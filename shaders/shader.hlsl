@@ -150,17 +150,22 @@ void HitCube(inout Payload payload, float2 uv)
     uint tri = PrimitiveIndex();
 
     tri /= 2;
-    float3 normal = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
+    const float3 normal_OS = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
 
-    float3 worldNormal = normalize(mul(normal, (float3x3) ObjectToWorld4x3()));
+    const float3 normal_WS = normalize(mul(normal_OS, (float3x3) ObjectToWorld4x3()));
 
-    float3 color = abs(normal) / 3 + 0.5;
+    float3 color = normal_OS;
+    if (any(normal_OS < 0.f))
+    {
+        color += 1.f;
+    }
+    
     if (uv.x < 0.03 || uv.y < 0.03)
     {
         color = 0.25.rrr;
     }
 
-    color *= saturate(dot(worldNormal, normalize(lightPos_WS))) + 0.33;
+    color *= saturate(dot(normal_WS, normalize(lightPos_WS))) + 0.33;
     payload.color = color;
 }
 
