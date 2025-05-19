@@ -1,48 +1,11 @@
+#include "rng.hlsl"
+
 struct Payload
 {
     float3 color;
     bool allowReflection;
     bool missed;
 };
-
-uint hash(uint s)
-{
-    s ^= 2747636419u;
-    s *= 2654435769u;
-    s ^= s >> 16;
-    s *= 2654435769u;
-    s ^= s >> 16;
-    s *= 2654435769u;
-    return s;
-}
-
-struct RandomSampler
-{
-    uint seed;
-    
-    uint nextUint()
-    {
-        seed = hash(seed);
-        return seed;
-    }
-    
-    float nextFloat()
-    {
-        return (nextUint() & 0x00FFFFFF) / 16777216.0;
-    }
-};
-
-RandomSampler initRandomSampler(uint seed)
-{
-    RandomSampler randomSampler;
-    randomSampler.seed = hash(seed);
-    return randomSampler;
-}
-
-RandomSampler initRandomSampler2(uint2 seed)
-{
-    return initRandomSampler(seed.x ^ hash(seed.y));
-}
 
 RaytracingAccelerationStructure scene : register(t0);
 
@@ -56,8 +19,8 @@ static const float3 cameraUp_WS = float3(0, 1, 0);
 static const float3 cameraForward_WS = float3(0, 0, 1);
 
 static const float3 lightPos_WS = float3(0, 200, 0);
-static const float3 skyTop = float3(0.24, 0.44, 0.72);
-static const float3 skyBottom = float3(0.75, 0.86, 0.93);
+static const float3 skyTopColor = float3(0.24, 0.44, 0.72);
+static const float3 skyBottomColor = float3(0.75, 0.86, 0.93);
 
 static const uint numSamplesPerPixel = 32;
 
@@ -113,7 +76,7 @@ void Miss(inout Payload payload)
 {
     float slope = normalize(WorldRayDirection()).y;
     float t = saturate(slope * 5 + 0.5);
-    payload.color = lerp(skyBottom, skyTop, t);
+    payload.color = lerp(skyBottomColor, skyTopColor, t);
 
     payload.missed = true;
 }

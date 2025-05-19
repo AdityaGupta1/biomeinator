@@ -5,10 +5,13 @@
 #include <Windows.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
+#include <wrl/client.h> // ComPtr
 
 #include <iostream>
 
 #include "shader.fxh"
+
+using Microsoft::WRL::ComPtr;
 
 void Resize(HWND);
 LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -102,17 +105,17 @@ constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
     .Flags = D3D12_RESOURCE_FLAG_NONE,
 };
 
-IDXGIFactory4* factory;
-ID3D12Device5* device;
-ID3D12CommandQueue* cmdQueue;
-ID3D12Fence* fence;
+ComPtr<IDXGIFactory4> factory;
+ComPtr<ID3D12Device5> device;
+ComPtr<ID3D12CommandQueue> cmdQueue;
+ComPtr<ID3D12Fence> fence;
 void InitDevice()
 {
-    if (ID3D12Debug* debug; SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
+    ComPtr<ID3D12Debug> debug;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
         printf("enabled debug layer\n");
         debug->EnableDebugLayer();
-        debug->Release();
     }
 
     if (SUCCEEDED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory))))
@@ -125,24 +128,24 @@ void InitDevice()
         CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
     }
 
-    IDXGIAdapter1* adapter;
+    ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
         DXGI_ADAPTER_DESC1 desc;
         adapter->GetDesc1(&desc);
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
         {
-            adapter->Release();
+            adapter.Reset();
             continue;
         }
 
-        if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
+        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
             printf("selected adapter: %ls\n", desc.Description);
             break;
         }
 
-        adapter->Release();
+        adapter.Reset();
     }
 
     D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {
@@ -153,15 +156,16 @@ void InitDevice()
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
 }
 
+// TODO: check if this actually blocks the CPU until the GPU finishes its commands
 void Flush()
 {
     static UINT64 value = 1;
-    cmdQueue->Signal(fence, value);
+    cmdQueue->Signal(fence.Get(), value);
     fence->SetEventOnCompletion(value++, nullptr);
 }
 
-IDXGISwapChain3* swapChain;
-ID3D12DescriptorHeap* uavHeap;
+ComPtr<IDXGISwapChain3> swapChain;
+ComPtr<ID3D12DescriptorHeap> uavHeap;
 void InitSurfaces(HWND hwnd)
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -170,12 +174,11 @@ void InitSurfaces(HWND hwnd)
         .BufferCount = 2,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     };
-    IDXGISwapChain1* swapChain1;
-    factory->CreateSwapChainForHwnd(cmdQueue, hwnd, &scDesc, nullptr, nullptr, &swapChain1);
-    swapChain1->QueryInterface(&swapChain);
-    swapChain1->Release();
+    ComPtr<IDXGISwapChain1> swapChain1;
+    factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1);
+    swapChain1.As(&swapChain);
 
-    factory->Release();
+    factory.Reset();
 
     D3D12_DESCRIPTOR_HEAP_DESC uavHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -187,7 +190,7 @@ void InitSurfaces(HWND hwnd)
     Resize(hwnd);
 }
 
-ID3D12Resource* renderTarget;
+ComPtr<ID3D12Resource> renderTarget;
 void Resize(HWND hwnd)
 {
     if (!swapChain) [[unlikely]]
@@ -205,7 +208,9 @@ void Resize(HWND hwnd)
     swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
 
     if (renderTarget) [[likely]]
-        renderTarget->Release();
+    {
+        renderTarget.Reset();
+    }
 
     D3D12_RESOURCE_DESC rtDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
@@ -223,7 +228,7 @@ void Resize(HWND hwnd)
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D
     };
-    device->CreateUnorderedAccessView(renderTarget, nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
+    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 ID3D12CommandAllocator* cmdAlloc;
@@ -242,16 +247,17 @@ constexpr short cubeIdx[] = { 4, 6, 0, 2, 0, 6, 0, 1, 4, 5, 4, 1,
                              0, 2, 1, 3, 1, 2, 1, 3, 5, 7, 5, 3,
                              2, 6, 3, 7, 3, 6, 4, 5, 6, 7, 6, 5 };
 
-ID3D12Resource* quadVB;
-ID3D12Resource* cubeVB;
-ID3D12Resource* cubeIB;
+ComPtr<ID3D12Resource> quadVB;
+ComPtr<ID3D12Resource> cubeVB;
+ComPtr<ID3D12Resource> cubeIB;
 void InitMeshes()
 {
-    auto makeAndCopy = [](auto& data)
+    auto makeAndCopy = [](auto& data) -> ComPtr<ID3D12Resource>
     {
         auto desc = BASIC_BUFFER_DESC;
         desc.Width = sizeof(data);
-        ID3D12Resource* res;
+
+        ComPtr<ID3D12Resource> res;
         device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE,
             &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr, IID_PPV_ARGS(&res));
@@ -260,6 +266,7 @@ void InitMeshes()
         res->Map(0, nullptr, &ptr);
         memcpy(ptr, data, sizeof(data));
         res->Unmap(0, nullptr);
+
         return res;
     };
 
@@ -268,16 +275,14 @@ void InitMeshes()
     cubeIB = makeAndCopy(cubeIdx);
 }
 
-ID3D12Resource* MakeAccelerationStructure(
-    const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs,
-    UINT64* updateScratchSize = nullptr)
+ComPtr<ID3D12Resource> MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr)
 {
     auto makeBuffer = [](UINT64 size, auto initialState)
     {
         auto desc = BASIC_BUFFER_DESC;
         desc.Width = size;
         desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        ID3D12Resource* buffer;
+        ComPtr<ID3D12Resource> buffer;
         device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
         return buffer;
     };
@@ -289,11 +294,11 @@ ID3D12Resource* MakeAccelerationStructure(
         *updateScratchSize = prebuildInfo.UpdateScratchDataSizeInBytes;
     }
 
-    auto* scratch = makeBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
-    auto* as = makeBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    auto scratch = makeBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
+    auto accelerationStructure = makeBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-        .DestAccelerationStructureData = as->GetGPUVirtualAddress(),
+        .DestAccelerationStructureData = accelerationStructure->GetGPUVirtualAddress(),
         .Inputs = inputs,
         .ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress()
     };
@@ -305,12 +310,10 @@ ID3D12Resource* MakeAccelerationStructure(
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&cmdList));
 
     Flush();
-    scratch->Release();
-    return as;
+    return accelerationStructure;
 }
 
-ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats,
-    ID3D12Resource* indexBuffer = nullptr, UINT indices = 0)
+ComPtr< ID3D12Resource> MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats, ID3D12Resource* indexBuffer = nullptr, UINT indices = 0)
 {
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -341,16 +344,15 @@ ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats,
     return MakeAccelerationStructure(inputs);
 }
 
-ID3D12Resource* quadBlas;
-ID3D12Resource* cubeBlas;
+ComPtr<ID3D12Resource> quadBlas;
+ComPtr<ID3D12Resource> cubeBlas;
 void InitBottomLevel()
 {
-    quadBlas = MakeBLAS(quadVB, std::size(quadVtx));
-    cubeBlas = MakeBLAS(cubeVB, std::size(cubeVtx), cubeIB, std::size(cubeIdx));
+    quadBlas = MakeBLAS(quadVB.Get(), std::size(quadVtx));
+    cubeBlas = MakeBLAS(cubeVB.Get(), std::size(cubeVtx), cubeIB.Get(), std::size(cubeIdx));
 }
 
-ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances,
-    UINT64* updateScratchSize)
+ComPtr<ID3D12Resource> MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize)
 {
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
@@ -364,7 +366,7 @@ ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances,
 }
 
 constexpr UINT NUM_INSTANCES = 3;
-ID3D12Resource* instances;
+ComPtr<ID3D12Resource> instances;
 D3D12_RAYTRACING_INSTANCE_DESC* instanceData;
 void UpdateTransforms();
 void InitScene()
@@ -413,12 +415,12 @@ void UpdateTransforms()
     set(2, floor);
 }
 
-ID3D12Resource* tlas;
-ID3D12Resource* tlasUpdateScratch;
+ComPtr<ID3D12Resource> tlas;
+ComPtr<ID3D12Resource> tlasUpdateScratch;
 void InitTopLevel()
 {
     UINT64 updateScratchSize;
-    tlas = MakeTLAS(instances, NUM_INSTANCES, &updateScratchSize);
+    tlas = MakeTLAS(instances.Get(), NUM_INSTANCES, &updateScratchSize);
 
     auto desc = BASIC_BUFFER_DESC;
     // WARP bug workaround: use 8 if the required size was reported as less
@@ -429,10 +431,9 @@ void InitTopLevel()
         IID_PPV_ARGS(&tlasUpdateScratch));
 }
 
-ID3D12RootSignature* rootSignature;
+ComPtr<ID3D12RootSignature> rootSignature;
 void InitRootSignature()
 {
-
     D3D12_DESCRIPTOR_RANGE uavRange = {
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
@@ -459,15 +460,14 @@ void InitRootSignature()
         .pParameters = params
     };
 
-    ID3DBlob* blob;
+    ComPtr<ID3DBlob> blob;
     D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &blob, nullptr);
     device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
-    blob->Release();
 }
 
-ID3D12StateObject* pso;
+ComPtr<ID3D12StateObject> pso;
 constexpr UINT64 NUM_SHADER_IDS = 3;
-ID3D12Resource* shaderIDs;
+ComPtr<ID3D12Resource> shaderIDs;
 void InitPipeline()
 {
     D3D12_DXIL_LIBRARY_DESC lib = {
@@ -488,7 +488,7 @@ void InitPipeline()
         .MaxAttributeSizeInBytes = 8,
     };
 
-    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = { rootSignature };
+    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = { rootSignature.Get()};
 
     D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
         .MaxTraceRecursionDepth = 3
@@ -512,8 +512,8 @@ void InitPipeline()
     device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &idDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&shaderIDs));
 
-    ID3D12StateObjectProperties* props;
-    pso->QueryInterface(&props);
+    ComPtr<ID3D12StateObjectProperties> props;
+    pso.As(&props);
 
     void* data;
     auto writeId = [&](const wchar_t* name)
@@ -528,8 +528,6 @@ void InitPipeline()
     writeId(L"Miss");
     writeId(L"HitGroup");
     shaderIDs->Unmap(0, nullptr);
-
-    props->Release();
 }
 
 void UpdateScene()
@@ -552,7 +550,7 @@ void UpdateScene()
 
     D3D12_RESOURCE_BARRIER barrier = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
-        .UAV = {.pResource = tlas}
+        .UAV = { .pResource = tlas.Get() }
     };
     cmdList->ResourceBarrier(1, &barrier);
 }
@@ -564,12 +562,13 @@ void Render()
 
     UpdateScene();
 
-    cmdList->SetPipelineState1(pso);
-    cmdList->SetComputeRootSignature(rootSignature);
-    cmdList->SetDescriptorHeaps(1, &uavHeap);
+    cmdList->SetPipelineState1(pso.Get());
+    cmdList->SetComputeRootSignature(rootSignature.Get());
+    ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+    cmdList->SetDescriptorHeaps(1, heaps);
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
-    cmdList->SetComputeRootDescriptorTable(0, uavTable); // ←u0 ↓t0
-    cmdList->SetComputeRootShaderResourceView(1, tlas->GetGPUVirtualAddress());
+    cmdList->SetComputeRootDescriptorTable(0, uavTable); // u0
+    cmdList->SetComputeRootShaderResourceView(1, tlas->GetGPUVirtualAddress()); // t0
 
     auto rtDesc = renderTarget->GetDesc();
 
@@ -592,7 +591,7 @@ void Render()
     };
     cmdList->DispatchRays(&dispatchDesc);
 
-    ID3D12Resource* backBuffer;
+    ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
 
     auto barrier = [](auto* resource, auto before, auto after)
@@ -608,15 +607,15 @@ void Render()
         cmdList->ResourceBarrier(1, &rb);
     };
 
-    barrier(renderTarget, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    barrier(backBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    barrier(renderTarget.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    barrier(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
 
-    cmdList->CopyResource(backBuffer, renderTarget);
+    cmdList->CopyResource(backBuffer.Get(), renderTarget.Get());
 
-    barrier(backBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    barrier(renderTarget, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    barrier(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    barrier(renderTarget.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    backBuffer->Release();
+    backBuffer.Reset();
 
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&cmdList));

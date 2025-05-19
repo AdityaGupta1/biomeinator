@@ -4,16 +4,20 @@ project(GigaMinecraft LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_program(DXC_EXECUTABLE NAMES dxc REQUIRED)
 
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
-set(GENERATED_SHADER_HEADERS "${CMAKE_BINARY_DIR}/generated_shaders")
 
+set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
+include_directories(${SHADER_DIR}) # allows IntelliSense to parse HLSL includes
+
+set(GENERATED_SHADER_HEADERS "${CMAKE_BINARY_DIR}/generated_shaders")
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
 include_directories(${GENERATED_SHADER_HEADERS})
 
-file(GLOB_RECURSE SHADERS "${SHADER_DIR}/*.hlsl")
+file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
 message(STATUS "Cleaning generated shaders...")
@@ -23,7 +27,7 @@ file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
 message(STATUS "Compiling shaders...")
 
 set(COMPILED_HEADERS "")
-foreach(SHADER ${SHADERS})
+foreach(SHADER ${SHADER_FILES})
     file(RELATIVE_PATH REL_PATH ${SHADER_DIR} ${SHADER})
     get_filename_component(NAME_WE ${REL_PATH} NAME_WE)
     string(REPLACE "\\" "/" REL_PATH_UNIX ${REL_PATH})
@@ -43,6 +47,7 @@ foreach(SHADER ${SHADERS})
                 /T lib_6_3
                 /Fh ${FXH_OUT}
                 /Vn ${VAR_NAME}
+                /I ${SHADER_DIR}
         DEPENDS ${SHADER}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
@@ -52,7 +57,9 @@ foreach(SHADER ${SHADERS})
     set_source_files_properties(${FXH_OUT} PROPERTIES GENERATED TRUE)
 endforeach()
 
-add_executable(GigaMinecraft ${SRC_DIR}/main.cpp ${COMPILED_HEADERS})
+file(GLOB_RECURSE SRC_FILES "${SRC_DIR}/*.cpp" "${SRC_DIR}/*.h")
+
+add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS})
 
 target_link_libraries(GigaMinecraft PRIVATE
     user32
