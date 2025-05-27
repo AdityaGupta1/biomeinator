@@ -1,5 +1,7 @@
 #include "renderer.h"
 
+#include "common_structs.h"
+
 #include <iostream>
 
 #include "shader.fxh"
@@ -19,7 +21,7 @@ constexpr D3D12_HEAP_PROPERTIES DEFAULT_HEAP = {
 };
 constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
     .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-    .Width = 0, // Will be changed in copies
+    .Width = 0, // will be changed in copies
     .Height = 1,
     .DepthOrArraySize = 1,
     .MipLevels = 1,
@@ -32,23 +34,25 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
 {
     switch (msg)
     {
-    case WM_CLOSE:
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        [[fallthrough]];
-    case WM_SIZING:
-    case WM_SIZE:
-        resize(hwnd);
-        [[fallthrough]];
-    case WM_KEYDOWN:
-        if (wparam == VK_ESCAPE)
-        {
-            PostMessage(hwnd, WM_CLOSE, 0, 0);
-        }
-        break;
-    default:
-        return DefWindowProcW(hwnd, msg, wparam, lparam);
+        case WM_CLOSE:
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            [[fallthrough]];
+        case WM_SIZING:
+        case WM_SIZE:
+            resize(hwnd);
+            [[fallthrough]];
+        case WM_KEYDOWN:
+            if (wparam == VK_ESCAPE)
+            {
+                PostMessage(hwnd, WM_CLOSE, 0, 0);
+            }
+            break;
+        default:
+            break;
     }
+
+    return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
 HWND hwnd;
@@ -214,13 +218,65 @@ void initCommand()
     device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
 }
 
-constexpr float quadVtx[] = { -1, 0, -1, -1, 0, 1, 1, 0, 1,
-                             -1, 0, -1, 1, 0, -1, 1, 0, 1 };
-constexpr float cubeVtx[] = { -1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1,
-                             -1, -1,  1, 1, -1,  1, -1, 1,  1, 1, 1,  1 };
-constexpr short cubeIdx[] = { 4, 6, 0, 2, 0, 6, 0, 1, 4, 5, 4, 1,
-                             0, 2, 1, 3, 1, 2, 1, 3, 5, 7, 5, 3,
-                             2, 6, 3, 7, 3, 6, 4, 5, 6, 7, 6, 5 };
+constexpr Vertex quadVtx[] = {
+    { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
+    { float3(-1, 0, 1), float3(0, 1, 0), float2(0, 1) },
+    { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) },
+    { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
+    { float3(1, 0, -1), float3(0, 1, 0), float2(1, 0) },
+    { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) }
+};
+constexpr Vertex cubeVtx[] = {
+    // +y (top)
+    {{-1, 1, -1}, {0, 1, 0}, {0, 0}},
+    {{-1, 1, 1}, {0, 1, 0}, {0, 1}},
+    {{1, 1, 1}, {0, 1, 0}, {1, 1}},
+    {{1, 1, -1}, {0, 1, 0}, {1, 0}},
+
+    // -y (bottom)
+    {{-1, -1, -1}, {0, -1, 0}, {0, 0}},
+    {{1, -1, -1}, {0, -1, 0}, {1, 0}},
+    {{1, -1, 1}, {0, -1, 0}, {1, 1}},
+    {{-1, -1, 1}, {0, -1, 0}, {0, 1}},
+
+    // +z (front)
+    {{-1, -1, 1}, {0, 0, 1}, {0, 1}},
+    {{1, -1, 1}, {0, 0, 1}, {1, 1}},
+    {{1, 1, 1}, {0, 0, 1}, {1, 0}},
+    {{-1, 1, 1}, {0, 0, 1}, {0, 0}},
+
+    // -z (back)
+    {{-1, -1, -1}, {0, 0, -1}, {1, 1}},
+    {{-1, 1, -1}, {0, 0, -1}, {1, 0}},
+    {{1, 1, -1}, {0, 0, -1}, {0, 0}},
+    {{1, -1, -1}, {0, 0, -1}, {0, 1}},
+
+    // -x (left)
+    {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
+    {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
+    {{-1, 1, 1}, {-1, 0, 0}, {1, 0}},
+    {{-1, 1, -1}, {-1, 0, 0}, {0, 0}},
+
+    // +x (right)
+    {{1, -1, -1}, {1, 0, 0}, {1, 1}},
+    {{1, 1, -1}, {1, 0, 0}, {1, 0}},
+    {{1, 1, 1}, {1, 0, 0}, {0, 0}},
+    {{1, -1, 1}, {1, 0, 0}, {0, 1}}
+};
+constexpr short cubeIdx[] = {
+    // +y
+    0, 1, 2, 0, 2, 3,
+    // -y
+    4, 5, 6, 4, 6, 7,
+    // +z
+    8, 9, 10, 8, 10, 11,
+    // -z
+    12, 13, 14, 12, 14, 15,
+    // -x
+    16, 17, 18, 16, 18, 19,
+    // +x
+    20, 21, 22, 20, 22, 23
+};
 
 ComPtr<ID3D12Resource> quadVB;
 ComPtr<ID3D12Resource> cubeVB;
@@ -288,7 +344,7 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_AC
     return accelerationStructure;
 }
 
-ComPtr<ID3D12Resource> makeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats, ID3D12Resource* indexBuffer = nullptr, UINT indices = 0)
+ComPtr<ID3D12Resource> makeBLAS(ID3D12Resource* vertexBuffer, UINT numVerts, ID3D12Resource* indexBuffer = nullptr, UINT numIdx = 0)
 {
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -298,12 +354,12 @@ ComPtr<ID3D12Resource> makeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats,
             .Transform3x4 = 0,
             .IndexFormat = indexBuffer ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_UNKNOWN,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-            .IndexCount = indices,
-            .VertexCount = vertexFloats / 3,
+            .IndexCount = numIdx,
+            .VertexCount = numVerts,
             .IndexBuffer = indexBuffer ? indexBuffer->GetGPUVirtualAddress() : 0,
             .VertexBuffer = {
                 .StartAddress = vertexBuffer->GetGPUVirtualAddress(),
-                .StrideInBytes = 3 * sizeof(float)
+                .StrideInBytes = sizeof(Vertex)
             }
         }
     };
