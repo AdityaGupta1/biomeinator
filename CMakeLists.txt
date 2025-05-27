@@ -11,7 +11,6 @@ find_program(DXC_EXECUTABLE NAMES dxc REQUIRED)
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 
 set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
-include_directories(${SHADER_DIR}) # allows IntelliSense to parse HLSL includes
 
 set(GENERATED_SHADER_HEADERS "${CMAKE_BINARY_DIR}/generated_shaders")
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
