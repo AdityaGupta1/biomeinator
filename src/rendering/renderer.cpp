@@ -555,9 +555,4 @@ void render()
     updateFps();
 }
 
-ID3D12Device5* getDevice()
-{
-    return device.Get();
-}
-
 } // namespace Renderer
