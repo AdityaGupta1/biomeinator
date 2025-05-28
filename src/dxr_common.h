@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dxr_includes.h"
+#include "common_structs.h"
 
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,

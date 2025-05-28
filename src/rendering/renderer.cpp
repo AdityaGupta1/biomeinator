@@ -3,13 +3,15 @@
 #include "dxr_common.h"
 #include "common_structs.h"
 
-#include "drawable.h"
+#include "as_helper.h"
 
 #include <iostream>
 #include <string>
 #include <chrono>
 
 #include "shader.fxh"
+
+using namespace AsHelper;
 
 namespace Renderer
 {
@@ -60,7 +62,6 @@ void init()
     initDevice();
     initSurfaces(hwnd);
     initCommand();
-    initMeshes();
     initBottomLevel();
     initScene();
     initTopLevel();
@@ -194,15 +195,15 @@ void resize(HWND hwnd)
     device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
-ID3D12CommandAllocator* cmdAlloc;
-ID3D12GraphicsCommandList4* cmdList;
+ComPtr<ID3D12CommandAllocator> cmdAlloc;
+ComPtr<ID3D12GraphicsCommandList4> cmdList;
 void initCommand()
 {
     device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cmdAlloc));
     device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
 }
 
-std::vector<Vertex> quadVerts = {
+const std::vector<Vertex> quadVerts = {
     { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
     { float3(-1, 0, 1), float3(0, 1, 0), float2(0, 1) },
     { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) },
@@ -210,7 +211,7 @@ std::vector<Vertex> quadVerts = {
     { float3(1, 0, -1), float3(0, 1, 0), float2(1, 0) },
     { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) }
 };
-std::vector<Vertex> cubeVerts = {
+const std::vector<Vertex> cubeVerts = {
     // -x (left)
     {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
     {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
@@ -247,7 +248,7 @@ std::vector<Vertex> cubeVerts = {
     {{1, 1, 1}, {0, 0, 1}, {1, 0}},
     {{-1, 1, 1}, {0, 0, 1}, {0, 0}}
 };
-std::vector<uint32_t> cubeIdx = {
+const std::vector<uint32_t> cubeIdx = {
     // -x
     0, 1, 2, 0, 2, 3,
     // -y
@@ -262,73 +263,13 @@ std::vector<uint32_t> cubeIdx = {
     20, 21, 22, 20, 22, 23
 };
 
-std::unique_ptr<Drawable> quadDrawable;
-std::unique_ptr<Drawable> cubeDrawable;
-
-void initMeshes()
-{
-    quadDrawable = std::make_unique<Drawable>(quadVerts);
-    cubeDrawable = std::make_unique<Drawable>(cubeVerts, cubeIdx);
-
-    quadDrawable->initBuffers();
-    cubeDrawable->initBuffers();
-}
-
-ComPtr<ID3D12Resource> Renderer::makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize)
-{
-    auto makeBuffer = [](UINT64 size, auto initialState)
-    {
-        auto desc = BASIC_BUFFER_DESC;
-        desc.Width = size;
-        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        ComPtr<ID3D12Resource> buffer;
-        device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
-        return buffer;
-    };
-
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-    device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-    if (updateScratchSize)
-    {
-        *updateScratchSize = prebuildInfo.UpdateScratchDataSizeInBytes;
-    }
-
-    auto scratch = makeBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
-    auto accelerationStructure = makeBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-        .DestAccelerationStructureData = accelerationStructure->GetGPUVirtualAddress(),
-        .Inputs = inputs,
-        .ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress()
-    };
-
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc, nullptr);
-    cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&cmdList));
-
-    flush();
-    return accelerationStructure;
-}
+BlasWrapper quadBlasWrapper;
+BlasWrapper cubeBlasWrapper;
 
 void initBottomLevel()
 {
-    quadDrawable->initBlas();
-    cubeDrawable->initBlas();
-}
-
-ComPtr<ID3D12Resource> makeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize)
-{
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-        .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE,
-        .NumDescs = numInstances,
-        .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .InstanceDescs = instances->GetGPUVirtualAddress()
-    };
-
-    return makeAccelerationStructure(inputs, updateScratchSize);
+    quadBlasWrapper = initBuffersAndBlas(&quadVerts);
+    cubeBlasWrapper = initBuffersAndBlas(&cubeVerts, &cubeIdx);
 }
 
 constexpr UINT NUM_INSTANCES = 3;
@@ -348,7 +289,7 @@ void initScene()
         instanceData[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
-            .AccelerationStructure = (i ? quadDrawable->getBlas() : cubeDrawable->getBlas())->GetGPUVirtualAddress(),
+            .AccelerationStructure = (i ? quadBlasWrapper.blas : cubeBlasWrapper.blas)->GetGPUVirtualAddress(),
         };
     }
 
@@ -547,7 +488,7 @@ void updateFps()
 void render()
 {
     cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc, nullptr);
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
 
     updateScene();
 
@@ -607,7 +548,7 @@ void render()
     backBuffer.Reset();
 
     cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&cmdList));
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 
     flush();
     swapChain->Present(1, 0);

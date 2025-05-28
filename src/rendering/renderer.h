@@ -14,8 +14,6 @@ namespace Renderer
 	void initSurfaces(HWND hwnd);
 	void resize(HWND hwnd);
 	void initCommand();
-	void initMeshes();
-	ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void initBottomLevel();
 	void initScene();
 	void updateTransforms();
@@ -23,7 +21,12 @@ namespace Renderer
 	void initRootSignature();
 	void initPipeline();
 
+	void flush();
+
 	void render();
 
-	ID3D12Device5* getDevice();
+	extern ComPtr<ID3D12Device5> device;
+	extern ComPtr<ID3D12CommandAllocator> cmdAlloc;
+	extern ComPtr<ID3D12GraphicsCommandList4> cmdList;
+	extern ComPtr<ID3D12CommandQueue> cmdQueue;
 };
