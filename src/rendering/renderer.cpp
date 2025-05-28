@@ -1,6 +1,6 @@
 #include "renderer.h"
 
-#include "common_structs.h"
+#include "../common_structs.h"
 
 #include <iostream>
 #include <string>
