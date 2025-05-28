@@ -20,6 +20,7 @@ include_directories(${GENERATED_SHADER_HEADERS})
 file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
+# there's probably a way to clean only the generated shaders that don't correspond to actual shaders, but I'm too lazy to figure it out
 message(STATUS "Cleaning generated shaders...")
 file(REMOVE_RECURSE ${GENERATED_SHADER_HEADERS})
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})

@@ -77,17 +77,17 @@ void initDevice()
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
-        printf("enabled debug layer\n");
+        printf("Enabled debug layer\n");
         debug->EnableDebugLayer();
     }
 
     if (SUCCEEDED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory))))
     {
-        printf("created debug factory\n");
+        printf("Created debug factory\n");
     }
     else
     {
-        printf("failed to create debug factory\n");
+        printf("Failed to create debug factory\n");
         CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
     }
 
@@ -104,7 +104,7 @@ void initDevice()
 
         if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
-            printf("selected adapter: %ls\n", desc.Description);
+            printf("Selected adapter: %ls\n", desc.Description);
             break;
         }
 
