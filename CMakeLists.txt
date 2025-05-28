@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_program(DXC_EXECUTABLE NAMES dxc REQUIRED)
 
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+include_directories(${SRC_DIR})
 
 set(SHADER_DIR "${SRC_DIR}/shaders")
 
