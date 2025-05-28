@@ -3,6 +3,8 @@
 #include "common_structs.h"
 
 #include <iostream>
+#include <string>
+#include <chrono>
 
 #include "shader.fxh"
 
@@ -585,6 +587,30 @@ void updateScene()
     cmdList->ResourceBarrier(1, &barrier);
 }
 
+static int frameCount = 0;
+static double elapsedTime = 0.0;
+static auto lastTime = std::chrono::high_resolution_clock::now();
+static int lastFps = 0;
+
+void updateFps()
+{
+    frameCount++;
+    auto now = std::chrono::high_resolution_clock::now();
+    double delta = std::chrono::duration<double>(now - lastTime).count();
+    elapsedTime += delta;
+    lastTime = now;
+
+    if (elapsedTime >= 1.0)
+    {
+        lastFps = frameCount;
+        frameCount = 0;
+        elapsedTime = 0.0;
+
+        std::wstring title = L"Giga Minecraft - FPS: " + std::to_wstring(lastFps);
+        SetWindowTextW(hwnd, title.c_str());
+    }
+}
+
 void render()
 {
     cmdAlloc->Reset();
@@ -652,6 +678,8 @@ void render()
 
     flush();
     swapChain->Present(1, 0);
+
+    updateFps();
 }
 
 } // namespace Renderer
