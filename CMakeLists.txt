@@ -59,7 +59,19 @@ endforeach()
 
 file(GLOB_RECURSE SRC_FILES "${SRC_DIR}/*.cpp" "${SRC_DIR}/*.h")
 
-add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS})
+foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
+    file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
+    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
+    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
+    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
+    source_group("src\\${FILTER_PATH}" FILES "${FILE}")
+endforeach()
+
+foreach(SHADER ${SHADER_FILES})
+    set_source_files_properties(${SHADER} PROPERTIES HEADER_FILE_ONLY TRUE)
+endforeach()
+
+add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES})
 
 target_link_libraries(GigaMinecraft PRIVATE
     user32

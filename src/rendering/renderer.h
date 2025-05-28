@@ -1,15 +1,8 @@
 #pragma once
 
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <algorithm>
-#include <DirectXMath.h>
-#include <Windows.h>
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <wrl/client.h>
+#include "dxr_includes.h"
 
-using Microsoft::WRL::ComPtr;
+#include <algorithm>
 
 namespace Renderer
 {
@@ -22,6 +15,7 @@ namespace Renderer
 	void resize(HWND hwnd);
 	void initCommand();
 	void initMeshes();
+	ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void initBottomLevel();
 	void initScene();
 	void updateTransforms();
@@ -30,4 +24,6 @@ namespace Renderer
 	void initPipeline();
 
 	void render();
+
+	ID3D12Device5* getDevice();
 };

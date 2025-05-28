@@ -1,6 +1,9 @@
 #include "renderer.h"
 
-#include "../common_structs.h"
+#include "dxr_common.h"
+#include "common_structs.h"
+
+#include "drawable.h"
 
 #include <iostream>
 #include <string>
@@ -10,27 +13,6 @@
 
 namespace Renderer
 {
-
-constexpr DXGI_SAMPLE_DESC NO_AA = {
-.Count = 1,
-.Quality = 0
-};
-constexpr D3D12_HEAP_PROPERTIES UPLOAD_HEAP = {
-    .Type = D3D12_HEAP_TYPE_UPLOAD
-};
-constexpr D3D12_HEAP_PROPERTIES DEFAULT_HEAP = {
-    .Type = D3D12_HEAP_TYPE_DEFAULT
-};
-constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
-    .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-    .Width = 0, // will be changed in copies
-    .Height = 1,
-    .DepthOrArraySize = 1,
-    .MipLevels = 1,
-    .SampleDesc = NO_AA,
-    .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-    .Flags = D3D12_RESOURCE_FLAG_NONE,
-};
 
 LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -220,7 +202,7 @@ void initCommand()
     device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
 }
 
-constexpr Vertex quadVtx[] = {
+std::vector<Vertex> quadVerts = {
     { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
     { float3(-1, 0, 1), float3(0, 1, 0), float2(0, 1) },
     { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) },
@@ -228,12 +210,12 @@ constexpr Vertex quadVtx[] = {
     { float3(1, 0, -1), float3(0, 1, 0), float2(1, 0) },
     { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) }
 };
-constexpr Vertex cubeVtx[] = {
-    // +y (top)
-    {{-1, 1, -1}, {0, 1, 0}, {0, 0}},
-    {{-1, 1, 1}, {0, 1, 0}, {0, 1}},
-    {{1, 1, 1}, {0, 1, 0}, {1, 1}},
-    {{1, 1, -1}, {0, 1, 0}, {1, 0}},
+std::vector<Vertex> cubeVerts = {
+    // -x (left)
+    {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
+    {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
+    {{-1, 1, 1}, {-1, 0, 0}, {1, 0}},
+    {{-1, 1, -1}, {-1, 0, 0}, {0, 0}},
 
     // -y (bottom)
     {{-1, -1, -1}, {0, -1, 0}, {0, 0}},
@@ -241,74 +223,58 @@ constexpr Vertex cubeVtx[] = {
     {{1, -1, 1}, {0, -1, 0}, {1, 1}},
     {{-1, -1, 1}, {0, -1, 0}, {0, 1}},
 
-    // +z (front)
-    {{-1, -1, 1}, {0, 0, 1}, {0, 1}},
-    {{1, -1, 1}, {0, 0, 1}, {1, 1}},
-    {{1, 1, 1}, {0, 0, 1}, {1, 0}},
-    {{-1, 1, 1}, {0, 0, 1}, {0, 0}},
-
     // -z (back)
     {{-1, -1, -1}, {0, 0, -1}, {1, 1}},
     {{-1, 1, -1}, {0, 0, -1}, {1, 0}},
     {{1, 1, -1}, {0, 0, -1}, {0, 0}},
     {{1, -1, -1}, {0, 0, -1}, {0, 1}},
 
-    // -x (left)
-    {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
-    {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
-    {{-1, 1, 1}, {-1, 0, 0}, {1, 0}},
-    {{-1, 1, -1}, {-1, 0, 0}, {0, 0}},
-
     // +x (right)
     {{1, -1, -1}, {1, 0, 0}, {1, 1}},
     {{1, 1, -1}, {1, 0, 0}, {1, 0}},
     {{1, 1, 1}, {1, 0, 0}, {0, 0}},
-    {{1, -1, 1}, {1, 0, 0}, {0, 1}}
+    {{1, -1, 1}, {1, 0, 0}, {0, 1}},
+
+    // +y (top)
+    {{-1, 1, -1}, {0, 1, 0}, {0, 0}},
+    {{-1, 1, 1}, {0, 1, 0}, {0, 1}},
+    {{1, 1, 1}, {0, 1, 0}, {1, 1}},
+    {{1, 1, -1}, {0, 1, 0}, {1, 0}},
+
+    // +z (front)
+    {{-1, -1, 1}, {0, 0, 1}, {0, 1}},
+    {{1, -1, 1}, {0, 0, 1}, {1, 1}},
+    {{1, 1, 1}, {0, 0, 1}, {1, 0}},
+    {{-1, 1, 1}, {0, 0, 1}, {0, 0}}
 };
-constexpr short cubeIdx[] = {
-    // +y
+std::vector<uint32_t> cubeIdx = {
+    // -x
     0, 1, 2, 0, 2, 3,
     // -y
     4, 5, 6, 4, 6, 7,
-    // +z
-    8, 9, 10, 8, 10, 11,
     // -z
-    12, 13, 14, 12, 14, 15,
-    // -x
-    16, 17, 18, 16, 18, 19,
+    8, 9, 10, 8, 10, 11,
     // +x
+    12, 13, 14, 12, 14, 15,
+    // +y
+    16, 17, 18, 16, 18, 19,
+    // +z
     20, 21, 22, 20, 22, 23
 };
 
-ComPtr<ID3D12Resource> quadVB;
-ComPtr<ID3D12Resource> cubeVB;
-ComPtr<ID3D12Resource> cubeIB;
+std::unique_ptr<Drawable> quadDrawable;
+std::unique_ptr<Drawable> cubeDrawable;
+
 void initMeshes()
 {
-    auto makeAndCopy = [](auto& data) -> ComPtr<ID3D12Resource>
-    {
-        auto desc = BASIC_BUFFER_DESC;
-        desc.Width = sizeof(data);
+    quadDrawable = std::make_unique<Drawable>(quadVerts);
+    cubeDrawable = std::make_unique<Drawable>(cubeVerts, cubeIdx);
 
-        ComPtr<ID3D12Resource> res;
-        device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE,
-            &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr, IID_PPV_ARGS(&res));
-
-        void* ptr;
-        res->Map(0, nullptr, &ptr);
-        memcpy(ptr, data, sizeof(data));
-        res->Unmap(0, nullptr);
-
-        return res;
-    };
-
-    quadVB = makeAndCopy(quadVtx);
-    cubeVB = makeAndCopy(cubeVtx);
-    cubeIB = makeAndCopy(cubeIdx);
+    quadDrawable->initBuffers();
+    cubeDrawable->initBuffers();
 }
 
-ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr)
+ComPtr<ID3D12Resource> Renderer::makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize)
 {
     auto makeBuffer = [](UINT64 size, auto initialState)
     {
@@ -346,43 +312,10 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_AC
     return accelerationStructure;
 }
 
-ComPtr<ID3D12Resource> makeBLAS(ID3D12Resource* vertexBuffer, UINT numVerts, ID3D12Resource* indexBuffer = nullptr, UINT numIdx = 0)
-{
-    D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
-        .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
-
-        .Triangles = {
-            .Transform3x4 = 0,
-            .IndexFormat = indexBuffer ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_UNKNOWN,
-            .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-            .IndexCount = numIdx,
-            .VertexCount = numVerts,
-            .IndexBuffer = indexBuffer ? indexBuffer->GetGPUVirtualAddress() : 0,
-            .VertexBuffer = {
-                .StartAddress = vertexBuffer->GetGPUVirtualAddress(),
-                .StrideInBytes = sizeof(Vertex)
-            }
-        }
-    };
-
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-        .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-        .NumDescs = 1,
-        .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .pGeometryDescs = &geometryDesc
-    };
-
-    return makeAccelerationStructure(inputs);
-}
-
-ComPtr<ID3D12Resource> quadBlas;
-ComPtr<ID3D12Resource> cubeBlas;
 void initBottomLevel()
 {
-    quadBlas = makeBLAS(quadVB.Get(), std::size(quadVtx));
-    cubeBlas = makeBLAS(cubeVB.Get(), std::size(cubeVtx), cubeIB.Get(), std::size(cubeIdx));
+    quadDrawable->initBlas();
+    cubeDrawable->initBlas();
 }
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize)
@@ -415,7 +348,7 @@ void initScene()
         instanceData[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
-            .AccelerationStructure = (i ? quadBlas : cubeBlas)->GetGPUVirtualAddress(),
+            .AccelerationStructure = (i ? quadDrawable->getBlas() : cubeDrawable->getBlas())->GetGPUVirtualAddress(),
         };
     }
 
@@ -680,6 +613,11 @@ void render()
     swapChain->Present(1, 0);
 
     updateFps();
+}
+
+ID3D12Device5* getDevice()
+{
+    return device.Get();
 }
 
 } // namespace Renderer
