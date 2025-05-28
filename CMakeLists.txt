@@ -26,6 +26,7 @@ file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
 
 message(STATUS "Compiling shaders...")
 
+# compile shaders
 set(COMPILED_HEADERS "")
 foreach(SHADER ${SHADER_FILES})
     file(RELATIVE_PATH REL_PATH ${SHADER_DIR} ${SHADER})
@@ -57,8 +58,10 @@ foreach(SHADER ${SHADER_FILES})
     set_source_files_properties(${FXH_OUT} PROPERTIES GENERATED TRUE)
 endforeach()
 
+# collect all src cpp/h files
 file(GLOB_RECURSE SRC_FILES "${SRC_DIR}/*.cpp" "${SRC_DIR}/*.h")
 
+# set up filters for src/ based on directory structure
 foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
@@ -67,8 +70,18 @@ foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
+# exclude shader files from build (avoids error with fxc and missing "main" entry point)
 foreach(SHADER ${SHADER_FILES})
     set_source_files_properties(${SHADER} PROPERTIES HEADER_FILE_ONLY TRUE)
+endforeach()
+
+# set up filter for generated_shaders
+foreach(FXH ${COMPILED_HEADERS})
+    file(RELATIVE_PATH REL_PATH "${GENERATED_SHADER_HEADERS}" "${FXH}")
+    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
+    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
+    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
+    source_group("generated_shaders\\${FILTER_PATH}" FILES "${FXH}")
 endforeach()
 
 add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES})
