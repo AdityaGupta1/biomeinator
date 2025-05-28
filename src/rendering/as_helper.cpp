@@ -8,7 +8,7 @@ namespace AsHelper
 {
 
 template<class T>
-ComPtr<ID3D12Resource> initAndCopyToBuffer(const std::vector<T>& host_vector)
+ComPtr<ID3D12Resource> initAndCopyToGeometryBuffer(const std::vector<T>& host_vector)
 {
     const size_t hostDataByteSize = sizeof(T) * host_vector.size();
 
@@ -28,18 +28,21 @@ ComPtr<ID3D12Resource> initAndCopyToBuffer(const std::vector<T>& host_vector)
     return res;
 }
 
+static ComPtr<ID3D12Resource> sharedAsScratchBuffer = nullptr;
+static uint64_t sharedAsScratchSize = 0;
+
+ComPtr<ID3D12Resource> makeAsBuffer(uint64_t size, D3D12_RESOURCE_STATES initialState)
+{
+    auto desc = BASIC_BUFFER_DESC;
+    desc.Width = size;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    ComPtr<ID3D12Resource> buffer;
+    device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
+    return buffer;
+}
+
 ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, uint64_t* updateScratchSize = nullptr)
 {
-    auto makeBuffer = [](UINT64 size, auto initialState)
-    {
-        auto desc = BASIC_BUFFER_DESC;
-        desc.Width = size;
-        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        ComPtr<ID3D12Resource> buffer;
-        device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
-        return buffer;
-    };
-
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
     device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
     if (updateScratchSize)
@@ -47,13 +50,22 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_AC
         *updateScratchSize = prebuildInfo.UpdateScratchDataSizeInBytes;
     }
 
-    auto scratch = makeBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
-    auto accelerationStructure = makeBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    if (prebuildInfo.ScratchDataSizeInBytes > sharedAsScratchSize)
+    {
+        if (sharedAsScratchBuffer)
+        {
+            sharedAsScratchBuffer.Reset();
+        }
+
+        sharedAsScratchBuffer = makeAsBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
+    }
+
+    auto asBuffer = makeAsBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-        .DestAccelerationStructureData = accelerationStructure->GetGPUVirtualAddress(),
+        .DestAccelerationStructureData = asBuffer->GetGPUVirtualAddress(),
         .Inputs = inputs,
-        .ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress()
+        .ScratchAccelerationStructureData = sharedAsScratchBuffer->GetGPUVirtualAddress()
     };
 
     cmdAlloc->Reset();
@@ -63,7 +75,7 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(const D3D12_BUILD_RAYTRACING_AC
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 
     flush();
-    return accelerationStructure;
+    return asBuffer;
 }
 
 ComPtr<ID3D12Resource> makeBlas(ID3D12Resource* vertBuffer, uint32_t numVerts, ID3D12Resource* idxBuffer = nullptr, uint32_t numIdx = 0)
@@ -104,10 +116,10 @@ BlasWrapper initBuffersAndBlas(const std::vector<Vertex>* verts, const std::vect
     ID3D12Resource* idxBufferPtr = nullptr;
     uint32_t numIdx = 0;
 
-    result.vertBuffer = initAndCopyToBuffer(*verts);
+    result.vertBuffer = initAndCopyToGeometryBuffer(*verts);
     if (idx)
     {
-        result.idxBuffer = initAndCopyToBuffer(*idx);
+        result.idxBuffer = initAndCopyToGeometryBuffer(*idx);
         idxBufferPtr = result.idxBuffer.Get();
         numIdx = idx->size();
     }

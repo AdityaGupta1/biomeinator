@@ -1,7 +1,6 @@
 #include "renderer.h"
 
 #include "dxr_common.h"
-#include "common_structs.h"
 
 #include "as_helper.h"
 
