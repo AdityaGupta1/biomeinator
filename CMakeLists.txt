@@ -18,6 +18,7 @@ file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
 include_directories(${GENERATED_SHADER_HEADERS})
 
 file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
+list(FILTER SHADER_FILES EXCLUDE REGEX ".*\\.hlsli$")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
 # there's probably a way to clean only the generated shaders that don't correspond to actual shaders, but I'm too lazy to figure it out
@@ -62,8 +63,11 @@ endforeach()
 # collect all src cpp/h files
 file(GLOB_RECURSE SRC_FILES "${SRC_DIR}/*.cpp" "${SRC_DIR}/*.h")
 
+# collect hlsli files (since they were excluded in the compilation step)
+file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
+
 # set up filters for src/ based on directory structure
-foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
+foreach(FILE IN LISTS SRC_FILES SHADER_FILES SHADER_INCLUDE_FILES)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
     string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
@@ -72,7 +76,7 @@ foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
 endforeach()
 
 # exclude shader files from build (avoids error with fxc and missing "main" entry point)
-foreach(SHADER ${SHADER_FILES})
+foreach(SHADER IN LISTS SHADER_FILES SHADER_INCLUDE_FILES)
     set_source_files_properties(${SHADER} PROPERTIES HEADER_FILE_ONLY TRUE)
 endforeach()
 
@@ -85,7 +89,7 @@ foreach(FXH ${COMPILED_HEADERS})
     source_group("generated_shaders\\${FILTER_PATH}" FILES "${FXH}")
 endforeach()
 
-add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES})
+add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES} ${SHADER_INCLUDE_FILES})
 
 target_link_libraries(GigaMinecraft PRIVATE
     user32

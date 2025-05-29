@@ -1,4 +1,4 @@
-#include "rng.hlsl"
+#include "rng.hlsli"
 
 struct Payload
 {
@@ -176,4 +176,3 @@ void HitFloor(inout Payload payload, float2 uv)
         payload.color /= 2;
     }
 }
-

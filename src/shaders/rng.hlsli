@@ -1,3 +1,5 @@
+#pragma once
+
 uint hash(uint s)
 {
     s ^= 2747636419u;
