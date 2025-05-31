@@ -15,36 +15,10 @@ using namespace AsHelper;
 namespace Renderer
 {
 
-void resize(HWND hwnd);
-
-LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-    switch (msg)
-    {
-        case WM_CLOSE:
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            [[fallthrough]];
-        case WM_SIZING:
-        case WM_SIZE:
-            resize(hwnd);
-            [[fallthrough]];
-        case WM_KEYDOWN:
-            if (wparam == VK_ESCAPE)
-            {
-                PostMessage(hwnd, WM_CLOSE, 0, 0);
-            }
-            break;
-        default:
-            break;
-    }
-
-    return DefWindowProcW(hwnd, msg, wparam, lparam);
-}
-
 void initWindow();
 void initDevice();
 void initSurfaces(HWND hwnd);
+void resize(HWND hwnd);
 void initCommand();
 void initBottomLevel();
 void initScene();
@@ -66,6 +40,31 @@ void init()
     initTopLevel();
     initRootSignature();
     initPipeline();
+}
+
+LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    switch (msg)
+    {
+    case WM_CLOSE:
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        [[fallthrough]];
+    case WM_SIZING:
+    case WM_SIZE:
+        resize(hwnd);
+        [[fallthrough]];
+    case WM_KEYDOWN:
+        if (wparam == VK_ESCAPE)
+        {
+            PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        break;
+    default:
+        break;
+    }
+
+    return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
 void initWindow()
@@ -134,14 +133,6 @@ void initDevice()
     device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue));
 
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-}
-
-// TODO: check if this actually blocks the CPU until the GPU finishes its commands
-void flush()
-{
-    static UINT64 value = 1;
-    cmdQueue->Signal(fence.Get(), value);
-    fence->SetEventOnCompletion(value++, nullptr);
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
@@ -570,6 +561,14 @@ void render()
     swapChain->Present(1, 0);
 
     updateFps();
+}
+
+// TODO: check if this actually blocks the CPU until the GPU finishes its commands
+void flush()
+{
+    static UINT64 value = 1;
+    cmdQueue->Signal(fence.Get(), value);
+    fence->SetEventOnCompletion(value++, nullptr);
 }
 
 } // namespace Renderer

@@ -8,11 +8,9 @@ namespace Renderer
 {
 	void init();
 
-	LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+	void render();
 
 	void flush();
-
-	void render();
 
 	extern ComPtr<ID3D12Device5> device;
 	extern ComPtr<ID3D12CommandAllocator> cmdAlloc;
