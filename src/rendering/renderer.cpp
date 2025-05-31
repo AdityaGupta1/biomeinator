@@ -301,9 +301,9 @@ void initScene()
         };
     }
 
-    dev_instanceDescs->Unmap(0, nullptr);
-
     updateTransforms();
+
+    dev_instanceDescs->Unmap(0, nullptr);
 }
 
 void updateTransforms()

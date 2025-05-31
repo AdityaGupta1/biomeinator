@@ -2,25 +2,19 @@
 
 #include "buffer_helper.h"
 
-void ManagedBuffer::init(uint64_t bufferSize, uint64_t uploadBufferSize)
+void ManagedBuffer::init(uint64_t size)
 {
     dev_buffer = BufferHelper::createBasicBuffer(
-        bufferSize, &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    this->bufferSize = bufferSize;
+        size, &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    this->bufferSize = size;
 
-    if (uploadBufferSize > 0)
-    {
-        dev_uploadBuffer = BufferHelper::createBasicBuffer(
-            bufferSize, &UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        dev_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&host_uploadBuffer));
-    }
-    this->uploadBufferSize = uploadBufferSize;
-
-    freeList.push_back({ 0, bufferSize });
+    freeList.push_back({ 0, size });
 }
 
 // TODO: keep a persistent rotating pointer into freeList to avoid biasing towards beginning of list for new uploads?
-ManagedBufferSection ManagedBuffer::upload(ID3D12GraphicsCommandList* cmdList, const void* data, uint64_t size)
+ManagedBufferSection ManagedBuffer::copyFromUploadHeap(ID3D12GraphicsCommandList* cmdList,
+                                                       ID3D12Resource* dev_uploadBuffer,
+                                                       uint64_t size)
 {
     for (auto it = freeList.begin(); it != freeList.end(); ++it)
     {
@@ -28,19 +22,12 @@ ManagedBufferSection ManagedBuffer::upload(ID3D12GraphicsCommandList* cmdList, c
         {
             uint64_t bufferOffset = it->offset;
 
-            if (uploadBufferOffset + size > uploadBufferSize)
-            {
-                uploadBufferOffset = 0;
-            }
-
-            std::memcpy(static_cast<uint8_t*>(host_uploadBuffer) + uploadBufferOffset, data, size);
-
             BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                          dev_buffer.Get(),
                                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                          D3D12_RESOURCE_STATE_COPY_DEST);
 
-            cmdList->CopyBufferRegion(dev_buffer.Get(), bufferOffset, dev_uploadBuffer.Get(), uploadBufferOffset, size);
+            cmdList->CopyBufferRegion(dev_buffer.Get(), bufferOffset, dev_uploadBuffer, 0, size);
 
             BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                          dev_buffer.Get(),
@@ -56,8 +43,6 @@ ManagedBufferSection ManagedBuffer::upload(ID3D12GraphicsCommandList* cmdList, c
                 it->offset += size;
                 it->size -= size;
             }
-
-            uploadBufferOffset += size;
 
             ManagedBufferSection result = {
                 .offset = bufferOffset,

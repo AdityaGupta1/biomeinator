@@ -10,3 +10,5 @@ BinPackParameters: false
 PointerAlignment: Left
 AllowShortFunctionsOnASingleLine: Empty
 Cpp11BracedListStyle: false
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 100000
