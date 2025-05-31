@@ -535,26 +535,17 @@ void render()
     ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
 
-    auto barrier = [](auto* resource, auto before, auto after)
-    {
-        D3D12_RESOURCE_BARRIER rb = {
-            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-            .Transition = {
-                .pResource = resource,
-                .StateBefore = before,
-                .StateAfter = after
-            },
-        };
-        cmdList->ResourceBarrier(1, &rb);
-    };
-
-    barrier(renderTarget.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    barrier(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), renderTarget.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
 
     cmdList->CopyResource(backBuffer.Get(), renderTarget.Get());
 
-    barrier(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    barrier(renderTarget.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), renderTarget.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     backBuffer.Reset();
 

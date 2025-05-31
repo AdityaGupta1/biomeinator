@@ -19,4 +19,20 @@ ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
     return dev_buffer;
 }
 
+void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
+                                    ID3D12Resource* resource,
+                                    D3D12_RESOURCE_STATES stateBefore,
+                                    D3D12_RESOURCE_STATES stateAfter)
+{
+    D3D12_RESOURCE_BARRIER resourceBarrier = {
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+        .Transition = {
+            .pResource = resource,
+            .StateBefore = stateBefore,
+            .StateAfter = stateAfter,
+        },
+    };
+    cmdList->ResourceBarrier(1, &resourceBarrier);
+}
+
 }  // namespace BufferHelper
