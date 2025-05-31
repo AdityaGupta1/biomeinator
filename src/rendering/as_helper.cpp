@@ -129,14 +129,14 @@ BlasWrapper initBuffersAndBlas(const std::vector<Vertex>* verts, const std::vect
     return result;
 }
 
-ComPtr<ID3D12Resource> makeTLAS(ID3D12Resource* instances, uint32_t numInstances, uint64_t* updateScratchSize)
+ComPtr<ID3D12Resource> makeTLAS(ID3D12Resource* dev_instanceDescs, uint32_t numInstances, uint64_t* updateScratchSize)
 {
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
         .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE,
         .NumDescs = numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .InstanceDescs = instances->GetGPUVirtualAddress()
+        .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress()
     };
 
     return makeAccelerationStructure(inputs, updateScratchSize);

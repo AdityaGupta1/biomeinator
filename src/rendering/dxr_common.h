@@ -26,3 +26,5 @@ constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
     .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
     .Flags = D3D12_RESOURCE_FLAG_NONE,
 };
+
+using uint = unsigned int;

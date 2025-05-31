@@ -1,4 +1,5 @@
 #include "rng.hlsli"
+#include "common_structs.hlsli"
 
 struct Payload
 {

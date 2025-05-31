@@ -3,6 +3,7 @@
 #include "dxr_common.h"
 
 #include "as_helper.h"
+#include "buffer_helper.h"
 
 #include <iostream>
 #include <string>
@@ -279,26 +280,28 @@ void initBottomLevel()
     cubeBlasWrapper = initBuffersAndBlas(&cubeVerts, &cubeIdx);
 }
 
-constexpr UINT NUM_INSTANCES = 3;
-ComPtr<ID3D12Resource> instances;
-D3D12_RAYTRACING_INSTANCE_DESC* instanceData;
+constexpr uint NUM_INSTANCES = 3;
+D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs;
+ComPtr<ID3D12Resource> dev_instanceDescs;
 void initScene()
 {
-    auto instancesDesc = BASIC_BUFFER_DESC;
-    instancesDesc.Width = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * NUM_INSTANCES;
-    device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE,
-        &instancesDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr, IID_PPV_ARGS(&instances));
-    instances->Map(0, nullptr, reinterpret_cast<void**>(&instanceData));
+    dev_instanceDescs =
+        BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * NUM_INSTANCES, &UPLOAD_HEAP,
+                                        D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDescs));
 
-    for (UINT i = 0; i < NUM_INSTANCES; ++i)
+    for (uint i = 0; i < NUM_INSTANCES; ++i)
     {
-        instanceData[i] = {
+        const BlasWrapper& blasWrapper = (i > 0 ? quadBlasWrapper : cubeBlasWrapper);
+
+        host_instanceDescs[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
-            .AccelerationStructure = (i ? quadBlasWrapper.blas : cubeBlasWrapper.blas)->GetGPUVirtualAddress(),
+            .AccelerationStructure = blasWrapper.blas->GetGPUVirtualAddress(),
         };
     }
+
+    dev_instanceDescs->Unmap(0, nullptr);
 
     updateTransforms();
 }
@@ -308,7 +311,7 @@ void updateTransforms()
     using namespace DirectX;
     auto set = [](int idx, XMMATRIX mx)
     {
-        auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&instanceData[idx].Transform);
+        auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&host_instanceDescs[idx].Transform);
         XMStoreFloat3x4(ptr, mx);
     };
 
@@ -333,7 +336,7 @@ ComPtr<ID3D12Resource> tlasUpdateScratch;
 void initTopLevel()
 {
     UINT64 updateScratchSize;
-    tlas = makeTLAS(instances.Get(), NUM_INSTANCES, &updateScratchSize);
+    tlas = makeTLAS(dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
 
     auto desc = BASIC_BUFFER_DESC;
     // WARP bug workaround: use 8 if the required size was reported as less
@@ -347,53 +350,65 @@ void initTopLevel()
 ComPtr<ID3D12RootSignature> rootSignature;
 void initRootSignature()
 {
-    D3D12_DESCRIPTOR_RANGE uavRange = {
+    D3D12_DESCRIPTOR_RANGE1 uavRange = {
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
     };
-    D3D12_ROOT_PARAMETER params[] = {
+    D3D12_ROOT_PARAMETER1 params[] = {
         {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-            .DescriptorTable = {
-                .NumDescriptorRanges = 1,
-                .pDescriptorRanges = &uavRange
-            }
+            .DescriptorTable =
+                {
+                    .NumDescriptorRanges = 1,
+                    .pDescriptorRanges = &uavRange,
+                },
         },
         {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = 0,
-                .RegisterSpace = 0
-            }
-        }
+            .Descriptor =
+                {
+                    .ShaderRegister = 0,
+                    .RegisterSpace = 0,
+                },
+        },
+        {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor =
+                {
+                    .ShaderRegister = 1,
+                    .RegisterSpace = 0,
+                },
+        },
     };
-
-    D3D12_ROOT_SIGNATURE_DESC desc = {
-        .NumParameters = std::size(params),
-        .pParameters = params
-    };
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
+    rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    rootSigDesc.Desc_1_1.NumParameters = std::size(params);
+    rootSigDesc.Desc_1_1.pParameters = params;
+    rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
+    rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
+    rootSigDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
     ComPtr<ID3DBlob> blob;
-    D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &blob, nullptr);
+    D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, nullptr);
     device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 }
 
 ComPtr<ID3D12StateObject> pso;
 constexpr UINT64 NUM_SHADER_IDS = 3;
-ComPtr<ID3D12Resource> shaderIDs;
+ComPtr<ID3D12Resource> dev_shaderIds;
 void initPipeline()
 {
     D3D12_DXIL_LIBRARY_DESC lib = {
         .DXILLibrary = {
             .pShaderBytecode = compiled_shader,
-            .BytecodeLength = std::size(compiled_shader)
-        }
+            .BytecodeLength = std::size(compiled_shader),
+        },
     };
 
     D3D12_HIT_GROUP_DESC hitGroup = {
         .HitGroupExport = L"HitGroup",
         .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit"
+        .ClosestHitShaderImport = L"ClosestHit",
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
@@ -404,26 +419,27 @@ void initPipeline()
     D3D12_GLOBAL_ROOT_SIGNATURE globalSig = { rootSignature.Get() };
 
     D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-        .MaxTraceRecursionDepth = 3
+        .MaxTraceRecursionDepth = 3,
     };
 
     D3D12_STATE_SUBOBJECT subobjects[] = {
-        {.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib},
-        {.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup},
-        {.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg},
-        {.Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig},
-        {.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg} };
+        { .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib },
+        { .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup },
+        { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg },
+        { .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig },
+        { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg },
+    };
     D3D12_STATE_OBJECT_DESC desc = {
         .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
         .NumSubobjects = std::size(subobjects),
-        .pSubobjects = subobjects
+        .pSubobjects = subobjects,
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
-    auto idDesc = BASIC_BUFFER_DESC;
-    idDesc.Width = NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
-    device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &idDesc,
-        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&shaderIDs));
+    dev_shaderIds = BufferHelper::createBasicBuffer(NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                                                    &UPLOAD_HEAP,
+                                                    D3D12_HEAP_FLAG_NONE,
+                                                    D3D12_RESOURCE_STATE_GENERIC_READ);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);
@@ -436,11 +452,11 @@ void initPipeline()
         data = static_cast<char*>(data) + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
     };
 
-    shaderIDs->Map(0, nullptr, &data);
+    dev_shaderIds->Map(0, nullptr, &data);
     writeId(L"RayGeneration");
     writeId(L"Miss");
     writeId(L"HitGroup");
-    shaderIDs->Unmap(0, nullptr);
+    dev_shaderIds->Unmap(0, nullptr);
 }
 
 void updateScene()
@@ -454,7 +470,7 @@ void updateScene()
             .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
             .NumDescs = NUM_INSTANCES,
             .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-            .InstanceDescs = instances->GetGPUVirtualAddress()
+            .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress(),
         },
         .SourceAccelerationStructureData = tlas->GetGPUVirtualAddress(),
         .ScratchAccelerationStructureData = tlasUpdateScratch->GetGPUVirtualAddress(),
@@ -463,7 +479,7 @@ void updateScene()
 
     D3D12_RESOURCE_BARRIER barrier = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
-        .UAV = {.pResource = tlas.Get() }
+        .UAV = { .pResource = tlas.Get() }
     };
     cmdList->ResourceBarrier(1, &barrier);
 }
@@ -511,15 +527,15 @@ void render()
 
     D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
         .RayGenerationShaderRecord = {
-            .StartAddress = shaderIDs->GetGPUVirtualAddress(),
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress(),
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
         },
         .MissShaderTable = {
-            .StartAddress = shaderIDs->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
         },
         .HitGroupTable = {
-            .StartAddress = shaderIDs->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
         },
         .Width = static_cast<UINT>(rtDesc.Width),
