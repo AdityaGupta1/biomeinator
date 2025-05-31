@@ -15,6 +15,8 @@ using namespace AsHelper;
 namespace Renderer
 {
 
+void resize(HWND hwnd);
+
 LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -40,9 +42,33 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
+void initWindow();
+void initDevice();
+void initSurfaces(HWND hwnd);
+void initCommand();
+void initBottomLevel();
+void initScene();
+void updateTransforms();
+void initTopLevel();
+void initRootSignature();
+void initPipeline();
+
 HWND hwnd;
 
 void init()
+{
+    initWindow();
+    initDevice();
+    initSurfaces(hwnd);
+    initCommand();
+    initBottomLevel();
+    initScene();
+    initTopLevel();
+    initRootSignature();
+    initPipeline();
+}
+
+void initWindow()
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
@@ -57,15 +83,6 @@ void init()
         WS_VISIBLE | WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
         /*width=*/CW_USEDEFAULT, /*height=*/CW_USEDEFAULT,
         nullptr, nullptr, nullptr, nullptr);
-
-    initDevice();
-    initSurfaces(hwnd);
-    initCommand();
-    initBottomLevel();
-    initScene();
-    initTopLevel();
-    initRootSignature();
-    initPipeline();
 }
 
 ComPtr<IDXGIFactory4> factory;

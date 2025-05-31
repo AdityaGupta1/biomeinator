@@ -10,17 +10,6 @@ namespace Renderer
 
 	LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-	void initDevice();
-	void initSurfaces(HWND hwnd);
-	void resize(HWND hwnd);
-	void initCommand();
-	void initBottomLevel();
-	void initScene();
-	void updateTransforms();
-	void initTopLevel();
-	void initRootSignature();
-	void initPipeline();
-
 	void flush();
 
 	void render();
