@@ -2,51 +2,51 @@
 
 #include "buffer_helper.h"
 
-void ManagedBuffer::init(uint64_t size)
+void ManagedBuffer::init(uint byteSize)
 {
     dev_buffer = BufferHelper::createBasicBuffer(
-        size, &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    this->bufferSize = size;
+        byteSize, &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    this->bufferSize = byteSize;
 
-    freeList.push_back({ 0, size });
+    freeList.push_back({ 0, byteSize });
 }
 
 // TODO: keep a persistent rotating pointer into freeList to avoid biasing towards beginning of list for new uploads?
 ManagedBufferSection ManagedBuffer::copyFromUploadHeap(ID3D12GraphicsCommandList* cmdList,
                                                        ID3D12Resource* dev_uploadBuffer,
-                                                       uint64_t size)
+                                                       uint byteSize)
 {
     for (auto it = freeList.begin(); it != freeList.end(); ++it)
     {
-        if (it->size >= size)
+        if (it->byteSize >= byteSize)
         {
-            uint64_t bufferOffset = it->offset;
+            uint bufferOffset = it->byteOffset;
 
             BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                          dev_buffer.Get(),
                                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                          D3D12_RESOURCE_STATE_COPY_DEST);
 
-            cmdList->CopyBufferRegion(dev_buffer.Get(), bufferOffset, dev_uploadBuffer, 0, size);
+            cmdList->CopyBufferRegion(dev_buffer.Get(), bufferOffset, dev_uploadBuffer, 0, byteSize);
 
             BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                          dev_buffer.Get(),
                                                          D3D12_RESOURCE_STATE_COPY_DEST,
                                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-            if (it->size == size)
+            if (it->byteSize == byteSize)
             {
                 freeList.erase(it);
             }
             else
             {
-                it->offset += size;
-                it->size -= size;
+                it->byteOffset += byteSize;
+                it->byteSize -= byteSize;
             }
 
             ManagedBufferSection result = {
-                .offset = bufferOffset,
-                .size = size,
+                .byteOffset = bufferOffset,
+                .byteSize = byteSize,
             };
             return result;
         }
@@ -60,7 +60,7 @@ void ManagedBuffer::free(ManagedBufferSection section)
     auto it = freeList.begin();
     for (; it != freeList.end(); ++it)
     {
-        if (section.offset + section.size < it->offset)
+        if (section.byteOffset + section.byteSize < it->byteOffset)
         {
             break;
         }
@@ -72,9 +72,9 @@ void ManagedBuffer::free(ManagedBufferSection section)
     if (inserted != freeList.begin())
     {
         auto prev = std::prev(inserted);
-        if (prev->offset + prev->size == inserted->offset)
+        if (prev->byteOffset + prev->byteSize == inserted->byteOffset)
         {
-            prev->size += inserted->size;
+            prev->byteSize += inserted->byteSize;
             freeList.erase(inserted);
             inserted = prev;
         }
@@ -82,9 +82,9 @@ void ManagedBuffer::free(ManagedBufferSection section)
 
     // try merging with next
     auto next = std::next(inserted);
-    if (next != freeList.end() && inserted->offset + inserted->size == next->offset)
+    if (next != freeList.end() && inserted->byteOffset + inserted->byteSize == next->byteOffset)
     {
-        inserted->size += next->size;
+        inserted->byteSize += next->byteSize;
         freeList.erase(next);
     }
 }

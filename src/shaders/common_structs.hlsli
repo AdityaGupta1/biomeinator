@@ -9,6 +9,7 @@ struct Vertex
 
 struct InstanceData
 {
-    uint64_t vertBufferOffset;
-    uint64_t idxBufferOffset;
+    uint vertBufferOffset;
+    uint hasIdx;
+    uint idxBufferByteOffset;
 };

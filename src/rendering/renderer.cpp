@@ -4,6 +4,7 @@
 
 #include "as_helper.h"
 #include "buffer_helper.h"
+#include "managed_buffer.h"
 
 #include <iostream>
 #include <string>
@@ -274,36 +275,73 @@ const std::vector<uint32_t> cubeIdx = {
 BlasWrapper quadBlasWrapper;
 BlasWrapper cubeBlasWrapper;
 
+ManagedBuffer dev_vertsBuffer;
+ManagedBuffer dev_idxBuffer;
+
+ManagedBufferSection quadVertsBufferSection;
+ManagedBufferSection cubeVertsBufferSection;
+ManagedBufferSection cubeIdxBufferSection;
+
 void initBottomLevel()
 {
     quadBlasWrapper = initBuffersAndBlas(&quadVerts);
     cubeBlasWrapper = initBuffersAndBlas(&cubeVerts, &cubeIdx);
+
+    dev_vertsBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
+    dev_idxBuffer.init(cubeIdx.size() * sizeof(uint32_t));
+
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
+
+    quadVertsBufferSection = dev_vertsBuffer.copyFromUploadHeap(
+        cmdList.Get(), quadBlasWrapper.vertBuffer.Get(), quadVerts.size() * sizeof(Vertex));
+    cubeVertsBufferSection = dev_vertsBuffer.copyFromUploadHeap(
+        cmdList.Get(), cubeBlasWrapper.vertBuffer.Get(), cubeVerts.size() * sizeof(Vertex));
+    cubeIdxBufferSection = dev_idxBuffer.copyFromUploadHeap(
+        cmdList.Get(), cubeBlasWrapper.idxBuffer.Get(), cubeIdx.size() * sizeof(uint32_t));
+
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    flush();
 }
 
+constexpr uint MAX_INSTANCES = 3; // will be more than NUM_INSTANCES after adding chunks
 constexpr uint NUM_INSTANCES = 3;
 D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs;
 ComPtr<ID3D12Resource> dev_instanceDescs;
+InstanceData* host_instanceDatas;
+ComPtr<ID3D12Resource> dev_instanceDatas;
 void initScene()
 {
-    dev_instanceDescs =
-        BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * NUM_INSTANCES, &UPLOAD_HEAP,
-                                        D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * MAX_INSTANCES,
+                                                        &UPLOAD_HEAP,
+                                                        D3D12_HEAP_FLAG_NONE,
+                                                        D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDescs));
+
+    dev_instanceDatas = BufferHelper::createBasicBuffer(
+        sizeof(InstanceData) * MAX_INSTANCES, &UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDatas));
 
     for (uint i = 0; i < NUM_INSTANCES; ++i)
     {
-        const BlasWrapper& blasWrapper = (i > 0 ? quadBlasWrapper : cubeBlasWrapper);
+        const bool isQuad = i > 0;
 
         host_instanceDescs[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
-            .AccelerationStructure = blasWrapper.blas->GetGPUVirtualAddress(),
+            .AccelerationStructure = (isQuad ? quadBlasWrapper : cubeBlasWrapper).blas->GetGPUVirtualAddress(),
+        };
+
+        host_instanceDatas[i] = {
+            .vertBufferOffset =
+                (uint)((isQuad ? quadVertsBufferSection : cubeVertsBufferSection).byteOffset / sizeof(Vertex)),
+            .hasIdx = !isQuad,
+            .idxBufferByteOffset = isQuad ? 0 : cubeIdxBufferSection.byteOffset,
         };
     }
 
     updateTransforms();
-
-    dev_instanceDescs->Unmap(0, nullptr);
 }
 
 void updateTransforms()
@@ -354,24 +392,52 @@ void initRootSignature()
     uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     uavRange.NumDescriptors = 1;
 
-    D3D12_ROOT_PARAMETER1 params[3] = {};
+    std::vector<D3D12_ROOT_PARAMETER1> params;
 
-    params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    params[0].DescriptorTable.NumDescriptorRanges = 1;
-    params[0].DescriptorTable.pDescriptorRanges = &uavRange;
+    params.push_back({ // u0
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+        .DescriptorTable = {
+            .NumDescriptorRanges = 1,
+            .pDescriptorRanges = &uavRange,
+        },
+    });
 
-    params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-    params[1].Descriptor.ShaderRegister = 0;
-    params[1].Descriptor.RegisterSpace = 0;
+    params.push_back({ // t0
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = 0,
+            .RegisterSpace = 0,
+        },
+    });
 
-    params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-    params[2].Descriptor.ShaderRegister = 1;
-    params[2].Descriptor.RegisterSpace = 0;
+    params.push_back({ // t1
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = 1,
+            .RegisterSpace = 0,
+        },
+    });
+
+    params.push_back({ // t2
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = 2,
+            .RegisterSpace = 0,
+        },
+    });
+
+    params.push_back({ // t3
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = 3,
+            .RegisterSpace = 0,
+        },
+    });
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
     rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-    rootSigDesc.Desc_1_1.NumParameters = std::size(params);
-    rootSigDesc.Desc_1_1.pParameters = params;
+    rootSigDesc.Desc_1_1.NumParameters = params.size();
+    rootSigDesc.Desc_1_1.pParameters = params.data();
     rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
     rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
     rootSigDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
@@ -510,6 +576,9 @@ void render()
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     cmdList->SetComputeRootDescriptorTable(0, uavTable); // u0
     cmdList->SetComputeRootShaderResourceView(1, tlas->GetGPUVirtualAddress()); // t0
+    cmdList->SetComputeRootShaderResourceView(2, dev_vertsBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(3, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
+    cmdList->SetComputeRootShaderResourceView(4, dev_instanceDatas->GetGPUVirtualAddress()); // t3
 
     auto rtDesc = renderTarget->GetDesc();
 
@@ -551,19 +620,27 @@ void render()
 
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-
     flush();
+
     swapChain->Present(1, 0);
 
     updateFps();
 }
 
-// TODO: check if this actually blocks the CPU until the GPU finishes its commands
 void flush()
 {
-    static UINT64 value = 1;
-    cmdQueue->Signal(fence.Get(), value);
-    fence->SetEventOnCompletion(value++, nullptr);
+    static uint64_t value = 1;
+    uint64_t fenceValue = value++;
+
+    cmdQueue->Signal(fence.Get(), fenceValue);
+
+    static HANDLE fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+    if (fence->GetCompletedValue() < fenceValue)
+    {
+        fence->SetEventOnCompletion(fenceValue, fenceEvent);
+        WaitForSingleObject(fenceEvent, INFINITE);
+    }
 }
 
 } // namespace Renderer

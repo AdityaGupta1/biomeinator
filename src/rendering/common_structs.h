@@ -4,6 +4,8 @@
 
 using namespace Windows::Foundation::Numerics;
 
+using uint = unsigned int;
+
 struct Vertex
 {
     float3 pos;
@@ -13,6 +15,7 @@ struct Vertex
 
 struct InstanceData
 {
-    uint64_t vertBufferOffset;
-    uint64_t idxBufferOffset;
+    uint vertBufferOffset;
+    uint hasIdx;
+    uint idxBufferByteOffset;
 };
