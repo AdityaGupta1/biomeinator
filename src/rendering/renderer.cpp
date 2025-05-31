@@ -350,36 +350,24 @@ void initTopLevel()
 ComPtr<ID3D12RootSignature> rootSignature;
 void initRootSignature()
 {
-    D3D12_DESCRIPTOR_RANGE1 uavRange = {
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        .NumDescriptors = 1,
-    };
-    D3D12_ROOT_PARAMETER1 params[] = {
-        {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-            .DescriptorTable =
-                {
-                    .NumDescriptorRanges = 1,
-                    .pDescriptorRanges = &uavRange,
-                },
-        },
-        {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor =
-                {
-                    .ShaderRegister = 0,
-                    .RegisterSpace = 0,
-                },
-        },
-        {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor =
-                {
-                    .ShaderRegister = 1,
-                    .RegisterSpace = 0,
-                },
-        },
-    };
+    D3D12_DESCRIPTOR_RANGE1 uavRange = {};
+    uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+    uavRange.NumDescriptors = 1;
+
+    D3D12_ROOT_PARAMETER1 params[3] = {};
+
+    params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    params[0].DescriptorTable.NumDescriptorRanges = 1;
+    params[0].DescriptorTable.pDescriptorRanges = &uavRange;
+
+    params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    params[1].Descriptor.ShaderRegister = 0;
+    params[1].Descriptor.RegisterSpace = 0;
+
+    params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    params[2].Descriptor.ShaderRegister = 1;
+    params[2].Descriptor.RegisterSpace = 0;
+
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
     rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     rootSigDesc.Desc_1_1.NumParameters = std::size(params);
