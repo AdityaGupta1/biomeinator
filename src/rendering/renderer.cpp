@@ -303,6 +303,10 @@ void initBottomLevel()
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();
+
+    quadBlasWrapper.vertBuffer.Reset();
+    cubeBlasWrapper.vertBuffer.Reset();
+    cubeBlasWrapper.idxBuffer.Reset();
 }
 
 constexpr uint MAX_INSTANCES = 3; // will be more than NUM_INSTANCES after adding chunks
