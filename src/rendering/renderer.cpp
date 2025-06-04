@@ -413,6 +413,14 @@ void initRootSignature()
         },
     });
 
+    params.push_back({ // b0
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+        .Descriptor = {
+            .ShaderRegister = 0,
+            .RegisterSpace = 0,
+        },
+    });
+
     params.push_back({ // t0
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
@@ -441,14 +449,6 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 3,
-            .RegisterSpace = 0,
-        },
-    });
-
-    params.push_back({ // b0
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-        .Descriptor = {
-            .ShaderRegister = 0,
             .RegisterSpace = 0,
         },
     });
@@ -665,11 +665,11 @@ void render()
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+    cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, tlas->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertsBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
 
     auto rtDesc = renderTarget->GetDesc();
 
