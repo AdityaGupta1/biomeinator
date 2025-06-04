@@ -1,17 +1,18 @@
 #pragma once
 
 #include "common_structs.h"
+#include "dxr_includes.h"
 
 class Camera
 {
 private:
-    XMFLOAT3 right_WS;
-    XMFLOAT3 up_WS;
-    XMFLOAT3 forward_WS;
-    const float tanHalfFovY;
+    CameraParams* host_cameraParams{ nullptr };
+    ComPtr<ID3D12Resource> dev_cameraParams{ nullptr };
 
 public:
-    Camera(float fovYRadians);
+    void init(float fovYRadians);
 
-    void updateCameraParams(CameraParams* cameraParams);
+    void moveLinear(XMFLOAT3 linearMovement);
+
+    ID3D12Resource* getCameraParamsBuffer();
 };

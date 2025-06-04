@@ -1,5 +1,6 @@
 #include "rng.hlsli"
 #include "common_structs.hlsli"
+#include "global_params.hlsli"
 
 struct Payload
 {
@@ -23,13 +24,6 @@ StructuredBuffer<InstanceData> instanceDatas : register(t3);
 
 RWTexture2D<float4> renderTarget : register(u0);
 
-static const float fovY = radians(35);
-
-static const float3 cameraPos_WS = float3(0, 1.5, -7);
-static const float3 cameraRight_WS = float3(1, 0, 0);
-static const float3 cameraUp_WS = float3(0, 1, 0);
-static const float3 cameraForward_WS = float3(0, 0, 1);
-
 static const float3 lightPos_WS = float3(0, 200, 0);
 static const float3 skyTopColor = float3(0.24, 0.44, 0.72);
 static const float3 skyBottomColor = float3(0.75, 0.86, 0.93);
@@ -42,13 +36,13 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
     const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
     
     const float aspect = size.x / size.y;
-    const float yScale = tan(fovY * 0.5);
+    const float yScale = cameraParams.tanHalfFovY;
     const float xScale = yScale * aspect;
     
-    const float3 target = cameraPos_WS
-        + cameraRight_WS * ndc.x * xScale
-        + cameraUp_WS * ndc.y * yScale
-        + cameraForward_WS * 1.0;
+    const float3 target = cameraParams.pos_WS
+        + cameraParams.right_WS * ndc.x * xScale
+        + cameraParams.up_WS * ndc.y * yScale
+        + cameraParams.forward_WS * 1.0;
     return target;
 }
 
@@ -67,8 +61,8 @@ void RayGeneration()
         const float3 targetPos_WS = calculateRayTarget(idx + jitter, size);
 
         RayDesc ray;
-        ray.Origin = cameraPos_WS;
-        ray.Direction = targetPos_WS - cameraPos_WS;
+        ray.Origin = cameraParams.pos_WS;
+        ray.Direction = targetPos_WS - cameraParams.pos_WS;
         ray.TMin = 0.001;
         ray.TMax = 1000;
 

@@ -16,8 +16,15 @@ struct InstanceData
 
 struct CameraParams
 {
+    float3 pos_WS;
+    uint pad0;
+    
     float3 right_WS;
+    uint pad1;
+    
     float3 up_WS;
+    uint pad2;
+    
     float3 forward_WS;
     float tanHalfFovY;
 };

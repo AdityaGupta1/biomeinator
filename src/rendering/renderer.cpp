@@ -6,6 +6,8 @@
 #include "buffer_helper.h"
 #include "managed_buffer.h"
 
+#include "camera.h"
+
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -44,18 +46,6 @@ void init()
     initPipeline();
 }
 
-void handleKeyDown(HWND hwnd, WPARAM wparam)
-{
-    switch (wparam)
-    {
-    case VK_ESCAPE:
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
-        break;
-    default:
-        break;
-    }
-}
-
 LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -69,7 +59,10 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
         resize(hwnd);
         [[fallthrough]];
     case WM_KEYDOWN:
-        handleKeyDown(hwnd, wparam);
+        if (wparam == VK_ESCAPE)
+        {
+            PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
         break;
     default:
         break;
@@ -318,6 +311,9 @@ void initBottomLevel()
     cubeBlasWrapper.idxBuffer.Reset();
 }
 
+constexpr float fovYDegrees = 35;
+Camera camera;
+
 constexpr uint32_t MAX_INSTANCES = 3; // will be more than NUM_INSTANCES after adding chunks
 constexpr uint32_t NUM_INSTANCES = 3;
 D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs;
@@ -326,6 +322,8 @@ InstanceData* host_instanceDatas;
 ComPtr<ID3D12Resource> dev_instanceDatas;
 void initScene()
 {
+    camera.init(XMConvertToRadians(fovYDegrees));
+
     dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * MAX_INSTANCES,
                                                         &UPLOAD_HEAP,
                                                         D3D12_HEAP_FLAG_NONE,
@@ -447,6 +445,14 @@ void initRootSignature()
         },
     });
 
+    params.push_back({ // b0
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+        .Descriptor = {
+            .ShaderRegister = 0,
+            .RegisterSpace = 0,
+        },
+    });
+
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
     rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     rootSigDesc.Desc_1_1.NumParameters = params.size();
@@ -551,10 +557,70 @@ void updateScene()
     cmdList->ResourceBarrier(1, &barrier);
 }
 
-// returns true if camera params should change
-bool processInputs(double deltaTime)
+struct PlayerInput
 {
-    return false; // TODO
+    XMFLOAT3 linearInput{ 0, 0, 0 };
+    float linearSpeedMultiplier = 1.f;
+    XMFLOAT2 mouseMovement{ 0, 0 };
+};
+
+PlayerInput getPlayerInput()
+{
+    PlayerInput input;
+
+    if (GetAsyncKeyState('W') & 0x8000)
+    {
+        ++input.linearInput.z;
+    }
+
+    if (GetAsyncKeyState('A') & 0x8000)
+    {
+        --input.linearInput.x;
+    }
+
+    if (GetAsyncKeyState('S') & 0x8000)
+    {
+        --input.linearInput.z;
+    }
+
+    if (GetAsyncKeyState('D') & 0x8000)
+    {
+        ++input.linearInput.x;
+    }
+
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+    {
+        ++input.linearInput.y;
+    }
+
+    if (GetAsyncKeyState(VK_LSHIFT) & 0x8000)
+    {
+        --input.linearInput.y;
+    }
+
+    if (GetAsyncKeyState(VK_LCONTROL) & 0x8000)
+    {
+        input.linearSpeedMultiplier = 2.f;
+    }
+
+    return input;
+}
+
+const float playerHorizontalSpeed = 11.0f;
+const float playerVerticalSpeed = 5.0f;
+const XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
+
+void processPlayerInput(PlayerInput input, double deltaTime)
+{
+    if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
+    {
+        XMVECTOR linearSpeed = XMLoadFloat3(&playerLinearSpeed);
+        linearSpeed = XMVectorScale(linearSpeed, static_cast<float>(deltaTime) * input.linearSpeedMultiplier);
+        const XMVECTOR linearMovement = XMVectorMultiply(linearSpeed, XMLoadFloat3(&input.linearInput));
+        XMFLOAT3 storedLinearMovement;
+        XMStoreFloat3(&storedLinearMovement, linearMovement);
+        camera.moveLinear(storedLinearMovement);
+    }
 }
 
 static int frameCount = 0;
@@ -584,6 +650,9 @@ void render()
     double deltaTime = std::chrono::duration<double>(now - lastTime).count();
     lastTime = now;
 
+    const PlayerInput playerInput = getPlayerInput();
+    processPlayerInput(playerInput, deltaTime);
+
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
 
@@ -594,11 +663,13 @@ void render()
     ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
     cmdList->SetDescriptorHeaps(1, heaps);
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
-    cmdList->SetComputeRootDescriptorTable(0, uavTable); // u0
-    cmdList->SetComputeRootShaderResourceView(1, tlas->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(2, dev_vertsBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(3, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
-    cmdList->SetComputeRootShaderResourceView(4, dev_instanceDatas->GetGPUVirtualAddress()); // t3
+    uint32_t paramIdx = 0;
+    cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, tlas->GetGPUVirtualAddress()); // t0
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertsBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3
+    cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
 
     auto rtDesc = renderTarget->GetDesc();
 
