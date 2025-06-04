@@ -44,6 +44,18 @@ void init()
     initPipeline();
 }
 
+void handleKeyDown(HWND hwnd, WPARAM wparam)
+{
+    switch (wparam)
+    {
+    case VK_ESCAPE:
+        PostMessage(hwnd, WM_CLOSE, 0, 0);
+        break;
+    default:
+        break;
+    }
+}
+
 LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -57,10 +69,7 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
         resize(hwnd);
         [[fallthrough]];
     case WM_KEYDOWN:
-        if (wparam == VK_ESCAPE)
-        {
-            PostMessage(hwnd, WM_CLOSE, 0, 0);
-        }
+        handleKeyDown(hwnd, wparam);
         break;
     default:
         break;
@@ -173,8 +182,8 @@ void resize(HWND hwnd)
 
     RECT rect;
     GetClientRect(hwnd, &rect);
-    auto width = std::max<UINT>(rect.right - rect.left, 1);
-    auto height = std::max<UINT>(rect.bottom - rect.top, 1);
+    auto width = std::max<uint32_t>(rect.right - rect.left, 1);
+    auto height = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
     flush();
 
@@ -213,12 +222,12 @@ void initCommand()
 }
 
 const std::vector<Vertex> quadVerts = {
-    { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
-    { float3(-1, 0, 1), float3(0, 1, 0), float2(0, 1) },
-    { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) },
-    { float3(-1, 0, -1), float3(0, 1, 0), float2(0, 0) },
-    { float3(1, 0, -1), float3(0, 1, 0), float2(1, 0) },
-    { float3(1, 0, 1), float3(0, 1, 0), float2(1, 1) }
+    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
+    {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
+    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
+    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
+    {{1, 0, -1}, {0, 1, 0}, {1, 0}},
+    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
 };
 const std::vector<Vertex> cubeVerts = {
     // -x (left)
@@ -309,8 +318,8 @@ void initBottomLevel()
     cubeBlasWrapper.idxBuffer.Reset();
 }
 
-constexpr uint MAX_INSTANCES = 3; // will be more than NUM_INSTANCES after adding chunks
-constexpr uint NUM_INSTANCES = 3;
+constexpr uint32_t MAX_INSTANCES = 3; // will be more than NUM_INSTANCES after adding chunks
+constexpr uint32_t NUM_INSTANCES = 3;
 D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs;
 ComPtr<ID3D12Resource> dev_instanceDescs;
 InstanceData* host_instanceDatas;
@@ -327,7 +336,7 @@ void initScene()
         sizeof(InstanceData) * MAX_INSTANCES, &UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDatas));
 
-    for (uint i = 0; i < NUM_INSTANCES; ++i)
+    for (uint32_t i = 0; i < NUM_INSTANCES; ++i)
     {
         const bool isQuad = i > 0;
 
@@ -339,7 +348,7 @@ void initScene()
 
         host_instanceDatas[i] = {
             .vertBufferOffset =
-                (uint)((isQuad ? quadVertsBufferSection : cubeVertsBufferSection).byteOffset / sizeof(Vertex)),
+                (uint32_t)((isQuad ? quadVertsBufferSection : cubeVertsBufferSection).byteOffset / sizeof(Vertex)),
             .hasIdx = !isQuad,
             .idxBufferByteOffset = isQuad ? 0 : cubeIdxBufferSection.byteOffset,
         };
@@ -542,18 +551,21 @@ void updateScene()
     cmdList->ResourceBarrier(1, &barrier);
 }
 
+// returns true if camera params should change
+bool processInputs(double deltaTime)
+{
+    return false; // TODO
+}
+
 static int frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTime = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
-void updateFps()
+void updateFps(double deltaTime)
 {
     frameCount++;
-    auto now = std::chrono::high_resolution_clock::now();
-    double delta = std::chrono::duration<double>(now - lastTime).count();
-    elapsedTime += delta;
-    lastTime = now;
+    elapsedTime += deltaTime;
 
     if (elapsedTime >= 1.0)
     {
@@ -568,6 +580,10 @@ void updateFps()
 
 void render()
 {
+    auto now = std::chrono::high_resolution_clock::now();
+    double deltaTime = std::chrono::duration<double>(now - lastTime).count();
+    lastTime = now;
+
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
 
@@ -628,7 +644,7 @@ void render()
 
     swapChain->Present(1, 0);
 
-    updateFps();
+    updateFps(deltaTime);
 }
 
 void flush()

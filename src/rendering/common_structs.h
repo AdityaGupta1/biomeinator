@@ -1,21 +1,27 @@
 #pragma once
 
-#include <WindowsNumerics.h>
+#include <DirectXMath.h>
 
-using namespace Windows::Foundation::Numerics;
-
-using uint = unsigned int;
+using namespace DirectX;
 
 struct Vertex
 {
-    float3 pos;
-    float3 nor;  // TODO: pack into one? uint
-    float2 uv;   // TODO: pack into one uint
+    XMFLOAT3 pos;
+    XMFLOAT3 nor; // TODO: pack into one? uint
+    XMFLOAT2 uv;  // TODO: pack into one uint
 };
 
 struct InstanceData
 {
-    uint vertBufferOffset;
-    uint hasIdx;
-    uint idxBufferByteOffset;
+    uint32_t vertBufferOffset;
+    uint32_t hasIdx;
+    uint32_t idxBufferByteOffset;
+};
+
+struct CameraParams
+{
+    XMFLOAT3 right_WS;
+    XMFLOAT3 up_WS;
+    XMFLOAT3 forward_WS;
+    float tanHalfFovY;
 };

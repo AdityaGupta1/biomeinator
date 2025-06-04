@@ -2,7 +2,9 @@
 
 #include "buffer_helper.h"
 
-void ManagedBuffer::init(uint byteSize)
+#include <stdexcept>
+
+void ManagedBuffer::init(uint32_t byteSize)
 {
     dev_buffer = BufferHelper::createBasicBuffer(
         byteSize, &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -14,13 +16,13 @@ void ManagedBuffer::init(uint byteSize)
 // TODO: keep a persistent rotating pointer into freeList to avoid biasing towards beginning of list for new uploads?
 ManagedBufferSection ManagedBuffer::copyFromUploadHeap(ID3D12GraphicsCommandList* cmdList,
                                                        ID3D12Resource* dev_uploadBuffer,
-                                                       uint byteSize)
+                                                       uint32_t byteSize)
 {
     for (auto it = freeList.begin(); it != freeList.end(); ++it)
     {
         if (it->byteSize >= byteSize)
         {
-            uint bufferOffset = it->byteOffset;
+            uint32_t bufferOffset = it->byteOffset;
 
             BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                          dev_buffer.Get(),

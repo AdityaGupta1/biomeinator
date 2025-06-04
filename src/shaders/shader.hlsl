@@ -39,7 +39,7 @@ static const uint numSamplesPerPixel = 32;
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
-    const float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
     
     const float aspect = size.x / size.y;
     const float yScale = tan(fovY * 0.5);

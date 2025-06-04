@@ -31,7 +31,7 @@ ComPtr<ID3D12Resource> initAndCopyToGeometryBuffer(const std::vector<T>& host_ve
 static ComPtr<ID3D12Resource> sharedAsScratchBuffer = nullptr;
 static uint64_t sharedAsScratchSize = 0;
 
-ComPtr<ID3D12Resource> makeAsBuffer(uint byteSize, D3D12_RESOURCE_STATES initialState)
+ComPtr<ID3D12Resource> makeAsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES initialState)
 {
     auto desc = BASIC_BUFFER_DESC;
     desc.Width = byteSize;

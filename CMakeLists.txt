@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.24)
 project(GigaMinecraft LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -91,8 +91,4 @@ endforeach()
 
 add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES} ${SHADER_INCLUDE_FILES})
 
-target_link_libraries(GigaMinecraft PRIVATE
-    user32
-    d3d12
-    dxgi
-)
+target_link_libraries(GigaMinecraft PRIVATE user32 d3d12 dxgi)

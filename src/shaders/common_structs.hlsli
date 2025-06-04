@@ -13,3 +13,11 @@ struct InstanceData
     uint hasIdx;
     uint idxBufferByteOffset;
 };
+
+struct CameraParams
+{
+    float3 right_WS;
+    float3 up_WS;
+    float3 forward_WS;
+    float tanHalfFovY;
+};
