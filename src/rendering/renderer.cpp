@@ -46,6 +46,8 @@ void init()
     initPipeline();
 }
 
+bool windowJustRegainedFocus = false;
+
 LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -53,15 +55,35 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
     case WM_CLOSE:
     case WM_DESTROY:
         PostQuitMessage(0);
-        [[fallthrough]];
+        break;
     case WM_SIZING:
     case WM_SIZE:
         resize(hwnd);
-        [[fallthrough]];
+        break;
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE)
         {
             PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        break;
+    case WM_SYSKEYDOWN: // = alt key pressed
+        if (wparam == VK_F4) // allow alt + f4
+        {
+            break;
+        }
+        [[fallthrough]];
+    case WM_SYSKEYUP:
+    case WM_SYSCHAR: // = key pressed while alt is also pressed
+        return 0;
+    case WM_ACTIVATE:
+        if (wparam == WA_INACTIVE)
+        {
+            ShowCursor(true);
+        }
+        else
+        {
+            windowJustRegainedFocus = true;
+            ShowCursor(false);
         }
         break;
     default:
@@ -560,7 +582,7 @@ void updateScene()
 struct PlayerInput
 {
     XMFLOAT3 linearInput{ 0, 0, 0 };
-    float linearSpeedMultiplier = 1.f;
+    float linearSpeedMultiplier{ 1.f };
     XMFLOAT2 mouseMovement{ 0, 0 };
 };
 
@@ -568,47 +590,83 @@ PlayerInput getPlayerInput()
 {
     PlayerInput input;
 
-    if (GetAsyncKeyState('W') & 0x8000)
+    if (GetForegroundWindow() != hwnd)
+    {
+        return input;
+    }
+
+#define KEY_DOWN(key) (GetAsyncKeyState(key) & 0x8000)
+
+    if (KEY_DOWN('W'))
     {
         ++input.linearInput.z;
     }
 
-    if (GetAsyncKeyState('A') & 0x8000)
+    if (KEY_DOWN('A'))
     {
         --input.linearInput.x;
     }
 
-    if (GetAsyncKeyState('S') & 0x8000)
+    if (KEY_DOWN('S'))
     {
         --input.linearInput.z;
     }
 
-    if (GetAsyncKeyState('D') & 0x8000)
+    if (KEY_DOWN('D'))
     {
         ++input.linearInput.x;
     }
 
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+    if (KEY_DOWN(VK_SPACE) || KEY_DOWN('E'))
     {
         ++input.linearInput.y;
     }
 
-    if (GetAsyncKeyState(VK_LSHIFT) & 0x8000)
+    if (KEY_DOWN(VK_LSHIFT) || KEY_DOWN('Q'))
     {
         --input.linearInput.y;
     }
 
-    if (GetAsyncKeyState(VK_LCONTROL) & 0x8000)
+    if (KEY_DOWN(VK_LCONTROL))
     {
-        input.linearSpeedMultiplier = 2.f;
+        input.linearSpeedMultiplier *= 2.f;
     }
+
+    if (KEY_DOWN(VK_LMENU))
+    {
+        input.linearSpeedMultiplier *= 0.5f;
+    }
+
+#undef KEY_DOWN
+
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+
+    RECT windowRect;
+    GetWindowRect(hwnd, &windowRect);
+    int centerX = (windowRect.left + windowRect.right) / 2;
+    int centerY = (windowRect.top + windowRect.bottom) / 2;
+
+    if (windowJustRegainedFocus)
+    {
+        windowJustRegainedFocus = false;
+    }
+    else
+    {
+        input.mouseMovement.x = static_cast<float>(cursorPos.x - centerX);
+        input.mouseMovement.y = static_cast<float>(cursorPos.y - centerY);
+    }
+
+    SetCursorPos(centerX, centerY);
 
     return input;
 }
 
-const float playerHorizontalSpeed = 11.0f;
-const float playerVerticalSpeed = 5.0f;
-const XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
+constexpr float playerHorizontalSpeed = 11.0f;
+constexpr float playerVerticalSpeed = 7.0f;
+constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
+
+constexpr float mouseSensitivity = 0.0016f;
 
 void processPlayerInput(PlayerInput input, double deltaTime)
 {
@@ -620,6 +678,11 @@ void processPlayerInput(PlayerInput input, double deltaTime)
         XMFLOAT3 storedLinearMovement;
         XMStoreFloat3(&storedLinearMovement, linearMovement);
         camera.moveLinear(storedLinearMovement);
+    }
+
+    if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
+    {
+        camera.rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
     }
 }
 

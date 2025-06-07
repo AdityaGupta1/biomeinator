@@ -28,7 +28,7 @@ static const float3 lightPos_WS = float3(0, 200, 0);
 static const float3 skyTopColor = float3(0.24, 0.44, 0.72);
 static const float3 skyBottomColor = float3(0.75, 0.86, 0.93);
 
-static const uint numSamplesPerPixel = 32;
+static const uint numSamplesPerPixel = 4;
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {

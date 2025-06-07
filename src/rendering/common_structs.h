@@ -23,12 +23,12 @@ struct CameraParams
     XMFLOAT3 pos_WS;
     uint32_t pad0;
 
-    XMFLOAT3 right_WS;
+    XMFLOAT3 forward_WS;
     uint32_t pad1;
 
-    XMFLOAT3 up_WS;
+    XMFLOAT3 right_WS;
     uint32_t pad2;
 
-    XMFLOAT3 forward_WS;
+    XMFLOAT3 up_WS;
     float tanHalfFovY;
 };

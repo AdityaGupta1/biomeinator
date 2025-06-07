@@ -19,12 +19,12 @@ struct CameraParams
     float3 pos_WS;
     uint pad0;
     
-    float3 right_WS;
+    float3 forward_WS;
     uint pad1;
     
-    float3 up_WS;
+    float3 right_WS;
     uint pad2;
     
-    float3 forward_WS;
+    float3 up_WS;
     float tanHalfFovY;
 };
