@@ -20,11 +20,14 @@ struct BlasInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
+
     ManagedBuffer* dev_managedVertBuffer{ nullptr };
     ManagedBuffer* dev_managedIdxBuffer{ nullptr };
+
+    GeometryWrapper* outGeoWrapper;
 };
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);
+void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
                                 ToFreeList* toFreeList,

@@ -110,10 +110,8 @@ ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
     return makeAccelerationStructure(cmdList, toFreeList, inputs);
 }
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs)
+void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs)
 {
-    GeometryWrapper result;
-
     ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_verts);
     ComPtr<ID3D12Resource> dev_idxUploadBuffer = nullptr;
     uint32_t numIdx = 0;
@@ -124,18 +122,18 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeLi
     }
 
     ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
-    result.dev_blas =
+    inputs.outGeoWrapper->dev_blas =
         makeBlas(cmdList, toFreeList, dev_vertUploadBuffer.Get(), inputs.host_verts->size(), dev_idxUploadBufferPtr, numIdx);
 
     if (inputs.dev_managedVertBuffer)
     {
-        result.vertBufferSection = inputs.dev_managedVertBuffer->copyFromUploadHeap(
+        inputs.outGeoWrapper->vertBufferSection = inputs.dev_managedVertBuffer->copyFromUploadHeap(
             cmdList, dev_vertUploadBuffer.Get(), inputs.host_verts->size() * sizeof(Vertex));
     }
 
     if (inputs.dev_managedIdxBuffer)
     {
-        result.idxBufferSection = inputs.dev_managedIdxBuffer->copyFromUploadHeap(
+        inputs.outGeoWrapper->idxBufferSection = inputs.dev_managedIdxBuffer->copyFromUploadHeap(
             cmdList, dev_idxUploadBuffer.Get(), inputs.host_idxs->size() * sizeof(uint32_t));
     }
 
@@ -144,8 +142,6 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeLi
     {
         toFreeList->push_back(dev_idxUploadBuffer);
     }
-
-    return result;
 }
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,

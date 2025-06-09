@@ -316,8 +316,8 @@ void initBottomLevel()
         AsHelper::BlasInputs blasInputs;
         blasInputs.host_verts = &quadVerts;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
-
-        quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
+        blasInputs.outGeoWrapper = &quadGeoWrapper;
+        makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
@@ -333,8 +333,8 @@ void initBottomLevel()
         blasInputs.host_idxs = &cubeIdxs;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
         blasInputs.dev_managedIdxBuffer = &dev_idxBuffer;
-
-        cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
+        blasInputs.outGeoWrapper = &cubeGeoWrapper;
+        makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
@@ -382,8 +382,6 @@ void initScene()
             .idxBufferByteOffset = isQuad ? 0 : cubeGeoWrapper.idxBufferSection.byteOffset,
         };
     }
-
-    updateTransforms();
 }
 
 void updateTransforms()
@@ -415,6 +413,8 @@ ComPtr<ID3D12Resource> dev_tlas;
 ComPtr<ID3D12Resource> dev_tlasUpdateScratchBuffer;
 void initTopLevel()
 {
+    updateTransforms();
+
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
     uint64_t updateScratchSize;
