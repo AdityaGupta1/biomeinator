@@ -5,7 +5,7 @@
 #include "dxr_common.h"
 #include "managed_buffer.h"
 
-namespace AsHelper
+namespace AcsHelper
 {
 
 struct GeometryWrapper
@@ -29,10 +29,10 @@ struct BlasInputs
 
 void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);
 
-ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
+ComPtr<ID3D12Resource> makeTlas(ID3D12GraphicsCommandList4* cmdList,
                                 ToFreeList* toFreeList,
                                 ID3D12Resource* dev_instanceDescs,
                                 uint32_t numInstances,
                                 uint64_t* updateScratchSize);
 
-}  // namespace AsHelper
+}  // namespace AcsHelper

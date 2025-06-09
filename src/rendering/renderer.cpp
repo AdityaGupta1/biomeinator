@@ -14,8 +14,6 @@
 
 #include "shader.fxh"
 
-using namespace AsHelper;
-
 namespace Renderer
 {
 
@@ -301,8 +299,8 @@ ToFreeList toFreeList;
 ManagedBuffer dev_vertBuffer;
 ManagedBuffer dev_idxBuffer;
 
-GeometryWrapper quadGeoWrapper;
-GeometryWrapper cubeGeoWrapper;
+AcsHelper::GeometryWrapper quadGeoWrapper;
+AcsHelper::GeometryWrapper cubeGeoWrapper;
 
 void initBottomLevel()
 {
@@ -313,7 +311,7 @@ void initBottomLevel()
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-        AsHelper::BlasInputs blasInputs;
+        AcsHelper::BlasInputs blasInputs;
         blasInputs.host_verts = &quadVerts;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
         blasInputs.outGeoWrapper = &quadGeoWrapper;
@@ -328,7 +326,7 @@ void initBottomLevel()
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-        AsHelper::BlasInputs blasInputs;
+        AcsHelper::BlasInputs blasInputs;
         blasInputs.host_verts = &cubeVerts;
         blasInputs.host_idxs = &cubeIdxs;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
@@ -418,7 +416,8 @@ void initTopLevel()
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
     uint64_t updateScratchSize;
-    dev_tlas = makeTLAS(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+    dev_tlas =
+        AcsHelper::makeTlas(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();

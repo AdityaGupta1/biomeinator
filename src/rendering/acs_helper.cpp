@@ -2,7 +2,7 @@
 
 #include "renderer.h"
 
-namespace AsHelper
+namespace AcsHelper
 {
 
 template<class T>
@@ -26,10 +26,10 @@ ComPtr<ID3D12Resource> initAndCopyToUploadBuffer(const std::vector<T>& host_vect
     return res;
 }
 
-static ComPtr<ID3D12Resource> sharedAsScratchBuffer = nullptr;
+static ComPtr<ID3D12Resource> sharedAcsScratchBuffer = nullptr;
 static uint64_t sharedAsScratchSize = 0;
 
-ComPtr<ID3D12Resource> makeAsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES initialState)
+ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES initialState)
 {
     auto desc = BASIC_BUFFER_DESC;
     desc.Width = byteSize;
@@ -53,25 +53,25 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmd
 
     if (prebuildInfo.ScratchDataSizeInBytes > sharedAsScratchSize)
     {
-        if (sharedAsScratchBuffer)
+        if (sharedAcsScratchBuffer)
         {
-            toFreeList->push_back(sharedAsScratchBuffer);
+            toFreeList->push_back(sharedAcsScratchBuffer);
         }
 
-        sharedAsScratchBuffer = makeAsBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
+        sharedAcsScratchBuffer = makeAcsBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
     }
 
-    ComPtr<ID3D12Resource> asBuffer = makeAsBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    ComPtr<ID3D12Resource> acsBuffer = makeAcsBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-        .DestAccelerationStructureData = asBuffer->GetGPUVirtualAddress(),
+        .DestAccelerationStructureData = acsBuffer->GetGPUVirtualAddress(),
         .Inputs = inputs,
-        .ScratchAccelerationStructureData = sharedAsScratchBuffer->GetGPUVirtualAddress()
+        .ScratchAccelerationStructureData = sharedAcsScratchBuffer->GetGPUVirtualAddress()
     };
 
     cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-    return asBuffer;
+    return acsBuffer;
 }
 
 ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
@@ -144,7 +144,7 @@ void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeL
     }
 }
 
-ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
+ComPtr<ID3D12Resource> makeTlas(ID3D12GraphicsCommandList4* cmdList,
                                 ToFreeList* toFreeList,
                                 ID3D12Resource* dev_instanceDescs,
                                 uint32_t numInstances,
@@ -161,4 +161,4 @@ ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
     return makeAccelerationStructure(cmdList, toFreeList, inputs, updateScratchSize);
 }
 
-} // namespace AsHelper
+} // namespace AcsHelper
