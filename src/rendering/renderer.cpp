@@ -574,31 +574,6 @@ void initPipeline()
     dev_shaderIds->Unmap(0, nullptr);
 }
 
-void updateScene()
-{
-    updateTransforms();
-
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {
-        .DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
-        .Inputs = {
-            .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-            .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
-            .NumDescs = NUM_INSTANCES,
-            .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-            .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress(),
-        },
-        .SourceAccelerationStructureData = tlas->GetGPUVirtualAddress(),
-        .ScratchAccelerationStructureData = tlasUpdateScratch->GetGPUVirtualAddress(),
-    };
-    cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
-
-    D3D12_RESOURCE_BARRIER barrier = {
-        .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
-        .UAV = { .pResource = tlas.Get() }
-    };
-    cmdList->ResourceBarrier(1, &barrier);
-}
-
 struct PlayerInput
 {
     XMFLOAT3 linearInput{ 0, 0, 0 };
@@ -725,6 +700,28 @@ void updateFps(double deltaTime)
         std::wstring title = L"Giga Minecraft - FPS: " + std::to_wstring(lastFps);
         SetWindowTextW(hwnd, title.c_str());
     }
+}
+
+void updateScene()
+{
+    updateTransforms();
+
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {
+        .DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
+        .Inputs = {
+            .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+            .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
+            .NumDescs = NUM_INSTANCES,
+            .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+            .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress(),
+        },
+        .SourceAccelerationStructureData = tlas->GetGPUVirtualAddress(),
+        .ScratchAccelerationStructureData = tlasUpdateScratch->GetGPUVirtualAddress(),
+    };
+    cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
+
+    D3D12_RESOURCE_BARRIER barrier = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV, .UAV = { .pResource = tlas.Get() } };
+    cmdList->ResourceBarrier(1, &barrier);
 }
 
 void render()

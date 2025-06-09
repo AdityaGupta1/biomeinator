@@ -14,6 +14,5 @@ void render();
 void flush();
 
 extern ComPtr<ID3D12Device5> device;
-extern ComPtr<ID3D12CommandQueue> cmdQueue;
 
 }; // namespace Renderer
