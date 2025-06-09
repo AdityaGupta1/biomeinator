@@ -40,6 +40,7 @@ ComPtr<ID3D12Resource> makeAsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES ini
 }
 
 ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmdList,
+                                                 ToFreeList* toFreeList,
                                                  const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs,
                                                  uint64_t* updateScratchSize = nullptr)
 {
@@ -54,7 +55,7 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmd
     {
         if (sharedAsScratchBuffer)
         {
-            sharedAsScratchBuffer.Reset();
+            toFreeList->push_back(sharedAsScratchBuffer);
         }
 
         sharedAsScratchBuffer = makeAsBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
@@ -74,6 +75,7 @@ ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmd
 }
 
 ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
+                                ToFreeList* toFreeList,
                                 ID3D12Resource* vertBuffer,
                                 uint32_t numVerts,
                                 ID3D12Resource* idxBuffer = nullptr,
@@ -105,12 +107,10 @@ ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
         .pGeometryDescs = &geometryDesc
     };
 
-    return makeAccelerationStructure(cmdList, inputs);
+    return makeAccelerationStructure(cmdList, toFreeList, inputs);
 }
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
-                                   BlasInputs inputs,
-                                   std::vector<ComPtr<ID3D12Resource>>* toFreeList)
+GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs)
 {
     GeometryWrapper result;
 
@@ -124,7 +124,8 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
     }
 
     ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
-    result.blas = makeBlas(cmdList, dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
+    result.blas =
+        makeBlas(cmdList, toFreeList, dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
 
     if (inputs.managedVertBuffer)
     {
@@ -148,6 +149,7 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
 }
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
+                                ToFreeList* toFreeList,
                                 ID3D12Resource* dev_instanceDescs,
                                 uint32_t numInstances,
                                 uint64_t* updateScratchSize)
@@ -160,7 +162,7 @@ ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
         .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress()
     };
 
-    return makeAccelerationStructure(cmdList, inputs, updateScratchSize);
+    return makeAccelerationStructure(cmdList, toFreeList, inputs, updateScratchSize);
 }
 
 } // namespace AsHelper

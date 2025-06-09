@@ -24,11 +24,10 @@ struct BlasInputs
     ManagedBuffer* managedIdxBuffer{ nullptr };
 };
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
-                                   BlasInputs inputs,
-                                   std::vector<ComPtr<ID3D12Resource>>* toFreeList);
+GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
+                                ToFreeList* toFreeList,
                                 ID3D12Resource* dev_instanceDescs,
                                 uint32_t numInstances,
                                 uint64_t* updateScratchSize);

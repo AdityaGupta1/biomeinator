@@ -9,4 +9,8 @@
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
+#include <vector>
+
 using Microsoft::WRL::ComPtr;
+
+using ToFreeList = std::vector<ComPtr<ID3D12Resource>>;

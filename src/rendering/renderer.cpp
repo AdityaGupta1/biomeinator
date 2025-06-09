@@ -296,6 +296,8 @@ const std::vector<uint32_t> cubeIdxs = {
     20, 21, 22, 20, 22, 23
 };
 
+ToFreeList toFreeList;
+
 ManagedBuffer dev_vertBuffer;
 ManagedBuffer dev_idxBuffer;
 
@@ -307,8 +309,6 @@ void initBottomLevel()
     dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
 
-    std::vector<ComPtr<ID3D12Resource>> toFreeList;
-
     {
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
@@ -317,7 +317,7 @@ void initBottomLevel()
         blasInputs.verts = &quadVerts;
         blasInputs.managedVertBuffer = &dev_vertBuffer;
 
-        quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs, &toFreeList);
+        quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
@@ -334,18 +334,12 @@ void initBottomLevel()
         blasInputs.managedVertBuffer = &dev_vertBuffer;
         blasInputs.managedIdxBuffer = &dev_idxBuffer;
 
-        cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs, &toFreeList);
+        cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
         flush();
     }
-
-    for (ComPtr<ID3D12Resource>& resourceToFree : toFreeList)
-    {
-        resourceToFree.Reset();
-    }
-    toFreeList.clear();
 }
 
 constexpr float fovYDegrees = 35;
@@ -423,15 +417,14 @@ void initTopLevel()
 {
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
-    UINT64 updateScratchSize;
-    tlas = makeTLAS(cmdList.Get(), dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+    uint64_t updateScratchSize;
+    tlas = makeTLAS(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();
 
     auto desc = BASIC_BUFFER_DESC;
-    // WARP bug workaround: use 8 if the required size was reported as less
-    desc.Width = std::max(updateScratchSize, 8ULL);
+    desc.Width = updateScratchSize;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc,
         D3D12_RESOURCE_STATE_COMMON, nullptr,
@@ -724,6 +717,15 @@ void updateScene()
     cmdList->ResourceBarrier(1, &barrier);
 }
 
+void clearToFreeList()
+{
+    for (ComPtr<ID3D12Resource>& resourceToFree : toFreeList)
+    {
+        resourceToFree.Reset();
+    }
+    toFreeList.clear();
+}
+
 void render()
 {
     auto now = std::chrono::high_resolution_clock::now();
@@ -794,6 +796,8 @@ void render()
     flush();
 
     swapChain->Present(1, 0);
+
+    clearToFreeList();
 
     updateFps(deltaTime);
 }
