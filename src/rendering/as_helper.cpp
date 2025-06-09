@@ -108,34 +108,40 @@ ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
     return makeAccelerationStructure(cmdList, inputs);
 }
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, BlasInputs inputs)
+GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
+                                   BlasInputs inputs,
+                                   std::vector<ComPtr<ID3D12Resource>>* toFreeList)
 {
     GeometryWrapper result;
 
-    ID3D12Resource* dev_idxUploadBufferPtr = nullptr;
+    ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.verts);
+    ComPtr<ID3D12Resource> dev_idxUploadBuffer = nullptr;
     uint32_t numIdx = 0;
-
-    result.dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.verts);
     if (inputs.idxs)
     {
-        result.dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idxs);
-        dev_idxUploadBufferPtr = result.dev_idxUploadBuffer.Get();
+        dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idxs);
         numIdx = inputs.idxs->size();
     }
 
-    result.blas =
-        makeBlas(cmdList, result.dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
+    ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
+    result.blas = makeBlas(cmdList, dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
 
     if (inputs.managedVertBuffer)
     {
         result.vertBufferSection = inputs.managedVertBuffer->copyFromUploadHeap(
-            cmdList, result.dev_vertUploadBuffer.Get(), inputs.verts->size() * sizeof(Vertex));
+            cmdList, dev_vertUploadBuffer.Get(), inputs.verts->size() * sizeof(Vertex));
     }
 
     if (inputs.managedIdxBuffer)
     {
         result.idxBufferSection = inputs.managedIdxBuffer->copyFromUploadHeap(
-            cmdList, result.dev_idxUploadBuffer.Get(), inputs.idxs->size() * sizeof(uint32_t));
+            cmdList, dev_idxUploadBuffer.Get(), inputs.idxs->size() * sizeof(uint32_t));
+    }
+
+    toFreeList->push_back(dev_vertUploadBuffer);
+    if (dev_idxUploadBuffer)
+    {
+        toFreeList->push_back(dev_idxUploadBuffer);
     }
 
     return result;

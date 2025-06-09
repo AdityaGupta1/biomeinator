@@ -307,6 +307,8 @@ void initBottomLevel()
     dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
 
+    std::vector<ComPtr<ID3D12Resource>> toFreeList;
+
     {
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
@@ -315,7 +317,7 @@ void initBottomLevel()
         blasInputs.verts = &quadVerts;
         blasInputs.managedVertBuffer = &dev_vertBuffer;
 
-        quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs);
+        quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs, &toFreeList);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
@@ -332,16 +334,18 @@ void initBottomLevel()
         blasInputs.managedVertBuffer = &dev_vertBuffer;
         blasInputs.managedIdxBuffer = &dev_idxBuffer;
 
-        cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs);
+        cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs, &toFreeList);
 
         cmdList->Close();
         cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
         flush();
     }
 
-    quadGeoWrapper.dev_vertUploadBuffer.Reset();
-    cubeGeoWrapper.dev_vertUploadBuffer.Reset();
-    cubeGeoWrapper.dev_idxUploadBuffer.Reset();
+    for (ComPtr<ID3D12Resource>& resourceToFree : toFreeList)
+    {
+        resourceToFree.Reset();
+    }
+    toFreeList.clear();
 }
 
 constexpr float fovYDegrees = 35;
