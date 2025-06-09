@@ -29,6 +29,10 @@ void initTopLevel();
 void initRootSignature();
 void initPipeline();
 
+void resetCmd();
+void submitCmd();
+void flush();
+
 HWND hwnd;
 
 void init()
@@ -38,9 +42,15 @@ void init()
     initSurfaces(hwnd);
     initCommand();
 
+    resetCmd();
+
     initBottomLevel();
     initScene();
     initTopLevel();
+
+    submitCmd();
+    flush();
+
     initRootSignature();
     initPipeline();
 }
@@ -329,14 +339,9 @@ void initBottomLevel()
         allBlasInputs.push_back(blasInputs);
     }
 
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
-
     AcsHelper::makeBuffersAndBlases(cmdList.Get(), &toFreeList, allBlasInputs);
 
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-    flush();
+    BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 }
 
 constexpr float fovYDegrees = 35;
@@ -420,14 +425,7 @@ void initTopLevel()
     inputs.updateScratchSizePtr = &updateScratchSize;
     inputs.outTlas = &dev_tlas;
 
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
-
     AcsHelper::makeTlas(cmdList.Get(), &toFreeList, inputs);
-
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-    flush();
 
     auto desc = BASIC_BUFFER_DESC;
     desc.Width = updateScratchSize;
@@ -741,8 +739,7 @@ void render()
     const PlayerInput playerInput = getPlayerInput();
     processPlayerInput(playerInput, deltaTime);
 
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
+    resetCmd();
 
     updateScene();
 
@@ -797,8 +794,7 @@ void render()
 
     backBuffer.Reset();
 
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    submitCmd();
     flush();
 
     swapChain->Present(1, 0);
@@ -806,6 +802,18 @@ void render()
     clearToFreeList();
 
     updateFps(deltaTime);
+}
+
+void resetCmd()
+{
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
+}
+
+void submitCmd()
+{
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 }
 
 void flush()
