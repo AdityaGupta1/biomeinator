@@ -642,12 +642,12 @@ PlayerInput getPlayerInput()
         ++input.linearInput.y;
     }
 
-    if (KEY_DOWN(VK_LSHIFT) || KEY_DOWN('Q'))
+    if (KEY_DOWN('Q'))
     {
         --input.linearInput.y;
     }
 
-    if (KEY_DOWN(VK_LCONTROL))
+    if (KEY_DOWN(VK_LSHIFT))
     {
         input.linearSpeedMultiplier *= 2.f;
     }
