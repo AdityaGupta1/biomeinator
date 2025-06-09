@@ -61,6 +61,7 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE)
         {
+            flush();
             PostMessage(hwnd, WM_CLOSE, 0, 0);
         }
         break;
