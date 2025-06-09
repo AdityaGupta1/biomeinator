@@ -16,7 +16,7 @@ struct GeometryWrapper
     ManagedBufferSection idxBufferSection{};
 };
 
-struct BlasInputs
+struct BlasBuildInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
@@ -27,12 +27,17 @@ struct BlasInputs
     GeometryWrapper* outGeoWrapper;
 };
 
-void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);
+void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasBuildInputs inputs);
 
-ComPtr<ID3D12Resource> makeTlas(ID3D12GraphicsCommandList4* cmdList,
-                                ToFreeList* toFreeList,
-                                ID3D12Resource* dev_instanceDescs,
-                                uint32_t numInstances,
-                                uint64_t* updateScratchSize);
+struct TlasBuildInputs
+{
+    ID3D12Resource* dev_instanceDescs;
+    uint32_t numInstances;
+    uint64_t* updateScratchSizePtr;
+
+    ComPtr<ID3D12Resource>* outTlas;
+};
+
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasBuildInputs inputs);
 
 }  // namespace AcsHelper

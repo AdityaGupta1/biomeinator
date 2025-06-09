@@ -42,13 +42,13 @@ ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES in
 ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmdList,
                                                  ToFreeList* toFreeList,
                                                  const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs,
-                                                 uint64_t* updateScratchSize = nullptr)
+                                                 uint64_t* updateScratchSizePtr = nullptr)
 {
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
     Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-    if (updateScratchSize)
+    if (updateScratchSizePtr)
     {
-        *updateScratchSize = prebuildInfo.UpdateScratchDataSizeInBytes;
+        *updateScratchSizePtr = prebuildInfo.UpdateScratchDataSizeInBytes;
     }
 
     if (prebuildInfo.ScratchDataSizeInBytes > sharedAsScratchSize)
@@ -110,7 +110,7 @@ ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
     return makeAccelerationStructure(cmdList, toFreeList, inputs);
 }
 
-void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs)
+void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasBuildInputs inputs)
 {
     ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_verts);
     ComPtr<ID3D12Resource> dev_idxUploadBuffer = nullptr;
@@ -144,21 +144,17 @@ void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeL
     }
 }
 
-ComPtr<ID3D12Resource> makeTlas(ID3D12GraphicsCommandList4* cmdList,
-                                ToFreeList* toFreeList,
-                                ID3D12Resource* dev_instanceDescs,
-                                uint32_t numInstances,
-                                uint64_t* updateScratchSize)
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasBuildInputs inputs)
 {
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS acsInputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
         .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE,
-        .NumDescs = numInstances,
+        .NumDescs = inputs.numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress()
+        .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress()
     };
 
-    return makeAccelerationStructure(cmdList, toFreeList, inputs, updateScratchSize);
+    *inputs.outTlas = makeAccelerationStructure(cmdList, toFreeList, acsInputs, inputs.updateScratchSizePtr);
 }
 
 } // namespace AcsHelper

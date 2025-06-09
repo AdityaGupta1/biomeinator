@@ -312,7 +312,7 @@ void initBottomLevel()
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-        AcsHelper::BlasInputs blasInputs;
+        AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &quadVerts;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
         blasInputs.outGeoWrapper = &quadGeoWrapper;
@@ -327,7 +327,7 @@ void initBottomLevel()
         cmdAlloc->Reset();
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-        AcsHelper::BlasInputs blasInputs;
+        AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &cubeVerts;
         blasInputs.host_idxs = &cubeIdxs;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
@@ -414,11 +414,19 @@ void initTopLevel()
 {
     updateTransforms();
 
+    uint64_t updateScratchSize;
+
+    AcsHelper::TlasBuildInputs inputs;
+    inputs.dev_instanceDescs = dev_instanceDescs.Get();
+    inputs.numInstances = NUM_INSTANCES;
+    inputs.updateScratchSizePtr = &updateScratchSize;
+    inputs.outTlas = &dev_tlas;
+
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
-    uint64_t updateScratchSize;
-    dev_tlas =
-        AcsHelper::makeTlas(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+
+    AcsHelper::makeTlas(cmdList.Get(), &toFreeList, inputs);
+
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();
