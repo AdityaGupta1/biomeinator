@@ -116,15 +116,27 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, BlasInpu
     uint32_t numIdx = 0;
 
     result.dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.verts);
-    if (inputs.idx)
+    if (inputs.idxs)
     {
-        result.dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idx);
+        result.dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idxs);
         dev_idxUploadBufferPtr = result.dev_idxUploadBuffer.Get();
-        numIdx = inputs.idx->size();
+        numIdx = inputs.idxs->size();
     }
 
     result.blas =
         makeBlas(cmdList, result.dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
+
+    if (inputs.managedVertBuffer)
+    {
+        result.vertBufferSection = inputs.managedVertBuffer->copyFromUploadHeap(
+            cmdList, result.dev_vertUploadBuffer.Get(), inputs.verts->size() * sizeof(Vertex));
+    }
+
+    if (inputs.managedIdxBuffer)
+    {
+        result.idxBufferSection = inputs.managedIdxBuffer->copyFromUploadHeap(
+            cmdList, result.dev_idxUploadBuffer.Get(), inputs.idxs->size() * sizeof(uint32_t));
+    }
 
     return result;
 }
