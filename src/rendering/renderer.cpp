@@ -314,8 +314,8 @@ void initBottomLevel()
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
         AsHelper::BlasInputs blasInputs;
-        blasInputs.verts = &quadVerts;
-        blasInputs.managedVertBuffer = &dev_vertBuffer;
+        blasInputs.host_verts = &quadVerts;
+        blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
 
         quadGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
@@ -329,10 +329,10 @@ void initBottomLevel()
         cmdList->Reset(cmdAlloc.Get(), nullptr);
 
         AsHelper::BlasInputs blasInputs;
-        blasInputs.verts = &cubeVerts;
-        blasInputs.idxs = &cubeIdxs;
-        blasInputs.managedVertBuffer = &dev_vertBuffer;
-        blasInputs.managedIdxBuffer = &dev_idxBuffer;
+        blasInputs.host_verts = &cubeVerts;
+        blasInputs.host_idxs = &cubeIdxs;
+        blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
+        blasInputs.dev_managedIdxBuffer = &dev_idxBuffer;
 
         cubeGeoWrapper = makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
 
@@ -372,7 +372,7 @@ void initScene()
         host_instanceDescs[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
-            .AccelerationStructure = (isQuad ? quadGeoWrapper : cubeGeoWrapper).blas->GetGPUVirtualAddress(),
+            .AccelerationStructure = (isQuad ? quadGeoWrapper : cubeGeoWrapper).dev_blas->GetGPUVirtualAddress(),
         };
 
         host_instanceDatas[i] = {
@@ -411,14 +411,14 @@ void updateTransforms()
     set(2, floor);
 }
 
-ComPtr<ID3D12Resource> tlas;
-ComPtr<ID3D12Resource> tlasUpdateScratch;
+ComPtr<ID3D12Resource> dev_tlas;
+ComPtr<ID3D12Resource> dev_tlasUpdateScratchBuffer;
 void initTopLevel()
 {
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
     uint64_t updateScratchSize;
-    tlas = makeTLAS(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+    dev_tlas = makeTLAS(cmdList.Get(), &toFreeList, dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();
@@ -428,7 +428,7 @@ void initTopLevel()
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc,
         D3D12_RESOURCE_STATE_COMMON, nullptr,
-        IID_PPV_ARGS(&tlasUpdateScratch));
+        IID_PPV_ARGS(&dev_tlasUpdateScratchBuffer));
 }
 
 ComPtr<ID3D12RootSignature> rootSignature;
@@ -700,7 +700,7 @@ void updateScene()
     updateTransforms();
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {
-        .DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
+        .DestAccelerationStructureData = dev_tlas->GetGPUVirtualAddress(),
         .Inputs = {
             .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
             .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
@@ -708,12 +708,12 @@ void updateScene()
             .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
             .InstanceDescs = dev_instanceDescs->GetGPUVirtualAddress(),
         },
-        .SourceAccelerationStructureData = tlas->GetGPUVirtualAddress(),
-        .ScratchAccelerationStructureData = tlasUpdateScratch->GetGPUVirtualAddress(),
+        .SourceAccelerationStructureData = dev_tlas->GetGPUVirtualAddress(),
+        .ScratchAccelerationStructureData = dev_tlasUpdateScratchBuffer->GetGPUVirtualAddress(),
     };
     cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
 
-    D3D12_RESOURCE_BARRIER barrier = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV, .UAV = { .pResource = tlas.Get() } };
+    D3D12_RESOURCE_BARRIER barrier = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV, .UAV = { .pResource = dev_tlas.Get() } };
     cmdList->ResourceBarrier(1, &barrier);
 }
 
@@ -748,7 +748,7 @@ void render()
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, tlas->GetGPUVirtualAddress()); // t0
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_tlas->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3

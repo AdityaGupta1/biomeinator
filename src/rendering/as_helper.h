@@ -10,7 +10,7 @@ namespace AsHelper
 
 struct GeometryWrapper
 {
-    ComPtr<ID3D12Resource> blas{ nullptr };
+    ComPtr<ID3D12Resource> dev_blas{ nullptr };
 
     ManagedBufferSection vertBufferSection{};
     ManagedBufferSection idxBufferSection{};
@@ -18,10 +18,10 @@ struct GeometryWrapper
 
 struct BlasInputs
 {
-    const std::vector<Vertex>* verts{ nullptr };
-    const std::vector<uint32_t>* idxs{ nullptr };
-    ManagedBuffer* managedVertBuffer{ nullptr };
-    ManagedBuffer* managedIdxBuffer{ nullptr };
+    const std::vector<Vertex>* host_verts{ nullptr };
+    const std::vector<uint32_t>* host_idxs{ nullptr };
+    ManagedBuffer* dev_managedVertBuffer{ nullptr };
+    ManagedBuffer* dev_managedIdxBuffer{ nullptr };
 };
 
 GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasInputs inputs);

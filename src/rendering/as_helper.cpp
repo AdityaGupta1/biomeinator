@@ -114,29 +114,29 @@ GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeLi
 {
     GeometryWrapper result;
 
-    ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.verts);
+    ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_verts);
     ComPtr<ID3D12Resource> dev_idxUploadBuffer = nullptr;
     uint32_t numIdx = 0;
-    if (inputs.idxs)
+    if (inputs.host_idxs)
     {
-        dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idxs);
-        numIdx = inputs.idxs->size();
+        dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_idxs);
+        numIdx = inputs.host_idxs->size();
     }
 
     ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
-    result.blas =
-        makeBlas(cmdList, toFreeList, dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
+    result.dev_blas =
+        makeBlas(cmdList, toFreeList, dev_vertUploadBuffer.Get(), inputs.host_verts->size(), dev_idxUploadBufferPtr, numIdx);
 
-    if (inputs.managedVertBuffer)
+    if (inputs.dev_managedVertBuffer)
     {
-        result.vertBufferSection = inputs.managedVertBuffer->copyFromUploadHeap(
-            cmdList, dev_vertUploadBuffer.Get(), inputs.verts->size() * sizeof(Vertex));
+        result.vertBufferSection = inputs.dev_managedVertBuffer->copyFromUploadHeap(
+            cmdList, dev_vertUploadBuffer.Get(), inputs.host_verts->size() * sizeof(Vertex));
     }
 
-    if (inputs.managedIdxBuffer)
+    if (inputs.dev_managedIdxBuffer)
     {
-        result.idxBufferSection = inputs.managedIdxBuffer->copyFromUploadHeap(
-            cmdList, dev_idxUploadBuffer.Get(), inputs.idxs->size() * sizeof(uint32_t));
+        result.idxBufferSection = inputs.dev_managedIdxBuffer->copyFromUploadHeap(
+            cmdList, dev_idxUploadBuffer.Get(), inputs.host_idxs->size() * sizeof(uint32_t));
     }
 
     toFreeList->push_back(dev_vertUploadBuffer);
