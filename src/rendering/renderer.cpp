@@ -190,7 +190,7 @@ void initSurfaces(HWND hwnd)
 ComPtr<ID3D12Resource> renderTarget;
 void resize(HWND hwnd)
 {
-    if (!swapChain) [[unlikely]]
+    if (!swapChain)
     {
         return;
     }
@@ -204,7 +204,7 @@ void resize(HWND hwnd)
 
     swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
 
-    if (renderTarget) [[likely]]
+    if (renderTarget)
     {
         renderTarget.Reset();
     }
@@ -296,10 +296,10 @@ const std::vector<uint32_t> cubeIdx = {
     20, 21, 22, 20, 22, 23
 };
 
-BlasWrapper quadBlasWrapper;
-BlasWrapper cubeBlasWrapper;
+GeometryWrapper quadBlasWrapper;
+GeometryWrapper cubeBlasWrapper;
 
-ManagedBuffer dev_vertsBuffer;
+ManagedBuffer dev_vertBuffer;
 ManagedBuffer dev_idxBuffer;
 
 ManagedBufferSection quadVertsBufferSection;
@@ -308,29 +308,40 @@ ManagedBufferSection cubeIdxBufferSection;
 
 void initBottomLevel()
 {
-    quadBlasWrapper = initBuffersAndBlas(&quadVerts);
-    cubeBlasWrapper = initBuffersAndBlas(&cubeVerts, &cubeIdx);
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
+    quadBlasWrapper = makeBuffersAndBlas(cmdList.Get(), &quadVerts);
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    flush();
 
-    dev_vertsBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
+    cubeBlasWrapper = makeBuffersAndBlas(cmdList.Get(), &cubeVerts, &cubeIdx);
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    flush();
+
+    dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     dev_idxBuffer.init(cubeIdx.size() * sizeof(uint32_t));
 
     cmdAlloc->Reset();
     cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-    quadVertsBufferSection = dev_vertsBuffer.copyFromUploadHeap(
-        cmdList.Get(), quadBlasWrapper.vertBuffer.Get(), quadVerts.size() * sizeof(Vertex));
-    cubeVertsBufferSection = dev_vertsBuffer.copyFromUploadHeap(
-        cmdList.Get(), cubeBlasWrapper.vertBuffer.Get(), cubeVerts.size() * sizeof(Vertex));
+    quadVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
+        cmdList.Get(), quadBlasWrapper.dev_vertUploadBuffer.Get(), quadVerts.size() * sizeof(Vertex));
+    cubeVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
+        cmdList.Get(), cubeBlasWrapper.dev_vertUploadBuffer.Get(), cubeVerts.size() * sizeof(Vertex));
     cubeIdxBufferSection = dev_idxBuffer.copyFromUploadHeap(
-        cmdList.Get(), cubeBlasWrapper.idxBuffer.Get(), cubeIdx.size() * sizeof(uint32_t));
+        cmdList.Get(), cubeBlasWrapper.dev_idxUploadBuffer.Get(), cubeIdx.size() * sizeof(uint32_t));
 
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
     flush();
 
-    quadBlasWrapper.vertBuffer.Reset();
-    cubeBlasWrapper.vertBuffer.Reset();
-    cubeBlasWrapper.idxBuffer.Reset();
+    quadBlasWrapper.dev_vertUploadBuffer.Reset();
+    cubeBlasWrapper.dev_vertUploadBuffer.Reset();
+    cubeBlasWrapper.dev_idxUploadBuffer.Reset();
 }
 
 constexpr float fovYDegrees = 35;
@@ -406,8 +417,13 @@ ComPtr<ID3D12Resource> tlas;
 ComPtr<ID3D12Resource> tlasUpdateScratch;
 void initTopLevel()
 {
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
     UINT64 updateScratchSize;
-    tlas = makeTLAS(dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+    tlas = makeTLAS(cmdList.Get(), dev_instanceDescs.Get(), NUM_INSTANCES, &updateScratchSize);
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    flush();
 
     auto desc = BASIC_BUFFER_DESC;
     // WARP bug workaround: use 8 if the required size was reported as less
@@ -730,7 +746,7 @@ void render()
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, tlas->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertsBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3
 
