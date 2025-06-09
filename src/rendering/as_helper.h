@@ -15,9 +15,13 @@ struct GeometryWrapper
     ComPtr<ID3D12Resource> blas{nullptr};
 };
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
-                                   const std::vector<Vertex>* verts,
-                                   const std::vector<uint32_t>* idx = nullptr);
+struct BlasInputs
+{
+    const std::vector<Vertex>* verts{ nullptr };
+    const std::vector<uint32_t>* idx{ nullptr };
+};
+
+GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, BlasInputs inputs);
 
 ComPtr<ID3D12Resource> makeTLAS(ID3D12GraphicsCommandList4* cmdList,
                                 ID3D12Resource* dev_instanceDescs,

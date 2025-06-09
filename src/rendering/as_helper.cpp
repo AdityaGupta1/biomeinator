@@ -108,24 +108,23 @@ ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
     return makeAccelerationStructure(cmdList, inputs);
 }
 
-GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList,
-                                   const std::vector<Vertex>* verts,
-                                   const std::vector<uint32_t>* idx)
+GeometryWrapper makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, BlasInputs inputs)
 {
     GeometryWrapper result;
 
     ID3D12Resource* dev_idxUploadBufferPtr = nullptr;
     uint32_t numIdx = 0;
 
-    result.dev_vertUploadBuffer = initAndCopyToUploadBuffer(*verts);
-    if (idx)
+    result.dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.verts);
+    if (inputs.idx)
     {
-        result.dev_idxUploadBuffer = initAndCopyToUploadBuffer(*idx);
+        result.dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.idx);
         dev_idxUploadBufferPtr = result.dev_idxUploadBuffer.Get();
-        numIdx = idx->size();
+        numIdx = inputs.idx->size();
     }
 
-    result.blas = makeBlas(cmdList, result.dev_vertUploadBuffer.Get(), verts->size(), dev_idxUploadBufferPtr, numIdx);
+    result.blas =
+        makeBlas(cmdList, result.dev_vertUploadBuffer.Get(), inputs.verts->size(), dev_idxUploadBufferPtr, numIdx);
 
     return result;
 }

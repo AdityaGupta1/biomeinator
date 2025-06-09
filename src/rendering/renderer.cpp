@@ -308,36 +308,45 @@ ManagedBufferSection cubeIdxBufferSection;
 
 void initBottomLevel()
 {
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
-    quadBlasWrapper = makeBuffersAndBlas(cmdList.Get(), &quadVerts);
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-    flush();
-
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
-    cubeBlasWrapper = makeBuffersAndBlas(cmdList.Get(), &cubeVerts, &cubeIdx);
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-    flush();
-
     dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     dev_idxBuffer.init(cubeIdx.size() * sizeof(uint32_t));
 
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
+    {
+        cmdAlloc->Reset();
+        cmdList->Reset(cmdAlloc.Get(), nullptr);
 
-    quadVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
-        cmdList.Get(), quadBlasWrapper.dev_vertUploadBuffer.Get(), quadVerts.size() * sizeof(Vertex));
-    cubeVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
-        cmdList.Get(), cubeBlasWrapper.dev_vertUploadBuffer.Get(), cubeVerts.size() * sizeof(Vertex));
-    cubeIdxBufferSection = dev_idxBuffer.copyFromUploadHeap(
-        cmdList.Get(), cubeBlasWrapper.dev_idxUploadBuffer.Get(), cubeIdx.size() * sizeof(uint32_t));
+        AsHelper::BlasInputs blasInputs;
+        blasInputs.verts = &quadVerts;
 
-    cmdList->Close();
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-    flush();
+        quadBlasWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs);
+
+        quadVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
+            cmdList.Get(), quadBlasWrapper.dev_vertUploadBuffer.Get(), quadVerts.size() * sizeof(Vertex));
+
+        cmdList->Close();
+        cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+        flush();
+    }
+
+    {
+        cmdAlloc->Reset();
+        cmdList->Reset(cmdAlloc.Get(), nullptr);
+
+        AsHelper::BlasInputs blasInputs;
+        blasInputs.verts = &cubeVerts;
+        blasInputs.idx = &cubeIdx;
+
+        cubeBlasWrapper = makeBuffersAndBlas(cmdList.Get(), blasInputs);
+
+        cubeVertsBufferSection = dev_vertBuffer.copyFromUploadHeap(
+            cmdList.Get(), cubeBlasWrapper.dev_vertUploadBuffer.Get(), cubeVerts.size() * sizeof(Vertex));
+        cubeIdxBufferSection = dev_idxBuffer.copyFromUploadHeap(
+            cmdList.Get(), cubeBlasWrapper.dev_idxUploadBuffer.Get(), cubeIdx.size() * sizeof(uint32_t));
+
+        cmdList->Close();
+        cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+        flush();
+    }
 
     quadBlasWrapper.dev_vertUploadBuffer.Reset();
     cubeBlasWrapper.dev_vertUploadBuffer.Reset();
