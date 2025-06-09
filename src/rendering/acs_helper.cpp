@@ -39,75 +39,82 @@ ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES in
     return buffer;
 }
 
-ComPtr<ID3D12Resource> makeAccelerationStructure(ID3D12GraphicsCommandList4* cmdList,
-                                                 ToFreeList* toFreeList,
-                                                 const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs,
-                                                 uint64_t* updateScratchSizePtr = nullptr)
+struct AcsBuildInfo
 {
+    D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc; // optional, used only for BLAS
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-    Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-    if (updateScratchSizePtr)
-    {
-        *updateScratchSizePtr = prebuildInfo.UpdateScratchDataSizeInBytes;
-    }
+    ComPtr<ID3D12Resource>* outAcs;
+};
 
-    if (prebuildInfo.ScratchDataSizeInBytes > sharedAsScratchSize)
+void makeAccelerationStructure(ID3D12GraphicsCommandList4* cmdList,
+                               ToFreeList* toFreeList,
+                               const AcsBuildInfo& buildInfo)
+{
+    if (buildInfo.prebuildInfo.ScratchDataSizeInBytes > sharedAsScratchSize)
     {
         if (sharedAcsScratchBuffer)
         {
             toFreeList->push_back(sharedAcsScratchBuffer);
         }
 
-        sharedAcsScratchBuffer = makeAcsBuffer(prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
+        sharedAcsScratchBuffer =
+            makeAcsBuffer(buildInfo.prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_COMMON);
     }
 
-    ComPtr<ID3D12Resource> acsBuffer = makeAcsBuffer(prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    *buildInfo.outAcs = makeAcsBuffer(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
+                                      D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-        .DestAccelerationStructureData = acsBuffer->GetGPUVirtualAddress(),
-        .Inputs = inputs,
+        .DestAccelerationStructureData = (*buildInfo.outAcs)->GetGPUVirtualAddress(),
+        .Inputs = buildInfo.inputs,
         .ScratchAccelerationStructureData = sharedAcsScratchBuffer->GetGPUVirtualAddress()
     };
 
     cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-    return acsBuffer;
 }
 
-ComPtr<ID3D12Resource> makeBlas(ID3D12GraphicsCommandList4* cmdList,
-                                ToFreeList* toFreeList,
-                                ID3D12Resource* vertBuffer,
-                                uint32_t numVerts,
-                                ID3D12Resource* idxBuffer = nullptr,
-                                uint32_t numIdx = 0)
+void makeBlas(ID3D12GraphicsCommandList4* cmdList,
+              ToFreeList* toFreeList,
+              ComPtr<ID3D12Resource>* outBlas,
+              ID3D12Resource* vertBuffer,
+              uint32_t numVerts,
+              ID3D12Resource* idxBuffer = nullptr,
+              uint32_t numIdx = 0)
 {
-    D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
-    .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-    .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+    AcsBuildInfo buildInfo;
 
-    .Triangles = {
-        .Transform3x4 = 0,
-        .IndexFormat = idxBuffer ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
-        .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-        .IndexCount = numIdx,
-        .VertexCount = numVerts,
-        .IndexBuffer = idxBuffer ? idxBuffer->GetGPUVirtualAddress() : 0,
-        .VertexBuffer = {
-            .StartAddress = vertBuffer->GetGPUVirtualAddress(),
-            .StrideInBytes = sizeof(Vertex)
-        }
-    }
+    buildInfo.geometryDesc = {
+        .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+
+        .Triangles = {
+            .Transform3x4 = 0,
+            .IndexFormat = idxBuffer ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
+            .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+            .IndexCount = numIdx,
+            .VertexCount = numVerts,
+            .IndexBuffer = idxBuffer ? idxBuffer->GetGPUVirtualAddress() : 0,
+            .VertexBuffer = {
+                .StartAddress = vertBuffer->GetGPUVirtualAddress(),
+                .StrideInBytes = sizeof(Vertex),
+            },
+        },
     };
 
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+    buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
         .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .pGeometryDescs = &geometryDesc
+        .pGeometryDescs = &buildInfo.geometryDesc,
     };
 
-    return makeAccelerationStructure(cmdList, toFreeList, inputs);
+    Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo.inputs, &buildInfo.prebuildInfo);
+
+    buildInfo.outAcs = outBlas;
+
+    makeAccelerationStructure(cmdList, toFreeList, buildInfo);
 }
 
 void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, BlasBuildInputs inputs)
@@ -122,8 +129,13 @@ void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeL
     }
 
     ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
-    inputs.outGeoWrapper->dev_blas =
-        makeBlas(cmdList, toFreeList, dev_vertUploadBuffer.Get(), inputs.host_verts->size(), dev_idxUploadBufferPtr, numIdx);
+    makeBlas(cmdList,
+             toFreeList,
+             &inputs.outGeoWrapper->dev_blas,
+             dev_vertUploadBuffer.Get(),
+             inputs.host_verts->size(),
+             dev_idxUploadBufferPtr,
+             numIdx);
 
     if (inputs.dev_managedVertBuffer)
     {
@@ -146,7 +158,9 @@ void makeBuffersAndBlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeL
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasBuildInputs inputs)
 {
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS acsInputs = {
+    AcsBuildInfo buildInfo;
+
+    buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
         .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE,
         .NumDescs = inputs.numInstances,
@@ -154,7 +168,16 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasB
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress()
     };
 
-    *inputs.outTlas = makeAccelerationStructure(cmdList, toFreeList, acsInputs, inputs.updateScratchSizePtr);
+    Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo.inputs, &buildInfo.prebuildInfo);
+
+    if (inputs.updateScratchSizePtr != nullptr)
+    {
+        *inputs.updateScratchSizePtr = buildInfo.prebuildInfo.UpdateScratchDataSizeInBytes;
+    }
+
+    buildInfo.outAcs = inputs.outTlas;
+
+    makeAccelerationStructure(cmdList, toFreeList, buildInfo);
 }
 
 } // namespace AcsHelper
