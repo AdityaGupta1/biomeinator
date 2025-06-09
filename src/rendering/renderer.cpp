@@ -37,6 +37,7 @@ void init()
     initDevice();
     initSurfaces(hwnd);
     initCommand();
+
     initBottomLevel();
     initScene();
     initTopLevel();
@@ -308,37 +309,34 @@ void initBottomLevel()
     dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
 
-    {
-        cmdAlloc->Reset();
-        cmdList->Reset(cmdAlloc.Get(), nullptr);
+    std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
+    {
         AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &quadVerts;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
         blasInputs.outGeoWrapper = &quadGeoWrapper;
-        makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
-
-        cmdList->Close();
-        cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-        flush();
+        allBlasInputs.push_back(blasInputs);
     }
 
     {
-        cmdAlloc->Reset();
-        cmdList->Reset(cmdAlloc.Get(), nullptr);
-
         AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &cubeVerts;
         blasInputs.host_idxs = &cubeIdxs;
         blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
         blasInputs.dev_managedIdxBuffer = &dev_idxBuffer;
         blasInputs.outGeoWrapper = &cubeGeoWrapper;
-        makeBuffersAndBlas(cmdList.Get(), &toFreeList, blasInputs);
-
-        cmdList->Close();
-        cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-        flush();
+        allBlasInputs.push_back(blasInputs);
     }
+
+    cmdAlloc->Reset();
+    cmdList->Reset(cmdAlloc.Get(), nullptr);
+
+    AcsHelper::makeBuffersAndBlases(cmdList.Get(), &toFreeList, allBlasInputs);
+
+    cmdList->Close();
+    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    flush();
 }
 
 constexpr float fovYDegrees = 35;

@@ -15,4 +15,6 @@ void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
                                     D3D12_RESOURCE_STATES stateBefore,
                                     D3D12_RESOURCE_STATES stateAfter);
 
+void uavBarrier(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* resource = nullptr);
+
 } // namespace BufferHelper
