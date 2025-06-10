@@ -30,10 +30,10 @@ ComPtr<ID3D12Resource> initAndCopyToUploadBuffer(const std::vector<T>& host_vect
 static ComPtr<ID3D12Resource> sharedAcsScratchBuffer = nullptr;
 static uint64_t sharedAsScratchSize = 0;
 
-ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t byteSize, D3D12_RESOURCE_STATES initialState)
+ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t sizeBytes, D3D12_RESOURCE_STATES initialState)
 {
     auto desc = BASIC_BUFFER_DESC;
-    desc.Width = byteSize;
+    desc.Width = sizeBytes;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     ComPtr<ID3D12Resource> buffer;
     Renderer::device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
@@ -163,24 +163,14 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
 
         if (inputs.dev_managedVertBuffer)
         {
-            inputs.outGeoWrapper->vertBufferSection = inputs.dev_managedVertBuffer->copyFromUploadHeap(
+            inputs.outGeoWrapper->vertBufferSection = inputs.dev_managedVertBuffer->copyFromDeviceBuffer(
                 cmdList, dev_vertUploadBuffer.Get(), inputs.host_verts->size() * sizeof(Vertex));
         }
 
         if (inputs.dev_managedIdxBuffer)
         {
-            inputs.outGeoWrapper->idxBufferSection = inputs.dev_managedIdxBuffer->copyFromUploadHeap(
+            inputs.outGeoWrapper->idxBufferSection = inputs.dev_managedIdxBuffer->copyFromDeviceBuffer(
                 cmdList, dev_idxUploadBuffer.Get(), inputs.host_idxs->size() * sizeof(uint32_t));
-        }
-
-        // These won't be freed until after the frame is done being rendered, so we can safely push them to toFreeList
-        // before building the BLAS.
-        //
-        // This should also keep the ComPtrs and associated resources alive for actually building the BLAS.
-        toFreeList.pushResource(dev_vertUploadBuffer);
-        if (dev_idxUploadBuffer)
-        {
-            toFreeList.pushResource(dev_idxUploadBuffer);
         }
 
         ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
@@ -192,6 +182,16 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
                           inputs.host_verts->size(),
                           dev_idxUploadBufferPtr,
                           numIdx);
+
+        // These won't be freed until after the frame is done being rendered, so we can safely push them to toFreeList
+        // before building the BLAS.
+        //
+        // This should also keep the ComPtrs and associated resources alive for actually building the BLAS.
+        toFreeList.pushResource(dev_vertUploadBuffer);
+        if (dev_idxUploadBuffer)
+        {
+            toFreeList.pushResource(dev_idxUploadBuffer);
+        }
     }
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);

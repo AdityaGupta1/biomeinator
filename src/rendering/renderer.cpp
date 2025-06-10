@@ -3,10 +3,10 @@
 #include "dxr_common.h"
 
 #include "acs_helper.h"
+#include "camera.h"
+#include "to_free_list.h"
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
-
-#include "camera.h"
 
 #include <iostream>
 #include <string>
@@ -308,8 +308,8 @@ const std::vector<uint32_t> cubeIdxs = {
 
 ToFreeList toFreeList;
 
-ManagedBuffer dev_vertBuffer;
-ManagedBuffer dev_idxBuffer;
+ManagedBuffer dev_vertBuffer{ &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+ManagedBuffer dev_idxBuffer{ &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 
 AcsHelper::GeometryWrapper quadGeoWrapper;
 AcsHelper::GeometryWrapper cubeGeoWrapper;
@@ -379,9 +379,9 @@ void initScene()
 
         host_instanceDatas[i] = {
             .vertBufferOffset =
-                (uint32_t)((isQuad ? quadGeoWrapper : cubeGeoWrapper).vertBufferSection.byteOffset / sizeof(Vertex)),
+                (uint32_t)((isQuad ? quadGeoWrapper : cubeGeoWrapper).vertBufferSection.offsetBytes / sizeof(Vertex)),
             .hasIdx = !isQuad,
-            .idxBufferByteOffset = isQuad ? 0 : cubeGeoWrapper.idxBufferSection.byteOffset,
+            .idxBufferByteOffset = isQuad ? 0 : cubeGeoWrapper.idxBufferSection.offsetBytes,
         };
     }
 }

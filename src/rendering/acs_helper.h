@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "dxr_common.h"
+#include "to_free_list.h"
 #include "buffer/managed_buffer.h"
 
 namespace AcsHelper

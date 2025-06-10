@@ -1,11 +1,8 @@
 #pragma once
 
-#include <d3d12.h>
-#include <wrl/client.h>
+#include "dxr_includes.h"
 
 #include <vector>
-
-using Microsoft::WRL::ComPtr;
 
 class ToFreeList
 {

@@ -11,6 +11,4 @@
 
 #include <vector>
 
-#include "to_free_list.h"
-
 using Microsoft::WRL::ComPtr;
