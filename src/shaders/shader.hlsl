@@ -97,7 +97,7 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
     uint i0, i1, i2;
-    if (instanceData.hasIdx)
+    if (instanceData.hasIdxs)
     {
         const uint idxBufferByteOffset = instanceData.idxBufferByteOffset + PrimitiveIndex() * 3 * 4;
         i0 = idxs.Load(idxBufferByteOffset + 0);

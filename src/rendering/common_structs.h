@@ -14,7 +14,7 @@ struct Vertex
 struct InstanceData
 {
     uint32_t vertBufferOffset;
-    uint32_t hasIdx;
+    uint32_t hasIdxs;
     uint32_t idxBufferByteOffset;
 };
 

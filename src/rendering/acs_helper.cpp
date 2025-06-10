@@ -80,7 +80,7 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                        const ManagedBuffer& dev_idxUploadBuffer,
                        ManagedBufferSection idxBufferSection)
 {
-    const bool hasIdx = (idxBufferSection.sizeBytes > 0);
+    const bool hasIdxs = (idxBufferSection.sizeBytes > 0);
 
     buildInfo->geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -88,11 +88,11 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
         .Triangles = {
             .Transform3x4 = 0,
-            .IndexFormat = hasIdx ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
+            .IndexFormat = hasIdxs ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
             .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxBufferSection.sizeBytes),
             .VertexCount = Util::convertByteSizeToCount<Vertex>(vertBufferSection.sizeBytes),
-            .IndexBuffer = hasIdx ? dev_idxUploadBuffer.getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
+            .IndexBuffer = hasIdxs ? dev_idxUploadBuffer.getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
             .VertexBuffer = {
                 .StartAddress = dev_vertUploadBuffer.getBufferGpuAddress() + vertBufferSection.offsetBytes,
                 .StrideInBytes = sizeof(Vertex),
@@ -140,8 +140,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
     }
 
     dev_vertUploadBuffer.init(vertBufferTotalSizeBytes);
-    const bool anyHasIdx = (idxBufferTotalSizeBytes > 0);
-    if (anyHasIdx)
+    const bool anyHasIdxs = (idxBufferTotalSizeBytes > 0);
+    if (anyHasIdxs)
     {
         dev_idxUploadBuffer.init(idxBufferTotalSizeBytes);
     }
@@ -154,22 +154,22 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
         const ManagedBufferSection dev_vertUploadBufferSection =
             dev_vertUploadBuffer.copyFromHostVector(cmdList, *inputs.host_verts);
 
-        ManagedBufferSection dev_idxUploadBufferSection = {};
-        if (inputs.host_idxs)
-        {
-            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, *inputs.host_idxs);
-        }
-
         if (inputs.dev_verts)
         {
             inputs.outGeoWrapper->vertBufferSection = inputs.dev_verts->copyFromManagedBuffer(
                 cmdList, dev_vertUploadBuffer, dev_vertUploadBufferSection);
         }
 
-        if (inputs.dev_idxs)
+        ManagedBufferSection dev_idxUploadBufferSection = {};
+        if (inputs.host_idxs)
         {
-            inputs.outGeoWrapper->idxBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                cmdList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
+            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, *inputs.host_idxs);
+
+            if (inputs.dev_idxs)
+            {
+                inputs.outGeoWrapper->idxBufferSection =
+                    inputs.dev_idxs->copyFromManagedBuffer(cmdList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
+            }
         }
 
         buildInfos.emplace_back();
@@ -184,7 +184,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 
     dev_vertUploadBuffer.queueFreeBuffer(toFreeList);
-    if (anyHasIdx)
+    if (anyHasIdxs)
     {
         dev_idxUploadBuffer.queueFreeBuffer(toFreeList);
     }

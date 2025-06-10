@@ -390,7 +390,7 @@ void initScene()
         host_instanceDatas[i] = {
             .vertBufferOffset =
                 (uint32_t)((isQuad ? quadGeoWrapper : cubeGeoWrapper).vertBufferSection.offsetBytes / sizeof(Vertex)),
-            .hasIdx = !isQuad,
+            .hasIdxs = !isQuad,
             .idxBufferByteOffset = isQuad ? 0 : cubeGeoWrapper.idxBufferSection.offsetBytes,
         };
     }
