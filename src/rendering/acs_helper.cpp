@@ -73,22 +73,11 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
-ManagedBuffer dev_vertUploadBuffer{
-    &UPLOAD_HEAP,
-    D3D12_HEAP_FLAG_NONE,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
-    true /*isMapped*/,
-};
-ManagedBuffer dev_idxUploadBuffer{
-    &UPLOAD_HEAP,
-    D3D12_HEAP_FLAG_NONE,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
-    true /*isMapped*/,
-};
-
 void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                        ComPtr<ID3D12Resource>* outBlas,
+                       const ManagedBuffer& dev_vertUploadBuffer,
                        ManagedBufferSection vertBufferSection,
+                       const ManagedBuffer& dev_idxUploadBuffer,
                        ManagedBufferSection idxBufferSection)
 {
     const bool hasIdx = (idxBufferSection.sizeBytes > 0);
@@ -124,10 +113,21 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
     buildInfo->outAcs = outBlas;
 }
 
-void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
-                          ToFreeList& toFreeList,
-                          std::vector<BlasBuildInputs> allInputs)
+void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std::vector<BlasBuildInputs> allInputs)
 {
+    ManagedBuffer dev_vertUploadBuffer{
+        &UPLOAD_HEAP,
+        D3D12_HEAP_FLAG_NONE,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        true /*isMapped*/,
+    };
+    ManagedBuffer dev_idxUploadBuffer{
+        &UPLOAD_HEAP,
+        D3D12_HEAP_FLAG_NONE,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        true /*isMapped*/,
+    };
+
     uint32_t vertBufferTotalSizeBytes = 0;
     uint32_t idxBufferTotalSizeBytes = 0;
     for (const auto& inputs : allInputs)
@@ -139,8 +139,12 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
         }
     }
 
-    dev_vertUploadBuffer.resize(vertBufferTotalSizeBytes, toFreeList, false /*canResizeSmaller*/);
-    dev_idxUploadBuffer.resize(idxBufferTotalSizeBytes, toFreeList, false /*canResizeSmaller*/);
+    dev_vertUploadBuffer.init(vertBufferTotalSizeBytes);
+    const bool anyHasIdx = (idxBufferTotalSizeBytes > 0);
+    if (anyHasIdx)
+    {
+        dev_idxUploadBuffer.init(idxBufferTotalSizeBytes);
+    }
 
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
@@ -171,11 +175,19 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(),
                           &inputs.outGeoWrapper->dev_blas,
+                          dev_vertUploadBuffer,
                           dev_vertUploadBufferSection,
+                          dev_idxUploadBuffer,
                           dev_idxUploadBufferSection);
     }
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
+
+    dev_vertUploadBuffer.queueFreeBuffer(toFreeList);
+    if (anyHasIdx)
+    {
+        dev_idxUploadBuffer.queueFreeBuffer(toFreeList);
+    }
 }
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs)

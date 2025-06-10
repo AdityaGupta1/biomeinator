@@ -28,9 +28,7 @@ struct BlasBuildInputs
     GeometryWrapper* outGeoWrapper;
 };
 
-void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
-                          ToFreeList& toFreeList,
-                          std::vector<BlasBuildInputs> allInputs);
+void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std::vector<BlasBuildInputs> allInputs);
 
 struct TlasBuildInputs
 {

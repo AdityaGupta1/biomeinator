@@ -25,7 +25,7 @@ private:
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
     uint32_t bufferSizeBytes{ 0 };
 
-    std::list<ManagedBufferSection> freeList;
+    std::list<ManagedBufferSection> freeSectionList;
 
     ManagedBufferSection findFreeSection(uint32_t sizeBytes);
 
@@ -36,7 +36,6 @@ public:
                   const bool isMapped);
 
     void init(uint32_t sizeBytes);
-    void resize(uint32_t sizeBytes, ToFreeList& toFreeList, bool canResizeSmaller = true);
 
     void map();
     void unmap();
@@ -61,6 +60,8 @@ public:
                                                ManagedBufferSection srcBufferSection);
 
     void freeSection(ManagedBufferSection section);
+
+    void queueFreeBuffer(ToFreeList& toFreeList);
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;

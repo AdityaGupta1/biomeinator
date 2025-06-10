@@ -14,11 +14,11 @@ ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
 
 void ManagedBuffer::init(uint32_t sizeBytes)
 {
-    dev_buffer =
+    this->dev_buffer =
         BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->heapFlags, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
 
-    freeList.push_back({ 0, sizeBytes });
+    this->freeSectionList.push_back({ 0, sizeBytes });
 
     if (this->isMapped)
     {
@@ -26,36 +26,21 @@ void ManagedBuffer::init(uint32_t sizeBytes)
     }
 }
 
-void ManagedBuffer::resize(uint32_t sizeBytes, ToFreeList& toFreeList, bool canResizeSmaller)
-{
-    if (!canResizeSmaller && sizeBytes < this->bufferSizeBytes)
-    {
-        return;
-    }
-
-    if (dev_buffer)
-    {
-        toFreeList.pushResource(this->dev_buffer, this->isMapped);
-    }
-
-    freeList.clear();
-    this->init(sizeBytes);
-}
-
 void ManagedBuffer::map()
 {
-    dev_buffer->Map(0, nullptr, &host_buffer);
+    this->dev_buffer->Map(0, nullptr, &this->host_buffer);
 }
 
 void ManagedBuffer::unmap()
 {
-    dev_buffer->Unmap(0, nullptr);
+    this->dev_buffer->Unmap(0, nullptr);
 }
 
-// TODO: keep a persistent rotating pointer into freeList to avoid biasing towards beginning of list for new uploads?
+// TODO: keep a persistent rotating pointer into freeSectionList to avoid biasing towards beginning of list for new
+// uploads?
 ManagedBufferSection ManagedBuffer::findFreeSection(uint32_t sizeBytes)
 {
-    for (auto it = freeList.begin(); it != freeList.end(); ++it)
+    for (auto it = this->freeSectionList.begin(); it != this->freeSectionList.end(); ++it)
     {
         if (it->sizeBytes >= sizeBytes)
         {
@@ -63,7 +48,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(uint32_t sizeBytes)
 
             if (it->sizeBytes == sizeBytes)
             {
-                freeList.erase(it);
+                this->freeSectionList.erase(it);
             }
             else
             {
@@ -91,7 +76,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
         throw std::runtime_error("Attempting to copy from host buffer to unmapped ManagedBuffer");
     }
 
-    const auto& freeSection = findFreeSection(sizeBytes);
+    const auto& freeSection = this->findFreeSection(sizeBytes);
 
     memcpy((uint8_t*)host_buffer + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
 
@@ -103,7 +88,7 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
                                                          uint32_t srcSizeBytes,
                                                          uint32_t srcOffsetBytes)
 {
-    const auto& freeSection = findFreeSection(srcSizeBytes);
+    const auto& freeSection = this->findFreeSection(srcSizeBytes);
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -127,8 +112,8 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-    auto it = freeList.begin();
-    for (; it != freeList.end(); ++it)
+    auto it = this->freeSectionList.begin();
+    for (; it != this->freeSectionList.end(); ++it)
     {
         if (section.offsetBytes + section.sizeBytes < it->offsetBytes)
         {
@@ -136,40 +121,45 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
         }
     }
 
-    auto inserted = freeList.insert(it, section);
+    auto inserted = this->freeSectionList.insert(it, section);
 
     // try merging with previous
-    if (inserted != freeList.begin())
+    if (inserted != this->freeSectionList.begin())
     {
         auto prev = std::prev(inserted);
         if (prev->offsetBytes + prev->sizeBytes == inserted->offsetBytes)
         {
             prev->sizeBytes += inserted->sizeBytes;
-            freeList.erase(inserted);
+            this->freeSectionList.erase(inserted);
             inserted = prev;
         }
     }
 
     // try merging with next
     auto next = std::next(inserted);
-    if (next != freeList.end() && inserted->offsetBytes + inserted->sizeBytes == next->offsetBytes)
+    if (next != this->freeSectionList.end() && inserted->offsetBytes + inserted->sizeBytes == next->offsetBytes)
     {
         inserted->sizeBytes += next->sizeBytes;
-        freeList.erase(next);
+        this->freeSectionList.erase(next);
     }
+}
+
+void ManagedBuffer::queueFreeBuffer(ToFreeList& toFreeList)
+{
+    toFreeList.pushResource(this->dev_buffer, this->isMapped);
 }
 
 ID3D12Resource* ManagedBuffer::getBuffer() const
 {
-    return dev_buffer.Get();
+    return this->dev_buffer.Get();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getBufferGpuAddress() const
 {
-    return dev_buffer->GetGPUVirtualAddress();
+    return this->dev_buffer->GetGPUVirtualAddress();
 }
 
 uint32_t ManagedBuffer::getSizeBytes() const
 {
-    return bufferSizeBytes;
+    return this->bufferSizeBytes;
 }

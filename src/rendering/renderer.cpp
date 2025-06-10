@@ -349,7 +349,7 @@ void initBottomLevel()
         allBlasInputs.push_back(blasInputs);
     }
 
-    AcsHelper::makeBuffersAndBlases(cmdList.Get(), toFreeList, allBlasInputs);
+    AcsHelper::makeBlases(cmdList.Get(), toFreeList, allBlasInputs);
 
     BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 }
