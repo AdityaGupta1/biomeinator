@@ -6,35 +6,40 @@
 
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_HEAP_FLAGS heapFlags,
-                             const D3D12_RESOURCE_STATES initialResourceState)
-    : heapProperties(heapProperties), heapFlags(heapFlags), initialResourceState(initialResourceState)
+                             const D3D12_RESOURCE_STATES initialResourceState,
+                             const bool isMapped)
+    : heapProperties(heapProperties), heapFlags(heapFlags), initialResourceState(initialResourceState),
+      isMapped(isMapped)
 {}
 
 void ManagedBuffer::init(uint32_t sizeBytes)
 {
     dev_buffer =
         BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->heapFlags, this->initialResourceState);
-    this->bufferSize = sizeBytes;
+    this->bufferSizeBytes = sizeBytes;
 
     freeList.push_back({ 0, sizeBytes });
+
+    if (this->isMapped)
+    {
+        this->map();
+    }
 }
 
-void ManagedBuffer::resize(uint32_t sizeBytes, ToFreeList& toFreeList)
+void ManagedBuffer::resize(uint32_t sizeBytes, ToFreeList& toFreeList, bool canResizeSmaller)
 {
-    bool isMapped = this->host_buffer != nullptr;
+    if (!canResizeSmaller && sizeBytes < this->bufferSizeBytes)
+    {
+        return;
+    }
 
     if (dev_buffer)
     {
-        toFreeList.pushResource(this->dev_buffer, isMapped);
+        toFreeList.pushResource(this->dev_buffer, this->isMapped);
     }
 
     freeList.clear();
     this->init(sizeBytes);
-
-    if (isMapped)
-    {
-        this->map();
-    }
 }
 
 void ManagedBuffer::map()
@@ -78,37 +83,46 @@ ManagedBufferSection ManagedBuffer::findFreeSection(uint32_t sizeBytes)
 }
 
 ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
-                                                       void* host_srcBuffer,
+                                                       const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
+    if (!isMapped)
+    {
+        throw std::runtime_error("Attempting to copy from host buffer to unmapped ManagedBuffer");
+    }
+
     const auto& freeSection = findFreeSection(sizeBytes);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
-
-    memcpy(dev_buffer.Get() + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
-
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    memcpy((uint8_t*)host_buffer + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
 
     return freeSection;
 }
 
 ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandList* cmdList,
-                                                       ID3D12Resource* dev_srcBuffer,
-                                                       uint32_t sizeBytes)
+                                                         ID3D12Resource* dev_srcBuffer,
+                                                         uint32_t srcSizeBytes,
+                                                         uint32_t srcOffsetBytes)
 {
-    const auto& freeSection = findFreeSection(sizeBytes);
+    const auto& freeSection = findFreeSection(srcSizeBytes);
 
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList, dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+        cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
 
-    cmdList->CopyBufferRegion(dev_buffer.Get(), freeSection.offsetBytes, dev_srcBuffer, 0, sizeBytes);
+    cmdList->CopyBufferRegion(
+        this->dev_buffer.Get(), freeSection.offsetBytes, dev_srcBuffer, srcOffsetBytes, srcSizeBytes);
 
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList, dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+        cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
 
     return freeSection;
+}
+
+ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
+                                                          const ManagedBuffer& dev_srcBuffer,
+                                                          ManagedBufferSection srcBufferSection)
+{
+    return this->copyFromDeviceBuffer(
+        cmdList, dev_srcBuffer.getBuffer(), srcBufferSection.sizeBytes, srcBufferSection.offsetBytes);
 }
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
@@ -145,7 +159,17 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
     }
 }
 
-ID3D12Resource* ManagedBuffer::getBuffer()
+ID3D12Resource* ManagedBuffer::getBuffer() const
 {
     return dev_buffer.Get();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getBufferGpuAddress() const
+{
+    return dev_buffer->GetGPUVirtualAddress();
+}
+
+uint32_t ManagedBuffer::getSizeBytes() const
+{
+    return bufferSizeBytes;
 }

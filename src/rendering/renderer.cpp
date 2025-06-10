@@ -308,8 +308,18 @@ const std::vector<uint32_t> cubeIdxs = {
 
 ToFreeList toFreeList;
 
-ManagedBuffer dev_vertBuffer{ &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
-ManagedBuffer dev_idxBuffer{ &DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+ManagedBuffer dev_vertBuffer{
+    &DEFAULT_HEAP,
+    D3D12_HEAP_FLAG_NONE,
+    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    false /*isMapped*/,
+};
+ManagedBuffer dev_idxBuffer{
+    &DEFAULT_HEAP,
+    D3D12_HEAP_FLAG_NONE,
+    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    false /*isMapped*/,
+};
 
 AcsHelper::GeometryWrapper quadGeoWrapper;
 AcsHelper::GeometryWrapper cubeGeoWrapper;
@@ -324,7 +334,7 @@ void initBottomLevel()
     {
         AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &quadVerts;
-        blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
+        blasInputs.dev_verts = &dev_vertBuffer;
         blasInputs.outGeoWrapper = &quadGeoWrapper;
         allBlasInputs.push_back(blasInputs);
     }
@@ -333,8 +343,8 @@ void initBottomLevel()
         AcsHelper::BlasBuildInputs blasInputs;
         blasInputs.host_verts = &cubeVerts;
         blasInputs.host_idxs = &cubeIdxs;
-        blasInputs.dev_managedVertBuffer = &dev_vertBuffer;
-        blasInputs.dev_managedIdxBuffer = &dev_idxBuffer;
+        blasInputs.dev_verts = &dev_vertBuffer;
+        blasInputs.dev_idxs = &dev_idxBuffer;
         blasInputs.outGeoWrapper = &cubeGeoWrapper;
         allBlasInputs.push_back(blasInputs);
     }
@@ -743,8 +753,8 @@ void render()
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_tlas->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertBuffer.getBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBuffer()->GetGPUVirtualAddress()); // t2
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_vertBuffer.getBufferGpuAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBufferGpuAddress()); // t2
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3
 
     auto rtDesc = renderTarget->GetDesc();
@@ -762,7 +772,7 @@ void render()
             .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
         },
-        .Width = static_cast<UINT>(rtDesc.Width),
+        .Width = static_cast<uint32_t>(rtDesc.Width),
         .Height = rtDesc.Height,
         .Depth = 1
     };

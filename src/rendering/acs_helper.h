@@ -22,8 +22,8 @@ struct BlasBuildInputs
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
 
-    ManagedBuffer* dev_managedVertBuffer{ nullptr };
-    ManagedBuffer* dev_managedIdxBuffer{ nullptr };
+    ManagedBuffer* dev_verts{ nullptr };
+    ManagedBuffer* dev_idxs{ nullptr };
 
     GeometryWrapper* outGeoWrapper;
 };

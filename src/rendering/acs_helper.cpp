@@ -2,30 +2,11 @@
 
 #include "renderer.h"
 #include "buffer/buffer_helper.h"
+#include "buffer/managed_buffer.h"
+#include "util/util.h"
 
 namespace AcsHelper
 {
-
-template<class T>
-ComPtr<ID3D12Resource> initAndCopyToUploadBuffer(const std::vector<T>& host_vector)
-{
-    const size_t hostDataByteSize = sizeof(T) * host_vector.size();
-
-    auto desc = BASIC_BUFFER_DESC;
-    desc.Width = hostDataByteSize;
-
-    ComPtr<ID3D12Resource> res;
-    Renderer::device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE,
-        &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr, IID_PPV_ARGS(&res));
-
-    void* ptr;
-    res->Map(0, nullptr, &ptr);
-    memcpy(ptr, host_vector.data(), hostDataByteSize);
-    res->Unmap(0, nullptr);
-
-    return res;
-}
 
 static ComPtr<ID3D12Resource> sharedAcsScratchBuffer = nullptr;
 static uint64_t sharedAsScratchSize = 0;
@@ -92,26 +73,39 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
+ManagedBuffer dev_vertUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_HEAP_FLAG_NONE,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    true /*isMapped*/,
+};
+ManagedBuffer dev_idxUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_HEAP_FLAG_NONE,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    true /*isMapped*/,
+};
+
 void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                        ComPtr<ID3D12Resource>* outBlas,
-                       ID3D12Resource* vertBuffer,
-                       uint32_t numVerts,
-                       ID3D12Resource* idxBuffer = nullptr,
-                       uint32_t numIdx = 0)
+                       ManagedBufferSection vertBufferSection,
+                       ManagedBufferSection idxBufferSection)
 {
+    const bool hasIdx = (idxBufferSection.sizeBytes > 0);
+
     buildInfo->geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
         .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
 
         .Triangles = {
             .Transform3x4 = 0,
-            .IndexFormat = idxBuffer ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
+            .IndexFormat = hasIdx ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-            .IndexCount = numIdx,
-            .VertexCount = numVerts,
-            .IndexBuffer = idxBuffer ? idxBuffer->GetGPUVirtualAddress() : 0,
+            .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxBufferSection.sizeBytes),
+            .VertexCount = Util::convertByteSizeToCount<Vertex>(vertBufferSection.sizeBytes),
+            .IndexBuffer = hasIdx ? dev_idxUploadBuffer.getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
             .VertexBuffer = {
-                .StartAddress = vertBuffer->GetGPUVirtualAddress(),
+                .StartAddress = dev_vertUploadBuffer.getBufferGpuAddress() + vertBufferSection.offsetBytes,
                 .StrideInBytes = sizeof(Vertex),
             },
         },
@@ -130,68 +124,55 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
     buildInfo->outAcs = outBlas;
 }
 
-//void* host_verts{ nullptr };
-//ComPtr<ID3D12Resource> dev_vertUploadBuffer{ nullptr };
-//uint64_t vertUploadBufferSize;
-//
-//void* host_idxs{ nullptr };
-//ComPtr<ID3D12Resource> dev_idxUploadBuffer{ nullptr };
-//uint64_t idxUploadBufferSize;
-
 void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
                           ToFreeList& toFreeList,
                           std::vector<BlasBuildInputs> allInputs)
 {
-    //for (const auto& inputs : allInputs)
-    //{
-    //    
-    //}
+    uint32_t vertBufferTotalSizeBytes = 0;
+    uint32_t idxBufferTotalSizeBytes = 0;
+    for (const auto& inputs : allInputs)
+    {
+        vertBufferTotalSizeBytes += Util::getVectorSizeBytes(*inputs.host_verts);
+        if (inputs.host_idxs)
+        {
+            idxBufferTotalSizeBytes += Util::getVectorSizeBytes(*inputs.host_idxs);
+        }
+    }
+
+    dev_vertUploadBuffer.resize(vertBufferTotalSizeBytes, toFreeList, false /*canResizeSmaller*/);
+    dev_idxUploadBuffer.resize(idxBufferTotalSizeBytes, toFreeList, false /*canResizeSmaller*/);
 
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
     for (const auto& inputs : allInputs)
     {
-        ComPtr<ID3D12Resource> dev_vertUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_verts);
-        ComPtr<ID3D12Resource> dev_idxUploadBuffer = nullptr;
-        uint32_t numIdx = 0;
+        const ManagedBufferSection dev_vertUploadBufferSection =
+            dev_vertUploadBuffer.copyFromHostVector(cmdList, *inputs.host_verts);
+
+        ManagedBufferSection dev_idxUploadBufferSection = {};
         if (inputs.host_idxs)
         {
-            dev_idxUploadBuffer = initAndCopyToUploadBuffer(*inputs.host_idxs);
-            numIdx = inputs.host_idxs->size();
+            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, *inputs.host_idxs);
         }
 
-        if (inputs.dev_managedVertBuffer)
+        if (inputs.dev_verts)
         {
-            inputs.outGeoWrapper->vertBufferSection = inputs.dev_managedVertBuffer->copyFromDeviceBuffer(
-                cmdList, dev_vertUploadBuffer.Get(), inputs.host_verts->size() * sizeof(Vertex));
+            inputs.outGeoWrapper->vertBufferSection = inputs.dev_verts->copyFromManagedBuffer(
+                cmdList, dev_vertUploadBuffer, dev_vertUploadBufferSection);
         }
 
-        if (inputs.dev_managedIdxBuffer)
+        if (inputs.dev_idxs)
         {
-            inputs.outGeoWrapper->idxBufferSection = inputs.dev_managedIdxBuffer->copyFromDeviceBuffer(
-                cmdList, dev_idxUploadBuffer.Get(), inputs.host_idxs->size() * sizeof(uint32_t));
+            inputs.outGeoWrapper->idxBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
+                cmdList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
         }
-
-        ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
 
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(),
                           &inputs.outGeoWrapper->dev_blas,
-                          dev_vertUploadBuffer.Get(),
-                          inputs.host_verts->size(),
-                          dev_idxUploadBufferPtr,
-                          numIdx);
-
-        // These won't be freed until after the frame is done being rendered, so we can safely push them to toFreeList
-        // before building the BLAS.
-        //
-        // This should also keep the ComPtrs and associated resources alive for actually building the BLAS.
-        toFreeList.pushResource(dev_vertUploadBuffer);
-        if (dev_idxUploadBuffer)
-        {
-            toFreeList.pushResource(dev_idxUploadBuffer);
-        }
+                          dev_vertUploadBufferSection,
+                          dev_idxUploadBufferSection);
     }
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);

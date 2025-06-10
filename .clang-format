@@ -12,3 +12,4 @@ AllowShortFunctionsOnASingleLine: Empty
 Cpp11BracedListStyle: false
 AlwaysBreakAfterReturnType: None
 PenaltyReturnTypeOnItsOwnLine: 100000
+SpaceAfterTemplateKeyword: false
