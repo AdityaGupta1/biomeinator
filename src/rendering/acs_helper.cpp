@@ -49,7 +49,7 @@ struct AcsBuildInfo
 };
 
 void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
-                                ToFreeList* toFreeList,
+                                ToFreeList& toFreeList,
                                 const std::vector<AcsBuildInfo>& buildInfos)
 {
     uint64_t maxScratchSize = 0;
@@ -62,7 +62,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         if (sharedAcsScratchBuffer)
         {
-            toFreeList->push_back(sharedAcsScratchBuffer);
+            toFreeList.pushResource(sharedAcsScratchBuffer);
         }
 
         sharedAcsScratchBuffer = makeAcsBuffer(maxScratchSize, D3D12_RESOURCE_STATE_COMMON);
@@ -130,10 +130,23 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
     buildInfo->outAcs = outBlas;
 }
 
+//void* host_verts{ nullptr };
+//ComPtr<ID3D12Resource> dev_vertUploadBuffer{ nullptr };
+//uint64_t vertUploadBufferSize;
+//
+//void* host_idxs{ nullptr };
+//ComPtr<ID3D12Resource> dev_idxUploadBuffer{ nullptr };
+//uint64_t idxUploadBufferSize;
+
 void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
-                          ToFreeList* toFreeList,
+                          ToFreeList& toFreeList,
                           std::vector<BlasBuildInputs> allInputs)
 {
+    //for (const auto& inputs : allInputs)
+    //{
+    //    
+    //}
+
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
@@ -164,10 +177,10 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
         // before building the BLAS.
         //
         // This should also keep the ComPtrs and associated resources alive for actually building the BLAS.
-        toFreeList->push_back(dev_vertUploadBuffer);
+        toFreeList.pushResource(dev_vertUploadBuffer);
         if (dev_idxUploadBuffer)
         {
-            toFreeList->push_back(dev_idxUploadBuffer);
+            toFreeList.pushResource(dev_idxUploadBuffer);
         }
 
         ID3D12Resource* dev_idxUploadBufferPtr = dev_idxUploadBuffer ? dev_idxUploadBuffer.Get() : nullptr;
@@ -184,7 +197,7 @@ void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
 
-void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasBuildInputs inputs)
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs)
 {
     AcsBuildInfo buildInfo;
 

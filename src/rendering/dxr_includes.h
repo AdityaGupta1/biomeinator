@@ -11,6 +11,6 @@
 
 #include <vector>
 
-using Microsoft::WRL::ComPtr;
+#include "to_free_list.h"
 
-using ToFreeList = std::vector<ComPtr<ID3D12Resource>>;
+using Microsoft::WRL::ComPtr;

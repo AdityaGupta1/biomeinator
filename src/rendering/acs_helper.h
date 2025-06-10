@@ -28,7 +28,7 @@ struct BlasBuildInputs
 };
 
 void makeBuffersAndBlases(ID3D12GraphicsCommandList4* cmdList,
-                          ToFreeList* toFreeList,
+                          ToFreeList& toFreeList,
                           std::vector<BlasBuildInputs> allInputs);
 
 struct TlasBuildInputs
@@ -40,6 +40,6 @@ struct TlasBuildInputs
     ComPtr<ID3D12Resource>* outTlas;
 };
 
-void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList* toFreeList, TlasBuildInputs inputs);
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs);
 
 }  // namespace AcsHelper

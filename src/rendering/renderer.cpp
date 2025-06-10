@@ -339,7 +339,7 @@ void initBottomLevel()
         allBlasInputs.push_back(blasInputs);
     }
 
-    AcsHelper::makeBuffersAndBlases(cmdList.Get(), &toFreeList, allBlasInputs);
+    AcsHelper::makeBuffersAndBlases(cmdList.Get(), toFreeList, allBlasInputs);
 
     BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 }
@@ -425,7 +425,7 @@ void initTopLevel()
     inputs.updateScratchSizePtr = &updateScratchSize;
     inputs.outTlas = &dev_tlas;
 
-    AcsHelper::makeTlas(cmdList.Get(), &toFreeList, inputs);
+    AcsHelper::makeTlas(cmdList.Get(), toFreeList, inputs);
 
     auto desc = BASIC_BUFFER_DESC;
     desc.Width = updateScratchSize;
@@ -721,15 +721,6 @@ void updateScene()
     cmdList->ResourceBarrier(1, &barrier);
 }
 
-void clearToFreeList()
-{
-    for (ComPtr<ID3D12Resource>& resourceToFree : toFreeList)
-    {
-        resourceToFree.Reset();
-    }
-    toFreeList.clear();
-}
-
 void render()
 {
     auto now = std::chrono::high_resolution_clock::now();
@@ -799,7 +790,7 @@ void render()
 
     swapChain->Present(1, 0);
 
-    clearToFreeList();
+    toFreeList.freeAll();
 
     updateFps(deltaTime);
 }
