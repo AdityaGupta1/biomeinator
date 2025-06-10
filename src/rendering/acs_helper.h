@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "dxr_common.h"
-#include "managed_buffer.h"
+#include "buffer/managed_buffer.h"
 
 namespace AcsHelper
 {

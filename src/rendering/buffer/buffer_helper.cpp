@@ -1,6 +1,6 @@
 #include "buffer_helper.h"
 
-#include "dxr_common.h"
+#include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 
 namespace BufferHelper

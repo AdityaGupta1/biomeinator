@@ -1,7 +1,7 @@
 #include "camera.h"
 
 #include "dxr_common.h"
-#include "buffer_helper.h"
+#include "buffer/buffer_helper.h"
 
 #include <numbers>
 

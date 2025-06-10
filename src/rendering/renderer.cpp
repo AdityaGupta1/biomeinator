@@ -3,8 +3,8 @@
 #include "dxr_common.h"
 
 #include "acs_helper.h"
-#include "buffer_helper.h"
-#include "managed_buffer.h"
+#include "buffer/buffer_helper.h"
+#include "buffer/managed_buffer.h"
 
 #include "camera.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dxr_common.h"
+#include "rendering/dxr_common.h"
 
 #include <list>
 
