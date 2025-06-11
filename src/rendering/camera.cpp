@@ -1,9 +1,12 @@
 #include "camera.h"
 
 #include "dxr_common.h"
+
 #include "buffer/buffer_helper.h"
 
 #include <numbers>
+
+using namespace DirectX;
 
 void Camera::init(float fovYRadians)
 {
@@ -56,6 +59,30 @@ void Camera::rotate(float dTheta, float dPhi)
     this->theta += dTheta;
     this->phi = fmaxf(-absMaxPhi, fminf(absMaxPhi, this->phi - dPhi));
     this->setDirectionVectorsFromAngles();
+}
+
+constexpr float playerHorizontalSpeed = 11.0f;
+constexpr float playerVerticalSpeed = 7.0f;
+constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
+
+constexpr float mouseSensitivity = 0.0016f;
+
+void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
+{
+    if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
+    {
+        XMVECTOR linearSpeed = XMLoadFloat3(&playerLinearSpeed);
+        linearSpeed = XMVectorScale(linearSpeed, static_cast<float>(deltaTime) * input.linearSpeedMultiplier);
+        const XMVECTOR linearMovement = XMVectorMultiply(linearSpeed, XMLoadFloat3(&input.linearInput));
+        XMFLOAT3 storedLinearMovement;
+        XMStoreFloat3(&storedLinearMovement, linearMovement);
+        this->moveLinear(storedLinearMovement);
+    }
+
+    if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
+    {
+        this->rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
+    }
 }
 
 ID3D12Resource* Camera::getCameraParamsBuffer()

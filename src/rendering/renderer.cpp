@@ -5,6 +5,7 @@
 #include "acs_helper.h"
 #include "camera.h"
 #include "to_free_list.h"
+#include "window_manager.h"
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 
@@ -14,13 +15,15 @@
 
 #include "shader.fxh"
 
+using namespace DirectX;
+
+using WindowManager::hwnd;
+
 namespace Renderer
 {
 
-void initWindow();
 void initDevice();
-void initSurfaces(HWND hwnd);
-void resize(HWND hwnd);
+void initRenderTarget();
 void initCommand();
 void initBottomLevel();
 void initScene();
@@ -31,15 +34,12 @@ void initPipeline();
 
 void resetCmd();
 void submitCmd();
-void flush();
-
-HWND hwnd;
 
 void init()
 {
-    initWindow();
+    WindowManager::initWindow();
     initDevice();
-    initSurfaces(hwnd);
+    initRenderTarget();
     initCommand();
 
     resetCmd();
@@ -53,71 +53,6 @@ void init()
 
     initRootSignature();
     initPipeline();
-}
-
-bool windowJustRegainedFocus = false;
-
-LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-    switch (msg)
-    {
-    case WM_CLOSE:
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        break;
-    case WM_SIZING:
-    case WM_SIZE:
-        resize(hwnd);
-        break;
-    case WM_KEYDOWN:
-        if (wparam == VK_ESCAPE)
-        {
-            flush();
-            PostMessage(hwnd, WM_CLOSE, 0, 0);
-        }
-        break;
-    case WM_SYSKEYDOWN: // = alt key pressed
-        if (wparam == VK_F4) // allow alt + f4
-        {
-            break;
-        }
-        [[fallthrough]];
-    case WM_SYSKEYUP:
-    case WM_SYSCHAR: // = key pressed while alt is also pressed
-        return 0;
-    case WM_ACTIVATE:
-        if (wparam == WA_INACTIVE)
-        {
-            ShowCursor(true);
-        }
-        else
-        {
-            windowJustRegainedFocus = true;
-            ShowCursor(false);
-        }
-        break;
-    default:
-        break;
-    }
-
-    return DefWindowProcW(hwnd, msg, wparam, lparam);
-}
-
-void initWindow()
-{
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
-    WNDCLASSW wcw = {
-        .lpfnWndProc = &onWindowMessage,
-        .hCursor = LoadCursor(nullptr, IDC_ARROW),
-        .lpszClassName = L"GigaMinecraftClass"
-    };
-    RegisterClassW(&wcw);
-
-    hwnd = CreateWindowExW(0, L"GigaMinecraftClass", L"Giga Minecraft",
-        WS_VISIBLE | WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-        /*width=*/CW_USEDEFAULT, /*height=*/CW_USEDEFAULT,
-        nullptr, nullptr, nullptr, nullptr);
 }
 
 ComPtr<IDXGIFactory4> factory;
@@ -173,7 +108,7 @@ void initDevice()
 
 ComPtr<IDXGISwapChain3> swapChain;
 ComPtr<ID3D12DescriptorHeap> uavHeap;
-void initSurfaces(HWND hwnd)
+void initRenderTarget()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -194,11 +129,11 @@ void initSurfaces(HWND hwnd)
     };
     device->CreateDescriptorHeap(&uavHeapDesc, IID_PPV_ARGS(&uavHeap));
 
-    resize(hwnd);
+    resize();
 }
 
 ComPtr<ID3D12Resource> renderTarget;
-void resize(HWND hwnd)
+void resize()
 {
     if (!swapChain)
     {
@@ -219,7 +154,7 @@ void resize(HWND hwnd)
         renderTarget.Reset();
     }
 
-    D3D12_RESOURCE_DESC rtDesc = {
+    D3D12_RESOURCE_DESC renderTargetDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         .Width = width,
         .Height = height,
@@ -229,13 +164,19 @@ void resize(HWND hwnd)
         .SampleDesc = NO_AA,
         .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
     };
-    device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &rtDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&renderTarget));
+    device->CreateCommittedResource(&DEFAULT_HEAP,
+                                    D3D12_HEAP_FLAG_NONE,
+                                    &renderTargetDesc,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                    nullptr,
+                                    IID_PPV_ARGS(&renderTarget));
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D
     };
-    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
+    device->CreateUnorderedAccessView(
+        renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 ComPtr<ID3D12CommandAllocator> cmdAlloc;
@@ -518,6 +459,7 @@ void initRootSignature()
 ComPtr<ID3D12StateObject> pso;
 constexpr UINT64 NUM_SHADER_IDS = 3;
 ComPtr<ID3D12Resource> dev_shaderIds;
+D3D12_DISPATCH_RAYS_DESC dispatchDesc;
 void initPipeline()
 {
     D3D12_DXIL_LIBRARY_DESC lib = {
@@ -538,7 +480,9 @@ void initPipeline()
         .MaxAttributeSizeInBytes = 8,
     };
 
-    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = { rootSignature.Get() };
+    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
+        rootSignature.Get(),
+    };
 
     D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
         .MaxTraceRecursionDepth = 3,
@@ -579,113 +523,22 @@ void initPipeline()
     writeId(L"Miss");
     writeId(L"HitGroup");
     dev_shaderIds->Unmap(0, nullptr);
-}
 
-struct PlayerInput
-{
-    XMFLOAT3 linearInput{ 0, 0, 0 };
-    float linearSpeedMultiplier{ 1.f };
-    XMFLOAT2 mouseMovement{ 0, 0 };
-};
-
-PlayerInput getPlayerInput()
-{
-    PlayerInput input;
-
-    if (GetForegroundWindow() != hwnd)
-    {
-        return input;
-    }
-
-#define KEY_DOWN(key) (GetAsyncKeyState(key) & 0x8000)
-
-    if (KEY_DOWN('W'))
-    {
-        ++input.linearInput.z;
-    }
-
-    if (KEY_DOWN('A'))
-    {
-        --input.linearInput.x;
-    }
-
-    if (KEY_DOWN('S'))
-    {
-        --input.linearInput.z;
-    }
-
-    if (KEY_DOWN('D'))
-    {
-        ++input.linearInput.x;
-    }
-
-    if (KEY_DOWN(VK_SPACE) || KEY_DOWN('E'))
-    {
-        ++input.linearInput.y;
-    }
-
-    if (KEY_DOWN('Q'))
-    {
-        --input.linearInput.y;
-    }
-
-    if (KEY_DOWN(VK_LSHIFT))
-    {
-        input.linearSpeedMultiplier *= 2.f;
-    }
-
-    if (KEY_DOWN(VK_LMENU))
-    {
-        input.linearSpeedMultiplier *= 0.5f;
-    }
-
-#undef KEY_DOWN
-
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
-
-    RECT windowRect;
-    GetWindowRect(hwnd, &windowRect);
-    int centerX = (windowRect.left + windowRect.right) / 2;
-    int centerY = (windowRect.top + windowRect.bottom) / 2;
-
-    if (windowJustRegainedFocus)
-    {
-        windowJustRegainedFocus = false;
-    }
-    else
-    {
-        input.mouseMovement.x = static_cast<float>(cursorPos.x - centerX);
-        input.mouseMovement.y = static_cast<float>(cursorPos.y - centerY);
-    }
-
-    SetCursorPos(centerX, centerY);
-
-    return input;
-}
-
-constexpr float playerHorizontalSpeed = 11.0f;
-constexpr float playerVerticalSpeed = 7.0f;
-constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
-
-constexpr float mouseSensitivity = 0.0016f;
-
-void processPlayerInput(PlayerInput input, double deltaTime)
-{
-    if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
-    {
-        XMVECTOR linearSpeed = XMLoadFloat3(&playerLinearSpeed);
-        linearSpeed = XMVectorScale(linearSpeed, static_cast<float>(deltaTime) * input.linearSpeedMultiplier);
-        const XMVECTOR linearMovement = XMVectorMultiply(linearSpeed, XMLoadFloat3(&input.linearInput));
-        XMFLOAT3 storedLinearMovement;
-        XMStoreFloat3(&storedLinearMovement, linearMovement);
-        camera.moveLinear(storedLinearMovement);
-    }
-
-    if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
-    {
-        camera.rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
-    }
+    dispatchDesc = {
+        .RayGenerationShaderRecord = {
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress(),
+            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+        },
+        .MissShaderTable = {
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+        },
+        .HitGroupTable = {
+            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+        },
+    };
+    dispatchDesc.Depth = 1;
 }
 
 static int frameCount = 0;
@@ -727,8 +580,7 @@ void updateScene()
     };
     cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
 
-    D3D12_RESOURCE_BARRIER barrier = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV, .UAV = { .pResource = dev_tlas.Get() } };
-    cmdList->ResourceBarrier(1, &barrier);
+    BufferHelper::uavBarrier(cmdList.Get(), dev_tlas.Get());
 }
 
 void render()
@@ -737,8 +589,7 @@ void render()
     double deltaTime = std::chrono::duration<double>(now - lastTime).count();
     lastTime = now;
 
-    const PlayerInput playerInput = getPlayerInput();
-    processPlayerInput(playerInput, deltaTime);
+    camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
 
     resetCmd();
 
@@ -757,25 +608,10 @@ void render()
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_idxBuffer.getBufferGpuAddress()); // t2
     cmdList->SetComputeRootShaderResourceView(paramIdx++, dev_instanceDatas->GetGPUVirtualAddress()); // t3
 
-    auto rtDesc = renderTarget->GetDesc();
+    const auto renderTargetDesc = renderTarget->GetDesc();
 
-    D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
-        .RayGenerationShaderRecord = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress(),
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
-        },
-        .MissShaderTable = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
-        },
-        .HitGroupTable = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
-        },
-        .Width = static_cast<uint32_t>(rtDesc.Width),
-        .Height = rtDesc.Height,
-        .Depth = 1
-    };
+    dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
+    dispatchDesc.Height = renderTargetDesc.Height;
     cmdList->DispatchRays(&dispatchDesc);
 
     ComPtr<ID3D12Resource> backBuffer;

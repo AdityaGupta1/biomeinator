@@ -1,7 +1,9 @@
 #pragma once
 
-#include "common_structs.h"
 #include "dxr_includes.h"
+
+#include "common_structs.h"
+#include "window_manager.h"
 
 class Camera
 {
@@ -17,8 +19,10 @@ private:
 public:
     void init(float fovYRadians);
 
-    void moveLinear(XMFLOAT3 linearMovement);
+    void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
+
+    void processPlayerInput(const PlayerInput& input, double deltaTime);
 
     ID3D12Resource* getCameraParamsBuffer();
 };
