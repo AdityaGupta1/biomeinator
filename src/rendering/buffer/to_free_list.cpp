@@ -1,6 +1,6 @@
 #include "to_free_list.h"
 
-#include "buffer/managed_buffer.h"
+#include "managed_buffer.h"
 
 void ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
 {

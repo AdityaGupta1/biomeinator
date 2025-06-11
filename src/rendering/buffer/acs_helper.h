@@ -1,10 +1,11 @@
 #pragma once
 
+#include "rendering/dxr_common.h"
+
 #include <vector>
 
-#include "dxr_common.h"
+#include "managed_buffer.h"
 #include "to_free_list.h"
-#include "buffer/managed_buffer.h"
 
 namespace AcsHelper
 {

@@ -1,8 +1,8 @@
 #include "acs_helper.h"
 
-#include "renderer.h"
-#include "buffer/buffer_helper.h"
-#include "buffer/managed_buffer.h"
+#include "rendering/renderer.h"
+#include "buffer_helper.h"
+#include "managed_buffer.h"
 #include "util/util.h"
 
 namespace AcsHelper

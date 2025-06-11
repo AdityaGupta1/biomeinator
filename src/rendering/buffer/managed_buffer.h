@@ -1,8 +1,9 @@
 #pragma once
 
 #include "rendering/dxr_includes.h"
-#include "rendering/to_free_list.h"
 #include "util/util.h"
+
+#include "to_free_list.h"
 
 #include <list>
 
