@@ -3,7 +3,7 @@
 #include "dxr_includes.h"
 
 #include "common_structs.h"
-#include "window_manager.h"
+#include "host_structs.h"
 
 class Camera
 {

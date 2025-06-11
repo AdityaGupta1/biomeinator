@@ -2,8 +2,6 @@
 
 #include "dxr_includes.h"
 
-#include <algorithm>
-
 namespace Renderer
 {
 
