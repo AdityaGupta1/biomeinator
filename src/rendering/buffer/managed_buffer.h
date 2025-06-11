@@ -59,7 +59,7 @@ public:
                                                const ManagedBuffer& dev_srcBuffer,
                                                ManagedBufferSection srcBufferSection);
 
-    void freeSection(ManagedBufferSection section);
+    //void freeSection(ManagedBufferSection section);
 
     void queueFreeBuffer(ToFreeList& toFreeList);
 

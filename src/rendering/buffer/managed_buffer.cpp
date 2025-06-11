@@ -110,39 +110,39 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
         cmdList, dev_srcBuffer.getBuffer(), srcBufferSection.sizeBytes, srcBufferSection.offsetBytes);
 }
 
-void ManagedBuffer::freeSection(ManagedBufferSection section)
-{
-    auto it = this->freeSectionList.begin();
-    for (; it != this->freeSectionList.end(); ++it)
-    {
-        if (section.offsetBytes + section.sizeBytes < it->offsetBytes)
-        {
-            break;
-        }
-    }
-
-    auto inserted = this->freeSectionList.insert(it, section);
-
-    // try merging with previous
-    if (inserted != this->freeSectionList.begin())
-    {
-        auto prev = std::prev(inserted);
-        if (prev->offsetBytes + prev->sizeBytes == inserted->offsetBytes)
-        {
-            prev->sizeBytes += inserted->sizeBytes;
-            this->freeSectionList.erase(inserted);
-            inserted = prev;
-        }
-    }
-
-    // try merging with next
-    auto next = std::next(inserted);
-    if (next != this->freeSectionList.end() && inserted->offsetBytes + inserted->sizeBytes == next->offsetBytes)
-    {
-        inserted->sizeBytes += next->sizeBytes;
-        this->freeSectionList.erase(next);
-    }
-}
+//void ManagedBuffer::freeSection(ManagedBufferSection section)
+//{
+//    auto it = this->freeSectionList.begin();
+//    for (; it != this->freeSectionList.end(); ++it)
+//    {
+//        if (section.offsetBytes + section.sizeBytes < it->offsetBytes)
+//        {
+//            break;
+//        }
+//    }
+//
+//    auto inserted = this->freeSectionList.insert(it, section);
+//
+//    // try merging with previous
+//    if (inserted != this->freeSectionList.begin())
+//    {
+//        auto prev = std::prev(inserted);
+//        if (prev->offsetBytes + prev->sizeBytes == inserted->offsetBytes)
+//        {
+//            prev->sizeBytes += inserted->sizeBytes;
+//            this->freeSectionList.erase(inserted);
+//            inserted = prev;
+//        }
+//    }
+//
+//    // try merging with next
+//    auto next = std::next(inserted);
+//    if (next != this->freeSectionList.end() && inserted->offsetBytes + inserted->sizeBytes == next->offsetBytes)
+//    {
+//        inserted->sizeBytes += next->sizeBytes;
+//        this->freeSectionList.erase(next);
+//    }
+//}
 
 void ManagedBuffer::queueFreeBuffer(ToFreeList& toFreeList)
 {
