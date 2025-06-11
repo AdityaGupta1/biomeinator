@@ -21,12 +21,15 @@ file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
 list(FILTER SHADER_FILES EXCLUDE REGEX ".*\\.hlsli$")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
-# there's probably a way to clean only the generated shaders that don't correspond to actual shaders, but I'm too lazy to figure it out
+# There's probably a way to clean only the generated shaders that don't correspond to actual shaders, but I'm too lazy to figure it out
 message(STATUS "Cleaning generated shaders...")
 file(REMOVE_RECURSE ${GENERATED_SHADER_HEADERS})
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
 
 message(STATUS "Compiling shaders...")
+
+# collect hlsli files (since they were excluded in the compilation step)
+file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
 # compile shaders
 set(COMPILED_HEADERS "")
@@ -51,7 +54,7 @@ foreach(SHADER ${SHADER_FILES})
                 /Fh ${FXH_OUT}
                 /Vn ${VAR_NAME}
                 /I ${SHADER_DIR}
-        DEPENDS ${SHADER}
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )
@@ -62,9 +65,6 @@ endforeach()
 
 # collect all src cpp/h files
 file(GLOB_RECURSE SRC_FILES "${SRC_DIR}/*.cpp" "${SRC_DIR}/*.h")
-
-# collect hlsli files (since they were excluded in the compilation step)
-file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
 # set up filters for src/ based on directory structure
 foreach(FILE IN LISTS SRC_FILES SHADER_FILES SHADER_INCLUDE_FILES)

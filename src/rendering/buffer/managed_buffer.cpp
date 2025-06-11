@@ -37,7 +37,7 @@ void ManagedBuffer::unmap()
 }
 
 // TODO: keep a persistent rotating pointer into freeSectionList to avoid biasing towards beginning of list for new
-// uploads?
+// uploads? (issue #12)
 ManagedBufferSection ManagedBuffer::findFreeSection(uint32_t sizeBytes)
 {
     for (auto it = this->freeSectionList.begin(); it != this->freeSectionList.end(); ++it)
