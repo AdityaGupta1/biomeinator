@@ -183,10 +183,10 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 
-    dev_vertUploadBuffer.queueFreeBuffer(toFreeList);
+    toFreeList.pushManagedBuffer(&dev_vertUploadBuffer);
     if (anyHasIdxs)
     {
-        dev_idxUploadBuffer.queueFreeBuffer(toFreeList);
+        toFreeList.pushManagedBuffer(&dev_idxUploadBuffer);
     }
 }
 

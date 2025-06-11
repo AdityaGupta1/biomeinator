@@ -14,6 +14,8 @@ struct ManagedBufferSection
 
 class ManagedBuffer
 {
+friend class ToFreeList;
+
 private:
     const D3D12_HEAP_PROPERTIES* heapProperties;
     const D3D12_HEAP_FLAGS heapFlags;
@@ -28,6 +30,8 @@ private:
     std::list<ManagedBufferSection> freeSectionList;
 
     ManagedBufferSection findFreeSection(uint32_t sizeBytes);
+
+    void freeSection(ManagedBufferSection section);
 
 public:
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
@@ -58,10 +62,6 @@ public:
     ManagedBufferSection copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
                                                const ManagedBuffer& dev_srcBuffer,
                                                ManagedBufferSection srcBufferSection);
-
-    //void freeSection(ManagedBufferSection section);
-
-    void queueFreeBuffer(ToFreeList& toFreeList);
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
