@@ -37,7 +37,6 @@ void submitCmd();
 
 void init()
 {
-    WindowManager::initWindow();
     initDevice();
     initRenderTarget();
     initCommand();

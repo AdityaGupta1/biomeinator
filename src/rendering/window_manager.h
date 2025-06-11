@@ -14,7 +14,7 @@ namespace WindowManager
 
 	extern HWND hwnd;
 
-    void initWindow();
+    void init();
 
     PlayerInput getPlayerInput();
 

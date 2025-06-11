@@ -55,7 +55,7 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-void initWindow()
+void init()
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 

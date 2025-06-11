@@ -1,7 +1,9 @@
 ﻿#include "rendering/renderer.h"
+#include "rendering/window_manager.h"
 
 int main()
 {
+    WindowManager::init();
     Renderer::init();
 
     for (MSG msg;;)
