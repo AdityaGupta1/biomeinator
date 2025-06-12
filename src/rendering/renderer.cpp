@@ -3,7 +3,7 @@
 #include "dxr_common.h"
 
 #include "camera.h"
-#include "scene_manager.h"
+#include "scene.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
@@ -26,10 +26,6 @@ namespace Renderer
 void initDevice();
 void initRenderTarget();
 void initCommand();
-void initBottomLevel();
-void initScene();
-void updateTransforms();
-void initTopLevel();
 void initRootSignature();
 void initPipeline();
 
@@ -43,7 +39,7 @@ ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 constexpr uint32_t MAX_NUM_INSTANCES = 3;
-SceneManager sceneManager{ MAX_NUM_INSTANCES };
+Scene sceneManager{ MAX_NUM_INSTANCES };
 
 void init()
 {

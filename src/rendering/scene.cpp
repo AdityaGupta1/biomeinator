@@ -1,4 +1,4 @@
-#include "scene_manager.h"
+#include "scene.h"
 
 #include "dxr_common.h"
 #include "renderer.h"
@@ -65,9 +65,9 @@ const std::vector<uint32_t> cubeIdxs = {
     20, 21, 22, 20, 22, 23
 };
 
-SceneManager::SceneManager(uint32_t maxNumInstances) : maxNumInstances(maxNumInstances) {}
+Scene::Scene(uint32_t maxNumInstances) : maxNumInstances(maxNumInstances) {}
 
-void SceneManager::init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+void Scene::init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     this->dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
     this->dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
@@ -154,7 +154,7 @@ void SceneManager::init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeL
     makeTlas(cmdList, toFreeList);
 }
 
-void SceneManager::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = dev_instanceDescs.Get();
@@ -166,27 +166,27 @@ void SceneManager::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toF
     BufferHelper::uavBarrier(cmdList, dev_tlas.Get());
 }
 
-ID3D12Resource* SceneManager::getDevInstanceDescs()
+ID3D12Resource* Scene::getDevInstanceDescs()
 {
     return this->dev_instanceDescs.Get();
 }
 
-ID3D12Resource* SceneManager::getDevInstanceDatas()
+ID3D12Resource* Scene::getDevInstanceDatas()
 {
     return this->dev_instanceDatas.Get();
 }
 
-ID3D12Resource* SceneManager::getDevTlas()
+ID3D12Resource* Scene::getDevTlas()
 {
     return this->dev_tlas.Get();
 }
 
-ID3D12Resource* SceneManager::getDevVertBuffer()
+ID3D12Resource* Scene::getDevVertBuffer()
 {
     return this->dev_vertBuffer.getBuffer();
 }
 
-ID3D12Resource* SceneManager::getDevIdxBuffer()
+ID3D12Resource* Scene::getDevIdxBuffer()
 {
     return this->dev_idxBuffer.getBuffer();
 }

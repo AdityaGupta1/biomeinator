@@ -8,7 +8,7 @@
 
 class ToFreeList;
 
-class SceneManager
+class Scene
 {
     friend class ToFreeList;
 
@@ -41,7 +41,7 @@ private:
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
 public:
-    SceneManager(uint32_t maxNumInstances);
+    Scene(uint32_t maxNumInstances);
 
     void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
