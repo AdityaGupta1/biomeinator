@@ -90,9 +90,18 @@ AcsHelper::GeometryWrapper quadGeoWrapper;
 AcsHelper::GeometryWrapper cubeGeoWrapper;
 
 ComPtr<ID3D12Resource> dev_tlas;
-ComPtr<ID3D12Resource> dev_tlasUpdateScratchBuffer;
 
-void updateTransforms();
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+{
+    AcsHelper::TlasBuildInputs inputs;
+    inputs.dev_instanceDescs = dev_instanceDescs.Get();
+    inputs.numInstances = NUM_INSTANCES;
+    inputs.outTlas = &dev_tlas;
+
+    AcsHelper::makeTlas(cmdList, toFreeList, inputs);
+
+    BufferHelper::uavBarrier(cmdList, dev_tlas.Get());
+}
 
 void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
@@ -151,73 +160,32 @@ void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
         };
     }
 
-    updateTransforms();
-
-    uint32_t updateScratchSize;
-
-    AcsHelper::TlasBuildInputs inputs;
-    inputs.dev_instanceDescs = dev_instanceDescs.Get();
-    inputs.numInstances = NUM_INSTANCES;
-    inputs.updateScratchSizePtr = &updateScratchSize;
-    inputs.outTlas = &dev_tlas;
-
-    AcsHelper::makeTlas(cmdList, toFreeList, inputs);
-
-    auto desc = BASIC_BUFFER_DESC;
-    desc.Width = updateScratchSize;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    Renderer::device->CreateCommittedResource(&DEFAULT_HEAP,
-                                              D3D12_HEAP_FLAG_NONE,
-                                              &desc,
-                                              D3D12_RESOURCE_STATE_COMMON,
-                                              nullptr,
-                                              IID_PPV_ARGS(&dev_tlasUpdateScratchBuffer));
-}
-
-void updateTransforms()
-{
-    using namespace DirectX;
-    auto set = [](int idx, XMMATRIX mx)
+    // TODO: remove
     {
-        auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&host_instanceDescs[idx].Transform);
-        XMStoreFloat3x4(ptr, mx);
-    };
+        using namespace DirectX;
+        auto set = [](int idx, XMMATRIX mx)
+        {
+            auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&host_instanceDescs[idx].Transform);
+            XMStoreFloat3x4(ptr, mx);
+        };
 
-    auto time = static_cast<float>(GetTickCount64()) / 1000;
+        auto time = static_cast<float>(GetTickCount64()) / 1000;
 
-    auto cube = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-    cube *= XMMatrixTranslation(-1.5, 2, 2);
-    set(0, cube);
+        auto cube = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+        cube *= XMMatrixTranslation(-1.5, 2, 2);
+        set(0, cube);
 
-    auto mirror = XMMatrixRotationX(-1.8f);
-    mirror *= XMMatrixRotationY(XMScalarSinEst(time) / 8 + 1);
-    mirror *= XMMatrixTranslation(2, 2, 2);
-    set(1, mirror);
+        auto mirror = XMMatrixRotationX(-1.8f);
+        mirror *= XMMatrixRotationY(XMScalarSinEst(time) / 8 + 1);
+        mirror *= XMMatrixTranslation(2, 2, 2);
+        set(1, mirror);
 
-    auto floor = XMMatrixScaling(5, 5, 5);
-    floor *= XMMatrixTranslation(0, 0, 2);
-    set(2, floor);
-}
+        auto floor = XMMatrixScaling(5, 5, 5);
+        floor *= XMMatrixTranslation(0, 0, 2);
+        set(2, floor);
+    }
 
-void update(ID3D12GraphicsCommandList4* cmdList)
-{
-    updateTransforms();
-
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {
-        .DestAccelerationStructureData = dev_tlas->GetGPUVirtualAddress(),
-        .Inputs = {
-            .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-            .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
-            .NumDescs = SceneManager::NUM_INSTANCES,
-            .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-            .InstanceDescs = SceneManager::getDevInstanceDescs()->GetGPUVirtualAddress(),
-        },
-        .SourceAccelerationStructureData = dev_tlas->GetGPUVirtualAddress(),
-        .ScratchAccelerationStructureData = dev_tlasUpdateScratchBuffer->GetGPUVirtualAddress(),
-    };
-    cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
-
-    BufferHelper::uavBarrier(cmdList, dev_tlas.Get());
+    makeTlas(cmdList, toFreeList);
 }
 
 ID3D12Resource* getDevInstanceDescs()

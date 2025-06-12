@@ -379,8 +379,6 @@ void render()
 
     resetCmd();
 
-    SceneManager::update(cmdList.Get());
-
     cmdList->SetPipelineState1(pso.Get());
     cmdList->SetComputeRootSignature(rootSignature.Get());
     ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
