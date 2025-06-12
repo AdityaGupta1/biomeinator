@@ -5,9 +5,6 @@
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
 
-namespace SceneManager
-{
-
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
     {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
@@ -68,45 +65,12 @@ const std::vector<uint32_t> cubeIdxs = {
     20, 21, 22, 20, 22, 23
 };
 
-ManagedBuffer dev_vertBuffer{
-    &DEFAULT_HEAP,
-    D3D12_HEAP_FLAG_NONE,
-    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-    false /*isMapped*/,
-};
-ManagedBuffer dev_idxBuffer{
-    &DEFAULT_HEAP,
-    D3D12_HEAP_FLAG_NONE,
-    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-    false /*isMapped*/,
-};
+SceneManager::SceneManager(uint32_t maxNumInstances) : maxNumInstances(maxNumInstances) {}
 
-D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs;
-ComPtr<ID3D12Resource> dev_instanceDescs;
-InstanceData* host_instanceDatas;
-ComPtr<ID3D12Resource> dev_instanceDatas;
-
-AcsHelper::GeometryWrapper quadGeoWrapper;
-AcsHelper::GeometryWrapper cubeGeoWrapper;
-
-ComPtr<ID3D12Resource> dev_tlas;
-
-void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+void SceneManager::init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    AcsHelper::TlasBuildInputs inputs;
-    inputs.dev_instanceDescs = dev_instanceDescs.Get();
-    inputs.numInstances = NUM_INSTANCES;
-    inputs.outTlas = &dev_tlas;
-
-    AcsHelper::makeTlas(cmdList, toFreeList, inputs);
-
-    BufferHelper::uavBarrier(cmdList, dev_tlas.Get());
-}
-
-void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
-{
-    dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
-    dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
+    this->dev_vertBuffer.init((quadVerts.size() + cubeVerts.size()) * sizeof(Vertex));
+    this->dev_idxBuffer.init(cubeIdxs.size() * sizeof(uint32_t));
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
@@ -132,27 +96,29 @@ void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 
     BufferHelper::uavBarrier(cmdList, nullptr);
 
-    dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * MAX_INSTANCES,
+    dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
                                                         &UPLOAD_HEAP,
                                                         D3D12_HEAP_FLAG_NONE,
                                                         D3D12_RESOURCE_STATE_GENERIC_READ);
-    dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDescs));
+    dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDescs));
 
-    dev_instanceDatas = BufferHelper::createBasicBuffer(
-        sizeof(InstanceData) * MAX_INSTANCES, &UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
-    dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&host_instanceDatas));
+    dev_instanceDatas = BufferHelper::createBasicBuffer(sizeof(InstanceData) * this->maxNumInstances,
+                                                        &UPLOAD_HEAP,
+                                                        D3D12_HEAP_FLAG_NONE,
+                                                        D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDatas));
 
-    for (uint32_t i = 0; i < NUM_INSTANCES; ++i)
+    for (uint32_t i = 0; i < this->maxNumInstances; ++i)
     {
         const bool isQuad = i > 0;
 
-        host_instanceDescs[i] = {
+        this->host_instanceDescs[i] = {
             .InstanceID = i,
             .InstanceMask = 1,
             .AccelerationStructure = (isQuad ? quadGeoWrapper : cubeGeoWrapper).dev_blas->GetGPUVirtualAddress(),
         };
 
-        host_instanceDatas[i] = {
+        this->host_instanceDatas[i] = {
             .vertBufferOffset =
                 (uint32_t)((isQuad ? quadGeoWrapper : cubeGeoWrapper).vertBufferSection.offsetBytes / sizeof(Vertex)),
             .hasIdxs = !isQuad,
@@ -163,9 +129,9 @@ void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     // TODO: remove
     {
         using namespace DirectX;
-        auto set = [](int idx, XMMATRIX mx)
+        auto set = [this](int idx, XMMATRIX mx)
         {
-            auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&host_instanceDescs[idx].Transform);
+            auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&this->host_instanceDescs[idx].Transform);
             XMStoreFloat3x4(ptr, mx);
         };
 
@@ -188,29 +154,39 @@ void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     makeTlas(cmdList, toFreeList);
 }
 
-ID3D12Resource* getDevInstanceDescs()
+void SceneManager::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    return dev_instanceDescs.Get();
+    AcsHelper::TlasBuildInputs inputs;
+    inputs.dev_instanceDescs = dev_instanceDescs.Get();
+    inputs.numInstances = this->maxNumInstances;
+    inputs.outTlas = &dev_tlas;
+
+    AcsHelper::makeTlas(cmdList, toFreeList, inputs);
+
+    BufferHelper::uavBarrier(cmdList, dev_tlas.Get());
 }
 
-ID3D12Resource* getDevInstanceDatas()
+ID3D12Resource* SceneManager::getDevInstanceDescs()
 {
-    return dev_instanceDatas.Get();
+    return this->dev_instanceDescs.Get();
 }
 
-ID3D12Resource* getDevTlas()
+ID3D12Resource* SceneManager::getDevInstanceDatas()
 {
-    return dev_tlas.Get();
+    return this->dev_instanceDatas.Get();
 }
 
-ID3D12Resource* getDevVertBuffer()
+ID3D12Resource* SceneManager::getDevTlas()
 {
-    return dev_vertBuffer.getBuffer();
+    return this->dev_tlas.Get();
 }
 
-ID3D12Resource* getDevIdxBuffer()
+ID3D12Resource* SceneManager::getDevVertBuffer()
 {
-    return dev_idxBuffer.getBuffer();
+    return this->dev_vertBuffer.getBuffer();
 }
 
-} // namespace SceneManager
+ID3D12Resource* SceneManager::getDevIdxBuffer()
+{
+    return this->dev_idxBuffer.getBuffer();
+}

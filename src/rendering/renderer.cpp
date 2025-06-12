@@ -42,6 +42,9 @@ Camera camera;
 ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
+constexpr uint32_t MAX_NUM_INSTANCES = 3;
+SceneManager sceneManager{ MAX_NUM_INSTANCES };
+
 void init()
 {
     initDevice();
@@ -52,7 +55,7 @@ void init()
 
     camera.init(XMConvertToRadians(fovYDegrees));
 
-    SceneManager::init(cmdList.Get(), toFreeList);
+    sceneManager.init(cmdList.Get(), toFreeList);
 
     submitCmd();
     flush();
@@ -387,10 +390,10 @@ void render()
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, SceneManager::getDevTlas()->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, SceneManager::getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, SceneManager::getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, SceneManager::getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevTlas()->GetGPUVirtualAddress()); // t0
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
 
     const auto renderTargetDesc = renderTarget->GetDesc();
 
