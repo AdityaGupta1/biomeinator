@@ -3,9 +3,9 @@
 #include "rendering/dxr_includes.h"
 #include "util/util.h"
 
-#include "to_free_list.h"
-
 #include <list>
+
+class ToFreeList;
 
 struct ManagedBufferSection
 {

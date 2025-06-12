@@ -1,6 +1,7 @@
 #include "managed_buffer.h"
 
 #include "buffer_helper.h"
+#include "to_free_list.h"
 
 #include <stdexcept>
 

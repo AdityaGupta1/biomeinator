@@ -5,7 +5,8 @@
 #include <vector>
 
 #include "managed_buffer.h"
-#include "to_free_list.h"
+
+class ToFreeList;
 
 namespace AcsHelper
 {
@@ -26,18 +27,18 @@ struct BlasBuildInputs
     ManagedBuffer* dev_verts{ nullptr };
     ManagedBuffer* dev_idxs{ nullptr };
 
-    GeometryWrapper* outGeoWrapper;
+    GeometryWrapper* outGeoWrapper{ nullptr };
 };
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std::vector<BlasBuildInputs> allInputs);
 
 struct TlasBuildInputs
 {
-    ID3D12Resource* dev_instanceDescs;
-    uint32_t numInstances;
-    uint64_t* updateScratchSizePtr;
+    ID3D12Resource* dev_instanceDescs{ nullptr };
+    uint32_t numInstances{ 0 };
+    uint32_t* updateScratchSizePtr{ nullptr };
 
-    ComPtr<ID3D12Resource>* outTlas;
+    ComPtr<ID3D12Resource>* outTlas{ nullptr };
 };
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs);

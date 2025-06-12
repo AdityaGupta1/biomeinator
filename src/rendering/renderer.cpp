@@ -367,7 +367,7 @@ void initTopLevel()
 {
     updateTransforms();
 
-    uint64_t updateScratchSize;
+    uint32_t updateScratchSize;
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = dev_instanceDescs.Get();
