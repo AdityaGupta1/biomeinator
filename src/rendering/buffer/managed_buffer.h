@@ -11,9 +11,17 @@ class ManagedBuffer;
 
 struct ManagedBufferSection
 {
-    const ManagedBuffer* buffer{ nullptr };
-    uint32_t offsetBytes{ 0 };
-    uint32_t sizeBytes{ 0 };
+private:
+    ManagedBuffer* buffer;
+
+public:
+    uint32_t offsetBytes;
+    uint32_t sizeBytes;
+
+    ManagedBufferSection(ManagedBuffer* buffer, uint32_t offsetBytes, uint32_t sizeBytes);
+    ManagedBufferSection();
+
+    ManagedBuffer* getManagedBuffer() const;
 };
 
 class ManagedBuffer
@@ -67,7 +75,7 @@ public:
                                                const ManagedBuffer& dev_srcBuffer,
                                                ManagedBufferSection srcBufferSection);
 
-    ID3D12Resource* getBuffer() const;
+    ID3D12Resource* getManagedBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
     uint32_t getSizeBytes() const;
 };

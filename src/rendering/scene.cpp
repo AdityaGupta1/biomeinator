@@ -183,10 +183,10 @@ ID3D12Resource* Scene::getDevTlas()
 
 ID3D12Resource* Scene::getDevVertBuffer()
 {
-    return this->dev_vertBuffer.getBuffer();
+    return this->dev_vertBuffer.getManagedBuffer();
 }
 
 ID3D12Resource* Scene::getDevIdxBuffer()
 {
-    return this->dev_idxBuffer.getBuffer();
+    return this->dev_idxBuffer.getManagedBuffer();
 }

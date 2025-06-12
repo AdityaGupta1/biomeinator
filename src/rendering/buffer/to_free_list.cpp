@@ -12,9 +12,9 @@ void ToFreeList::pushManagedBuffer(const ManagedBuffer* buffer)
     this->pushResource(buffer->dev_buffer, buffer->isMapped);
 }
 
-void ToFreeList::pushManagedBufferSection(ManagedBuffer* buffer, const ManagedBufferSection* bufferSection)
+void ToFreeList::pushManagedBufferSection(const ManagedBufferSection* bufferSection)
 {
-    managedBufferSections.push_back(std::make_pair(buffer, bufferSection));
+    managedBufferSections.push_back(bufferSection);
 }
 
 void ToFreeList::freeAll()
@@ -32,9 +32,9 @@ void ToFreeList::freeAll()
     }
     mappedResources.clear();
 
-    for (const auto& [managedBuffer, bufferSection] : managedBufferSections)
+    for (const auto bufferSection : managedBufferSections)
     {
-        managedBuffer->freeSection(*bufferSection);
+        bufferSection->getManagedBuffer()->freeSection(*bufferSection);
     }
     managedBufferSections.clear();
 }

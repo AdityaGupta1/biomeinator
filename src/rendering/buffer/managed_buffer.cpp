@@ -5,6 +5,19 @@
 
 #include <stdexcept>
 
+ManagedBufferSection::ManagedBufferSection(ManagedBuffer* buffer, uint32_t offsetBytes, uint32_t sizeBytes)
+    : buffer(buffer), offsetBytes(offsetBytes), sizeBytes(sizeBytes)
+{}
+
+ManagedBufferSection::ManagedBufferSection()
+    : ManagedBufferSection(nullptr, 0, 0)
+{}
+
+ManagedBuffer* ManagedBufferSection::getManagedBuffer() const
+{
+    return this->buffer;
+}
+
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_HEAP_FLAGS heapFlags,
                              const D3D12_RESOURCE_STATES initialResourceState,
@@ -104,12 +117,12 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
                                                           ManagedBufferSection srcBufferSection)
 {
     return this->copyFromDeviceBuffer(
-        cmdList, dev_srcBuffer.getBuffer(), srcBufferSection.sizeBytes, srcBufferSection.offsetBytes);
+        cmdList, dev_srcBuffer.getManagedBuffer(), srcBufferSection.sizeBytes, srcBufferSection.offsetBytes);
 }
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-    if (section.buffer != this)
+    if (section.getManagedBuffer() != this)
     {
         throw std::runtime_error("Attempting to free ManagedBufferSection from wrong ManagedBuffer");
     }
@@ -146,7 +159,7 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
     }
 }
 
-ID3D12Resource* ManagedBuffer::getBuffer() const
+ID3D12Resource* ManagedBuffer::getManagedBuffer() const
 {
     return this->dev_buffer.Get();
 }
