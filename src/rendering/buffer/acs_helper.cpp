@@ -66,7 +66,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
         cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-        // It is the caller's responsibility to enforce a barrier for the last build if necessary.
+        // The caller is responsible for enforcing a barrier for the last build if necessary.
         if (i < buildInfos.size() - 1)
         {
             BufferHelper::uavBarrier(cmdList, sharedAcsScratchBuffer.Get());

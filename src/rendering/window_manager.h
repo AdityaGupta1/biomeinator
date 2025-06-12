@@ -6,10 +6,10 @@
 namespace WindowManager
 {
 
-	extern HWND hwnd;
+extern HWND hwnd;
 
-    void init();
+void init();
 
-    PlayerInput getPlayerInput();
+PlayerInput getPlayerInput();
 
-}; // namespace WindowManager
+} // namespace WindowManager
