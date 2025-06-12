@@ -76,9 +76,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
 void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                        ComPtr<ID3D12Resource>* outBlas,
-                       const ManagedBuffer& dev_vertUploadBuffer,
                        ManagedBufferSection vertBufferSection,
-                       const ManagedBuffer& dev_idxUploadBuffer,
                        ManagedBufferSection idxBufferSection)
 {
     const bool hasIdxs = (idxBufferSection.sizeBytes > 0);
@@ -93,9 +91,9 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
             .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxBufferSection.sizeBytes),
             .VertexCount = Util::convertByteSizeToCount<Vertex>(vertBufferSection.sizeBytes),
-            .IndexBuffer = hasIdxs ? dev_idxUploadBuffer.getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
+            .IndexBuffer = hasIdxs ? idxBufferSection.buffer->getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
             .VertexBuffer = {
-                .StartAddress = dev_vertUploadBuffer.getBufferGpuAddress() + vertBufferSection.offsetBytes,
+                .StartAddress = vertBufferSection.buffer->getBufferGpuAddress() + vertBufferSection.offsetBytes,
                 .StrideInBytes = sizeof(Vertex),
             },
         },
@@ -176,9 +174,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(),
                           &inputs.outGeoWrapper->dev_blas,
-                          dev_vertUploadBuffer,
                           dev_vertUploadBufferSection,
-                          dev_idxUploadBuffer,
                           dev_idxUploadBufferSection);
     }
 

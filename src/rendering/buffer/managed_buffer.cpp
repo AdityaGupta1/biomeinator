@@ -19,7 +19,7 @@ void ManagedBuffer::init(uint32_t sizeBytes)
         BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->heapFlags, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
 
-    this->freeSectionList.push_back({ 0, sizeBytes });
+    this->freeSectionList.push_back({ this, 0, sizeBytes });
 
     if (this->isMapped)
     {
@@ -57,11 +57,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(uint32_t sizeBytes)
                 it->sizeBytes -= sizeBytes;
             }
 
-            ManagedBufferSection result = {
-                .offsetBytes = resultOffsetBytes,
-                .sizeBytes = sizeBytes,
-            };
-            return result;
+            return { this, resultOffsetBytes, sizeBytes };
         }
     }
 
@@ -113,6 +109,11 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
+    if (section.buffer != this)
+    {
+        throw std::runtime_error("Attempting to free ManagedBufferSection from wrong ManagedBuffer");
+    }
+
     auto it = this->freeSectionList.begin();
     for (; it != this->freeSectionList.end(); ++it)
     {

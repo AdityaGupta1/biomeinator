@@ -7,8 +7,11 @@
 
 class ToFreeList;
 
+class ManagedBuffer;
+
 struct ManagedBufferSection
 {
+    const ManagedBuffer* buffer{ nullptr };
     uint32_t offsetBytes{ 0 };
     uint32_t sizeBytes{ 0 };
 };
