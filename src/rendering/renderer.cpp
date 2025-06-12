@@ -39,7 +39,67 @@ ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 constexpr uint32_t MAX_NUM_INSTANCES = 3;
-Scene sceneManager{ MAX_NUM_INSTANCES };
+Scene scene{ MAX_NUM_INSTANCES };
+
+const std::vector<Vertex> quadVerts = {
+    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
+    {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
+    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
+    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
+    {{1, 0, -1}, {0, 1, 0}, {1, 0}},
+    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
+};
+const std::vector<Vertex> cubeVerts = {
+    // -x (left)
+    {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
+    {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
+    {{-1, 1, 1}, {-1, 0, 0}, {1, 0}},
+    {{-1, 1, -1}, {-1, 0, 0}, {0, 0}},
+
+    // -y (bottom)
+    {{-1, -1, -1}, {0, -1, 0}, {0, 0}},
+    {{1, -1, -1}, {0, -1, 0}, {1, 0}},
+    {{1, -1, 1}, {0, -1, 0}, {1, 1}},
+    {{-1, -1, 1}, {0, -1, 0}, {0, 1}},
+
+    // -z (back)
+    {{-1, -1, -1}, {0, 0, -1}, {1, 1}},
+    {{-1, 1, -1}, {0, 0, -1}, {1, 0}},
+    {{1, 1, -1}, {0, 0, -1}, {0, 0}},
+    {{1, -1, -1}, {0, 0, -1}, {0, 1}},
+
+    // +x (right)
+    {{1, -1, -1}, {1, 0, 0}, {1, 1}},
+    {{1, 1, -1}, {1, 0, 0}, {1, 0}},
+    {{1, 1, 1}, {1, 0, 0}, {0, 0}},
+    {{1, -1, 1}, {1, 0, 0}, {0, 1}},
+
+    // +y (top)
+    {{-1, 1, -1}, {0, 1, 0}, {0, 0}},
+    {{-1, 1, 1}, {0, 1, 0}, {0, 1}},
+    {{1, 1, 1}, {0, 1, 0}, {1, 1}},
+    {{1, 1, -1}, {0, 1, 0}, {1, 0}},
+
+    // +z (front)
+    {{-1, -1, 1}, {0, 0, 1}, {0, 1}},
+    {{1, -1, 1}, {0, 0, 1}, {1, 1}},
+    {{1, 1, 1}, {0, 0, 1}, {1, 0}},
+    {{-1, 1, 1}, {0, 0, 1}, {0, 0}}
+};
+const std::vector<uint32_t> cubeIdxs = {
+    // -x
+    0, 1, 2, 0, 2, 3,
+    // -y
+    4, 5, 6, 4, 6, 7,
+    // -z
+    8, 9, 10, 8, 10, 11,
+    // +x
+    12, 13, 14, 12, 14, 15,
+    // +y
+    16, 17, 18, 16, 18, 19,
+    // +z
+    20, 21, 22, 20, 22, 23
+};
 
 void init()
 {
@@ -51,7 +111,51 @@ void init()
 
     camera.init(XMConvertToRadians(fovYDegrees));
 
-    sceneManager.init(cmdList.Get(), toFreeList);
+    const uint32_t vertBufferSizeBytes = (2 * quadVerts.size() + cubeVerts.size()) * sizeof(Vertex);
+    const uint32_t idxBufferSizeBytes = cubeIdxs.size() * sizeof(uint32_t);
+    scene.init(cmdList.Get(), toFreeList, vertBufferSizeBytes, idxBufferSizeBytes);
+
+    {
+        const auto time = static_cast<float>(GetTickCount64()) / 1000;
+
+        {
+            Instance* instance = scene.requestNewInstance();
+
+            instance->host_verts = cubeVerts;
+            instance->host_idxs = cubeIdxs;
+
+            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+            transform *= XMMatrixTranslation(-1.5, 2, 2);
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->markReadyForBlasBuild();
+        }
+
+        {
+            Instance* instance = scene.requestNewInstance();
+
+            instance->host_verts = quadVerts;
+
+            auto transform = XMMatrixRotationX(-1.8f);
+            transform *= XMMatrixRotationY(XMScalarSinEst(time) / 8 + 1);
+            transform *= XMMatrixTranslation(2, 2, 2);
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->markReadyForBlasBuild();
+        }
+
+        {
+            Instance* instance = scene.requestNewInstance();
+
+            instance->host_verts = quadVerts;
+
+            auto transform = XMMatrixScaling(5, 5, 5);
+            transform *= XMMatrixTranslation(0, 0, 2);
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->markReadyForBlasBuild();
+        }
+    }
 
     submitCmd();
     flush();
@@ -378,6 +482,8 @@ void render()
 
     resetCmd();
 
+    scene.update(cmdList.Get(), toFreeList);
+
     cmdList->SetPipelineState1(pso.Get());
     cmdList->SetComputeRootSignature(rootSignature.Get());
     ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
@@ -386,10 +492,10 @@ void render()
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevTlas()->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, sceneManager.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
+    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
 
     const auto renderTargetDesc = renderTarget->GetDesc();
 

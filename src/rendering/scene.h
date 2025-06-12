@@ -25,7 +25,6 @@ private:
     const uint32_t id;
 
     AcsHelper::GeometryWrapper geoWrapper;
-    bool hasBlas{ false };
 
     Instance(Scene* scene, uint32_t id);
 
@@ -75,7 +74,10 @@ private:
 public:
     Scene(uint32_t maxNumInstances);
 
-    void init(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    void init(ID3D12GraphicsCommandList4* cmdList,
+              ToFreeList& toFreeList,
+              uint32_t vertBufferSizeBytes,
+              uint32_t idxBufferSizeBytes);
 
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
