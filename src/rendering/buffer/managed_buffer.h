@@ -26,7 +26,7 @@ public:
 
 class ManagedBuffer
 {
-friend class ToFreeList;
+    friend class ToFreeList;
 
 private:
     const D3D12_HEAP_PROPERTIES* heapProperties;
