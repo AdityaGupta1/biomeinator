@@ -8,7 +8,7 @@ AccessModifierOffset: -4
 BinPackArguments: false
 BinPackParameters: false
 PointerAlignment: Left
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: false
 Cpp11BracedListStyle: false
 AlwaysBreakAfterReturnType: None
 PenaltyReturnTypeOnItsOwnLine: 100000

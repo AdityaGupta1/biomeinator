@@ -2,9 +2,11 @@
 
 #include "managed_buffer.h"
 
-void ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
+ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
 {
-    (isMapped ? mappedResources : resources).push_back(resource);
+    auto& resourceVector = (isMapped ? mappedResources : resources);
+    resourceVector.push_back(resource);
+    return resourceVector.back().Get();
 }
 
 void ToFreeList::pushManagedBuffer(const ManagedBuffer* buffer)

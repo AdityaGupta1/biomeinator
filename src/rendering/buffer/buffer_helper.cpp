@@ -44,4 +44,37 @@ void uavBarrier(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* resource)
     cmdList->ResourceBarrier(1, &barrier);
 }
 
+void copyResource(ID3D12GraphicsCommandList* cmdList,
+                  ID3D12Resource* destResource,
+                  D3D12_RESOURCE_STATES destState,
+                  ID3D12Resource* srcResource,
+                  D3D12_RESOURCE_STATES srcState)
+{
+    stateTransitionResourceBarrier(cmdList, srcResource, srcState, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    stateTransitionResourceBarrier(cmdList, destResource, destState, D3D12_RESOURCE_STATE_COPY_DEST);
+
+    cmdList->CopyResource(destResource, srcResource);
+
+    stateTransitionResourceBarrier(cmdList, destResource, D3D12_RESOURCE_STATE_COPY_DEST, destState);
+    stateTransitionResourceBarrier(cmdList, srcResource, D3D12_RESOURCE_STATE_COPY_SOURCE, srcState);
+}
+
+void copyBufferRegion(ID3D12GraphicsCommandList* cmdList,
+                      ID3D12Resource* destBuffer,
+                      D3D12_RESOURCE_STATES destState,
+                      uint32_t destOffsetBytes,
+                      ID3D12Resource* srcBuffer,
+                      D3D12_RESOURCE_STATES srcState,
+                      uint32_t srcOffsetBytes,
+                      uint32_t sizeBytes)
+{
+    stateTransitionResourceBarrier(cmdList, srcBuffer, srcState, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    stateTransitionResourceBarrier(cmdList, destBuffer, destState, D3D12_RESOURCE_STATE_COPY_DEST);
+
+    cmdList->CopyBufferRegion(destBuffer, destOffsetBytes, srcBuffer, srcOffsetBytes, sizeBytes);
+
+    stateTransitionResourceBarrier(cmdList, destBuffer, D3D12_RESOURCE_STATE_COPY_DEST, destState);
+    stateTransitionResourceBarrier(cmdList, srcBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, srcState);
+}
+
 }  // namespace BufferHelper

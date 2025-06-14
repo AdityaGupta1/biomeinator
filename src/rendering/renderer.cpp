@@ -111,9 +111,7 @@ void init()
 
     camera.init(XMConvertToRadians(fovYDegrees));
 
-    const uint32_t vertBufferSizeBytes = (2 * quadVerts.size() + cubeVerts.size()) * sizeof(Vertex);
-    const uint32_t idxBufferSizeBytes = cubeIdxs.size() * sizeof(uint32_t);
-    scene.init(cmdList.Get(), toFreeList, vertBufferSizeBytes, idxBufferSizeBytes);
+    scene.init(cmdList.Get(), toFreeList);
 
     {
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
@@ -506,17 +504,11 @@ void render()
     ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), renderTarget.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-
-    cmdList->CopyResource(backBuffer.Get(), renderTarget.Get());
-
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), renderTarget.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::copyResource(cmdList.Get(),
+                               backBuffer.Get(),
+                               D3D12_RESOURCE_STATE_PRESENT,
+                               renderTarget.Get(),
+                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     backBuffer.Reset();
 

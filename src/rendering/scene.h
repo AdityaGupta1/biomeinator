@@ -47,13 +47,15 @@ private:
     ManagedBuffer dev_vertBuffer{
         &DEFAULT_HEAP,
         D3D12_HEAP_FLAG_NONE,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, 
+        true /*isResizable*/,
         false /*isMapped*/,
     };
     ManagedBuffer dev_idxBuffer{
         &DEFAULT_HEAP,
         D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        true /*isResizable*/,
         false /*isMapped*/,
     };
 
@@ -76,8 +78,8 @@ public:
 
     void init(ID3D12GraphicsCommandList4* cmdList,
               ToFreeList& toFreeList,
-              uint32_t vertBufferSizeBytes,
-              uint32_t idxBufferSizeBytes);
+              uint32_t vertBufferSizeBytes = 512,
+              uint32_t idxBufferSizeBytes = 128);
 
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 

@@ -17,4 +17,19 @@ void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
 
 void uavBarrier(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* resource);
 
+void copyResource(ID3D12GraphicsCommandList* cmdList,
+                  ID3D12Resource* destResource,
+                  D3D12_RESOURCE_STATES destState,
+                  ID3D12Resource* srcResource,
+                  D3D12_RESOURCE_STATES srcState);
+
+void copyBufferRegion(ID3D12GraphicsCommandList* cmdList,
+                      ID3D12Resource* destBuffer,
+                      D3D12_RESOURCE_STATES destState,
+                      uint32_t destOffsetBytes,
+                      ID3D12Resource* srcBuffer,
+                      D3D12_RESOURCE_STATES srcState,
+                      uint32_t srcOffsetBytes,
+                      uint32_t sizeBytes);
+
 } // namespace BufferHelper

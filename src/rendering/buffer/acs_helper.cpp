@@ -118,12 +118,14 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
         &UPLOAD_HEAP,
         D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_GENERIC_READ,
+        false /*isResizable*/,
         true /*isMapped*/,
     };
     ManagedBuffer dev_idxUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_GENERIC_READ,
+        false /*isResizable*/,
         true /*isMapped*/,
     };
 
@@ -151,23 +153,23 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
     for (const auto& inputs : allInputs)
     {
         const ManagedBufferSection dev_vertUploadBufferSection =
-            dev_vertUploadBuffer.copyFromHostVector(cmdList, *inputs.host_verts);
+            dev_vertUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
         if (inputs.dev_verts)
         {
             inputs.outGeoWrapper->vertBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-                cmdList, dev_vertUploadBuffer, dev_vertUploadBufferSection);
+                cmdList, toFreeList, dev_vertUploadBuffer, dev_vertUploadBufferSection);
         }
 
         ManagedBufferSection dev_idxUploadBufferSection = {};
         if (inputs.host_idxs)
         {
-            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, *inputs.host_idxs);
+            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
             if (inputs.dev_idxs)
             {
-                inputs.outGeoWrapper->idxBufferSection =
-                    inputs.dev_idxs->copyFromManagedBuffer(cmdList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
+                inputs.outGeoWrapper->idxBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
+                    cmdList, toFreeList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
             }
         }
 
