@@ -16,7 +16,10 @@ void Camera::init(float fovYRadians)
     dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&this->host_cameraParams));
 
     this->host_cameraParams->pos_WS = { 0, 1.5, -7 };
-    this->host_cameraParams->tanHalfFovY = tanf(fovYRadians * 0.5f);
+
+    this->defaultFovYRadians = fovYRadians;
+    this->currentFovYRadians = fovYRadians;
+    this->host_cameraParams->tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
 
     this->setDirectionVectorsFromAngles();
 }
@@ -82,6 +85,24 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
         this->rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
+    }
+
+    float targetFov = input.zoomHeld ? this->defaultFovYRadians * 0.5f : this->defaultFovYRadians;
+    float delta = targetFov - this->currentFovYRadians;
+    const float maxStep = fovTransitionSpeed * static_cast<float>(deltaTime);
+    if (fabsf(delta) <= maxStep)
+    {
+        this->currentFovYRadians = targetFov;
+    }
+    else
+    {
+        this->currentFovYRadians += (delta > 0 ? maxStep : -maxStep);
+    }
+
+    float newTanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
+    if (newTanHalfFovY != this->host_cameraParams->tanHalfFovY)
+    {
+        this->host_cameraParams->tanHalfFovY = newTanHalfFovY;
     }
 }
 

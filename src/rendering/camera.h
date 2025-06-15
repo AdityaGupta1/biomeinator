@@ -14,6 +14,11 @@ private:
     float phi{ 0 };
     float theta{ 0 };
 
+    float defaultFovYRadians{ 0 };
+    float currentFovYRadians{ 0 };
+
+    static constexpr float fovTransitionSpeed = 5.f; // radians per second
+
     void setDirectionVectorsFromAngles();
 
 public:
