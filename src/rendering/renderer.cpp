@@ -118,7 +118,7 @@ void init()
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
 
         {
-            // Mirror
+            // mirror
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
@@ -132,7 +132,7 @@ void init()
         }
 
         {
-            // Floor
+            // floor
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
@@ -145,7 +145,7 @@ void init()
         }
 
         {
-            // Initial cube
+            // big cube
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = cubeVerts;
@@ -474,10 +474,9 @@ void updateFps(double deltaTime)
 
 void render()
 {
-    auto now = std::chrono::high_resolution_clock::now();
-    double deltaTime = std::chrono::duration<double>(now - lastTime).count();
+    const auto now = std::chrono::high_resolution_clock::now();
+    const double deltaTime = std::chrono::duration<double>(now - lastTime).count();
     lastTime = now;
-    float time = std::chrono::duration<float>(now.time_since_epoch()).count();
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
 
@@ -489,10 +488,12 @@ void render()
     static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
     static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
 
-    if (chanceDist(rng) < 0.002f)
+    if (chanceDist(rng) < 0.08f)
     {
         try
         {
+            const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
+
             Instance* instance = scene.requestNewInstance();
             instance->host_verts = cubeVerts;
             instance->host_idxs = cubeIdxs;
