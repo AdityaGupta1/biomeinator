@@ -4,5 +4,4 @@ This project aims to implement a real-time path traced Minecraft using DXR. It w
 
 == Coding Conventions
 
-- Check the `.clang-format` file in the root directory of this repository for general formatting guidelines.
 - Always use `const` for local variables that will not change.
