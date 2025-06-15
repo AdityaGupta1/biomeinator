@@ -126,16 +126,13 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     switch (InstanceID())
     {
         case 0:
-            HitCube(payload, hitInfo);
-            break;
-        case 1:
             HitMirror(payload, hitInfo);
             break;
-        case 2:
+        case 1:
             HitFloor(payload, hitInfo);
             break;
         default:
-            payload.color = float3(1, 0, 1);
+            HitCube(payload, hitInfo);
             break;
     }
 }

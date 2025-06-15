@@ -118,19 +118,7 @@ void init()
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
 
         {
-            Instance* instance = scene.requestNewInstance();
-
-            instance->host_verts = cubeVerts;
-            instance->host_idxs = cubeIdxs;
-
-            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-            transform *= XMMatrixTranslation(-1.5, 2, 2);
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            instance->markReadyForBlasBuild();
-        }
-
-        {
+            // Mirror
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
@@ -144,12 +132,27 @@ void init()
         }
 
         {
+            // Floor
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
 
             auto transform = XMMatrixScaling(5, 5, 5);
             transform *= XMMatrixTranslation(0, 0, 2);
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->markReadyForBlasBuild();
+        }
+
+        {
+            // Initial cube
+            Instance* instance = scene.requestNewInstance();
+
+            instance->host_verts = cubeVerts;
+            instance->host_idxs = cubeIdxs;
+
+            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+            transform *= XMMatrixTranslation(-1.5, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
             instance->markReadyForBlasBuild();
