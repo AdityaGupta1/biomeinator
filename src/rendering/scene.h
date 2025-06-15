@@ -17,7 +17,6 @@ class Scene;
 class Instance
 {
     friend class Scene;
-
     friend class ToFreeList;
 
 private:
@@ -40,7 +39,6 @@ public:
 class Scene
 {
     friend class Instance;
-
     friend class ToFreeList;
 
 private:
@@ -69,9 +67,12 @@ private:
     std::vector<Instance*> instancesReadyForBlasBuild;
 
     ComPtr<ID3D12Resource> dev_tlas{ nullptr };
+    bool isTlasDirty{ false };
 
-    bool makeQueuedBlasesAndUpdateInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+
+    void freeInstance(Instance* instance);
 
 public:
     Scene(uint32_t maxNumInstances);
@@ -84,8 +85,6 @@ public:
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance();
-
-    void freeInstance(Instance* instance);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();

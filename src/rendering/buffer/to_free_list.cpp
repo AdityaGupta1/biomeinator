@@ -1,7 +1,7 @@
 #include "to_free_list.h"
 
 #include "managed_buffer.h"
-#include "scene.h"
+#include "rendering/scene.h"
 
 ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
 {
@@ -40,12 +40,6 @@ void ToFreeList::pushInstance(Instance* instance)
 
 void ToFreeList::freeAll()
 {
-    for (Instance* inst : instances)
-    {
-        Scene* const scene = inst->scene;
-        scene->freeInstance(inst);
-    }
-    instances.clear();
 
     for (auto& resource : resources)
     {
@@ -65,4 +59,10 @@ void ToFreeList::freeAll()
         bufferSection.getManagedBuffer()->freeSection(bufferSection);
     }
     managedBufferSections.clear();
+
+    for (Instance* instance : instances)
+    {
+        instance->scene->freeInstance(instance);
+    }
+    instances.clear();
 }

@@ -15,12 +15,12 @@ ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
     D3D12_RESOURCE_DESC resourceDesc = BASIC_BUFFER_DESC;
     resourceDesc.Width = width;
     resourceDesc.Flags = optionalFlags.resourceFlags;
-    Renderer::device->CreateCommittedResource(heapProperties,
-                                              optionalFlags.heapFlags,
-                                              &resourceDesc,
-                                              initialResourceState,
-                                              nullptr,
-                                              IID_PPV_ARGS(&dev_buffer));
+    CHECK_HRESULT(Renderer::device->CreateCommittedResource(heapProperties,
+                                                            optionalFlags.heapFlags,
+                                                            &resourceDesc,
+                                                            initialResourceState,
+                                                            nullptr,
+                                                            IID_PPV_ARGS(&dev_buffer)));
     return dev_buffer;
 }
 

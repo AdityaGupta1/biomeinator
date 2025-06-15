@@ -40,7 +40,7 @@ Camera camera;
 ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
-constexpr uint32_t MAX_NUM_INSTANCES = 5000;
+constexpr uint32_t MAX_NUM_INSTANCES = 2000;
 Scene scene{ MAX_NUM_INSTANCES };
 
 const std::vector<Vertex> quadVerts = {
@@ -173,6 +173,7 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
+#ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
@@ -186,8 +187,16 @@ void initDevice()
     }
     else
     {
-        printf("Failed to create debug factory\n");
-        CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+        printf("Failed to create debug factory, falling back to non-debug\n");
+    }
+#endif
+
+    if (!factory)
+    {
+        if (SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))))
+        {
+            printf("Created factory\n");
+        }
     }
 
     ComPtr<IDXGIAdapter1> adapter;
@@ -456,7 +465,6 @@ static int frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTime = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
-static std::deque<Instance*> cubeQueue;
 
 void updateFps(double deltaTime)
 {
@@ -473,6 +481,8 @@ void updateFps(double deltaTime)
         SetWindowTextW(hwnd, title.c_str());
     }
 }
+
+static std::deque<Instance*> cubeQueue;
 
 void render()
 {
@@ -508,8 +518,8 @@ void render()
 
     if (!cubeQueue.empty())
     {
-        const uint32_t maxRemoval = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
-        std::uniform_int_distribution<uint32_t> removeDist(0, maxRemoval);
+        const uint32_t maxNumToRemove = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
+        std::uniform_int_distribution<uint32_t> removeDist(0, maxNumToRemove);
         const uint32_t numToRemove = removeDist(rng);
         for (uint32_t i = 0; i < numToRemove; ++i)
         {
@@ -517,9 +527,9 @@ void render()
             {
                 break;
             }
-            Instance* inst = cubeQueue.front();
+            Instance* instance = cubeQueue.front();
             cubeQueue.pop_front();
-            toFreeList.pushInstance(inst);
+            toFreeList.pushInstance(instance);
         }
     }
 
