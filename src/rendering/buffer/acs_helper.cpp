@@ -14,12 +14,8 @@ static uint64_t sharedAsScratchSize = 0;
 
 ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t sizeBytes, D3D12_RESOURCE_STATES initialState)
 {
-    auto desc = BASIC_BUFFER_DESC;
-    desc.Width = sizeBytes;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    ComPtr<ID3D12Resource> buffer;
-    Renderer::device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, initialState, nullptr, IID_PPV_ARGS(&buffer));
-    return buffer;
+    return BufferHelper::createBasicBuffer(
+        sizeBytes, &DEFAULT_HEAP, initialState, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
 }
 
 struct AcsBuildInfo
@@ -118,14 +114,12 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 {
     ManagedBuffer dev_vertUploadBuffer{
         &UPLOAD_HEAP,
-        D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         false /*isResizable*/,
         true /*isMapped*/,
     };
     ManagedBuffer dev_idxUploadBuffer{
         &UPLOAD_HEAP,
-        D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         false /*isResizable*/,
         true /*isMapped*/,

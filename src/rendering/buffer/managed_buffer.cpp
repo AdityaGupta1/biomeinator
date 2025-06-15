@@ -19,12 +19,11 @@ ManagedBuffer* ManagedBufferSection::getManagedBuffer() const
 }
 
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
-                             const D3D12_HEAP_FLAGS heapFlags,
                              const D3D12_RESOURCE_STATES initialResourceState,
                              const bool isResizable,
                              const bool isMapped)
-    : heapProperties(heapProperties), heapFlags(heapFlags), initialResourceState(initialResourceState),
-      isResizable(isResizable), isMapped(isMapped)
+    : heapProperties(heapProperties), initialResourceState(initialResourceState), isResizable(isResizable),
+      isMapped(isMapped)
 {}
 
 void ManagedBuffer::init(uint32_t sizeBytes)
@@ -34,8 +33,7 @@ void ManagedBuffer::init(uint32_t sizeBytes)
         throw std::runtime_error("Attempting to initialize ManagedBuffer with 0 size");
     }
 
-    this->dev_buffer =
-        BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->heapFlags, this->initialResourceState);
+    this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
 
     this->freeSectionList.push_back({ this, 0, sizeBytes });
@@ -124,8 +122,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
-    this->dev_buffer =
-        BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties, this->heapFlags, this->initialResourceState);
+    this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = newSizeBytes;
 
     BufferHelper::copyBufferRegion(cmdList,

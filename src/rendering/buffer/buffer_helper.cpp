@@ -8,14 +8,19 @@ namespace BufferHelper
 
 ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
                                          const D3D12_HEAP_PROPERTIES* heapProperties,
-                                         D3D12_HEAP_FLAGS heapFlags,
-                                         D3D12_RESOURCE_STATES initialResourceState)
+                                         D3D12_RESOURCE_STATES initialResourceState,
+                                         BufferCreationFlags optionalFlags)
 {
     ComPtr<ID3D12Resource> dev_buffer;
     D3D12_RESOURCE_DESC resourceDesc = BASIC_BUFFER_DESC;
     resourceDesc.Width = width;
-    Renderer::device->CreateCommittedResource(
-        heapProperties, heapFlags, &resourceDesc, initialResourceState, nullptr, IID_PPV_ARGS(&dev_buffer));
+    resourceDesc.Flags = optionalFlags.resourceFlags;
+    Renderer::device->CreateCommittedResource(heapProperties,
+                                              optionalFlags.heapFlags,
+                                              &resourceDesc,
+                                              initialResourceState,
+                                              nullptr,
+                                              IID_PPV_ARGS(&dev_buffer));
     return dev_buffer;
 }
 

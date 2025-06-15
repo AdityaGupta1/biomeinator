@@ -410,10 +410,8 @@ void initPipeline()
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
-    dev_shaderIds = BufferHelper::createBasicBuffer(NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-                                                    &UPLOAD_HEAP,
-                                                    D3D12_HEAP_FLAG_NONE,
-                                                    D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_shaderIds = BufferHelper::createBasicBuffer(
+        NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);

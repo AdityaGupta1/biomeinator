@@ -34,14 +34,11 @@ void Scene::init(ID3D12GraphicsCommandList4* cmdList,
 
     dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
                                                         &UPLOAD_HEAP,
-                                                        D3D12_HEAP_FLAG_NONE,
                                                         D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDescs));
 
-    dev_instanceDatas = BufferHelper::createBasicBuffer(sizeof(InstanceData) * this->maxNumInstances,
-                                                        &UPLOAD_HEAP,
-                                                        D3D12_HEAP_FLAG_NONE,
-                                                        D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDatas = BufferHelper::createBasicBuffer(
+        sizeof(InstanceData) * this->maxNumInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDatas));
 
     for (int i = 0; i < this->maxNumInstances; ++i)

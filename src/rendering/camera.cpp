@@ -10,8 +10,8 @@ using namespace DirectX;
 
 void Camera::init(float fovYRadians)
 {
-    dev_cameraParams = BufferHelper::createBasicBuffer(
-        sizeof(CameraParams), &UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_cameraParams =
+        BufferHelper::createBasicBuffer(sizeof(CameraParams), &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
     dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&this->host_cameraParams));
 

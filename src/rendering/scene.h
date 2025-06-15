@@ -46,14 +46,12 @@ private:
 
     ManagedBuffer dev_vertBuffer{
         &DEFAULT_HEAP,
-        D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, 
         true /*isResizable*/,
         false /*isMapped*/,
     };
     ManagedBuffer dev_idxBuffer{
         &DEFAULT_HEAP,
-        D3D12_HEAP_FLAG_NONE,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         true /*isResizable*/,
         false /*isMapped*/,

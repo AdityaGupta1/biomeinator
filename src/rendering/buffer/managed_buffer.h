@@ -30,7 +30,6 @@ class ManagedBuffer
 
 private:
     const D3D12_HEAP_PROPERTIES* heapProperties;
-    const D3D12_HEAP_FLAGS heapFlags;
     const D3D12_RESOURCE_STATES initialResourceState;
 
     const bool isResizable;
@@ -55,7 +54,6 @@ private:
 
 public:
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
-                  const D3D12_HEAP_FLAGS heapFlags,
                   const D3D12_RESOURCE_STATES initialResourceState,
                   const bool isResizable,
                   const bool isMapped);

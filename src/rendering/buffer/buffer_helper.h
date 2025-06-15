@@ -5,10 +5,16 @@
 namespace BufferHelper
 {
 
+struct BufferCreationFlags
+{
+    D3D12_HEAP_FLAGS heapFlags{ D3D12_HEAP_FLAG_NONE };
+    D3D12_RESOURCE_FLAGS resourceFlags{ D3D12_RESOURCE_FLAG_NONE };
+};
+
 ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
                                          const D3D12_HEAP_PROPERTIES* heapProperties,
-                                         D3D12_HEAP_FLAGS heapFlags,
-                                         D3D12_RESOURCE_STATES initialResourceState);
+                                         D3D12_RESOURCE_STATES initialResourceState,
+                                         BufferCreationFlags optionalFlags = {});
 
 void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
                                     ID3D12Resource* resource,
