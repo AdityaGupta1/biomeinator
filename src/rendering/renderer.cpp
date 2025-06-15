@@ -14,6 +14,7 @@
 #include <string>
 #include <chrono>
 #include <random>
+#include <deque>
 
 #include "shader.fxh"
 
@@ -39,7 +40,7 @@ Camera camera;
 ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
-constexpr uint32_t MAX_NUM_INSTANCES = 5000;
+constexpr uint32_t MAX_NUM_INSTANCES = 2000;
 Scene scene{ MAX_NUM_INSTANCES };
 
 const std::vector<Vertex> quadVerts = {
@@ -172,6 +173,7 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
+#ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
@@ -185,8 +187,14 @@ void initDevice()
     }
     else
     {
-        printf("Failed to create debug factory\n");
-        CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+        printf("Failed to create debug factory, falling back to non-debug\n");
+    }
+#endif
+
+    if (!factory)
+    {
+        CHECK_HRESULT(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+        printf("Created factory\n");
     }
 
     ComPtr<IDXGIAdapter1> adapter;
@@ -453,7 +461,7 @@ void initPipeline()
 
 static int frameCount = 0;
 static double elapsedTime = 0.0;
-static auto lastTime = std::chrono::high_resolution_clock::now();
+static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
 void updateFps(double deltaTime)
@@ -472,36 +480,54 @@ void updateFps(double deltaTime)
     }
 }
 
+static std::deque<Instance*> cubeQueue;
+
 void render()
 {
-    const auto now = std::chrono::high_resolution_clock::now();
-    const double deltaTime = std::chrono::duration<double>(now - lastTime).count();
-    lastTime = now;
+    const auto currentTimePoint = std::chrono::high_resolution_clock::now();
+    const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
+    lastTimePoint = currentTimePoint;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
 
     resetCmd();
 
     static std::mt19937 rng(std::random_device{}());
-    static std::uniform_real_distribution<float> chanceDist(0.f, 1.f);
-    static std::uniform_real_distribution<float> posXDist(-10.f, 10.f);
+    static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
     static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
-    static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
 
-    if (chanceDist(rng) < 0.08f)
+    const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
+
+    for (int i = 0; i < 3; ++i)
     {
-        const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
-
         Instance* instance = scene.requestNewInstance();
         instance->host_verts = cubeVerts;
         instance->host_idxs = cubeIdxs;
 
         auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
         transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-        transform *= XMMatrixTranslation(posXDist(rng), posYDist(rng), posZDist(rng));
+        transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
         XMStoreFloat3x4(&instance->transform, transform);
 
         instance->markReadyForBlasBuild();
+        cubeQueue.push_back(instance);
+    }
+
+    if (!cubeQueue.empty())
+    {
+        const uint32_t maxNumToRemove = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
+        std::uniform_int_distribution<uint32_t> removeDist(0, maxNumToRemove);
+        const uint32_t numToRemove = removeDist(rng);
+        for (uint32_t i = 0; i < numToRemove; ++i)
+        {
+            if (cubeQueue.empty())
+            {
+                break;
+            }
+            Instance* instance = cubeQueue.front();
+            cubeQueue.pop_front();
+            toFreeList.pushInstance(instance);
+        }
     }
 
     scene.update(cmdList.Get(), toFreeList);

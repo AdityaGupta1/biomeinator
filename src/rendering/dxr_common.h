@@ -3,6 +3,22 @@
 #include "dxr_includes.h"
 #include "common_structs.h"
 
+#ifdef _DEBUG
+#include <stdio.h>
+#define CHECK_HRESULT(expr)                                                                                            \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        HRESULT _hr = (expr);                                                                                          \
+        if (FAILED(_hr))                                                                                               \
+        {                                                                                                              \
+            printf("HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                            \
+            __debugbreak();                                                                                            \
+        }                                                                                                              \
+    } while (0)
+#else
+#define CHECK_HRESULT(expr) (expr)
+#endif
+
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,
     .Quality = 0

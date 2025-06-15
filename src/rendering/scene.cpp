@@ -41,23 +41,23 @@ void Scene::init(ID3D12GraphicsCommandList4* cmdList,
         sizeof(InstanceData) * this->maxNumInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDatas));
 
-    for (int i = 0; i < this->maxNumInstances; ++i)
+    for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
     {
-        availableInstanceIds.push(i);
+        availableInstanceIds.push(instanceIdx);
     }
 }
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    const bool doUpdateTlas = this->makeQueuedBlasesAndUpdateInstances(cmdList, toFreeList);
+    this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
-    if (doUpdateTlas)
+    if (this->isTlasDirty)
     {
         this->makeTlas(cmdList, toFreeList);
     }
 }
 
-bool Scene::makeQueuedBlasesAndUpdateInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     if (this->instancesReadyForBlasBuild.empty())
     {
@@ -90,12 +90,6 @@ bool Scene::makeQueuedBlasesAndUpdateInstances(ID3D12GraphicsCommandList4* cmdLi
 
     for (const auto instance : this->instancesReadyForBlasBuild)
     {
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->host_instanceDescs[instance->id];
-        memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
-        instanceDesc.InstanceID = instance->id;
-        instanceDesc.InstanceMask = 1;
-        instanceDesc.AccelerationStructure = instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
-
         InstanceData& data = this->host_instanceDatas[instance->id];
         data.vertBufferOffset =
             instance->geoWrapper.vertBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
@@ -117,12 +111,23 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         toFreeList.pushResource(this->dev_tlas);
     }
 
+    int instanceDescIdx = 0;
+    for (const auto& [instanceId, instance] : this->instances)
+    {
+        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->host_instanceDescs[instanceDescIdx++];
+        memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
+        instanceDesc.InstanceID = instanceId;
+        instanceDesc.InstanceMask = 1;
+        instanceDesc.AccelerationStructure = instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
+    }
+
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->dev_instanceDescs.Get();
-    inputs.numInstances = this->maxNumInstances;
+    inputs.numInstances = this->instances.size();
     inputs.outTlas = &this->dev_tlas;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
+    this->isTlasDirty = false;
 
     BufferHelper::uavBarrier(cmdList, this->dev_tlas.Get());
 }
@@ -142,6 +147,13 @@ Instance* Scene::requestNewInstance()
     this->instances.emplace(id, std::move(newInstance));
 
     return newInstancePtr;
+}
+
+void Scene::freeInstance(Instance* instance)
+{
+    this->availableInstanceIds.push(instance->id);
+    this->instances.erase(instance->id);
+    this->isTlasDirty = true;
 }
 
 ID3D12Resource* Scene::getDevInstanceDescs()
