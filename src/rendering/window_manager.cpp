@@ -129,6 +129,8 @@ PlayerInput getPlayerInput()
         input.linearSpeedMultiplier *= 0.5f;
     }
 
+    input.isZoomHeld = KEY_DOWN('C');
+
 #undef KEY_DOWN
 
     POINT cursorPos;

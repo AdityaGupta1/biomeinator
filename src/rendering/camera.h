@@ -14,6 +14,9 @@ private:
     float phi{ 0 };
     float theta{ 0 };
 
+    float defaultFovYRadians{ 0 };
+    float currentFovYRadians{ 0 };
+
     void setDirectionVectorsFromAngles();
 
 public:

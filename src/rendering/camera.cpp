@@ -16,7 +16,10 @@ void Camera::init(float fovYRadians)
     dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&this->host_cameraParams));
 
     this->host_cameraParams->pos_WS = { 0, 1.5, -7 };
-    this->host_cameraParams->tanHalfFovY = tanf(fovYRadians * 0.5f);
+
+    this->defaultFovYRadians = fovYRadians;
+    this->currentFovYRadians = fovYRadians;
+    this->host_cameraParams->tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
 
     this->setDirectionVectorsFromAngles();
 }
@@ -67,6 +70,9 @@ constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVer
 
 constexpr float mouseSensitivity = 0.0016f;
 
+constexpr float fovTransitionSpeed = 10.f;
+constexpr float zoomFovRatio = 0.3f;
+
 void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
 {
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
@@ -82,6 +88,23 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
         this->rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
+    }
+
+    const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
+    const float deltaFov = targetFov - this->currentFovYRadians;
+    const float maxStep = fovTransitionSpeed * fabsf(deltaFov) * static_cast<float>(deltaTime);
+    if (fabsf(deltaFov) <= maxStep)
+    {
+        this->currentFovYRadians = targetFov;
+    }
+    else
+    {
+        this->currentFovYRadians += (deltaFov > 0 ? maxStep : -maxStep);
+    }
+
+    if (fabsf(deltaFov) > 0.f)
+    {
+        this->host_cameraParams->tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
     }
 }
 
