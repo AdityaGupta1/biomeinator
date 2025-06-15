@@ -14,6 +14,7 @@
 #include <string>
 #include <chrono>
 #include <random>
+#include <deque>
 
 #include "shader.fxh"
 
@@ -455,6 +456,7 @@ static int frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTime = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
+static std::deque<Instance*> cubeQueue;
 
 void updateFps(double deltaTime)
 {
@@ -483,15 +485,14 @@ void render()
     resetCmd();
 
     static std::mt19937 rng(std::random_device{}());
-    static std::uniform_real_distribution<float> chanceDist(0.f, 1.f);
     static std::uniform_real_distribution<float> posXDist(-10.f, 10.f);
     static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
     static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
 
-    if (chanceDist(rng) < 0.08f)
-    {
-        const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
+    const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
 
+    for (int i = 0; i < 3; ++i)
+    {
         Instance* instance = scene.requestNewInstance();
         instance->host_verts = cubeVerts;
         instance->host_idxs = cubeIdxs;
@@ -502,6 +503,24 @@ void render()
         XMStoreFloat3x4(&instance->transform, transform);
 
         instance->markReadyForBlasBuild();
+        cubeQueue.push_back(instance);
+    }
+
+    if (!cubeQueue.empty())
+    {
+        const uint32_t maxRemoval = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
+        std::uniform_int_distribution<uint32_t> removeDist(0, maxRemoval);
+        const uint32_t numToRemove = removeDist(rng);
+        for (uint32_t i = 0; i < numToRemove; ++i)
+        {
+            if (cubeQueue.empty())
+            {
+                break;
+            }
+            Instance* inst = cubeQueue.front();
+            cubeQueue.pop_front();
+            toFreeList.pushInstance(inst);
+        }
     }
 
     scene.update(cmdList.Get(), toFreeList);

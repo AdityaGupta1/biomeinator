@@ -16,9 +16,9 @@ class Scene;
 
 class Instance
 {
-    friend class ToFreeList;
-
     friend class Scene;
+
+    friend class ToFreeList;
 
 private:
     Scene* const scene;
@@ -40,6 +40,8 @@ public:
 class Scene
 {
     friend class Instance;
+
+    friend class ToFreeList;
 
 private:
     const uint32_t maxNumInstances;
@@ -82,6 +84,8 @@ public:
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance();
+
+    void freeInstance(Instance* instance);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();

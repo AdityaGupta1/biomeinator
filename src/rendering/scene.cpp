@@ -144,6 +144,12 @@ Instance* Scene::requestNewInstance()
     return newInstancePtr;
 }
 
+void Scene::freeInstance(Instance* instance)
+{
+    this->instances.erase(instance->id);
+    this->availableInstanceIds.push(instance->id);
+}
+
 ID3D12Resource* Scene::getDevInstanceDescs()
 {
     return this->dev_instanceDescs.Get();
