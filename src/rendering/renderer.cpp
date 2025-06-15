@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <chrono>
+#include <random>
 
 #include "shader.fxh"
 
@@ -38,7 +39,7 @@ Camera camera;
 ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
-constexpr uint32_t MAX_NUM_INSTANCES = 3;
+constexpr uint32_t MAX_NUM_INSTANCES = 5000;
 Scene scene{ MAX_NUM_INSTANCES };
 
 const std::vector<Vertex> quadVerts = {
@@ -117,19 +118,7 @@ void init()
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
 
         {
-            Instance* instance = scene.requestNewInstance();
-
-            instance->host_verts = cubeVerts;
-            instance->host_idxs = cubeIdxs;
-
-            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-            transform *= XMMatrixTranslation(-1.5, 2, 2);
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            instance->markReadyForBlasBuild();
-        }
-
-        {
+            // mirror
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
@@ -143,12 +132,27 @@ void init()
         }
 
         {
+            // floor
             Instance* instance = scene.requestNewInstance();
 
             instance->host_verts = quadVerts;
 
             auto transform = XMMatrixScaling(5, 5, 5);
             transform *= XMMatrixTranslation(0, 0, 2);
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->markReadyForBlasBuild();
+        }
+
+        {
+            // big cube
+            Instance* instance = scene.requestNewInstance();
+
+            instance->host_verts = cubeVerts;
+            instance->host_idxs = cubeIdxs;
+
+            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+            transform *= XMMatrixTranslation(-1.5, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
             instance->markReadyForBlasBuild();
@@ -470,13 +474,35 @@ void updateFps(double deltaTime)
 
 void render()
 {
-    auto now = std::chrono::high_resolution_clock::now();
-    double deltaTime = std::chrono::duration<double>(now - lastTime).count();
+    const auto now = std::chrono::high_resolution_clock::now();
+    const double deltaTime = std::chrono::duration<double>(now - lastTime).count();
     lastTime = now;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
 
     resetCmd();
+
+    static std::mt19937 rng(std::random_device{}());
+    static std::uniform_real_distribution<float> chanceDist(0.f, 1.f);
+    static std::uniform_real_distribution<float> posXDist(-10.f, 10.f);
+    static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
+    static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
+
+    if (chanceDist(rng) < 0.08f)
+    {
+        const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
+
+        Instance* instance = scene.requestNewInstance();
+        instance->host_verts = cubeVerts;
+        instance->host_idxs = cubeIdxs;
+
+        auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
+        transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+        transform *= XMMatrixTranslation(posXDist(rng), posYDist(rng), posZDist(rng));
+        XMStoreFloat3x4(&instance->transform, transform);
+
+        instance->markReadyForBlasBuild();
+    }
 
     scene.update(cmdList.Get(), toFreeList);
 
