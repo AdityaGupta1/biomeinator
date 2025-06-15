@@ -104,6 +104,9 @@ bool Scene::makeQueuedBlasesAndUpdateInstances(ID3D12GraphicsCommandList4* cmdLi
             instance->geoWrapper.vertBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
         data.hasIdxs = instance->geoWrapper.idxBufferSection.sizeBytes > 0;
         data.idxBufferByteOffset = instance->geoWrapper.idxBufferSection.offsetBytes;
+
+        instance->host_verts.clear();
+        instance->host_idxs.clear();
     }
 
     this->instancesReadyForBlasBuild.clear();

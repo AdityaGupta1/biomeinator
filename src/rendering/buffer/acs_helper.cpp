@@ -112,7 +112,9 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
     buildInfo->outAcs = outBlas;
 }
 
-void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std::vector<BlasBuildInputs> allInputs)
+void makeBlases(ID3D12GraphicsCommandList4* cmdList,
+                ToFreeList& toFreeList,
+                const std::vector<BlasBuildInputs>& allInputs)
 {
     ManagedBuffer dev_vertUploadBuffer{
         &UPLOAD_HEAP,
@@ -189,7 +191,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std
     }
 }
 
-void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs)
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs)
 {
     AcsBuildInfo buildInfo;
 

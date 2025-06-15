@@ -30,7 +30,9 @@ struct BlasBuildInputs
     GeometryWrapper* outGeoWrapper{ nullptr };
 };
 
-void makeBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, std::vector<BlasBuildInputs> allInputs);
+void makeBlases(ID3D12GraphicsCommandList4* cmdList,
+                ToFreeList& toFreeList,
+                const std::vector<BlasBuildInputs>& allInputs);
 
 struct TlasBuildInputs
 {
@@ -41,6 +43,6 @@ struct TlasBuildInputs
     ComPtr<ID3D12Resource>* outTlas{ nullptr };
 };
 
-void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, TlasBuildInputs inputs);
+void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs);
 
 }  // namespace AcsHelper
