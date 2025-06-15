@@ -90,7 +90,7 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
         this->rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
     }
 
-    const float targetFov = input.zoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
+    const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
     const float deltaFov = targetFov - this->currentFovYRadians;
     const float maxStep = fovTransitionSpeed * fabsf(deltaFov) * static_cast<float>(deltaTime);
     if (fabsf(deltaFov) <= maxStep)

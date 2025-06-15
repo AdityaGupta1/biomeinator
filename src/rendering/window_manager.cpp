@@ -129,10 +129,7 @@ PlayerInput getPlayerInput()
         input.linearSpeedMultiplier *= 0.5f;
     }
 
-    if (KEY_DOWN('C'))
-    {
-        input.zoomHeld = true;
-    }
+    input.isZoomHeld = KEY_DOWN('C');
 
 #undef KEY_DOWN
 

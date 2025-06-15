@@ -7,5 +7,5 @@ struct PlayerInput
     DirectX::XMFLOAT3 linearInput{ 0, 0, 0 };
     float linearSpeedMultiplier{ 1.f };
     DirectX::XMFLOAT2 mouseMovement{ 0, 0 };
-    bool zoomHeld{ false };
+    bool isZoomHeld{ false };
 };
