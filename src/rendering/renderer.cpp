@@ -490,24 +490,18 @@ void render()
 
     if (chanceDist(rng) < 0.08f)
     {
-        try
-        {
-            const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
+        const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
 
-            Instance* instance = scene.requestNewInstance();
-            instance->host_verts = cubeVerts;
-            instance->host_idxs = cubeIdxs;
+        Instance* instance = scene.requestNewInstance();
+        instance->host_verts = cubeVerts;
+        instance->host_idxs = cubeIdxs;
 
-            auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
-            transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-            transform *= XMMatrixTranslation(posXDist(rng), posYDist(rng), posZDist(rng));
-            XMStoreFloat3x4(&instance->transform, transform);
+        auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
+        transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+        transform *= XMMatrixTranslation(posXDist(rng), posYDist(rng), posZDist(rng));
+        XMStoreFloat3x4(&instance->transform, transform);
 
-            instance->markReadyForBlasBuild();
-        }
-        catch (const std::runtime_error&)
-        {
-        }
+        instance->markReadyForBlasBuild();
     }
 
     scene.update(cmdList.Get(), toFreeList);
