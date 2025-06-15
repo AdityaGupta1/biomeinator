@@ -193,10 +193,8 @@ void initDevice()
 
     if (!factory)
     {
-        if (SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))))
-        {
-            printf("Created factory\n");
-        }
+        CHECK_HRESULT(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+        printf("Created factory\n");
     }
 
     ComPtr<IDXGIAdapter1> adapter;
@@ -495,9 +493,8 @@ void render()
     resetCmd();
 
     static std::mt19937 rng(std::random_device{}());
-    static std::uniform_real_distribution<float> posXDist(-10.f, 10.f);
+    static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
     static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
-    static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
 
     const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
 
@@ -509,7 +506,7 @@ void render()
 
         auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
         transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-        transform *= XMMatrixTranslation(posXDist(rng), posYDist(rng), posZDist(rng));
+        transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
         XMStoreFloat3x4(&instance->transform, transform);
 
         instance->markReadyForBlasBuild();

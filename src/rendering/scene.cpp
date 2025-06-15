@@ -127,10 +127,9 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     inputs.outTlas = &this->dev_tlas;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
+    this->isTlasDirty = false;
 
     BufferHelper::uavBarrier(cmdList, this->dev_tlas.Get());
-
-    this->isTlasDirty = false;
 }
 
 Instance* Scene::requestNewInstance()
