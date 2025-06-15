@@ -463,7 +463,7 @@ void initPipeline()
 
 static int frameCount = 0;
 static double elapsedTime = 0.0;
-static auto lastTime = std::chrono::high_resolution_clock::now();
+static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
 void updateFps(double deltaTime)
@@ -486,9 +486,9 @@ static std::deque<Instance*> cubeQueue;
 
 void render()
 {
-    const auto now = std::chrono::high_resolution_clock::now();
-    const double deltaTime = std::chrono::duration<double>(now - lastTime).count();
-    lastTime = now;
+    const auto currentTimePoint = std::chrono::high_resolution_clock::now();
+    const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
+    lastTimePoint = currentTimePoint;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
 
@@ -499,7 +499,7 @@ void render()
     static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
     static std::uniform_real_distribution<float> posZDist(-10.f, 10.f);
 
-    const float time = std::chrono::duration<float>(now.time_since_epoch()).count();
+    const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
 
     for (int i = 0; i < 3; ++i)
     {

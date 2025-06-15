@@ -40,7 +40,6 @@ void ToFreeList::pushInstance(Instance* instance)
 
 void ToFreeList::freeAll()
 {
-
     for (auto& resource : resources)
     {
         resource.Reset();

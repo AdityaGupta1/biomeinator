@@ -20,7 +20,7 @@ private:
     std::vector<Instance*> instances;
 
 public:
-    // The caller is responsible for nulling resource if necessary.
+    // The caller is responsible for nulling the ComPtr if necessary.
     ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped = false);
 
     void pushManagedBuffer(const ManagedBuffer* buffer);
