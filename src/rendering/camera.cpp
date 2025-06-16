@@ -2,9 +2,7 @@
 
 #include "dxr_common.h"
 
-
 #include <numbers>
-#include <cstring>
 
 using namespace DirectX;
 
