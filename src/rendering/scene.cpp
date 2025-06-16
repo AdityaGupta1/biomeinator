@@ -111,10 +111,16 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         toFreeList.pushResource(this->dev_tlas);
     }
 
-    int instanceDescIdx = 0;
+    uint32_t instanceDescIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->host_instanceDescs[instanceDescIdx++];
+        if (instance->isScheduledForDeletion)
+        {
+            continue;
+        }
+
+        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc =
+            this->host_instanceDescs[instanceDescIdx++];
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
@@ -123,7 +129,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->dev_instanceDescs.Get();
-    inputs.numInstances = this->instances.size();
+    inputs.numInstances = instanceDescIdx;
     inputs.outTlas = &this->dev_tlas;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
@@ -153,7 +159,6 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instances.erase(instance->id);
-    this->isTlasDirty = true;
 }
 
 ID3D12Resource* Scene::getDevInstanceDescs()
