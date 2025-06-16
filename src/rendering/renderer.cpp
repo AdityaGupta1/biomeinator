@@ -31,13 +31,32 @@ void initCommand();
 void initRootSignature();
 void initPipeline();
 
-void resetCmd();
+void waitForFence(uint64_t fenceValue);
+
+void beginFrame();
 void submitCmd();
+
+constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
+
+struct FrameContext
+{
+    uint64_t fenceValue = 0;
+
+    ComPtr<ID3D12CommandAllocator> cmdAlloc;
+    ToFreeList toFreeList;
+
+    ComPtr<ID3D12Resource> devCameraParams;
+    CameraParams* hostCameraParams = nullptr;
+};
+
+FrameContext frames[NUM_FRAMES_IN_FLIGHT];
+uint32_t frameIndex = 0;
+uint64_t nextFenceValue = 1;
+HANDLE fenceEvent;
 
 constexpr float fovYDegrees = 35;
 Camera camera;
 
-ToFreeList toFreeList;
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 constexpr uint32_t MAX_NUM_INSTANCES = 2000;
@@ -109,11 +128,25 @@ void init()
     initRenderTarget();
     initCommand();
 
-    resetCmd();
+    for (auto& frame : frames)
+    {
+        frame.devCameraParams = BufferHelper::createBasicBuffer(
+            sizeof(CameraParams),
+            &UPLOAD_HEAP,
+            D3D12_RESOURCE_STATE_GENERIC_READ);
+        frame.devCameraParams->Map(0, nullptr, reinterpret_cast<void**>(&frame.hostCameraParams));
+    }
+
+    beginFrame();
 
     camera.init(XMConvertToRadians(fovYDegrees));
 
-    scene.init(cmdList.Get(), toFreeList);
+    for (auto& frame : frames)
+    {
+        camera.copyTo(frame.hostCameraParams);
+    }
+
+    scene.init(cmdList.Get(), frames[frameIndex].toFreeList);
 
     {
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
@@ -232,7 +265,7 @@ void initRenderTarget()
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .SampleDesc = NO_AA,
-        .BufferCount = 2,
+        .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
@@ -298,11 +331,20 @@ void resize()
         renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
-ComPtr<ID3D12CommandAllocator> cmdAlloc;
 void initCommand()
 {
-    device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cmdAlloc));
-    device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
+    for (auto& frame : frames)
+    {
+        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                       IID_PPV_ARGS(&frame.cmdAlloc));
+    }
+
+    device->CreateCommandList1(0,
+                               D3D12_COMMAND_LIST_TYPE_DIRECT,
+                               D3D12_COMMAND_LIST_FLAG_NONE,
+                               IID_PPV_ARGS(&cmdList));
+
+    fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
 
 
@@ -489,8 +531,9 @@ void render()
     lastTimePoint = currentTimePoint;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
+    camera.copyTo(frames[frameIndex].hostCameraParams);
 
-    resetCmd();
+    beginFrame();
 
     static std::mt19937 rng(std::random_device{}());
     static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
@@ -526,11 +569,11 @@ void render()
             }
             Instance* instance = cubeQueue.front();
             cubeQueue.pop_front();
-            toFreeList.pushInstance(instance);
+            frames[frameIndex].toFreeList.pushInstance(instance);
         }
     }
 
-    scene.update(cmdList.Get(), toFreeList);
+    scene.update(cmdList.Get(), frames[frameIndex].toFreeList);
 
     cmdList->SetPipelineState1(pso.Get());
     cmdList->SetComputeRootSignature(rootSignature.Get());
@@ -539,7 +582,9 @@ void render()
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, camera.getCameraParamsBuffer()->GetGPUVirtualAddress()); // b0
+    cmdList->SetComputeRootConstantBufferView(paramIdx++,
+                                              frames[frameIndex]
+                                                  .devCameraParams->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
@@ -563,19 +608,26 @@ void render()
     backBuffer.Reset();
 
     submitCmd();
-    flush();
+    const uint64_t fenceValue = nextFenceValue++;
+    cmdQueue->Signal(fence.Get(), fenceValue);
+    frames[frameIndex].fenceValue = fenceValue;
 
-    swapChain->Present(1, 0);
+    swapChain->Present(0, 0);
 
-    toFreeList.freeAll();
+    frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
 }
 
-void resetCmd()
+void beginFrame()
 {
-    cmdAlloc->Reset();
-    cmdList->Reset(cmdAlloc.Get(), nullptr);
+    FrameContext& frame = frames[frameIndex];
+
+    waitForFence(frame.fenceValue);
+
+    frame.toFreeList.freeAll();
+    frame.cmdAlloc->Reset();
+    cmdList->Reset(frame.cmdAlloc.Get(), nullptr);
 }
 
 void submitCmd()
@@ -584,19 +636,26 @@ void submitCmd()
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 }
 
-void flush()
+void waitForFence(const uint64_t fenceValue)
 {
-    static uint64_t value = 1;
-    uint64_t fenceValue = value++;
-
-    cmdQueue->Signal(fence.Get(), fenceValue);
-
-    static HANDLE fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
     if (fence->GetCompletedValue() < fenceValue)
     {
         fence->SetEventOnCompletion(fenceValue, fenceEvent);
         WaitForSingleObject(fenceEvent, INFINITE);
+    }
+}
+
+void flush()
+{
+    const uint64_t fenceValue = nextFenceValue++;
+    cmdQueue->Signal(fence.Get(), fenceValue);
+
+    waitForFence(fenceValue);
+
+    for (auto& frame : frames)
+    {
+        frame.fenceValue = 0;
+        frame.toFreeList.freeAll();
     }
 }
 

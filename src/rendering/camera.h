@@ -8,8 +8,7 @@
 class Camera
 {
 private:
-    CameraParams* host_cameraParams{ nullptr };
-    ComPtr<ID3D12Resource> dev_cameraParams{ nullptr };
+    CameraParams params{};
 
     float phi{ 0 };
     float theta{ 0 };
@@ -19,13 +18,13 @@ private:
 
     void setDirectionVectorsFromAngles();
 
-public:
-    void init(float fovYRadians);
-
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void processPlayerInput(const PlayerInput& input, double deltaTime);
+public:
+    void init(float fovYRadians);
 
-    ID3D12Resource* getCameraParamsBuffer();
+    void copyTo(CameraParams* dest) const;
+
+    void processPlayerInput(const PlayerInput& input, double deltaTime);
 };
