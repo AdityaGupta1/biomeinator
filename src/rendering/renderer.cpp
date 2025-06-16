@@ -142,7 +142,9 @@ void init()
         camera.copyParamsTo(frame.host_cameraParams);
     }
 
-    beginFrame();
+    // use frame 0 cmdAlloc just for scene init, then flush so it's ready for the actual first frame
+    frames[0].cmdAlloc->Reset();
+    cmdList->Reset(frames[0].cmdAlloc.Get(), nullptr);
 
     scene.init(cmdList.Get());
 
