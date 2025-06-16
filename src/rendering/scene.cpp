@@ -23,14 +23,12 @@ Scene::Scene(uint32_t maxNumInstances)
     : maxNumInstances(maxNumInstances)
 {}
 
-// TODO: pass in managed vert buffer and idx buffer size as params to constructor
 void Scene::init(ID3D12GraphicsCommandList4* cmdList,
-                 ToFreeList& toFreeList,
-                 uint32_t vertBufferSizeBytes,
-                 uint32_t idxBufferSizeBytes)
+                 uint32_t vertBufferInitialSizeBytes,
+                 uint32_t idxBufferInitialSizeBytes)
 {
-    this->dev_vertBuffer.init(vertBufferSizeBytes);
-    this->dev_idxBuffer.init(idxBufferSizeBytes);
+    this->dev_vertBuffer.init(vertBufferInitialSizeBytes);
+    this->dev_idxBuffer.init(idxBufferInitialSizeBytes);
 
     dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
                                                         &UPLOAD_HEAP,
