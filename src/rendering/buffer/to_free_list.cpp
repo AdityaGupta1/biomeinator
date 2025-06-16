@@ -36,6 +36,8 @@ void ToFreeList::pushInstance(Instance* instance)
     }
 
     instances.push_back(instance);
+    instance->scheduledForDeletion = true;
+    instance->scene->isTlasDirty = true;
 }
 
 void ToFreeList::freeAll()
