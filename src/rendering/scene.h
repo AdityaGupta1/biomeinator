@@ -80,9 +80,8 @@ public:
     Scene(uint32_t maxNumInstances);
 
     void init(ID3D12GraphicsCommandList4* cmdList,
-              ToFreeList& toFreeList,
-              uint32_t vertBufferSizeBytes = 512,
-              uint32_t idxBufferSizeBytes = 128);
+              uint32_t vertBufferInitialSizeBytes = 512,
+              uint32_t idxBufferInitialSizeBytes = 128);
 
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 

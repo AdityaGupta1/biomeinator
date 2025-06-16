@@ -146,7 +146,7 @@ void init()
         camera.copyTo(frame.hostCameraParams);
     }
 
-    scene.init(cmdList.Get(), frames[frameIndex].toFreeList);
+    scene.init(cmdList.Get());
 
     {
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
@@ -612,7 +612,7 @@ void render()
     cmdQueue->Signal(fence.Get(), fenceValue);
     frames[frameIndex].fenceValue = fenceValue;
 
-    swapChain->Present(0, 0);
+    swapChain->Present(1, 0);
 
     frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
 
