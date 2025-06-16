@@ -25,7 +25,7 @@ private:
 
     AcsHelper::GeometryWrapper geoWrapper;
 
-    bool scheduledForDeletion{ false };
+    bool isScheduledForDeletion{ false };
 
     Instance(Scene* scene, uint32_t id);
 

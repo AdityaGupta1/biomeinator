@@ -11,7 +11,7 @@
 using namespace DirectX;
 
 Instance::Instance(Scene* scene, uint32_t id)
-    : scene(scene), id(id), scheduledForDeletion(false)
+    : scene(scene), id(id)
 {}
 
 void Instance::markReadyForBlasBuild()
@@ -114,7 +114,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     uint32_t instanceDescIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        if (instance->scheduledForDeletion)
+        if (instance->isScheduledForDeletion)
         {
             continue;
         }
@@ -124,8 +124,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
-        instanceDesc.AccelerationStructure =
-            instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
+        instanceDesc.AccelerationStructure = instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
     }
 
     AcsHelper::TlasBuildInputs inputs;
