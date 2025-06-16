@@ -22,9 +22,9 @@ private:
     void rotate(float dTheta, float dPhi);
 
 public:
-    void init(float fovYRadians);
+    void init(float defaultFovYRadians);
 
-    void copyTo(CameraParams* dest) const;
+    void copyParamsTo(CameraParams* dest) const;
 
     void processPlayerInput(const PlayerInput& input, double deltaTime);
 };

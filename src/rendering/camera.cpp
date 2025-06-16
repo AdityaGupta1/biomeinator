@@ -6,12 +6,11 @@
 
 using namespace DirectX;
 
-void Camera::init(float fovYRadians)
+void Camera::init(float defaultFovYRadians)
 {
     this->params.pos_WS = { 0, 1.5f, -7.f };
 
-    this->defaultFovYRadians = fovYRadians;
-    this->currentFovYRadians = fovYRadians;
+    this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
     this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
 
     this->setDirectionVectorsFromAngles();
@@ -101,7 +100,7 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
     }
 }
 
-void Camera::copyTo(CameraParams* dest) const
+void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
 }

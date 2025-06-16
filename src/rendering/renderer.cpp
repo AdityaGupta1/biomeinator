@@ -31,8 +31,6 @@ void initCommand();
 void initRootSignature();
 void initPipeline();
 
-void waitForFence(uint64_t fenceValue);
-
 void beginFrame();
 void submitCmd();
 
@@ -40,13 +38,13 @@ constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
 
 struct FrameContext
 {
-    uint64_t fenceValue = 0;
+    uint64_t fenceValue{ 0 };
 
-    ComPtr<ID3D12CommandAllocator> cmdAlloc;
-    ToFreeList toFreeList;
+    ComPtr<ID3D12CommandAllocator> cmdAlloc{ nullptr };
+    ToFreeList toFreeList{};
 
-    ComPtr<ID3D12Resource> devCameraParams;
-    CameraParams* hostCameraParams = nullptr;
+    ComPtr<ID3D12Resource> dev_cameraParams{ nullptr };
+    CameraParams* host_cameraParams{ nullptr };
 };
 
 FrameContext frames[NUM_FRAMES_IN_FLIGHT];
@@ -54,7 +52,7 @@ uint32_t frameIndex = 0;
 uint64_t nextFenceValue = 1;
 HANDLE fenceEvent;
 
-constexpr float fovYDegrees = 35;
+constexpr float defaultFovYDegrees = 35;
 Camera camera;
 
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
@@ -130,23 +128,26 @@ void init()
 
     for (auto& frame : frames)
     {
-        frame.devCameraParams = BufferHelper::createBasicBuffer(
+        frame.dev_cameraParams = BufferHelper::createBasicBuffer(
             sizeof(CameraParams),
             &UPLOAD_HEAP,
             D3D12_RESOURCE_STATE_GENERIC_READ);
-        frame.devCameraParams->Map(0, nullptr, reinterpret_cast<void**>(&frame.hostCameraParams));
+        frame.dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&frame.host_cameraParams));
+    }
+
+    camera.init(XMConvertToRadians(defaultFovYDegrees));
+
+    for (auto& frame : frames)
+    {
+        camera.copyParamsTo(frame.host_cameraParams);
     }
 
     beginFrame();
 
-    camera.init(XMConvertToRadians(fovYDegrees));
-
-    for (auto& frame : frames)
-    {
-        camera.copyTo(frame.hostCameraParams);
-    }
-
     scene.init(cmdList.Get());
+
+    submitCmd();
+    flush();
 
     {
         const auto time = static_cast<float>(GetTickCount64()) / 1000;
@@ -192,9 +193,6 @@ void init()
             instance->markReadyForBlasBuild();
         }
     }
-
-    submitCmd();
-    flush();
 
     initRootSignature();
     initPipeline();
@@ -314,7 +312,7 @@ void resize()
         .MipLevels = 1,
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .SampleDesc = NO_AA,
-        .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+        .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
     };
     device->CreateCommittedResource(&DEFAULT_HEAP,
                                     D3D12_HEAP_FLAG_NONE,
@@ -325,7 +323,7 @@ void resize()
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D
+        .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     device->CreateUnorderedAccessView(
         renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
@@ -335,14 +333,10 @@ void initCommand()
 {
     for (auto& frame : frames)
     {
-        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                       IID_PPV_ARGS(&frame.cmdAlloc));
+        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc));
     }
 
-    device->CreateCommandList1(0,
-                               D3D12_COMMAND_LIST_TYPE_DIRECT,
-                               D3D12_COMMAND_LIST_FLAG_NONE,
-                               IID_PPV_ARGS(&cmdList));
+    device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
 
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
@@ -530,8 +524,10 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
+    auto& frameCtx = frames[frameIndex];
+
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
-    camera.copyTo(frames[frameIndex].hostCameraParams);
+    camera.copyParamsTo(frameCtx.host_cameraParams);
 
     beginFrame();
 
@@ -569,11 +565,11 @@ void render()
             }
             Instance* instance = cubeQueue.front();
             cubeQueue.pop_front();
-            frames[frameIndex].toFreeList.pushInstance(instance);
+            frameCtx.toFreeList.pushInstance(instance);
         }
     }
 
-    scene.update(cmdList.Get(), frames[frameIndex].toFreeList);
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     cmdList->SetPipelineState1(pso.Get());
     cmdList->SetComputeRootSignature(rootSignature.Get());
@@ -582,9 +578,7 @@ void render()
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++,
-                                              frames[frameIndex]
-                                                  .devCameraParams->GetGPUVirtualAddress()); // b0
+    cmdList->SetComputeRootConstantBufferView(paramIdx++, frameCtx.dev_cameraParams->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
@@ -610,13 +604,22 @@ void render()
     submitCmd();
     const uint64_t fenceValue = nextFenceValue++;
     cmdQueue->Signal(fence.Get(), fenceValue);
-    frames[frameIndex].fenceValue = fenceValue;
+    frameCtx.fenceValue = fenceValue;
 
     swapChain->Present(1, 0);
 
     frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
+}
+
+void waitForFence(const uint64_t fenceValue)
+{
+    if (fence->GetCompletedValue() < fenceValue)
+    {
+        fence->SetEventOnCompletion(fenceValue, fenceEvent);
+        WaitForSingleObject(fenceEvent, INFINITE);
+    }
 }
 
 void beginFrame()
@@ -634,15 +637,6 @@ void submitCmd()
 {
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
-}
-
-void waitForFence(const uint64_t fenceValue)
-{
-    if (fence->GetCompletedValue() < fenceValue)
-    {
-        fence->SetEventOnCompletion(fenceValue, fenceEvent);
-        WaitForSingleObject(fenceEvent, INFINITE);
-    }
 }
 
 void flush()
