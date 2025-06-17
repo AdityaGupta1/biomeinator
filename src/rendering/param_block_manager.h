@@ -1,6 +1,5 @@
 #pragma once
 
-#include "buffer/buffer_helper.h"
 #include "common_structs.h"
 #include "dxr_includes.h"
 

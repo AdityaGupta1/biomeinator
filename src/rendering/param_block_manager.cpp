@@ -1,5 +1,8 @@
 #include "param_block_manager.h"
 
+#include "dxr_common.h"
+#include "buffer/buffer_helper.h"
+
 void ParamBlockManager::init()
 {
     const uint32_t bufferSize = sizeof(CameraParams) + sizeof(SceneParams);
