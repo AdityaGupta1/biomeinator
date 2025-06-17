@@ -34,11 +34,11 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
     const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
-    
+
     const float aspect = size.x / size.y;
     const float yScale = cameraParams.tanHalfFovY;
     const float xScale = yScale * aspect;
-    
+
     const float3 target = cameraParams.pos_WS
         + cameraParams.right_WS * ndc.x * xScale
         + cameraParams.up_WS * ndc.y * yScale
@@ -51,8 +51,8 @@ void RayGeneration()
 {
     const uint2 idx = DispatchRaysIndex().xy;
     const float2 size = DispatchRaysDimensions().xy;
-    
-    RandomSampler rng = initRandomSampler2(idx);
+
+    RandomSampler rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
 
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint i = 0; i < numSamplesPerPixel; ++i)
@@ -69,7 +69,7 @@ void RayGeneration()
         Payload payload;
         payload.allowReflection = true;
         payload.missed = false;
-        
+
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
         accumulatedColor += payload.color;
     }
@@ -103,7 +103,6 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
         i0 = idxs.Load(idxBufferByteOffset + 0);
         i1 = idxs.Load(idxBufferByteOffset + 4);
         i2 = idxs.Load(idxBufferByteOffset + 8);
-
     }
     else
     {
@@ -125,15 +124,15 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
 
     switch (InstanceID())
     {
-        case 0:
-            HitMirror(payload, hitInfo);
-            break;
-        case 1:
-            HitFloor(payload, hitInfo);
-            break;
-        default:
-            HitCube(payload, hitInfo);
-            break;
+    case 0:
+        HitMirror(payload, hitInfo);
+        break;
+    case 1:
+        HitFloor(payload, hitInfo);
+        break;
+    default:
+        HitCube(payload, hitInfo);
+        break;
     }
 }
 
@@ -146,7 +145,7 @@ void HitCube(inout Payload payload, HitInfo hitInfo)
     {
         color += 1.f;
     }
-    
+
     if (any(abs(hitInfo.uv - 0.5) > 0.47))
     {
         color = 0.25.rrr;

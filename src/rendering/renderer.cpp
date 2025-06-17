@@ -9,6 +9,7 @@
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "param_block_manager.h"
 
 #include <iostream>
 #include <string>
@@ -43,8 +44,7 @@ struct FrameContext
     ComPtr<ID3D12CommandAllocator> cmdAlloc{ nullptr };
     ToFreeList toFreeList{};
 
-    ComPtr<ID3D12Resource> dev_cameraParams{ nullptr };
-    CameraParams* host_cameraParams{ nullptr };
+    ParamBlockManager paramBlockManager{};
 };
 
 FrameContext frames[NUM_FRAMES_IN_FLIGHT];
@@ -59,6 +59,8 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 constexpr uint32_t MAX_NUM_INSTANCES = 2000;
 Scene scene{ MAX_NUM_INSTANCES };
+
+uint32_t frameNumber = 0;
 
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
@@ -128,18 +130,15 @@ void init()
 
     for (auto& frame : frames)
     {
-        frame.dev_cameraParams = BufferHelper::createBasicBuffer(
-            sizeof(CameraParams),
-            &UPLOAD_HEAP,
-            D3D12_RESOURCE_STATE_GENERIC_READ);
-        frame.dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&frame.host_cameraParams));
+        frame.paramBlockManager.init();
     }
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
 
     for (auto& frame : frames)
     {
-        camera.copyParamsTo(frame.host_cameraParams);
+        camera.copyParamsTo(frame.paramBlockManager.cameraParams);
+        frame.paramBlockManager.sceneParams->frameNumber = 0;
     }
 
     // use frame 0 cmdAlloc just for scene init, then flush so it's ready for the actual first frame
@@ -527,9 +526,11 @@ void render()
     lastTimePoint = currentTimePoint;
 
     auto& frameCtx = frames[frameIndex];
+    ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
-    camera.copyParamsTo(frameCtx.host_cameraParams);
+    camera.copyParamsTo(paramBlockManager.cameraParams);
+    paramBlockManager.sceneParams->frameNumber = frameNumber;
 
     beginFrame();
 
@@ -580,7 +581,7 @@ void render()
     auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, frameCtx.dev_cameraParams->GetGPUVirtualAddress()); // b0
+    cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
@@ -610,6 +611,7 @@ void render()
 
     swapChain->Present(1, 0);
 
+    ++frameNumber;
     frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);

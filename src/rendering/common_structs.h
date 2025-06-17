@@ -17,7 +17,7 @@ struct Vertex
 {
     float3 pos;
     float3 nor; // TODO: pack into one? uint
-    float2 uv; // TODO: pack into one uint
+    float2 uv;  // TODO: pack into one uint
 };
 
 struct InstanceData
@@ -40,6 +40,14 @@ struct CameraParams
 
     float3 up_WS;
     float tanHalfFovY;
+};
+
+struct SceneParams
+{
+    uint frameNumber;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 #if !__hlsl
