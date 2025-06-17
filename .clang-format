@@ -14,4 +14,4 @@ AlwaysBreakAfterReturnType: None
 PenaltyReturnTypeOnItsOwnLine: 100000
 SpaceAfterTemplateKeyword: false
 AlignTrailingComments:
-  Kind: Never
+    Kind: Never

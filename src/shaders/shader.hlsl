@@ -71,6 +71,7 @@ void RayGeneration()
         payload.missed = false;
 
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+
         accumulatedColor += payload.color;
     }
 
@@ -174,6 +175,7 @@ void HitMirror(inout Payload payload, HitInfo hitInfo)
     mirrorRay.TMax = 1000;
 
     payload.allowReflection = false;
+
     TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
 }
 
@@ -193,6 +195,7 @@ void HitFloor(inout Payload payload, HitInfo hitInfo)
     Payload shadow;
     shadow.allowReflection = false;
     shadow.missed = false;
+
     TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
 
     if (!shadow.missed)
