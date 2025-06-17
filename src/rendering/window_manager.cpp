@@ -138,8 +138,8 @@ PlayerInput getPlayerInput()
 
     RECT windowRect;
     GetWindowRect(WindowManager::hwnd, &windowRect);
-    int centerX = (windowRect.left + windowRect.right) / 2;
-    int centerY = (windowRect.top + windowRect.bottom) / 2;
+    const int centerX = (windowRect.left + windowRect.right) / 2;
+    const int centerY = (windowRect.top + windowRect.bottom) / 2;
 
     if (didWindowJustRegainFocus)
     {
