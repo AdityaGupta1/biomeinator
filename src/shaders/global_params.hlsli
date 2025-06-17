@@ -5,4 +5,5 @@
 cbuffer GlobalParams : register(b0)
 {
     CameraParams cameraParams;
+    SceneParams sceneParams;
 };

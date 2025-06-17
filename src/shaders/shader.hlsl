@@ -28,17 +28,17 @@ static const float3 lightPos_WS = float3(0, 200, 0);
 static const float3 skyTopColor = float3(0.24, 0.44, 0.72);
 static const float3 skyBottomColor = float3(0.75, 0.86, 0.93);
 
-static const uint numSamplesPerPixel = 4;
+static const uint numSamplesPerPixel = 1;
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
     const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
-    
+
     const float aspect = size.x / size.y;
     const float yScale = cameraParams.tanHalfFovY;
     const float xScale = yScale * aspect;
-    
+
     const float3 target = cameraParams.pos_WS
         + cameraParams.right_WS * ndc.x * xScale
         + cameraParams.up_WS * ndc.y * yScale
@@ -51,8 +51,8 @@ void RayGeneration()
 {
     const uint2 idx = DispatchRaysIndex().xy;
     const float2 size = DispatchRaysDimensions().xy;
-    
-    RandomSampler rng = initRandomSampler2(idx);
+
+    RandomSampler rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
 
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint i = 0; i < numSamplesPerPixel; ++i)
@@ -69,8 +69,9 @@ void RayGeneration()
         Payload payload;
         payload.allowReflection = true;
         payload.missed = false;
-        
+
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+
         accumulatedColor += payload.color;
     }
 
@@ -103,7 +104,6 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
         i0 = idxs.Load(idxBufferByteOffset + 0);
         i1 = idxs.Load(idxBufferByteOffset + 4);
         i2 = idxs.Load(idxBufferByteOffset + 8);
-
     }
     else
     {
@@ -125,15 +125,15 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
 
     switch (InstanceID())
     {
-        case 0:
-            HitMirror(payload, hitInfo);
-            break;
-        case 1:
-            HitFloor(payload, hitInfo);
-            break;
-        default:
-            HitCube(payload, hitInfo);
-            break;
+    case 0:
+        HitMirror(payload, hitInfo);
+        break;
+    case 1:
+        HitFloor(payload, hitInfo);
+        break;
+    default:
+        HitCube(payload, hitInfo);
+        break;
     }
 }
 
@@ -142,11 +142,12 @@ void HitCube(inout Payload payload, HitInfo hitInfo)
     const float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
 
     float3 color = hitInfo.normal_OS;
+
     if (any(color < 0.f))
     {
         color += 1.f;
     }
-    
+
     if (any(abs(hitInfo.uv - 0.5) > 0.47))
     {
         color = 0.25.rrr;
@@ -174,6 +175,7 @@ void HitMirror(inout Payload payload, HitInfo hitInfo)
     mirrorRay.TMax = 1000;
 
     payload.allowReflection = false;
+
     TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
 }
 
@@ -193,6 +195,7 @@ void HitFloor(inout Payload payload, HitInfo hitInfo)
     Payload shadow;
     shadow.allowReflection = false;
     shadow.missed = false;
+
     TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
 
     if (!shadow.missed)

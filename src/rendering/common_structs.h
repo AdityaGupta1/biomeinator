@@ -42,6 +42,14 @@ struct CameraParams
     float tanHalfFovY;
 };
 
+struct SceneParams
+{
+    uint frameNumber;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
 #if !__hlsl
 #undef uint
 

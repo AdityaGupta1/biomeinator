@@ -3,6 +3,7 @@
 #include "dxr_common.h"
 
 #include "camera.h"
+#include "param_block_manager.h"
 #include "scene.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
@@ -41,14 +42,15 @@ struct FrameContext
     ComPtr<ID3D12CommandAllocator> cmdAlloc{ nullptr };
     ToFreeList toFreeList{};
 
-    ComPtr<ID3D12Resource> dev_cameraParams{ nullptr };
-    CameraParams* host_cameraParams{ nullptr };
+    ParamBlockManager paramBlockManager{};
 };
 
-FrameContext frames[NUM_FRAMES_IN_FLIGHT];
-uint32_t frameIndex = 0;
+FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
+uint32_t frameCtxIdx = 0;
 uint64_t nextFenceValue = 1;
 HANDLE fenceEvent;
+
+uint32_t frameNumber = 0;
 
 constexpr float defaultFovYDegrees = 35;
 Camera camera;
@@ -124,25 +126,22 @@ void init()
     initRenderTarget();
     initCommand();
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
-        frame.dev_cameraParams = BufferHelper::createBasicBuffer(
-            sizeof(CameraParams),
-            &UPLOAD_HEAP,
-            D3D12_RESOURCE_STATE_GENERIC_READ);
-        frame.dev_cameraParams->Map(0, nullptr, reinterpret_cast<void**>(&frame.host_cameraParams));
+        frame.paramBlockManager.init();
     }
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
-        camera.copyParamsTo(frame.host_cameraParams);
+        camera.copyParamsTo(frame.paramBlockManager.cameraParams);
+        frame.paramBlockManager.sceneParams->frameNumber = 0;
     }
 
     // use frame 0 cmdAlloc just for scene init, then flush so it's ready for the actual first frame
-    frames[0].cmdAlloc->Reset();
-    cmdList->Reset(frames[0].cmdAlloc.Get(), nullptr);
+    frameCtxs[0].cmdAlloc->Reset();
+    cmdList->Reset(frameCtxs[0].cmdAlloc.Get(), nullptr);
 
     scene.init(cmdList.Get());
 
@@ -331,7 +330,7 @@ void resize()
 
 void initCommand()
 {
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc));
     }
@@ -524,10 +523,12 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
-    auto& frameCtx = frames[frameIndex];
+    auto& frameCtx = frameCtxs[frameCtxIdx];
+    ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
-    camera.copyParamsTo(frameCtx.host_cameraParams);
+    camera.copyParamsTo(paramBlockManager.cameraParams);
+    paramBlockManager.sceneParams->frameNumber = frameNumber;
 
     beginFrame();
 
@@ -578,7 +579,7 @@ void render()
     const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, frameCtx.dev_cameraParams->GetGPUVirtualAddress()); // b0
+    cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
     cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
@@ -608,7 +609,8 @@ void render()
 
     swapChain->Present(1, 0);
 
-    frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
+    ++frameNumber;
+    frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
 }
@@ -624,7 +626,7 @@ void waitForFence(const uint64_t fenceValue)
 
 void beginFrame()
 {
-    FrameContext& frame = frames[frameIndex];
+    FrameContext& frame = frameCtxs[frameCtxIdx];
 
     waitForFence(frame.fenceValue);
 
@@ -646,7 +648,7 @@ void flush()
 
     waitForFence(fenceValue);
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         frame.fenceValue = 0;
         frame.toFreeList.freeAll();
