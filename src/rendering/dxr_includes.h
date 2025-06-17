@@ -9,6 +9,5 @@
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
-#include <vector>
 
 using Microsoft::WRL::ComPtr;

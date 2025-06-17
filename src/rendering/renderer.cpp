@@ -10,8 +10,6 @@
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
 
-#include <iostream>
-#include <string>
 #include <chrono>
 #include <random>
 #include <deque>
@@ -294,8 +292,8 @@ void resize()
 
     RECT rect;
     GetClientRect(hwnd, &rect);
-    auto width = std::max<uint32_t>(rect.right - rect.left, 1);
-    auto height = std::max<uint32_t>(rect.bottom - rect.top, 1);
+    const auto width = std::max<uint32_t>(rect.right - rect.left, 1);
+    const auto height = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
     flush();
 
@@ -306,7 +304,7 @@ void resize()
         renderTarget.Reset();
     }
 
-    D3D12_RESOURCE_DESC renderTargetDesc = {
+    const D3D12_RESOURCE_DESC renderTargetDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         .Width = width,
         .Height = height,
@@ -323,7 +321,7 @@ void resize()
                                     nullptr,
                                     IID_PPV_ARGS(&renderTarget));
 
-    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
@@ -577,7 +575,7 @@ void render()
     cmdList->SetComputeRootSignature(rootSignature.Get());
     ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
     cmdList->SetDescriptorHeaps(1, heaps);
-    auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
+    const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
     uint32_t paramIdx = 0;
     cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
     cmdList->SetComputeRootConstantBufferView(paramIdx++, frameCtx.dev_cameraParams->GetGPUVirtualAddress()); // b0

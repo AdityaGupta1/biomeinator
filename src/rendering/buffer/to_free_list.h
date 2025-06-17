@@ -3,7 +3,6 @@
 #include "rendering/dxr_includes.h"
 
 #include <vector>
-#include <utility>
 
 class ManagedBuffer;
 class ManagedBufferSection;
