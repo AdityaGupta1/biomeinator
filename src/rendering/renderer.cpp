@@ -3,13 +3,13 @@
 #include "dxr_common.h"
 
 #include "camera.h"
+#include "param_block_manager.h"
 #include "scene.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
-#include "param_block_manager.h"
 
 #include <iostream>
 #include <string>
@@ -47,10 +47,12 @@ struct FrameContext
     ParamBlockManager paramBlockManager{};
 };
 
-FrameContext frames[NUM_FRAMES_IN_FLIGHT];
-uint32_t frameIndex = 0;
+FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
+uint32_t frameCtxIdx = 0;
 uint64_t nextFenceValue = 1;
 HANDLE fenceEvent;
+
+uint32_t frameNumber = 0;
 
 constexpr float defaultFovYDegrees = 35;
 Camera camera;
@@ -59,8 +61,6 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 constexpr uint32_t MAX_NUM_INSTANCES = 2000;
 Scene scene{ MAX_NUM_INSTANCES };
-
-uint32_t frameNumber = 0;
 
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
@@ -128,22 +128,22 @@ void init()
     initRenderTarget();
     initCommand();
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         frame.paramBlockManager.init();
     }
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         camera.copyParamsTo(frame.paramBlockManager.cameraParams);
         frame.paramBlockManager.sceneParams->frameNumber = 0;
     }
 
     // use frame 0 cmdAlloc just for scene init, then flush so it's ready for the actual first frame
-    frames[0].cmdAlloc->Reset();
-    cmdList->Reset(frames[0].cmdAlloc.Get(), nullptr);
+    frameCtxs[0].cmdAlloc->Reset();
+    cmdList->Reset(frameCtxs[0].cmdAlloc.Get(), nullptr);
 
     scene.init(cmdList.Get());
 
@@ -332,7 +332,7 @@ void resize()
 
 void initCommand()
 {
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc));
     }
@@ -525,7 +525,7 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
-    auto& frameCtx = frames[frameIndex];
+    auto& frameCtx = frameCtxs[frameCtxIdx];
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
@@ -612,7 +612,7 @@ void render()
     swapChain->Present(1, 0);
 
     ++frameNumber;
-    frameIndex = (frameIndex + 1) % NUM_FRAMES_IN_FLIGHT;
+    frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
 }
@@ -628,7 +628,7 @@ void waitForFence(const uint64_t fenceValue)
 
 void beginFrame()
 {
-    FrameContext& frame = frames[frameIndex];
+    FrameContext& frame = frameCtxs[frameCtxIdx];
 
     waitForFence(frame.fenceValue);
 
@@ -650,7 +650,7 @@ void flush()
 
     waitForFence(fenceValue);
 
-    for (auto& frame : frames)
+    for (auto& frame : frameCtxs)
     {
         frame.fenceValue = 0;
         frame.toFreeList.freeAll();

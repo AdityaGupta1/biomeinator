@@ -141,6 +141,7 @@ void HitCube(inout Payload payload, HitInfo hitInfo)
     const float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
 
     float3 color = hitInfo.normal_OS;
+
     if (any(color < 0.f))
     {
         color += 1.f;
