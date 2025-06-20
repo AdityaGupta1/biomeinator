@@ -19,30 +19,30 @@ void Instance::markReadyForBlasBuild()
     this->scene->instancesReadyForBlasBuild.push_back(this);
 }
 
-Scene::Scene(uint32_t maxNumInstances)
-    : maxNumInstances(maxNumInstances)
-{}
-
-void Scene::init(ID3D12GraphicsCommandList4* cmdList,
-                 uint32_t vertBufferInitialSizeBytes,
-                 uint32_t idxBufferInitialSizeBytes)
+void Scene::init()
 {
-    this->dev_vertBuffer.init(vertBufferInitialSizeBytes);
-    this->dev_idxBuffer.init(idxBufferInitialSizeBytes);
+    // these resources can be dynamically resized later
+    this->numInstances = 1;
+    this->dev_vertBuffer.init(512 /*bytes*/);
+    this->dev_idxBuffer.init(128 /*bytes*/);
 
-    dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
-                                                        &UPLOAD_HEAP,
-                                                        D3D12_RESOURCE_STATE_GENERIC_READ);
-    dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDescs));
+    this->initInstanceBuffers();
 
-    dev_instanceDatas = BufferHelper::createBasicBuffer(
-        sizeof(InstanceData) * this->maxNumInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
-    dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDatas));
-
-    for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
+    for (int instanceIdx = 0; instanceIdx < this->numInstances; ++instanceIdx)
     {
         availableInstanceIds.push(instanceIdx);
     }
+}
+
+void Scene::initInstanceBuffers()
+{
+    dev_instanceDescs = BufferHelper::createBasicBuffer(
+        sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->numInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDescs));
+
+    dev_instanceDatas = BufferHelper::createBasicBuffer(
+        sizeof(InstanceData) * this->numInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDatas->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDatas));
 }
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -136,11 +136,11 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     BufferHelper::uavBarrier(cmdList, this->dev_tlas.Get());
 }
 
-Instance* Scene::requestNewInstance()
+Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 {
     if (this->availableInstanceIds.empty())
     {
-        throw std::runtime_error("Scene has no available instance ids");
+        this->resizeInstanceBuffers(toFreeList, this->numInstances * 2);
     }
 
     const uint32_t id = this->availableInstanceIds.front();
@@ -151,6 +151,28 @@ Instance* Scene::requestNewInstance()
     this->instances.emplace(id, std::move(newInstance));
 
     return newInstancePtr;
+}
+
+void Scene::resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances)
+{
+    toFreeList.pushResource(this->dev_instanceDatas, true);
+    toFreeList.pushResource(this->dev_instanceDescs, true);
+
+    const uint32_t oldNumInstances = this->numInstances;
+    this->numInstances = newNumInstances;
+
+    const D3D12_RAYTRACING_INSTANCE_DESC* host_oldInstanceDescs = this->host_instanceDescs;
+    const InstanceData* host_oldInstanceDatas = this->host_instanceDatas;
+
+    this->initInstanceBuffers();
+
+    memcpy(this->host_instanceDescs, host_oldInstanceDescs, oldNumInstances * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
+    memcpy(this->host_instanceDatas, host_oldInstanceDatas, oldNumInstances * sizeof(InstanceData));
+
+    for (int instanceIdx = oldNumInstances; instanceIdx < this->numInstances; ++instanceIdx)
+    {
+        this->availableInstanceIds.push(instanceIdx);
+    }
 }
 
 void Scene::freeInstance(Instance* instance)

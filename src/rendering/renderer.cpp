@@ -57,8 +57,7 @@ Camera camera;
 
 ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
-constexpr uint32_t MAX_NUM_INSTANCES = 2000;
-Scene scene{ MAX_NUM_INSTANCES };
+Scene scene;
 
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
@@ -139,21 +138,14 @@ void init()
         frame.paramBlockManager.sceneParams->frameNumber = 0;
     }
 
-    // use frame 0 cmdAlloc just for scene init, then flush so it's ready for the actual first frame
-    frameCtxs[0].cmdAlloc->Reset();
-    cmdList->Reset(frameCtxs[0].cmdAlloc.Get(), nullptr);
-
-    scene.init(cmdList.Get());
-
-    submitCmd();
-    flush();
+    scene.init();
 
     {
-        const auto time = static_cast<float>(GetTickCount64()) / 1000;
+        const auto time = static_cast<float>(GetTickCount64()) / 1000.f;
 
         {
             // mirror
-            Instance* instance = scene.requestNewInstance();
+            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
 
             instance->host_verts = quadVerts;
 
@@ -167,7 +159,7 @@ void init()
 
         {
             // floor
-            Instance* instance = scene.requestNewInstance();
+            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
 
             instance->host_verts = quadVerts;
 
@@ -180,7 +172,7 @@ void init()
 
         {
             // big cube
-            Instance* instance = scene.requestNewInstance();
+            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
 
             instance->host_verts = cubeVerts;
             instance->host_idxs = cubeIdxs;
@@ -538,9 +530,9 @@ void render()
 
     const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 7; ++i)
     {
-        Instance* instance = scene.requestNewInstance();
+        Instance* instance = scene.requestNewInstance(frameCtx.toFreeList);
         instance->host_verts = cubeVerts;
         instance->host_idxs = cubeIdxs;
 
