@@ -24,6 +24,8 @@ file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 # collect hlsli files (since they were excluded in the compilation step)
 file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
+set(COMMON_STRUCTS_HEADER "${SRC_DIR}/rendering/common_structs.h")
+
 # compile shaders
 set(COMPILED_HEADERS "")
 foreach(SHADER ${SHADER_FILES})
@@ -37,8 +39,6 @@ foreach(SHADER ${SHADER_FILES})
     set(FXH_OUT "${GENERATED_SHADER_HEADERS}/${FXH_FILENAME}")
     get_filename_component(FXH_DIR ${FXH_OUT} DIRECTORY)
     file(MAKE_DIRECTORY ${FXH_DIR})
-
-    set(COMMON_STRUCTS_HEADER "${SRC_DIR}/rendering/common_structs.h")
 
     add_custom_command(
         OUTPUT ${FXH_OUT}
