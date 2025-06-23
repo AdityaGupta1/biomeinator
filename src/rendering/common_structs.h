@@ -25,6 +25,7 @@ struct InstanceData
     uint vertBufferOffset;
     uint hasIdxs;
     uint idxBufferByteOffset;
+    uint pad0;
 };
 
 struct CameraParams

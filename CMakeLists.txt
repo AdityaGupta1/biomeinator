@@ -21,13 +21,6 @@ file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
 list(FILTER SHADER_FILES EXCLUDE REGEX ".*\\.hlsli$")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
-# There's probably a way to clean only the generated shaders that don't correspond to actual shaders, but I'm too lazy to figure it out
-message(STATUS "Cleaning generated shaders...")
-file(REMOVE_RECURSE ${GENERATED_SHADER_HEADERS})
-file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
-
-message(STATUS "Compiling shaders...")
-
 # collect hlsli files (since they were excluded in the compilation step)
 file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
@@ -45,6 +38,8 @@ foreach(SHADER ${SHADER_FILES})
     get_filename_component(FXH_DIR ${FXH_OUT} DIRECTORY)
     file(MAKE_DIRECTORY ${FXH_DIR})
 
+    set(COMMON_STRUCTS_HEADER "${SRC_DIR}/rendering/common_structs.h")
+
     add_custom_command(
         OUTPUT ${FXH_OUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${FXH_DIR}
@@ -54,7 +49,7 @@ foreach(SHADER ${SHADER_FILES})
                 /Fh ${FXH_OUT}
                 /Vn ${VAR_NAME}
                 /I ${SHADER_DIR}
-        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES}
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_STRUCTS_HEADER}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )
