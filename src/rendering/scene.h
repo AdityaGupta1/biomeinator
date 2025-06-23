@@ -44,7 +44,7 @@ class Scene
     friend class ToFreeList;
 
 private:
-    uint32_t numInstances{ 0 };
+    uint32_t maxNumInstances{ 0 };
 
     ManagedBuffer dev_vertBuffer{
         &DEFAULT_HEAP,
@@ -72,11 +72,11 @@ private:
     bool isTlasDirty{ false };
 
     void initInstanceBuffers();
+    void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
+    void freeInstance(Instance* instance);
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
-
-    void freeInstance(Instance* instance);
 
 public:
     void init();
@@ -84,7 +84,6 @@ public:
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
-    void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
