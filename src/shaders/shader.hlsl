@@ -21,6 +21,7 @@ StructuredBuffer<Vertex> verts : register(t1);
 ByteAddressBuffer idxs : register(t2);
 
 StructuredBuffer<InstanceData> instanceDatas : register(t3);
+StructuredBuffer<Material> materials : register(t4);
 
 RWTexture2D<float4> renderTarget : register(u0);
 

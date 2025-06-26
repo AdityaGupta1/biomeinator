@@ -7,12 +7,15 @@
 #include "buffer/acs_helper.h"
 
 #include <unordered_map>
+#include <vector>
 #include <memory>
 #include <queue>
 
 class ToFreeList;
 
 class Scene;
+
+constexpr uint32_t INVALID_MATERIAL_ID = ~0u;
 
 class Instance
 {
@@ -22,6 +25,7 @@ class Instance
 private:
     Scene* const scene;
     const uint32_t id;
+    uint32_t materialId{ INVALID_MATERIAL_ID };
 
     AcsHelper::GeometryWrapper geoWrapper;
 
@@ -34,6 +38,8 @@ public:
     std::vector<uint32_t> host_idxs;
 
     DirectX::XMFLOAT3X4 transform{};
+
+    void setMaterialId(uint32_t id);
 
     void markReadyForBlasBuild();
 };
@@ -71,9 +77,20 @@ private:
     ComPtr<ID3D12Resource> dev_tlas{ nullptr };
     bool isTlasDirty{ false };
 
+    uint32_t maxNumMaterials{ 0 };
+    uint32_t nextMaterialId{ 0 };
+
+    Material* host_materials{ nullptr };
+    ComPtr<ID3D12Resource> dev_materials{ nullptr };
+
+    std::vector<std::unique_ptr<Material>> materials;
+
     void initInstanceBuffers();
     void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
+
+    void initMaterialBuffers();
+    void resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials);
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
@@ -84,9 +101,11 @@ public:
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
+    Material* requestNewMaterial(ToFreeList& toFreeList);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
+    ID3D12Resource* getDevMaterials();
 
     ID3D12Resource* getDevTlas();
 
