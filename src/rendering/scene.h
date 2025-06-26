@@ -2,20 +2,20 @@
 
 #include "dxr_includes.h"
 
+#include "buffer/acs_helper.h"
 #include "common_structs.h"
 #include "host_structs.h"
-#include "buffer/acs_helper.h"
 
-#include <unordered_map>
-#include <vector>
 #include <memory>
 #include <queue>
+#include <unordered_map>
+#include <vector>
 
 class ToFreeList;
 
 class Scene;
 
-constexpr uint32_t INVALID_MATERIAL_ID = ~0u;
+constexpr uint32_t INVALID_MATERIAL_ID = -1;
 
 class Instance
 {
@@ -40,8 +40,6 @@ public:
     DirectX::XMFLOAT3X4 transform{};
 
     void setMaterialId(uint32_t id);
-
-    void markReadyForBlasBuild();
 };
 
 class Scene
@@ -101,7 +99,10 @@ public:
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
+    void markInstanceReadyForBlasBuild(Instance* instance);
+
     Material* requestNewMaterial(ToFreeList& toFreeList);
+    void finalizeMaterial(Material* material);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();

@@ -1,23 +1,17 @@
 #include "scene.h"
 
-#include "dxr_common.h"
-#include "renderer.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
 #include "buffer/to_free_list.h"
+#include "dxr_common.h"
+#include "renderer.h"
 
 #include <stdexcept>
 
 using namespace DirectX;
 
-Instance::Instance(Scene* scene, uint32_t id)
-    : scene(scene), id(id)
+Instance::Instance(Scene* scene, uint32_t id) : scene(scene), id(id)
 {}
-
-void Instance::markReadyForBlasBuild()
-{
-    this->scene->instancesReadyForBlasBuild.push_back(this);
-}
 
 void Instance::setMaterialId(uint32_t id)
 {
@@ -43,8 +37,9 @@ void Scene::init()
 
 void Scene::initInstanceBuffers()
 {
-    dev_instanceDescs = BufferHelper::createBasicBuffer(
-        sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+    dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
+                                                        &UPLOAD_HEAP,
+                                                        D3D12_RESOURCE_STATE_GENERIC_READ);
     dev_instanceDescs->Map(0, nullptr, reinterpret_cast<void**>(&this->host_instanceDescs));
 
     dev_instanceDatas = BufferHelper::createBasicBuffer(
@@ -69,7 +64,10 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     return newInstancePtr;
 }
 
-
+void Scene::markInstanceReadyForBlasBuild(Instance* instance)
+{
+    this->instancesReadyForBlasBuild.push_back(instance);
+}
 
 void Scene::resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newMaxNumInstances)
 {
@@ -84,7 +82,8 @@ void Scene::resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newMaxNumInst
 
     this->initInstanceBuffers();
 
-    memcpy(this->host_instanceDescs, host_oldInstanceDescs, oldMaxNumInstances * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
+    memcpy(
+        this->host_instanceDescs, host_oldInstanceDescs, oldMaxNumInstances * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
     memcpy(this->host_instanceDatas, host_oldInstanceDatas, oldMaxNumInstances * sizeof(InstanceData));
 
     for (int instanceIdx = oldMaxNumInstances; instanceIdx < this->maxNumInstances; ++instanceIdx)
@@ -114,8 +113,7 @@ Material* Scene::requestNewMaterial(ToFreeList& toFreeList)
     }
 
     const uint32_t id = this->nextMaterialId++;
-    std::unique_ptr<Material> newMaterial = std::unique_ptr<Material>(new Material{});
-    newMaterial->id = id;
+    std::unique_ptr<Material> newMaterial = std::make_unique<Material>(id);
     if (this->materials.size() <= id)
     {
         this->materials.resize(id + 1);
@@ -123,9 +121,12 @@ Material* Scene::requestNewMaterial(ToFreeList& toFreeList)
     Material* newMaterialPtr = newMaterial.get();
     this->materials[id] = std::move(newMaterial);
 
-    this->host_materials[id] = *newMaterialPtr;
-
     return newMaterialPtr;
+}
+
+void Scene::finalizeMaterial(Material* material)
+{
+    this->host_materials[material->getId()] = *material;
 }
 
 void Scene::resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials)
@@ -216,8 +217,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             continue;
         }
 
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc =
-            this->host_instanceDescs[instanceDescIdx++];
+        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->host_instanceDescs[instanceDescIdx++];
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
@@ -234,7 +234,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     BufferHelper::uavBarrier(cmdList, this->dev_tlas.Get());
 }
-
 
 ID3D12Resource* Scene::getDevInstanceDescs()
 {
@@ -265,4 +264,3 @@ ID3D12Resource* Scene::getDevIdxBuffer()
 {
     return this->dev_idxBuffer.getManagedBuffer();
 }
-

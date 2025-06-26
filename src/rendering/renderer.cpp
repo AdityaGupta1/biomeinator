@@ -141,11 +141,13 @@ void init()
     scene.init();
 
     {
+        auto& frame0ToFreeList = frameCtxs[0].toFreeList;
+
         const auto time = static_cast<float>(GetTickCount64()) / 1000.f;
 
         {
             // mirror
-            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
+            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
 
             instance->host_verts = quadVerts;
 
@@ -154,12 +156,19 @@ void init()
             transform *= XMMatrixTranslation(2, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            instance->markReadyForBlasBuild();
+            Material* material = scene.requestNewMaterial(frame0ToFreeList);
+            material->diffWeight = 0;
+            material->specWeight = 1;
+            material->specCol = { 1, 1, 1 };
+            scene.finalizeMaterial(material);
+            instance->setMaterialId(material->getId());
+
+            scene.markInstanceReadyForBlasBuild(instance);
         }
 
         {
             // floor
-            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
+            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
 
             instance->host_verts = quadVerts;
 
@@ -167,12 +176,18 @@ void init()
             transform *= XMMatrixTranslation(0, 0, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            instance->markReadyForBlasBuild();
+            Material* material = scene.requestNewMaterial(frame0ToFreeList);
+            material->diffWeight = 1;
+            material->diffCol = { 1, 0, 0 };
+            scene.finalizeMaterial(material);
+            instance->setMaterialId(material->getId());
+
+            scene.markInstanceReadyForBlasBuild(instance);
         }
 
         {
             // big cube
-            Instance* instance = scene.requestNewInstance(frameCtxs[0].toFreeList);
+            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
 
             instance->host_verts = cubeVerts;
             instance->host_idxs = cubeIdxs;
@@ -181,7 +196,13 @@ void init()
             transform *= XMMatrixTranslation(-1.5, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            instance->markReadyForBlasBuild();
+            Material* material = scene.requestNewMaterial(frame0ToFreeList);
+            material->diffWeight = 1;
+            material->diffCol = { 0, 1, 0 };
+            scene.finalizeMaterial(material);
+            instance->setMaterialId(material->getId());
+
+            scene.markInstanceReadyForBlasBuild(instance);
         }
     }
 
@@ -431,7 +452,7 @@ void initPipeline()
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-        .MaxPayloadSizeInBytes = 20,
+        .MaxPayloadSizeInBytes = 24,
         .MaxAttributeSizeInBytes = 8,
     };
 
@@ -515,7 +536,8 @@ void updateFps(double deltaTime)
     }
 }
 
-static std::deque<Instance*> cubeQueue;
+std::deque<Instance*> cubeQueue;
+Material* smallCubeMaterial{ nullptr };
 
 void render()
 {
@@ -532,41 +554,52 @@ void render()
 
     beginFrame();
 
-    static std::mt19937 rng(std::random_device{}());
-    static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
-    static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
-
-    const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
-
-    for (int i = 0; i < 7; ++i)
     {
-        Instance* instance = scene.requestNewInstance(frameCtx.toFreeList);
-        instance->host_verts = cubeVerts;
-        instance->host_idxs = cubeIdxs;
-
-        auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
-        transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-        transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
-        XMStoreFloat3x4(&instance->transform, transform);
-
-        instance->markReadyForBlasBuild();
-        cubeQueue.push_back(instance);
-    }
-
-    if (!cubeQueue.empty())
-    {
-        const uint32_t maxNumToRemove = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
-        std::uniform_int_distribution<uint32_t> removeDist(0, maxNumToRemove);
-        const uint32_t numToRemove = removeDist(rng);
-        for (uint32_t i = 0; i < numToRemove; ++i)
+        if (smallCubeMaterial == nullptr)
         {
-            if (cubeQueue.empty())
+            smallCubeMaterial = scene.requestNewMaterial(frameCtx.toFreeList);
+            smallCubeMaterial->diffCol = { 0, 1, 1 };
+            scene.finalizeMaterial(smallCubeMaterial);
+        }
+
+        static std::mt19937 rng(std::random_device{}());
+        static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
+        static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
+
+        const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
+
+        for (int i = 0; i < 7; ++i)
+        {
+            Instance* instance = scene.requestNewInstance(frameCtx.toFreeList);
+            instance->host_verts = cubeVerts;
+            instance->host_idxs = cubeIdxs;
+
+            auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
+            transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
+            transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
+            XMStoreFloat3x4(&instance->transform, transform);
+
+            instance->setMaterialId(smallCubeMaterial->getId());
+
+            scene.markInstanceReadyForBlasBuild(instance);
+            cubeQueue.push_back(instance);
+        }
+
+        if (!cubeQueue.empty())
+        {
+            const uint32_t maxNumToRemove = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
+            std::uniform_int_distribution<uint32_t> removeDist(0, maxNumToRemove);
+            const uint32_t numToRemove = removeDist(rng);
+            for (uint32_t i = 0; i < numToRemove; ++i)
             {
-                break;
+                if (cubeQueue.empty())
+                {
+                    break;
+                }
+                Instance* instance = cubeQueue.front();
+                cubeQueue.pop_front();
+                frameCtx.toFreeList.pushInstance(instance);
             }
-            Instance* instance = cubeQueue.front();
-            cubeQueue.pop_front();
-            frameCtx.toFreeList.pushInstance(instance);
         }
     }
 
