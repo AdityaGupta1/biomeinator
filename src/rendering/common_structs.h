@@ -28,9 +28,28 @@ struct InstanceData
     uint materialId;
 };
 
+#define MATERIAL_ID_INVALID ~0u
+
 struct Material
 {
+#if !__hlsl
+public:
+    Material(uint id)
+        : id(id), diffWeight(1), diffCol({ 1, 1, 1 }), specWeight(0), specCol({ 1, 1, 1 })
+    {}
+
+    uint getId() const
+    {
+        return this->id;
+    }
+
+private:
     uint id;
+
+public:
+#else
+    uint id;
+#endif
     uint pad0;
     uint pad1;
     uint pad2;
