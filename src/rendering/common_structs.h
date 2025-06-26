@@ -28,6 +28,8 @@ struct InstanceData
     uint materialId;
 };
 
+#define MATERIAL_ID_INVALID ~0u
+
 struct Material
 {
 #if !__hlsl

@@ -126,7 +126,7 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     hitInfo.normal_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
     hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    if (instanceData.materialId == -1)
+    if (instanceData.materialId == MATERIAL_ID_INVALID)
     {
         payload.color = 0;
         return;

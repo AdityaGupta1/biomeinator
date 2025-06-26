@@ -15,8 +15,6 @@ class ToFreeList;
 
 class Scene;
 
-constexpr uint32_t INVALID_MATERIAL_ID = -1;
-
 class Instance
 {
     friend class Scene;
@@ -25,7 +23,7 @@ class Instance
 private:
     Scene* const scene;
     const uint32_t id;
-    uint32_t materialId{ INVALID_MATERIAL_ID };
+    uint32_t materialId{ MATERIAL_ID_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper;
 
