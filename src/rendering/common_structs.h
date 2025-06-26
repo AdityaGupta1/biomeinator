@@ -25,7 +25,21 @@ struct InstanceData
     uint vertBufferOffset;
     uint hasIdxs;
     uint idxBufferByteOffset;
+    uint materialId;
+};
+
+struct Material
+{
+    uint id;
     uint pad0;
+    uint pad1;
+    uint pad2;
+
+    float diffWeight;
+    float3 diffCol;
+
+    float specWeight;
+    float3 specCol;
 };
 
 struct CameraParams

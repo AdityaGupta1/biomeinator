@@ -24,7 +24,7 @@ file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 # collect hlsli files (since they were excluded in the compilation step)
 file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
-set(COMMON_STRUCTS_HEADER "${SRC_DIR}/rendering/common_structs.h")
+set(COMMON_HEADERS "${SRC_DIR}/rendering/common_structs.h")
 
 # compile shaders
 set(COMPILED_HEADERS "")
@@ -49,7 +49,7 @@ foreach(SHADER ${SHADER_FILES})
                 /Fh ${FXH_OUT}
                 /Vn ${VAR_NAME}
                 /I ${SHADER_DIR}
-        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_STRUCTS_HEADER}
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )
