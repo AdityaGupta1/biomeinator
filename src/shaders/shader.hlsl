@@ -2,11 +2,12 @@
 #include "common_structs.hlsli"
 #include "global_params.hlsli"
 
+#define PAYLOAD_FLAG_ALLOW_REFLECTION (1 << 0)
+
 struct Payload
 {
     float3 color;
-    bool allowReflection;
-    bool missed;
+    uint flags;
 
     RandomSampler rng;
 };
@@ -60,8 +61,8 @@ void RayGeneration()
     {
         Payload payload;
         payload.color = float3(1, 1, 1);
-        payload.allowReflection = true;
-        payload.missed = false;
+        payload.flags = 0;
+        payload.flags |= PAYLOAD_FLAG_ALLOW_REFLECTION;
         payload.rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
 
         const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
@@ -84,11 +85,8 @@ void RayGeneration()
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    float slope = normalize(WorldRayDirection()).y;
-    float t = saturate(slope * 5 + 0.5);
-    payload.color = lerp(skyBottomColor, skyTopColor, t);
-
-    payload.missed = true;
+    float3 skyColor = WorldRayDirection().y > 0 ? float3(1, 1, 1) : 0;
+    payload.color = skyColor;
 }
 
 void HitCube(inout Payload payload, HitInfo hitInfo);
@@ -141,7 +139,7 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     }
     else
     {
-        if (!payload.allowReflection)
+        if (!(payload.flags & PAYLOAD_FLAG_ALLOW_REFLECTION))
         {
             payload.color = 0;
             return;
@@ -159,7 +157,7 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
         mirrorRay.TMin = 0.001;
         mirrorRay.TMax = 1000;
 
-        payload.allowReflection = false;
+        payload.flags &= ~PAYLOAD_FLAG_ALLOW_REFLECTION;
 
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
     }
