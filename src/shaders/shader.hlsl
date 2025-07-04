@@ -4,8 +4,6 @@
 
 RWTexture2D<float4> renderTarget : register(u0);
 
-static const float3 lightPos_WS = float3(0, 200, 0);
-
 static const uint numSamplesPerPixel = 4;
 
 [shader("raygeneration")]
