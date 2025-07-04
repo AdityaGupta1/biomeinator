@@ -14,13 +14,13 @@ uint hash(uint s)
 struct RandomSampler
 {
     uint seed;
-    
+
     uint nextUint()
     {
         seed = hash(seed);
         return seed;
     }
-    
+
     float nextFloat()
     {
         return (nextUint() & 0x00FFFFFF) / 16777216.0;
