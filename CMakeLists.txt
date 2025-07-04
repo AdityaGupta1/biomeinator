@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(GigaMinecraft LANGUAGES CXX)
+project(Biomeinator LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,6 +84,6 @@ foreach(FXH ${COMPILED_HEADERS})
     source_group("generated_shaders\\${FILTER_PATH}" FILES "${FXH}")
 endforeach()
 
-add_executable(GigaMinecraft ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES} ${SHADER_INCLUDE_FILES})
+add_executable(Biomeinator ${SRC_FILES} ${COMPILED_HEADERS} ${SHADER_FILES} ${SHADER_INCLUDE_FILES})
 
-target_link_libraries(GigaMinecraft PRIVATE user32 d3d12 dxgi)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi)
