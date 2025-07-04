@@ -105,7 +105,7 @@ void Scene::initMaterialBuffers()
     dev_materials->Map(0, nullptr, reinterpret_cast<void**>(&this->host_materials));
 }
 
-Material* Scene::requestNewMaterial(ToFreeList& toFreeList)
+uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
     if (this->nextMaterialId >= this->maxNumMaterials)
     {
@@ -113,20 +113,9 @@ Material* Scene::requestNewMaterial(ToFreeList& toFreeList)
     }
 
     const uint32_t id = this->nextMaterialId++;
-    std::unique_ptr<Material> newMaterial = std::make_unique<Material>(id);
-    if (this->materials.size() <= id)
-    {
-        this->materials.resize(id + 1);
-    }
-    Material* newMaterialPtr = newMaterial.get();
-    this->materials[id] = std::move(newMaterial);
+    this->host_materials[id] = *material;
 
-    return newMaterialPtr;
-}
-
-void Scene::finalizeMaterial(Material* material)
-{
-    this->host_materials[material->getId()] = *material;
+    return id;
 }
 
 void Scene::resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials)
@@ -141,7 +130,6 @@ void Scene::resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMateria
     this->initMaterialBuffers();
 
     memcpy(this->host_materials, host_oldMaterials, oldMaxNumMaterials * sizeof(Material));
-    this->materials.resize(newNumMaterials);
 }
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

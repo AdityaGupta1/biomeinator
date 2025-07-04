@@ -79,8 +79,6 @@ private:
     Material* host_materials{ nullptr };
     ComPtr<ID3D12Resource> dev_materials{ nullptr };
 
-    std::vector<std::unique_ptr<Material>> materials;
-
     void initInstanceBuffers();
     void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
@@ -99,8 +97,7 @@ public:
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);
 
-    Material* requestNewMaterial(ToFreeList& toFreeList);
-    void finalizeMaterial(Material* material);
+    uint32_t addMaterial(ToFreeList& toFreeList, const Material* material);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
