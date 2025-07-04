@@ -7,6 +7,8 @@ struct Payload
     float3 color;
     bool allowReflection;
     bool missed;
+
+    RandomSampler rng;
 };
 
 struct HitInfo
@@ -21,6 +23,7 @@ StructuredBuffer<Vertex> verts : register(t1);
 ByteAddressBuffer idxs : register(t2);
 
 StructuredBuffer<InstanceData> instanceDatas : register(t3);
+StructuredBuffer<Material> materials : register(t4);
 
 RWTexture2D<float4> renderTarget : register(u0);
 
@@ -52,12 +55,16 @@ void RayGeneration()
     const uint2 idx = DispatchRaysIndex().xy;
     const float2 size = DispatchRaysDimensions().xy;
 
-    RandomSampler rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
-
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint i = 0; i < numSamplesPerPixel; ++i)
     {
-        const float2 jitter = float2(rng.nextFloat(), rng.nextFloat());
+        Payload payload;
+        payload.color = float3(1, 1, 1);
+        payload.allowReflection = true;
+        payload.missed = false;
+        payload.rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
+
+        const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
         const float3 targetPos_WS = calculateRayTarget(idx + jitter, size);
 
         RayDesc ray;
@@ -65,10 +72,6 @@ void RayGeneration()
         ray.Direction = targetPos_WS - cameraParams.pos_WS;
         ray.TMin = 0.001;
         ray.TMax = 1000;
-
-        Payload payload;
-        payload.allowReflection = true;
-        payload.missed = false;
 
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
 
@@ -123,83 +126,41 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     hitInfo.normal_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
     hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    switch (InstanceID())
+    if (instanceData.materialId == MATERIAL_ID_INVALID)
     {
-    case 0:
-        HitMirror(payload, hitInfo);
-        break;
-    case 1:
-        HitFloor(payload, hitInfo);
-        break;
-    default:
-        HitCube(payload, hitInfo);
-        break;
-    }
-}
-
-void HitCube(inout Payload payload, HitInfo hitInfo)
-{
-    const float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
-
-    float3 color = hitInfo.normal_OS;
-
-    if (any(color < 0.f))
-    {
-        color += 1.f;
-    }
-
-    if (any(abs(hitInfo.uv - 0.5) > 0.47))
-    {
-        color = 0.25.rrr;
-    }
-
-    color *= saturate(dot(normal_WS, normalize(lightPos_WS))) + 0.33;
-    payload.color = color;
-}
-
-void HitMirror(inout Payload payload, HitInfo hitInfo)
-{
-    if (!payload.allowReflection)
-    {
+        payload.color = 0;
         return;
     }
 
-    float3 hitPos_WS = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-    float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
-    float3 reflectedDir_WS = reflect(normalize(WorldRayDirection()), normal_WS);
+    const Material material = materials[instanceData.materialId];
 
-    RayDesc mirrorRay;
-    mirrorRay.Origin = hitPos_WS;
-    mirrorRay.Direction = reflectedDir_WS;
-    mirrorRay.TMin = 0.001;
-    mirrorRay.TMax = 1000;
-
-    payload.allowReflection = false;
-
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
-}
-
-void HitFloor(inout Payload payload, HitInfo hitInfo)
-{
-    float3 hitPos_WS = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-
-    bool2 pattern = frac(hitPos_WS.xz) > 0.5;
-    payload.color = (pattern.x ^ pattern.y ? 0.6 : 0.4).rrr;
-
-    RayDesc shadowRay;
-    shadowRay.Origin = hitPos_WS;
-    shadowRay.Direction = lightPos_WS - hitPos_WS;
-    shadowRay.TMin = 0.001;
-    shadowRay.TMax = 1;
-
-    Payload shadow;
-    shadow.allowReflection = false;
-    shadow.missed = false;
-
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
-
-    if (!shadow.missed)
+    const float diffuseChance = material.diffWeight / (material.diffWeight + material.specWeight);
+    if (payload.rng.nextFloat() < diffuseChance)
     {
-        payload.color /= 2;
+        payload.color *= material.diffCol / diffuseChance;
+    }
+    else
+    {
+        if (!payload.allowReflection)
+        {
+            payload.color = 0;
+            return;
+        }
+
+        payload.color *= material.specCol / (1 - diffuseChance);
+
+        float3 hitPos_WS = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+        float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
+        float3 reflectedDir_WS = reflect(normalize(WorldRayDirection()), normal_WS);
+
+        RayDesc mirrorRay;
+        mirrorRay.Origin = hitPos_WS;
+        mirrorRay.Direction = reflectedDir_WS;
+        mirrorRay.TMin = 0.001;
+        mirrorRay.TMax = 1000;
+
+        payload.allowReflection = false;
+
+        TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
     }
 }

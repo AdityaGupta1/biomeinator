@@ -28,12 +28,14 @@ struct InstanceData
     uint materialId;
 };
 
+#define MATERIAL_ID_INVALID ~0u
+
 struct Material
 {
-    uint id;
-    uint pad0;
-    uint pad1;
-    uint pad2;
+#if !__hlsl
+public:
+    Material();
+#endif
 
     float diffWeight;
     float3 diffCol;
