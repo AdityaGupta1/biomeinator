@@ -101,6 +101,7 @@ public:
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
+
     ID3D12Resource* getDevMaterials();
 
     ID3D12Resource* getDevTlas();

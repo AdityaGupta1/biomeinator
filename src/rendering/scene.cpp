@@ -10,7 +10,8 @@
 
 using namespace DirectX;
 
-Instance::Instance(Scene* scene, uint32_t id) : scene(scene), id(id)
+Instance::Instance(Scene* scene, uint32_t id)
+    : scene(scene), id(id)
 {}
 
 void Instance::setMaterialId(uint32_t id)
@@ -57,6 +58,7 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     const uint32_t id = this->availableInstanceIds.front();
     this->availableInstanceIds.pop();
 
+    // can't use make_unique() here since the constructor is private and accessed through friend relationship
     std::unique_ptr<Instance> newInstance = std::unique_ptr<Instance>(new Instance(this, id));
     Instance* newInstancePtr = newInstance.get();
     this->instances.emplace(id, std::move(newInstance));
