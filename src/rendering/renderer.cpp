@@ -156,12 +156,12 @@ void init()
             transform *= XMMatrixTranslation(2, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            Material* material = scene.requestNewMaterial(frame0ToFreeList);
-            material->diffWeight = 0;
-            material->specWeight = 1;
-            material->specCol = { 1, 1, 1 };
-            scene.finalizeMaterial(material);
-            instance->setMaterialId(material->getId());
+            Material material;
+            material.diffWeight = 0;
+            material.specWeight = 1;
+            material.specCol = { 1, 1, 1 };
+            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
+            instance->setMaterialId(matId);
 
             scene.markInstanceReadyForBlasBuild(instance);
         }
@@ -176,11 +176,11 @@ void init()
             transform *= XMMatrixTranslation(0, 0, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            Material* material = scene.requestNewMaterial(frame0ToFreeList);
-            material->diffWeight = 1;
-            material->diffCol = { 1, 0, 0 };
-            scene.finalizeMaterial(material);
-            instance->setMaterialId(material->getId());
+            Material material;
+            material.diffWeight = 1;
+            material.diffCol = { 1, 0, 0 };
+            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
+            instance->setMaterialId(matId);
 
             scene.markInstanceReadyForBlasBuild(instance);
         }
@@ -196,11 +196,11 @@ void init()
             transform *= XMMatrixTranslation(-1.5, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
-            Material* material = scene.requestNewMaterial(frame0ToFreeList);
-            material->diffWeight = 1;
-            material->diffCol = { 0, 1, 0 };
-            scene.finalizeMaterial(material);
-            instance->setMaterialId(material->getId());
+            Material material;
+            material.diffWeight = 1;
+            material.diffCol = { 0, 1, 0 };
+            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
+            instance->setMaterialId(matId);
 
             scene.markInstanceReadyForBlasBuild(instance);
         }
@@ -537,7 +537,7 @@ void updateFps(double deltaTime)
 }
 
 std::deque<Instance*> cubeQueue;
-Material* smallCubeMaterial{ nullptr };
+uint32_t smallCubeMaterialId{ MATERIAL_ID_INVALID };
 
 void render()
 {
@@ -555,11 +555,11 @@ void render()
     beginFrame();
 
     {
-        if (smallCubeMaterial == nullptr)
+        if (smallCubeMaterialId == MATERIAL_ID_INVALID)
         {
-            smallCubeMaterial = scene.requestNewMaterial(frameCtx.toFreeList);
-            smallCubeMaterial->diffCol = { 0, 1, 1 };
-            scene.finalizeMaterial(smallCubeMaterial);
+            Material material;
+            material.diffCol = { 0, 1, 1 };
+            smallCubeMaterialId = scene.addMaterial(frameCtx.toFreeList, &material);
         }
 
         static std::mt19937 rng(std::random_device{}());
@@ -579,7 +579,7 @@ void render()
             transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
             XMStoreFloat3x4(&instance->transform, transform);
 
-            instance->setMaterialId(smallCubeMaterial->getId());
+            instance->setMaterialId(smallCubeMaterialId);
 
             scene.markInstanceReadyForBlasBuild(instance);
             cubeQueue.push_back(instance);
