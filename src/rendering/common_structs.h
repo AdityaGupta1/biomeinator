@@ -36,9 +36,6 @@ struct Material
 public:
     Material();
 #endif
-    uint pad0;
-    uint pad1;
-    uint pad2;
 
     float diffWeight;
     float3 diffCol;
