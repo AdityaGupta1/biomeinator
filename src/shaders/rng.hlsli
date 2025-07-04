@@ -43,3 +43,8 @@ RandomSampler initRandomSampler3(uint3 seed)
 {
     return initRandomSampler(seed.x ^ hash(seed.y ^ hash(seed.z)));
 }
+
+RandomSampler initRandomSampler4(uint4 seed)
+{
+    return initRandomSampler(seed.x ^ hash(seed.y ^ hash(seed.z ^ hash(seed.w))));
+}

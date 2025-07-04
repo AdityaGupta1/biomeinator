@@ -452,7 +452,7 @@ void initPipeline()
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-        .MaxPayloadSizeInBytes = 24,
+        .MaxPayloadSizeInBytes = 80,
         .MaxAttributeSizeInBytes = 8,
     };
 

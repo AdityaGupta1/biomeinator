@@ -1,28 +1,27 @@
 #include "common_structs.hlsli"
-#include "global_params.hlsli"
 #include "path_tracing.hlsli"
 
 RWTexture2D<float4> renderTarget : register(u0);
 
-static const uint numSamplesPerPixel = 4;
+static const uint numSamplesPerPixel = 16;
 
 [shader("raygeneration")]
 void RayGeneration()
 {
-    const uint2 idx = DispatchRaysIndex().xy;
+    const uint2 pixelIdx = DispatchRaysIndex().xy;
     const float2 size = DispatchRaysDimensions().xy;
 
     float3 accumulatedColor = float3(0, 0, 0);
-    for (uint i = 0; i < numSamplesPerPixel; ++i)
+    for (uint sampleIdx = 0; sampleIdx < numSamplesPerPixel; ++sampleIdx)
     {
         Payload payload;
-        payload.color = float3(1, 1, 1);
+        payload.pathWeight = float3(1, 1, 1);
+        payload.pathColor = float3(0, 0, 0);
         payload.flags = 0;
-        payload.flags |= PAYLOAD_FLAG_ALLOW_REFLECTION;
-        payload.rng = initRandomSampler3(uint3(idx, sceneParams.frameNumber));
+        payload.rng = initRandomSampler4(uint4(pixelIdx, sampleIdx, sceneParams.frameNumber));
 
         const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
-        const float3 targetPos_WS = calculateRayTarget(idx + jitter, size);
+        const float3 targetPos_WS = calculateRayTarget(pixelIdx + jitter, size);
 
         RayDesc ray;
         ray.Origin = cameraParams.pos_WS;
@@ -30,12 +29,12 @@ void RayGeneration()
         ray.TMin = 0.001;
         ray.TMax = 1000;
         
-        const bool success = pathTraceRay(ray, payload);
+        bool success = pathTraceRay(ray, payload);
         if (success)
         {
-            accumulatedColor += payload.color;
+            accumulatedColor += payload.pathColor;
         }
     }
 
-    renderTarget[idx] = float4(accumulatedColor / numSamplesPerPixel, 1);
+    renderTarget[pixelIdx] = float4(accumulatedColor / numSamplesPerPixel, 1);
 }

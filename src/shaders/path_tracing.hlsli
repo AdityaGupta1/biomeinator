@@ -1,22 +1,32 @@
 #pragma once
 
 #include "global_params.hlsli"
+#include "math.hlsli"
 #include "rng.hlsli"
 
-#define PAYLOAD_FLAG_ALLOW_REFLECTION (1 << 0)
+#define MAX_PATH_DEPTH 4
 
-struct Payload
-{
-    float3 color;
-    uint flags;
-
-    RandomSampler rng;
-};
+#define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
 
 struct HitInfo
 {
-    float3 normal_OS;
+    float3 normal_WS;
+    float hitT;
+
     float2 uv;
+};
+
+struct Payload
+{
+    float3 pathWeight;
+    uint flags;
+
+    float3 pathColor;
+    uint materialId;
+
+    HitInfo hitInfo;
+
+    RandomSampler rng;
 };
 
 RaytracingAccelerationStructure scene : register(t0);
@@ -43,17 +53,69 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
     return target;
 }
 
-bool pathTraceRay(const RayDesc ray, inout Payload payload)
+float3 evalRayPos(const RayDesc ray, const float t)
 {
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
-    return true;
+    return ray.Origin + ray.Direction * t;
 }
 
-[shader("miss")]
-void Miss(inout Payload payload)
+void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
-    float3 skyColor = WorldRayDirection().y > 0 ? float3(1, 1, 1) : 0;
-    payload.color = skyColor;
+    const Material material = materials[payload.materialId];
+
+    const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
+    const float3 normal_WS = payload.hitInfo.normal_WS;
+
+    const float diffuseChance = material.diffWeight / (material.diffWeight + material.specWeight);
+    float pdf;
+    if (payload.rng.nextFloat() < diffuseChance)
+    {
+        payload.pathWeight *= material.diffCol;
+        pdf = diffuseChance;
+
+        const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
+        const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+
+        ray.Origin = hitPos_WS;
+        ray.Direction = newDir_WS;
+        ray.TMin = 0.001;
+        ray.TMax = 1000;
+    }
+    else
+    {
+        payload.pathWeight *= material.specCol;
+        pdf = 1 - diffuseChance;
+
+        const float3 reflectedDir_WS = reflect(normalize(ray.Direction), payload.hitInfo.normal_WS);
+
+        ray.Origin = hitPos_WS;
+        ray.Direction = reflectedDir_WS;
+        ray.TMin = 0.001;
+        ray.TMax = 1000;
+    }
+
+    payload.pathWeight /= pdf;
+}
+
+bool pathTraceRay(RayDesc ray, inout Payload payload)
+{
+    for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
+    {
+        TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+
+        if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
+        {
+            return true;
+        }
+
+        if (payload.materialId == MATERIAL_ID_INVALID)
+        {
+            return false;
+        }
+
+        evaluateBsdf(ray, payload);
+    }
+
+    return false;
 }
 
 [shader("closesthit")]
@@ -83,45 +145,18 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
 
-    HitInfo hitInfo;
-    hitInfo.normal_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    const float3 normal_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
+    payload.hitInfo.normal_WS = normalize(mul(normal_OS, (float3x3) ObjectToWorld4x3()));
+    payload.hitInfo.hitT = RayTCurrent();
+    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    if (instanceData.materialId == MATERIAL_ID_INVALID)
-    {
-        payload.color = 0;
-        return;
-    }
+    payload.materialId = instanceData.materialId;
+}
 
-    const Material material = materials[instanceData.materialId];
-
-    const float diffuseChance = material.diffWeight / (material.diffWeight + material.specWeight);
-    if (payload.rng.nextFloat() < diffuseChance)
-    {
-        payload.color *= material.diffCol / diffuseChance;
-    }
-    else
-    {
-        if (!(payload.flags & PAYLOAD_FLAG_ALLOW_REFLECTION))
-        {
-            payload.color = 0;
-            return;
-        }
-
-        payload.color *= material.specCol / (1 - diffuseChance);
-
-        float3 hitPos_WS = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-        float3 normal_WS = normalize(mul(hitInfo.normal_OS, (float3x3) ObjectToWorld4x3()));
-        float3 reflectedDir_WS = reflect(normalize(WorldRayDirection()), normal_WS);
-
-        RayDesc mirrorRay;
-        mirrorRay.Origin = hitPos_WS;
-        mirrorRay.Direction = reflectedDir_WS;
-        mirrorRay.TMin = 0.001;
-        mirrorRay.TMax = 1000;
-
-        payload.flags &= ~PAYLOAD_FLAG_ALLOW_REFLECTION;
-
-        TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
-    }
+[shader("miss")]
+void Miss(inout Payload payload)
+{
+    float3 Li = WorldRayDirection().y > 0 ? float3(1, 1, 1) : 0;
+    payload.pathColor += payload.pathWeight * Li;
+    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }
