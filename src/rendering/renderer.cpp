@@ -18,7 +18,7 @@
 
 #include "shader.fxh"
 
-#define USE_DEFAULT_SCENE 1
+#define USE_DEFAULT_SCENE 0
 
 using namespace DirectX;
 
@@ -630,25 +630,28 @@ void render()
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    cmdList->SetPipelineState1(pso.Get());
-    cmdList->SetComputeRootSignature(rootSignature.Get());
-    ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
-    cmdList->SetDescriptorHeaps(1, heaps);
-    const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
-    uint32_t paramIdx = 0;
-    cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
+    if (scene.getDevTlas() != nullptr)
+    {
+        cmdList->SetPipelineState1(pso.Get());
+        cmdList->SetComputeRootSignature(rootSignature.Get());
+        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+        cmdList->SetDescriptorHeaps(1, heaps);
+        const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
+        uint32_t paramIdx = 0;
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+        cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
 
-    const auto renderTargetDesc = renderTarget->GetDesc();
+        const auto renderTargetDesc = renderTarget->GetDesc();
 
-    dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
-    dispatchDesc.Height = renderTargetDesc.Height;
-    cmdList->DispatchRays(&dispatchDesc);
+        dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
+        dispatchDesc.Height = renderTargetDesc.Height;
+        cmdList->DispatchRays(&dispatchDesc);
+    }
 
     ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
