@@ -49,6 +49,7 @@ FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
 uint32_t frameCtxIdx = 0;
 uint64_t nextFenceValue = 1;
 HANDLE fenceEvent;
+HANDLE frameLatencyWaitable;
 
 uint32_t frameNumber = 0;
 
@@ -277,10 +278,14 @@ void initRenderTarget()
         .SampleDesc = NO_AA,
         .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+        .Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
     factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1);
     swapChain1.As(&swapChain);
+
+    swapChain->SetMaximumFrameLatency(1);
+    frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
     factory.Reset();
 
@@ -662,6 +667,7 @@ void beginFrame()
 {
     FrameContext& frame = frameCtxs[frameCtxIdx];
 
+    WaitForSingleObject(swapChain->GetFrameLatencyWaitableObject(), INFINITE);
     waitForFence(frame.fenceValue);
 
     frame.toFreeList.freeAll();
