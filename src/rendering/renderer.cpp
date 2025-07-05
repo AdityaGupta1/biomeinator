@@ -270,6 +270,8 @@ void initDevice()
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
+constexpr uint32_t swapChainFlags =
+    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 ComPtr<ID3D12DescriptorHeap> uavHeap;
 void initRenderTarget()
 {
@@ -278,14 +280,11 @@ void initRenderTarget()
         .SampleDesc = NO_AA,
         .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
+        .Flags = swapChainFlags,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
     factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1);
     swapChain1.As(&swapChain);
-
-    swapChain->SetMaximumFrameLatency(1);
-    frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
     factory.Reset();
 
@@ -314,7 +313,9 @@ void resize()
 
     flush();
 
-    swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, swapChainFlags);
+    swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
+    frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
     if (renderTarget)
     {
@@ -646,7 +647,7 @@ void render()
     cmdQueue->Signal(fence.Get(), fenceValue);
     frameCtx.fenceValue = fenceValue;
 
-    swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
+    swapChain->Present(1, 0);
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
