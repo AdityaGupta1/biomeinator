@@ -592,7 +592,7 @@ void saveScreenshot()
 
     for (size_t i = 0; i < pixels.size(); i += 4)
     {
-        std::swap(pixels[i], pixels[i + 2]);
+        std::swap(pixels[i], pixels[i + 2]); // convert BGRA to RGBA
     }
 
     wchar_t docPath[MAX_PATH];
@@ -606,7 +606,7 @@ void saveScreenshot()
         GetLocalTime(&st);
         char fileName[64];
         sprintf_s(fileName,
-                  "%04d%02d%02d_%02d%02d%02d.png",
+                  "%04d.%02d.%02d_%02d-%02d-%02d.png",
                   st.wYear,
                   st.wMonth,
                   st.wDay,
