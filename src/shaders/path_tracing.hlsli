@@ -62,7 +62,10 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
     const Material material = materials[payload.materialId];
 
-    payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
+    if (material.emissiveStrength > 0)
+    {
+        payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
+    }
 
     const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
     const float3 normal_WS = payload.hitInfo.normal_WS;
@@ -74,12 +77,12 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
         return;
     }
 
-    const float diffuseChance = material.diffuseWeight / totalWeight;
-    float pdf;
-    if (payload.rng.nextFloat() < diffuseChance)
+    // for now, pick either fully diffuse or fully specular
+    // will deal with proper layer selection when I have more complicated bsdfs (rough reflection, etc.)
+
+    if (material.diffuseWeight > 0)
     {
         payload.pathWeight *= material.diffuseColor;
-        pdf = diffuseChance;
 
         const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
         const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
@@ -89,10 +92,9 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
         ray.TMin = 0.001;
         ray.TMax = 1000;
     }
-    else
+    else // material.specularWeight > 0
     {
         payload.pathWeight *= material.specularColor;
-        pdf = 1 - diffuseChance;
 
         const float3 reflectedDir_WS = reflect(normalize(ray.Direction), payload.hitInfo.normal_WS);
 
@@ -101,8 +103,6 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
         ray.TMin = 0.001;
         ray.TMax = 1000;
     }
-
-    payload.pathWeight /= pdf;
 }
 
 bool pathTraceRay(RayDesc ray, inout Payload payload)
