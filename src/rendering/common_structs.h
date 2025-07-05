@@ -37,11 +37,14 @@ public:
     Material();
 #endif
 
-    float diffWeight;
-    float3 diffCol;
+    float diffuseWeight;
+    float3 diffuseColor;
 
-    float specWeight;
-    float3 specCol;
+    float specularWeight;
+    float3 specularColor;
+
+    float emissiveStrength;
+    float3 emissiveColor;
 };
 
 struct CameraParams
