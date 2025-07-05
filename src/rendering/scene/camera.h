@@ -4,13 +4,15 @@
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
 
+#include <numbers>
+
 class Camera
 {
 private:
     CameraParams params{};
 
     float phi{ 0 };
-    float theta{ 0 };
+    float theta{ std::numbers::pi_v<float> };
 
     float defaultFovYRadians{ 0 };
     float currentFovYRadians{ 0 };
