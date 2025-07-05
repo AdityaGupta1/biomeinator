@@ -485,7 +485,7 @@ void initPipeline()
     };
 
     D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-        .MaxTraceRecursionDepth = 3,
+        .MaxTraceRecursionDepth = 1,
     };
 
     D3D12_STATE_SUBOBJECT subobjects[] = {
