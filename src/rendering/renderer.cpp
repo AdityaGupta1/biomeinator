@@ -18,6 +18,8 @@
 
 #include "shader.fxh"
 
+#define USE_DEFAULT_SCENE 1
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -61,6 +63,7 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 Scene scene;
 
+#if USE_DEFAULT_SCENE
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
     {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
@@ -120,6 +123,7 @@ const std::vector<uint32_t> cubeIdxs = {
     // +z
     20, 21, 22, 20, 22, 23
 };
+#endif // USE_DEFAULT_SCENE
 
 void init()
 {
@@ -142,6 +146,7 @@ void init()
 
     scene.init();
 
+#if USE_DEFAULT_SCENE
     {
         auto& frame0ToFreeList = frameCtxs[0].toFreeList;
 
@@ -207,6 +212,7 @@ void init()
             scene.markInstanceReadyForBlasBuild(instance);
         }
     }
+#endif // USE_DEFAULT_SCENE
 
     initRootSignature();
     initPipeline();
@@ -548,8 +554,10 @@ void updateFps(double deltaTime)
     }
 }
 
+#if USE_DEFAULT_SCENE
 std::deque<Instance*> cubeQueue;
 uint32_t smallCubeMaterialId{ MATERIAL_ID_INVALID };
+#endif // USE_DEFAULT_SCENE
 
 void render()
 {
@@ -566,6 +574,7 @@ void render()
 
     beginFrame();
 
+#if USE_DEFAULT_SCENE
     {
         if (smallCubeMaterialId == MATERIAL_ID_INVALID)
         {
@@ -617,6 +626,7 @@ void render()
             }
         }
     }
+#endif // USE_DEFAULT_SCENE
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
