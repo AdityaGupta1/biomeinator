@@ -2,10 +2,14 @@
 
 #include "dxr_includes.h"
 
+#include <string>
+
 namespace Renderer
 {
 
 void init();
+
+void loadGltf(const std::string& filePath);
 
 void resize();
 

@@ -9,6 +9,7 @@
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
 #include "scene/camera.h"
+#include "scene/gltf_loader.h"
 #include "scene/scene.h"
 
 #include <chrono>
@@ -209,6 +210,11 @@ void init()
 
     initRootSignature();
     initPipeline();
+}
+
+void loadGltf(const std::string& filePath)
+{
+    GltfLoader::loadGltf(filePath, scene);
 }
 
 ComPtr<IDXGIFactory4> factory;

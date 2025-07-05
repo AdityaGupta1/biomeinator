@@ -1,6 +1,12 @@
 #include "window_manager.h"
 
 #include "renderer.h"
+#include "scene/gltf_loader.h"
+
+#include <commdlg.h>
+
+#include <locale>
+#include <codecvt>
 
 namespace WindowManager
 {
@@ -26,6 +32,26 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
         {
             Renderer::flush();
             PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        else if (wparam == 'O' && (GetKeyState(VK_CONTROL) & 0x8000))
+        {
+            OPENFILENAMEW ofn{};
+            wchar_t filePath[MAX_PATH] = L"";
+
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = hwnd;
+            ofn.lpstrFile = filePath;
+            ofn.nMaxFile = MAX_PATH;
+            ofn.lpstrFilter = L"glTF Files (*.gltf; *.glb)\0*.gltf;*.glb\0";
+            ofn.lpstrTitle = L"Open glTF file";
+            ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+            if (GetOpenFileNameW(&ofn))
+            {
+                std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+                const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
+                Renderer::loadGltf(filePathStr);
+            }
         }
         break;
     case WM_SYSKEYDOWN:      // = alt key pressed
