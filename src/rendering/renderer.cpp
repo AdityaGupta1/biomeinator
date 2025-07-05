@@ -278,7 +278,7 @@ void initRenderTarget()
         .SampleDesc = NO_AA,
         .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT,
+        .Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
     factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1);
@@ -646,7 +646,7 @@ void render()
     cmdQueue->Signal(fence.Get(), fenceValue);
     frameCtx.fenceValue = fenceValue;
 
-    swapChain->Present(1, 0);
+    swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
