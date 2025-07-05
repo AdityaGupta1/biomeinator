@@ -158,9 +158,9 @@ void init()
             XMStoreFloat3x4(&instance->transform, transform);
 
             Material material;
-            material.diffWeight = 0;
-            material.specWeight = 1;
-            material.specCol = { 1, 1, 1 };
+            material.diffuseWeight = 0;
+            material.specularWeight = 1;
+            material.specularColor = { 1, 1, 1 };
             const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
             instance->setMaterialId(matId);
 
@@ -178,8 +178,8 @@ void init()
             XMStoreFloat3x4(&instance->transform, transform);
 
             Material material;
-            material.diffWeight = 1;
-            material.diffCol = { 1, 0, 0 };
+            material.diffuseWeight = 1;
+            material.diffuseColor = { 1, 0, 0 };
             const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
             instance->setMaterialId(matId);
 
@@ -198,8 +198,8 @@ void init()
             XMStoreFloat3x4(&instance->transform, transform);
 
             Material material;
-            material.diffWeight = 1;
-            material.diffCol = { 0, 1, 0 };
+            material.diffuseWeight = 1;
+            material.diffuseColor = { 0, 1, 0 };
             const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
             instance->setMaterialId(matId);
 
@@ -564,10 +564,10 @@ void render()
         if (smallCubeMaterialId == MATERIAL_ID_INVALID)
         {
             Material material;
-            material.diffWeight = 0;
-            material.specWeight = 0;
-            material.emissiveStrength = 1;
-            material.emissiveCol = { 1, 1, 1 };
+            material.diffuseWeight = 0;
+            material.specularWeight = 0;
+            material.emissiveStrength = 5;
+            material.emissiveColor = { 1, 1, 1 };
             smallCubeMaterialId = scene.addMaterial(frameCtx.toFreeList, &material);
         }
 
