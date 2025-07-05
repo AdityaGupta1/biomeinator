@@ -59,9 +59,11 @@ void init()
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    WNDCLASSW wcw = { .lpfnWndProc = &onWindowMessage,
-                      .hCursor = LoadCursor(nullptr, IDC_ARROW),
-                      .lpszClassName = L"GigaMinecraftClass" };
+    WNDCLASSW wcw = {
+        .lpfnWndProc = &onWindowMessage,
+        .hCursor = LoadCursor(nullptr, IDC_ARROW),
+        .lpszClassName = L"GigaMinecraftClass",
+    };
     RegisterClassW(&wcw);
 
     hwnd = CreateWindowExW(0,
