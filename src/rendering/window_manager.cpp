@@ -15,25 +15,16 @@ HWND hwnd;
 
 bool didWindowJustRegainFocus = true;
 
-LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+static void onKeyDown(WPARAM wparam)
 {
-    switch (msg)
+    switch (wparam)
     {
-    case WM_CLOSE:
-    case WM_DESTROY:
-        PostQuitMessage(0);
+    case VK_ESCAPE:
+        Renderer::flush();
+        PostMessage(hwnd, WM_CLOSE, 0, 0);
         break;
-    case WM_SIZING:
-    case WM_SIZE:
-        Renderer::resize();
-        break;
-    case WM_KEYDOWN:
-        if (wparam == VK_ESCAPE)
-        {
-            Renderer::flush();
-            PostMessage(hwnd, WM_CLOSE, 0, 0);
-        }
-        else if (wparam == 'O' && (GetKeyState(VK_CONTROL) & 0x8000))
+    case 'O':
+        if (GetKeyState(VK_CONTROL) & 0x8000)
         {
             OPENFILENAMEW ofn{};
             wchar_t filePath[MAX_PATH] = L"";
@@ -49,12 +40,36 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
             if (GetOpenFileNameW(&ofn))
             {
                 std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-                const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
+                const std::string filePathStr =
+                    converter.to_bytes(std::wstring(filePath, MAX_PATH));
                 // strip hidden characters which otherwise cause issues with file extension comparison
                 const std::string filePathStrClean = std::string(filePathStr.c_str());
                 Renderer::loadGltf(filePathStrClean);
             }
         }
+        break;
+    case 'P':
+        Renderer::saveScreenshot();
+        break;
+    default:
+        break;
+    }
+}
+
+static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    switch (msg)
+    {
+    case WM_CLOSE:
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    case WM_SIZING:
+    case WM_SIZE:
+        Renderer::resize();
+        break;
+    case WM_KEYDOWN:
+        onKeyDown(wparam);
         break;
     case WM_SYSKEYDOWN:      // = alt key pressed
         if (wparam == VK_F4) // allow alt + f4
