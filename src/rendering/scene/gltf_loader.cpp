@@ -5,6 +5,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tinygltf/tiny_gltf.h"
 
+#include <filesystem>
+#include <string>
+
 #include "rendering/buffer/to_free_list.h"
 #include "scene.h"
 
@@ -13,19 +16,18 @@ using namespace tinygltf;
 namespace GltfLoader
 {
 
-void loadGltf(const std::string& filePath, ::Scene& scene)
+void loadGltf(const std::string& filePathStr, ::Scene& scene)
 {
-    printf("Loading GLTF file: %s\n", filePath.c_str());
+    printf("Loading GLTF file: %s\n", filePathStr.c_str());
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err;
     std::string warn;
 
-    const std::string extension = filePath.substr(filePath.find_last_of('.') + 1);
-    const bool loaded = (extension == "glb")
-                            ? loader.LoadBinaryFromFile(&model, &err, &warn, filePath)
-                            : loader.LoadASCIIFromFile(&model, &err, &warn, filePath);
+    const bool isGlb = std::filesystem::path(filePathStr).extension() == ".glb";
+    const bool loaded = isGlb ? loader.LoadBinaryFromFile(&model, &err, &warn, filePathStr)
+                              : loader.LoadASCIIFromFile(&model, &err, &warn, filePathStr);
 
     if (!warn.empty())
     {
@@ -56,6 +58,11 @@ void loadGltf(const std::string& filePath, ::Scene& scene)
                 static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[1]),
                 static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[2]),
             };
+
+            if (material.diffuseColor.x == 0 && material.diffuseColor.y == 0 && material.diffuseColor.z == 0)
+            {
+                material.diffuseWeight = 0.f;
+            }
         }
 
         if (gltfMat.emissiveFactor.size() == 3)
@@ -262,4 +269,4 @@ void loadGltf(const std::string& filePath, ::Scene& scene)
     toFreeList.freeAll();
 }
 
-} // namespace GLtfLoader
+} // namespace GltfLoader

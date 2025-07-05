@@ -218,9 +218,9 @@ void init()
     initPipeline();
 }
 
-void loadGltf(const std::string& filePath)
+void loadGltf(const std::string& filePathStr)
 {
-    GltfLoader::loadGltf(filePath, scene);
+    GltfLoader::loadGltf(filePathStr, scene);
 }
 
 ComPtr<IDXGIFactory4> factory;

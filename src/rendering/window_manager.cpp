@@ -50,7 +50,9 @@ LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
             {
                 std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
                 const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
-                Renderer::loadGltf(filePathStr);
+                // strip hidden characters which otherwise cause issues with file extension comparison
+                const std::string filePathStrClean = std::string(filePathStr.c_str());
+                Renderer::loadGltf(filePathStrClean);
             }
         }
         break;
