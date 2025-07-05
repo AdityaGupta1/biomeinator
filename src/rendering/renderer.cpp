@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <vector>
 #include <cstdio>
+#include <shlobj.h>
 
 #include "tinygltf/stb_image_write.h"
 
@@ -589,23 +590,33 @@ void saveScreenshot()
     DeleteDC(hdcMem);
     ReleaseDC(hwnd, hdcWindow);
 
-    const std::filesystem::path dir("_screenshots");
-    std::filesystem::create_directories(dir);
+    for (size_t i = 0; i < pixels.size(); i += 4)
+    {
+        std::swap(pixels[i], pixels[i + 2]);
+    }
 
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    char fileName[64];
-    sprintf_s(fileName,
-              "%04d%02d%02d_%02d%02d%02d.png",
-              st.wYear,
-              st.wMonth,
-              st.wDay,
-              st.wHour,
-              st.wMinute,
-              st.wSecond);
+    wchar_t docPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
+    {
+        const std::filesystem::path dir =
+            std::filesystem::path(docPath) / L"biomeinator" / "screenshots";
+        std::filesystem::create_directories(dir);
 
-    const std::filesystem::path path = dir / fileName;
-    stbi_write_png(path.string().c_str(), width, height, 4, pixels.data(), width * 4);
+        SYSTEMTIME st{};
+        GetLocalTime(&st);
+        char fileName[64];
+        sprintf_s(fileName,
+                  "%04d%02d%02d_%02d%02d%02d.png",
+                  st.wYear,
+                  st.wMonth,
+                  st.wDay,
+                  st.wHour,
+                  st.wMinute,
+                  st.wSecond);
+
+        const std::filesystem::path path = dir / fileName;
+        stbi_write_png(path.string().c_str(), width, height, 4, pixels.data(), width * 4);
+    }
 }
 
 #if USE_DEFAULT_SCENE
