@@ -20,6 +20,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 {
     printf("Loading GLTF file: %s\n", filePathStr.c_str());
 
+    scene.clear();
+
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err;

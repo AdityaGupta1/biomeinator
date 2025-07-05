@@ -36,6 +36,21 @@ void Scene::init()
     }
 }
 
+void Scene::clear()
+{
+    this->instances.clear();
+    this->instancesReadyForBlasBuild.clear();
+    this->availableInstanceIds = {};
+    for (uint32_t instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
+    {
+        this->availableInstanceIds.push(instanceIdx);
+    }
+
+    this->nextMaterialId = 0;
+    this->isTlasDirty = false;
+    this->dev_tlas = nullptr;
+}
+
 void Scene::initInstanceBuffers()
 {
     dev_instanceDescs = BufferHelper::createBasicBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * this->maxNumInstances,
