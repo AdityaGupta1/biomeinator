@@ -91,6 +91,8 @@ private:
 public:
     void init();
 
+    void clear();
+
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);

@@ -8,7 +8,7 @@ using namespace DirectX;
 
 void Camera::init(float defaultFovYRadians)
 {
-    this->params.pos_WS = { 0, 1.5f, -7.f };
+    this->params.pos_WS = { 0, 1.5f, 7.f };
 
     this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
     this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
@@ -47,7 +47,7 @@ void Camera::moveLinear(XMFLOAT3 linearMovement)
     XMStoreFloat3(&this->params.pos_WS, pos);
 }
 
-constexpr float absMaxPhi = std::numbers::pi / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
+constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
 
 void Camera::rotate(float dTheta, float dPhi)
 {

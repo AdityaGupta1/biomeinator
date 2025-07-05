@@ -20,6 +20,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 {
     printf("Loading GLTF file: %s\n", filePathStr.c_str());
 
+    scene.clear();
+
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err;
@@ -75,6 +77,20 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             const bool anyEmissive = material.emissiveColor.x != 0 || material.emissiveColor.y != 0
                                      || material.emissiveColor.z != 0;
             material.emissiveStrength = anyEmissive ? 1.f : 0.f;
+        }
+
+        const auto emissiveExtIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
+        if (emissiveExtIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = emissiveExtIt->second;
+            if (ext.IsObject() && ext.Has("emissiveStrength"))
+            {
+                const tinygltf::Value& val = ext.Get("emissiveStrength");
+                if (val.IsNumber())
+                {
+                    material.emissiveStrength = static_cast<float>(val.GetNumberAsDouble());
+                }
+            }
         }
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
