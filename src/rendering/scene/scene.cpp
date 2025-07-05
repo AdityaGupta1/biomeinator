@@ -47,6 +47,7 @@ void Scene::clear()
     }
 
     this->nextMaterialId = 0;
+
     this->isTlasDirty = false;
     this->dev_tlas = nullptr;
 }

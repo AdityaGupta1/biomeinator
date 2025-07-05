@@ -79,6 +79,20 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             material.emissiveStrength = anyEmissive ? 1.f : 0.f;
         }
 
+        const auto emissiveExtIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
+        if (emissiveExtIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = emissiveExtIt->second;
+            if (ext.IsObject() && ext.Has("emissiveStrength"))
+            {
+                const tinygltf::Value& val = ext.Get("emissiveStrength");
+                if (val.IsNumber())
+                {
+                    material.emissiveStrength = static_cast<float>(val.GetNumberAsDouble());
+                }
+            }
+        }
+
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIds.push_back(id);
     }
