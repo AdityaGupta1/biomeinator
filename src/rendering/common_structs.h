@@ -42,6 +42,9 @@ public:
 
     float specWeight;
     float3 specCol;
+
+    float emissiveStrength;
+    float3 emissiveCol;
 };
 
 struct CameraParams

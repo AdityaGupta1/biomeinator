@@ -564,7 +564,10 @@ void render()
         if (smallCubeMaterialId == MATERIAL_ID_INVALID)
         {
             Material material;
-            material.diffCol = { 0, 1, 1 };
+            material.diffWeight = 0;
+            material.specWeight = 0;
+            material.emissiveStrength = 1;
+            material.emissiveCol = { 1, 1, 1 };
             smallCubeMaterialId = scene.addMaterial(frameCtx.toFreeList, &material);
         }
 

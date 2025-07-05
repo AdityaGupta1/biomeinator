@@ -62,10 +62,19 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
     const Material material = materials[payload.materialId];
 
+    payload.pathColor += payload.pathWeight * material.emissiveCol * material.emissiveStrength;
+
     const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
     const float3 normal_WS = payload.hitInfo.normal_WS;
 
-    const float diffuseChance = material.diffWeight / (material.diffWeight + material.specWeight);
+    const float totalWeight = material.diffWeight + material.specWeight;
+    if (totalWeight == 0)
+    {
+        payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+        return;
+    }
+
+    const float diffuseChance = material.diffWeight / totalWeight;
     float pdf;
     if (payload.rng.nextFloat() < diffuseChance)
     {
@@ -156,7 +165,7 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    float3 Li = WorldRayDirection().y > 0 ? float3(1, 1, 1) : 0;
+    const float3 Li = float3(0, 0, 0);
     payload.pathColor += payload.pathWeight * Li;
     payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }
