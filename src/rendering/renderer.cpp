@@ -15,6 +15,11 @@
 #include <chrono>
 #include <random>
 #include <deque>
+#include <filesystem>
+#include <vector>
+#include <cstdio>
+
+#include "tinygltf/stb_image_write.h"
 
 #include "shader.fxh"
 
@@ -552,6 +557,55 @@ void updateFps(double deltaTime)
         std::wstring title = L"Giga Minecraft - FPS: " + std::to_wstring(lastFps);
         SetWindowTextW(hwnd, title.c_str());
     }
+}
+
+void saveScreenshot()
+{
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
+
+    const HDC hdcWindow = GetDC(hwnd);
+    const HDC hdcMem = CreateCompatibleDC(hdcWindow);
+    const HBITMAP hbm = CreateCompatibleBitmap(hdcWindow, width, height);
+    const HGDIOBJ old = SelectObject(hdcMem, hbm);
+
+    BitBlt(hdcMem, 0, 0, width, height, hdcWindow, 0, 0, SRCCOPY);
+
+    BITMAPINFOHEADER bi{};
+    bi.biSize = sizeof(bi);
+    bi.biWidth = width;
+    bi.biHeight = -height;
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+
+    std::vector<uint8_t> pixels(width * height * 4);
+    GetDIBits(hdcWindow, hbm, 0, height, pixels.data(), reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS);
+
+    SelectObject(hdcMem, old);
+    DeleteObject(hbm);
+    DeleteDC(hdcMem);
+    ReleaseDC(hwnd, hdcWindow);
+
+    const std::filesystem::path dir("_screenshots");
+    std::filesystem::create_directories(dir);
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    char fileName[64];
+    sprintf_s(fileName,
+              "%04d%02d%02d_%02d%02d%02d.png",
+              st.wYear,
+              st.wMonth,
+              st.wDay,
+              st.wHour,
+              st.wMinute,
+              st.wSecond);
+
+    const std::filesystem::path path = dir / fileName;
+    stbi_write_png(path.string().c_str(), width, height, 4, pixels.data(), width * 4);
 }
 
 #if USE_DEFAULT_SCENE
