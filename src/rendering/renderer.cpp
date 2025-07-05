@@ -20,7 +20,7 @@
 #include <cstdio>
 #include <shlobj.h>
 
-#include "tinygltf/stb_image_write.h"
+#include "stb/stb_image_write.h"
 
 #include "shader.fxh"
 
