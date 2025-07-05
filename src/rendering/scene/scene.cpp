@@ -1,10 +1,10 @@
 #include "scene.h"
 
-#include "buffer/acs_helper.h"
-#include "buffer/buffer_helper.h"
-#include "buffer/to_free_list.h"
-#include "dxr_common.h"
-#include "renderer.h"
+#include "rendering/buffer/acs_helper.h"
+#include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/to_free_list.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
 
 #include <stdexcept>
 

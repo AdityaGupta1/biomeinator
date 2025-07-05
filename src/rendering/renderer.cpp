@@ -2,14 +2,14 @@
 
 #include "dxr_common.h"
 
-#include "camera.h"
 #include "param_block_manager.h"
-#include "scene.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "scene/camera.h"
+#include "scene/scene.h"
 
 #include <chrono>
 #include <random>

@@ -1,9 +1,8 @@
 #pragma once
 
-#include "dxr_includes.h"
-
-#include "common_structs.h"
-#include "host_structs.h"
+#include "rendering/common_structs.h"
+#include "rendering/dxr_includes.h"
+#include "rendering/host_structs.h"
 
 class Camera
 {

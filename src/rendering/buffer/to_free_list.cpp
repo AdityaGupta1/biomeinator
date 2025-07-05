@@ -1,7 +1,7 @@
 #include "to_free_list.h"
 
 #include "managed_buffer.h"
-#include "rendering/scene.h"
+#include "rendering/scene/scene.h"
 
 ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
 {
