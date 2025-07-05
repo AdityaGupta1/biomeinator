@@ -667,7 +667,7 @@ void beginFrame()
 {
     FrameContext& frame = frameCtxs[frameCtxIdx];
 
-    WaitForSingleObject(swapChain->GetFrameLatencyWaitableObject(), INFINITE);
+    WaitForSingleObject(frameLatencyWaitable, INFINITE);
     waitForFence(frame.fenceValue);
 
     frame.toFreeList.freeAll();
