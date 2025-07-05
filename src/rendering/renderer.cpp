@@ -18,6 +18,8 @@
 
 #include "shader.fxh"
 
+#define USE_DEFAULT_SCENE 0
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -61,6 +63,7 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 Scene scene;
 
+#if USE_DEFAULT_SCENE
 const std::vector<Vertex> quadVerts = {
     {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
     {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
@@ -120,6 +123,7 @@ const std::vector<uint32_t> cubeIdxs = {
     // +z
     20, 21, 22, 20, 22, 23
 };
+#endif // USE_DEFAULT_SCENE
 
 void init()
 {
@@ -142,6 +146,7 @@ void init()
 
     scene.init();
 
+#if USE_DEFAULT_SCENE
     {
         auto& frame0ToFreeList = frameCtxs[0].toFreeList;
 
@@ -207,14 +212,15 @@ void init()
             scene.markInstanceReadyForBlasBuild(instance);
         }
     }
+#endif // USE_DEFAULT_SCENE
 
     initRootSignature();
     initPipeline();
 }
 
-void loadGltf(const std::string& filePath)
+void loadGltf(const std::string& filePathStr)
 {
-    GltfLoader::loadGltf(filePath, scene);
+    GltfLoader::loadGltf(filePathStr, scene);
 }
 
 ComPtr<IDXGIFactory4> factory;
@@ -548,8 +554,10 @@ void updateFps(double deltaTime)
     }
 }
 
+#if USE_DEFAULT_SCENE
 std::deque<Instance*> cubeQueue;
 uint32_t smallCubeMaterialId{ MATERIAL_ID_INVALID };
+#endif // USE_DEFAULT_SCENE
 
 void render()
 {
@@ -566,6 +574,7 @@ void render()
 
     beginFrame();
 
+#if USE_DEFAULT_SCENE
     {
         if (smallCubeMaterialId == MATERIAL_ID_INVALID)
         {
@@ -617,28 +626,32 @@ void render()
             }
         }
     }
+#endif // USE_DEFAULT_SCENE
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    cmdList->SetPipelineState1(pso.Get());
-    cmdList->SetComputeRootSignature(rootSignature.Get());
-    ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
-    cmdList->SetDescriptorHeaps(1, heaps);
-    const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
-    uint32_t paramIdx = 0;
-    cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
-    cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
-    cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
+    if (scene.getDevTlas() != nullptr)
+    {
+        cmdList->SetPipelineState1(pso.Get());
+        cmdList->SetComputeRootSignature(rootSignature.Get());
+        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+        cmdList->SetDescriptorHeaps(1, heaps);
+        const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
+        uint32_t paramIdx = 0;
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+        cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
+        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
 
-    const auto renderTargetDesc = renderTarget->GetDesc();
+        const auto renderTargetDesc = renderTarget->GetDesc();
 
-    dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
-    dispatchDesc.Height = renderTargetDesc.Height;
-    cmdList->DispatchRays(&dispatchDesc);
+        dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
+        dispatchDesc.Height = renderTargetDesc.Height;
+        cmdList->DispatchRays(&dispatchDesc);
+    }
 
     ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
