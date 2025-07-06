@@ -51,7 +51,7 @@ constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly
 
 void Camera::rotate(float dTheta, float dPhi)
 {
-    this->theta += dTheta;
+    this->theta -= dTheta;
     this->phi = fmaxf(-absMaxPhi, fminf(absMaxPhi, this->phi - dPhi));
     this->setDirectionVectorsFromAngles();
 }
