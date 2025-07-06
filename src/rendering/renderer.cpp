@@ -165,7 +165,7 @@ void init()
             instance->host_verts = quadVerts;
 
             auto transform = XMMatrixRotationX(-1.8f);
-            transform *= XMMatrixRotationY(XMScalarSinEst(time) / 8 + 1);
+            transform *= XMMatrixRotationY(2);
             transform *= XMMatrixTranslation(2, 2, 2);
             XMStoreFloat3x4(&instance->transform, transform);
 
