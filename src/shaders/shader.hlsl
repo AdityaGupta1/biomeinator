@@ -3,7 +3,7 @@
 
 RWTexture2D<float4> renderTarget : register(u0);
 
-static const uint numSamplesPerPixel = 1024;
+static const uint numSamplesPerPixel = 64;
 
 [shader("raygeneration")]
 void RayGeneration()

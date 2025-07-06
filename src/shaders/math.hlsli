@@ -22,3 +22,8 @@ float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSa
     const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
     return mul(computeTBN(normal_WS), sampledDir_OS);
 }
+
+float luminance(float3 color)
+{
+    return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+}

@@ -109,6 +109,17 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 {
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
     {
+        // russian roulette
+        if (pathDepth >= 3)
+        {
+            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+            if (payload.rng.nextFloat() >= survivalProbability)
+            {
+                return false;
+            }
+            payload.pathWeight /= survivalProbability;
+        }
+
         TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
