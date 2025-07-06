@@ -1,8 +1,9 @@
 #pragma once
 
 #include "global_params.hlsli"
-#include "math.hlsli"
 #include "rng.hlsli"
+#include "util/color.hlsli"
+#include "util/math.hlsli"
 
 #define MAX_PATH_DEPTH 8
 

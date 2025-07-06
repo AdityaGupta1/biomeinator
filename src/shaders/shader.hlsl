@@ -3,7 +3,7 @@
 
 RWTexture2D<float4> renderTarget : register(u0);
 
-static const uint numSamplesPerPixel = 1;
+#define NUM_SAMPLES_PER_PIXEL 1
 
 [shader("raygeneration")]
 void RayGeneration()
@@ -12,7 +12,7 @@ void RayGeneration()
     const float2 size = DispatchRaysDimensions().xy;
 
     float3 accumulatedColor = float3(0, 0, 0);
-    for (uint sampleIdx = 0; sampleIdx < numSamplesPerPixel; ++sampleIdx)
+    for (uint sampleIdx = 0; sampleIdx < NUM_SAMPLES_PER_PIXEL; ++sampleIdx)
     {
         Payload payload;
         payload.pathWeight = float3(1, 1, 1);
@@ -36,5 +36,5 @@ void RayGeneration()
         }
     }
 
-    renderTarget[pixelIdx] = float4(accumulatedColor / numSamplesPerPixel, 1);
+    renderTarget[pixelIdx] = float4(accumulatedColor / NUM_SAMPLES_PER_PIXEL, 1);
 }
