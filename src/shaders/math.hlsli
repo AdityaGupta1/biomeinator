@@ -23,7 +23,11 @@ float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSa
     return mul(computeTBN(normal_WS), sampledDir_OS);
 }
 
-float luminance(float3 color)
+float luminance(const float3 color)
 {
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+}
+
+float3 faceforward(const float3 normal, const float3 vec) {
+    return (dot(normal, vec) < 0.f) ? -normal : normal;
 }

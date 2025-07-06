@@ -68,7 +68,7 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
     }
 
     const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
-    const float3 normal_WS = payload.hitInfo.normal_WS;
+    const float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
 
     const float totalWeight = material.diffuseWeight + material.specularWeight;
     if (totalWeight == 0)
@@ -96,7 +96,7 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
     {
         payload.pathWeight *= material.specularColor;
 
-        const float3 reflectedDir_WS = reflect(normalize(ray.Direction), payload.hitInfo.normal_WS);
+        const float3 reflectedDir_WS = reflect(normalize(ray.Direction), normal_WS);
 
         ray.Origin = hitPos_WS;
         ray.Direction = reflectedDir_WS;
