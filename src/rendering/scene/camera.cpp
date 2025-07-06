@@ -22,14 +22,13 @@ void Camera::setDirectionVectorsFromAngles()
     const XMVECTOR forward =
         XMVector3Normalize(XMVectorSet(cosPhi * sinf(theta), sinf(phi), cosPhi * cosf(theta), 0.0f));
 
-    const XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+    XMVECTOR up = XMVectorSet(0, 1, 0, 0);
     const XMVECTOR right = XMVector3Normalize(XMVector3Cross(forward, up));
-
-    const XMVECTOR newUp = XMVector3Normalize(XMVector3Cross(right, forward));
+    up = XMVector3Normalize(XMVector3Cross(right, forward));
 
     XMStoreFloat3(&this->params.forward_WS, forward);
     XMStoreFloat3(&this->params.right_WS, right);
-    XMStoreFloat3(&this->params.up_WS, newUp);
+    XMStoreFloat3(&this->params.up_WS, up);
 }
 
 void Camera::moveLinear(XMFLOAT3 linearMovement)
