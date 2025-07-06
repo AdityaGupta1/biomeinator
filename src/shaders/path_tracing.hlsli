@@ -4,7 +4,7 @@
 #include "math.hlsli"
 #include "rng.hlsli"
 
-#define MAX_PATH_DEPTH 4
+#define MAX_PATH_DEPTH 8
 
 #define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
 
