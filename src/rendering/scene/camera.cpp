@@ -19,13 +19,12 @@ void Camera::init(float defaultFovYRadians)
 void Camera::setDirectionVectorsFromAngles()
 {
     const float cosPhi = cosf(phi);
-    XMVECTOR forward = XMVectorSet(cosPhi * sinf(theta), sinf(phi), cosPhi * cosf(theta), 0.0f);
-    forward = XMVector3Normalize(forward);
+    const XMVECTOR forward =
+        XMVector3Normalize(XMVectorSet(cosPhi * sinf(theta), sinf(phi), cosPhi * cosf(theta), 0.0f));
 
     XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-    XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
-
-    up = XMVector3Normalize(XMVector3Cross(forward, right));
+    const XMVECTOR right = XMVector3Normalize(XMVector3Cross(forward, up));
+    up = XMVector3Normalize(XMVector3Cross(right, forward));
 
     XMStoreFloat3(&this->params.forward_WS, forward);
     XMStoreFloat3(&this->params.right_WS, right);
@@ -51,7 +50,7 @@ constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly
 
 void Camera::rotate(float dTheta, float dPhi)
 {
-    this->theta += dTheta;
+    this->theta -= dTheta;
     this->phi = fmaxf(-absMaxPhi, fminf(absMaxPhi, this->phi - dPhi));
     this->setDirectionVectorsFromAngles();
 }
