@@ -109,14 +109,20 @@ void init()
     };
     RegisterClassW(&wcw);
 
+    RECT rect = { 0, 0, 1920, 1080 };
+    AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE); // account for window header bar
+
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+
     hwnd = CreateWindowExW(0,
                            L"GigaMinecraftClass",
                            L"Giga Minecraft",
                            WS_VISIBLE | WS_OVERLAPPEDWINDOW,
                            320,
                            180,
-                           1920,
-                           1080,
+                           width,
+                           height,
                            nullptr,
                            nullptr,
                            nullptr,

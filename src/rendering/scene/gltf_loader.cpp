@@ -156,30 +156,20 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         DirectX::XMMATRIX transform = DirectX::XMMatrixIdentity();
         if (node.matrix.size() == 16)
         {
-            transform = DirectX::XMMATRIX(static_cast<float>(node.matrix[0]),
-                                           static_cast<float>(node.matrix[1]),
-                                           static_cast<float>(node.matrix[2]),
-                                           static_cast<float>(node.matrix[3]),
-                                           static_cast<float>(node.matrix[4]),
-                                           static_cast<float>(node.matrix[5]),
-                                           static_cast<float>(node.matrix[6]),
-                                           static_cast<float>(node.matrix[7]),
-                                           static_cast<float>(node.matrix[8]),
-                                           static_cast<float>(node.matrix[9]),
-                                           static_cast<float>(node.matrix[10]),
-                                           static_cast<float>(node.matrix[11]),
-                                           static_cast<float>(node.matrix[12]),
-                                           static_cast<float>(node.matrix[13]),
-                                           static_cast<float>(node.matrix[14]),
-                                           static_cast<float>(node.matrix[15]));
+            float nodeMatrixValues[16];
+            for (int i = 0; i < 16; ++i)
+            {
+                nodeMatrixValues[i] = static_cast<float>(node.matrix[i]);
+            }
+            transform = DirectX::XMMATRIX(nodeMatrixValues);
         }
         else
         {
-            if (node.translation.size() == 3)
+            if (node.scale.size() == 3)
             {
-                transform *= DirectX::XMMatrixTranslation(static_cast<float>(node.translation[0]),
-                                                          static_cast<float>(node.translation[1]),
-                                                          static_cast<float>(node.translation[2]));
+                transform *= DirectX::XMMatrixScaling(static_cast<float>(node.scale[0]),
+                                                      static_cast<float>(node.scale[1]),
+                                                      static_cast<float>(node.scale[2]));
             }
 
             if (node.rotation.size() == 4)
@@ -191,11 +181,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 transform *= DirectX::XMMatrixRotationQuaternion(quat);
             }
 
-            if (node.scale.size() == 3)
+            if (node.translation.size() == 3)
             {
-                transform *= DirectX::XMMatrixScaling(static_cast<float>(node.scale[0]),
-                                                     static_cast<float>(node.scale[1]),
-                                                     static_cast<float>(node.scale[2]));
+                transform *= DirectX::XMMatrixTranslation(static_cast<float>(node.translation[0]),
+                                                          static_cast<float>(node.translation[1]),
+                                                          static_cast<float>(node.translation[2]));
             }
         }
 
