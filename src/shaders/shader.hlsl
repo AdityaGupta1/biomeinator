@@ -29,8 +29,8 @@ void RayGeneration()
         ray.TMin = 0.001;
         ray.TMax = 1000;
 
-        bool success = pathTraceRay(ray, payload);
-        if (success)
+        bool pathHadContribution = pathTraceRay(ray, payload);
+        if (pathHadContribution)
         {
             accumulatedColor += payload.pathColor;
         }
