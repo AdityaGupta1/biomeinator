@@ -134,6 +134,11 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         }
 
         evaluateBsdf(ray, payload);
+
+        if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
+        {
+            return true;
+        }
     }
 
     return false;
