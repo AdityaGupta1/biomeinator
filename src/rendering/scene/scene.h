@@ -1,9 +1,9 @@
 #pragma once
 
+#include "rendering/buffer/acs_helper.h"
 #include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
-#include "rendering/buffer/acs_helper.h"
 
 #include <array>
 #include <memory>
@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-constexpr uint32_t MAX_NUM_TEXTURES = 16;
+constexpr uint32_t MAX_NUM_TEXTURES = 8;
 
 class ToFreeList;
 
@@ -116,7 +116,7 @@ public:
 
     uint32_t addMaterial(ToFreeList& toFreeList, const Material* material);
 
-    uint32_t addTexture(std::vector<uint8_t> data, uint32_t width, uint32_t height);
+    uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();

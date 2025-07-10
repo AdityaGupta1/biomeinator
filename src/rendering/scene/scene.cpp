@@ -139,7 +139,7 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
     return id;
 }
 
-uint32_t Scene::addTexture(std::vector<uint8_t> data, uint32_t width, uint32_t height)
+uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
 {
     if (this->nextTextureId >= MAX_NUM_TEXTURES)
     {
@@ -360,4 +360,3 @@ ID3D12Resource* Scene::getDevIdxBuffer()
 {
     return this->dev_idxBuffer.getManagedBuffer();
 }
-
