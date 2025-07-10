@@ -127,5 +127,4 @@ public:
 
     ID3D12Resource* getDevVertBuffer();
     ID3D12Resource* getDevIdxBuffer();
-
 };
