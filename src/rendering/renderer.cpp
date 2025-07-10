@@ -313,16 +313,6 @@ void initRenderTarget()
     };
     device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedHeap));
 
-    const uint32_t descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE baseHandle =
-        sharedHeap->GetCPUDescriptorHandleForHeapStart();
-    for (uint32_t i = 0; i < MAX_NUM_TEXTURES; ++i)
-    {
-        const D3D12_CPU_DESCRIPTOR_HANDLE handle = { baseHandle.ptr + descriptorSize * i };
-        device->CreateShaderResourceView(nullptr, nullptr, handle);
-    }
-
     resize();
 }
 
@@ -402,6 +392,7 @@ void initRootSignature()
     textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     textureRange.NumDescriptors = MAX_NUM_TEXTURES;
     textureRange.BaseShaderRegister = 5;
+    textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
     std::vector<D3D12_ROOT_PARAMETER1> params;
 
