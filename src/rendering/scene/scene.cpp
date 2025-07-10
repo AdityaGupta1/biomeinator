@@ -292,19 +292,20 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                                                                 nullptr,
                                                                 IID_PPV_ARGS(&dev_texture)));
 
-        const uint64_t rowPitch = static_cast<uint64_t>(pendingTex.width) * 4;
-        const uint64_t uploadSize = rowPitch * pendingTex.height;
-        ComPtr<ID3D12Resource> dev_uploadBuffer = BufferHelper::createBasicBuffer(uploadSize, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
-        uint8_t* mapped = nullptr;
-        dev_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
-        memcpy(mapped, pendingTex.data.data(), uploadSize);
+        const uint32_t rowPitchBytes = pendingTex.width * 4;
+        const uint32_t uploadSizeBytes = rowPitchBytes * pendingTex.height;
+        ComPtr<ID3D12Resource> dev_uploadBuffer = BufferHelper::createBasicBuffer(uploadSizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+        uint8_t* host_uploadBuffer = nullptr;
+        dev_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&host_uploadBuffer));
+        memcpy(host_uploadBuffer, pendingTex.data.data(), uploadSizeBytes);
 
         D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
         footprint.Format = texDesc.Format;
         footprint.Width = pendingTex.width;
         footprint.Height = pendingTex.height;
         footprint.Depth = 1;
-        footprint.RowPitch = static_cast<uint32_t>((rowPitch + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1));
+        footprint.RowPitch =
+            (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
 
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout = { 0, footprint };
 
