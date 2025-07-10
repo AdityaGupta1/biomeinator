@@ -38,6 +38,9 @@ ByteAddressBuffer idxs : register(t2);
 StructuredBuffer<InstanceData> instanceDatas : register(t3);
 StructuredBuffer<Material> materials : register(t4);
 
+Texture2D<float4> textures[] : register(t5);
+SamplerState texSampler : register(s0);
+
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
@@ -83,7 +86,12 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 
     if (material.diffuseWeight > 0)
     {
-        payload.pathWeight *= material.diffuseColor;
+        float3 diffuseColor = material.diffuseColor;
+        if (material.diffuseTextureId != TEXTURE_ID_INVALID)
+        {
+            diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
+        }
+        payload.pathWeight *= diffuseColor;
 
         const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
         const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);

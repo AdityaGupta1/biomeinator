@@ -29,6 +29,7 @@ struct InstanceData
 };
 
 #define MATERIAL_ID_INVALID ~0u
+#define TEXTURE_ID_INVALID ~0u
 
 struct Material
 {
@@ -39,6 +40,11 @@ public:
 
     float diffuseWeight;
     float3 diffuseColor;
+
+    uint diffuseTextureId;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 
     float specularWeight;
     float3 specularColor;

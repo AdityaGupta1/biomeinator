@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <vector>
 
+constexpr uint32_t MAX_NUM_TEXTURES = 16;
+
 class ToFreeList;
 
 class Scene;
@@ -78,6 +80,18 @@ private:
     Material* host_materials{ nullptr };
     ComPtr<ID3D12Resource> dev_materials{ nullptr };
 
+    uint32_t nextTextureId{ 0 };
+    ComPtr<ID3D12DescriptorHeap> textureHeap{ nullptr };
+    std::vector<ComPtr<ID3D12Resource>> textures;
+    struct PendingTexture
+    {
+        std::vector<uint8_t> data;
+        uint32_t width;
+        uint32_t height;
+        uint32_t id;
+    };
+    std::vector<PendingTexture> pendingTextures;
+
     void initInstanceBuffers();
     void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
@@ -87,6 +101,8 @@ private:
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+
+    void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
 public:
     void init();
@@ -100,6 +116,8 @@ public:
 
     uint32_t addMaterial(ToFreeList& toFreeList, const Material* material);
 
+    uint32_t addTexture(std::vector<uint8_t> data, uint32_t width, uint32_t height);
+
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
 
@@ -109,4 +127,6 @@ public:
 
     ID3D12Resource* getDevVertBuffer();
     ID3D12Resource* getDevIdxBuffer();
+
+    ID3D12DescriptorHeap* getTextureHeap();
 };

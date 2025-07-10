@@ -385,6 +385,11 @@ void initRootSignature()
     uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
     uavRange.NumDescriptors = 1;
 
+    D3D12_DESCRIPTOR_RANGE1 textureRange = {};
+    textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    textureRange.NumDescriptors = MAX_NUM_TEXTURES;
+    textureRange.BaseShaderRegister = 5;
+
     std::vector<D3D12_ROOT_PARAMETER1> params;
 
     params.push_back({ // u0
@@ -443,12 +448,27 @@ void initRootSignature()
         },
     });
 
+    params.push_back({ // t5 (descriptor table of textures)
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+        .DescriptorTable = {
+            .NumDescriptorRanges = 1,
+            .pDescriptorRanges = &textureRange,
+        },
+    });
+
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
     rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     rootSigDesc.Desc_1_1.NumParameters = params.size();
     rootSigDesc.Desc_1_1.pParameters = params.data();
-    rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
-    rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
+    D3D12_STATIC_SAMPLER_DESC staticSampler = {};
+    staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.ShaderRegister = 0;
+
+    rootSigDesc.Desc_1_1.NumStaticSamplers = 1;
+    rootSigDesc.Desc_1_1.pStaticSamplers = &staticSampler;
     rootSigDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
     ComPtr<ID3DBlob> blob;
@@ -699,8 +719,8 @@ void render()
     {
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
-        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
-        cmdList->SetDescriptorHeaps(1, heaps);
+        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get(), scene.getTextureHeap() };
+        cmdList->SetDescriptorHeaps(2, heaps);
         const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
         uint32_t paramIdx = 0;
         cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
@@ -710,6 +730,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, scene.getTextureHeap()->GetGPUDescriptorHandleForHeapStart()); // t5
 
         const auto renderTargetDesc = renderTarget->GetDesc();
 
