@@ -19,8 +19,8 @@ void flush();
 
 void saveScreenshot();
 
-extern ComPtr<ID3D12DescriptorHeap> sharedHeap;
-
 extern ComPtr<ID3D12Device5> device;
+
+extern ComPtr<ID3D12DescriptorHeap> sharedHeap;
 
 } // namespace Renderer
