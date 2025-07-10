@@ -82,7 +82,6 @@ private:
     ComPtr<ID3D12Resource> dev_materials{ nullptr };
 
     uint32_t nextTextureId{ 0 };
-    ComPtr<ID3D12DescriptorHeap> textureHeap{ nullptr };
     std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
     struct PendingTexture
     {
@@ -128,6 +127,4 @@ public:
 
     ID3D12Resource* getDevVertBuffer();
     ID3D12Resource* getDevIdxBuffer();
-
-    ID3D12DescriptorHeap* getTextureHeap();
 };

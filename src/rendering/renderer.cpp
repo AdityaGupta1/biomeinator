@@ -290,7 +290,7 @@ void initDevice()
 ComPtr<IDXGISwapChain3> swapChain;
 constexpr uint32_t swapChainFlags =
     DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-ComPtr<ID3D12DescriptorHeap> uavHeap;
+ComPtr<ID3D12DescriptorHeap> sharedHeap;
 void initRenderTarget()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -306,12 +306,12 @@ void initRenderTarget()
 
     factory.Reset();
 
-    D3D12_DESCRIPTOR_HEAP_DESC uavHeapDesc = {
+    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = 1,
+        .NumDescriptors = MAX_NUM_TEXTURES + 1,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
     };
-    device->CreateDescriptorHeap(&uavHeapDesc, IID_PPV_ARGS(&uavHeap));
+    device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedHeap));
 
     resize();
 }
@@ -361,8 +361,11 @@ void resize()
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
-    device->CreateUnorderedAccessView(
-        renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
+    const uint32_t descriptorSize =
+        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = {
+        sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr + descriptorSize * MAX_NUM_TEXTURES };
+    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
 }
 
 void initCommand()
@@ -389,6 +392,7 @@ void initRootSignature()
     textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     textureRange.NumDescriptors = MAX_NUM_TEXTURES;
     textureRange.BaseShaderRegister = 5;
+    textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
     std::vector<D3D12_ROOT_PARAMETER1> params;
 
@@ -719,18 +723,23 @@ void render()
     {
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
-        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get(), scene.getTextureHeap() };
-        cmdList->SetDescriptorHeaps(2, heaps);
-        const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
+        ID3D12DescriptorHeap* heaps[] = { sharedHeap.Get() };
+        cmdList->SetDescriptorHeaps(1, heaps);
+        const uint32_t descriptorSize =
+            device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        const D3D12_GPU_DESCRIPTOR_HANDLE uavTableStart = {
+            sharedHeap->GetGPUDescriptorHandleForHeapStart().ptr + descriptorSize * MAX_NUM_TEXTURES };
+        const D3D12_GPU_DESCRIPTOR_HANDLE srvTableStart =
+            sharedHeap->GetGPUDescriptorHandleForHeapStart();
         uint32_t paramIdx = 0;
-        cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTableStart); // u0
         cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
-        cmdList->SetComputeRootDescriptorTable(paramIdx++, scene.getTextureHeap()->GetGPUDescriptorHandleForHeapStart()); // t5
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, srvTableStart); // t5
 
         const auto renderTargetDesc = renderTarget->GetDesc();
 
