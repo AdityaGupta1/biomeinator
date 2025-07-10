@@ -5,6 +5,7 @@
 #include "rendering/host_structs.h"
 #include "rendering/buffer/acs_helper.h"
 
+#include <array>
 #include <memory>
 #include <queue>
 #include <unordered_map>
@@ -82,7 +83,7 @@ private:
 
     uint32_t nextTextureId{ 0 };
     ComPtr<ID3D12DescriptorHeap> textureHeap{ nullptr };
-    std::vector<ComPtr<ID3D12Resource>> textures;
+    std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
     struct PendingTexture
     {
         std::vector<uint8_t> data;

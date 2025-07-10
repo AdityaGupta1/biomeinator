@@ -42,14 +42,14 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         return;
     }
 
-    ToFreeList toFreeList;
-
     std::vector<uint32_t> textureIds;
     textureIds.reserve(model.images.size());
     for (tinygltf::Image& image : model.images)
     {
         textureIds.push_back(scene.addTexture(std::move(image.image), image.width, image.height));
     }
+
+    ToFreeList toFreeList;
 
     std::vector<uint32_t> materialIds;
     materialIds.reserve(model.materials.size());
