@@ -266,7 +266,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
 
     const uint32_t descriptorSize =
         Renderer::device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+    const D3D12_CPU_DESCRIPTOR_HANDLE heapCpuHandle =
         Renderer::sharedHeap->GetCPUDescriptorHandleForHeapStart();
 
     for (const auto& pendingTex : this->pendingTextures)
@@ -315,7 +315,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         BufferHelper::stateTransitionResourceBarrier(
             cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        const D3D12_CPU_DESCRIPTOR_HANDLE handle = { cpuHandle.ptr + descriptorSize * pendingTex.id };
+        const D3D12_CPU_DESCRIPTOR_HANDLE handle = { heapCpuHandle.ptr + descriptorSize * pendingTex.id };
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Format = texDesc.Format;
