@@ -277,7 +277,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         texDesc.Height = pendingTex.height;
         texDesc.DepthOrArraySize = 1;
         texDesc.MipLevels = 1;
-        texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         texDesc.SampleDesc = NO_AA;
 
         ComPtr<ID3D12Resource> dev_texture;
