@@ -361,10 +361,9 @@ void resize()
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
-    const uint32_t descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = {
-        sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr + descriptorSize * MAX_NUM_TEXTURES };
+    const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+                                                    MAX_NUM_TEXTURES * descriptorSize };
     device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
 }
 

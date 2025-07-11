@@ -53,6 +53,7 @@ void Scene::clear()
 
     this->textures.fill(nullptr);
     this->nextTextureId = 0;
+    this->pendingTextures.clear();
 }
 
 void Scene::initInstanceBuffers()
@@ -167,7 +168,11 @@ void Scene::resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMateria
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    this->uploadPendingTextures(cmdList, toFreeList);
+    if (!this->pendingTextures.empty())
+    {
+        this->uploadPendingTextures(cmdList, toFreeList);
+    }
+
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
     if (this->isTlasDirty)
@@ -259,11 +264,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    if (this->pendingTextures.empty())
-    {
-        return;
-    }
-
     const uint32_t descriptorSize =
         Renderer::device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     const D3D12_CPU_DESCRIPTOR_HANDLE heapCpuHandle =
@@ -289,9 +289,9 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                                                                 IID_PPV_ARGS(&dev_texture)));
 
         const uint32_t rowPitchBytes = pendingTex.width * 4;
-        const uint32_t rowPitchAligned =
+        const uint32_t rowPitchBytesAligned =
             (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
-        const uint32_t uploadSizeBytes = rowPitchAligned * pendingTex.height;
+        const uint32_t uploadSizeBytes = rowPitchBytesAligned * pendingTex.height;
 
         ComPtr<ID3D12Resource> dev_uploadBuffer =
             BufferHelper::createBasicBuffer(uploadSizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -301,8 +301,8 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         for (uint32_t row = 0; row < pendingTex.height; ++row)
         {
             const uint8_t* srcPtr = pendingTex.data.data() + rowPitchBytes * row;
-            uint8_t* dstPtr = host_uploadBuffer + rowPitchAligned * row;
-            memcpy(dstPtr, srcPtr, rowPitchBytes);
+            uint8_t* destPtr = host_uploadBuffer + rowPitchBytesAligned * row;
+            memcpy(destPtr, srcPtr, rowPitchBytes);
         }
 
         D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
@@ -310,28 +310,37 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         footprint.Width = pendingTex.width;
         footprint.Height = pendingTex.height;
         footprint.Depth = 1;
-        footprint.RowPitch = rowPitchAligned;
+        footprint.RowPitch = rowPitchBytesAligned;
 
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout = { 0, footprint };
 
-        D3D12_TEXTURE_COPY_LOCATION src = { dev_uploadBuffer.Get(), D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT };
-        src.PlacedFootprint = layout;
-        D3D12_TEXTURE_COPY_LOCATION dst = { dev_texture.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX };
-        dst.SubresourceIndex = 0;
+        D3D12_TEXTURE_COPY_LOCATION srcTexLocation = {
+            .pResource = dev_uploadBuffer.Get(),
+            .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+            .PlacedFootprint = layout,
+        };
+        D3D12_TEXTURE_COPY_LOCATION destTexLocation = {
+            .pResource = dev_texture.Get(),
+            .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            .SubresourceIndex = 0,
+        };
 
         BufferHelper::stateTransitionResourceBarrier(
             cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        cmdList->CopyTextureRegion(&destTexLocation, 0, 0, 0, &srcTexLocation, nullptr);
         BufferHelper::stateTransitionResourceBarrier(
             cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        const D3D12_CPU_DESCRIPTOR_HANDLE handle = { heapCpuHandle.ptr + descriptorSize * pendingTex.id };
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Format = texDesc.Format;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Texture2D.MipLevels = 1;
-        Renderer::device->CreateShaderResourceView(dev_texture.Get(), &srvDesc, handle);
+        const D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorHandle = { heapCpuHandle.ptr + descriptorSize * pendingTex.id };
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+            .Format = texDesc.Format,
+            .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D,
+            .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+            .Texture2D = {
+                .MipLevels = 1,
+            },
+        };
+        Renderer::device->CreateShaderResourceView(dev_texture.Get(), &srvDesc, cpuDescriptorHandle);
 
         this->textures[pendingTex.id] = dev_texture;
         toFreeList.pushResource(dev_uploadBuffer, true);
