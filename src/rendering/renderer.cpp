@@ -24,8 +24,6 @@
 
 #include "shader.fxh"
 
-#define USE_DEFAULT_SCENE 0
-
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -69,68 +67,6 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 Scene scene;
 
-#if USE_DEFAULT_SCENE
-const std::vector<Vertex> quadVerts = {
-    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
-    {{-1, 0, 1}, {0, 1, 0}, {0, 1}},
-    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
-    {{-1, 0, -1}, {0, 1, 0}, {0, 0}},
-    {{1, 0, -1}, {0, 1, 0}, {1, 0}},
-    {{1, 0, 1}, {0, 1, 0}, {1, 1}},
-};
-const std::vector<Vertex> cubeVerts = {
-    // -x (left)
-    {{-1, -1, -1}, {-1, 0, 0}, {0, 1}},
-    {{-1, -1, 1}, {-1, 0, 0}, {1, 1}},
-    {{-1, 1, 1}, {-1, 0, 0}, {1, 0}},
-    {{-1, 1, -1}, {-1, 0, 0}, {0, 0}},
-
-    // -y (bottom)
-    {{-1, -1, -1}, {0, -1, 0}, {0, 0}},
-    {{1, -1, -1}, {0, -1, 0}, {1, 0}},
-    {{1, -1, 1}, {0, -1, 0}, {1, 1}},
-    {{-1, -1, 1}, {0, -1, 0}, {0, 1}},
-
-    // -z (back)
-    {{-1, -1, -1}, {0, 0, -1}, {1, 1}},
-    {{-1, 1, -1}, {0, 0, -1}, {1, 0}},
-    {{1, 1, -1}, {0, 0, -1}, {0, 0}},
-    {{1, -1, -1}, {0, 0, -1}, {0, 1}},
-
-    // +x (right)
-    {{1, -1, -1}, {1, 0, 0}, {1, 1}},
-    {{1, 1, -1}, {1, 0, 0}, {1, 0}},
-    {{1, 1, 1}, {1, 0, 0}, {0, 0}},
-    {{1, -1, 1}, {1, 0, 0}, {0, 1}},
-
-    // +y (top)
-    {{-1, 1, -1}, {0, 1, 0}, {0, 0}},
-    {{-1, 1, 1}, {0, 1, 0}, {0, 1}},
-    {{1, 1, 1}, {0, 1, 0}, {1, 1}},
-    {{1, 1, -1}, {0, 1, 0}, {1, 0}},
-
-    // +z (front)
-    {{-1, -1, 1}, {0, 0, 1}, {0, 1}},
-    {{1, -1, 1}, {0, 0, 1}, {1, 1}},
-    {{1, 1, 1}, {0, 0, 1}, {1, 0}},
-    {{-1, 1, 1}, {0, 0, 1}, {0, 0}}
-};
-const std::vector<uint32_t> cubeIdxs = {
-    // -x
-    0, 1, 2, 0, 2, 3,
-    // -y
-    4, 5, 6, 4, 6, 7,
-    // -z
-    8, 9, 10, 8, 10, 11,
-    // +x
-    12, 13, 14, 12, 14, 15,
-    // +y
-    16, 17, 18, 16, 18, 19,
-    // +z
-    20, 21, 22, 20, 22, 23
-};
-#endif // USE_DEFAULT_SCENE
-
 void init()
 {
     initDevice();
@@ -151,74 +87,6 @@ void init()
     }
 
     scene.init();
-
-#if USE_DEFAULT_SCENE
-    {
-        auto& frame0ToFreeList = frameCtxs[0].toFreeList;
-
-        const auto time = static_cast<float>(GetTickCount64()) / 1000.f;
-
-        {
-            // mirror
-            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
-
-            instance->host_verts = quadVerts;
-
-            auto transform = XMMatrixRotationX(-1.8f);
-            transform *= XMMatrixRotationY(2);
-            transform *= XMMatrixTranslation(2, 2, 2);
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            Material material;
-            material.diffuseWeight = 0;
-            material.specularWeight = 1;
-            material.specularColor = { 1, 1, 1 };
-            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
-            instance->setMaterialId(matId);
-
-            scene.markInstanceReadyForBlasBuild(instance);
-        }
-
-        {
-            // floor
-            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
-
-            instance->host_verts = quadVerts;
-
-            auto transform = XMMatrixScaling(5, 5, 5);
-            transform *= XMMatrixTranslation(0, 0, 2);
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            Material material;
-            material.diffuseWeight = 1;
-            material.diffuseColor = { 1, 0, 0 };
-            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
-            instance->setMaterialId(matId);
-
-            scene.markInstanceReadyForBlasBuild(instance);
-        }
-
-        {
-            // big cube
-            Instance* instance = scene.requestNewInstance(frame0ToFreeList);
-
-            instance->host_verts = cubeVerts;
-            instance->host_idxs = cubeIdxs;
-
-            auto transform = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-            transform *= XMMatrixTranslation(-1.5, 2, 2);
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            Material material;
-            material.diffuseWeight = 1;
-            material.diffuseColor = { 0, 1, 0 };
-            const uint32_t matId = scene.addMaterial(frame0ToFreeList, &material);
-            instance->setMaterialId(matId);
-
-            scene.markInstanceReadyForBlasBuild(instance);
-        }
-    }
-#endif // USE_DEFAULT_SCENE
 
     initRootSignature();
     initPipeline();
@@ -648,11 +516,6 @@ void saveScreenshot()
     }
 }
 
-#if USE_DEFAULT_SCENE
-std::deque<Instance*> cubeQueue;
-uint32_t smallCubeMaterialId{ MATERIAL_ID_INVALID };
-#endif // USE_DEFAULT_SCENE
-
 void render()
 {
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
@@ -667,60 +530,6 @@ void render()
     paramBlockManager.sceneParams->frameNumber = frameNumber;
 
     beginFrame();
-
-#if USE_DEFAULT_SCENE
-    {
-        if (smallCubeMaterialId == MATERIAL_ID_INVALID)
-        {
-            Material material;
-            material.diffuseWeight = 0;
-            material.specularWeight = 0;
-            material.emissiveStrength = 5;
-            material.emissiveColor = { 1, 1, 1 };
-            smallCubeMaterialId = scene.addMaterial(frameCtx.toFreeList, &material);
-        }
-
-        static std::mt19937 rng(std::random_device{}());
-        static std::uniform_real_distribution<float> posXZDist(-10.f, 10.f);
-        static std::uniform_real_distribution<float> posYDist(0.f, 10.f);
-
-        const float time = std::chrono::duration<float>(currentTimePoint.time_since_epoch()).count();
-
-        for (int i = 0; i < 7; ++i)
-        {
-            Instance* instance = scene.requestNewInstance(frameCtx.toFreeList);
-            instance->host_verts = cubeVerts;
-            instance->host_idxs = cubeIdxs;
-
-            auto transform = XMMatrixScaling(0.1f, 0.1f, 0.1f);
-            transform *= XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-            transform *= XMMatrixTranslation(posXZDist(rng), posYDist(rng), posXZDist(rng));
-            XMStoreFloat3x4(&instance->transform, transform);
-
-            instance->setMaterialId(smallCubeMaterialId);
-
-            scene.markInstanceReadyForBlasBuild(instance);
-            cubeQueue.push_back(instance);
-        }
-
-        if (!cubeQueue.empty())
-        {
-            const uint32_t maxNumToRemove = static_cast<uint32_t>(cubeQueue.size() * 0.03f);
-            std::uniform_int_distribution<uint32_t> removeDist(0, maxNumToRemove);
-            const uint32_t numToRemove = removeDist(rng);
-            for (uint32_t i = 0; i < numToRemove; ++i)
-            {
-                if (cubeQueue.empty())
-                {
-                    break;
-                }
-                Instance* instance = cubeQueue.front();
-                cubeQueue.pop_front();
-                frameCtx.toFreeList.pushInstance(instance);
-            }
-        }
-    }
-#endif // USE_DEFAULT_SCENE
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
