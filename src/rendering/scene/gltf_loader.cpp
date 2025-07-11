@@ -1,8 +1,5 @@
 #include "gltf_loader.h"
 
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tinygltf/tiny_gltf.h"
 
 #include <filesystem>
@@ -43,6 +40,13 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     {
         printf("Failed to load glTF file\n");
         return;
+    }
+
+    std::vector<uint32_t> textureIds;
+    textureIds.reserve(model.images.size());
+    for (tinygltf::Image& image : model.images)
+    {
+        textureIds.push_back(scene.addTexture(std::move(image.image), image.width, image.height));
     }
 
     ToFreeList toFreeList;
@@ -89,6 +93,19 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 if (val.IsNumber())
                 {
                     material.emissiveStrength = static_cast<float>(val.GetNumberAsDouble());
+                }
+            }
+        }
+
+        if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+        {
+            const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
+            if (texIdx < model.textures.size())
+            {
+                const int imgIdx = model.textures[texIdx].source;
+                if (imgIdx >= 0 && imgIdx < textureIds.size())
+                {
+                    material.diffuseTextureId = textureIds[imgIdx];
                 }
             }
         }

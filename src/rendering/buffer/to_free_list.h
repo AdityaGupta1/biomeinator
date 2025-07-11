@@ -16,6 +16,7 @@ private:
     std::vector<ComPtr<ID3D12Resource>> mappedResources;
 
     std::vector<ManagedBufferSection> managedBufferSections;
+
     std::vector<Instance*> instances;
 
 public:

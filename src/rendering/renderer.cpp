@@ -290,7 +290,7 @@ void initDevice()
 ComPtr<IDXGISwapChain3> swapChain;
 constexpr uint32_t swapChainFlags =
     DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-ComPtr<ID3D12DescriptorHeap> uavHeap;
+ComPtr<ID3D12DescriptorHeap> sharedHeap;
 void initRenderTarget()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -306,12 +306,12 @@ void initRenderTarget()
 
     factory.Reset();
 
-    D3D12_DESCRIPTOR_HEAP_DESC uavHeapDesc = {
+    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = 1,
+        .NumDescriptors = MAX_NUM_TEXTURES + 1,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
     };
-    device->CreateDescriptorHeap(&uavHeapDesc, IID_PPV_ARGS(&uavHeap));
+    device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedHeap));
 
     resize();
 }
@@ -361,8 +361,10 @@ void resize()
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
-    device->CreateUnorderedAccessView(
-        renderTarget.Get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
+    const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+                                                    MAX_NUM_TEXTURES * descriptorSize };
+    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
 }
 
 void initCommand()
@@ -381,21 +383,35 @@ void initCommand()
 ComPtr<ID3D12RootSignature> rootSignature;
 void initRootSignature()
 {
-    D3D12_DESCRIPTOR_RANGE1 uavRange = {};
-    uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-    uavRange.NumDescriptors = 1;
+    std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
+
+    descriptorRanges.push_back({ // u0, renderTarget
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = 0,
+        .RegisterSpace = 0,
+        .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
+    });
+
+    descriptorRanges.push_back({ // t5, textures
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        .NumDescriptors = MAX_NUM_TEXTURES,
+        .BaseShaderRegister = 5,
+        .RegisterSpace = 0,
+        .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
+    });
 
     std::vector<D3D12_ROOT_PARAMETER1> params;
 
-    params.push_back({ // u0
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
         .DescriptorTable = {
-            .NumDescriptorRanges = 1,
-            .pDescriptorRanges = &uavRange,
+            .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
+            .pDescriptorRanges = descriptorRanges.data(),
         },
     });
 
-    params.push_back({ // b0
+    params.push_back({ // b0, GlobalParams
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
             .ShaderRegister = 0,
@@ -403,7 +419,7 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // t0
+    params.push_back({ // t0, scene
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 0,
@@ -411,7 +427,7 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // t1
+    params.push_back({ // t1, verts
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 1,
@@ -419,7 +435,7 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // t2
+    params.push_back({ // t2, idxs
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 2,
@@ -427,7 +443,7 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // t3
+    params.push_back({ // t3, instanceDatas
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 3,
@@ -435,7 +451,7 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // t4
+    params.push_back({ // t4, materials
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = 4,
@@ -443,13 +459,26 @@ void initRootSignature()
         },
     });
 
-    D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {};
-    rootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-    rootSigDesc.Desc_1_1.NumParameters = params.size();
-    rootSigDesc.Desc_1_1.pParameters = params.data();
-    rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
-    rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
-    rootSigDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+    std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+    staticSamplers.push_back({
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .ShaderRegister = 0,
+    });
+
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {
+        .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+        .Desc_1_1 = {
+            .NumParameters = static_cast<uint32_t>(params.size()),
+            .pParameters = params.data(),
+            .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+            .pStaticSamplers = staticSamplers.data(),
+            .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
+        },
+    };
 
     ComPtr<ID3DBlob> blob;
     D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, nullptr);
@@ -699,11 +728,10 @@ void render()
     {
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
-        ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+        ID3D12DescriptorHeap* heaps[] = { sharedHeap.Get() };
         cmdList->SetDescriptorHeaps(1, heaps);
-        const auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
         uint32_t paramIdx = 0;
-        cmdList->SetComputeRootDescriptorTable(paramIdx++, uavTable); // u0
+        cmdList->SetComputeRootDescriptorTable(paramIdx++, sharedHeap->GetGPUDescriptorHandleForHeapStart()); // u0, t5
         cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
         cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1

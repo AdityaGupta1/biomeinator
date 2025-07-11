@@ -1,14 +1,17 @@
 #pragma once
 
+#include "rendering/buffer/acs_helper.h"
 #include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
-#include "rendering/buffer/acs_helper.h"
 
+#include <array>
 #include <memory>
 #include <queue>
 #include <unordered_map>
 #include <vector>
+
+constexpr uint32_t MAX_NUM_TEXTURES = 8;
 
 class ToFreeList;
 
@@ -78,6 +81,17 @@ private:
     Material* host_materials{ nullptr };
     ComPtr<ID3D12Resource> dev_materials{ nullptr };
 
+    uint32_t nextTextureId{ 0 };
+    std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
+    struct PendingTexture
+    {
+        std::vector<uint8_t> data;
+        uint32_t width;
+        uint32_t height;
+        uint32_t id;
+    };
+    std::vector<PendingTexture> pendingTextures;
+
     void initInstanceBuffers();
     void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
@@ -87,6 +101,8 @@ private:
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+
+    void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
 public:
     void init();
@@ -99,6 +115,8 @@ public:
     void markInstanceReadyForBlasBuild(Instance* instance);
 
     uint32_t addMaterial(ToFreeList& toFreeList, const Material* material);
+
+    uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
     ID3D12Resource* getDevInstanceDescs();
     ID3D12Resource* getDevInstanceDatas();
