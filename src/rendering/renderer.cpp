@@ -194,8 +194,8 @@ void resize()
 
     RECT rect;
     GetClientRect(hwnd, &rect);
-    const auto width = std::max<uint32_t>(rect.right - rect.left, 1);
-    const auto height = std::max<uint32_t>(rect.bottom - rect.top, 1);
+    const uint32_t width = std::max<uint32_t>(rect.right - rect.left, 1);
+    const uint32_t height = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
     flush();
 

@@ -112,8 +112,8 @@ void init()
     RECT rect = { 0, 0, 1920, 1080 };
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE); // account for window header bar
 
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
 
     hwnd = CreateWindowExW(0,
                            L"GigaMinecraftClass",
