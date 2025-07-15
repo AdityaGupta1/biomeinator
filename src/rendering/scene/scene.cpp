@@ -50,8 +50,11 @@ void Scene::clear()
     {
         this->availableInstanceIds.push(instanceIdx);
     }
+    this->mappedInstanceDescsArray.setIsDirty();
+    this->mappedInstanceDatasArray.setIsDirty();
 
     this->nextMaterialIdx = 0;
+    this->mappedMaterialsArray.setIsDirty();
 
     this->isTlasDirty = false;
     this->dev_tlas = nullptr;
