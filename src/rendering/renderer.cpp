@@ -247,6 +247,20 @@ void initCommand()
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
 
+enum class Param
+{
+    SHARED_HEAP,
+    GLOBAL_PARAMS,
+    RAYTRACING_ACS,
+    VERTS,
+    IDXS,
+    INSTANCE_DATAS,
+    MATERIALS,
+
+    COUNT
+};
+
+#define PARAM_IDX(param) static_cast<uint32_t>(Param::param)
 
 ComPtr<ID3D12RootSignature> rootSignature;
 void initRootSignature()
@@ -269,63 +283,63 @@ void initRootSignature()
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
     });
 
-    std::vector<D3D12_ROOT_PARAMETER1> params;
+    std::array<D3D12_ROOT_PARAMETER1, PARAM_IDX(COUNT)> params;
 
-    params.push_back({
+    params[PARAM_IDX(SHARED_HEAP)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
         .DescriptorTable = {
             .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
             .pDescriptorRanges = descriptorRanges.data(),
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(GLOBAL_PARAMS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
             .ShaderRegister = REGISTER_GLOBAL_PARAMS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(RAYTRACING_ACS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_RAYTRACING_ACS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(VERTS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_VERTS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(IDXS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_IDXS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(INSTANCE_DATAS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_INSTANCE_DATAS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({
+    params[PARAM_IDX(MATERIALS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_MATERIALS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
     std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
 
@@ -539,14 +553,16 @@ void render()
         cmdList->SetComputeRootSignature(rootSignature.Get());
         ID3D12DescriptorHeap* heaps[] = { sharedHeap.Get() };
         cmdList->SetDescriptorHeaps(1, heaps);
-        uint32_t paramIdx = 0;
-        cmdList->SetComputeRootDescriptorTable(paramIdx++, sharedHeap->GetGPUDescriptorHandleForHeapStart()); // u0, t5
-        cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
+
+        // clang-format off
+        cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedHeap->GetGPUDescriptorHandleForHeapStart());
+        cmdList->SetComputeRootConstantBufferView(PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlas()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatas()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterials()->GetGPUVirtualAddress());
+        // clang-format on
 
         const auto renderTargetDesc = renderTarget->GetDesc();
 
