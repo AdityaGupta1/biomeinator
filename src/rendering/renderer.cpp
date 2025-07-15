@@ -556,32 +556,27 @@ void finalizeQueuedScreenshot()
     screenshotRequest.readbackBuffer->Unmap(0, nullptr);
 
     wchar_t docPath[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
+    if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
     {
-        const std::filesystem::path dir =
-            std::filesystem::path(docPath) / L"biomeinator" / "screenshots";
-        std::filesystem::create_directories(dir);
-
-        SYSTEMTIME st{};
-        GetLocalTime(&st);
-        char fileName[64];
-        sprintf_s(fileName,
-                  "%04d.%02d.%02d_%02d-%02d-%02d.png",
-                  st.wYear,
-                  st.wMonth,
-                  st.wDay,
-                  st.wHour,
-                  st.wMinute,
-                  st.wSecond);
-
-        const std::filesystem::path path = dir / fileName;
-        stbi_write_png(path.string().c_str(),
-                       screenshotRequest.width,
-                       screenshotRequest.height,
-                       4,
-                       pixels.data(),
-                       screenshotRequest.width * 4);
+        throw std::runtime_error("Failed to get screenshots directory");
     }
+
+    const std::filesystem::path dir = std::filesystem::path(docPath) / L"biomeinator" / "screenshots";
+    std::filesystem::create_directories(dir);
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    char fileName[64];
+    sprintf_s(
+        fileName, "%04d.%02d.%02d_%02d-%02d-%02d.png", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+    const std::filesystem::path path = dir / fileName;
+    stbi_write_png(path.string().c_str(),
+                   screenshotRequest.width,
+                   screenshotRequest.height,
+                   4,
+                   pixels.data(),
+                   screenshotRequest.width * 4);
 
     screenshotRequest.readbackBuffer.Reset();
     screenshotRequest.active = false;
