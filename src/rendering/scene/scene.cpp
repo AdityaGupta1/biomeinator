@@ -40,6 +40,9 @@ void Scene::init()
 
 void Scene::clear()
 {
+    this->dev_vertBuffer.freeAll();
+    this->dev_idxBuffer.freeAll();
+
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
     this->availableInstanceIds = {};

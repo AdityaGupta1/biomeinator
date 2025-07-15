@@ -36,12 +36,18 @@ void ManagedBuffer::init(uint32_t sizeBytes)
     this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
 
-    this->freeSectionList.push_back({ this, 0, sizeBytes });
+    this->freeAll();
 
     if (this->isMapped)
     {
         this->map();
     }
+}
+
+void ManagedBuffer::freeAll()
+{
+    this->freeSectionList.clear();
+    this->freeSectionList.push_back({ this, 0, this->bufferSizeBytes });
 }
 
 void ManagedBuffer::map()

@@ -95,6 +95,7 @@ void init()
 
 void loadGltf(const std::string& filePathStr)
 {
+    flush();
     GltfLoader::loadGltf(filePathStr, scene);
 }
 
