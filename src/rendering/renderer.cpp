@@ -457,18 +457,6 @@ static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
-struct ScreenshotRequest
-{
-    bool active{ false };
-    ComPtr<ID3D12Resource> readbackBuffer{ nullptr };
-    uint32_t width{ 0 };
-    uint32_t height{ 0 };
-    uint32_t rowPitchBytes{ 0 };
-    uint32_t rowPitchBytesAligned{ 0 };
-};
-
-static ScreenshotRequest screenshotRequest;
-
 void updateFps(double deltaTime)
 {
     frameCount++;
@@ -485,7 +473,19 @@ void updateFps(double deltaTime)
     }
 }
 
-void saveScreenshot()
+struct ScreenshotRequest
+{
+    bool active{ false };
+    ComPtr<ID3D12Resource> readbackBuffer{ nullptr };
+    uint32_t width{ 0 };
+    uint32_t height{ 0 };
+    uint32_t rowPitchBytes{ 0 };
+    uint32_t rowPitchBytesAligned{ 0 };
+};
+
+static ScreenshotRequest screenshotRequest;
+
+void queueScreenshot()
 {
     screenshotRequest.active = true;
 }

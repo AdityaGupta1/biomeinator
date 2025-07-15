@@ -17,7 +17,7 @@ void render();
 
 void flush();
 
-void saveScreenshot();
+void queueScreenshot();
 
 extern ComPtr<ID3D12Device5> device;
 
