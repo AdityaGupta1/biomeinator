@@ -1,6 +1,8 @@
 #pragma once
 
-#include "common_structs.hlsli"
+#include "../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
+
 #include "global_params.hlsli"
 #include "rng.hlsli"
 #include "util/color.hlsli"

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "common_structs.h"
 #include "dxr_includes.h"
+#include "common/common_structs.h"
 
 class ParamBlockManager
 {

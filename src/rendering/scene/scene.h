@@ -1,10 +1,10 @@
 #pragma once
 
-#include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/mapped_array.h"
+#include "rendering/common/common_structs.h"
 
 #include <array>
 #include <memory>

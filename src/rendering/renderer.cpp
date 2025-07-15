@@ -8,6 +8,7 @@
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_registers.h"
 #include "scene/camera.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"

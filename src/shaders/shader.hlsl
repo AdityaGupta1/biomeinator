@@ -1,4 +1,6 @@
-#include "common_structs.hlsli"
+#include "../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
+
 #include "path_tracing.hlsli"
 
 RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET);

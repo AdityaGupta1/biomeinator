@@ -1,8 +1,8 @@
 #pragma once
 
-#include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
+#include "rendering/common/common_structs.h"
 
 #include <numbers>
 
