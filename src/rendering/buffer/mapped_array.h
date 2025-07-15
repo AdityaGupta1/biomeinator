@@ -50,6 +50,14 @@ public:
         this->isDirty = false;
     }
 
+    inline void copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
+    {
+        if (this->isDirty)
+        {
+            this->copyFromUploadBuffer(cmdList);
+        }
+    }
+
     void resize(ToFreeList& toFreeList, uint32_t newSize)
     {
         uint32_t oldSize = this->size;

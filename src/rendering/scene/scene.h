@@ -49,8 +49,6 @@ class Scene
     friend class ToFreeList;
 
 private:
-    uint32_t maxNumInstances{ 0 };
-
     ManagedBuffer dev_vertBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -64,10 +62,9 @@ private:
         false /*isMapped*/,
     };
 
-    D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs{ nullptr };
-    ComPtr<ID3D12Resource> dev_instanceDescs{ nullptr };
-    InstanceData* host_instanceDatas{ nullptr };
-    ComPtr<ID3D12Resource> dev_instanceDatas{ nullptr };
+    uint32_t maxNumInstances{ 0 };
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{};
+    MappedArray<InstanceData> mappedInstanceDatasArray{};
 
     std::queue<uint32_t> availableInstanceIds;
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances;
@@ -78,8 +75,7 @@ private:
 
     uint32_t maxNumMaterials{ 0 };
     uint32_t nextMaterialIdx{ 0 };
-
-    MappedArray<Material> mappedMaterialsArray;
+    MappedArray<Material> mappedMaterialsArray{};
 
     uint32_t nextTextureId{ 0 };
     std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
@@ -92,8 +88,6 @@ private:
     };
     std::vector<PendingTexture> pendingTextures;
 
-    void initInstanceBuffers();
-    void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
