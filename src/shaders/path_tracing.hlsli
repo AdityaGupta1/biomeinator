@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
+
 #include "global_params.hlsli"
 #include "rng.hlsli"
 #include "util/color.hlsli"
@@ -30,16 +33,17 @@ struct Payload
     RandomSampler rng;
 };
 
-RaytracingAccelerationStructure scene : register(t0);
+RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS);
 
-StructuredBuffer<Vertex> verts : register(t1);
-ByteAddressBuffer idxs : register(t2);
+StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS);
+ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS);
 
-StructuredBuffer<InstanceData> instanceDatas : register(t3);
-StructuredBuffer<Material> materials : register(t4);
+StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATAS);
 
-Texture2D<float4> textures[] : register(t5);
-SamplerState texSampler : register(s0);
+StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS);
+
+Texture2D<float4> textures[] : REGISTER_T(REGISTER_TEXTURES);
+SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
@@ -129,7 +133,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             payload.pathWeight /= survivalProbability;
         }
 
-        TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "dxr_includes.h"
-#include "common_structs.h"
+#include "common/common_structs.h"
 
 #ifdef _DEBUG
 #include <stdio.h>

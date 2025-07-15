@@ -8,6 +8,7 @@
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_registers.h"
 #include "scene/camera.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
@@ -247,85 +248,99 @@ void initCommand()
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
 
+enum class Param
+{
+    SHARED_HEAP,
+    GLOBAL_PARAMS,
+    RAYTRACING_ACS,
+    VERTS,
+    IDXS,
+    INSTANCE_DATAS,
+    MATERIALS,
+
+    COUNT
+};
+
+#define PARAM_IDX(param) static_cast<uint32_t>(Param::param)
 
 ComPtr<ID3D12RootSignature> rootSignature;
 void initRootSignature()
 {
     std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
 
-    descriptorRanges.push_back({ // u0, renderTarget
+    descriptorRanges.push_back({
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
-        .BaseShaderRegister = 0,
+        .BaseShaderRegister = REGISTER_RENDER_TARGET,
         .RegisterSpace = 0,
         .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
     });
 
-    descriptorRanges.push_back({ // t5, textures
+    descriptorRanges.push_back({
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         .NumDescriptors = MAX_NUM_TEXTURES,
-        .BaseShaderRegister = 5,
+        .BaseShaderRegister = REGISTER_TEXTURES,
         .RegisterSpace = 0,
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
     });
 
-    std::vector<D3D12_ROOT_PARAMETER1> params;
+    std::array<D3D12_ROOT_PARAMETER1, PARAM_IDX(COUNT)> params;
 
-    params.push_back({
+    params[PARAM_IDX(SHARED_HEAP)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
         .DescriptorTable = {
             .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
             .pDescriptorRanges = descriptorRanges.data(),
         },
-    });
+    };
 
-    params.push_back({ // b0, GlobalParams
+    params[PARAM_IDX(GLOBAL_PARAMS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
-            .ShaderRegister = 0,
+            .ShaderRegister = REGISTER_GLOBAL_PARAMS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({ // t0, scene
+    params[PARAM_IDX(RAYTRACING_ACS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 0,
+            .ShaderRegister = REGISTER_RAYTRACING_ACS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({ // t1, verts
+    params[PARAM_IDX(VERTS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 1,
+            .ShaderRegister = REGISTER_VERTS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({ // t2, idxs
+    params[PARAM_IDX(IDXS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 2,
+            .ShaderRegister = REGISTER_IDXS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({ // t3, instanceDatas
+    params[PARAM_IDX(INSTANCE_DATAS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 3,
+            .ShaderRegister = REGISTER_INSTANCE_DATAS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
-    params.push_back({ // t4, materials
+    params[PARAM_IDX(MATERIALS)] = {
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 4,
+            .ShaderRegister = REGISTER_MATERIALS,
             .RegisterSpace = 0,
         },
-    });
+    };
 
     std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
 
@@ -334,7 +349,7 @@ void initRootSignature()
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = 0,
+        .ShaderRegister = REGISTER_TEX_SAMPLER,
     });
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {
@@ -539,14 +554,16 @@ void render()
         cmdList->SetComputeRootSignature(rootSignature.Get());
         ID3D12DescriptorHeap* heaps[] = { sharedHeap.Get() };
         cmdList->SetDescriptorHeaps(1, heaps);
-        uint32_t paramIdx = 0;
-        cmdList->SetComputeRootDescriptorTable(paramIdx++, sharedHeap->GetGPUDescriptorHandleForHeapStart()); // u0, t5
-        cmdList->SetComputeRootConstantBufferView(paramIdx++, paramBlockManager.getDevBuffer()->GetGPUVirtualAddress()); // b0
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevTlas()->GetGPUVirtualAddress()); // t0
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevVertBuffer()->GetGPUVirtualAddress()); // t1
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevIdxBuffer()->GetGPUVirtualAddress()); // t2
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevInstanceDatas()->GetGPUVirtualAddress()); // t3
-        cmdList->SetComputeRootShaderResourceView(paramIdx++, scene.getDevMaterials()->GetGPUVirtualAddress()); // t4
+
+        // clang-format off
+        cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedHeap->GetGPUDescriptorHandleForHeapStart());
+        cmdList->SetComputeRootConstantBufferView(PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlas()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatas()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterials()->GetGPUVirtualAddress());
+        // clang-format on
 
         const auto renderTargetDesc = renderTarget->GetDesc();
 

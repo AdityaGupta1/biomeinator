@@ -1,19 +1,15 @@
 #pragma once
 
-#ifndef __HLSL_VERSION
-#define __hlsl 0
-#else
-#define __hlsl 1
-#endif
+#include "common_preamble.h"
 
-#if !__hlsl
+#if !_hlsl
 #include <DirectXMath.h>
 
 #define uint uint32_t
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
-#endif // !__hlsl
+#endif // !_hlsl
 
 struct Vertex
 {
@@ -35,7 +31,7 @@ struct InstanceData
 
 struct Material
 {
-#if !__hlsl
+#if !_hlsl
 public:
     Material();
 #endif
@@ -78,9 +74,9 @@ struct SceneParams
     uint pad2;
 };
 
-#if !__hlsl
+#if !_hlsl
 #undef uint
 
 #undef float2
 #undef float3
-#endif // !__hlsl
+#endif // !_hlsl

@@ -23,10 +23,12 @@ file(GLOB_RECURSE SHADER_FILES "${SHADER_DIR}/*.hlsl")
 list(FILTER SHADER_FILES EXCLUDE REGEX ".*\\.hlsli$")
 file(GLOB_RECURSE EXISTING_COMPILED_SHADERS "${GENERATED_SHADER_HEADERS}/*.fxh")
 
-# collect hlsli files (since they were excluded in the compilation step)
+# collect .hlsli files (since they were excluded in the compilation step)
 file(GLOB_RECURSE SHADER_INCLUDE_FILES "${SHADER_DIR}/*.hlsli")
 
-set(COMMON_HEADERS "${SRC_DIR}/rendering/common_structs.h")
+# .h files which will be used by HLSL as well
+set(COMMON_SRC_DIR "${SRC_DIR}/rendering/common")
+file(GLOB_RECURSE COMMON_HEADERS "${COMMON_SRC_DIR}/*.h")
 
 # compile shaders
 set(COMPILED_HEADERS "")
