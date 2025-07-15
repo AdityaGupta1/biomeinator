@@ -60,6 +60,8 @@ public:
 
     void init(uint32_t sizeBytes);
 
+    void freeAll();
+
     void map();
     void unmap();
 

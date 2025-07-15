@@ -84,6 +84,11 @@ public:
         return this->isDirty;
     }
 
+    inline void setIsDirty()
+    {
+        this->isDirty = true;
+    }
+
     inline ID3D12Resource* getUploadBuffer()
     {
         return this->upload_buffer.Get();
