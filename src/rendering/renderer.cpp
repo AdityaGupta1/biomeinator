@@ -253,18 +253,18 @@ void initRootSignature()
 {
     std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
 
-    descriptorRanges.push_back({ // u0, renderTarget
+    descriptorRanges.push_back({
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
-        .BaseShaderRegister = 0,
+        .BaseShaderRegister = REGISTER_RENDER_TARGET,
         .RegisterSpace = 0,
         .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
     });
 
-    descriptorRanges.push_back({ // t5, textures
+    descriptorRanges.push_back({
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         .NumDescriptors = MAX_NUM_TEXTURES,
-        .BaseShaderRegister = 5,
+        .BaseShaderRegister = REGISTER_TEXTURES,
         .RegisterSpace = 0,
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
     });
@@ -279,50 +279,50 @@ void initRootSignature()
         },
     });
 
-    params.push_back({ // b0, GlobalParams
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
-            .ShaderRegister = 0,
+            .ShaderRegister = REGISTER_GLOBAL_PARAMS,
             .RegisterSpace = 0,
         },
     });
 
-    params.push_back({ // t0, scene
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 0,
+            .ShaderRegister = REGISTER_RAYTRACING_ACS,
             .RegisterSpace = 0,
         },
     });
 
-    params.push_back({ // t1, verts
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 1,
+            .ShaderRegister = REGISTER_VERTS,
             .RegisterSpace = 0,
         },
     });
 
-    params.push_back({ // t2, idxs
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 2,
+            .ShaderRegister = REGISTER_IDXS,
             .RegisterSpace = 0,
         },
     });
 
-    params.push_back({ // t3, instanceDatas
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 3,
+            .ShaderRegister = REGISTER_INSTANCE_DATAS,
             .RegisterSpace = 0,
         },
     });
 
-    params.push_back({ // t4, materials
+    params.push_back({
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
-            .ShaderRegister = 4,
+            .ShaderRegister = REGISTER_MATERIALS,
             .RegisterSpace = 0,
         },
     });
@@ -334,7 +334,7 @@ void initRootSignature()
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = 0,
+        .ShaderRegister = REGISTER_TEX_SAMPLER,
     });
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {

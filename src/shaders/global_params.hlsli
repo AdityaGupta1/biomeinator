@@ -2,7 +2,7 @@
 
 #include "common_structs.hlsli"
 
-cbuffer GlobalParams : register(b0)
+cbuffer GlobalParams : REGISTER_B(REGISTER_GLOBAL_PARAMS)
 {
     CameraParams cameraParams;
     SceneParams sceneParams;

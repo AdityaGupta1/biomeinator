@@ -1,7 +1,7 @@
 #include "common_structs.hlsli"
 #include "path_tracing.hlsli"
 
-RWTexture2D<float4> renderTarget : register(u0);
+RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET);
 
 #define NUM_SAMPLES_PER_PIXEL 1
 
