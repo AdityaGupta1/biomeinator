@@ -476,36 +476,61 @@ void saveScreenshot()
 {
     RECT rect;
     GetClientRect(hwnd, &rect);
-    const int width = rect.right - rect.left;
-    const int height = rect.bottom - rect.top;
+    const uint32_t width = rect.right - rect.left;
+    const uint32_t height = rect.bottom - rect.top;
 
-    const HDC hdcWindow = GetDC(hwnd);
-    const HDC hdcMem = CreateCompatibleDC(hdcWindow);
-    const HBITMAP hbm = CreateCompatibleBitmap(hdcWindow, width, height);
-    const HGDIOBJ old = SelectObject(hdcMem, hbm);
+    flush();
 
-    BitBlt(hdcMem, 0, 0, width, height, hdcWindow, 0, 0, SRCCOPY);
+    const uint32_t rowPitchBytes = width * 4;
+    const uint32_t rowPitchBytesAligned =
+        (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+    const uint32_t readbackSizeBytes = rowPitchBytesAligned * height;
 
-    BITMAPINFOHEADER bi{};
-    bi.biSize = sizeof(bi);
-    bi.biWidth = width;
-    bi.biHeight = -height;
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;
-    bi.biCompression = BI_RGB;
+    const D3D12_HEAP_PROPERTIES readbackHeap = { D3D12_HEAP_TYPE_READBACK };
+    ComPtr<ID3D12Resource> readbackBuffer =
+        BufferHelper::createBasicBuffer(readbackSizeBytes, &readbackHeap, D3D12_RESOURCE_STATE_COPY_DEST);
+
+    beginFrame();
+
+    D3D12_TEXTURE_COPY_LOCATION srcLocation = {
+        .pResource = renderTarget.Get(),
+        .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+        .SubresourceIndex = 0,
+    };
+
+    D3D12_TEXTURE_COPY_LOCATION destLocation = {};
+    destLocation.pResource = readbackBuffer.Get();
+    destLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destLocation.PlacedFootprint = { 0,
+                                     { DXGI_FORMAT_R8G8B8A8_UNORM,
+                                       width,
+                                       height,
+                                       1,
+                                       rowPitchBytesAligned } };
+
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 renderTarget.Get(),
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 D3D12_RESOURCE_STATE_COPY_SOURCE);
+    cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 renderTarget.Get(),
+                                                 D3D12_RESOURCE_STATE_COPY_SOURCE,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    submitCmd();
+    const uint64_t fenceValue = nextFenceValue++;
+    cmdQueue->Signal(fence.Get(), fenceValue);
+    waitForFence(fenceValue);
 
     std::vector<uint8_t> pixels(width * height * 4);
-    GetDIBits(hdcWindow, hbm, 0, height, pixels.data(), reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS);
-
-    SelectObject(hdcMem, old);
-    DeleteObject(hbm);
-    DeleteDC(hdcMem);
-    ReleaseDC(hwnd, hdcWindow);
-
-    for (size_t i = 0; i < pixels.size(); i += 4)
+    uint8_t* mapped = nullptr;
+    readbackBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+    for (uint32_t row = 0; row < height; ++row)
     {
-        std::swap(pixels[i], pixels[i + 2]); // convert BGRA to RGBA
+        memcpy(pixels.data() + rowPitchBytes * row, mapped + rowPitchBytesAligned * row, rowPitchBytes);
     }
+    readbackBuffer->Unmap(0, nullptr);
 
     wchar_t docPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
