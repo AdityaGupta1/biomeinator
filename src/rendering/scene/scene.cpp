@@ -50,11 +50,8 @@ void Scene::clear()
     {
         this->availableInstanceIds.push(instanceIdx);
     }
-    this->mappedInstanceDescsArray.setIsDirty();
-    this->mappedInstanceDatasArray.setIsDirty();
 
     this->nextMaterialIdx = 0;
-    this->mappedMaterialsArray.setIsDirty();
 
     this->isTlasDirty = false;
     this->dev_tlas = nullptr;
@@ -130,6 +127,8 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
+    this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
+
     this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
     this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
 
@@ -139,8 +138,6 @@ void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     {
         this->uploadPendingTextures(cmdList, toFreeList);
     }
-
-    this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
     if (this->isTlasDirty)
     {

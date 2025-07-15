@@ -48,7 +48,7 @@ static void onKeyDown(WPARAM wparam)
         }
         break;
     case 'P':
-        Renderer::saveScreenshot();
+        Renderer::queueScreenshot();
         break;
     default:
         break;
