@@ -457,6 +457,18 @@ static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
+struct ScreenshotRequest
+{
+    bool active{ false };
+    ComPtr<ID3D12Resource> readbackBuffer{ nullptr };
+    uint32_t width{ 0 };
+    uint32_t height{ 0 };
+    uint32_t rowPitchBytes{ 0 };
+    uint32_t rowPitchBytesAligned{ 0 };
+};
+
+static ScreenshotRequest screenshotRequest;
+
 void updateFps(double deltaTime)
 {
     frameCount++;
@@ -475,22 +487,27 @@ void updateFps(double deltaTime)
 
 void saveScreenshot()
 {
+    screenshotRequest.active = true;
+}
+
+void captureQueuedScreenshot()
+{
     RECT rect;
     GetClientRect(hwnd, &rect);
     const uint32_t width = rect.right - rect.left;
     const uint32_t height = rect.bottom - rect.top;
 
-    flush();
+    screenshotRequest.width = width;
+    screenshotRequest.height = height;
 
-    const uint32_t rowPitchBytes = width * 4;
-    const uint32_t rowPitchBytesAligned =
-        (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
-    const uint32_t readbackSizeBytes = rowPitchBytesAligned * height;
+    screenshotRequest.rowPitchBytes = width * 4;
+    screenshotRequest.rowPitchBytesAligned =
+        (screenshotRequest.rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) &
+        ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+    const uint32_t readbackSizeBytes = screenshotRequest.rowPitchBytesAligned * height;
 
-    ComPtr<ID3D12Resource> readbackBuffer =
-        BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP, D3D12_RESOURCE_STATE_COPY_DEST);
-
-    beginFrame();
+    screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(
+        readbackSizeBytes, &READBACK_HEAP, D3D12_RESOURCE_STATE_COPY_DEST);
 
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
         .pResource = renderTarget.Get(),
@@ -499,7 +516,7 @@ void saveScreenshot()
     };
 
     D3D12_TEXTURE_COPY_LOCATION destLocation = {};
-    destLocation.pResource = readbackBuffer.Get();
+    destLocation.pResource = screenshotRequest.readbackBuffer.Get();
     destLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     destLocation.PlacedFootprint = {
         .Offset = 0,
@@ -508,7 +525,7 @@ void saveScreenshot()
             .Width = width,
             .Height = height,
             .Depth = 1,
-            .RowPitch = rowPitchBytesAligned,
+            .RowPitch = screenshotRequest.rowPitchBytesAligned,
         },
     };
 
@@ -521,18 +538,22 @@ void saveScreenshot()
                                                  renderTarget.Get(),
                                                  D3D12_RESOURCE_STATE_COPY_SOURCE,
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
 
-    submitCmd();
+void finalizeQueuedScreenshot()
+{
     flush();
 
-    std::vector<uint8_t> pixels(width * height * 4);
+    std::vector<uint8_t> pixels(screenshotRequest.width * screenshotRequest.height * 4);
     uint8_t* mapped = nullptr;
-    readbackBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
-    for (uint32_t row = 0; row < height; ++row)
+    screenshotRequest.readbackBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+    for (uint32_t row = 0; row < screenshotRequest.height; ++row)
     {
-        memcpy(pixels.data() + rowPitchBytes * row, mapped + rowPitchBytesAligned * row, rowPitchBytes);
+        memcpy(pixels.data() + screenshotRequest.rowPitchBytes * row,
+               mapped + screenshotRequest.rowPitchBytesAligned * row,
+               screenshotRequest.rowPitchBytes);
     }
-    readbackBuffer->Unmap(0, nullptr);
+    screenshotRequest.readbackBuffer->Unmap(0, nullptr);
 
     wchar_t docPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
@@ -554,10 +575,16 @@ void saveScreenshot()
                   st.wSecond);
 
         const std::filesystem::path path = dir / fileName;
-        stbi_write_png(path.string().c_str(), width, height, 4, pixels.data(), width * 4);
+        stbi_write_png(path.string().c_str(),
+                       screenshotRequest.width,
+                       screenshotRequest.height,
+                       4,
+                       pixels.data(),
+                       screenshotRequest.width * 4);
     }
 
-    readbackBuffer.Reset();
+    screenshotRequest.readbackBuffer.Reset();
+    screenshotRequest.active = false;
 }
 
 void render()
@@ -610,6 +637,11 @@ void render()
                                renderTarget.Get(),
                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+    if (screenshotRequest.active)
+    {
+        captureQueuedScreenshot();
+    }
+
     backBuffer.Reset();
 
     submitCmd();
@@ -623,6 +655,11 @@ void render()
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
+
+    if (screenshotRequest.active)
+    {
+        finalizeQueuedScreenshot();
+    }
 }
 
 void waitForFence(const uint64_t fenceValue)
