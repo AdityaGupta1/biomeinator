@@ -28,7 +28,7 @@ void Scene::init()
     this->dev_idxBuffer.init(128 /*bytes*/);
 
     this->initInstanceBuffers();
-    this->initMaterialBuffers();
+    this->mappedMaterialsArray.init(this->maxNumMaterials);
 
     for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
     {
@@ -46,7 +46,7 @@ void Scene::clear()
         this->availableInstanceIds.push(instanceIdx);
     }
 
-    this->nextMaterialId = 0;
+    this->nextMaterialIdx = 0;
 
     this->isTlasDirty = false;
     this->dev_tlas = nullptr;
@@ -120,24 +120,17 @@ void Scene::freeInstance(Instance* instance)
     this->instances.erase(instance->id);
 }
 
-void Scene::initMaterialBuffers()
-{
-    dev_materials = BufferHelper::createBasicBuffer(
-        sizeof(Material) * this->maxNumMaterials, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
-    dev_materials->Map(0, nullptr, reinterpret_cast<void**>(&this->host_materials));
-}
-
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
-    if (this->nextMaterialId >= this->maxNumMaterials)
+    if (this->nextMaterialIdx >= this->maxNumMaterials)
     {
-        this->resizeMaterialBuffers(toFreeList, this->maxNumMaterials * 2);
+        this->mappedMaterialsArray.resize(toFreeList, this->maxNumMaterials *= 2);
     }
 
-    const uint32_t id = this->nextMaterialId++;
-    this->host_materials[id] = *material;
+    const uint32_t materialIdx = this->nextMaterialIdx++;
+    this->mappedMaterialsArray[materialIdx] = *material;
 
-    return id;
+    return materialIdx;
 }
 
 uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
@@ -152,22 +145,13 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t
     return id;
 }
 
-void Scene::resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials)
-{
-    toFreeList.pushResource(this->dev_materials, true);
-
-    const uint32_t oldMaxNumMaterials = this->maxNumMaterials;
-    this->maxNumMaterials = newNumMaterials;
-
-    const Material* host_oldMaterials = this->host_materials;
-
-    this->initMaterialBuffers();
-
-    memcpy(this->host_materials, host_oldMaterials, oldMaxNumMaterials * sizeof(Material));
-}
-
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
+    if (this->mappedMaterialsArray.getIsDirty())
+    {
+        this->mappedMaterialsArray.copyFromUploadBuffer(cmdList);
+    }
+
     if (!this->pendingTextures.empty())
     {
         this->uploadPendingTextures(cmdList, toFreeList);
@@ -233,7 +217,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 {
     if (this->dev_tlas)
     {
-        toFreeList.pushResource(this->dev_tlas);
+        toFreeList.pushResource(this->dev_tlas, false);
     }
 
     uint32_t instanceDescIdx = 0;
@@ -361,7 +345,7 @@ ID3D12Resource* Scene::getDevInstanceDatas()
 
 ID3D12Resource* Scene::getDevMaterials()
 {
-    return this->dev_materials.Get();
+    return this->mappedMaterialsArray.getBuffer();
 }
 
 ID3D12Resource* Scene::getDevTlas()
@@ -371,10 +355,10 @@ ID3D12Resource* Scene::getDevTlas()
 
 ID3D12Resource* Scene::getDevVertBuffer()
 {
-    return this->dev_vertBuffer.getManagedBuffer();
+    return this->dev_vertBuffer.getBuffer();
 }
 
 ID3D12Resource* Scene::getDevIdxBuffer()
 {
-    return this->dev_idxBuffer.getManagedBuffer();
+    return this->dev_idxBuffer.getBuffer();
 }

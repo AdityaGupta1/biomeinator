@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rendering/buffer/acs_helper.h"
 #include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
+#include "rendering/buffer/acs_helper.h"
+#include "rendering/buffer/mapped_array.h"
 
 #include <array>
 #include <memory>
@@ -76,10 +77,9 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t maxNumMaterials{ 0 };
-    uint32_t nextMaterialId{ 0 };
+    uint32_t nextMaterialIdx{ 0 };
 
-    Material* host_materials{ nullptr };
-    ComPtr<ID3D12Resource> dev_materials{ nullptr };
+    MappedArray<Material> mappedMaterialsArray;
 
     uint32_t nextTextureId{ 0 };
     std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
@@ -95,9 +95,6 @@ private:
     void initInstanceBuffers();
     void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
-
-    void initMaterialBuffers();
-    void resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials);
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
