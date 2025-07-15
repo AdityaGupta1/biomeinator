@@ -100,7 +100,8 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
     if (this->nextMaterialIdx >= this->maxNumMaterials)
     {
-        this->mappedMaterialsArray.resize(toFreeList, this->maxNumMaterials *= 2);
+        this->maxNumMaterials *= 2;
+        this->mappedMaterialsArray.resize(toFreeList, this->maxNumMaterials);
     }
 
     const uint32_t materialIdx = this->nextMaterialIdx++;
