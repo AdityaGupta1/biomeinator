@@ -40,7 +40,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         if (sharedAcsScratchBuffer)
         {
-            toFreeList.pushResource(sharedAcsScratchBuffer);
+            toFreeList.pushResource(sharedAcsScratchBuffer, false);
         }
 
         sharedAcsScratchBuffer = makeAcsBuffer(maxScratchSize, D3D12_RESOURCE_STATE_COMMON);
@@ -87,9 +87,9 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
             .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxBufferSection.sizeBytes),
             .VertexCount = Util::convertByteSizeToCount<Vertex>(vertBufferSection.sizeBytes),
-            .IndexBuffer = hasIdxs ? idxBufferSection.getManagedBuffer()->getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
+            .IndexBuffer = hasIdxs ? idxBufferSection.getBuffer()->getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
             .VertexBuffer = {
-                .StartAddress = vertBufferSection.getManagedBuffer()->getBufferGpuAddress() + vertBufferSection.offsetBytes,
+                .StartAddress = vertBufferSection.getBuffer()->getBufferGpuAddress() + vertBufferSection.offsetBytes,
                 .StrideInBytes = sizeof(Vertex),
             },
         },

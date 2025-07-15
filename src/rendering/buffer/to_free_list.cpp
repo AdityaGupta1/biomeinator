@@ -24,7 +24,7 @@ void ToFreeList::pushInstance(Instance* instance)
 {
     if (instance->geoWrapper.dev_blas)
     {
-        this->pushResource(instance->geoWrapper.dev_blas);
+        this->pushResource(instance->geoWrapper.dev_blas, false);
     }
     if (instance->geoWrapper.vertBufferSection.sizeBytes > 0)
     {
@@ -57,7 +57,7 @@ void ToFreeList::freeAll()
 
     for (const auto& bufferSection : managedBufferSections)
     {
-        bufferSection.getManagedBuffer()->freeSection(bufferSection);
+        bufferSection.getBuffer()->freeSection(bufferSection);
     }
     managedBufferSections.clear();
 

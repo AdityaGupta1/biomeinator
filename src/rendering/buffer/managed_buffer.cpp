@@ -13,7 +13,7 @@ ManagedBufferSection::ManagedBufferSection()
     : ManagedBufferSection(nullptr, 0, 0)
 {}
 
-ManagedBuffer* ManagedBufferSection::getManagedBuffer() const
+ManagedBuffer* ManagedBufferSection::getBuffer() const
 {
     return this->buffer;
 }
@@ -119,7 +119,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
         throw std::runtime_error("Attempting to resize mapped ManagedBuffer");
     }
 
-    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer);
+    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
     this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties, this->initialResourceState);
@@ -190,14 +190,14 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
 {
     return this->copyFromDeviceBuffer(cmdList,
                                       toFreeList,
-                                      dev_srcBuffer.getManagedBuffer(),
+                                      dev_srcBuffer.getBuffer(),
                                       srcBufferSection.sizeBytes,
                                       srcBufferSection.offsetBytes);
 }
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-    if (section.getManagedBuffer() != this)
+    if (section.getBuffer() != this)
     {
         throw std::runtime_error("Attempting to free ManagedBufferSection from wrong ManagedBuffer");
     }
@@ -234,7 +234,7 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
     }
 }
 
-ID3D12Resource* ManagedBuffer::getManagedBuffer() const
+ID3D12Resource* ManagedBuffer::getBuffer() const
 {
     return this->dev_buffer.Get();
 }

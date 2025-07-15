@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rendering/buffer/acs_helper.h"
 #include "rendering/common_structs.h"
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
+#include "rendering/buffer/acs_helper.h"
+#include "rendering/buffer/mapped_array.h"
 
 #include <array>
 #include <memory>
@@ -48,8 +49,6 @@ class Scene
     friend class ToFreeList;
 
 private:
-    uint32_t maxNumInstances{ 0 };
-
     ManagedBuffer dev_vertBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -63,10 +62,9 @@ private:
         false /*isMapped*/,
     };
 
-    D3D12_RAYTRACING_INSTANCE_DESC* host_instanceDescs{ nullptr };
-    ComPtr<ID3D12Resource> dev_instanceDescs{ nullptr };
-    InstanceData* host_instanceDatas{ nullptr };
-    ComPtr<ID3D12Resource> dev_instanceDatas{ nullptr };
+    uint32_t maxNumInstances{ 0 };
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{};
+    MappedArray<InstanceData> mappedInstanceDatasArray{};
 
     std::queue<uint32_t> availableInstanceIds;
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances;
@@ -76,10 +74,8 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t maxNumMaterials{ 0 };
-    uint32_t nextMaterialId{ 0 };
-
-    Material* host_materials{ nullptr };
-    ComPtr<ID3D12Resource> dev_materials{ nullptr };
+    uint32_t nextMaterialIdx{ 0 };
+    MappedArray<Material> mappedMaterialsArray{};
 
     uint32_t nextTextureId{ 0 };
     std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
@@ -92,12 +88,7 @@ private:
     };
     std::vector<PendingTexture> pendingTextures;
 
-    void initInstanceBuffers();
-    void resizeInstanceBuffers(ToFreeList& toFreeList, uint32_t newNumInstances);
     void freeInstance(Instance* instance);
-
-    void initMaterialBuffers();
-    void resizeMaterialBuffers(ToFreeList& toFreeList, uint32_t newNumMaterials);
 
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);

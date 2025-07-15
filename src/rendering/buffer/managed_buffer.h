@@ -21,7 +21,7 @@ public:
     ManagedBufferSection(ManagedBuffer* buffer, uint32_t offsetBytes, uint32_t sizeBytes);
     ManagedBufferSection();
 
-    ManagedBuffer* getManagedBuffer() const;
+    ManagedBuffer* getBuffer() const;
 };
 
 class ManagedBuffer
@@ -88,7 +88,7 @@ public:
                                                const ManagedBuffer& dev_srcBuffer,
                                                ManagedBufferSection srcBufferSection);
 
-    ID3D12Resource* getManagedBuffer() const;
+    ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
     uint32_t getSizeBytes() const;
 };

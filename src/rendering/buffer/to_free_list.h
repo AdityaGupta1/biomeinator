@@ -21,7 +21,7 @@ private:
 
 public:
     // The caller is responsible for nulling the ComPtr if necessary.
-    ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped = false);
+    ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped);
 
     void pushManagedBuffer(const ManagedBuffer* buffer);
     void pushManagedBufferSection(const ManagedBufferSection& bufferSection);
