@@ -556,6 +556,8 @@ void saveScreenshot()
         const std::filesystem::path path = dir / fileName;
         stbi_write_png(path.string().c_str(), width, height, 4, pixels.data(), width * 4);
     }
+
+    readbackBuffer.Reset();
 }
 
 void render()
