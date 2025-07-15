@@ -1,7 +1,9 @@
 #pragma once
 
-#ifndef __hlsl
+#ifndef __HLSL_VERSION
 #define __hlsl 0
+#else
+#define __hlsl 1
 #endif
 
 #if !__hlsl
