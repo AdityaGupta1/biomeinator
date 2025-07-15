@@ -486,9 +486,8 @@ void saveScreenshot()
         (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
     const uint32_t readbackSizeBytes = rowPitchBytesAligned * height;
 
-    const D3D12_HEAP_PROPERTIES readbackHeap = { D3D12_HEAP_TYPE_READBACK };
     ComPtr<ID3D12Resource> readbackBuffer =
-        BufferHelper::createBasicBuffer(readbackSizeBytes, &readbackHeap, D3D12_RESOURCE_STATE_COPY_DEST);
+        BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP, D3D12_RESOURCE_STATE_COPY_DEST);
 
     beginFrame();
 
@@ -501,12 +500,16 @@ void saveScreenshot()
     D3D12_TEXTURE_COPY_LOCATION destLocation = {};
     destLocation.pResource = readbackBuffer.Get();
     destLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    destLocation.PlacedFootprint = { 0,
-                                     { DXGI_FORMAT_R8G8B8A8_UNORM,
-                                       width,
-                                       height,
-                                       1,
-                                       rowPitchBytesAligned } };
+    destLocation.PlacedFootprint = {
+        .Offset = 0,
+        .Footprint = {
+            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .Width = width,
+            .Height = height,
+            .Depth = 1,
+            .RowPitch = rowPitchBytesAligned,
+        },
+    };
 
     BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                  renderTarget.Get(),
@@ -519,9 +522,7 @@ void saveScreenshot()
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     submitCmd();
-    const uint64_t fenceValue = nextFenceValue++;
-    cmdQueue->Signal(fence.Get(), fenceValue);
-    waitForFence(fenceValue);
+    flush();
 
     std::vector<uint8_t> pixels(width * height * 4);
     uint8_t* mapped = nullptr;
