@@ -4,6 +4,7 @@
 #include "rendering/host_structs.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/mapped_array.h"
+#include "rendering/common/common_registers.h"
 #include "rendering/common/common_structs.h"
 
 #include <array>
@@ -11,8 +12,6 @@
 #include <queue>
 #include <unordered_map>
 #include <vector>
-
-constexpr uint32_t MAX_NUM_TEXTURES = 8;
 
 class ToFreeList;
 
@@ -28,7 +27,8 @@ private:
     const uint32_t id;
     uint32_t materialId{ MATERIAL_ID_INVALID };
 
-    AcsHelper::GeometryWrapper geoWrapper;
+    AcsHelper::GeometryWrapper geoWrapper{};
+    ManagedBufferSection areaLightsBufferSection{};
 
     bool isScheduledForDeletion{ false };
 
@@ -40,6 +40,8 @@ public:
 
     DirectX::XMFLOAT3X4 transform{};
 
+    std::vector<AreaLight> host_areaLights;
+
     void setMaterialId(uint32_t id);
 };
 
@@ -49,13 +51,13 @@ class Scene
     friend class ToFreeList;
 
 private:
-    ManagedBuffer dev_vertBuffer{
+    ManagedBuffer managedVertsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         true /*isResizable*/,
         false /*isMapped*/,
     };
-    ManagedBuffer dev_idxBuffer{
+    ManagedBuffer managedIdxsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         true /*isResizable*/,
@@ -66,14 +68,13 @@ private:
     MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{};
     MappedArray<InstanceData> mappedInstanceDatasArray{};
 
-    std::queue<uint32_t> availableInstanceIds;
-    std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances;
-    std::vector<Instance*> instancesReadyForBlasBuild;
+    std::queue<uint32_t> availableInstanceIds{};
+    std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
+    std::vector<Instance*> instancesReadyForBlasBuild{};
 
     ComPtr<ID3D12Resource> dev_tlas{ nullptr };
     bool isTlasDirty{ false };
 
-    uint32_t maxNumMaterials{ 0 };
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<Material> mappedMaterialsArray{};
 
@@ -87,6 +88,15 @@ private:
         uint32_t id;
     };
     std::vector<PendingTexture> pendingTextures;
+
+    ManagedBuffer managedAreaLightsBuffer{
+        &DEFAULT_HEAP,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        true /*isResizable*/,
+        false /*isMapped*/,
+    };
+    uint32_t numAreaLights{ 0 };
+    MappedArray<uint32_t> areaLightSamplingStructure{};
 
     void freeInstance(Instance* instance);
 
@@ -109,13 +119,17 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    ID3D12Resource* getDevInstanceDescs();
-    ID3D12Resource* getDevInstanceDatas();
+    D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 
-    ID3D12Resource* getDevMaterials();
+    D3D12_GPU_VIRTUAL_ADDRESS getDevMaterialsAddress() const;
 
-    ID3D12Resource* getDevTlas();
+    bool hasTlas() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
-    ID3D12Resource* getDevVertBuffer();
-    ID3D12Resource* getDevIdxBuffer();
+    D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
+
+    uint32_t getNumAreaLights() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightSamplingStructureAddress() const;
 };

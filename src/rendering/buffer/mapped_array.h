@@ -74,23 +74,28 @@ public:
         this->isDirty = true;
     }
 
-    inline uint32_t getSize()
+    inline uint32_t getSize() const
     {
         return this->size;
     }
 
-    inline bool getIsDirty()
+    inline bool getIsDirty() const
     {
         return this->isDirty;
     }
 
-    inline ID3D12Resource* getUploadBuffer()
+    inline ID3D12Resource* getUploadBuffer() const
     {
         return this->upload_buffer.Get();
     }
 
-    inline ID3D12Resource* getBuffer()
+    inline ID3D12Resource* getBuffer() const
     {
         return this->dev_buffer.Get();
+    }
+
+    inline D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const
+    {
+        return this->dev_buffer->GetGPUVirtualAddress();
     }
 };

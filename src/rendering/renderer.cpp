@@ -258,6 +258,8 @@ enum class Param
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
+    AREA_LIGHTS,
+    AREA_LIGHT_SAMPLING_STRUCTURE,
 
     COUNT
 };
@@ -273,7 +275,7 @@ void initRootSignature()
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
         .BaseShaderRegister = REGISTER_RENDER_TARGET,
-        .RegisterSpace = 0,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
         .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
     });
 
@@ -281,7 +283,7 @@ void initRootSignature()
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         .NumDescriptors = MAX_NUM_TEXTURES,
         .BaseShaderRegister = REGISTER_TEXTURES,
-        .RegisterSpace = 0,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
     });
 
@@ -299,7 +301,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
             .ShaderRegister = REGISTER_GLOBAL_PARAMS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -307,7 +309,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_RAYTRACING_ACS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -315,7 +317,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_VERTS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -323,7 +325,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_IDXS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -331,7 +333,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_INSTANCE_DATAS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -339,7 +341,23 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_MATERIALS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
+        },
+    };
+
+    params[PARAM_IDX(AREA_LIGHTS)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = REGISTER_AREA_LIGHTS,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
+        },
+    };
+
+    params[PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -351,6 +369,7 @@ void initRootSignature()
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .ShaderRegister = REGISTER_TEX_SAMPLER,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
     });
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {
@@ -365,7 +384,18 @@ void initRootSignature()
     };
 
     ComPtr<ID3DBlob> blob;
-    D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, nullptr);
+    ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, &errorBlob);
+#ifdef _DEBUG
+    if (FAILED(hr))
+    {
+        if (errorBlob)
+        {
+            printf("Root signature serialization error: %s\n", (const char*)errorBlob->GetBufferPointer());
+        }
+        __debugbreak();
+    }
+#endif
     device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 }
 
@@ -594,12 +624,13 @@ void render()
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
     paramBlockManager.sceneParams->frameNumber = frameNumber;
+    paramBlockManager.sceneParams->numAreaLights = scene.getNumAreaLights();
 
     beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    if (scene.getDevTlas() != nullptr)
+    if (scene.hasTlas())
     {
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
@@ -609,11 +640,13 @@ void render()
         // clang-format off
         cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedHeap->GetGPUDescriptorHandleForHeapStart());
         cmdList->SetComputeRootConstantBufferView(PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlas()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatas()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterials()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
         const auto renderTargetDesc = renderTarget->GetDesc();

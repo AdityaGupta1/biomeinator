@@ -1,2 +1,7 @@
+[SearchableFiles.ignore]
+.git/
+build/
+external/
+
 [SearchableFiles.include]
 *

@@ -33,17 +33,20 @@ struct Payload
     RandomSampler rng;
 };
 
-RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS);
+RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS, REGISTER_SPACE_BUFFERS);
 
-StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS);
-ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS);
+StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
+ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
 
-StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATAS);
+StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATAS, REGISTER_SPACE_BUFFERS);
 
-StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS);
+StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_SPACE_BUFFERS);
 
-Texture2D<float4> textures[] : REGISTER_T(REGISTER_TEXTURES);
-SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER);
+Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
+SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
+
+StructuredBuffer<AreaLight> areaLights : REGISTER_T(REGISTER_AREA_LIGHTS, REGISTER_SPACE_BUFFERS);
+StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, REGISTER_SPACE_BUFFERS);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {

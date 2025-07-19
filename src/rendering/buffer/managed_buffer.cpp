@@ -191,12 +191,12 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
 
 ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
                                                           ToFreeList& toFreeList,
-                                                          const ManagedBuffer& dev_srcBuffer,
+                                                          const ManagedBuffer& srcBuffer,
                                                           ManagedBufferSection srcBufferSection)
 {
     return this->copyFromDeviceBuffer(cmdList,
                                       toFreeList,
-                                      dev_srcBuffer.getBuffer(),
+                                      srcBuffer.getBuffer(),
                                       srcBufferSection.sizeBytes,
                                       srcBufferSection.offsetBytes);
 }

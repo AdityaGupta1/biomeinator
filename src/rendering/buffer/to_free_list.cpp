@@ -26,13 +26,18 @@ void ToFreeList::pushInstance(Instance* instance)
     {
         this->pushResource(instance->geoWrapper.dev_blas, false);
     }
-    if (instance->geoWrapper.vertBufferSection.sizeBytes > 0)
+    if (instance->geoWrapper.vertsBufferSection.sizeBytes > 0)
     {
-        this->pushManagedBufferSection(instance->geoWrapper.vertBufferSection);
+        this->pushManagedBufferSection(instance->geoWrapper.vertsBufferSection);
     }
-    if (instance->geoWrapper.idxBufferSection.sizeBytes > 0)
+    if (instance->geoWrapper.idxsBufferSection.sizeBytes > 0)
     {
-        this->pushManagedBufferSection(instance->geoWrapper.idxBufferSection);
+        this->pushManagedBufferSection(instance->geoWrapper.idxsBufferSection);
+    }
+
+    if (instance->areaLightsBufferSection.sizeBytes > 0)
+    {
+        this->pushManagedBufferSection(instance->areaLightsBufferSection);
     }
 
     instances.push_back(instance);

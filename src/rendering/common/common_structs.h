@@ -51,6 +51,18 @@ public:
     float3 emissiveColor;
 };
 
+struct AreaLight
+{
+    float3 pos0;
+    uint instanceId;
+
+    float3 pos1;
+    uint triangleId;
+
+    float3 pos2;
+    uint pad0;
+};
+
 struct CameraParams
 {
     float3 pos_WS;
@@ -69,9 +81,9 @@ struct CameraParams
 struct SceneParams
 {
     uint frameNumber;
+    uint numAreaLights;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #if !_hlsl

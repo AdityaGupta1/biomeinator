@@ -15,8 +15,8 @@ struct GeometryWrapper
 {
     ComPtr<ID3D12Resource> dev_blas{ nullptr };
 
-    ManagedBufferSection vertBufferSection{};
-    ManagedBufferSection idxBufferSection{};
+    ManagedBufferSection vertsBufferSection{};
+    ManagedBufferSection idxsBufferSection{};
 };
 
 struct BlasBuildInputs
