@@ -75,26 +75,6 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
     const Material material = materials[payload.materialId];
 
-    // TODO: remove
-    if (true)
-    {
-        bool hitLight = false;
-        for (uint lightSampleIdx = 0; lightSampleIdx < sceneParams.numAreaLights; ++lightSampleIdx)
-        {
-            const uint lightIdx = areaLightSamplingStructure[lightSampleIdx];
-            const AreaLight light = areaLights[lightIdx];
-            if (payload.hitInfo.instanceId == light.instanceId && payload.hitInfo.triangleIdx == light.triangleIdx)
-            {
-                hitLight = true;
-                break;
-            }
-        }
-
-        payload.pathColor = hitLight ? float3(0, 1, 0) : float3(1, 0, 0);
-        payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
-        return;
-    }
-
     if (material.emissiveStrength > 0)
     {
         payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
@@ -115,10 +95,14 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 
     if (material.diffuseWeight > 0)
     {
-        float3 diffuseColor = material.diffuseColor;
+        float3 diffuseColor;
         if (material.diffuseTextureId != TEXTURE_ID_INVALID)
         {
             diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
+        }
+        else
+        {
+            diffuseColor = material.diffuseColor;
         }
         payload.pathWeight *= diffuseColor;
 
@@ -178,11 +162,13 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         }
     }
 
+    // TODO: try sampling a light
+
     return false;
 }
 
 [shader("closesthit")]
-void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
@@ -216,6 +202,12 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialId = instanceData.materialId;
+}
+
+[shader("closesthit")]
+void ClosestHit_Light(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+{
+
 }
 
 [shader("miss")]

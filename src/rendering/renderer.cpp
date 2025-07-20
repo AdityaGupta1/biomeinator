@@ -400,7 +400,6 @@ void initRootSignature()
 }
 
 ComPtr<ID3D12StateObject> pso;
-constexpr UINT64 NUM_SHADER_IDS = 3;
 ComPtr<ID3D12Resource> dev_shaderIds;
 D3D12_DISPATCH_RAYS_DESC dispatchDesc;
 void initPipeline()
@@ -412,10 +411,17 @@ void initPipeline()
         },
     };
 
-    D3D12_HIT_GROUP_DESC hitGroup = {
-        .HitGroupExport = L"HitGroup",
-        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit",
+    std::vector<D3D12_HIT_GROUP_DESC> hitGroups = {
+        {
+            .HitGroupExport = L"HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        },
+        {
+            .HitGroupExport = L"HitGroup_Light",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Light",
+        },
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
@@ -431,22 +437,28 @@ void initPipeline()
         .MaxTraceRecursionDepth = 1,
     };
 
-    D3D12_STATE_SUBOBJECT subobjects[] = {
+    std::vector<D3D12_STATE_SUBOBJECT> subobjects = {
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib },
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg },
     };
+
+    for (const auto& hitGroup : hitGroups)
+    {
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+    }
+
     D3D12_STATE_OBJECT_DESC desc = {
         .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-        .NumSubobjects = std::size(subobjects),
-        .pSubobjects = subobjects,
+        .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
+        .pSubobjects = subobjects.data(),
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
+    const uint32_t numShaderIds = 2 + hitGroups.size();
     dev_shaderIds = BufferHelper::createBasicBuffer(
-        NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+        numShaderIds * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);
@@ -462,7 +474,10 @@ void initPipeline()
     dev_shaderIds->Map(0, nullptr, &data);
     writeId(L"RayGeneration");
     writeId(L"Miss");
-    writeId(L"HitGroup");
+    for (const auto& hitGroup : hitGroups)
+    {
+        writeId(hitGroup.HitGroupExport);
+    }
     dev_shaderIds->Unmap(0, nullptr);
 
     dispatchDesc = {
@@ -476,10 +491,11 @@ void initPipeline()
         },
         .HitGroupTable = {
             .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            .SizeInBytes = hitGroups.size() * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },
     };
-    dispatchDesc.Depth = 1;
+    dispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
 }
 
 static int frameCount = 0;
