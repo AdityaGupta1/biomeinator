@@ -79,9 +79,10 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
     if (true)
     {
         bool hitLight = false;
-        for (uint lightIdx = 0; lightIdx < sceneParams.numAreaLights; ++lightIdx)
+        for (uint lightSampleIdx = 0; lightSampleIdx < sceneParams.numAreaLights; ++lightSampleIdx)
         {
-            AreaLight light = areaLights[lightIdx];
+            const uint lightIdx = areaLightSamplingStructure[lightSampleIdx];
+            const AreaLight light = areaLights[lightIdx];
             if (payload.hitInfo.instanceId == light.instanceId && payload.hitInfo.triangleIdx == light.triangleIdx)
             {
                 hitLight = true;

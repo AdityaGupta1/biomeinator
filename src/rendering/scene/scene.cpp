@@ -263,11 +263,14 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
                 if (nextAreaLightSamplingIdx > this->areaLightSamplingStructure.getSize())
                 {
                     this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
-                    this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
                 }
+
+                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
             }
         }
     }
+
+    this->numAreaLights = nextAreaLightSamplingIdx;
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->mappedInstanceDescsArray.getUploadBuffer(); // TODO: test if this crashes with default heap buffer
