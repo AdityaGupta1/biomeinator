@@ -67,6 +67,7 @@ void Scene::clear()
     this->pendingTextures.clear();
 
     this->numAreaLights = 0;
+    this->managedAreaLightsBuffer.freeAll();
 }
 
 Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
@@ -260,7 +261,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             uint32_t instanceAreaLightIdx = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
             for (uint32_t idx = 0; idx < instanceNumAreaLights; ++idx)
             {
-                if (nextAreaLightSamplingIdx > this->areaLightSamplingStructure.getSize())
+                if (nextAreaLightSamplingIdx >= this->areaLightSamplingStructure.getSize())
                 {
                     this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
                 }
