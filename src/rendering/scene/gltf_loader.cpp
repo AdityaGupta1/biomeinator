@@ -287,18 +287,17 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 }
             }
 
-            const bool isEmissive = prim.material >= 0
-                                      && static_cast<size_t>(prim.material) < materialIsEmissive.size()
-                                      && materialIsEmissive[prim.material];
+            const bool isEmissive = prim.material >= 0 &&
+                                    static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
+                                    materialIsEmissive[prim.material];
             if (isEmissive)
             {
-                const size_t triCount =
-                    instance->host_idxs.empty() ? instance->host_verts.size() / 3
-                                                : instance->host_idxs.size() / 3;
+                const uint32_t triCount =
+                    instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
                 instance->host_areaLights.resize(triCount);
-                for (size_t t = 0; t < triCount; ++t)
+                for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
                 {
-                    uint32_t i0 = t * 3;
+                    uint32_t i0 = triIdx * 3;
                     uint32_t i1 = i0 + 1;
                     uint32_t i2 = i0 + 2;
                     if (!instance->host_idxs.empty())
@@ -308,12 +307,12 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         i2 = instance->host_idxs[i2];
                     }
 
-                    AreaLight& light = instance->host_areaLights[t];
+                    AreaLight& light = instance->host_areaLights[triIdx];
                     light.pos0 = instance->host_verts[i0].pos;
                     light.pos1 = instance->host_verts[i1].pos;
                     light.pos2 = instance->host_verts[i2].pos;
-                    light.instanceId = 0;
-                    light.triangleId = static_cast<uint>(t);
+                    light.instanceId = instance->getId();
+                    light.triangleIdx = triIdx;
                 }
             }
 

@@ -14,6 +14,11 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+uint32_t Instance::getId() const
+{
+    return this->id;
+}
+
 void Instance::setMaterialId(uint32_t id)
 {
     this->materialId = id;
