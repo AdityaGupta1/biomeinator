@@ -42,6 +42,8 @@ public:
 
     std::vector<AreaLight> host_areaLights;
 
+    uint32_t getId() const;
+
     void setMaterialId(uint32_t id);
 };
 

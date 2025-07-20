@@ -18,6 +18,8 @@ struct HitInfo
     float hitT;
 
     float2 uv;
+    uint instanceId;
+    uint triangleIdx;
 };
 
 struct Payload
@@ -72,6 +74,26 @@ float3 evalRayPos(const RayDesc ray, const float t)
 void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
     const Material material = materials[payload.materialId];
+
+    // TODO: remove
+    if (true)
+    {
+        bool hitLight = false;
+        for (uint lightSampleIdx = 0; lightSampleIdx < sceneParams.numAreaLights; ++lightSampleIdx)
+        {
+            const uint lightIdx = areaLightSamplingStructure[lightSampleIdx];
+            const AreaLight light = areaLights[lightIdx];
+            if (payload.hitInfo.instanceId == light.instanceId && payload.hitInfo.triangleIdx == light.triangleIdx)
+            {
+                hitLight = true;
+                break;
+            }
+        }
+
+        payload.pathColor = hitLight ? float3(0, 1, 0) : float3(1, 0, 0);
+        payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+        return;
+    }
 
     if (material.emissiveStrength > 0)
     {
@@ -190,6 +212,8 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
     payload.hitInfo.normal_WS = normalize(mul(normal_OS, (float3x3) ObjectToWorld4x3()));
     payload.hitInfo.hitT = RayTCurrent();
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialId = instanceData.materialId;
 }

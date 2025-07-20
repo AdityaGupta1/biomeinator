@@ -14,6 +14,11 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+uint32_t Instance::getId() const
+{
+    return this->id;
+}
+
 void Instance::setMaterialId(uint32_t id)
 {
     this->materialId = id;
@@ -62,6 +67,7 @@ void Scene::clear()
     this->pendingTextures.clear();
 
     this->numAreaLights = 0;
+    this->managedAreaLightsBuffer.freeAll();
 }
 
 Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
@@ -255,14 +261,17 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             uint32_t instanceAreaLightIdx = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
             for (uint32_t idx = 0; idx < instanceNumAreaLights; ++idx)
             {
-                if (nextAreaLightSamplingIdx > this->areaLightSamplingStructure.getSize())
+                if (nextAreaLightSamplingIdx >= this->areaLightSamplingStructure.getSize())
                 {
                     this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
-                    this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
                 }
+
+                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
             }
         }
     }
+
+    this->numAreaLights = nextAreaLightSamplingIdx;
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->mappedInstanceDescsArray.getUploadBuffer(); // TODO: test if this crashes with default heap buffer

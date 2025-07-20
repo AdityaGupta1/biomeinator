@@ -57,7 +57,7 @@ struct AreaLight
     uint instanceId;
 
     float3 pos1;
-    uint triangleId;
+    uint triangleIdx;
 
     float3 pos2;
     uint pad0;
