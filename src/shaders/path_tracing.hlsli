@@ -71,6 +71,11 @@ float3 evalRayPos(const RayDesc ray, const float t)
 
 void evaluateBsdf(inout RayDesc ray, inout Payload payload)
 {
+    if (true)
+    {
+        const bool hitLight = materials[payload.materialId].emissiveStrength > 0;
+        payload.pathColor = hitLight ? float3(0, 1, 0) : float3(1, 0, 0);
+    }
     const Material material = materials[payload.materialId];
 
     if (material.emissiveStrength > 0)
