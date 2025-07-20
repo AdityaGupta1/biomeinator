@@ -1,3 +1,8 @@
+/*
+This file is mostly AI-generated and exists solely to load test scenes for verifying path tracing results. It works only
+on a specific subset of glTF files and is not guaranteed to work for files outside that subset.
+*/
+
 #include "gltf_loader.h"
 
 #include "tinygltf/tiny_gltf.h"

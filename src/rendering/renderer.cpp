@@ -624,11 +624,12 @@ void render()
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
     paramBlockManager.sceneParams->frameNumber = frameNumber;
-    paramBlockManager.sceneParams->numAreaLights = scene.getNumAreaLights();
 
     beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
+
+    paramBlockManager.sceneParams->numAreaLights = scene.getNumAreaLights();
 
     if (scene.hasTlas())
     {

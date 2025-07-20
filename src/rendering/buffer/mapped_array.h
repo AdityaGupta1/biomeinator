@@ -29,6 +29,13 @@ public:
 
     T& operator[](uint32_t idx)
     {
+#ifdef _DEBUG
+        if (idx >= this->size)
+        {
+            throw std::exception("MappedArray access out of bounds");
+        }
+#endif
+
         this->isDirty = true; // kind of hacky but if you're accessing this then you probably want to do a copy too
         return host_buffer[idx];
     }
