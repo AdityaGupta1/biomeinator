@@ -72,7 +72,55 @@ float3 evalRayPos(const RayDesc ray, const float t)
     return ray.Origin + ray.Direction * t;
 }
 
-void evaluateBsdf(inout RayDesc ray, inout Payload payload)
+float3 evaluateBsdf(
+    const Material material,
+    const float2 uv,
+    const float3 wo_WS,
+    const float3 wi_WS,
+    const float3 normal_WS)
+{
+    float3 diffuseColor;
+    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
+    {
+        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, uv, 0).rgb;
+    }
+    else
+    {
+        diffuseColor = material.diffuseColor;
+    }
+
+    return diffuseColor * M_INV_PI;
+}
+
+struct BsdfSample
+{
+    float3 wi_WS;
+    float pdf;
+
+    float3 bsdfValue;
+};
+
+BsdfSample sampleBsdf(
+    const Material material,
+    const float2 uv,
+    const float3 wo_WS,
+    const float3 normal_WS,
+    float2 rndSample)
+{
+    BsdfSample result;
+
+    const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+    result.wi_WS = wi_WS;
+
+    float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
+
+    result.pdf = cosTheta(wi_WS, normal_WS) / M_PI;
+    result.bsdfValue = bsdfValue;
+
+    return result;
+}
+
+void bounceRay(inout RayDesc ray, inout Payload payload)
 {
     const Material material = materials[payload.materialId];
 
@@ -81,31 +129,23 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
         payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
     }
 
-    const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
-    const float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
-
     if (material.diffuseWeight == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;
     }
 
-    float3 diffuseColor;
-    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
-    {
-        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
-    }
-    else
-    {
-        diffuseColor = material.diffuseColor;
-    }
-    payload.pathWeight *= diffuseColor;
+    float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
+    float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
+    float3 wo_WS = -ray.Direction;
 
     const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
-    const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, rndSample);
+
+    payload.pathWeight *= sample.bsdfValue * cosTheta(sample.wi_WS, normal_WS) / sample.pdf;
 
     ray.Origin = hitPos_WS;
-    ray.Direction = newDir_WS;
+    ray.Direction = sample.wi_WS;
     ray.TMin = 0.001;
     ray.TMax = 1000;
 }
@@ -137,7 +177,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             return false;
         }
 
-        evaluateBsdf(ray, payload);
+        bounceRay(ray, payload);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {
