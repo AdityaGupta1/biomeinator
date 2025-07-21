@@ -7,6 +7,7 @@
 
 #define uint uint32_t
 
+#define float float
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
 #endif // !_hlsl
@@ -57,7 +58,7 @@ struct AreaLight
     uint triangleIdx;
 
     float3 pos2;
-    uint pad0;
+    float rcpArea; // set by Scene::markInstanceReadyForBlasBuild()
 };
 
 struct CameraParams

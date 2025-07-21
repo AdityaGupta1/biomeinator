@@ -99,6 +99,20 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 
 void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 {
+    for (auto& areaLight : instance->host_areaLights)
+    {
+        const XMVECTOR p0 = XMLoadFloat3(&areaLight.pos0);
+        const XMVECTOR p1 = XMLoadFloat3(&areaLight.pos1);
+        const XMVECTOR p2 = XMLoadFloat3(&areaLight.pos2);
+
+        const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
+        const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
+        const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+
+        const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
+        areaLight.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+    }
+
     this->instancesReadyForBlasBuild.push_back(instance);
 }
 
