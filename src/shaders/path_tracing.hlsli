@@ -5,6 +5,7 @@
 #include "../rendering/common/common_registers.h"
 
 #include "global_params.hlsli"
+#include "light_sampling.hlsli"
 #include "rng.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
@@ -47,9 +48,6 @@ StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_S
 
 Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
 SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
-
-StructuredBuffer<AreaLight> areaLights : REGISTER_T(REGISTER_AREA_LIGHTS, REGISTER_SPACE_BUFFERS);
-StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, REGISTER_SPACE_BUFFERS);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {

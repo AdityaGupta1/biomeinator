@@ -7,7 +7,6 @@
 
 #define uint uint32_t
 
-#define float float
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
 #endif // !_hlsl
