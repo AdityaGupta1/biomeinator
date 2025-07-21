@@ -83,48 +83,30 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
     const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
     const float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
 
-    const float totalWeight = material.diffuseWeight + material.specularWeight;
-    if (totalWeight == 0)
+    if (material.diffuseWeight == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;
     }
 
-    // for now, pick either fully diffuse or fully specular
-    // will deal with proper layer selection when I have more complicated bsdfs (rough reflection, etc.)
-
-    if (material.diffuseWeight > 0)
+    float3 diffuseColor;
+    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
     {
-        float3 diffuseColor;
-        if (material.diffuseTextureId != TEXTURE_ID_INVALID)
-        {
-            diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
-        }
-        else
-        {
-            diffuseColor = material.diffuseColor;
-        }
-        payload.pathWeight *= diffuseColor;
-
-        const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
-        const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
-
-        ray.Origin = hitPos_WS;
-        ray.Direction = newDir_WS;
-        ray.TMin = 0.001;
-        ray.TMax = 1000;
+        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
     }
-    else // material.specularWeight > 0
+    else
     {
-        payload.pathWeight *= material.specularColor;
-
-        const float3 reflectedDir_WS = reflect(normalize(ray.Direction), normal_WS);
-
-        ray.Origin = hitPos_WS;
-        ray.Direction = reflectedDir_WS;
-        ray.TMin = 0.001;
-        ray.TMax = 1000;
+        diffuseColor = material.diffuseColor;
     }
+    payload.pathWeight *= diffuseColor;
+
+    const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
+    const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+
+    ray.Origin = hitPos_WS;
+    ray.Direction = newDir_WS;
+    ray.TMin = 0.001;
+    ray.TMax = 1000;
 }
 
 bool pathTraceRay(RayDesc ray, inout Payload payload)

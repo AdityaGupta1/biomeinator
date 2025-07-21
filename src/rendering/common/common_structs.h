@@ -44,9 +44,6 @@ public:
     uint pad1;
     uint pad2;
 
-    float specularWeight;
-    float3 specularColor;
-
     float emissiveStrength;
     float3 emissiveColor;
 };
