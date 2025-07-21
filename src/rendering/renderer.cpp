@@ -8,6 +8,7 @@
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_hitgroups.h"
 #include "common/common_registers.h"
 #include "scene/camera.h"
 #include "scene/gltf_loader.h"
@@ -411,17 +412,17 @@ void initPipeline()
         },
     };
 
-    std::vector<D3D12_HIT_GROUP_DESC> hitGroups = {
-        {
-            .HitGroupExport = L"HitGroup_Primary",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .ClosestHitShaderImport = L"ClosestHit_Primary",
-        },
-        {
-            .HitGroupExport = L"HitGroup_Light",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .ClosestHitShaderImport = L"ClosestHit_Light",
-        },
+    constexpr uint32_t NUM_HIT_GROUPS = 2;
+    std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
+    hitGroups[HITGROUP_PRIMARY] = {
+        .HitGroupExport = L"HitGroup_Primary",
+        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+        .ClosestHitShaderImport = L"ClosestHit_Primary",
+    };
+    hitGroups[HITGROUP_LIGHTS] = {
+        .HitGroupExport = L"HitGroup_Lights",
+        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+        .ClosestHitShaderImport = L"ClosestHit_Lights",
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
@@ -456,7 +457,7 @@ void initPipeline()
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
-    const uint32_t numShaderIds = 2 + hitGroups.size();
+    const uint32_t numShaderIds = 2 + NUM_HIT_GROUPS;
     dev_shaderIds = BufferHelper::createBasicBuffer(
         numShaderIds * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
@@ -491,7 +492,7 @@ void initPipeline()
         },
         .HitGroupTable = {
             .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = hitGroups.size() * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
             .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },
     };

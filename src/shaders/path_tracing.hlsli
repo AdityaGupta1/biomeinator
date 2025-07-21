@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
@@ -124,7 +125,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             payload.pathWeight /= survivalProbability;
         }
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {
@@ -187,7 +188,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 }
 
 [shader("closesthit")]
-void ClosestHit_Light(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
 
 }
