@@ -25,6 +25,16 @@ struct RandomSampler
     {
         return (nextUint() & 0x00FFFFFF) / 16777216.0;
     }
+
+    float2 nextFloat2()
+    {
+        return float2(nextFloat(), nextFloat());
+    }
+
+    float3 nextFloat3()
+    {
+        return float3(nextFloat(), nextFloat(), nextFloat());
+    }
 };
 
 RandomSampler initRandomSampler(uint seed)

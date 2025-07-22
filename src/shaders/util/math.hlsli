@@ -33,3 +33,8 @@ float cosTheta(const float3 v_WS, const float3 normal_WS)
 {
     return saturate(dot(v_WS, normal_WS));
 }
+
+float distance2(const float3 a, const float3 b)
+{
+    return dot(a - b, a - b);
+}

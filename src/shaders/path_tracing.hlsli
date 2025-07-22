@@ -6,45 +6,14 @@
 
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
-#include "rng.hlsli"
+#include "payload.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-#define MAX_PATH_DEPTH 8
-
-#define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
-
-struct HitInfo
-{
-    float3 normal_WS;
-    float hitT;
-
-    float2 uv;
-    uint instanceId;
-    uint triangleIdx;
-};
-
-struct Payload
-{
-    float3 pathWeight;
-    uint flags;
-
-    float3 pathColor;
-    uint materialId;
-
-    HitInfo hitInfo;
-
-    RandomSampler rng;
-};
-
-RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS, REGISTER_SPACE_BUFFERS);
+#define MAX_PATH_DEPTH 5
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
-
-StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATAS, REGISTER_SPACE_BUFFERS);
-
-StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_SPACE_BUFFERS);
 
 Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
 SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
@@ -118,7 +87,13 @@ BsdfSample sampleBsdf(
     return result;
 }
 
-void bounceRay(inout RayDesc ray, inout Payload payload)
+void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 hitPos_WS, out float3 normal_WS)
+{
+    hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
+    normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
+}
+
+void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 {
     const Material material = materials[payload.materialId];
 
@@ -133,19 +108,23 @@ void bounceRay(inout RayDesc ray, inout Payload payload)
         return;
     }
 
-    float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
-    float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
+    if (isLastBounce)
+    {
+        return;
+    }
+
+    float3 hitPos_WS, normal_WS;
+    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
     float3 wo_WS = -ray.Direction;
 
-    const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
-    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, rndSample);
+    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
 
     payload.pathWeight *= sample.bsdfValue * cosTheta(sample.wi_WS, normal_WS) / sample.pdf;
 
-    ray.Origin = hitPos_WS;
+    ray.Origin = hitPos_WS + 0.001f * normal_WS;
     ray.Direction = sample.wi_WS;
-    ray.TMin = 0.001;
-    ray.TMax = 1000;
+    ray.TMin = 0.f;
+    ray.TMax = 10000.f;
 }
 
 bool pathTraceRay(RayDesc ray, inout Payload payload)
@@ -175,7 +154,8 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             return false;
         }
 
-        bounceRay(ray, payload);
+        const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
+        bounceRay(ray, payload, isLastBounce);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {
@@ -183,9 +163,20 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         }
     }
 
-    // TODO: try sampling a light
+    float3 hitPos_WS, normal_WS;
+    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng.nextFloat3());
 
-    return false;
+    if (!lightSample.didHitLight)
+    {
+        return false;
+    }
+
+    float3 bsdfValue = evaluateBsdf(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    payload.pathWeight *= bsdfValue * cosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
+    payload.pathColor += payload.pathWeight * lightSample.Le;
+
+    return true;
 }
 
 [shader("closesthit")]
@@ -225,16 +216,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.materialId = instanceData.materialId;
 }
 
-[shader("closesthit")]
-void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
-{
-
-}
-
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    const float3 Li = float3(0, 0, 0);
-    payload.pathColor += payload.pathWeight * Li;
     payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

@@ -99,11 +99,26 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 
 void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 {
+    // TODO: figure out better place to do this transform
+    const DirectX::XMFLOAT3X4& xf = instance->transform;
+    DirectX::XMMATRIX objectToWorld = DirectX::XMMATRIX(DirectX::XMVECTOR{ xf.m[0][0], xf.m[0][1], xf.m[0][2], 0.0f },
+                                                        DirectX::XMVECTOR{ xf.m[1][0], xf.m[1][1], xf.m[1][2], 0.0f },
+                                                        DirectX::XMVECTOR{ xf.m[2][0], xf.m[2][1], xf.m[2][2], 0.0f },
+                                                        DirectX::XMVECTOR{ xf.m[0][3], xf.m[1][3], xf.m[2][3], 1.0f });
+
     for (auto& areaLight : instance->host_areaLights)
     {
-        const XMVECTOR p0 = XMLoadFloat3(&areaLight.pos0);
-        const XMVECTOR p1 = XMLoadFloat3(&areaLight.pos1);
-        const XMVECTOR p2 = XMLoadFloat3(&areaLight.pos2);
+        XMVECTOR p0 = XMLoadFloat3(&areaLight.pos0);
+        XMVECTOR p1 = XMLoadFloat3(&areaLight.pos1);
+        XMVECTOR p2 = XMLoadFloat3(&areaLight.pos2);
+
+        p0 = DirectX::XMVector3Transform(p0, objectToWorld);
+        p1 = DirectX::XMVector3Transform(p1, objectToWorld);
+        p2 = DirectX::XMVector3Transform(p2, objectToWorld);
+
+        DirectX::XMStoreFloat3(&areaLight.pos0, p0);
+        DirectX::XMStoreFloat3(&areaLight.pos1, p1);
+        DirectX::XMStoreFloat3(&areaLight.pos2, p2);
 
         const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
         const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
