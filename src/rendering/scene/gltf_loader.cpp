@@ -313,11 +313,12 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         i2 = instance->host_idxs[i2];
                     }
 
-                    AreaLightInputs lightInputs;
-                    lightInputs.pos0 = instance->host_verts[i0].pos;
-                    lightInputs.pos1 = instance->host_verts[i1].pos;
-                    lightInputs.pos2 = instance->host_verts[i2].pos;
-                    lightInputs.triangleIdx = triIdx;
+                    const AreaLightInputs lightInputs = {
+                        .pos0 = instance->host_verts[i0].pos,
+                        .pos1 = instance->host_verts[i1].pos,
+                        .pos2 = instance->host_verts[i2].pos,
+                        .triangleIdx = triIdx,
+                    };
                     instance->addAreaLight(lightInputs);
                 }
             }
