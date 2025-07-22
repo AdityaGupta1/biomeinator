@@ -50,14 +50,17 @@ public:
 
 struct AreaLight
 {
-    float3 pos0;
+    float3 pos0_WS;
     uint instanceId;
 
-    float3 pos1;
+    float3 pos1_WS;
     uint triangleIdx;
 
-    float3 pos2;
+    float3 pos2_WS;
     float rcpArea;
+
+    float3 normal_WS;
+    uint pad0;
 };
 
 struct CameraParams

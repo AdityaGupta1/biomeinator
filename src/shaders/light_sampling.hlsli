@@ -22,7 +22,7 @@ float3 samplePointOnLight(AreaLight light, float2 rndSample, out float pdf)
 {
     const float sqrtRndX = sqrt(rndSample.x);
     float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
-    float3 pointOnLight_WS = bary2.x * light.pos0 + bary2.y * light.pos1 + (1.f - bary2.x - bary2.y) * light.pos2;
+    float3 pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
     pdf = light.rcpArea;
     return pointOnLight_WS;
 }
@@ -48,9 +48,7 @@ DirectLightingSample sampleDirectLighting(float3 origin_WS, float3 normal_WS, fl
 
     result.wi_WS = normalize(pointOnLight_WS - origin_WS);
 
-    // TODO: store normal in light? figure out better way to do this?
-    const float3 lightNormal_WS = normalize(cross(light.pos1 - light.pos0, light.pos2 - light.pos0));
-    const float cosTheta = dot(lightNormal_WS, -result.wi_WS);
+    const float cosTheta = dot(light.normal_WS, -result.wi_WS);
     const float r2 = distance2(origin_WS, pointOnLight_WS);
     lightSamplePdf *= r2 / cosTheta;
 

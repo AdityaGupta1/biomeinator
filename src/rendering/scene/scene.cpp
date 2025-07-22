@@ -39,13 +39,14 @@ void Instance::addAreaLight(const AreaLightInputs& lightInputs)
     p1 = DirectX::XMVector3Transform(p1, objectToWorld);
     p2 = DirectX::XMVector3Transform(p2, objectToWorld);
 
-    DirectX::XMStoreFloat3(&light.pos0, p0);
-    DirectX::XMStoreFloat3(&light.pos1, p1);
-    DirectX::XMStoreFloat3(&light.pos2, p2);
+    DirectX::XMStoreFloat3(&light.pos0_WS, p0);
+    DirectX::XMStoreFloat3(&light.pos1_WS, p1);
+    DirectX::XMStoreFloat3(&light.pos2_WS, p2);
 
     const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
     const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
     const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+    DirectX::XMStoreFloat3(&light.normal_WS, cross);
 
     const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
     light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
