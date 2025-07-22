@@ -14,6 +14,43 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+void Instance::addAreaLight(const AreaLightInputs& lightInputs)
+{
+    this->host_areaLights.emplace_back();
+    AreaLight& light = this->host_areaLights.back();
+
+    light.instanceId = this->id;
+    light.triangleIdx = lightInputs.triangleIdx;
+
+    const DirectX::XMFLOAT3X4& xf = this->transform;
+    // TODO: store this matrix instead of reconstructing it each time?
+    const DirectX::XMMATRIX objectToWorld = {
+        { xf.m[0][0], xf.m[0][1], xf.m[0][2], 0.0f },
+        { xf.m[1][0], xf.m[1][1], xf.m[1][2], 0.0f },
+        { xf.m[2][0], xf.m[2][1], xf.m[2][2], 0.0f },
+        { xf.m[0][3], xf.m[1][3], xf.m[2][3], 1.0f },
+    };
+
+    XMVECTOR p0 = XMLoadFloat3(&lightInputs.pos0);
+    XMVECTOR p1 = XMLoadFloat3(&lightInputs.pos1);
+    XMVECTOR p2 = XMLoadFloat3(&lightInputs.pos2);
+
+    p0 = DirectX::XMVector3Transform(p0, objectToWorld);
+    p1 = DirectX::XMVector3Transform(p1, objectToWorld);
+    p2 = DirectX::XMVector3Transform(p2, objectToWorld);
+
+    DirectX::XMStoreFloat3(&light.pos0, p0);
+    DirectX::XMStoreFloat3(&light.pos1, p1);
+    DirectX::XMStoreFloat3(&light.pos2, p2);
+
+    const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
+    const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
+    const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+
+    const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
+    light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+}
+
 uint32_t Instance::getId() const
 {
     return this->id;
@@ -99,35 +136,6 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 
 void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 {
-    // TODO: figure out better place to do this transform
-    const DirectX::XMFLOAT3X4& xf = instance->transform;
-    DirectX::XMMATRIX objectToWorld = DirectX::XMMATRIX(DirectX::XMVECTOR{ xf.m[0][0], xf.m[0][1], xf.m[0][2], 0.0f },
-                                                        DirectX::XMVECTOR{ xf.m[1][0], xf.m[1][1], xf.m[1][2], 0.0f },
-                                                        DirectX::XMVECTOR{ xf.m[2][0], xf.m[2][1], xf.m[2][2], 0.0f },
-                                                        DirectX::XMVECTOR{ xf.m[0][3], xf.m[1][3], xf.m[2][3], 1.0f });
-
-    for (auto& areaLight : instance->host_areaLights)
-    {
-        XMVECTOR p0 = XMLoadFloat3(&areaLight.pos0);
-        XMVECTOR p1 = XMLoadFloat3(&areaLight.pos1);
-        XMVECTOR p2 = XMLoadFloat3(&areaLight.pos2);
-
-        p0 = DirectX::XMVector3Transform(p0, objectToWorld);
-        p1 = DirectX::XMVector3Transform(p1, objectToWorld);
-        p2 = DirectX::XMVector3Transform(p2, objectToWorld);
-
-        DirectX::XMStoreFloat3(&areaLight.pos0, p0);
-        DirectX::XMStoreFloat3(&areaLight.pos1, p1);
-        DirectX::XMStoreFloat3(&areaLight.pos2, p2);
-
-        const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
-        const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
-        const XMVECTOR cross = XMVector3Cross(edge1, edge2);
-
-        const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
-        areaLight.rcpArea = area > 0.f ? (1.f / area) : 0.f;
-    }
-
     this->instancesReadyForBlasBuild.push_back(instance);
 }
 

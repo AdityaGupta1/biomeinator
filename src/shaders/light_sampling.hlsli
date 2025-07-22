@@ -62,7 +62,7 @@ DirectLightingSample sampleDirectLighting(float3 origin_WS, float3 normal_WS, fl
 
     Payload lightPayload;
     lightPayload.materialId = MATERIAL_ID_INVALID;
-    //TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+    // TODO: figure out why HITGROUP_LIGHTS doesn't work here
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, lightPayload);
 
     if (lightPayload.materialId == MATERIAL_ID_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)

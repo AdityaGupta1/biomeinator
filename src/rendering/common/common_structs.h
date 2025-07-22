@@ -57,7 +57,7 @@ struct AreaLight
     uint triangleIdx;
 
     float3 pos2;
-    float rcpArea; // set by Scene::markInstanceReadyForBlasBuild()
+    float rcpArea;
 };
 
 struct CameraParams

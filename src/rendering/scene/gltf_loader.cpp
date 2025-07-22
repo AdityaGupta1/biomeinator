@@ -292,6 +292,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 }
             }
 
+            DirectX::XMStoreFloat3x4(&instance->transform, transform);
+
             const bool isEmissive = prim.material >= 0 &&
                                     static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
                                     materialIsEmissive[prim.material];
@@ -299,7 +301,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             {
                 const uint32_t triCount =
                     instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
-                instance->host_areaLights.resize(triCount);
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
                 {
                     uint32_t i0 = triIdx * 3;
@@ -312,16 +313,14 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         i2 = instance->host_idxs[i2];
                     }
 
-                    AreaLight& light = instance->host_areaLights[triIdx];
-                    light.pos0 = instance->host_verts[i0].pos;
-                    light.pos1 = instance->host_verts[i1].pos;
-                    light.pos2 = instance->host_verts[i2].pos;
-                    light.instanceId = instance->getId();
-                    light.triangleIdx = triIdx;
+                    AreaLightInputs lightInputs;
+                    lightInputs.pos0 = instance->host_verts[i0].pos;
+                    lightInputs.pos1 = instance->host_verts[i1].pos;
+                    lightInputs.pos2 = instance->host_verts[i2].pos;
+                    lightInputs.triangleIdx = triIdx;
+                    instance->addAreaLight(lightInputs);
                 }
             }
-
-            DirectX::XMStoreFloat3x4(&instance->transform, transform);
 
             scene.markInstanceReadyForBlasBuild(instance);
         }

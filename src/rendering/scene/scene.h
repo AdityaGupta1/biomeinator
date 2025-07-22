@@ -17,6 +17,14 @@ class ToFreeList;
 
 class Scene;
 
+struct AreaLightInputs
+{
+    DirectX::XMFLOAT3 pos0;
+    DirectX::XMFLOAT3 pos1;
+    DirectX::XMFLOAT3 pos2;
+    uint32_t triangleIdx;
+};
+
 class Instance
 {
     friend class Scene;
@@ -28,6 +36,8 @@ private:
     uint32_t materialId{ MATERIAL_ID_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
+
+    std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
     bool isScheduledForDeletion{ false };
@@ -40,7 +50,8 @@ public:
 
     DirectX::XMFLOAT3X4 transform{};
 
-    std::vector<AreaLight> host_areaLights;
+    // `transform` must be set before calling this function
+    void addAreaLight(const AreaLightInputs& lightInputs);
 
     uint32_t getId() const;
 
