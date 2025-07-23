@@ -29,9 +29,9 @@ float3 faceforward(const float3 normal, const float3 vec)
     return (dot(normal, vec) < 0.f) ? -normal : normal;
 }
 
-float cosTheta(const float3 v_WS, const float3 normal_WS)
+float absCosTheta(const float3 v_WS, const float3 normal_WS)
 {
-    return saturate(dot(v_WS, normal_WS));
+    return abs(dot(v_WS, normal_WS));
 }
 
 float distance2(const float3 a, const float3 b)

@@ -81,7 +81,7 @@ BsdfSample sampleBsdf(
 
     float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
 
-    result.pdf = cosTheta(wi_WS, normal_WS) / M_PI;
+    result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
     result.bsdfValue = bsdfValue;
 
     return result;
@@ -102,6 +102,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
         payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
     }
 
+    // material has no reflectance
     if (material.diffuseWeight == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
@@ -119,7 +120,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 
     BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
 
-    payload.pathWeight *= sample.bsdfValue * cosTheta(sample.wi_WS, normal_WS) / sample.pdf;
+    payload.pathWeight *= sample.bsdfValue * absCosTheta(sample.wi_WS, normal_WS) / sample.pdf;
 
     ray.Origin = hitPos_WS + 0.001f * normal_WS;
     ray.Direction = sample.wi_WS;
@@ -173,7 +174,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
     }
 
     float3 bsdfValue = evaluateBsdf(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
-    payload.pathWeight *= bsdfValue * cosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
+    payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
     payload.pathColor += payload.pathWeight * lightSample.Le;
 
     return true;
@@ -210,8 +211,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.normal_WS = normalize(mul(normal_OS, (float3x3) ObjectToWorld4x3()));
     payload.hitInfo.hitT = RayTCurrent();
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialId = instanceData.materialId;
 }

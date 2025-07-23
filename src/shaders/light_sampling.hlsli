@@ -48,9 +48,8 @@ DirectLightingSample sampleDirectLighting(float3 origin_WS, float3 normal_WS, fl
 
     result.wi_WS = normalize(pointOnLight_WS - origin_WS);
 
-    const float cosTheta = dot(light.normal_WS, -result.wi_WS);
     const float r2 = distance2(origin_WS, pointOnLight_WS);
-    lightSamplePdf *= r2 / cosTheta;
+    lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
 
     RayDesc ray;
     ray.Origin = origin_WS + 0.001f * normal_WS;
