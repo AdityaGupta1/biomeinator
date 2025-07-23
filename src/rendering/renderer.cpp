@@ -24,7 +24,7 @@
 
 #include "stb/stb_image_write.h"
 
-#include "shader.fxh"
+#include "main.fxh"
 
 using namespace DirectX;
 
@@ -407,8 +407,8 @@ void initPipeline()
 {
     D3D12_DXIL_LIBRARY_DESC lib = {
         .DXILLibrary = {
-            .pShaderBytecode = compiled_shader,
-            .BytecodeLength = std::size(compiled_shader),
+            .pShaderBytecode = main_shaderBytecode,
+            .BytecodeLength = std::size(main_shaderBytecode),
         },
     };
 
