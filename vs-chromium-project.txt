@@ -1,4 +1,4 @@
-[SearchableFiles.ignore]
+[SourceExplorer.ignore]
 .git/
 build/
 external/
