@@ -16,6 +16,14 @@ Instance::Instance(Scene* scene, uint32_t id)
 
 void Instance::addAreaLight(const AreaLightInputs& lightInputs)
 {
+#if _DEBUG
+    static constexpr DirectX::XMFLOAT3X4 zero{};
+    if (std::memcmp(&this->transform, &zero, sizeof(this->transform)) == 0)
+    {
+        throw std::runtime_error("Attempting to add AreaLight to Instance with no transform");
+    }
+#endif
+
     this->host_areaLights.emplace_back();
     AreaLight& light = this->host_areaLights.back();
 
