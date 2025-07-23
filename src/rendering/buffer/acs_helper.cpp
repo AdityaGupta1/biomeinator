@@ -72,10 +72,10 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
 void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                        ComPtr<ID3D12Resource>* outBlas,
-                       ManagedBufferSection vertBufferSection,
-                       ManagedBufferSection idxBufferSection)
+                       ManagedBufferSection vertsBufferSection,
+                       ManagedBufferSection idxsBufferSection)
 {
-    const bool hasIdxs = (idxBufferSection.sizeBytes > 0);
+    const bool hasIdxs = (idxsBufferSection.sizeBytes > 0);
 
     buildInfo->geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -85,11 +85,11 @@ void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
             .Transform3x4 = 0,
             .IndexFormat = hasIdxs ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
             .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-            .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxBufferSection.sizeBytes),
-            .VertexCount = Util::convertByteSizeToCount<Vertex>(vertBufferSection.sizeBytes),
-            .IndexBuffer = hasIdxs ? idxBufferSection.getBuffer()->getBufferGpuAddress() + idxBufferSection.offsetBytes : 0,
+            .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes),
+            .VertexCount = Util::convertByteSizeToCount<Vertex>(vertsBufferSection.sizeBytes),
+            .IndexBuffer = hasIdxs ? idxsBufferSection.getBuffer()->getBufferGpuAddress() + idxsBufferSection.offsetBytes : 0,
             .VertexBuffer = {
-                .StartAddress = vertBufferSection.getBuffer()->getBufferGpuAddress() + vertBufferSection.offsetBytes,
+                .StartAddress = vertsBufferSection.getBuffer()->getBufferGpuAddress() + vertsBufferSection.offsetBytes,
                 .StrideInBytes = sizeof(Vertex),
             },
         },
@@ -112,13 +112,13 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 const std::vector<BlasBuildInputs>& allInputs)
 {
-    ManagedBuffer dev_vertUploadBuffer{
+    ManagedBuffer vertsUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         false /*isResizable*/,
         true /*isMapped*/,
     };
-    ManagedBuffer dev_idxUploadBuffer{
+    ManagedBuffer idxsUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         false /*isResizable*/,
@@ -136,11 +136,11 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         }
     }
 
-    dev_vertUploadBuffer.init(vertBufferTotalSizeBytes);
+    vertsUploadBuffer.init(vertBufferTotalSizeBytes);
     const bool anyHasIdxs = (idxBufferTotalSizeBytes > 0);
     if (anyHasIdxs)
     {
-        dev_idxUploadBuffer.init(idxBufferTotalSizeBytes);
+        idxsUploadBuffer.init(idxBufferTotalSizeBytes);
     }
 
     std::vector<AcsBuildInfo> buildInfos;
@@ -148,40 +148,40 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
     for (const auto& inputs : allInputs)
     {
-        const ManagedBufferSection dev_vertUploadBufferSection =
-            dev_vertUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
+        const ManagedBufferSection vertsUploadBufferSection =
+            vertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
         if (inputs.dev_verts)
         {
-            inputs.outGeoWrapper->vertBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-                cmdList, toFreeList, dev_vertUploadBuffer, dev_vertUploadBufferSection);
+            inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
+                cmdList, toFreeList, vertsUploadBuffer, vertsUploadBufferSection);
         }
 
-        ManagedBufferSection dev_idxUploadBufferSection = {};
+        ManagedBufferSection idxsUploadBufferSection = {};
         if (inputs.host_idxs)
         {
-            dev_idxUploadBufferSection = dev_idxUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
+            idxsUploadBufferSection = idxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
             if (inputs.dev_idxs)
             {
-                inputs.outGeoWrapper->idxBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                    cmdList, toFreeList, dev_idxUploadBuffer, dev_idxUploadBufferSection);
+                inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
+                    cmdList, toFreeList, idxsUploadBuffer, idxsUploadBufferSection);
             }
         }
 
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(),
                           &inputs.outGeoWrapper->dev_blas,
-                          dev_vertUploadBufferSection,
-                          dev_idxUploadBufferSection);
+                          vertsUploadBufferSection,
+                          idxsUploadBufferSection);
     }
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 
-    toFreeList.pushManagedBuffer(&dev_vertUploadBuffer);
+    toFreeList.pushManagedBuffer(&vertsUploadBuffer);
     if (anyHasIdxs)
     {
-        toFreeList.pushManagedBuffer(&dev_idxUploadBuffer);
+        toFreeList.pushManagedBuffer(&idxsUploadBuffer);
     }
 }
 

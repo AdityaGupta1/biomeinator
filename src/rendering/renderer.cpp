@@ -8,6 +8,7 @@
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_hitgroups.h"
 #include "common/common_registers.h"
 #include "scene/camera.h"
 #include "scene/gltf_loader.h"
@@ -258,6 +259,8 @@ enum class Param
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
+    AREA_LIGHTS,
+    AREA_LIGHT_SAMPLING_STRUCTURE,
 
     COUNT
 };
@@ -273,7 +276,7 @@ void initRootSignature()
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,
         .BaseShaderRegister = REGISTER_RENDER_TARGET,
-        .RegisterSpace = 0,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
         .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
     });
 
@@ -281,7 +284,7 @@ void initRootSignature()
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         .NumDescriptors = MAX_NUM_TEXTURES,
         .BaseShaderRegister = REGISTER_TEXTURES,
-        .RegisterSpace = 0,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
     });
 
@@ -299,7 +302,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
         .Descriptor = {
             .ShaderRegister = REGISTER_GLOBAL_PARAMS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -307,7 +310,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_RAYTRACING_ACS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -315,7 +318,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_VERTS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -323,7 +326,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_IDXS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -331,7 +334,7 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_INSTANCE_DATAS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -339,7 +342,23 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_MATERIALS,
-            .RegisterSpace = 0,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
+        },
+    };
+
+    params[PARAM_IDX(AREA_LIGHTS)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = REGISTER_AREA_LIGHTS,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
+        },
+    };
+
+    params[PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
 
@@ -351,6 +370,7 @@ void initRootSignature()
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .ShaderRegister = REGISTER_TEX_SAMPLER,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
     });
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {
@@ -365,12 +385,22 @@ void initRootSignature()
     };
 
     ComPtr<ID3DBlob> blob;
-    D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, nullptr);
+    ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, &errorBlob);
+#ifdef _DEBUG
+    if (FAILED(hr))
+    {
+        if (errorBlob)
+        {
+            printf("Root signature serialization error: %s\n", (const char*)errorBlob->GetBufferPointer());
+        }
+        __debugbreak();
+    }
+#endif
     device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 }
 
 ComPtr<ID3D12StateObject> pso;
-constexpr UINT64 NUM_SHADER_IDS = 3;
 ComPtr<ID3D12Resource> dev_shaderIds;
 D3D12_DISPATCH_RAYS_DESC dispatchDesc;
 void initPipeline()
@@ -382,10 +412,17 @@ void initPipeline()
         },
     };
 
-    D3D12_HIT_GROUP_DESC hitGroup = {
-        .HitGroupExport = L"HitGroup",
+    constexpr uint32_t NUM_HIT_GROUPS = 2;
+    std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
+    hitGroups[HITGROUP_PRIMARY] = {
+        .HitGroupExport = L"HitGroup_Primary",
         .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit",
+        .ClosestHitShaderImport = L"ClosestHit_Primary",
+    };
+    hitGroups[HITGROUP_LIGHTS] = {
+        .HitGroupExport = L"HitGroup_Lights",
+        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+        .ClosestHitShaderImport = L"ClosestHit_Lights",
     };
 
     D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
@@ -401,38 +438,50 @@ void initPipeline()
         .MaxTraceRecursionDepth = 1,
     };
 
-    D3D12_STATE_SUBOBJECT subobjects[] = {
+    std::vector<D3D12_STATE_SUBOBJECT> subobjects = {
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib },
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig },
         { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg },
     };
+
+    for (const auto& hitGroup : hitGroups)
+    {
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+    }
+
     D3D12_STATE_OBJECT_DESC desc = {
         .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-        .NumSubobjects = std::size(subobjects),
-        .pSubobjects = subobjects,
+        .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
+        .pSubobjects = subobjects.data(),
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
-    dev_shaderIds = BufferHelper::createBasicBuffer(
-        NUM_SHADER_IDS * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+    const uint32_t shaderIdsSizeBytes =
+        2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+    dev_shaderIds =
+        BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);
 
-    void* data;
-    auto writeId = [&](const wchar_t* name)
+    uint8_t* host_shaderIds;
+    dev_shaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+
+    auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
     {
         void* id = props->GetShaderIdentifier(name);
-        memcpy(data, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        data = static_cast<char*>(data) + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+        memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+        host_shaderIds += incrementSizeBytes;
     };
 
-    dev_shaderIds->Map(0, nullptr, &data);
-    writeId(L"RayGeneration");
-    writeId(L"Miss");
-    writeId(L"HitGroup");
+    writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+    writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+    for (const auto& hitGroup : hitGroups)
+    {
+        writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+    }
+
     dev_shaderIds->Unmap(0, nullptr);
 
     dispatchDesc = {
@@ -446,10 +495,11 @@ void initPipeline()
         },
         .HitGroupTable = {
             .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },
     };
-    dispatchDesc.Depth = 1;
+    dispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
 }
 
 static int frameCount = 0;
@@ -599,7 +649,9 @@ void render()
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    if (scene.getDevTlas() != nullptr)
+    paramBlockManager.sceneParams->numAreaLights = scene.getNumAreaLights();
+
+    if (scene.hasTlas())
     {
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
@@ -609,11 +661,13 @@ void render()
         // clang-format off
         cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedHeap->GetGPUDescriptorHandleForHeapStart());
         cmdList->SetComputeRootConstantBufferView(PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlas()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatas()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterials()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
         const auto renderTargetDesc = renderTarget->GetDesc();

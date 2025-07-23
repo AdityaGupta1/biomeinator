@@ -23,6 +23,7 @@ public:
     // The caller is responsible for nulling the ComPtr if necessary.
     ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped);
 
+    // The ManagedBuffer can go out of scope but this ToFreeList will keep the underlying buffer alive until it's freed
     void pushManagedBuffer(const ManagedBuffer* buffer);
     void pushManagedBufferSection(const ManagedBufferSection& bufferSection);
 

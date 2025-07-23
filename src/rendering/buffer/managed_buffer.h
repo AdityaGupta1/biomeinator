@@ -87,7 +87,7 @@ public:
                                               uint32_t offsetBytes = 0);
     ManagedBufferSection copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
                                                ToFreeList& toFreeList,
-                                               const ManagedBuffer& dev_srcBuffer,
+                                               const ManagedBuffer& srcBuffer,
                                                ManagedBufferSection srcBufferSection);
 
     ID3D12Resource* getBuffer() const;

@@ -1,49 +1,22 @@
 #pragma once
 
+#include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
 #include "global_params.hlsli"
-#include "rng.hlsli"
+#include "light_sampling.hlsli"
+#include "payload.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-#define MAX_PATH_DEPTH 8
+#define MAX_PATH_DEPTH 5
 
-#define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
+StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
+ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
 
-struct HitInfo
-{
-    float3 normal_WS;
-    float hitT;
-
-    float2 uv;
-};
-
-struct Payload
-{
-    float3 pathWeight;
-    uint flags;
-
-    float3 pathColor;
-    uint materialId;
-
-    HitInfo hitInfo;
-
-    RandomSampler rng;
-};
-
-RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS);
-
-StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS);
-ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS);
-
-StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATAS);
-
-StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS);
-
-Texture2D<float4> textures[] : REGISTER_T(REGISTER_TEXTURES);
-SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER);
+Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
+SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
@@ -66,7 +39,61 @@ float3 evalRayPos(const RayDesc ray, const float t)
     return ray.Origin + ray.Direction * t;
 }
 
-void evaluateBsdf(inout RayDesc ray, inout Payload payload)
+float3 evaluateBsdf(
+    const Material material,
+    const float2 uv,
+    const float3 wo_WS,
+    const float3 wi_WS,
+    const float3 normal_WS)
+{
+    float3 diffuseColor;
+    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
+    {
+        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, uv, 0).rgb;
+    }
+    else
+    {
+        diffuseColor = material.diffuseColor;
+    }
+
+    return diffuseColor * M_INV_PI;
+}
+
+struct BsdfSample
+{
+    float3 wi_WS;
+    float pdf;
+
+    float3 bsdfValue;
+};
+
+BsdfSample sampleBsdf(
+    const Material material,
+    const float2 uv,
+    const float3 wo_WS,
+    const float3 normal_WS,
+    float2 rndSample)
+{
+    BsdfSample result;
+
+    const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+    result.wi_WS = wi_WS;
+
+    float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
+
+    result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
+    result.bsdfValue = bsdfValue;
+
+    return result;
+}
+
+void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 hitPos_WS, out float3 normal_WS)
+{
+    hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
+    normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
+}
+
+void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 {
     const Material material = materials[payload.materialId];
 
@@ -75,47 +102,30 @@ void evaluateBsdf(inout RayDesc ray, inout Payload payload)
         payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
     }
 
-    const float3 hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
-    const float3 normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
-
-    const float totalWeight = material.diffuseWeight + material.specularWeight;
-    if (totalWeight == 0)
+    // material has no reflectance
+    if (material.diffuseWeight == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;
     }
 
-    // for now, pick either fully diffuse or fully specular
-    // will deal with proper layer selection when I have more complicated bsdfs (rough reflection, etc.)
-
-    if (material.diffuseWeight > 0)
+    if (isLastBounce)
     {
-        float3 diffuseColor = material.diffuseColor;
-        if (material.diffuseTextureId != TEXTURE_ID_INVALID)
-        {
-            diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, payload.hitInfo.uv, 0).rgb;
-        }
-        payload.pathWeight *= diffuseColor;
-
-        const float2 rndSample = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
-        const float3 newDir_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
-
-        ray.Origin = hitPos_WS;
-        ray.Direction = newDir_WS;
-        ray.TMin = 0.001;
-        ray.TMax = 1000;
+        return;
     }
-    else // material.specularWeight > 0
-    {
-        payload.pathWeight *= material.specularColor;
 
-        const float3 reflectedDir_WS = reflect(normalize(ray.Direction), normal_WS);
+    float3 hitPos_WS, normal_WS;
+    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+    float3 wo_WS = -ray.Direction;
 
-        ray.Origin = hitPos_WS;
-        ray.Direction = reflectedDir_WS;
-        ray.TMin = 0.001;
-        ray.TMax = 1000;
-    }
+    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
+
+    payload.pathWeight *= sample.bsdfValue * absCosTheta(sample.wi_WS, normal_WS) / sample.pdf;
+
+    ray.Origin = hitPos_WS + 0.001f * normal_WS;
+    ray.Direction = sample.wi_WS;
+    ray.TMin = 0.f;
+    ray.TMax = 10000.f;
 }
 
 bool pathTraceRay(RayDesc ray, inout Payload payload)
@@ -133,7 +143,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             payload.pathWeight /= survivalProbability;
         }
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {
@@ -145,7 +155,8 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             return false;
         }
 
-        evaluateBsdf(ray, payload);
+        const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
+        bounceRay(ray, payload, isLastBounce);
 
         if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
         {
@@ -153,11 +164,24 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         }
     }
 
-    return false;
+    float3 hitPos_WS, normal_WS;
+    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng.nextFloat3());
+
+    if (!lightSample.didHitLight)
+    {
+        return false;
+    }
+
+    float3 bsdfValue = evaluateBsdf(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
+    payload.pathColor += payload.pathWeight * lightSample.Le;
+
+    return true;
 }
 
 [shader("closesthit")]
-void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
@@ -194,7 +218,5 @@ void ClosestHit(inout Payload payload, BuiltInTriangleIntersectionAttributes att
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    const float3 Li = float3(0, 0, 0);
-    payload.pathColor += payload.pathWeight * Li;
     payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

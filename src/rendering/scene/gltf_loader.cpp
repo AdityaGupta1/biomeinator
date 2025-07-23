@@ -1,3 +1,8 @@
+/*
+This file is mostly AI-generated and exists solely to load test scenes for verifying path tracing results. It works only
+on a specific subset of glTF files and is not guaranteed to work for files outside that subset.
+*/
+
 #include "gltf_loader.h"
 
 #include "tinygltf/tiny_gltf.h"
@@ -6,6 +11,7 @@
 #include <string>
 
 #include "rendering/buffer/to_free_list.h"
+#include "rendering/common/common_structs.h"
 #include "scene.h"
 
 using namespace tinygltf;
@@ -53,6 +59,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
     std::vector<uint32_t> materialIds;
     materialIds.reserve(model.materials.size());
+    std::vector<bool> materialIsEmissive;
+    materialIsEmissive.reserve(model.materials.size());
     for (const tinygltf::Material& gltfMat : model.materials)
     {
         ::Material material;
@@ -112,6 +120,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIds.push_back(id);
+        materialIsEmissive.push_back(material.emissiveStrength > 0.f);
     }
 
     const auto readAccessorData = [&](const tinygltf::Accessor& accessor) {
@@ -284,6 +293,35 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
 
             DirectX::XMStoreFloat3x4(&instance->transform, transform);
+
+            const bool isEmissive = prim.material >= 0 &&
+                                    static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
+                                    materialIsEmissive[prim.material];
+            if (isEmissive)
+            {
+                const uint32_t triCount =
+                    instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
+                for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
+                {
+                    uint32_t i0 = triIdx * 3;
+                    uint32_t i1 = i0 + 1;
+                    uint32_t i2 = i0 + 2;
+                    if (!instance->host_idxs.empty())
+                    {
+                        i0 = instance->host_idxs[i0];
+                        i1 = instance->host_idxs[i1];
+                        i2 = instance->host_idxs[i2];
+                    }
+
+                    const AreaLightInputs lightInputs = {
+                        .pos0 = instance->host_verts[i0].pos,
+                        .pos1 = instance->host_verts[i1].pos,
+                        .pos2 = instance->host_verts[i2].pos,
+                        .triangleIdx = triIdx,
+                    };
+                    instance->addAreaLight(lightInputs);
+                }
+            }
 
             scene.markInstanceReadyForBlasBuild(instance);
         }

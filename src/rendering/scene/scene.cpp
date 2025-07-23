@@ -14,6 +14,57 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+void Instance::addAreaLight(const AreaLightInputs& lightInputs)
+{
+#if _DEBUG
+    static constexpr DirectX::XMFLOAT3X4 zero{};
+    if (std::memcmp(&this->transform, &zero, sizeof(this->transform)) == 0)
+    {
+        throw std::runtime_error("Attempting to add AreaLight to Instance with no transform");
+    }
+#endif
+
+    this->host_areaLights.emplace_back();
+    AreaLight& light = this->host_areaLights.back();
+
+    light.instanceId = this->id;
+    light.triangleIdx = lightInputs.triangleIdx;
+
+    const DirectX::XMFLOAT3X4& xf = this->transform;
+    // TODO: store this matrix instead of reconstructing it each time?
+    const DirectX::XMMATRIX objectToWorld = {
+        { xf.m[0][0], xf.m[0][1], xf.m[0][2], 0.0f },
+        { xf.m[1][0], xf.m[1][1], xf.m[1][2], 0.0f },
+        { xf.m[2][0], xf.m[2][1], xf.m[2][2], 0.0f },
+        { xf.m[0][3], xf.m[1][3], xf.m[2][3], 1.0f },
+    };
+
+    XMVECTOR p0 = XMLoadFloat3(&lightInputs.pos0);
+    XMVECTOR p1 = XMLoadFloat3(&lightInputs.pos1);
+    XMVECTOR p2 = XMLoadFloat3(&lightInputs.pos2);
+
+    p0 = DirectX::XMVector3Transform(p0, objectToWorld);
+    p1 = DirectX::XMVector3Transform(p1, objectToWorld);
+    p2 = DirectX::XMVector3Transform(p2, objectToWorld);
+
+    DirectX::XMStoreFloat3(&light.pos0_WS, p0);
+    DirectX::XMStoreFloat3(&light.pos1_WS, p1);
+    DirectX::XMStoreFloat3(&light.pos2_WS, p2);
+
+    const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
+    const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
+    const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+    DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
+
+    const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
+    light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+}
+
+uint32_t Instance::getId() const
+{
+    return this->id;
+}
+
 void Instance::setMaterialId(uint32_t id)
 {
     this->materialId = id;
@@ -22,26 +73,27 @@ void Instance::setMaterialId(uint32_t id)
 void Scene::init()
 {
     // these resources can be dynamically resized later
-    this->maxNumInstances = 1;
-    this->maxNumMaterials = 1;
-    this->dev_vertBuffer.init(512 /*bytes*/);
-    this->dev_idxBuffer.init(128 /*bytes*/);
+    this->managedVertsBuffer.init(512 /*bytes*/);
+    this->managedIdxsBuffer.init(128 /*bytes*/);
 
+    this->maxNumInstances = 1;
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
-
-    this->mappedMaterialsArray.init(this->maxNumMaterials);
-
     for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
     {
         availableInstanceIds.push(instanceIdx);
     }
+
+    this->mappedMaterialsArray.init(1);
+
+    this->managedAreaLightsBuffer.init(512 /*bytes*/);
+    this->areaLightSamplingStructure.init(1);
 }
 
 void Scene::clear()
 {
-    this->dev_vertBuffer.freeAll();
-    this->dev_idxBuffer.freeAll();
+    this->managedVertsBuffer.freeAll();
+    this->managedIdxsBuffer.freeAll();
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
@@ -59,6 +111,9 @@ void Scene::clear()
     this->textures.fill(nullptr);
     this->nextTextureId = 0;
     this->pendingTextures.clear();
+
+    this->numAreaLights = 0;
+    this->managedAreaLightsBuffer.freeAll();
 }
 
 Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
@@ -101,10 +156,9 @@ void Scene::freeInstance(Instance* instance)
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
-    if (this->nextMaterialIdx >= this->maxNumMaterials)
+    if (this->nextMaterialIdx >= this->mappedMaterialsArray.getSize())
     {
-        this->maxNumMaterials *= 2;
-        this->mappedMaterialsArray.resize(toFreeList, this->maxNumMaterials);
+        this->mappedMaterialsArray.resize(toFreeList, this->mappedMaterialsArray.getSize() * 2);
     }
 
     const uint32_t materialIdx = this->nextMaterialIdx++;
@@ -143,6 +197,8 @@ void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     {
         this->makeTlas(cmdList, toFreeList);
     }
+
+    this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
 }
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -154,22 +210,37 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
-    for (const auto instance : instancesReadyForBlasBuild)
+    uint32_t numNewAreaLights = 0;
+
+    for (Instance* const instance : instancesReadyForBlasBuild)
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
         blasInputs.host_verts = &instance->host_verts;
-        blasInputs.dev_verts = &dev_vertBuffer;
+        blasInputs.dev_verts = &managedVertsBuffer;
 
         if (instance->host_idxs.size() > 0)
         {
             blasInputs.host_idxs = &instance->host_idxs;
-            blasInputs.dev_idxs = &dev_idxBuffer;
+            blasInputs.dev_idxs = &managedIdxsBuffer;
         }
 
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
+
+        numNewAreaLights += instance->host_areaLights.size();
+    }
+
+    ManagedBuffer areaLightsUploadBuffer{
+        &UPLOAD_HEAP,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        false /*isResizable*/,
+        true /*isMapped*/,
+    };
+    if (numNewAreaLights > 0)
+    {
+        areaLightsUploadBuffer.init(numNewAreaLights * sizeof(AreaLight));
     }
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
@@ -180,13 +251,28 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         InstanceData& data = this->mappedInstanceDatasArray[instance->id];
         data.vertBufferOffset =
-            instance->geoWrapper.vertBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
-        data.hasIdxs = instance->geoWrapper.idxBufferSection.sizeBytes > 0;
-        data.idxBufferByteOffset = instance->geoWrapper.idxBufferSection.offsetBytes;
+            instance->geoWrapper.vertsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
+        data.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
+        data.idxBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         data.materialId = instance->materialId;
 
         instance->host_verts.clear();
         instance->host_idxs.clear();
+
+        if (!instance->host_areaLights.empty())
+        {
+            ManagedBufferSection areaLightsUploadBufferSection =
+                areaLightsUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
+            instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
+                cmdList, toFreeList, areaLightsUploadBuffer, areaLightsUploadBufferSection);
+
+            instance->host_areaLights.clear();
+        }
+    }
+
+    if (numNewAreaLights > 0)
+    {
+        toFreeList.pushManagedBuffer(&areaLightsUploadBuffer);
     }
 
     this->instancesReadyForBlasBuild.clear();
@@ -200,7 +286,8 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         toFreeList.pushResource(this->dev_tlas, false);
     }
 
-    uint32_t instanceDescIdx = 0;
+    uint32_t nextInstanceDescIdx = 0;
+    uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
         if (instance->isScheduledForDeletion)
@@ -208,16 +295,33 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             continue;
         }
 
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->mappedInstanceDescsArray[instanceDescIdx++];
+        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->mappedInstanceDescsArray[nextInstanceDescIdx++];
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
         instanceDesc.AccelerationStructure = instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
+
+        if (instance->areaLightsBufferSection.sizeBytes > 0)
+        {
+            const uint32_t instanceNumAreaLights = instance->areaLightsBufferSection.sizeBytes / sizeof(AreaLight);
+            uint32_t instanceAreaLightIdx = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
+            for (uint32_t idx = 0; idx < instanceNumAreaLights; ++idx)
+            {
+                if (nextAreaLightSamplingIdx >= this->areaLightSamplingStructure.getSize())
+                {
+                    this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
+                }
+
+                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
+            }
+        }
     }
+
+    this->numAreaLights = nextAreaLightSamplingIdx;
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->mappedInstanceDescsArray.getUploadBuffer(); // TODO: test if this crashes with default heap buffer
-    inputs.numInstances = instanceDescIdx;
+    inputs.numInstances = nextInstanceDescIdx;
     inputs.outTlas = &this->dev_tlas;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
@@ -313,32 +417,47 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     this->pendingTextures.clear();
 }
 
-ID3D12Resource* Scene::getDevInstanceDescs()
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevInstanceDatasAddress() const
 {
-    return this->mappedInstanceDescsArray.getBuffer();
+    return this->mappedInstanceDatasArray.getBufferGpuAddress();
 }
 
-ID3D12Resource* Scene::getDevInstanceDatas()
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
 {
-    return this->mappedInstanceDatasArray.getBuffer();
+    return this->mappedMaterialsArray.getBufferGpuAddress();
 }
 
-ID3D12Resource* Scene::getDevMaterials()
+bool Scene::hasTlas() const
 {
-    return this->mappedMaterialsArray.getBuffer();
+    return this->dev_tlas != nullptr;
 }
 
-ID3D12Resource* Scene::getDevTlas()
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
 {
-    return this->dev_tlas.Get();
+    return this->dev_tlas.Get()->GetGPUVirtualAddress();
 }
 
-ID3D12Resource* Scene::getDevVertBuffer()
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 {
-    return this->dev_vertBuffer.getBuffer();
+    return this->managedVertsBuffer.getBufferGpuAddress();
 }
 
-ID3D12Resource* Scene::getDevIdxBuffer()
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
 {
-    return this->dev_idxBuffer.getBuffer();
+    return this->managedIdxsBuffer.getBufferGpuAddress();
+}
+
+uint32_t Scene::getNumAreaLights() const
+{
+    return this->numAreaLights;
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightsBufferAddress() const
+{
+    return this->managedAreaLightsBuffer.getBufferGpuAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightSamplingStructureAddress() const
+{
+    return this->areaLightSamplingStructure.getBufferGpuAddress();
 }

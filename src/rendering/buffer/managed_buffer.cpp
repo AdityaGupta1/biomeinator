@@ -28,10 +28,12 @@ ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
 
 void ManagedBuffer::init(uint32_t sizeBytes)
 {
+#ifdef _DEBUG
     if (sizeBytes == 0)
     {
         throw std::runtime_error("Attempting to initialize ManagedBuffer with 0 size");
     }
+#endif
 
     this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
@@ -86,10 +88,12 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         }
     }
 
+#ifdef _DEBUG
     if (!this->isResizable)
     {
         throw std::runtime_error("ManagedBuffer out of space");
     }
+#endif
 
     bool useBackFreeSection = false;
     uint32_t backSizeBytes = 0;
@@ -120,10 +124,12 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
+#ifdef _DEBUG
     if (this->isMapped)
     {
         throw std::runtime_error("Attempting to resize mapped ManagedBuffer");
     }
+#endif
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -157,10 +163,12 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
                                                        const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
+#ifdef _DEBUG
     if (!this->isMapped)
     {
         throw std::runtime_error("Attempting to copy from host buffer to unmapped ManagedBuffer");
     }
+#endif
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 
@@ -191,22 +199,24 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
 
 ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
                                                           ToFreeList& toFreeList,
-                                                          const ManagedBuffer& dev_srcBuffer,
+                                                          const ManagedBuffer& srcBuffer,
                                                           ManagedBufferSection srcBufferSection)
 {
     return this->copyFromDeviceBuffer(cmdList,
                                       toFreeList,
-                                      dev_srcBuffer.getBuffer(),
+                                      srcBuffer.getBuffer(),
                                       srcBufferSection.sizeBytes,
                                       srcBufferSection.offsetBytes);
 }
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
+#ifdef _DEBUG
     if (section.getBuffer() != this)
     {
         throw std::runtime_error("Attempting to free ManagedBufferSection from wrong ManagedBuffer");
     }
+#endif
 
     auto it = this->freeSectionList.begin();
     for (; it != this->freeSectionList.end(); ++it)
