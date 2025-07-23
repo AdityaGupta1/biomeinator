@@ -457,28 +457,31 @@ void initPipeline()
     };
     device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
 
-    const uint32_t numShaderIds = 2 + NUM_HIT_GROUPS;
-    dev_shaderIds = BufferHelper::createBasicBuffer(
-        numShaderIds * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+    const uint32_t shaderIdsSizeBytes =
+        2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+    dev_shaderIds =
+        BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);
 
-    void* data;
-    auto writeId = [&](const wchar_t* name)
+    uint8_t* host_shaderIds;
+    dev_shaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+
+    auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
     {
         void* id = props->GetShaderIdentifier(name);
-        memcpy(data, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        data = static_cast<char*>(data) + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+        memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+        host_shaderIds += incrementSizeBytes;
     };
 
-    dev_shaderIds->Map(0, nullptr, &data);
-    writeId(L"RayGeneration");
-    writeId(L"Miss");
+    writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+    writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
     for (const auto& hitGroup : hitGroups)
     {
-        writeId(hitGroup.HitGroupExport);
+        writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
     }
+
     dev_shaderIds->Unmap(0, nullptr);
 
     dispatchDesc = {
