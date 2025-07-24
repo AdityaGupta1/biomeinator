@@ -142,7 +142,7 @@
 			],
 			"translation":[
 				0,
-				2.954841136932373,
+				2.95263671875,
 				0
 			]
 		}
@@ -336,7 +336,7 @@
 						"NORMAL":24,
 						"TEXCOORD_0":25
 					},
-					"indices":19,
+					"indices":26,
 					"material":3
 				}
 			]
@@ -554,15 +554,15 @@
 		{
 			"bufferView":23,
 			"componentType":5126,
-			"count":24,
+			"count":4,
 			"max":[
 				1,
-				1,
+				0,
 				1
 			],
 			"min":[
 				-1,
-				-1,
+				0,
 				-1
 			],
 			"type":"VEC3"
@@ -570,14 +570,20 @@
 		{
 			"bufferView":24,
 			"componentType":5126,
-			"count":24,
+			"count":4,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":25,
 			"componentType":5126,
-			"count":24,
+			"count":4,
 			"type":"VEC2"
+		},
+		{
+			"bufferView":26,
+			"componentType":5123,
+			"count":6,
+			"type":"SCALAR"
 		}
 	],
 	"bufferViews":[
@@ -721,26 +727,32 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":288,
+			"byteLength":48,
 			"byteOffset":2260,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":288,
-			"byteOffset":2548,
+			"byteLength":48,
+			"byteOffset":2308,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":192,
-			"byteOffset":2836,
+			"byteLength":32,
+			"byteOffset":2356,
 			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":12,
+			"byteOffset":2388,
+			"target":34963
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":3028,
+			"byteLength":2400,
 			"uri":"cornell_box.bin"
 		}
 	]
