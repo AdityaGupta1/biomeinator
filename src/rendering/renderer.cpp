@@ -436,31 +436,32 @@ void initPipeline()
     Slang::ComPtr<IBlob> diagnostics;
     Slang::ComPtr<IModule> module;
     module = session->loadModule("main", diagnostics.writeRef());
+    CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
-#ifdef _DEBUG
-    if (diagnostics)
-    {
-        fprintf(stderr, "%s\n", (const char*)diagnostics->getBufferPointer());
-    }
-#endif
-
+    std::vector<IComponentType*> components = { module };
     const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
-    printf("num entry points: %d\n", numEntryPoints);
-    //Slang::ComPtr<IEntryPoint> raygenEntryPoint;
-    //module->findEntryPointByName("RayGeneration", raygenEntryPoint.writeRef());
+    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
+    {
+        Slang::ComPtr<IEntryPoint> entryPoint;
+        module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
+        components.push_back(entryPoint);
+    }
 
+    Slang::ComPtr<IComponentType> program;
+    CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
 
+    Slang::ComPtr<IComponentType> linkedProgram;
+    program->link(linkedProgram.writeRef(), diagnostics.writeRef());
+    CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
-    // TODO
-
-
-
-
+    Slang::ComPtr<IBlob> kernelBlob;
+    linkedProgram->getTargetCode(0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef());
+    CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
     D3D12_DXIL_LIBRARY_DESC lib = {
         .DXILLibrary = {
-            .pShaderBytecode = main_shaderBytecode,
-            .BytecodeLength = std::size(main_shaderBytecode),
+            .pShaderBytecode = kernelBlob->getBufferPointer(),
+            .BytecodeLength = kernelBlob->getBufferSize(),
         },
     };
 

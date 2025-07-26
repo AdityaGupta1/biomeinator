@@ -139,3 +139,16 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_CURRENT_SOURCE_DIR}/external/bin/slang.dll
     $<TARGET_FILE_DIR:Biomeinator>)
+
+set(DXC_DLLS
+    ${CMAKE_SOURCE_DIR}/external/bin/dxc.exe
+    ${CMAKE_SOURCE_DIR}/external/bin/dxcompiler.dll
+    ${CMAKE_SOURCE_DIR}/external/bin/dxil.dll
+)
+
+foreach(dll ${DXC_DLLS})
+    add_custom_command(TARGET Biomeinator POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${dll}
+        $<TARGET_FILE_DIR:Biomeinator>)
+endforeach()
