@@ -438,24 +438,26 @@ void initPipeline()
     module = session->loadModule("main", diagnostics.writeRef());
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
+    std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
     std::vector<IComponentType*> components = { module };
     const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
     for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
     {
         Slang::ComPtr<IEntryPoint> entryPoint;
         module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
-        components.push_back(entryPoint);
+        entryPoints.push_back(entryPoint);
+        components.push_back(entryPoint.get());
     }
 
     Slang::ComPtr<IComponentType> program;
     CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
 
     Slang::ComPtr<IComponentType> linkedProgram;
-    program->link(linkedProgram.writeRef(), diagnostics.writeRef());
+    CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
     Slang::ComPtr<IBlob> kernelBlob;
-    linkedProgram->getTargetCode(0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef());
+    CHECK_HRESULT(linkedProgram->getEntryPointCode(0, 0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef()));
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
     D3D12_DXIL_LIBRARY_DESC lib = {
