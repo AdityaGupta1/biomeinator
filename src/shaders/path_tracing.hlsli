@@ -145,7 +145,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
             return true;
         }
@@ -158,7 +158,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
         bounceRay(ray, payload, isLastBounce);
 
-        if (payload.flags & PAYLOAD_FLAG_PATH_FINISHED)
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
             return true;
         }
@@ -186,7 +186,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
     uint i0, i1, i2;
-    if (instanceData.hasIdxs)
+    if (bool(instanceData.hasIdxs))
     {
         const uint idxBufferByteOffset = instanceData.idxBufferByteOffset + PrimitiveIndex() * 3 * 4;
         i0 = idxs.Load(idxBufferByteOffset + 0);

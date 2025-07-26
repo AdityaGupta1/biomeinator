@@ -141,7 +141,6 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     $<TARGET_FILE_DIR:Biomeinator>)
 
 set(DXC_DLLS
-    ${CMAKE_SOURCE_DIR}/external/bin/dxc.exe
     ${CMAKE_SOURCE_DIR}/external/bin/dxcompiler.dll
     ${CMAKE_SOURCE_DIR}/external/bin/dxil.dll
 )
