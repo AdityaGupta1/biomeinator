@@ -20,27 +20,15 @@ include_directories(
 
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/lib)
 
-# Collect all source files and keep the list up to date when files are added
 file(GLOB_RECURSE SRC_FILES
     CONFIGURE_DEPENDS
     "${SRC_DIR}/*.cpp"
     "${SRC_DIR}/*.h"
-)
-
-# Collect all shaders (hlsl and hlsli)
-file(GLOB_RECURSE SHADER_FILES
-    CONFIGURE_DEPENDS
-    "${SHADER_DIR}/*.hlsl"
-    "${SHADER_DIR}/*.hlsli"
     "${SHADER_DIR}/*.slang"
-    "${SHADER_DIR}/*.slangh"
 )
 
-# Mark shader source files as headers only
-set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
-
-# Visual Studio filters for project structure
-foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
+# set up Visual Studio filters based on directory structure
+foreach(FILE IN LISTS SRC_FILES)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
     string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
@@ -48,11 +36,7 @@ foreach(FILE IN LISTS SRC_FILES SHADER_FILES)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(Biomeinator
-    ${SRC_FILES}
-    ${COMPILED_HEADERS}
-    ${SHADER_FILES}
-)
+add_executable(Biomeinator ${SRC_FILES})
 
 target_compile_definitions(Biomeinator PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 

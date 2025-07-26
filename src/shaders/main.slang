@@ -1,7 +1,7 @@
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "path_tracing.hlsli"
+#include "path_tracing.slang"
 
 RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_SPACE_TEXTURES);
 

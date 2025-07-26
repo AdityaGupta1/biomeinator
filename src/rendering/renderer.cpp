@@ -26,9 +26,6 @@
 
 #include "slang/slang.h"
 #include "slang/slang-com-ptr.h"
-#include "slang/slang-com-helper.h"
-
-#include "main.fxh"
 
 using namespace DirectX;
 
