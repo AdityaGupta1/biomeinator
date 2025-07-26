@@ -456,16 +456,23 @@ void initPipeline()
     CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
-    Slang::ComPtr<IBlob> kernelBlob;
-    CHECK_HRESULT(linkedProgram->getTargetCode(0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef()));
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
+    std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
+    std::vector<D3D12_DXIL_LIBRARY_DESC> libs;
+    libs.reserve(numEntryPoints);
 
-    D3D12_DXIL_LIBRARY_DESC lib = {
-        .DXILLibrary = {
-            .pShaderBytecode = kernelBlob->getBufferPointer(),
-            .BytecodeLength = kernelBlob->getBufferSize(),
-        },
-    };
+    for (uint32_t i = 0; i < numEntryPoints; ++i)
+    {
+        CHECK_HRESULT(linkedProgram->getEntryPointCode(i, 0, entryPointBlobs[i].writeRef(), diagnostics.writeRef()));
+        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+        D3D12_DXIL_LIBRARY_DESC lib = {
+            .DXILLibrary = {
+                .pShaderBytecode = entryPointBlobs[i]->getBufferPointer(),
+                .BytecodeLength = entryPointBlobs[i]->getBufferSize(),
+            },
+        };
+        libs.push_back(lib);
+    }
 
     constexpr uint32_t NUM_HIT_GROUPS = 2;
     std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
@@ -493,12 +500,15 @@ void initPipeline()
         .MaxTraceRecursionDepth = 1,
     };
 
-    std::vector<D3D12_STATE_SUBOBJECT> subobjects = {
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib },
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg },
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig },
-        { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg },
-    };
+    std::vector<D3D12_STATE_SUBOBJECT> subobjects;
+    for (auto& lib : libs)
+    {
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+    }
+
+    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
+    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
+    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
 
     for (const auto& hitGroup : hitGroups)
     {
