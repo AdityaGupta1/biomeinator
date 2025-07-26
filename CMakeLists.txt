@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# TODO: remove dxc stuff
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
     file(GLOB DXC_POSSIBLE_PATHS
@@ -42,6 +43,8 @@ include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
     ${GENERATED_SHADER_HEADERS}
 )
+
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/lib)
 
 # Collect all source files and keep the list up to date when files are added
 file(GLOB_RECURSE SRC_FILES
@@ -126,4 +129,9 @@ add_executable(Biomeinator
     ${SHADER_INCLUDE_FILES}
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang)
+
+add_custom_command(TARGET Biomeinator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/bin/slang.dll
+    $<TARGET_FILE_DIR:Biomeinator>)
