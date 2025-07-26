@@ -457,7 +457,7 @@ void initPipeline()
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
     Slang::ComPtr<IBlob> kernelBlob;
-    CHECK_HRESULT(linkedProgram->getEntryPointCode(0, 0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef()));
+    CHECK_HRESULT(linkedProgram->getTargetCode(0 /*targetIndex*/, kernelBlob.writeRef(), diagnostics.writeRef()));
     CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
     D3D12_DXIL_LIBRARY_DESC lib = {
