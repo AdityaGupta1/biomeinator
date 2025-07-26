@@ -24,6 +24,10 @@
 
 #include "stb/stb_image_write.h"
 
+#include "slang/slang.h"
+#include "slang/slang-com-ptr.h"
+#include "slang/slang-com-helper.h"
+
 #include "main.fxh"
 
 using namespace DirectX;
@@ -405,6 +409,54 @@ ComPtr<ID3D12Resource> dev_shaderIds;
 D3D12_DISPATCH_RAYS_DESC dispatchDesc;
 void initPipeline()
 {
+    using namespace slang;
+
+    Slang::ComPtr<IGlobalSession> globalSession;
+    SlangGlobalSessionDesc globalSessionDesc = {};
+    CHECK_HRESULT(createGlobalSession(&globalSessionDesc, globalSession.writeRef()));
+
+    SessionDesc sessionDesc;
+
+    TargetDesc targetDesc = {
+        .format = SLANG_DXIL,
+        .profile = globalSession->findProfile("sm_6_3"),
+    };
+    sessionDesc.targets = &targetDesc;
+    sessionDesc.targetCount = 1;
+
+    const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
+    const std::string shadersPathStr = std::filesystem::absolute(shadersPath).string();
+    const char* searchPaths[] = { shadersPathStr.c_str() };
+    sessionDesc.searchPaths = searchPaths;
+    sessionDesc.searchPathCount = 1;
+
+    Slang::ComPtr<ISession> session;
+    CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
+
+    Slang::ComPtr<IBlob> diagnostics;
+    Slang::ComPtr<IModule> module;
+    module = session->loadModule("main", diagnostics.writeRef());
+
+#ifdef _DEBUG
+    if (diagnostics)
+    {
+        fprintf(stderr, "%s\n", (const char*)diagnostics->getBufferPointer());
+    }
+#endif
+
+    const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
+    printf("num entry points: %d\n", numEntryPoints);
+    //Slang::ComPtr<IEntryPoint> raygenEntryPoint;
+    //module->findEntryPointByName("RayGeneration", raygenEntryPoint.writeRef());
+
+
+
+    // TODO
+
+
+
+
+
     D3D12_DXIL_LIBRARY_DESC lib = {
         .DXILLibrary = {
             .pShaderBytecode = main_shaderBytecode,

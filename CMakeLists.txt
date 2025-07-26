@@ -58,6 +58,8 @@ file(GLOB_RECURSE SHADER_FILES_ALL
     CONFIGURE_DEPENDS
     "${SHADER_DIR}/*.hlsl"
     "${SHADER_DIR}/*.hlsli"
+    "${SHADER_DIR}/*.slang"
+    "${SHADER_DIR}/*.slangh"
 )
 
 set(SHADER_FILES "")
@@ -128,6 +130,8 @@ add_executable(Biomeinator
     ${SHADER_FILES}
     ${SHADER_INCLUDE_FILES}
 )
+
+target_compile_definitions(Biomeinator PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang)
 

@@ -15,22 +15,26 @@ struct RandomSampler
 {
     uint seed;
 
+    [mutating]
     uint nextUint()
     {
         seed = hash(seed);
         return seed;
     }
 
+    [mutating]
     float nextFloat()
     {
         return (nextUint() & 0x00FFFFFF) / 16777216.0;
     }
 
+    [mutating]
     float2 nextFloat2()
     {
         return float2(nextFloat(), nextFloat());
     }
 
+    [mutating]
     float3 nextFloat3()
     {
         return float3(nextFloat(), nextFloat(), nextFloat());
