@@ -11,12 +11,22 @@
         HRESULT _hr = (expr);                                                                                          \
         if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
-            printf("HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                            \
+            fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
             __debugbreak();                                                                                            \
+        }                                                                                                              \
+    } while (0)
+
+#define CHECK_SLANG_DIAGNOSTICS(blob)                                                                                  \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if ((blob))                                                                                                    \
+        {                                                                                                              \
+            fprintf(stderr, "Slang diagnostics: %s\n", (const char*)(blob)->getBufferPointer());                       \
         }                                                                                                              \
     } while (0)
 #else
 #define CHECK_HRESULT(expr) (expr)
+#define CHECK_SLANG_DIAGNOSTICS(blob) ((void)0)
 #endif
 
 constexpr DXGI_SAMPLE_DESC NO_AA = {
