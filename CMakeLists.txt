@@ -6,25 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(SHADER_DIR "${SRC_DIR}/shaders")
-set(COMMON_DIR "${SRC_DIR}/rendering/common")
-set(GENERATED_SHADER_HEADERS "${CMAKE_BINARY_DIR}/generated_shaders")
-
-file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
-
-include_directories(
-    ${SRC_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
-    ${GENERATED_SHADER_HEADERS}
-)
-
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/lib)
 
 file(GLOB_RECURSE SRC_FILES
     CONFIGURE_DEPENDS
     "${SRC_DIR}/*.cpp"
     "${SRC_DIR}/*.h"
-    "${SHADER_DIR}/*.slang"
+    "${SRC_DIR}/*.slang"
 )
 
 # set up Visual Studio filters based on directory structure
@@ -38,23 +25,21 @@ endforeach()
 
 add_executable(Biomeinator ${SRC_FILES})
 
-target_compile_definitions(Biomeinator PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_include_directories(Biomeinator PRIVATE
+    ${SRC_DIR}
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
+)
 
+target_link_directories(Biomeinator PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/lib"
+)
+
+target_compile_definitions(Biomeinator PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang)
+
+file(GLOB RUNTIME_DLLS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/external/bin/*.dll")
 
 add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/bin/slang.dll
+    ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
-
-set(DXC_DLLS
-    ${CMAKE_SOURCE_DIR}/external/bin/dxcompiler.dll
-    ${CMAKE_SOURCE_DIR}/external/bin/dxil.dll
-)
-
-foreach(dll ${DXC_DLLS})
-    add_custom_command(TARGET Biomeinator POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${dll}
-        $<TARGET_FILE_DIR:Biomeinator>)
-endforeach()
