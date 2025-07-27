@@ -457,15 +457,17 @@ void initPipeline()
     std::vector<D3D12_DXIL_LIBRARY_DESC> libs;
     libs.reserve(numEntryPoints);
 
-    for (uint32_t i = 0; i < numEntryPoints; ++i)
+    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
     {
-        CHECK_HRESULT(linkedProgram->getEntryPointCode(i, 0, entryPointBlobs[i].writeRef(), diagnostics.writeRef()));
+        auto& entryPointBlob = entryPointBlobs[entryPointIdx];
+
+        CHECK_HRESULT(linkedProgram->getEntryPointCode(entryPointIdx, 0, entryPointBlob.writeRef(), diagnostics.writeRef()));
         CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
         D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
-                .pShaderBytecode = entryPointBlobs[i]->getBufferPointer(),
-                .BytecodeLength = entryPointBlobs[i]->getBufferSize(),
+                .pShaderBytecode = entryPointBlob->getBufferPointer(),
+                .BytecodeLength = entryPointBlob->getBufferSize(),
             },
         };
         libs.push_back(lib);
@@ -519,7 +521,7 @@ void initPipeline()
         .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
         .pSubobjects = subobjects.data(),
     };
-    device->CreateStateObject(&desc, IID_PPV_ARGS(&pso));
+    CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&pso)));
 
     const uint32_t shaderIdsSizeBytes =
         2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
