@@ -22,10 +22,10 @@
 #include <cstdio>
 #include <shlobj.h>
 
-#include "stb/stb_image_write.h"
-
 #include "slang/slang.h"
 #include "slang/slang-com-ptr.h"
+
+#include "stb/stb_image_write.h"
 
 using namespace DirectX;
 
@@ -498,18 +498,20 @@ void initPipeline()
     };
 
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
-    for (auto& lib : libs)
     {
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
-    }
+        for (auto& lib : libs)
+        {
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+        }
 
-    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
-    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-    subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
 
-    for (const auto& hitGroup : hitGroups)
-    {
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+        for (const auto& hitGroup : hitGroups)
+        {
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+        }
     }
 
     D3D12_STATE_OBJECT_DESC desc = {
