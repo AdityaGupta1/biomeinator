@@ -19,6 +19,7 @@
 #include <deque>
 #include <filesystem>
 #include <vector>
+#include <fstream>
 #include <cstdio>
 #include <shlobj.h>
 
@@ -430,28 +431,55 @@ void initPipeline()
     Slang::ComPtr<ISession> session;
     CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
 
-    Slang::ComPtr<IBlob> diagnostics;
-    Slang::ComPtr<IModule> module;
-    module = session->loadModule("main", diagnostics.writeRef());
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-    std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
-    std::vector<IComponentType*> components = { module };
-    const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
-    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-    {
-        Slang::ComPtr<IEntryPoint> entryPoint;
-        module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
-        entryPoints.push_back(entryPoint);
-        components.push_back(entryPoint.get());
-    }
-
-    Slang::ComPtr<IComponentType> program;
-    CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
+    const std::filesystem::path blobPath =
+        std::filesystem::path(CMAKE_BINARY_DIR) / "shaders" / "linked_program.slangblob";
 
     Slang::ComPtr<IComponentType> linkedProgram;
-    CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
+    Slang::ComPtr<IBlob> diagnostics;
+
+    if (std::filesystem::exists(blobPath))
+    {
+        std::ifstream file(blobPath, std::ios::binary | std::ios::ate);
+        const size_t size = static_cast<size_t>(file.tellg());
+        std::vector<char> data(size);
+        file.seekg(0);
+        file.read(data.data(), size);
+        file.close();
+
+        CHECK_HRESULT(session->loadComponentLibrary(data.data(), size, linkedProgram.writeRef()));
+    }
+    else
+    {
+        Slang::ComPtr<IModule> module;
+        module = session->loadModule("main", diagnostics.writeRef());
+        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+        std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
+        std::vector<IComponentType*> components = { module };
+        const uint32_t numEntryPointsModule = module->getDefinedEntryPointCount();
+        for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPointsModule; ++entryPointIdx)
+        {
+            Slang::ComPtr<IEntryPoint> entryPoint;
+            module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
+            entryPoints.push_back(entryPoint);
+            components.push_back(entryPoint.get());
+        }
+
+        Slang::ComPtr<IComponentType> program;
+        CHECK_HRESULT(session->createCompositeComponentType(
+            components.data(), components.size(), program.writeRef()));
+
+        CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
+        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+        Slang::ComPtr<IBlob> serialized;
+        CHECK_HRESULT(linkedProgram->serialize(serialized.writeRef()));
+        std::filesystem::create_directories(blobPath.parent_path());
+        std::ofstream ofs(blobPath, std::ios::binary);
+        ofs.write(static_cast<const char*>(serialized->getBufferPointer()), serialized->getBufferSize());
+    }
+
+    const uint32_t numEntryPoints = static_cast<uint32_t>(linkedProgram->getEntryPointCount());
 
     std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
     std::vector<D3D12_DXIL_LIBRARY_DESC> libs;
