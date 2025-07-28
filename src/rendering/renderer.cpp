@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include "dxr_common.h"
+#include <d3dcompiler.h>
 
 #include "param_block_manager.h"
 #include "window_manager.h"
@@ -38,7 +39,7 @@ void initDevice();
 void initRenderTarget();
 void initCommand();
 void initRootSignature();
-void initPipeline();
+void compileShadersAndInitPipeline();
 
 void beginFrame();
 void submitCmd();
@@ -92,7 +93,7 @@ void init()
     scene.init();
 
     initRootSignature();
-    initPipeline();
+    compileShadersAndInitPipeline();
 }
 
 void loadGltf(const std::string& filePathStr)
@@ -404,7 +405,7 @@ void initRootSignature()
 ComPtr<ID3D12StateObject> pso;
 ComPtr<ID3D12Resource> dev_shaderIds;
 D3D12_DISPATCH_RAYS_DESC dispatchDesc;
-void initPipeline()
+void compileShadersAndInitPipeline()
 {
     using namespace slang;
 
@@ -432,8 +433,84 @@ void initPipeline()
 
     Slang::ComPtr<IBlob> diagnostics;
     Slang::ComPtr<IModule> module;
-    module = session->loadModule("main", diagnostics.writeRef());
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    const std::filesystem::path shaderBlobPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders/main.slang-module";
+    std::filesystem::create_directories(shaderBlobPath.parent_path());
+
+    auto shaderDirs = {
+        shadersPath,
+        std::filesystem::path(CMAKE_SOURCE_DIR) / "src/rendering/common",
+    };
+
+    bool needsRecompile = !std::filesystem::is_regular_file(shaderBlobPath);
+
+    if (!needsRecompile)
+    {
+        auto blobTime = std::filesystem::last_write_time(shaderBlobPath);
+
+        for (const auto& dir : shaderDirs)
+        {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
+            {
+                if (!entry.is_regular_file())
+                {
+                    continue;
+                }
+
+                auto ext = entry.path().extension();
+                if (ext != ".slang" && ext != ".slangh")
+                {
+                    continue;
+                }
+
+                auto srcTime = std::filesystem::last_write_time(entry);
+                if (srcTime > blobTime)
+                {
+                    std::string pathStr = entry.path().string();
+                    std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
+                    printf("File at \"%s\" needs recompilation\n", pathStr.c_str());
+                    needsRecompile = true;
+                    break;
+                }
+            }
+
+            if (needsRecompile)
+            {
+                break;
+            }
+        }
+    }
+
+    if (needsRecompile)
+    {
+        printf("Compiling shaders...\n");
+        module = session->loadModule("main", diagnostics.writeRef());
+        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+        printf("Serializing shaders and writing to disk...\n");
+        Slang::ComPtr<slang::IBlob> serialized;
+        CHECK_HRESULT(module->serialize(serialized.writeRef()));
+        CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
+    }
+    else
+    {
+        printf("Loading shaders from blob...\n");
+        ID3DBlob* d3dBlob = nullptr;
+        CHECK_HRESULT(D3DReadFileToBlob(std::wstring(shaderBlobPath.wstring()).c_str(), &d3dBlob));
+
+        Slang::ComPtr<slang::IBlob> slangBlob;
+        slangBlob.attach(reinterpret_cast<slang::IBlob*>(d3dBlob));
+
+        module =
+            session->loadModuleFromIRBlob("main", shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
+        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+    printf("Shader init took %lld ms\n", durationMs);
 
     std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
     std::vector<IComponentType*> components = { module };
