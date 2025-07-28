@@ -454,13 +454,7 @@ void compileShadersAndInitPipeline()
         {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
             {
-                if (!entry.is_regular_file())
-                {
-                    continue;
-                }
-
-                auto ext = entry.path().extension();
-                if (ext != ".slang" && ext != ".slangh")
+                if (!entry.is_regular_file() || entry.path().extension() != ".slang")
                 {
                     continue;
                 }
