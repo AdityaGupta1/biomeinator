@@ -19,6 +19,8 @@
 #include <random>
 #include <deque>
 #include <filesystem>
+#include <fstream>
+#include <algorithm>
 #include <vector>
 #include <cstdio>
 #include <shlobj.h>
@@ -405,6 +407,49 @@ void initRootSignature()
 ComPtr<ID3D12StateObject> pso;
 ComPtr<ID3D12Resource> dev_shaderIds;
 D3D12_DISPATCH_RAYS_DESC dispatchDesc;
+
+static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::path>& dirs)
+{
+    constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ull;
+    constexpr uint64_t FNV_PRIME = 1099511628211ull;
+
+    uint64_t hash = FNV_OFFSET_BASIS;
+
+    std::vector<std::filesystem::path> files;
+    for (const auto& dir : dirs)
+    {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
+        {
+            if (!entry.is_regular_file())
+            {
+                continue;
+            }
+
+            const auto ext = entry.path().extension();
+            if (ext != ".slang" && ext != ".h")
+            {
+                continue;
+            }
+
+            files.push_back(entry.path());
+        }
+    }
+
+    std::sort(files.begin(), files.end());
+
+    for (const auto& file : files)
+    {
+        std::ifstream stream(file, std::ios::binary);
+        const std::vector<char> data((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+        for (char c : data)
+        {
+            hash ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
+            hash *= FNV_PRIME;
+        }
+    }
+
+    return hash;
+}
 void compileShadersAndInitPipeline()
 {
     using namespace slang;
@@ -439,41 +484,29 @@ void compileShadersAndInitPipeline()
     const std::filesystem::path shaderBlobPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders/main.slang-module";
     std::filesystem::create_directories(shaderBlobPath.parent_path());
 
-    auto shaderDirs = {
+    const auto shaderDirs = {
         shadersPath,
         std::filesystem::path(CMAKE_SOURCE_DIR) / "src/rendering/common",
     };
 
-    bool needsRecompile = !std::filesystem::is_regular_file(shaderBlobPath);
+    const std::filesystem::path shaderHashPath = shaderBlobPath.string() + ".hash";
+    const uint64_t currentHash = computeShaderHash(shaderDirs);
 
-    if (!needsRecompile)
+    bool needsRecompile = true;
+    if (std::filesystem::is_regular_file(shaderBlobPath) &&
+        std::filesystem::is_regular_file(shaderHashPath))
     {
-        auto blobTime = std::filesystem::last_write_time(shaderBlobPath);
-
-        for (const auto& dir : shaderDirs)
+        std::ifstream hashIn(shaderHashPath, std::ios::binary);
+        uint64_t storedHash = 0;
+        hashIn.read(reinterpret_cast<char*>(&storedHash), sizeof(storedHash));
+        if (storedHash != currentHash)
         {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
-            {
-                if (!entry.is_regular_file() || entry.path().extension() != ".slang")
-                {
-                    continue;
-                }
-
-                auto srcTime = std::filesystem::last_write_time(entry);
-                if (srcTime > blobTime)
-                {
-                    std::string pathStr = entry.path().string();
-                    std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
-                    printf("File at \"%s\" needs recompilation\n", pathStr.c_str());
-                    needsRecompile = true;
-                    break;
-                }
-            }
-
-            if (needsRecompile)
-            {
-                break;
-            }
+            printf("Shader hash has changed; need to recompile...\n");
+            needsRecompile = true;
+        }
+        else
+        {
+            needsRecompile = false;
         }
     }
 
@@ -487,6 +520,9 @@ void compileShadersAndInitPipeline()
         Slang::ComPtr<slang::IBlob> serialized;
         CHECK_HRESULT(module->serialize(serialized.writeRef()));
         CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
+
+        std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
+        hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
     }
     else
     {
