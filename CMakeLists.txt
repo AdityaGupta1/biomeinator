@@ -34,8 +34,11 @@ target_link_directories(Biomeinator PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/external/lib"
 )
 
-target_compile_definitions(Biomeinator PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang)
+target_compile_definitions(Biomeinator PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang d3dcompiler)
 
 file(GLOB RUNTIME_DLLS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/external/bin/*.dll")
 
