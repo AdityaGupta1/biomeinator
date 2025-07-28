@@ -1,6 +1,5 @@
 #pragma once
 
-#include "rendering/dxr_includes.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
 
@@ -12,7 +11,14 @@ private:
     ComPtr<ID3D12Resource> upload_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
 
-    bool isDirty{ false };
+    uint32_t dirtyBeginIdx{ 0 };
+    uint32_t dirtyEndIdx{ 0 };
+
+    void setNotDirty()
+    {
+        this->dirtyBeginIdx = this->size;
+        this->dirtyEndIdx = 0;
+    }
 
 public:
     void init(uint32_t size)
@@ -25,6 +31,8 @@ public:
 
         dev_buffer =
             BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        this->setNotDirty();
     }
 
     T& operator[](uint32_t idx)
@@ -36,33 +44,32 @@ public:
         }
 #endif
 
-        this->isDirty = true; // kind of hacky but if you're accessing this then you probably want to do a copy too
+        this->dirtyBeginIdx = std::min(this->dirtyBeginIdx, idx);
+        this->dirtyEndIdx = std::max(this->dirtyEndIdx, idx + 1);
         return host_buffer[idx];
     }
 
-    void copyFromUploadBuffer(ID3D12GraphicsCommandList* cmdList)
+    void copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
     {
-        const uint32_t sizeBytes = sizeof(T) * size;
+        if (!this->getIsDirty())
+        {
+            return;
+        }
+
+        const uint32_t startBytes = sizeof(T) * this->dirtyBeginIdx;
+        const uint32_t sizeBytes = sizeof(T) * (this->dirtyEndIdx - this->dirtyBeginIdx);
 
         BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                      this->dev_buffer.Get(),
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                      D3D12_RESOURCE_STATE_COPY_DEST);
-        cmdList->CopyBufferRegion(this->dev_buffer.Get(), 0, this->upload_buffer.Get(), 0, sizeBytes);
+        cmdList->CopyBufferRegion(this->dev_buffer.Get(), startBytes, this->upload_buffer.Get(), startBytes, sizeBytes);
         BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                      this->dev_buffer.Get(),
                                                      D3D12_RESOURCE_STATE_COPY_DEST,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        this->isDirty = false;
-    }
-
-    inline void copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
-    {
-        if (this->isDirty)
-        {
-            this->copyFromUploadBuffer(cmdList);
-        }
+        this->setNotDirty();
     }
 
     void resize(ToFreeList& toFreeList, uint32_t newSize)
@@ -78,7 +85,8 @@ public:
         const uint32_t copyCount = std::min(oldSize, newSize);
         memcpy(this->host_buffer, host_oldBuffer, sizeof(T) * copyCount);
 
-        this->isDirty = true;
+        this->dirtyBeginIdx = 0;
+        this->dirtyEndIdx = newSize;
     }
 
     inline uint32_t getSize() const
@@ -88,7 +96,7 @@ public:
 
     inline bool getIsDirty() const
     {
-        return this->isDirty;
+        return this->dirtyBeginIdx <= this->dirtyEndIdx;
     }
 
     inline ID3D12Resource* getUploadBuffer() const
