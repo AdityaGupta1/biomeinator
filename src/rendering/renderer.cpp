@@ -420,7 +420,13 @@ static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::p
     {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
         {
-            if (!entry.is_regular_file() || entry.path().extension() != ".slang")
+            if (!entry.is_regular_file())
+            {
+                continue;
+            }
+
+            const auto ext = entry.path().extension();
+            if (ext != ".slang" && ext != ".h")
             {
                 continue;
             }
@@ -493,7 +499,15 @@ void compileShadersAndInitPipeline()
         std::ifstream hashIn(shaderHashPath, std::ios::binary);
         uint64_t storedHash = 0;
         hashIn.read(reinterpret_cast<char*>(&storedHash), sizeof(storedHash));
-        needsRecompile = storedHash != currentHash;
+        if (storedHash != currentHash)
+        {
+            printf("Shader hash has changed; need to recompile...\n");
+            needsRecompile = true;
+        }
+        else
+        {
+            needsRecompile = false;
+        }
     }
 
     if (needsRecompile)
