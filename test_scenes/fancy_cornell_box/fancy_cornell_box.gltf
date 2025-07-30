@@ -250,7 +250,7 @@
 					"emissiveStrength":15
 				}
 			},
-			"name":"Material",
+			"name":"mat_light",
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
 					0,
