@@ -65,6 +65,19 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     {
         ::Material material;
 
+        bool hasEmission = false;
+        if (gltfMat.emissiveFactor.size() == 3)
+        {
+            material.emissiveColor = {
+                static_cast<float>(gltfMat.emissiveFactor[0]),
+                static_cast<float>(gltfMat.emissiveFactor[1]),
+                static_cast<float>(gltfMat.emissiveFactor[2]),
+            };
+            hasEmission =
+                material.emissiveColor.x != 0 || material.emissiveColor.y != 0 || material.emissiveColor.z != 0;
+        }
+        material.emissiveStrength = hasEmission ? 1.f : 0.f;
+
         bool hasDiffuse = false;
         if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() >= 3)
         {
@@ -74,23 +87,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[2]),
             };
 
-            hasDiffuse =
-                material.baseColor.x != 0 || material.baseColor.y != 0 || material.baseColor.z != 0;
+            const bool isBaseColorBlack =
+                material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0;
+            hasDiffuse = !hasEmission || !isBaseColorBlack;
         }
-
         material.hasDiffuse = hasDiffuse ? 1 : 0;
-
-        if (gltfMat.emissiveFactor.size() == 3)
-        {
-            material.emissiveColor = {
-                static_cast<float>(gltfMat.emissiveFactor[0]),
-                static_cast<float>(gltfMat.emissiveFactor[1]),
-                static_cast<float>(gltfMat.emissiveFactor[2]),
-            };
-            const bool anyEmissive = material.emissiveColor.x != 0 || material.emissiveColor.y != 0
-                                     || material.emissiveColor.z != 0;
-            material.emissiveStrength = anyEmissive ? 1.f : 0.f;
-        }
 
         const auto emissiveExtIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
         if (emissiveExtIt != gltfMat.extensions.end())

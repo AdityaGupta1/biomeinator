@@ -29,6 +29,7 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 normal_WS)
 {
+    // TODO: handle materials with both diffuse and specular reflection
     if (material.hasDiffuse == 1)
     {
         float3 baseColor = material.baseColor;
@@ -64,6 +65,7 @@ BsdfSample sampleBsdf(
     BsdfSample result;
     result.bsdfValue = float3(0, 0, 0);
 
+    // TODO: handle materials with both diffuse and specular reflection
     if (material.hasDiffuse == 1)
     {
         const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
