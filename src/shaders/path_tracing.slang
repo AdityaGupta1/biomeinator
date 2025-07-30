@@ -103,7 +103,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     }
 
     // material has no reflectance
-    if (material.diffuseWeight == 0)
+    if (material.hasDiffuse == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;

@@ -65,6 +65,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     {
         ::Material material;
 
+        bool hasDiffuse = false;
         if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() >= 3)
         {
             material.diffuseColor = {
@@ -73,11 +74,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[2]),
             };
 
-            if (material.diffuseColor.x == 0 && material.diffuseColor.y == 0 && material.diffuseColor.z == 0)
-            {
-                material.diffuseWeight = 0.f;
-            }
+            hasDiffuse =
+                material.diffuseColor.x != 0 || material.diffuseColor.y != 0 || material.diffuseColor.z != 0;
         }
+
+        material.hasDiffuse = hasDiffuse ? 1 : 0;
 
         if (gltfMat.emissiveFactor.size() == 3)
         {

@@ -36,13 +36,14 @@ public:
     Material();
 #endif
 
-    float diffuseWeight;
-    float3 diffuseColor;
-
-    uint diffuseTextureId;
-    uint pad0;
+    uint hasDiffuse : 1;
+    uint pad0 : 31;
     uint pad1;
     uint pad2;
+    uint pad3;
+
+    float3 diffuseColor;
+    uint diffuseTextureId;
 
     float emissiveStrength;
     float3 emissiveColor;
