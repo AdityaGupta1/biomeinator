@@ -29,13 +29,21 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 normal_WS)
 {
-    float3 baseColor = material.baseColor;
-    if (material.baseColorTextureId != TEXTURE_ID_INVALID)
+    if (material.hasDiffuse == 1)
     {
-        baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
+        float3 baseColor = material.baseColor;
+        if (material.baseColorTextureId != TEXTURE_ID_INVALID)
+        {
+            baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
+        }
+        return baseColor * M_INV_PI;
+    }
+    else if (material.hasSpecularReflection == 1)
+    {
+        return float3(0, 0, 0); // can't randomly sample this direction so return 0 for bsdf value
     }
 
-    return baseColor * M_INV_PI;
+    return float3(0, 0, 0);
 }
 
 struct BsdfSample
@@ -54,14 +62,25 @@ BsdfSample sampleBsdf(
     float2 rndSample)
 {
     BsdfSample result;
+    result.bsdfValue = float3(0, 0, 0);
 
-    const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
-    result.wi_WS = wi_WS;
+    if (material.hasDiffuse == 1)
+    {
+        const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+        result.wi_WS = wi_WS;
 
-    float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
+        float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
 
-    result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
-    result.bsdfValue = bsdfValue;
+        result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
+        result.bsdfValue = bsdfValue;
+    }
+    else if (material.hasSpecularReflection == 1)
+    {
+        const float3 wi_WS = reflect(wo_WS, normal_WS);
+        result.wi_WS = wi_WS;
+        result.pdf = 1;
+        result.bsdfValue = material.specularColor / absCosTheta(wi_WS, normal_WS);
+    }
 
     return result;
 }
