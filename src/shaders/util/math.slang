@@ -16,22 +16,19 @@ float3x3 computeTBN(const float3 normal)
     );
 }
 
-float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSample)
-{
-    const float r = sqrt(rndSample.x);
-    const float theta = M_TWO_PI * rndSample.y;
-    const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
-    return mul(computeTBN(normal_WS), sampledDir_OS);
-}
-
 float3 faceforward(const float3 normal, const float3 vec)
 {
     return (dot(normal, vec) < 0.f) ? -normal : normal;
 }
 
+float cosTheta(const float3 v_WS, const float3 normal_WS)
+{
+    return dot(v_WS, normal_WS);
+}
+
 float absCosTheta(const float3 v_WS, const float3 normal_WS)
 {
-    return abs(dot(v_WS, normal_WS));
+    return abs(cosTheta(v_WS, normal_WS));
 }
 
 float distance2(const float3 a, const float3 b)

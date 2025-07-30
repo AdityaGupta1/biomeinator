@@ -27,7 +27,7 @@ void RayGeneration()
 
         RayDesc ray;
         ray.Origin = cameraParams.pos_WS;
-        ray.Direction = targetPos_WS - cameraParams.pos_WS;
+        ray.Direction = normalize(targetPos_WS - cameraParams.pos_WS);
         ray.TMin = 0.001;
         ray.TMax = 1000;
 

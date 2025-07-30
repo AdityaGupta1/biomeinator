@@ -39,6 +39,21 @@ float3 evalRayPos(const RayDesc ray, const float t)
     return ray.Origin + ray.Direction * t;
 }
 
+float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSample)
+{
+    const float r = sqrt(rndSample.x);
+    const float theta = M_TWO_PI * rndSample.y;
+    const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
+    return normalize(mul(computeTBN(normal_WS), sampledDir_OS));
+}
+
+float schlickFresnel(const float ior, const float cosThetaWo)
+{
+    float R0 = (1.f - ior) / (1.f + ior);
+    R0 = R0 * R0;
+    return R0 + (1.f - R0) * pow(1.f - cosThetaWo, 5.f);
+}
+
 float3 evaluateBsdf(
     const Material material,
     const float2 uv,
@@ -46,17 +61,13 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 normal_WS)
 {
-    float3 diffuseColor;
-    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
+    float3 baseColor = material.baseColor;
+    if (material.baseColorTextureId != TEXTURE_ID_INVALID)
     {
-        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, uv, 0).rgb;
-    }
-    else
-    {
-        diffuseColor = material.diffuseColor;
+        baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
     }
 
-    return diffuseColor * M_INV_PI;
+    return baseColor * M_INV_PI;
 }
 
 struct BsdfSample
@@ -103,7 +114,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     }
 
     // material has no reflectance
-    if (material.hasDiffuse == 0)
+    if (material.hasDiffuse == 0 && material.hasSpecularReflection == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;

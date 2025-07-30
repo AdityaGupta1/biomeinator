@@ -37,13 +37,17 @@ public:
 #endif
 
     uint hasDiffuse : 1;
-    uint pad0 : 31;
+    uint hasSpecularReflection : 1;
+    uint pad0 : 30;
     uint pad1;
     uint pad2;
     uint pad3;
 
-    float3 diffuseColor;
-    uint diffuseTextureId;
+    float3 baseColor;
+    uint baseColorTextureId;
+
+    float3 specularColor;
+    float ior;
 
     float emissiveStrength;
     float3 emissiveColor;
