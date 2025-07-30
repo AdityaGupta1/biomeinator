@@ -11,7 +11,7 @@
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define MAX_PATH_DEPTH 5
+#define MAX_PATH_DEPTH 8
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
@@ -70,7 +70,12 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 
     BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
 
-    payload.pathWeight *= sample.bsdfValue * absCosTheta(sample.wi_WS, normal_WS) / sample.pdf;
+    float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
+    if (!sample.wasSpecular)
+    {
+        adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
+    }
+    payload.pathWeight *= adjustedBsdfValue;
 
     ray.Origin = hitPos_WS + 0.001f * normal_WS;
     ray.Direction = sample.wi_WS;

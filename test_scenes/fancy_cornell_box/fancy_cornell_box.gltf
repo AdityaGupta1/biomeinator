@@ -165,6 +165,15 @@
 	"materials":[
 		{
 			"doubleSided":true,
+			"extensions":{
+				"KHR_materials_specular":{
+					"specularColorFactor":[
+						0.0,
+						1.0,
+						1.0
+					]
+				}
+			},
 			"name":"mat_wall_white",
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
@@ -236,6 +245,11 @@
 		},
 		{
 			"doubleSided":true,
+			"extensions":{
+				"KHR_materials_specular":{
+					"specularFactor":1
+				}
+			},
 			"name":"mat_sphere"
 		},
 		{

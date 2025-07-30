@@ -5,8 +5,11 @@
 
 #include "util/math.slang"
 
+StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_SPACE_BUFFERS);
+
 Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
 SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
+
 float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSample)
 {
     const float r = sqrt(rndSample.x);
@@ -51,8 +54,8 @@ struct BsdfSample
 {
     float3 wi_WS;
     float pdf;
-
     float3 bsdfValue;
+    bool wasSpecular;
 };
 
 BsdfSample sampleBsdf(
@@ -64,24 +67,24 @@ BsdfSample sampleBsdf(
 {
     BsdfSample result;
     result.bsdfValue = float3(0, 0, 0);
+    result.wasSpecular = false;
 
     // TODO: handle materials with both diffuse and specular reflection
     if (material.hasDiffuse == 1)
     {
         const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
         result.wi_WS = wi_WS;
-
-        float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
-
         result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
+        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
         result.bsdfValue = bsdfValue;
     }
     else if (material.hasSpecularReflection == 1)
     {
-        const float3 wi_WS = reflect(wo_WS, normal_WS);
+        const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
         result.wi_WS = wi_WS;
-        result.pdf = 1;
-        result.bsdfValue = material.specularColor / absCosTheta(wi_WS, normal_WS);
+        result.pdf = 1.f;
+        result.bsdfValue = material.specularColor;
+        result.wasSpecular = true;
     }
 
     return result;
