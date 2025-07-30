@@ -11,7 +11,8 @@
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define MAX_PATH_DEPTH 8
+#define NUM_SAMPLES_PER_PIXEL 4096
+#define MAX_PATH_DEPTH 5
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);

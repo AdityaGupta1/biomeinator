@@ -5,8 +5,6 @@
 
 RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_SPACE_TEXTURES);
 
-#define NUM_SAMPLES_PER_PIXEL 16
-
 [shader("raygeneration")]
 void RayGeneration()
 {
