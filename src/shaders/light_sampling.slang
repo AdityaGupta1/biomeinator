@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.slang"
+#include "materials.slang"
 #include "path_tracing_common.slang"
 #include "payload.slang"
 #include "util/math.slang"

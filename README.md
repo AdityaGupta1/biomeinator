@@ -2,6 +2,10 @@
 
 Real-time path traced voxel engine
 
+![](img/fancy_cornell_box.png)
+
+(this is just a test scene, I will put actual voxel terrain here once it exists lol)
+
 ## Building
 
 - Run `setup.bat`
@@ -9,7 +13,7 @@ Real-time path traced voxel engine
 - Load the Visual Studio solution at `build/Biomeinator.sln`
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
-- Open a glTF scene from `test_scenes/` with Ctrl + O 
+- Open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>
 
 ## Third-Party Licenses
 

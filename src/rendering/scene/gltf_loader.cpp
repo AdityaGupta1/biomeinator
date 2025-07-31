@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 /*
-This file is mostly AI-generated and exists solely to load test scenes for verifying path tracing results. It works only
+This file is mostly AI-generated and exists solely to load test scenes for verifying path tracing results. It works
 on a specific subset of glTF files and is not guaranteed to work for files outside that subset.
 */
 
@@ -83,21 +83,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     {
         ::Material material;
 
-        bool hasDiffuse = false;
-        if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() >= 3)
-        {
-            material.diffuseColor = {
-                static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[0]),
-                static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[1]),
-                static_cast<float>(gltfMat.pbrMetallicRoughness.baseColorFactor[2]),
-            };
-
-            hasDiffuse =
-                material.diffuseColor.x != 0 || material.diffuseColor.y != 0 || material.diffuseColor.z != 0;
-        }
-
-        material.hasDiffuse = hasDiffuse ? 1 : 0;
-
         if (gltfMat.emissiveFactor.size() == 3)
         {
             material.emissiveColor = {
@@ -105,9 +90,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 static_cast<float>(gltfMat.emissiveFactor[1]),
                 static_cast<float>(gltfMat.emissiveFactor[2]),
             };
-            const bool anyEmissive = material.emissiveColor.x != 0 || material.emissiveColor.y != 0
-                                     || material.emissiveColor.z != 0;
-            material.emissiveStrength = anyEmissive ? 1.f : 0.f;
         }
 
         const auto emissiveExtIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
@@ -124,18 +106,54 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
         }
 
-        if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+        const bool hasEmission =
+            material.emissiveStrength > 0 &&
+            (material.emissiveColor.x != 0 || material.emissiveColor.y != 0 || material.emissiveColor.z != 0);
+
+        bool hasDiffuse, hasSpecular;
+
+        if (hasEmission)
         {
-            const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
-            if (texIdx < model.textures.size())
+            hasDiffuse = false;
+            hasSpecular = false;
+        }
+        else
+        {
+            hasDiffuse = false;
+            hasSpecular = true;
+
+            const auto& pbr = gltfMat.pbrMetallicRoughness;
+            // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
+            // Ideally, I would use some JSON utils to check this for real. But this works for now.
+            const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
+            if (hasPbr)
             {
-                const int imgIdx = model.textures[texIdx].source;
-                if (imgIdx >= 0 && imgIdx < textureIds.size())
+                material.baseColor = {
+                    static_cast<float>(pbr.baseColorFactor[0]),
+                    static_cast<float>(pbr.baseColorFactor[1]),
+                    static_cast<float>(pbr.baseColorFactor[2]),
+                };
+
+                hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+            }
+
+            const auto specularExtIt = gltfMat.extensions.find("KHR_materials_specular");
+            if (specularExtIt != gltfMat.extensions.end())
+            {
+                const tinygltf::Value& ext = specularExtIt->second;
+                if (ext.IsObject() && ext.Has("specularFactor"))
                 {
-                    material.diffuseTextureId = textureIds[imgIdx];
+                    const tinygltf::Value& val = ext.Get("specularFactor");
+                    if (val.IsNumber())
+                    {
+                        hasSpecular = val.GetNumberAsDouble() != 0.0;
+                    }
                 }
             }
         }
+
+        material.hasDiffuse = hasDiffuse ? 1 : 0;
+        material.hasSpecularReflection = hasSpecular ? 1 : 0;
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIds.push_back(id);

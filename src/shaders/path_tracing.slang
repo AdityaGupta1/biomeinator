@@ -24,17 +24,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "global_params.slang"
 #include "light_sampling.slang"
+#include "materials.slang"
 #include "payload.slang"
 #include "util/color.slang"
 #include "util/math.slang"
 
+#define NUM_SAMPLES_PER_PIXEL 16
 #define MAX_PATH_DEPTH 5
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
-
-Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
-SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
@@ -57,54 +56,6 @@ float3 evalRayPos(const RayDesc ray, const float t)
     return ray.Origin + ray.Direction * t;
 }
 
-float3 evaluateBsdf(
-    const Material material,
-    const float2 uv,
-    const float3 wo_WS,
-    const float3 wi_WS,
-    const float3 normal_WS)
-{
-    float3 diffuseColor;
-    if (material.diffuseTextureId != TEXTURE_ID_INVALID)
-    {
-        diffuseColor = textures[material.diffuseTextureId].SampleLevel(texSampler, uv, 0).rgb;
-    }
-    else
-    {
-        diffuseColor = material.diffuseColor;
-    }
-
-    return diffuseColor * M_INV_PI;
-}
-
-struct BsdfSample
-{
-    float3 wi_WS;
-    float pdf;
-
-    float3 bsdfValue;
-};
-
-BsdfSample sampleBsdf(
-    const Material material,
-    const float2 uv,
-    const float3 wo_WS,
-    const float3 normal_WS,
-    float2 rndSample)
-{
-    BsdfSample result;
-
-    const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
-    result.wi_WS = wi_WS;
-
-    float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
-
-    result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
-    result.bsdfValue = bsdfValue;
-
-    return result;
-}
-
 void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 hitPos_WS, out float3 normal_WS)
 {
     hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
@@ -121,7 +72,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     }
 
     // material has no reflectance
-    if (material.hasDiffuse == 0)
+    if (material.hasDiffuse == 0 && material.hasSpecularReflection == 0)
     {
         payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;
@@ -138,7 +89,12 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 
     BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
 
-    payload.pathWeight *= sample.bsdfValue * absCosTheta(sample.wi_WS, normal_WS) / sample.pdf;
+    float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
+    if (!sample.wasSpecular)
+    {
+        adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
+    }
+    payload.pathWeight *= adjustedBsdfValue;
 
     ray.Origin = hitPos_WS + 0.001f * normal_WS;
     ray.Direction = sample.wi_WS;

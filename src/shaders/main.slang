@@ -23,8 +23,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_SPACE_TEXTURES);
 
-#define NUM_SAMPLES_PER_PIXEL 16
-
 [shader("raygeneration")]
 void RayGeneration()
 {
@@ -45,7 +43,7 @@ void RayGeneration()
 
         RayDesc ray;
         ray.Origin = cameraParams.pos_WS;
-        ray.Direction = targetPos_WS - cameraParams.pos_WS;
+        ray.Direction = normalize(targetPos_WS - cameraParams.pos_WS);
         ray.TMin = 0.001;
         ray.TMax = 1000;
 
