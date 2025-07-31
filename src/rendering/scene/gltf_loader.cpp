@@ -123,6 +123,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             hasSpecular = true;
 
             const auto& pbr = gltfMat.pbrMetallicRoughness;
+            // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
+            // Ideally, I would use some JSON utils to check this for real. But this works for now.
             const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
             if (hasPbr)
             {

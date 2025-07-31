@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 4096
+#define NUM_SAMPLES_PER_PIXEL 16
 #define MAX_PATH_DEPTH 5
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
