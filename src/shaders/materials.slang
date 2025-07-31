@@ -83,7 +83,19 @@ BsdfSample sampleBsdf(
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    if (material.hasDiffuse == 1 && material.hasSpecularReflection == 0)
+    if (material.hasDiffuse == 0 && material.hasSpecularReflection == 0)
+    {
+        return result;
+    }
+
+    bool chooseDiffuse = (material.hasDiffuse == 1);
+    if (chooseDiffuse && material.hasSpecularReflection == 1)
+    {
+        float diffuseWeight = 1.f - schlickFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        chooseDiffuse = (rng.nextFloat() < diffuseWeight);
+    }
+
+    if (chooseDiffuse)
     {
         const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng.nextFloat2());
         result.wi_WS = wi_WS;
@@ -91,33 +103,13 @@ BsdfSample sampleBsdf(
         const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
         result.bsdfValue = bsdfValue;
     }
-    else if (material.hasDiffuse == 0 && material.hasSpecularReflection == 1)
+    else
     {
         const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
         result.wi_WS = wi_WS;
         result.pdf = 1.f;
         result.bsdfValue = material.specularColor;
         result.wasSpecular = true;
-    }
-    else if (material.hasDiffuse == 1 && material.hasSpecularReflection == 1)
-    {
-        float diffuseWeight = 1.f - schlickFresnel(material.ior, cosTheta(wo_WS, normal_WS));
-        if (rng.nextFloat() < diffuseWeight)
-        {
-            const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng.nextFloat2());
-            result.wi_WS = wi_WS;
-            result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
-            const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
-            result.bsdfValue = bsdfValue;
-        }
-        else
-        {
-            const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
-            result.wi_WS = wi_WS;
-            result.pdf = 1.f;
-            result.bsdfValue = material.specularColor;
-            result.wasSpecular = true;
-        }
     }
 
     return result;
