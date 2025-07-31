@@ -1,10 +1,14 @@
 # Biomeinator
 
-swag
+Real-time path traced voxel engine
 
 ## Building
 
-run `setup.bat` lol
+- Run `setup.bat`
+- Load the Visual Studio solution at `build/Biomeinator.sln`
+- Right-click "Biomeinator" in the Solution Explorer and set as default startup project
+- Build and run
+- Open a glTF scene from `test_scenes/` with Ctrl + O 
 
 ## Third-Party Licenses
 
