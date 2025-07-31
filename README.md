@@ -5,6 +5,7 @@ Real-time path traced voxel engine
 ## Building
 
 - Run `setup.bat`
+  - You might need some Windows SDK installed, not sure because I haven't tested this step in a clean environment
 - Load the Visual Studio solution at `build/Biomeinator.sln`
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
