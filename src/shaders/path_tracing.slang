@@ -87,7 +87,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
     float3 wo_WS = -ray.Direction;
 
-    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
+    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
 
     float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
     if (!sample.wasSpecular)

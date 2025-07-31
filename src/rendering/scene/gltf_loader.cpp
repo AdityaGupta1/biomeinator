@@ -141,12 +141,28 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             if (specularExtIt != gltfMat.extensions.end())
             {
                 const tinygltf::Value& ext = specularExtIt->second;
-                if (ext.IsObject() && ext.Has("specularFactor"))
+                if (ext.IsObject())
                 {
-                    const tinygltf::Value& val = ext.Get("specularFactor");
-                    if (val.IsNumber())
+                    if (ext.Has("specularFactor"))
                     {
-                        hasSpecular = val.GetNumberAsDouble() != 0.0;
+                        const tinygltf::Value& val = ext.Get("specularFactor");
+                        if (val.IsNumber())
+                        {
+                            hasSpecular = val.GetNumberAsDouble() != 0.0;
+                        }
+                    }
+
+                    if (hasSpecular && ext.Has("specularColorFactor"))
+                    {
+                        const tinygltf::Value& val = ext.Get("specularColorFactor");
+                        if (val.IsArray() && val.ArrayLen() >= 3)
+                        {
+                            material.specularColor = {
+                                static_cast<float>(val.Get(0).GetNumberAsDouble()),
+                                static_cast<float>(val.Get(1).GetNumberAsDouble()),
+                                static_cast<float>(val.Get(2).GetNumberAsDouble()),
+                            };
+                        }
                     }
                 }
             }

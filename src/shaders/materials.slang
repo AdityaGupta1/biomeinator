@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 
 #include "util/math.slang"
+#include "util/rng.slang"
 
 StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_SPACE_BUFFERS);
 
@@ -50,7 +51,6 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 normal_WS)
 {
-    // TODO: handle materials with both diffuse and specular reflection
     if (material.hasDiffuse == 1)
     {
         float3 baseColor = material.baseColor;
@@ -59,10 +59,6 @@ float3 evaluateBsdf(
             baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
         }
         return baseColor * M_INV_PI;
-    }
-    else if (material.hasSpecularReflection == 1)
-    {
-        return float3(0, 0, 0); // can't randomly sample this direction so return 0 for bsdf value
     }
 
     return float3(0, 0, 0);
@@ -81,28 +77,47 @@ BsdfSample sampleBsdf(
     const float2 uv,
     const float3 wo_WS,
     const float3 normal_WS,
-    float2 rndSample)
+    inout RandomSampler rng)
 {
     BsdfSample result;
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    // TODO: handle materials with both diffuse and specular reflection
-    if (material.hasDiffuse == 1)
+    if (material.hasDiffuse == 1 && material.hasSpecularReflection == 0)
     {
-        const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rndSample);
+        const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng.nextFloat2());
         result.wi_WS = wi_WS;
         result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
         const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
         result.bsdfValue = bsdfValue;
     }
-    else if (material.hasSpecularReflection == 1)
+    else if (material.hasDiffuse == 0 && material.hasSpecularReflection == 1)
     {
         const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
         result.wi_WS = wi_WS;
         result.pdf = 1.f;
         result.bsdfValue = material.specularColor;
         result.wasSpecular = true;
+    }
+    else if (material.hasDiffuse == 1 && material.hasSpecularReflection == 1)
+    {
+        float diffuseWeight = 1.f - schlickFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        if (rng.nextFloat() < diffuseWeight)
+        {
+            const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng.nextFloat2());
+            result.wi_WS = wi_WS;
+            result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
+            const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
+            result.bsdfValue = bsdfValue;
+        }
+        else
+        {
+            const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
+            result.wi_WS = wi_WS;
+            result.pdf = 1.f;
+            result.bsdfValue = material.specularColor;
+            result.wasSpecular = true;
+        }
     }
 
     return result;
