@@ -37,11 +37,29 @@ float3 sampleHemisphereCosineWeighted(const float3 normal_WS, const float2 rndSa
     return normalize(mul(computeTBN(normal_WS), sampledDir_OS));
 }
 
-float schlickFresnel(const float ior, const float cosThetaWo)
+// "An Inexpensive BRDF Model for Physically-based Rendering", Schlick, 1994
+float schlickFresnel(const float eta, const float cosThetaWo)
 {
-    float R0 = (1.f - ior) / (1.f + ior);
+    float R0 = (1.f - eta) / (1.f + eta);
     R0 = R0 * R0;
     return R0 + (1.f - R0) * pow(1.f - cosThetaWo, 5.f);
+}
+
+// "Microfacet Models for Refraction through Rough Surfaces", Walter et al., 2007
+float walterFresnel(const float eta, const float cosThetaWo)
+{
+    const float c = cosThetaWo;
+    float g = eta * eta - 1.f + c * c;
+
+    if (g < 0.f) // total internal reflection
+    {
+        return 1.f;
+    }
+
+    g = sqrt(g);
+    const float a = (g - c) / (g + c);
+    const float b = (c * (g + c) - 1.f) / (c * (g - c) + 1.f);
+    return 0.5f * a * a * (1 + b * b);
 }
 
 float3 evaluateBsdf(
@@ -91,7 +109,7 @@ BsdfSample sampleBsdf(
     bool chooseDiffuse = (material.hasDiffuse == 1);
     if (chooseDiffuse && material.hasSpecularReflection == 1)
     {
-        float diffuseWeight = 1.f - schlickFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        float diffuseWeight = 1.f - walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
         chooseDiffuse = (rng.nextFloat() < diffuseWeight);
     }
 
