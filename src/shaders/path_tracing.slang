@@ -30,7 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.slang"
 
 #define NUM_SAMPLES_PER_PIXEL 16
-#define MAX_PATH_DEPTH 5
+#define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
@@ -38,7 +38,7 @@ ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
-    const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
 
     const float aspect = size.x / size.y;
     const float yScale = cameraParams.tanHalfFovY;
@@ -47,7 +47,7 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
     const float3 target = cameraParams.pos_WS
         + cameraParams.right_WS * ndc.x * xScale
         + cameraParams.up_WS * ndc.y * yScale
-        + cameraParams.forward_WS * 1.0;
+        + cameraParams.forward_WS;
     return target;
 }
 
@@ -87,7 +87,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
     float3 wo_WS = -ray.Direction;
 
-    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng.nextFloat2());
+    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
 
     float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
     if (!sample.wasSpecular)
@@ -147,7 +147,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         return false;
     }
 
-    float3 bsdfValue = evaluateBsdf(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
     payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
     payload.pathColor += payload.pathWeight * lightSample.Le;
 

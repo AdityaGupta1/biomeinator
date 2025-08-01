@@ -167,11 +167,7 @@
 			"doubleSided":true,
 			"extensions":{
 				"KHR_materials_specular":{
-					"specularColorFactor":[
-						0.0,
-						1.0,
-						1.0
-					]
+					"specularFactor":0
 				}
 			},
 			"name":"mat_wall_white",
@@ -185,6 +181,19 @@
 				"metallicFactor":0,
 				"roughnessFactor":0
 			}
+		},
+		{
+			"doubleSided":true,
+			"extensions":{
+				"KHR_materials_specular":{
+					"specularColorFactor":[
+						0.0,
+						0.800000011920929,
+						0.6000000238418579
+					]
+				}
+			},
+			"name":"mat_wall_mirror"
 		},
 		{
 			"doubleSided":true,
@@ -245,12 +254,17 @@
 		},
 		{
 			"doubleSided":true,
-			"extensions":{
-				"KHR_materials_specular":{
-					"specularFactor":1
-				}
-			},
-			"name":"mat_sphere"
+			"name":"mat_sphere",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					1,
+					0.5,
+					0,
+					1
+				],
+				"metallicFactor":0,
+				"roughnessFactor":0
+			}
 		},
 		{
 			"doubleSided":true,
@@ -300,7 +314,7 @@
 						"TEXCOORD_0":6
 					},
 					"indices":3,
-					"material":0
+					"material":1
 				}
 			]
 		},
@@ -314,7 +328,7 @@
 						"TEXCOORD_0":9
 					},
 					"indices":3,
-					"material":1
+					"material":2
 				}
 			]
 		},
@@ -328,7 +342,7 @@
 						"TEXCOORD_0":12
 					},
 					"indices":3,
-					"material":2
+					"material":3
 				}
 			]
 		},
@@ -356,7 +370,7 @@
 						"TEXCOORD_0":18
 					},
 					"indices":19,
-					"material":3
+					"material":4
 				}
 			]
 		},
@@ -370,7 +384,7 @@
 						"TEXCOORD_0":22
 					},
 					"indices":19,
-					"material":3
+					"material":4
 				}
 			]
 		},
@@ -384,7 +398,7 @@
 						"TEXCOORD_0":25
 					},
 					"indices":26,
-					"material":4
+					"material":5
 				}
 			]
 		},
@@ -398,7 +412,7 @@
 						"TEXCOORD_0":29
 					},
 					"indices":30,
-					"material":5
+					"material":6
 				}
 			]
 		}
