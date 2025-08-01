@@ -38,7 +38,7 @@ ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
-    const float2 ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
 
     const float aspect = size.x / size.y;
     const float yScale = cameraParams.tanHalfFovY;
@@ -47,7 +47,7 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
     const float3 target = cameraParams.pos_WS
         + cameraParams.right_WS * ndc.x * xScale
         + cameraParams.up_WS * ndc.y * yScale
-        + cameraParams.forward_WS * 1.0;
+        + cameraParams.forward_WS;
     return target;
 }
 
