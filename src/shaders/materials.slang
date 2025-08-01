@@ -62,12 +62,13 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-float3 evaluateBsdf(
+float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
     const Material material,
     const float2 uv,
     const float3 wo_WS,
     const float3 wi_WS,
-    const float3 normal_WS)
+    const float3 normal_WS,
+    float fresnelReflectance = 0.f)
 {
     if (material.hasDiffuse == 1)
     {
@@ -76,7 +77,13 @@ float3 evaluateBsdf(
         {
             baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
         }
-        return baseColor * M_INV_PI;
+
+        if (calculateFresnelReflectance && material.hasSpecularReflection == 1)
+        {
+            fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        }
+
+        return baseColor * M_INV_PI * (1.f - fresnelReflectance);
     }
 
     return float3(0, 0, 0);
@@ -106,10 +113,22 @@ BsdfSample sampleBsdf(
         return result;
     }
 
-    bool chooseDiffuse = (material.hasDiffuse == 1);
-    if (chooseDiffuse && material.hasSpecularReflection == 1)
+    float fresnelReflectance;
+    bool chooseDiffuse;
+    if (material.hasDiffuse == 1 && material.hasSpecularReflection == 0)
     {
-        float diffuseWeight = 1.f - walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        fresnelReflectance = 0.f;
+        chooseDiffuse = true;
+    }
+    else if (material.hasDiffuse == 0 && material.hasSpecularReflection == 1)
+    {
+        fresnelReflectance = 1.f;
+        chooseDiffuse = false;
+    }
+    else
+    {
+        fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        const float diffuseWeight = 1.f - fresnelReflectance;
         chooseDiffuse = (rng.nextFloat() < diffuseWeight);
     }
 
@@ -117,16 +136,16 @@ BsdfSample sampleBsdf(
     {
         const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng.nextFloat2());
         result.wi_WS = wi_WS;
-        result.pdf = absCosTheta(wi_WS, normal_WS) / M_PI;
-        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, normal_WS);
+        result.pdf = absCosTheta(wi_WS, normal_WS) * (1.f - fresnelReflectance) / M_PI;
+        const float3 bsdfValue = evaluateBsdf<false /*calculateFresnelReflectance*/>(material, uv, wo_WS, wi_WS, normal_WS, fresnelReflectance);
         result.bsdfValue = bsdfValue;
     }
     else
     {
         const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
         result.wi_WS = wi_WS;
-        result.pdf = 1.f;
-        result.bsdfValue = material.specularColor;
+        result.pdf = fresnelReflectance;
+        result.bsdfValue = material.specularColor * fresnelReflectance;
         result.wasSpecular = true;
     }
 

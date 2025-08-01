@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 4096
+#define NUM_SAMPLES_PER_PIXEL 16
 #define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
@@ -147,7 +147,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
         return false;
     }
 
-    float3 bsdfValue = evaluateBsdf(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
     payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
     payload.pathColor += payload.pathWeight * lightSample.Le;
 
