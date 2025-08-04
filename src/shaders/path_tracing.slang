@@ -102,7 +102,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     ray.TMax = 10000.f;
 }
 
-bool pathTraceRay(RayDesc ray, inout Payload payload)
+void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
     {
@@ -112,7 +112,8 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
             if (payload.rng.nextFloat() >= survivalProbability)
             {
-                return false;
+                payload.pathColor = 0;
+                return;
             }
             payload.pathWeight /= survivalProbability;
         }
@@ -121,12 +122,13 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
-            return true;
+            return;
         }
 
         if (payload.materialId == MATERIAL_ID_INVALID)
         {
-            return false;
+            payload.pathColor = 0;
+            return;
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
@@ -134,7 +136,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
-            return true;
+            return;
         }
     }
 
@@ -144,14 +146,15 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
     if (!lightSample.didHitLight)
     {
-        return false;
+        payload.pathColor = 0;
+        return;
     }
 
     const float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
     payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
     payload.pathColor += payload.pathWeight * lightSample.Le;
 
-    return true;
+    return;
 }
 
 [shader("closesthit")]

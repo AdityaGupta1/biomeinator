@@ -47,11 +47,8 @@ void RayGeneration()
         ray.TMin = 0.001;
         ray.TMax = 1000;
 
-        bool pathHadContribution = pathTraceRay(ray, payload);
-        if (pathHadContribution)
-        {
-            accumulatedColor += payload.pathColor;
-        }
+        pathTraceRay(ray, payload);
+        accumulatedColor += payload.pathColor;
     }
 
     renderTarget[pixelIdx] = float4(accumulatedColor / NUM_SAMPLES_PER_PIXEL, 1);
