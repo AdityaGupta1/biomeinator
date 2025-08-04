@@ -62,13 +62,30 @@ void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 h
     normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
 }
 
+float powerHeuristic(const float pdfA, const float pdfB)
+{
+    const float pdfA2 = pdfA * pdfA;
+    const float pdfB2 = pdfB * pdfB;
+    return pdfA2 / (pdfA2 + pdfB2);
+}
+
 void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 {
     const Material material = materials[payload.materialId];
 
+    float3 hitPos_WS, normal_WS;
+    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+    const float3 wo_WS = -ray.Direction;
+
     if (material.emissiveStrength > 0)
     {
-        payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
+        float emissionWeight = 1.f;
+        if (!payload.lastSampleWasSpecular)
+        {
+            const float lightPdf = calculateLightPdf(payload.hitInfo, ray.Direction);
+            emissionWeight = powerHeuristic(payload.lastBsdfPdf, lightPdf);
+        }
+        payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength * emissionWeight;
     }
 
     // material has no reflectance
@@ -78,22 +95,28 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
         return;
     }
 
+    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng.nextFloat3());
+    if (lightSample.didHitLight)
+    {
+        const float3 bsdfValue = evaluateBsdf<true>(material, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, normal_WS);
+        const float bsdfPdfVal = bsdfPdf(material, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, normal_WS);
+        const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdfVal);
+        payload.pathColor += payload.pathWeight * bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) * lightSample.Le * misWeight / lightSample.pdf;
+    }
+
     if (isLastBounce)
     {
+        payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
         return;
     }
 
-    float3 hitPos_WS, normal_WS;
-    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    float3 wo_WS = -ray.Direction;
+    const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
+    payload.lastBsdfPdf = sample.pdf;
+    payload.lastSampleWasSpecular = sample.wasSpecular ? 1u : 0u;
 
-    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
-
-    float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
-    if (!sample.wasSpecular)
-    {
-        adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
-    }
+    const float3 adjustedBsdfValue = sample.wasSpecular
+        ? sample.bsdfValue
+        : (sample.bsdfValue / sample.pdf) * absCosTheta(sample.wi_WS, normal_WS);
     payload.pathWeight *= adjustedBsdfValue;
 
     ray.Origin = hitPos_WS + 0.001f * normal_WS;
@@ -102,7 +125,7 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
     ray.TMax = 10000.f;
 }
 
-bool pathTraceRay(RayDesc ray, inout Payload payload)
+void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
     {
@@ -112,7 +135,7 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
             const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
             if (payload.rng.nextFloat() >= survivalProbability)
             {
-                return false;
+                return;
             }
             payload.pathWeight /= survivalProbability;
         }
@@ -121,12 +144,12 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
-            return true;
+            return;
         }
 
         if (payload.materialId == MATERIAL_ID_INVALID)
         {
-            return false;
+            return;
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
@@ -134,24 +157,10 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
         {
-            return true;
+            return;
         }
     }
-
-    float3 hitPos_WS, normal_WS;
-    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng.nextFloat3());
-
-    if (!lightSample.didHitLight)
-    {
-        return false;
-    }
-
-    float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
-    payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
-    payload.pathColor += payload.pathWeight * lightSample.Le;
-
-    return true;
+    return;
 }
 
 [shader("closesthit")]

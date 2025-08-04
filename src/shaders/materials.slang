@@ -138,7 +138,7 @@ BsdfSample sampleBsdf(
     {
         const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
         result.wi_WS = wi_WS;
-        result.pdf = fresnelReflectance;
+        result.pdf = 0.f;
         result.bsdfValue = material.specularColor * fresnelReflectance;
         result.wasSpecular = true;
     }
@@ -152,4 +152,51 @@ BsdfSample sampleBsdf(
     }
 
     return result;
+}
+
+float bsdfPdf(
+    const Material material,
+    const float2 uv,
+    const float3 wo_WS,
+    const float3 wi_WS,
+    const float3 normal_WS)
+{
+    if (material.hasDiffuse == 0 && material.hasSpecularReflection == 0)
+    {
+        return 0.f;
+    }
+
+    const bool hasReflect = (material.hasSpecularReflection == 1);
+    const bool hasTransmit = (material.hasDiffuse == 1);
+
+    float fresnelReflectance = 0.f;
+    if (hasReflect && !hasTransmit)
+    {
+        fresnelReflectance = 1.f;
+    }
+    else if (!hasReflect && hasTransmit)
+    {
+        fresnelReflectance = 0.f;
+    }
+    else if (hasReflect && hasTransmit)
+    {
+        fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+    }
+
+    if (hasReflect)
+    {
+        const float3 reflDir_WS = normalize(reflect(-wo_WS, normal_WS));
+        const float cosRefl = dot(reflDir_WS, wi_WS);
+        if (cosRefl > 1.f - 1e-4f)
+        {
+            return 0.f;
+        }
+    }
+
+    if (hasTransmit)
+    {
+        return absCosTheta(wi_WS, normal_WS) * (1.f - fresnelReflectance) / M_PI;
+    }
+
+    return 0.f;
 }

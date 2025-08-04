@@ -37,6 +37,8 @@ void RayGeneration()
         payload.pathColor = float3(0, 0, 0);
         payload.flags = 0;
         payload.rng = initRandomSampler4(uint4(pixelIdx, sampleIdx, sceneParams.frameNumber));
+        payload.lastBsdfPdf = 0.f;
+        payload.lastSampleWasSpecular = 1;
 
         const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
         const float3 targetPos_WS = calculateRayTarget(pixelIdx + jitter, size);
@@ -47,8 +49,8 @@ void RayGeneration()
         ray.TMin = 0.001;
         ray.TMax = 1000;
 
-        bool pathHadContribution = pathTraceRay(ray, payload);
-        if (pathHadContribution)
+        pathTraceRay(ray, payload);
+        if (luminance(payload.pathColor) > 0.f)
         {
             accumulatedColor += payload.pathColor;
         }

@@ -42,5 +42,8 @@ struct Payload
 
     HitInfo hitInfo;
 
+    float lastBsdfPdf;
+    uint lastSampleWasSpecular;
+
     RandomSampler rng;
 };
