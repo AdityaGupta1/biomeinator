@@ -47,6 +47,9 @@ struct InstanceData
 #define MATERIAL_ID_INVALID ~0u
 #define TEXTURE_ID_INVALID ~0u
 
+#define MATERIAL_FLAG_HAS_DIFFUSE (1 << 0)
+#define MATERIAL_FLAG_HAS_SPECULAR (1 << 1)
+
 struct Material
 {
 #if !_hlsl
@@ -54,9 +57,7 @@ public:
     Material();
 #endif
 
-    uint hasDiffuse : 1;
-    uint hasSpecularReflection : 1;
-    uint pad0 : 30;
+    uint flags;
     uint pad1;
     uint pad2;
     uint pad3;
@@ -69,6 +70,43 @@ public:
 
     float emissiveStrength;
     float3 emissiveColor;
+
+    bool hasDiffuse()
+    {
+        return bool(flags & MATERIAL_FLAG_HAS_DIFFUSE);
+    }
+
+    bool hasSpecularReflection()
+    {
+        return bool(flags & MATERIAL_FLAG_HAS_SPECULAR);
+    }
+
+    bool canReflect()
+    {
+        return bool(flags & MATERIAL_FLAG_HAS_SPECULAR); // TODO: add more conditions here later?
+    }
+
+    bool canTransmit() // TODO: use a more appropriate word than "transmit"?
+    {
+        return bool(flags & MATERIAL_FLAG_HAS_DIFFUSE); // TODO: add more conditions here later? (e.g. specular transmission)
+    }
+
+    bool canScatter()
+    {
+        return canReflect() || canTransmit();
+    }
+
+#if !_hlsl
+    void setHasDiffuse(bool enable)
+    {
+        flags = (flags & ~MATERIAL_FLAG_HAS_DIFFUSE) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_DIFFUSE);
+    }
+
+    void setHasSpecularReflection(bool enable)
+    {
+        flags = (flags & ~MATERIAL_FLAG_HAS_SPECULAR) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_SPECULAR);
+    }
+#endif
 };
 
 struct AreaLight

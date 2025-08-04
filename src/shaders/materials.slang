@@ -71,7 +71,7 @@ float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
     const float3 normal_WS,
     float fresnelReflectance = 0.f)
 {
-    if (material.hasDiffuse == 1)
+    if (material.hasDiffuse())
     {
         float3 baseColor = material.baseColor;
         if (material.baseColorTextureId != TEXTURE_ID_INVALID)
@@ -79,7 +79,7 @@ float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
             baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
         }
 
-        if (calculateFresnelReflectance && material.hasSpecularReflection == 1)
+        if (calculateFresnelReflectance && material.hasSpecularReflection())
         {
             fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
         }
@@ -109,22 +109,22 @@ BsdfSample sampleBsdf(
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    const bool hasReflect = (material.hasSpecularReflection == 1);
-    const bool hasTransmit = (material.hasDiffuse == 1);
+    const bool canReflect = material.canReflect();
+    const bool canTransmit = material.canTransmit();
 
-    if (!hasReflect && !hasTransmit)
+    if (!canReflect && !canTransmit)
     {
         return result;
     }
 
     float fresnelReflectance;
     bool chooseReflect;
-    if (hasReflect && !hasTransmit)
+    if (canReflect && !canTransmit)
     {
         fresnelReflectance = 1.f;
         chooseReflect = true;
     }
-    else if (!hasReflect && hasTransmit)
+    else if (!canReflect && canTransmit)
     {
         fresnelReflectance = 0.f;
         chooseReflect = false;

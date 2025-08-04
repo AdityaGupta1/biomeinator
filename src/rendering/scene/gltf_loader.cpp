@@ -110,17 +110,17 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             material.emissiveStrength > 0 &&
             (material.emissiveColor.x != 0 || material.emissiveColor.y != 0 || material.emissiveColor.z != 0);
 
-        bool hasDiffuse, hasSpecular;
+        bool hasDiffuse, hasSpecularReflection;
 
         if (hasEmission)
         {
             hasDiffuse = false;
-            hasSpecular = false;
+            hasSpecularReflection = false;
         }
         else
         {
             hasDiffuse = false;
-            hasSpecular = true;
+            hasSpecularReflection = true;
 
             const auto& pbr = gltfMat.pbrMetallicRoughness;
             // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
@@ -148,11 +148,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         const tinygltf::Value& val = ext.Get("specularFactor");
                         if (val.IsNumber())
                         {
-                            hasSpecular = val.GetNumberAsDouble() != 0.0;
+                            hasSpecularReflection = val.GetNumberAsDouble() != 0.0;
                         }
                     }
 
-                    if (hasSpecular && ext.Has("specularColorFactor"))
+                    if (hasSpecularReflection && ext.Has("specularColorFactor"))
                     {
                         const tinygltf::Value& val = ext.Get("specularColorFactor");
                         if (val.IsArray() && val.ArrayLen() >= 3)
@@ -168,8 +168,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
         }
 
-        material.hasDiffuse = hasDiffuse ? 1 : 0;
-        material.hasSpecularReflection = hasSpecular ? 1 : 0;
+        material.setHasDiffuse(hasDiffuse);
+        material.setHasSpecularReflection(hasSpecularReflection);
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIds.push_back(id);
