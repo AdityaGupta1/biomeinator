@@ -62,6 +62,13 @@ void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 h
     normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
 }
 
+float powerHeuristic(const float pdfA, const float pdfB)
+{
+    const float pdfA2 = pdfA * pdfA;
+    const float pdfB2 = pdfB * pdfB;
+    return pdfA2 / (pdfA2 + pdfB2);
+}
+
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
