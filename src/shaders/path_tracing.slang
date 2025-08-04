@@ -85,9 +85,9 @@ void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
 
     float3 hitPos_WS, normal_WS;
     calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    float3 wo_WS = -ray.Direction;
+    const float3 wo_WS = -ray.Direction;
 
-    BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
+    const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
 
     float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
     if (!sample.wasSpecular)
@@ -140,14 +140,14 @@ bool pathTraceRay(RayDesc ray, inout Payload payload)
 
     float3 hitPos_WS, normal_WS;
     calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng.nextFloat3());
+    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng);
 
     if (!lightSample.didHitLight)
     {
         return false;
     }
 
-    float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    const float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
     payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
     payload.pathColor += payload.pathWeight * lightSample.Le;
 
@@ -174,9 +174,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         i2 = i0 + 2;
     }
 
-    Vertex v0 = verts[instanceData.vertBufferOffset + i0];
-    Vertex v1 = verts[instanceData.vertBufferOffset + i1];
-    Vertex v2 = verts[instanceData.vertBufferOffset + i2];
+    const Vertex v0 = verts[instanceData.vertBufferOffset + i0];
+    const Vertex v1 = verts[instanceData.vertBufferOffset + i1];
+    const Vertex v2 = verts[instanceData.vertBufferOffset + i2];
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);

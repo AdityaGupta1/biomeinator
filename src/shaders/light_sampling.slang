@@ -30,18 +30,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(REGISTER_AREA_LIGHTS, REGISTER_SPACE_BUFFERS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, REGISTER_SPACE_BUFFERS);
 
-AreaLight pickLightUniform(float rndSample, out float pdf)
+AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {
-    const uint lightIdx = areaLightSamplingStructure[uint(rndSample * sceneParams.numAreaLights)];
+    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     pdf = 1.f / sceneParams.numAreaLights;
     return areaLights[lightIdx];
 }
 
-float3 samplePointOnLight(AreaLight light, float2 rndSample, out float pdf)
+float3 samplePointOnLight(const AreaLight light, inout RandomSampler rng, out float pdf)
 {
+    const float2 rndSample = rng.nextFloat2();
     const float sqrtRndX = sqrt(rndSample.x);
-    float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
-    float3 pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+    const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
+    const float3 pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
     pdf = light.rcpArea;
     return pointOnLight_WS;
 }
@@ -55,15 +56,15 @@ struct DirectLightingSample
     float pdf;
 };
 
-DirectLightingSample sampleDirectLighting(float3 origin_WS, float3 normal_WS, float3 rndSample)
+DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 normal_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
 
     float lightPickPdf;
-    AreaLight light = pickLightUniform(rndSample.x, lightPickPdf);
+    const AreaLight light = pickLightUniform(rng, lightPickPdf);
 
     float lightSamplePdf;
-    float3 pointOnLight_WS = samplePointOnLight(light, rndSample.yz, lightSamplePdf);
+    const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
 
     result.wi_WS = normalize(pointOnLight_WS - origin_WS);
 
