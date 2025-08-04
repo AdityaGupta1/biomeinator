@@ -62,46 +62,6 @@ void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 h
     normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
 }
 
-void bounceRay(inout RayDesc ray, inout Payload payload, bool isLastBounce)
-{
-    const Material material = materials[payload.materialId];
-
-    if (material.emissiveStrength > 0)
-    {
-        payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
-    }
-
-    // material has no reflectance
-    if (!material.canScatter())
-    {
-        payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
-        return;
-    }
-
-    if (isLastBounce)
-    {
-        return;
-    }
-
-    float3 hitPos_WS, normal_WS;
-    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    const float3 wo_WS = -ray.Direction;
-
-    const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
-
-    float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
-    if (!sample.wasSpecular)
-    {
-        adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
-    }
-    payload.pathWeight *= adjustedBsdfValue;
-
-    ray.Origin = hitPos_WS + 0.001f * normal_WS;
-    ray.Direction = sample.wi_WS;
-    ray.TMin = 0.f;
-    ray.TMax = 10000.f;
-}
-
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
@@ -120,41 +80,56 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {
             return;
         }
 
-        if (payload.materialId == MATERIAL_ID_INVALID)
+        const Material material = materials[payload.materialId];
+
+        if (material.emissiveStrength > 0)
         {
-            payload.pathColor = 0;
-            return;
+            payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
-        bounceRay(ray, payload, isLastBounce);
-
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
+        if (!material.canScatter() || isLastBounce)
         {
             return;
         }
+
+        float3 hitPos_WS, normal_WS;
+        calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+        const float3 wo_WS = -ray.Direction;
+
+        const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
+
+        float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
+        if (!sample.wasSpecular)
+        {
+            adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
+        }
+        payload.pathWeight *= adjustedBsdfValue;
+
+        ray.Origin = hitPos_WS + 0.001f * normal_WS;
+        ray.Direction = sample.wi_WS;
+        ray.TMin = 0.f;
+        ray.TMax = 10000.f;
     }
 
-    float3 hitPos_WS, normal_WS;
-    calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng);
-
-    if (!lightSample.didHitLight)
-    {
-        payload.pathColor = 0;
-        return;
-    }
-
-    const float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
-    payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
-    payload.pathColor += payload.pathWeight * lightSample.Le;
-
-    return;
+    //float3 hitPos_WS, normal_WS;
+    //calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+    //const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng);
+    //
+    //if (!lightSample.didHitLight)
+    //{
+    //    payload.pathColor = 0;
+    //    return;
+    //}
+    //
+    //const float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
+    //payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
+    //payload.pathColor += payload.pathWeight * lightSample.Le;
 }
 
 [shader("closesthit")]
