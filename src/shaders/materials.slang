@@ -154,3 +154,33 @@ BsdfSample sampleBsdf(
 
     return result;
 }
+
+float bsdfPdf(
+    const Material material,
+    const float3 wo_WS,
+    const float3 wi_WS,
+    const float3 normal_WS)
+{
+    if (!material.canScatter())
+    {
+        return 0.f;
+    }
+
+    const bool canReflect = material.canReflect();
+    const bool canTransmit = material.canTransmit();
+
+    if (!canTransmit)
+    {
+        return 0.f; // TODO: update this after adding microfacet reflection
+    }
+
+    float pdf = absCosTheta(wi_WS, normal_WS) * M_INV_PI;
+
+    if (canReflect)
+    {
+        const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        pdf *= (1.f - fresnelReflectance);
+    }
+
+    return pdf;
+}

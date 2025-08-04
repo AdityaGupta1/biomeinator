@@ -95,6 +95,24 @@ DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 n
     return result;
 }
 
+float lightPdf(const HitInfo hitInfo, const float3 wi_WS)
+{
+    // TODO: this is a really stupid way of figuring out which light was hit lol
+    for (uint i = 0; i < sceneParams.numAreaLights; ++i)
+    {
+        const AreaLight light = areaLights[i];
+        if (light.instanceId == hitInfo.instanceId && light.triangleIdx == hitInfo.triangleIdx)
+        {
+            const float lightPickPdf = 1.f / sceneParams.numAreaLights;
+            const float r2 = hitInfo.hitT * hitInfo.hitT;
+            const float cosTheta = absCosTheta(-wi_WS, light.normal_WS);
+            return lightPickPdf * light.rcpArea * r2 / cosTheta;
+        }
+    }
+
+    return 0.f;
+}
+
 [shader("closesthit")]
 void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
