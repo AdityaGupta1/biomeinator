@@ -51,5 +51,6 @@ float absCosTheta(const float3 v_WS, const float3 normal_WS)
 
 float distance2(const float3 a, const float3 b)
 {
-    return dot(a - b, a - b);
+    const float3 aToB = a - b;
+    return dot(aToB, aToB);
 }

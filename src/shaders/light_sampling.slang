@@ -56,7 +56,7 @@ struct DirectLightingSample
     float pdf;
 };
 
-DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 normal_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
 
@@ -66,13 +66,13 @@ DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 n
     float lightSamplePdf;
     const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
 
-    result.wi_WS = normalize(pointOnLight_WS - origin_WS);
+    result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    const float r2 = distance2(origin_WS, pointOnLight_WS);
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
 
     RayDesc ray;
-    ray.Origin = origin_WS + 0.001f * normal_WS;
+    ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
     ray.Direction = result.wi_WS;
     ray.TMin = 0.f;
     ray.TMax = 10000.f;

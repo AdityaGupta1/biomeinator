@@ -152,7 +152,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
-        if (!surfMaterial.canScatter() || isLastBounce)
+        if (!surfMaterial.canScatter() || isLastBounce) // TODO: check if isLastBounce condition is correct when MAX_PATH_DEPTH == 1
         {
             return;
         }
@@ -205,6 +205,11 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+        {
+            return;
+        }
+
         const Material hitMaterial = materials[payload.materialId];
         if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
         {
@@ -214,11 +219,6 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             const float lightPdf = lightPdf(payload.hitInfo, ray.Direction);
             const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
             payload.pathWeight *= misWeight;
-        }
-
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
-        {
-            return;
         }
     }
 }

@@ -48,14 +48,8 @@ void Instance::addAreaLight(const AreaLightInputs& lightInputs)
     light.instanceId = this->id;
     light.triangleIdx = lightInputs.triangleIdx;
 
-    const DirectX::XMFLOAT3X4& xf = this->transform;
     // TODO: store this matrix instead of reconstructing it each time?
-    const DirectX::XMMATRIX objectToWorld = {
-        { xf.m[0][0], xf.m[0][1], xf.m[0][2], 0.0f },
-        { xf.m[1][0], xf.m[1][1], xf.m[1][2], 0.0f },
-        { xf.m[2][0], xf.m[2][1], xf.m[2][2], 0.0f },
-        { xf.m[0][3], xf.m[1][3], xf.m[2][3], 1.0f },
-    };
+    const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
     XMVECTOR p0 = XMLoadFloat3(&lightInputs.pos0);
     XMVECTOR p1 = XMLoadFloat3(&lightInputs.pos1);
