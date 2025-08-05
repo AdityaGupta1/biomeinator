@@ -94,9 +94,9 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
         const Material material = materials[payload.materialId];
 
-        if (material.emissiveStrength > 0)
+        if (material.hasEmission())
         {
-            payload.pathColor += payload.pathWeight * material.emissiveColor * material.emissiveStrength;
+            payload.pathColor += payload.pathWeight * material.getEmissiveColor();
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;

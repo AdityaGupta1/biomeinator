@@ -89,7 +89,7 @@ DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 n
 
     result.didHitLight = true;
     const Material material = materials[lightPayload.materialId];
-    result.Le = material.emissiveStrength * material.emissiveColor;
+    result.Le = material.getEmissiveColor();
     result.pdf = lightPickPdf * lightSamplePdf;
 
     return result;
