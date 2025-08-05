@@ -29,8 +29,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 32
-#define MAX_PATH_DEPTH 12
+#define NUM_SAMPLES_PER_PIXEL 1
+#define MAX_PATH_DEPTH 2
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
@@ -187,7 +187,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
         payload.pathWeight *= adjustedBsdfValue;
 
-        // TODO: figure out where to put this and re-enable it
+        //// TODO: figure out where to put this and re-enable it
         //// russian roulette
         //if (pathDepth >= 3)
         //{
@@ -218,7 +218,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             float3 hitPos_WS, hitNor_WS;
             calcPathPosAndNormal(ray, payload, hitPos_WS, hitNor_WS);
 
-            const float lightPdf = lightPdf(payload.hitInfo, ray.Direction);
+            const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, hitPos_WS, ray.Direction);
             const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
             payload.pathWeight *= misWeight;
         }

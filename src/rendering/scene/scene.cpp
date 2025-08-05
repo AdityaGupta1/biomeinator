@@ -273,7 +273,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         if (!instance->host_areaLights.empty())
         {
-            ManagedBufferSection areaLightsUploadBufferSection =
+            const ManagedBufferSection areaLightsUploadBufferSection =
                 areaLightsUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
                 cmdList, toFreeList, areaLightsUploadBuffer, areaLightsUploadBufferSection);

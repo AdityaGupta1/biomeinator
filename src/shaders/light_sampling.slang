@@ -59,6 +59,7 @@ struct DirectLightingSample
 DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
+    result.didHitLight = false;
 
     float lightPickPdf;
     const AreaLight light = pickLightUniform(rng, lightPickPdf);
@@ -83,7 +84,6 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
 
     if (lightPayload.materialId == MATERIAL_ID_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {
-        result.didHitLight = false;
         return result;
     }
 
@@ -95,7 +95,7 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
     return result;
 }
 
-float lightPdf(const HitInfo hitInfo, const float3 wi_WS)
+float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 pointOnLight_WS, const float3 wi_WS)
 {
     // TODO: this is a really stupid way of figuring out which light was hit lol
     uint areaLightIdx = -1;
@@ -103,7 +103,7 @@ float lightPdf(const HitInfo hitInfo, const float3 wi_WS)
     {
         const uint lightIdx = areaLightSamplingStructure[i];
         const AreaLight light = areaLights[lightIdx];
-        if (light.instanceId == hitInfo.instanceId && light.triangleIdx == hitInfo.triangleIdx)
+        if (hitInfo.instanceId == light.instanceId && hitInfo.triangleIdx == light.triangleIdx)
         {
             areaLightIdx = lightIdx;
             break;
@@ -117,7 +117,7 @@ float lightPdf(const HitInfo hitInfo, const float3 wi_WS)
 
     const AreaLight light = areaLights[areaLightIdx];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
-    const float r2 = hitInfo.hitT * hitInfo.hitT; // TODO: use surface pos and hit pos instead?
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
 }
 

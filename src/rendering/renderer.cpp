@@ -485,6 +485,25 @@ void compileShadersAndInitPipeline()
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
 
+    //std::vector<CompilerOptionEntry> compilerOptionEntries = {
+    //    {
+    //        .name = CompilerOptionName::WarningsAsErrors,
+    //        .value = {
+    //            .kind = CompilerOptionValueKind::String,
+    //            .stringValue0 = "all",
+    //        },
+    //    },
+    //    {
+    //        .name = CompilerOptionName::Optimization,
+    //        .value = {
+    //            .kind = CompilerOptionValueKind::Int,
+    //            .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE,
+    //        },
+    //    },
+    //};
+    //sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
+    //sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
+
     const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
     const std::string shadersPathStr = std::filesystem::absolute(shadersPath).string();
     const char* searchPaths[] = { shadersPathStr.c_str() };
