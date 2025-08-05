@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 256
+#define NUM_SAMPLES_PER_PIXEL 512
 #define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
@@ -146,7 +146,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
     {
         const Material surfMaterial = materials[payload.materialId];
 
-        if (pathDepth == 0 && surfMaterial.hasEmission())
+        if (surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }

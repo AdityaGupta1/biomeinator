@@ -101,10 +101,11 @@ float lightPdf(const HitInfo hitInfo, const float3 wi_WS)
     uint areaLightIdx = -1;
     for (uint i = 0; i < sceneParams.numAreaLights; ++i)
     {
-        const AreaLight light = areaLights[i];
+        const uint lightIdx = areaLightSamplingStructure[i];
+        const AreaLight light = areaLights[lightIdx];
         if (light.instanceId == hitInfo.instanceId && light.triangleIdx == hitInfo.triangleIdx)
         {
-            areaLightIdx = i;
+            areaLightIdx = lightIdx;
             break;
         }
     }
