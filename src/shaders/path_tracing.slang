@@ -69,6 +69,70 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
+#if 0
+void pathTraceRay(RayDesc ray, inout Payload payload)
+{
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+    {
+        return;
+    }
+
+    for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
+    {
+        const Material material = materials[payload.materialId];
+
+        if (material.hasEmission())
+        {
+            payload.pathColor += payload.pathWeight * material.getEmissiveColor();
+        }
+
+        const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
+        if (!material.canScatter() || isLastBounce)
+        {
+            return;
+        }
+
+        float3 hitPos_WS, normal_WS;
+        calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+        const float3 wo_WS = -ray.Direction;
+
+        const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
+
+        float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
+        if (!sample.wasSpecular)
+        {
+            adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
+        }
+        payload.pathWeight *= adjustedBsdfValue;
+
+        ray.Origin = hitPos_WS + 0.001f * normal_WS;
+        ray.Direction = sample.wi_WS;
+        ray.TMin = 0.f;
+        ray.TMax = 10000.f;
+
+        // russian roulette
+        if (pathDepth >= 3)
+        {
+            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+            if (payload.rng.nextFloat() >= survivalProbability)
+            {
+                payload.pathColor = 0;
+                return;
+            }
+            payload.pathWeight /= survivalProbability;
+        }
+
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+        {
+            return;
+        }
+    }
+}
+#else
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
@@ -158,6 +222,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
     }
 }
+#endif
 
 [shader("closesthit")]
 void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
