@@ -187,6 +187,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
         payload.pathWeight *= adjustedBsdfValue;
 
+        // TODO: re-enable
         //// russian roulette
         //if (pathDepth >= 3)
         //{
