@@ -147,7 +147,7 @@ BsdfSample sampleBsdf(
     {
         const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng);
         result.wi_WS = wi_WS;
-        result.pdf = absCosTheta(wi_WS, normal_WS) * (1.f - fresnelReflectance) / M_PI;
+        result.pdf = absCosTheta(wi_WS, normal_WS) * (1.f - fresnelReflectance) * M_INV_PI;
         const float3 bsdfValue = evaluateBsdf<false /*calculateFresnelReflectance*/>(material, uv, wo_WS, wi_WS, normal_WS, fresnelReflectance);
         result.bsdfValue = bsdfValue;
     }
