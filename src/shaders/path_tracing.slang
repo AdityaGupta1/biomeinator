@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 16
+#define NUM_SAMPLES_PER_PIXEL 256
 #define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
@@ -71,27 +71,15 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+    {
+        return;
+    }
+
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
     {
-        // russian roulette
-        if (pathDepth >= 3)
-        {
-            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-            if (payload.rng.nextFloat() >= survivalProbability)
-            {
-                payload.pathColor = 0;
-                return;
-            }
-            payload.pathWeight /= survivalProbability;
-        }
-
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
-        {
-            return;
-        }
-
         const Material material = materials[payload.materialId];
 
         if (material.hasEmission())
@@ -122,6 +110,25 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         ray.Direction = sample.wi_WS;
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
+
+        // russian roulette
+        if (pathDepth >= 3)
+        {
+            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+            if (payload.rng.nextFloat() >= survivalProbability)
+            {
+                payload.pathColor = 0;
+                return;
+            }
+            payload.pathWeight /= survivalProbability;
+        }
+
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+        {
+            return;
+        }
     }
 
     //float3 hitPos_WS, normal_WS;
