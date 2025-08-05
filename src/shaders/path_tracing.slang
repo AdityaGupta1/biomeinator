@@ -80,70 +80,83 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
     for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
     {
-        const Material material = materials[payload.materialId];
+        const Material surfMaterial = materials[payload.materialId];
 
-        if (material.hasEmission())
+        if (pathDepth == 0 && surfMaterial.hasEmission())
         {
-            payload.pathColor += payload.pathWeight * material.getEmissiveColor();
+            payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
-        if (!material.canScatter() || isLastBounce)
+        if (!surfMaterial.canScatter() || isLastBounce)
         {
             return;
         }
 
-        float3 hitPos_WS, normal_WS;
-        calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
+        float3 surfPos_WS, surfNor_WS;
+        calcPathPosAndNormal(ray, payload, surfPos_WS, surfNor_WS);
         const float3 wo_WS = -ray.Direction;
 
-        const BsdfSample sample = sampleBsdf(material, payload.hitInfo.uv, wo_WS, normal_WS, payload.rng);
-
-        float3 adjustedBsdfValue = sample.bsdfValue / sample.pdf;
-        if (!sample.wasSpecular)
+        // TODO: don't do this if material is only specular refl/trans and has 0 roughness
+        const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
+        if (lightSample.didHitLight)
         {
-            adjustedBsdfValue *= absCosTheta(sample.wi_WS, normal_WS);
+            const float3 bsdfVal = evaluateBsdf<true /*calculateFresnelReflectance*/>(
+                surfMaterial,
+                payload.hitInfo.uv,
+                wo_WS,
+                lightSample.wi_WS,
+                surfNor_WS);
+            const float bsdfPdfVal = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+            const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdfVal);
+            payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
+                * lightSample.Le / lightSample.pdf;
+        }
+
+        const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
+
+        float3 adjustedBsdfValue = surfBsdfSample.bsdfValue;
+        if (!surfBsdfSample.wasSpecular)
+        {
+            adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS) / surfBsdfSample.pdf;
         }
         payload.pathWeight *= adjustedBsdfValue;
 
-        ray.Origin = hitPos_WS + 0.001f * normal_WS;
-        ray.Direction = sample.wi_WS;
+        //// russian roulette
+        //if (pathDepth >= 3)
+        //{
+        //    const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+        //    if (payload.rng.nextFloat() >= survivalProbability)
+        //    {
+        //        payload.pathColor = 0;
+        //        return;
+        //    }
+        //    payload.pathWeight /= survivalProbability;
+        //}
+
+        ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
+        ray.Direction = surfBsdfSample.wi_WS;
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        // russian roulette
-        if (pathDepth >= 3)
-        {
-            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-            if (payload.rng.nextFloat() >= survivalProbability)
-            {
-                payload.pathColor = 0;
-                return;
-            }
-            payload.pathWeight /= survivalProbability;
-        }
-
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        const Material hitMaterial = materials[payload.materialId];
+        if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
+        {
+            float3 hitPos_WS, hitNor_WS;
+            calcPathPosAndNormal(ray, payload, hitPos_WS, hitNor_WS);
+
+            const float lightPdf = lightPdf(payload.hitInfo, ray.Direction);
+            const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
+            payload.pathWeight *= misWeight;
+        }
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {
             return;
         }
     }
-
-    //float3 hitPos_WS, normal_WS;
-    //calcPathPosAndNormal(ray, payload, hitPos_WS, normal_WS);
-    //const DirectLightingSample lightSample = sampleDirectLighting(hitPos_WS, normal_WS, payload.rng);
-    //
-    //if (!lightSample.didHitLight)
-    //{
-    //    payload.pathColor = 0;
-    //    return;
-    //}
-    //
-    //const float3 bsdfValue = evaluateBsdf<true /*calculateFresnelReflectance*/>(materials[payload.materialId], payload.hitInfo.uv, -ray.Direction, lightSample.wi_WS, normal_WS);
-    //payload.pathWeight *= bsdfValue * absCosTheta(lightSample.wi_WS, normal_WS) / lightSample.pdf;
-    //payload.pathColor += payload.pathWeight * lightSample.Le;
 }
 
 [shader("closesthit")]

@@ -91,6 +91,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 static_cast<float>(gltfMat.emissiveFactor[2]),
             };
         }
+        const bool hasEmissiveColor =
+            (material.emissiveColor.x != 0 || material.emissiveColor.y != 0 || material.emissiveColor.z != 0);
 
         const auto emissiveExtIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
         if (emissiveExtIt != gltfMat.extensions.end())
@@ -105,10 +107,12 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 }
             }
         }
+        else if (hasEmissiveColor)
+        {
+            material.emissiveStrength = 1.f;
+        }
 
-        const bool hasEmission =
-            material.emissiveStrength > 0 &&
-            (material.emissiveColor.x != 0 || material.emissiveColor.y != 0 || material.emissiveColor.z != 0);
+        const bool hasEmission = material.emissiveStrength > 0 && hasEmissiveColor;
 
         bool hasDiffuse, hasSpecularReflection;
 
