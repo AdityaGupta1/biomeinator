@@ -222,6 +222,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
             payload.pathWeight *= misWeight;
         }
+        // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
     }
 }
 #endif
