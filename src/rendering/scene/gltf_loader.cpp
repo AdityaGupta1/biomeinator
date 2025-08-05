@@ -132,13 +132,32 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
             if (hasPbr)
             {
-                material.baseColor = {
-                    static_cast<float>(pbr.baseColorFactor[0]),
-                    static_cast<float>(pbr.baseColorFactor[1]),
-                    static_cast<float>(pbr.baseColorFactor[2]),
-                };
+                if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+                {
+                    const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
 
-                hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+                    if (texIdx < model.textures.size())
+                    {
+                        const int imgIdx = model.textures[texIdx].source;
+
+                        if (imgIdx >= 0 && imgIdx < textureIds.size())
+
+                        {
+                            material.baseColorTextureId = textureIds[imgIdx];
+                            hasDiffuse = true;
+                        }
+                    }
+                }
+                else
+                {
+                    material.baseColor = {
+                        static_cast<float>(pbr.baseColorFactor[0]),
+                        static_cast<float>(pbr.baseColorFactor[1]),
+                        static_cast<float>(pbr.baseColorFactor[2]),
+                    };
+
+                    hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+                }
             }
 
             const auto specularExtIt = gltfMat.extensions.find("KHR_materials_specular");
