@@ -48,6 +48,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "stb/stb_image_write.h"
 
+//#define DEBUG_DEFAULT_SCENE "C:\\Users\\SDOAJ\\Programming\\biomeinator\\test_scenes\\fancy_cornell_box\\fancy_cornell_box.gltf"
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -114,6 +116,10 @@ void init()
 
     initRootSignature();
     compileShadersAndInitPipeline();
+
+#ifdef DEBUG_DEFAULT_SCENE
+    loadGltf(DEBUG_DEFAULT_SCENE);
+#endif
 }
 
 void loadGltf(const std::string& filePathStr)
@@ -485,6 +491,25 @@ void compileShadersAndInitPipeline()
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
 
+    //std::vector<CompilerOptionEntry> compilerOptionEntries = {
+    //    {
+    //        .name = CompilerOptionName::WarningsAsErrors,
+    //        .value = {
+    //            .kind = CompilerOptionValueKind::String,
+    //            .stringValue0 = "all",
+    //        },
+    //    },
+    //    {
+    //        .name = CompilerOptionName::Optimization,
+    //        .value = {
+    //            .kind = CompilerOptionValueKind::Int,
+    //            .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE,
+    //        },
+    //    },
+    //};
+    //sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
+    //sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
+
     const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
     const std::string shadersPathStr = std::filesystem::absolute(shadersPath).string();
     const char* searchPaths[] = { shadersPathStr.c_str() };
@@ -818,6 +843,8 @@ void finalizeQueuedScreenshot()
                    4,
                    pixels.data(),
                    screenshotRequest.width * 4);
+
+    printf("Saved screenshot to %s\n", path.string().c_str());
 
     screenshotRequest.readbackBuffer.Reset();
     screenshotRequest.active = false;

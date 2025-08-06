@@ -68,7 +68,7 @@ float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
     const float2 uv,
     const float3 wo_WS,
     const float3 wi_WS,
-    const float3 normal_WS,
+    const float3 surfNor_WS,
     float fresnelReflectance = 0.f)
 {
     if (material.hasDiffuse())
@@ -81,7 +81,7 @@ float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
 
         if (calculateFresnelReflectance && material.hasSpecularReflection())
         {
-            fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+            fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         }
 
         return baseColor * M_INV_PI * (1.f - fresnelReflectance);
@@ -102,7 +102,7 @@ BsdfSample sampleBsdf(
     const Material material,
     const float2 uv,
     const float3 wo_WS,
-    const float3 normal_WS,
+    const float3 surfNor_WS,
     inout RandomSampler rng)
 {
     BsdfSample result;
@@ -131,13 +131,13 @@ BsdfSample sampleBsdf(
     }
     else
     {
-        fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, normal_WS));
+        fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         chooseReflect = (rng.nextFloat() < fresnelReflectance);
     }
 
     if (chooseReflect)
     {
-        const float3 wi_WS = normalize(reflect(-wo_WS, normal_WS));
+        const float3 wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
         result.wi_WS = wi_WS;
         result.pdf = fresnelReflectance;
         result.bsdfValue = material.specularColor * fresnelReflectance;
@@ -145,12 +145,42 @@ BsdfSample sampleBsdf(
     }
     else
     {
-        const float3 wi_WS = sampleHemisphereCosineWeighted(normal_WS, rng);
+        const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
         result.wi_WS = wi_WS;
-        result.pdf = absCosTheta(wi_WS, normal_WS) * (1.f - fresnelReflectance) / M_PI;
-        const float3 bsdfValue = evaluateBsdf<false /*calculateFresnelReflectance*/>(material, uv, wo_WS, wi_WS, normal_WS, fresnelReflectance);
+        result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
+        const float3 bsdfValue = evaluateBsdf<false /*calculateFresnelReflectance*/>(material, uv, wo_WS, wi_WS, surfNor_WS, fresnelReflectance);
         result.bsdfValue = bsdfValue;
     }
 
     return result;
+}
+
+float bsdfPdf(
+    const Material material,
+    const float3 wo_WS,
+    const float3 wi_WS,
+    const float3 surfNor_WS)
+{
+    if (!material.canScatter())
+    {
+        return 0.f;
+    }
+
+    const bool canReflect = material.canReflect();
+    const bool canTransmit = material.canTransmit();
+
+    if (!canTransmit)
+    {
+        return 0.f; // TODO: update this after adding microfacet reflection
+    }
+
+    float pdf = absCosTheta(wi_WS, surfNor_WS) * M_INV_PI;
+
+    if (canReflect)
+    {
+        const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
+        pdf *= (1.f - fresnelReflectance);
+    }
+
+    return pdf;
 }

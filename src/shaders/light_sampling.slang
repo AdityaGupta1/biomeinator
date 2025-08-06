@@ -56,9 +56,10 @@ struct DirectLightingSample
     float pdf;
 };
 
-DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 normal_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
+    result.didHitLight = false;
 
     float lightPickPdf;
     const AreaLight light = pickLightUniform(rng, lightPickPdf);
@@ -66,13 +67,13 @@ DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 n
     float lightSamplePdf;
     const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
 
-    result.wi_WS = normalize(pointOnLight_WS - origin_WS);
+    result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    const float r2 = distance2(origin_WS, pointOnLight_WS);
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
 
     RayDesc ray;
-    ray.Origin = origin_WS + 0.001f * normal_WS;
+    ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
     ray.Direction = result.wi_WS;
     ray.TMin = 0.f;
     ray.TMax = 10000.f;
@@ -83,16 +84,41 @@ DirectLightingSample sampleDirectLighting(const float3 origin_WS, const float3 n
 
     if (lightPayload.materialId == MATERIAL_ID_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {
-        result.didHitLight = false;
         return result;
     }
 
     result.didHitLight = true;
     const Material material = materials[lightPayload.materialId];
-    result.Le = material.emissiveStrength * material.emissiveColor;
+    result.Le = material.getEmissiveColor();
     result.pdf = lightPickPdf * lightSamplePdf;
 
     return result;
+}
+
+float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 pointOnLight_WS, const float3 wi_WS)
+{
+    // TODO: this is a really stupid way of figuring out which light was hit lol
+    uint areaLightIdx = -1;
+    for (uint i = 0; i < sceneParams.numAreaLights; ++i)
+    {
+        const uint lightIdx = areaLightSamplingStructure[i];
+        const AreaLight light = areaLights[lightIdx];
+        if (hitInfo.instanceId == light.instanceId && hitInfo.triangleIdx == light.triangleIdx)
+        {
+            areaLightIdx = lightIdx;
+            break;
+        }
+    }
+
+    if (areaLightIdx == -1)
+    {
+        return 0.f;
+    }
+
+    const AreaLight light = areaLights[areaLightIdx];
+    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
+    return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
 }
 
 [shader("closesthit")]
