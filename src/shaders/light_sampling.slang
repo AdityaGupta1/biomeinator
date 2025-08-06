@@ -95,30 +95,23 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
     return result;
 }
 
+// This function assumes the hit triangle is a light. For now, all triangles of instances with emissive materials
+// are lights, and this function is only called for hits on those instances. If that assumption changes, this function
+// will need to change as well.
 float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 pointOnLight_WS, const float3 wi_WS)
 {
-    // TODO: this is a really stupid way of figuring out which light was hit lol
-    uint areaLightIdx = -1;
-    for (uint i = 0; i < sceneParams.numAreaLights; ++i)
-    {
-        const uint lightIdx = areaLightSamplingStructure[i];
-        const AreaLight light = areaLights[lightIdx];
-        if (hitInfo.instanceId == light.instanceId && hitInfo.triangleIdx == light.triangleIdx)
-        {
-            areaLightIdx = lightIdx;
-            break;
-        }
-    }
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceDatas[hitInfo.instanceId], hitInfo.triangleIdx, v0, v1, v2);
 
-    if (areaLightIdx == -1)
-    {
-        return 0.f;
-    }
+    const float3 edge1 = v1.pos - v0.pos;
+    const float3 edge2 = v2.pos - v0.pos;
+    const float3 crossE = cross(edge1, edge2);
+    const float rcpArea = 2.f / length(crossE);
+    const float3 lightNor_WS = normalize(crossE);
 
-    const AreaLight light = areaLights[areaLightIdx];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
+    return lightPickPdf * rcpArea * r2 / absCosTheta(-wi_WS, lightNor_WS);
 }
 
 [shader("closesthit")]
