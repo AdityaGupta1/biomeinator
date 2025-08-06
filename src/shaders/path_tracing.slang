@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 128
+#define NUM_SAMPLES_PER_PIXEL 16
 #define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
@@ -157,6 +157,17 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             return;
         }
 
+        // russian roulette
+        if (pathDepth >= 2)
+        {
+             const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+             if (payload.rng.nextFloat() >= survivalProbability)
+             {
+                 return;
+             }
+             payload.pathWeight /= survivalProbability;
+        }
+
         float3 surfPos_WS, surfNor_WS;
         calcPathPosAndNormal(ray, payload, surfPos_WS, surfNor_WS);
         const float3 wo_WS = -ray.Direction;
@@ -186,19 +197,6 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS) / surfBsdfSample.pdf;
         }
         payload.pathWeight *= adjustedBsdfValue;
-
-        //// TODO: figure out where to put this and re-enable it
-        //// russian roulette
-        //if (pathDepth >= 3)
-        //{
-        //    const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-        //    if (payload.rng.nextFloat() >= survivalProbability)
-        //    {
-        //        payload.pathColor = 0;
-        //        return;
-        //    }
-        //    payload.pathWeight /= survivalProbability;
-        //}
 
         ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
         ray.Direction = surfBsdfSample.wi_WS;
