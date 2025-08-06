@@ -50,7 +50,7 @@ float3 calculateRayTarget(const float2 idx, const float2 size)
 
 float3 evalRayPos(const RayDesc ray, const float t)
 {
-    return ray.Origin + ray.Direction * t;
+    return mad(ray.Direction, t, ray.Origin);
 }
 
 void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 hitPos_WS, out float3 normal_WS)
