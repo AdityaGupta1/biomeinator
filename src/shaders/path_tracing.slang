@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 16
+#define NUM_SAMPLES_PER_PIXEL 512
 #define MAX_PATH_DEPTH 12
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
@@ -191,10 +191,10 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
         const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
-        float3 adjustedBsdfValue = surfBsdfSample.bsdfValue;
+        float3 adjustedBsdfValue = surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
         if (!surfBsdfSample.wasSpecular)
         {
-            adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS) / surfBsdfSample.pdf;
+            adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
         }
         payload.pathWeight *= adjustedBsdfValue;
 
