@@ -29,11 +29,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 512
+#define NUM_SAMPLES_PER_PIXEL 32
 #define MAX_PATH_DEPTH 12
-
-StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
-ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
@@ -230,24 +227,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
-    uint i0, i1, i2;
-    if (bool(instanceData.hasIdxs))
-    {
-        const uint idxBufferByteOffset = instanceData.idxBufferByteOffset + PrimitiveIndex() * 3 * 4;
-        i0 = idxs.Load(idxBufferByteOffset + 0);
-        i1 = idxs.Load(idxBufferByteOffset + 4);
-        i2 = idxs.Load(idxBufferByteOffset + 8);
-    }
-    else
-    {
-        i0 = PrimitiveIndex() * 3;
-        i1 = i0 + 1;
-        i2 = i0 + 2;
-    }
-
-    const Vertex v0 = verts[instanceData.vertBufferOffset + i0];
-    const Vertex v1 = verts[instanceData.vertBufferOffset + i1];
-    const Vertex v2 = verts[instanceData.vertBufferOffset + i2];
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
