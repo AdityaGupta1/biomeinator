@@ -112,7 +112,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             material.emissiveStrength = 1.f;
         }
 
-        const bool hasEmission = material.emissiveStrength > 0 && hasEmissiveColor;
+        const bool hasEmission = material.emissiveStrength > 0;
 
         bool hasDiffuse, hasSpecularReflection;
 

@@ -2,6 +2,7 @@
 .git/
 build/
 external/
+.vs/
 
 [SearchableFiles.include]
 *
