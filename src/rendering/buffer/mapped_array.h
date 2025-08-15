@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 template<class T> class MappedArray
 {
 private:
-    uint32_t size;
+    uint32_t size{ 0 };
     T* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> upload_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
