@@ -190,7 +190,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 
-    memcpy((uint8_t*)host_buffer + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
+    memcpy((uint8_t*)this->host_buffer + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
 
     return freeSection;
 }

@@ -81,6 +81,11 @@ public:
         return bool(flags & MATERIAL_FLAG_HAS_SPECULAR);
     }
 
+    bool hasEmission()
+    {
+        return emissiveStrength > 0.f;
+    }
+
     bool canReflect()
     {
         return bool(flags & MATERIAL_FLAG_HAS_SPECULAR); // TODO: add more conditions here later?
@@ -96,7 +101,12 @@ public:
         return canReflect() || canTransmit();
     }
 
-#if !_hlsl
+#if _hlsl
+    float3 getEmissiveColor()
+    {
+        return emissiveColor * emissiveStrength;
+    }
+#else
     void setHasDiffuse(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_HAS_DIFFUSE) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_DIFFUSE);

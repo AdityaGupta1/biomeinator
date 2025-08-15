@@ -33,6 +33,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             __debugbreak();                                                                                            \
         }                                                                                                              \
     } while (0)
+#else
+#define CHECK_HRESULT(expr) (expr)
+#endif
 
 #define CHECK_SLANG_DIAGNOSTICS(blob)                                                                                  \
     do                                                                                                                 \
@@ -42,10 +45,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             fprintf(stderr, "Slang diagnostics: %s\n", (const char*)(blob)->getBufferPointer());                       \
         }                                                                                                              \
     } while (0)
-#else
-#define CHECK_HRESULT(expr) (expr)
-#define CHECK_SLANG_DIAGNOSTICS(blob) ((void)0)
-#endif
 
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,
