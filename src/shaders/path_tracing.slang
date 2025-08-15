@@ -85,7 +85,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
 
         const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
-        if (!surfMaterial.canScatter() || isLastBounce) // TODO: check if isLastBounce condition is correct when MAX_PATH_DEPTH == 1
+        if (!surfMaterial.canScatter() || isLastBounce)
         {
             return;
         }
