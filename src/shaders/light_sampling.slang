@@ -97,7 +97,7 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
 
 float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 pointOnLight_WS, const float3 wi_WS)
 {
-    // TODO: this is a really stupid way of figuring out which light was hit lol
+    // TODO: this is a really stupid way of figuring out which light was hit lol (see #98)
     uint areaLightIdx = -1;
     for (uint i = 0; i < sceneParams.numAreaLights; ++i)
     {
