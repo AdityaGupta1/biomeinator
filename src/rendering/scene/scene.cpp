@@ -262,10 +262,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     for (const auto instance : this->instancesReadyForBlasBuild)
     {
         InstanceData& data = this->mappedInstanceDatasArray[instance->id];
-        data.vertBufferOffset =
+        data.vertsBufferOffset =
             instance->geoWrapper.vertsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
         data.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
-        data.idxBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
+        data.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         data.materialId = instance->materialId;
 
         instance->host_verts.clear();

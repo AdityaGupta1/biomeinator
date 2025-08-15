@@ -38,9 +38,9 @@ struct Vertex
 
 struct InstanceData
 {
-    uint vertBufferOffset;
+    uint vertsBufferOffset;
     uint hasIdxs;
-    uint idxBufferByteOffset;
+    uint idxsBufferByteOffset;
     uint materialId;
 };
 

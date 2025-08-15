@@ -32,10 +32,10 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     uint i0, i1, i2;
     if (bool(instanceData.hasIdxs))
     {
-        const uint idxBufferByteOffset = instanceData.idxBufferByteOffset + triIdx * 3 * 4;
-        i0 = idxs.Load(idxBufferByteOffset + 0);
-        i1 = idxs.Load(idxBufferByteOffset + 4);
-        i2 = idxs.Load(idxBufferByteOffset + 8);
+        const uint idxsBufferByteOffset = instanceData.idxsBufferByteOffset + triIdx * 3 * 4;
+        i0 = idxs.Load(idxsBufferByteOffset + 0);
+        i1 = idxs.Load(idxsBufferByteOffset + 4);
+        i2 = idxs.Load(idxsBufferByteOffset + 8);
     }
     else
     {
@@ -44,7 +44,7 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
         i2 = i0 + 2;
     }
 
-    v0 = verts[instanceData.vertBufferOffset + i0];
-    v1 = verts[instanceData.vertBufferOffset + i1];
-    v2 = verts[instanceData.vertBufferOffset + i2];
+    v0 = verts[instanceData.vertsBufferOffset + i0];
+    v1 = verts[instanceData.vertsBufferOffset + i1];
+    v2 = verts[instanceData.vertsBufferOffset + i2];
 }
