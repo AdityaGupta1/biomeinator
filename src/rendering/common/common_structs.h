@@ -41,6 +41,7 @@ struct InstanceData
     uint vertsBufferOffset;
     uint hasIdxs;
     uint idxsBufferByteOffset;
+    uint perTriDatasBufferOffset;
     uint materialId;
 };
 
@@ -132,6 +133,21 @@ struct AreaLight
 
     float3 normal_WS;
     uint pad0;
+};
+
+#define LIGHT_ID_INVALID ~0u
+
+struct PerTriangleData
+{
+#if !_hlsl
+public:
+    PerTriangleData();
+#endif
+
+    uint areaLightIdx;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct CameraParams

@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "util/util.h"
 
 #include <stdexcept>
 
@@ -39,6 +40,7 @@ void Instance::free()
     this->geoWrapper.idxsBufferSection.free();
 
     this->areaLightsBufferSection.free();
+    this->perTriDatasBufferSection.free();
 
     this->scene->freeInstance(this);
 }
@@ -98,6 +100,7 @@ void Scene::init()
     // these resources can be dynamically resized later
     this->managedVertsBuffer.init(512 /*bytes*/);
     this->managedIdxsBuffer.init(128 /*bytes*/);
+    this->managedPerTriDatasBuffer.init(128 /*bytes*/);
 
     this->maxNumInstances = 1;
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
@@ -117,6 +120,7 @@ void Scene::clear()
 {
     this->managedVertsBuffer.freeAll();
     this->managedIdxsBuffer.freeAll();
+    this->managedPerTriDatasBuffer.freeAll();
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
@@ -234,6 +238,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
     uint32_t numNewAreaLights = 0;
+    uint32_t perTriDatasTotalSizeBytes = 0;
 
     for (Instance* const instance : instancesReadyForBlasBuild)
     {
@@ -253,6 +258,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         allBlasInputs.push_back(blasInputs);
 
         numNewAreaLights += instance->host_areaLights.size();
+        perTriDatasTotalSizeBytes += Util::getVectorSizeBytes(instance->host_perTriDatas);
     }
 
     ManagedBuffer areaLightsUploadBuffer{
@@ -261,9 +267,19 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         false /*isResizable*/,
         true /*isMapped*/,
     };
+    ManagedBuffer perTriDatasUploadBuffer{
+        &UPLOAD_HEAP,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        false /*isResizable*/,
+        true /*isMapped*/,
+    };
     if (numNewAreaLights > 0)
     {
         areaLightsUploadBuffer.init(numNewAreaLights * sizeof(AreaLight));
+    }
+    if (perTriDatasTotalSizeBytes > 0)
+    {
+        perTriDatasUploadBuffer.init(perTriDatasTotalSizeBytes);
     }
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
@@ -291,11 +307,45 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
             instance->host_areaLights.clear();
         }
+
+        if (!instance->host_perTriDatas.empty())
+        {
+            if (instance->areaLightsBufferSection.sizeBytes > 0)
+            {
+                const uint32_t baseLightIdx =
+                    instance->areaLightsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(AreaLight));
+                for (auto& perTriData : instance->host_perTriDatas)
+                {
+                    if (perTriData.areaLightIdx != LIGHT_ID_INVALID)
+                    {
+                        perTriData.areaLightIdx += baseLightIdx;
+                    }
+                }
+            }
+
+            const ManagedBufferSection perTriDatasUploadBufferSection =
+                perTriDatasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
+            instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
+                cmdList, toFreeList, perTriDatasUploadBuffer, perTriDatasUploadBufferSection);
+
+            data.perTriDatasBufferOffset =
+                instance->perTriDatasBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(PerTriangleData));
+
+            instance->host_perTriDatas.clear();
+        }
+        else
+        {
+            data.perTriDatasBufferOffset = 0;
+        }
     }
 
     if (numNewAreaLights > 0)
     {
         toFreeList.pushManagedBuffer(&areaLightsUploadBuffer);
+    }
+    if (perTriDatasTotalSizeBytes > 0)
+    {
+        toFreeList.pushManagedBuffer(&perTriDatasUploadBuffer);
     }
 
     this->instancesReadyForBlasBuild.clear();
@@ -468,6 +518,11 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
 {
     return this->managedIdxsBuffer.getBufferGpuAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
+{
+    return this->managedPerTriDatasBuffer.getBufferGpuAddress();
 }
 
 uint32_t Scene::getNumAreaLights() const

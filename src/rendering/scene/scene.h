@@ -58,6 +58,9 @@ private:
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
+    std::vector<PerTriangleData> host_perTriDatas;
+    ManagedBufferSection perTriDatasBufferSection{};
+
     bool isScheduledForDeletion{ false };
 
     Instance(Scene* scene, uint32_t id);
@@ -91,6 +94,12 @@ private:
         false /*isMapped*/,
     };
     ManagedBuffer managedIdxsBuffer{
+        &DEFAULT_HEAP,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        true /*isResizable*/,
+        false /*isMapped*/,
+    };
+    ManagedBuffer managedPerTriDatasBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         true /*isResizable*/,
@@ -161,6 +170,7 @@ public:
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;

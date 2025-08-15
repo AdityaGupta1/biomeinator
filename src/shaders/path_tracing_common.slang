@@ -26,6 +26,7 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(REGISTER_INSTANCE_DATA
 
 StructuredBuffer<Vertex> verts : REGISTER_T(REGISTER_VERTS, REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(REGISTER_IDXS, REGISTER_SPACE_BUFFERS);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(REGISTER_PER_TRI_DATAS, REGISTER_SPACE_BUFFERS);
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
