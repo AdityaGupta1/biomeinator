@@ -120,6 +120,8 @@ void init()
 #ifdef DEBUG_DEFAULT_SCENE
     loadGltf(DEBUG_DEFAULT_SCENE);
 #endif
+
+    SetForegroundWindow(hwnd);
 }
 
 void loadGltf(const std::string& filePathStr)
