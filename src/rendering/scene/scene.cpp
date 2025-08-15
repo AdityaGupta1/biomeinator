@@ -32,6 +32,17 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+void Instance::free()
+{
+    this->geoWrapper.dev_blas.Reset();
+    this->geoWrapper.vertsBufferSection.free();
+    this->geoWrapper.idxsBufferSection.free();
+
+    this->areaLightsBufferSection.free();
+
+    this->scene->freeInstance(this);
+}
+
 void Instance::addAreaLight(const AreaLightInputs& lightInputs)
 {
 #if _DEBUG

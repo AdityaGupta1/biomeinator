@@ -40,24 +40,6 @@ void ToFreeList::pushManagedBufferSection(const ManagedBufferSection& bufferSect
 
 void ToFreeList::pushInstance(Instance* instance)
 {
-    if (instance->geoWrapper.dev_blas)
-    {
-        this->pushResource(instance->geoWrapper.dev_blas, false);
-    }
-    if (instance->geoWrapper.vertsBufferSection.sizeBytes > 0)
-    {
-        this->pushManagedBufferSection(instance->geoWrapper.vertsBufferSection);
-    }
-    if (instance->geoWrapper.idxsBufferSection.sizeBytes > 0)
-    {
-        this->pushManagedBufferSection(instance->geoWrapper.idxsBufferSection);
-    }
-
-    if (instance->areaLightsBufferSection.sizeBytes > 0)
-    {
-        this->pushManagedBufferSection(instance->areaLightsBufferSection);
-    }
-
     instances.push_back(instance);
     instance->isScheduledForDeletion = true;
     instance->scene->isTlasDirty = true;
@@ -80,13 +62,13 @@ void ToFreeList::freeAll()
 
     for (const auto& bufferSection : managedBufferSections)
     {
-        bufferSection.getBuffer()->freeSection(bufferSection);
+        bufferSection.free();
     }
     managedBufferSections.clear();
 
     for (Instance* instance : instances)
     {
-        instance->scene->freeInstance(instance);
+        instance->free();
     }
     instances.clear();
 }

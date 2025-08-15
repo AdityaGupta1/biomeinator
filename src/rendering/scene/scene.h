@@ -62,6 +62,8 @@ private:
 
     Instance(Scene* scene, uint32_t id);
 
+    void free();
+
 public:
     std::vector<Vertex> host_verts;
     std::vector<uint32_t> host_idxs;

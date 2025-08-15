@@ -40,10 +40,13 @@ public:
     ManagedBufferSection();
 
     ManagedBuffer* getBuffer() const;
+
+    void free() const;
 };
 
 class ManagedBuffer
 {
+    friend class ManagedBufferSection;
     friend class ToFreeList;
 
 private:

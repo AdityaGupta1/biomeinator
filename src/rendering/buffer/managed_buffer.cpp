@@ -36,6 +36,14 @@ ManagedBuffer* ManagedBufferSection::getBuffer() const
     return this->buffer;
 }
 
+void ManagedBufferSection::free() const
+{
+    if (this->sizeBytes > 0)
+    {
+        this->buffer->freeSection(*this);
+    }
+}
+
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_RESOURCE_STATES initialResourceState,
                              const bool isResizable,
