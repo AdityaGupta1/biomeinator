@@ -247,13 +247,14 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
+        assert(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
-        blasInputs.dev_verts = &managedVertsBuffer;
+        blasInputs.dev_verts = &this->managedVertsBuffer;
 
         if (instance->host_idxs.size() > 0)
         {
             blasInputs.host_idxs = &instance->host_idxs;
-            blasInputs.dev_idxs = &managedIdxsBuffer;
+            blasInputs.dev_idxs = &this->managedIdxsBuffer;
         }
 
         blasInputs.outGeoWrapper = &instance->geoWrapper;
@@ -261,6 +262,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         allBlasInputs.push_back(blasInputs);
 
         numAreaLights += instance->host_areaLights.size();
+        assert(instance->host_perTriDatas.size() > 0);
         numPerTriDatas += instance->host_perTriDatas.size();
     }
 
