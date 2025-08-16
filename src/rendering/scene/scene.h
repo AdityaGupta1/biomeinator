@@ -45,11 +45,11 @@ struct AreaLightInputs
 
 class Instance
 {
-    friend class Scene;
+    friend class ::Scene;
     friend class ToFreeList;
 
 private:
-    Scene* const scene;
+    ::Scene* const scene;
     const uint32_t id;
     uint32_t materialId{ MATERIAL_ID_INVALID };
 
@@ -62,7 +62,7 @@ private:
 
     bool isScheduledForDeletion{ false };
 
-    Instance(Scene* scene, uint32_t id);
+    Instance(::Scene* scene, uint32_t id);
 
     void free();
 
@@ -118,7 +118,7 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t nextMaterialIdx{ 0 };
-    MappedArray<Material> mappedMaterialsArray{};
+    MappedArray<::Material> mappedMaterialsArray{};
 
     uint32_t nextTextureId{ 0 };
     std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
@@ -157,7 +157,7 @@ public:
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);
 
-    uint32_t addMaterial(ToFreeList& toFreeList, const Material* material);
+    uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
