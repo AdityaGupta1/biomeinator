@@ -54,12 +54,7 @@ ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
 
 void ManagedBuffer::init(uint32_t sizeBytes)
 {
-#ifdef _DEBUG
-    if (sizeBytes == 0)
-    {
-        throw std::runtime_error("Attempting to initialize ManagedBuffer with 0 size");
-    }
-#endif
+    assert(sizeBytes > 0);
 
     this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
@@ -150,12 +145,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-#ifdef _DEBUG
-    if (this->isMapped)
-    {
-        throw std::runtime_error("Attempting to resize mapped ManagedBuffer");
-    }
-#endif
+    assert(this->isMapped);
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -189,12 +179,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
                                                        const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
-#ifdef _DEBUG
-    if (!this->isMapped)
-    {
-        throw std::runtime_error("Attempting to copy from host buffer to unmapped ManagedBuffer");
-    }
-#endif
+    assert(this->isMapped);
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 
@@ -237,12 +222,7 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-#ifdef _DEBUG
-    if (section.getBuffer() != this)
-    {
-        throw std::runtime_error("Attempting to free ManagedBufferSection from wrong ManagedBuffer");
-    }
-#endif
+    assert(section.getBuffer() == this);
 
     auto it = this->freeSectionList.begin();
     for (; it != this->freeSectionList.end(); ++it)

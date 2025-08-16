@@ -199,14 +199,10 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 
 uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
 {
-    if (this->nextTextureId >= MAX_NUM_TEXTURES)
-    {
-        throw std::runtime_error("Scene out of texture slots");
-    }
-
-    const uint32_t id = this->nextTextureId++;
-    this->pendingTextures.push_back({ std::move(data), width, height, id });
-    return id;
+    const uint32_t texId = this->nextTextureId++;
+    assert(texId < MAX_NUM_TEXTURES);
+    this->pendingTextures.push_back({ std::move(data), width, height, texId });
+    return texId;
 }
 
 void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
