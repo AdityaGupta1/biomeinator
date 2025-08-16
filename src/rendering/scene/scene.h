@@ -54,11 +54,10 @@ private:
     uint32_t materialId{ MATERIAL_ID_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
+    ManagedBufferSection perTriDatasBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
-
-    ManagedBufferSection perTriDatasBufferSection{};
 
     bool isScheduledForDeletion{ false };
 
