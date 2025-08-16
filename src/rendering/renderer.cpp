@@ -287,6 +287,7 @@ enum class Param
     RAYTRACING_ACS,
     VERTS,
     IDXS,
+    PER_TRI_DATAS,
     INSTANCE_DATAS,
     MATERIALS,
     AREA_LIGHTS,
@@ -356,6 +357,14 @@ void initRootSignature()
         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
         .Descriptor = {
             .ShaderRegister = REGISTER_IDXS,
+            .RegisterSpace = REGISTER_SPACE_BUFFERS,
+        },
+    };
+
+    params[PARAM_IDX(PER_TRI_DATAS)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+        .Descriptor = {
+            .ShaderRegister = REGISTER_PER_TRI_DATAS,
             .RegisterSpace = REGISTER_SPACE_BUFFERS,
         },
     };
@@ -884,6 +893,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
         cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());

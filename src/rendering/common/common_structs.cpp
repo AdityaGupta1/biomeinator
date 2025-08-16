@@ -27,3 +27,7 @@ Material::Material()
       emissiveStrength(0),
       emissiveColor{ 1, 1, 1 }
 {}
+
+PerTriangleData::PerTriangleData()
+    : localAreaLightIdx(LIGHT_ID_INVALID)
+{}

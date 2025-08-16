@@ -54,6 +54,7 @@ private:
     uint32_t materialId{ MATERIAL_ID_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
+    ManagedBufferSection perTriDatasBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
@@ -67,11 +68,12 @@ private:
 public:
     std::vector<Vertex> host_verts;
     std::vector<uint32_t> host_idxs;
+    std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{};
 
     // `transform` must be set before calling this function
-    void addAreaLight(const AreaLightInputs& lightInputs);
+    uint32_t addAreaLight(const AreaLightInputs& lightInputs);
 
     uint32_t getId() const;
 
@@ -91,6 +93,12 @@ private:
         false /*isMapped*/,
     };
     ManagedBuffer managedIdxsBuffer{
+        &DEFAULT_HEAP,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        true /*isResizable*/,
+        false /*isMapped*/,
+    };
+    ManagedBuffer managedPerTriDatasBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         true /*isResizable*/,
@@ -161,6 +169,7 @@ public:
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;

@@ -370,13 +370,15 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
             DirectX::XMStoreFloat3x4(&instance->transform, transform);
 
+            const uint32_t triCount =
+                instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
+            instance->host_perTriDatas.resize(triCount);
+
             const bool isEmissive = prim.material >= 0 &&
                                     static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
                                     materialIsEmissive[prim.material];
             if (isEmissive)
             {
-                const uint32_t triCount =
-                    instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
                 {
                     uint32_t i0 = triIdx * 3;
@@ -395,7 +397,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         .pos2 = instance->host_verts[i2].pos,
                         .triangleIdx = triIdx,
                     };
-                    instance->addAreaLight(lightInputs);
+                    const uint32_t localAreaLightIdx = instance->addAreaLight(lightInputs);
+                    instance->host_perTriDatas[triIdx].localAreaLightIdx = localAreaLightIdx;
                 }
             }
 

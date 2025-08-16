@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "util/util.h"
 
 #include <stdexcept>
 
@@ -37,13 +38,14 @@ void Instance::free()
     this->geoWrapper.dev_blas.Reset();
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
+    this->perTriDatasBufferSection.free();
 
     this->areaLightsBufferSection.free();
 
     this->scene->freeInstance(this);
 }
 
-void Instance::addAreaLight(const AreaLightInputs& lightInputs)
+uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
 {
 #if _DEBUG
     static constexpr DirectX::XMFLOAT3X4 zero{};
@@ -54,6 +56,7 @@ void Instance::addAreaLight(const AreaLightInputs& lightInputs)
 #endif
 
     this->host_areaLights.emplace_back();
+    const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
     AreaLight& light = this->host_areaLights.back();
 
     light.instanceId = this->id;
@@ -81,6 +84,8 @@ void Instance::addAreaLight(const AreaLightInputs& lightInputs)
 
     const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
     light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+
+    return localAreaLightIdx;
 }
 
 uint32_t Instance::getId() const
@@ -98,6 +103,7 @@ void Scene::init()
     // these resources can be dynamically resized later
     this->managedVertsBuffer.init(512 /*bytes*/);
     this->managedIdxsBuffer.init(128 /*bytes*/);
+    this->managedPerTriDatasBuffer.init(128 /*bytes*/);
 
     this->maxNumInstances = 1;
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
@@ -117,6 +123,7 @@ void Scene::clear()
 {
     this->managedVertsBuffer.freeAll();
     this->managedIdxsBuffer.freeAll();
+    this->managedPerTriDatasBuffer.freeAll();
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
@@ -233,38 +240,42 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
-    uint32_t numNewAreaLights = 0;
+    uint32_t numPerTriDatas = 0;
+    uint32_t numAreaLights = 0;
 
     for (Instance* const instance : instancesReadyForBlasBuild)
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
+        assert(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
-        blasInputs.dev_verts = &managedVertsBuffer;
+        blasInputs.dev_verts = &this->managedVertsBuffer;
 
         if (instance->host_idxs.size() > 0)
         {
             blasInputs.host_idxs = &instance->host_idxs;
-            blasInputs.dev_idxs = &managedIdxsBuffer;
+            blasInputs.dev_idxs = &this->managedIdxsBuffer;
         }
 
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
 
-        numNewAreaLights += instance->host_areaLights.size();
+        assert(instance->host_perTriDatas.size() > 0);
+        numPerTriDatas += instance->host_perTriDatas.size();
+
+        numAreaLights += instance->host_areaLights.size();
     }
 
-    ManagedBuffer areaLightsUploadBuffer{
+    // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
+    ManagedBuffer uploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         false /*isResizable*/,
         true /*isMapped*/,
     };
-    if (numNewAreaLights > 0)
-    {
-        areaLightsUploadBuffer.init(numNewAreaLights * sizeof(AreaLight));
-    }
+    const uint32_t uploadBufferSize = (numPerTriDatas * sizeof(PerTriangleData) + (numAreaLights * sizeof(AreaLight)));
+    uploadBuffer.init(uploadBufferSize);
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
 
@@ -272,31 +283,39 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     for (const auto instance : this->instancesReadyForBlasBuild)
     {
-        InstanceData& data = this->mappedInstanceDatasArray[instance->id];
-        data.vertsBufferOffset =
-            instance->geoWrapper.vertsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
-        data.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
-        data.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
-        data.materialId = instance->materialId;
+        InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
+        instanceData.vertsBufferOffset =
+            Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
+        instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
+        instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
+        instanceData.materialId = instance->materialId;
 
         instance->host_verts.clear();
         instance->host_idxs.clear();
 
+        const ManagedBufferSection perTriDatasUploadBufferSection =
+            uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
+        instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
+            cmdList, toFreeList, uploadBuffer, perTriDatasUploadBufferSection);
+        instanceData.perTriDatasBufferOffset =
+            Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
+
+        instance->host_perTriDatas.clear();
+
         if (!instance->host_areaLights.empty())
         {
             const ManagedBufferSection areaLightsUploadBufferSection =
-                areaLightsUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
+                uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
-                cmdList, toFreeList, areaLightsUploadBuffer, areaLightsUploadBufferSection);
+                cmdList, toFreeList, uploadBuffer, areaLightsUploadBufferSection);
+            instanceData.areaLightsBufferOffset =
+                Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
             instance->host_areaLights.clear();
         }
     }
 
-    if (numNewAreaLights > 0)
-    {
-        toFreeList.pushManagedBuffer(&areaLightsUploadBuffer);
-    }
+    toFreeList.pushManagedBuffer(&uploadBuffer);
 
     this->instancesReadyForBlasBuild.clear();
     return true;
@@ -468,6 +487,11 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
 {
     return this->managedIdxsBuffer.getBufferGpuAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
+{
+    return this->managedPerTriDatasBuffer.getBufferGpuAddress();
 }
 
 uint32_t Scene::getNumAreaLights() const
