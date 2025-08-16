@@ -38,9 +38,9 @@ void Instance::free()
     this->geoWrapper.dev_blas.Reset();
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
+    this->perTriDatasBufferSection.free();
 
     this->areaLightsBufferSection.free();
-    this->perTriDatasBufferSection.free();
 
     this->scene->freeInstance(this);
 }
