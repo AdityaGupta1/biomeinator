@@ -240,8 +240,8 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
 
-    uint32_t areaLightsTotalSizeBytes = 0;
-    uint32_t perTriDatasTotalSizeBytes = 0;
+    uint32_t numAreaLights = 0;
+    uint32_t numPerTriDatas = 0;
 
     for (Instance* const instance : instancesReadyForBlasBuild)
     {
@@ -260,10 +260,11 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         allBlasInputs.push_back(blasInputs);
 
-        areaLightsTotalSizeBytes += Util::getVectorSizeBytes(instance->host_areaLights);
-        perTriDatasTotalSizeBytes += Util::getVectorSizeBytes(instance->host_perTriDatas);
+        numAreaLights += instance->host_areaLights.size();
+        numPerTriDatas += instance->host_perTriDatas.size();
     }
 
+    // TODO: combine these ManagedBuffers into one
     ManagedBuffer areaLightsUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -276,14 +277,11 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         false /*isResizable*/,
         true /*isMapped*/,
     };
-    if (areaLightsTotalSizeBytes > 0)
+    if (numAreaLights > 0)
     {
-        areaLightsUploadBuffer.init(areaLightsTotalSizeBytes);
+        areaLightsUploadBuffer.init(numAreaLights * sizeof(AreaLight));
     }
-    if (perTriDatasTotalSizeBytes > 0)
-    {
-        perTriDatasUploadBuffer.init(perTriDatasTotalSizeBytes);
-    }
+    perTriDatasUploadBuffer.init(numPerTriDatas * sizeof(PerTriangleData));
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
 
@@ -291,16 +289,12 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     for (const auto instance : this->instancesReadyForBlasBuild)
     {
-        InstanceData& data = this->mappedInstanceDatasArray[instance->id];
-        data.vertsBufferOffset =
-            instance->geoWrapper.vertsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(Vertex));
-        data.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
-        data.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
-        data.perTriDatasBufferOffset = 0;
-        data.materialId = instance->materialId;
-        data.pad0 = 0;
-        data.pad1 = 0;
-        data.pad2 = 0;
+        InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
+        instanceData.vertsBufferOffset =
+            Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
+        instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
+        instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
+        instanceData.materialId = instance->materialId;
 
         instance->host_verts.clear();
         instance->host_idxs.clear();
@@ -315,45 +309,34 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instance->host_areaLights.clear();
         }
 
-        if (!instance->host_perTriDatas.empty())
+        if (instance->areaLightsBufferSection.sizeBytes > 0)
         {
-            if (instance->areaLightsBufferSection.sizeBytes > 0)
+            const uint32_t baseLightIdx =
+                Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
+            for (auto& perTriData : instance->host_perTriDatas)
             {
-                const uint32_t baseLightIdx =
-                    instance->areaLightsBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(AreaLight));
-                for (auto& perTriData : instance->host_perTriDatas)
+                if (perTriData.areaLightIdx != LIGHT_ID_INVALID)
                 {
-                    if (perTriData.areaLightIdx != LIGHT_ID_INVALID)
-                    {
-                        perTriData.areaLightIdx += baseLightIdx;
-                    }
+                    perTriData.areaLightIdx += baseLightIdx;
                 }
             }
-
-            const ManagedBufferSection perTriDatasUploadBufferSection =
-                perTriDatasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
-            instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
-                cmdList, toFreeList, perTriDatasUploadBuffer, perTriDatasUploadBufferSection);
-
-            data.perTriDatasBufferOffset =
-                instance->perTriDatasBufferSection.offsetBytes / static_cast<uint32_t>(sizeof(PerTriangleData));
-
-            instance->host_perTriDatas.clear();
         }
-        else
-        {
-            data.perTriDatasBufferOffset = 0;
-        }
+
+        const ManagedBufferSection perTriDatasUploadBufferSection =
+            perTriDatasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
+        instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
+            cmdList, toFreeList, perTriDatasUploadBuffer, perTriDatasUploadBufferSection);
+        instanceData.perTriDatasBufferOffset =
+            Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
+
+        instance->host_perTriDatas.clear();
     }
 
-    if (areaLightsTotalSizeBytes > 0)
+    if (numAreaLights > 0)
     {
         toFreeList.pushManagedBuffer(&areaLightsUploadBuffer);
     }
-    if (perTriDatasTotalSizeBytes > 0)
-    {
-        toFreeList.pushManagedBuffer(&perTriDatasUploadBuffer);
-    }
+    toFreeList.pushManagedBuffer(&perTriDatasUploadBuffer);
 
     this->instancesReadyForBlasBuild.clear();
     return true;
