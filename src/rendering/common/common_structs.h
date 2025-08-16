@@ -43,8 +43,8 @@ struct InstanceData
     uint idxsBufferByteOffset;
     uint perTriDatasBufferOffset;
 
+    uint areaLightsBufferOffset;
     uint materialId;
-    uint pad0;
     uint pad1;
     uint pad2;
 };
@@ -148,7 +148,7 @@ public:
     PerTriangleData();
 #endif
 
-    uint areaLightIdx;
+    uint localAreaLightIdx;
     uint pad0;
     uint pad1;
     uint pad2;

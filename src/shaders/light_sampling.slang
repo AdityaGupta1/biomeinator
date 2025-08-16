@@ -99,12 +99,13 @@ float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 poin
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
-    if (perTriData.areaLightIdx == LIGHT_ID_INVALID)
+    if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
     {
         return 0.f;
     }
 
-    const AreaLight light = areaLights[perTriData.areaLightIdx];
+    const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
+    const AreaLight light = areaLights[areaLightIdx];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);

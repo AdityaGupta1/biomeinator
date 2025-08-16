@@ -29,7 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 8
+#define NUM_SAMPLES_PER_PIXEL 1
 #define MAX_PATH_DEPTH 12
 
 float3 calculateRayTarget(const float2 idx, const float2 size)

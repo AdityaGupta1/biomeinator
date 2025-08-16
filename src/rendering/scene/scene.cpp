@@ -56,7 +56,7 @@ uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
 #endif
 
     this->host_areaLights.emplace_back();
-    const uint32_t areaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
+    const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
     AreaLight& light = this->host_areaLights.back();
 
     light.instanceId = this->id;
@@ -85,7 +85,7 @@ uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
     const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
     light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
 
-    return areaLightIdx;
+    return localAreaLightIdx;
 }
 
 uint32_t Instance::getId() const
@@ -298,21 +298,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
                 uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
                 cmdList, toFreeList, uploadBuffer, areaLightsUploadBufferSection);
+            instanceData.areaLightsBufferOffset =
+                Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
             instance->host_areaLights.clear();
-        }
-
-        if (instance->areaLightsBufferSection.sizeBytes > 0)
-        {
-            const uint32_t baseLightIdx =
-                Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
-            for (auto& perTriData : instance->host_perTriDatas)
-            {
-                if (perTriData.areaLightIdx != LIGHT_ID_INVALID)
-                {
-                    perTriData.areaLightIdx += baseLightIdx;
-                }
-            }
         }
 
         const ManagedBufferSection perTriDatasUploadBufferSection =
