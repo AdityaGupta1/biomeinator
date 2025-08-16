@@ -58,7 +58,6 @@ private:
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
-    std::vector<PerTriangleData> host_perTriDatas;
     ManagedBufferSection perTriDatasBufferSection{};
 
     bool isScheduledForDeletion{ false };
@@ -70,11 +69,12 @@ private:
 public:
     std::vector<Vertex> host_verts;
     std::vector<uint32_t> host_idxs;
+    std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{};
 
     // `transform` must be set before calling this function
-    void addAreaLight(const AreaLightInputs& lightInputs);
+    uint32_t addAreaLight(const AreaLightInputs& lightInputs);
 
     uint32_t getId() const;
 

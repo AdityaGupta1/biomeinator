@@ -42,7 +42,11 @@ struct InstanceData
     uint hasIdxs;
     uint idxsBufferByteOffset;
     uint perTriDatasBufferOffset;
+
     uint materialId;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 #define MATERIAL_ID_INVALID ~0u
