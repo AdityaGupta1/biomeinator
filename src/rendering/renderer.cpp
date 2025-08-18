@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include <d3dcompiler.h>
 
+#include "../settings_manager.h"
 #include "param_block_manager.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
@@ -872,13 +873,17 @@ void render()
 
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
-    paramBlockManager.sceneParams->frameNumber = frameNumber;
+
+    auto& sceneParams = paramBlockManager.sceneParams;
+    sceneParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
+    sceneParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
+    sceneParams->frameNumber = frameNumber;
 
     beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    paramBlockManager.sceneParams->numAreaLights = scene.getNumAreaLights();
+    sceneParams->numAreaLights = scene.getNumAreaLights();
 
     if (scene.hasTlas())
     {
