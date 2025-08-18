@@ -49,8 +49,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "stb/stb_image_write.h"
 
-//#define DEBUG_DEFAULT_SCENE "C:\\Users\\SDOAJ\\Programming\\biomeinator\\test_scenes\\fancy_cornell_box\\fancy_cornell_box.gltf"
-
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -118,9 +116,11 @@ void init()
     initRootSignature();
     compileShadersAndInitPipeline();
 
-#ifdef DEBUG_DEFAULT_SCENE
-    loadGltf(DEBUG_DEFAULT_SCENE);
-#endif
+    const std::string& defaultScene = SettingsManager::getAsString("scene");
+    if (!defaultScene.empty())
+    {
+        loadGltf(defaultScene);
+    }
 
     SetForegroundWindow(hwnd);
 }
