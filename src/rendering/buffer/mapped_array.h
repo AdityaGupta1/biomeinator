@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
 
-template<class T> class MappedArray
+template<typename T> class MappedArray
 {
 private:
     uint32_t size{ 0 };
