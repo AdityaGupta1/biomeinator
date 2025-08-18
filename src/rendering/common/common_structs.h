@@ -171,10 +171,10 @@ struct CameraParams
 
 struct SceneParams
 {
+    uint numSamplesPerPixel;
+    uint maxPathDepth;
     uint frameNumber;
     uint numAreaLights;
-    uint pad0;
-    uint pad1;
 };
 
 #if !_hlsl

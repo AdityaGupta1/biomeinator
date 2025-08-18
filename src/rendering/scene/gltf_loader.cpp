@@ -27,6 +27,7 @@ on a specific subset of glTF files and is not guaranteed to work for files outsi
 
 #include <filesystem>
 #include <string>
+#include <stdexcept>
 
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
@@ -62,8 +63,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     }
     if (!loaded)
     {
-        printf("Failed to load glTF file\n");
-        return;
+        throw std::runtime_error("Failed to load glTF file");
     }
 
     std::vector<uint32_t> textureIds;

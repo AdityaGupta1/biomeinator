@@ -30,7 +30,7 @@ void RayGeneration()
     const float2 size = DispatchRaysDimensions().xy;
 
     float3 accumulatedColor = float3(0, 0, 0);
-    for (uint sampleIdx = 0; sampleIdx < NUM_SAMPLES_PER_PIXEL; ++sampleIdx)
+    for (uint sampleIdx = 0; sampleIdx < sceneParams.numSamplesPerPixel; ++sampleIdx)
     {
         Payload payload;
         payload.pathWeight = float3(1, 1, 1);
@@ -51,5 +51,5 @@ void RayGeneration()
         accumulatedColor += payload.pathColor;
     }
 
-    renderTarget[pixelIdx] = float4(accumulatedColor / NUM_SAMPLES_PER_PIXEL, 1);
+    renderTarget[pixelIdx] = float4(accumulatedColor / sceneParams.numSamplesPerPixel, 1);
 }

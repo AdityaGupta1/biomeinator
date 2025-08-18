@@ -29,9 +29,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#define NUM_SAMPLES_PER_PIXEL 8
-#define MAX_PATH_DEPTH 12
-
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
@@ -75,7 +72,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         return;
     }
 
-    for (uint pathDepth = 0; pathDepth < MAX_PATH_DEPTH; ++pathDepth)
+    for (uint pathDepth = 0; pathDepth < sceneParams.maxPathDepth; ++pathDepth)
     {
         const Material surfMaterial = materials[payload.materialId];
 
@@ -84,7 +81,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
 
-        const bool isLastBounce = pathDepth == MAX_PATH_DEPTH - 1;
+        const bool isLastBounce = pathDepth == sceneParams.maxPathDepth - 1;
         if (!surfMaterial.canScatter() || isLastBounce)
         {
             return;
