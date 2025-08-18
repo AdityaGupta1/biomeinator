@@ -1,8 +1,12 @@
-﻿#include "rendering/renderer.h"
+﻿#include "settings_manager.h"
+
+#include "rendering/renderer.h"
 #include "rendering/window_manager.h"
 
-int main()
+int main(int argc, char** argv)
 {
+    SettingsManager::parseArgs(argc, argv);
+
     WindowManager::init();
     Renderer::init();
 

@@ -26,6 +26,7 @@ This project uses various third-party libraries:
 
 - [tinygltf](https://github.com/syoyo/tinygltf) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
+- [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
 - [Slang](https://github.com/shader-slang/slang) - Apache-2.0 WITH LLVM-exception
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 

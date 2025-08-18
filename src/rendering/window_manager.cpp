@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "window_manager.h"
 
+#include "../settings_manager.h"
+
 #include "renderer.h"
 #include "scene/gltf_loader.h"
 
@@ -126,7 +128,11 @@ void init()
     };
     RegisterClassW(&wcw);
 
-    RECT rect = { 0, 0, 1920, 1080 };
+    RECT rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = SettingsManager::getAsUint("width");
+    rect.bottom = SettingsManager::getAsUint("height");
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE); // account for window header bar
 
     const int width = rect.right - rect.left;
