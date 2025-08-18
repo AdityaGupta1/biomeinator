@@ -27,5 +27,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
-
 using Microsoft::WRL::ComPtr;

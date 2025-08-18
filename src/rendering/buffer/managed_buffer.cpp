@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "buffer_helper.h"
 #include "to_free_list.h"
 
+#include "debug.h"
 #include <stdexcept>
 
 ManagedBufferSection::ManagedBufferSection(ManagedBuffer* buffer, uint32_t offsetBytes, uint32_t sizeBytes)
@@ -54,7 +55,7 @@ ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
 
 void ManagedBuffer::init(uint32_t sizeBytes)
 {
-    assert(sizeBytes > 0);
+    ASSERT(sizeBytes > 0);
 
     this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
     this->bufferSizeBytes = sizeBytes;
@@ -145,7 +146,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-    assert(!this->isMapped);
+    ASSERT(!this->isMapped, "Cannot resize mapped ManagedBuffer");
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -179,7 +180,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
                                                        const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
-    assert(this->isMapped);
+    ASSERT(this->isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 
@@ -222,7 +223,7 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-    assert(section.getBuffer() == this);
+    ASSERT(section.getBuffer() == this, "Attempted to free ManagedBufferSection from wrong ManagedBuffer");
 
     auto it = this->freeSectionList.begin();
     for (; it != this->freeSectionList.end(); ++it)
