@@ -35,7 +35,7 @@ void render();
 
 void flush();
 
-void queueScreenshot(const std::string& filePath = "");
+void queueScreenshot(const bool useTestOutputPath = false);
 
 extern ComPtr<ID3D12Device5> device;
 

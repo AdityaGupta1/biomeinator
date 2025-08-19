@@ -31,6 +31,11 @@ void parseArgs(const int argc, const char* const* argv)
     }
 }
 
+bool hasOption(const std::string& name)
+{
+    return parseResult.count(name) > 0;
+}
+
 bool getAsBool(const std::string& name)
 {
     return parseResult[name].as<bool>();
@@ -49,11 +54,6 @@ uint32_t getAsUint(const std::string& name)
 std::string getAsString(const std::string& name)
 {
     return parseResult[name].as<std::string>();
-}
-
-bool hasOption(const std::string& name)
-{
-    return parseResult.count(name) > 0;
 }
 
 } // namespace SettingsManager

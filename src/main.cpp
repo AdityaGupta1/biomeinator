@@ -10,11 +10,10 @@ int main(int argc, char** argv)
     WindowManager::init();
     Renderer::init();
 
-    const bool hasTestOutput = SettingsManager::hasOption("test-output");
-    if (hasTestOutput)
+    if (SettingsManager::hasOption("test-output"))
     {
         const std::string path = SettingsManager::getAsString("test-output");
-        Renderer::queueScreenshot(path);
+        Renderer::queueScreenshot(true /*useTestOutputPath*/);
         Renderer::render();
         Renderer::flush();
         return 0;
