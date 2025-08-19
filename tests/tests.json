@@ -1,0 +1,10 @@
+"tests": [
+	{
+		"name": "fancy_cornell_box",
+		"scene": "fancy_cornell_box/fancy_cornell_box.gltf",
+		"args": [
+			"--spp=2048"
+		],
+		"golden": "fancy_cornell_box/golden.png",
+	}
+]
