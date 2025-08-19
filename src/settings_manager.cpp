@@ -14,7 +14,7 @@ void parseArgs(const int argc, const char* const* argv)
 {
     Options options("Biomeinator.exe", "Real-time path traced voxel engine");
     OptionAdder optionAdder = options.add_options();
-    optionAdder("h,help", "Print usage");
+    optionAdder("h,help", "Print this message");
     optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));
     optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
     optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("16"));
