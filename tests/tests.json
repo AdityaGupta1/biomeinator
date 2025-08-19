@@ -1,5 +1,13 @@
 "tests": [
 	{
+		"name": "textured_cube",
+		"scene": "textured_cube/textured_cube.gltf",
+		"args": [
+			"--spp=2048"
+		],
+		"golden": "textured_cube/golden.png",
+	},
+	{
 		"name": "fancy_cornell_box",
 		"scene": "fancy_cornell_box/fancy_cornell_box.gltf",
 		"args": [
