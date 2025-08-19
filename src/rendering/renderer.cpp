@@ -848,7 +848,7 @@ void finalizeQueuedScreenshot()
             throw std::runtime_error("Failed to get screenshots directory");
         }
 
-        const std::filesystem::path dir = std::filesystem::path(documentsPath) / L"biomeinator" / "screenshots";
+        const std::filesystem::path dir = std::filesystem::path(documentsPath) / "biomeinator" / "screenshots";
 
         SYSTEMTIME st{};
         GetLocalTime(&st);
