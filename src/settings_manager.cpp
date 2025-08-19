@@ -20,6 +20,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("16"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>());
+    optionAdder("test-output", "Render one frame and save screenshot", cxxopts::value<std::string>());
 
     parseResult = options.parse(argc, argv);
 
@@ -48,6 +49,11 @@ uint32_t getAsUint(const std::string& name)
 std::string getAsString(const std::string& name)
 {
     return parseResult[name].as<std::string>();
+}
+
+bool hasOption(const std::string& name)
+{
+    return parseResult.count(name) > 0;
 }
 
 } // namespace SettingsManager
