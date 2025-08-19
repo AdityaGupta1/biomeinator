@@ -29,6 +29,16 @@ void parseArgs(const int argc, const char* const* argv)
         std::cout << options.help() << std::endl;
         exit(0);
     }
+
+    if (hasOption("test-output"))
+    {
+        const std::string& testOutputPath = getAsString("test-output");
+        if (!testOutputPath.ends_with(".png"))
+        {
+            std::cerr << "--test-output must be a .png" << std::endl;
+            exit(-1);
+        }
+    }
 }
 
 bool hasOption(const std::string& name)
