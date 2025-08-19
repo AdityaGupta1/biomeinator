@@ -759,13 +759,15 @@ struct ScreenshotRequest
     uint32_t height{ 0 };
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
+    bool useTestOutputPath{ false };
 };
 
-static ScreenshotRequest screenshotRequest;
+static ScreenshotRequest screenshotRequest{};
 
-void queueScreenshot()
+void queueScreenshot(const bool useTestOutputPath)
 {
     screenshotRequest.active = true;
+    screenshotRequest.useTestOutputPath = useTestOutputPath;
 }
 
 void captureQueuedScreenshot()
@@ -833,22 +835,38 @@ void finalizeQueuedScreenshot()
     }
     screenshotRequest.readbackBuffer->Unmap(0, nullptr);
 
-    wchar_t docPath[MAX_PATH];
-    if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docPath)))
+    std::filesystem::path path;
+    if (screenshotRequest.useTestOutputPath)
     {
-        throw std::runtime_error("Failed to get screenshots directory");
+        path = std::filesystem::absolute(SettingsManager::getAsString("test-output"));
+    }
+    else
+    {
+        wchar_t documentsPath[MAX_PATH];
+        if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documentsPath)))
+        {
+            throw std::runtime_error("Failed to get screenshots directory");
+        }
+
+        const std::filesystem::path dir = std::filesystem::path(documentsPath) / "biomeinator" / "screenshots";
+
+        SYSTEMTIME st{};
+        GetLocalTime(&st);
+        char fileName[64];
+        sprintf_s(fileName,
+                  "%04d.%02d.%02d_%02d-%02d-%02d.png",
+                  st.wYear,
+                  st.wMonth,
+                  st.wDay,
+                  st.wHour,
+                  st.wMinute,
+                  st.wSecond);
+
+        path = dir / fileName;
     }
 
-    const std::filesystem::path dir = std::filesystem::path(docPath) / L"biomeinator" / "screenshots";
-    std::filesystem::create_directories(dir);
+    std::filesystem::create_directories(path.parent_path());
 
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    char fileName[64];
-    sprintf_s(
-        fileName, "%04d.%02d.%02d_%02d-%02d-%02d.png", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-
-    const std::filesystem::path path = dir / fileName;
     stbi_write_png(path.string().c_str(),
                    screenshotRequest.width,
                    screenshotRequest.height,
@@ -859,7 +877,7 @@ void finalizeQueuedScreenshot()
     printf("Saved screenshot to %s\n", path.string().c_str());
 
     screenshotRequest.readbackBuffer.Reset();
-    screenshotRequest.active = false;
+    screenshotRequest = ScreenshotRequest();
 }
 
 void render()
