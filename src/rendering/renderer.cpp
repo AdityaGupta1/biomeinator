@@ -838,7 +838,7 @@ void finalizeQueuedScreenshot()
     std::filesystem::path path;
     if (screenshotRequest.useTestOutputPath)
     {
-        path = SettingsManager::getAsString("test-output");
+        path = std::filesystem::absolute(SettingsManager::getAsString("test-output"));
     }
     else
     {
