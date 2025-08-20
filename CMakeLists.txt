@@ -68,4 +68,5 @@ target_include_directories(BiomeinatorTests PRIVATE
     ${SRC_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
 )
-target_link_libraries(BiomeinatorTests PRIVATE Catch2::Catch2WithMain Biomeinator)
+add_dependencies(BiomeinatorTests Biomeinator)
+target_link_libraries(BiomeinatorTests PRIVATE Catch2::Catch2WithMain)
