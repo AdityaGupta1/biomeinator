@@ -20,21 +20,6 @@ std::vector<TestCase> LoadTests(const std::filesystem::path& jsonPath)
         return {};
     }
 
-    if (content.front() != '{')
-    {
-        content.insert(content.begin(), '{');
-        content.push_back('}');
-    }
-
-    for (std::string::size_type pos = 0; (pos = content.find(",}")) != std::string::npos; )
-    {
-        content.erase(pos, 1);
-    }
-    for (std::string::size_type pos = 0; (pos = content.find(",]")) != std::string::npos; )
-    {
-        content.erase(pos, 1);
-    }
-
     const nlohmann::json data = nlohmann::json::parse(content);
     const std::filesystem::path testsDir = jsonPath.parent_path();
 

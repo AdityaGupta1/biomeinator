@@ -1,18 +1,24 @@
-"tests": [
-	{
-		"name": "textured_cube",
-		"scene": "textured_cube/textured_cube.gltf",
-		"args": [
-			"--spp=2048"
-		],
-		"golden": "textured_cube/golden.png",
-	},
-	{
-		"name": "fancy_cornell_box",
-		"scene": "fancy_cornell_box/fancy_cornell_box.gltf",
-		"args": [
-			"--spp=2048"
-		],
-		"golden": "fancy_cornell_box/golden.png",
-	}
-]
+{
+	"tests": [
+	    {
+	        "name": "textured_cube",
+	        "scene": "textured_cube/textured_cube.gltf",
+	        "args": [
+	            "--spp=2048",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "textured_cube/golden.png",
+	        "threshold": 0.01
+	    },
+	    {
+	        "name": "fancy_cornell_box",
+	        "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
+	        "args": [
+	            "--spp=2048",
+	            "--maxPathDepth=12"
+	        ],
+	        "golden": "fancy_cornell_box/golden.png",
+	        "threshold": 0.01
+	    }
+	]
+}

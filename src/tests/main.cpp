@@ -18,7 +18,8 @@ TEST_CASE("Render regression tests")
             const std::filesystem::path goldenCopy = test.output.parent_path() / (test.name + "_GOLDEN.png");
             std::filesystem::copy_file(test.golden, goldenCopy, std::filesystem::copy_options::overwrite_existing);
 
-            std::string command = std::string("./Biomeinator.exe --test-output ") + test.output.string();
+            std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
+            std::string command = (exePath.string() + " --test-output " + test.output.string());
             for (const std::string& arg : test.args)
             {
                 command += " " + arg;

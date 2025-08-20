@@ -51,24 +51,22 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
 
-FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v3.8.1
-    GIT_SHALLOW TRUE
-)
-FetchContent_GetProperties(Catch2)
-if(NOT catch2_POPULATED)
-    FetchContent_Populate(Catch2)
-endif()
-set(CATCH2_INCLUDE_DIR "${catch2_SOURCE_DIR}/src")
+Include(FetchContent)
 
-file(GLOB TEST_SRC CONFIGURE_DEPENDS
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.8.1 # or a later release
+)
+
+FetchContent_MakeAvailable(Catch2)
+
+file(GLOB TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"
     "${SRC_DIR}/tests/*.h"
 )
 
-foreach(FILE IN LISTS TEST_SRC)
+foreach(FILE IN LISTS TESTS_SRC)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
     string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
@@ -76,14 +74,14 @@ foreach(FILE IN LISTS TEST_SRC)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(BiomeinatorTests ${TEST_SRC})
+add_executable(BiomeinatorTests ${TESTS_SRC})
 target_include_directories(BiomeinatorTests PRIVATE
     ${SRC_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
-    ${CATCH2_INCLUDE_DIR}
 )
-add_dependencies(BiomeinatorTests Biomeinator)
+target_link_libraries(BiomeinatorTests PRIVATE Catch2::Catch2WithMain)
+add_dependencies(BiomeinatorTests BuildBiomeinator)
 target_compile_definitions(BiomeinatorTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+    BIOMEINATOR_EXE_PATH="$<TARGET_FILE:Biomeinator>"
 )
