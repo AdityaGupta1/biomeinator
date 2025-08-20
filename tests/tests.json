@@ -11,10 +11,20 @@
 	        "threshold": 0.01
 	    },
 	    {
+	        "name": "emissive_cube",
+	        "scene": "emissive_cube/emissive_cube.gltf",
+	        "args": [
+	            "--spp=4096",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "emissive_cube/golden.png",
+	        "threshold": 0.01
+	    },
+	    {
 	        "name": "many_monkeys",
 	        "scene": "many_monkeys/many_monkeys.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "many_monkeys/golden.png",
