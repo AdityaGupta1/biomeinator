@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(Biomeinator LANGUAGES CXX)
 
+include(FetchContent)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -13,6 +15,8 @@ file(GLOB_RECURSE SRC_FILES
     "${SRC_DIR}/*.h"
     "${SRC_DIR}/*.slang"
 )
+
+list(FILTER SRC_FILES EXCLUDE REGEX "/tests/")
 
 # set up Visual Studio filters based on directory structure
 foreach(FILE IN LISTS SRC_FILES)
@@ -46,3 +50,22 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
+
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.8.1
+)
+FetchContent_MakeAvailable(Catch2)
+
+set(TEST_SRC
+    "${SRC_DIR}/tests/main.cpp"
+    "${SRC_DIR}/tests/test_loader.cpp"
+)
+
+add_executable(BiomeinatorTests ${TEST_SRC})
+target_include_directories(BiomeinatorTests PRIVATE
+    ${SRC_DIR}
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
+)
+target_link_libraries(BiomeinatorTests PRIVATE Catch2::Catch2WithMain Biomeinator)
