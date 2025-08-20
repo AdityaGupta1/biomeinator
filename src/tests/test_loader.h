@@ -13,5 +13,5 @@ struct TestCase
     float threshold;
 };
 
-std::vector<TestCase> LoadTests(const std::filesystem::path &jsonPath);
+std::vector<TestCase> LoadTests(const std::filesystem::path& jsonPath);
 

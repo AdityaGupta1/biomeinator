@@ -6,7 +6,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
-std::vector<TestCase> LoadTests(const std::filesystem::path &jsonPath)
+std::vector<TestCase> LoadTests(const std::filesystem::path& jsonPath)
 {
     std::ifstream file(jsonPath);
     if (!file.is_open())
@@ -39,7 +39,7 @@ std::vector<TestCase> LoadTests(const std::filesystem::path &jsonPath)
     const std::filesystem::path testsDir = jsonPath.parent_path();
 
     std::vector<TestCase> cases;
-    for (const nlohmann::json &t : data["tests"])
+    for (const nlohmann::json& t : data["tests"])
     {
         const std::string name = t.at("name").get<std::string>();
 
