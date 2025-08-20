@@ -7,8 +7,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <iostream>
 
-TEST_CASE("Render regression tests")
+TEST_CASE("Image-based tests")
 {
     const auto testsOutputPath = std::filesystem::absolute("test_output");
     static std::once_flag once;
@@ -21,7 +22,7 @@ TEST_CASE("Render regression tests")
         std::filesystem::create_directories(testsOutputPath);
     });
 
-    const auto tests = LoadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
+    const auto tests = loadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
     for (const TestCase& test : tests)
     {
         DYNAMIC_SECTION(test.name)
@@ -40,6 +41,7 @@ TEST_CASE("Render regression tests")
             {
                 command += " " + arg;
             }
+            std::cout << command << std::endl << std::endl;
             const int ret = std::system(command.c_str());
             REQUIRE(ret == 0);
 

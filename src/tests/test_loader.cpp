@@ -6,7 +6,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
-std::vector<TestCase> LoadTests(const std::filesystem::path& jsonPath)
+std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
 {
     std::ifstream file(jsonPath);
     if (!file.is_open())
