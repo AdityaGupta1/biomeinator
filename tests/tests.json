@@ -11,10 +11,20 @@
 	        "threshold": 0.01
 	    },
 	    {
+	        "name": "cornell_box",
+	        "scene": "cornell_box/cornell_box.gltf",
+	        "args": [
+	            "--spp=4096",
+	            "--maxPathDepth=12"
+	        ],
+	        "golden": "cornell_box/golden.png",
+	        "threshold": 0.01
+	    },
+	    {
 	        "name": "fancy_cornell_box",
 	        "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
 	        "args": [
-	            "--spp=2048",
+	            "--spp=4096",
 	            "--maxPathDepth=12"
 	        ],
 	        "golden": "fancy_cornell_box/golden.png",

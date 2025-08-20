@@ -6,6 +6,7 @@
 #include <stb/stb_image.h>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 
 TEST_CASE("Render regression tests")
 {
@@ -14,6 +15,10 @@ TEST_CASE("Render regression tests")
     {
         DYNAMIC_SECTION(test.name)
         {
+            printf("\n=============================================\n");
+            printf("STARTING TEST: %s\n", test.name.c_str());
+            printf("=============================================\n\n");
+
             std::filesystem::create_directories(test.output.parent_path());
             const std::filesystem::path goldenCopy = test.output.parent_path() / (test.name + "_GOLDEN.png");
             std::filesystem::copy_file(test.golden, goldenCopy, std::filesystem::copy_options::overwrite_existing);
@@ -54,6 +59,11 @@ TEST_CASE("Render regression tests")
 
             const double rmse = std::sqrt(sumSq / count) / 255.0;
             REQUIRE(rmse <= test.threshold);
+
+            printf("\n=============================================\n");
+            printf("FINISHED TEST: %s\n", test.name.c_str());
+            printf("Error: %.4f, Threshold: %.4f\n", rmse, test.threshold);
+            printf("=============================================\n\n");
         }
     }
 }
