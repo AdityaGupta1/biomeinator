@@ -10,6 +10,17 @@
 
 TEST_CASE("Render regression tests")
 {
+    const auto testsOutputPath = std::filesystem::absolute("test_output");
+    static std::once_flag once;
+    std::call_once(once, [&]{
+        printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
+        if (std::filesystem::exists(testsOutputPath))
+        {
+            std::filesystem::remove_all(testsOutputPath);
+        }
+        std::filesystem::create_directories(testsOutputPath);
+    });
+
     const auto tests = LoadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
     for (const TestCase& test : tests)
     {
@@ -19,12 +30,12 @@ TEST_CASE("Render regression tests")
             printf("STARTING TEST: %s\n", test.name.c_str());
             printf("=============================================\n\n");
 
-            std::filesystem::create_directories(test.output.parent_path());
-            const std::filesystem::path goldenCopy = test.output.parent_path() / (test.name + "_GOLDEN.png");
+            const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
             std::filesystem::copy_file(test.golden, goldenCopy, std::filesystem::copy_options::overwrite_existing);
 
             std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
-            std::string command = (exePath.string() + " --test-output " + test.output.string());
+            const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
+            std::string command = (exePath.string() + " --test-output " + generatedImagePath.string());
             for (const std::string& arg : test.args)
             {
                 command += " " + arg;
@@ -35,7 +46,7 @@ TEST_CASE("Render regression tests")
             int genW = 0;
             int genH = 0;
             int genC = 0;
-            unsigned char* generated = stbi_load(test.output.string().c_str(), &genW, &genH, &genC, 3);
+            unsigned char* generated = stbi_load(generatedImagePath.string().c_str(), &genW, &genH, &genC, 3);
             REQUIRE(generated != nullptr);
 
             int goldW = 0;
@@ -67,4 +78,3 @@ TEST_CASE("Render regression tests")
         }
     }
 }
-

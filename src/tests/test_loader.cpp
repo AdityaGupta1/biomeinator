@@ -31,7 +31,6 @@ std::vector<TestCase> LoadTests(const std::filesystem::path& jsonPath)
         TestCase tc;
         tc.name = name;
         tc.golden = testsDir / t.at("golden").get<std::string>();
-        tc.output = std::filesystem::path("test_output") / (name + "_GENERATED.png");
         tc.threshold = t.value("threshold", 0.0f);
         tc.args = t.value("args", std::vector<std::string>{});
 

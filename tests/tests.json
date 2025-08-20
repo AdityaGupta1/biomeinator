@@ -1,10 +1,30 @@
 {
 	"tests": [
 	    {
+	        "name": "two_triangles",
+	        "scene": "two_triangles/two_triangles.gltf",
+	        "args": [
+	            "--spp=4096",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "two_triangles/golden.png",
+	        "threshold": 0.01
+	    },
+	    {
+	        "name": "many_monkeys",
+	        "scene": "many_monkeys/many_monkeys.gltf",
+	        "args": [
+	            "--spp=4096",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "many_monkeys/golden.png",
+	        "threshold": 0.01
+	    },
+	    {
 	        "name": "textured_cube",
 	        "scene": "textured_cube/textured_cube.gltf",
 	        "args": [
-	            "--spp=2048",
+	            "--spp=4096",
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "textured_cube/golden.png",
