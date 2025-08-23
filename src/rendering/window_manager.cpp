@@ -18,9 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "window_manager.h"
 
-#include "../settings_manager.h"
-
 #include "renderer.h"
+#include "settings_manager.h"
 #include "scene/gltf_loader.h"
 
 #include <commdlg.h>

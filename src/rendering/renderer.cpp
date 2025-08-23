@@ -21,8 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include <d3dcompiler.h>
 
-#include "../settings_manager.h"
 #include "param_block_manager.h"
+#include "settings_manager.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"

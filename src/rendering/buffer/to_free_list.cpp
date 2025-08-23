@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "to_free_list.h"
 
 #include "managed_buffer.h"
-#include "rendering/scene/scene.h"
+#include "scene/scene.h"
 
 ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
 {
