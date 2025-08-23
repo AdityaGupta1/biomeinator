@@ -52,5 +52,7 @@ void RayGeneration()
         accumulatedColor += payload.pathColor;
     }
 
-    renderTarget[pixelIdx] = float4(accumulatedColor / renderParams.numSamplesPerPixel, 1);
+    const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
+    const float3 colorPostTonemap = applyTonemapping(colorPreTonemap);
+    renderTarget[pixelIdx] = float4(colorPostTonemap, 1);
 }
