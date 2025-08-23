@@ -23,7 +23,7 @@ on a specific subset of glTF files and is not guaranteed to work for files outsi
 
 #include "gltf_loader.h"
 
-#include "tinygltf/tiny_gltf.h"
+#include <tinygltf/tiny_gltf.h>
 
 #include <filesystem>
 #include <string>

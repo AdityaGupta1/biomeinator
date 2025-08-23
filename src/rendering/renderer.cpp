@@ -44,10 +44,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <cstdio>
 #include <shlobj.h>
 
-#include "slang/slang.h"
-#include "slang/slang-com-ptr.h"
+#include <slang/slang.h>
+#include <slang/slang-com-ptr.h>
 
-#include "stb/stb_image_write.h"
+#include <stb/stb_image_write.h>
 
 using namespace DirectX;
 
