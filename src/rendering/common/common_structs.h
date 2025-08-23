@@ -154,6 +154,14 @@ public:
     uint pad2;
 };
 
+struct ConstantParams
+{
+    uint rngSeed;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
 struct CameraParams
 {
     float3 pos_WS;

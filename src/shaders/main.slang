@@ -27,7 +27,8 @@ RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_S
 void RayGeneration()
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
-    const float2 size = DispatchRaysDimensions().xy;
+    const uint2 size = DispatchRaysDimensions().xy;
+    const uint linearPixelIdx = pixelIdx.y * size.x + pixelIdx.x;
 
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
@@ -36,7 +37,7 @@ void RayGeneration()
         payload.pathWeight = float3(1, 1, 1);
         payload.pathColor = float3(0, 0, 0);
         payload.flags = 0;
-        payload.rng = initRandomSampler4(uint4(pixelIdx, sampleIdx, renderParams.frameNumber));
+        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
 
         const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());
         const float3 targetPos_WS = calculateRayTarget(pixelIdx + jitter, size);
