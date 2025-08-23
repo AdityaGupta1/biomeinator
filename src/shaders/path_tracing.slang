@@ -110,11 +110,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             {
                 // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
                 const float3 bsdfVal = evaluateBsdf<true /*calculateFresnelReflectance*/>(
-                    surfMaterial,
-                payload.hitInfo.uv,
-                wo_WS,
-                lightSample.wi_WS,
-                surfNor_WS);
+                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
                 const float bsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
                 const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdf);
                 payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
