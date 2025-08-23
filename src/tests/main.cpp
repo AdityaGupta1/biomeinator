@@ -32,7 +32,7 @@ TEST_CASE("Image-based tests")
             printf("=============================================\n\n");
 
             const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
-            std::filesystem::copy_file(test.golden, goldenCopy, std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
 
             std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
             const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");

@@ -51,8 +51,6 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
 
-Include(FetchContent)
-
 FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git

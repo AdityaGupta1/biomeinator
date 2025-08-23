@@ -8,7 +8,7 @@ struct TestCase
 {
     std::string name;
     std::vector<std::string> args;
-    std::filesystem::path golden;
+    std::filesystem::path goldenPath;
     float threshold;
 };
 

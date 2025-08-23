@@ -30,7 +30,7 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
 
         TestCase tc;
         tc.name = name;
-        tc.golden = testsDir / t.at("golden").get<std::string>();
+        tc.goldenPath = testsDir / t.at("golden").get<std::string>();
         tc.threshold = t.value("threshold", 0.0f);
         tc.args = t.value("args", std::vector<std::string>{});
 
@@ -40,7 +40,7 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
         int width = 0;
         int height = 0;
         int comp = 0;
-        if (stbi_info(tc.golden.string().c_str(), &width, &height, &comp) != 0)
+        if (stbi_info(tc.goldenPath.string().c_str(), &width, &height, &comp) != 0)
         {
             tc.args.push_back("--width=" + std::to_string(width));
             tc.args.push_back("--height=" + std::to_string(height));
