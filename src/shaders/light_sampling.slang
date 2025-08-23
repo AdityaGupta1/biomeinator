@@ -73,7 +73,7 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
     lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
 
     RayDesc ray;
-    ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
+    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
     ray.Direction = result.wi_WS;
     ray.TMin = 0.f;
     ray.TMax = 10000.f;

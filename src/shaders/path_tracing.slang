@@ -127,7 +127,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         }
         payload.pathWeight *= adjustedBsdfValue;
 
-        ray.Origin = surfPos_WS + 0.001f * surfNor_WS;
+        ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
         ray.Direction = surfBsdfSample.wi_WS;
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
