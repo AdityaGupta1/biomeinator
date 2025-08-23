@@ -35,12 +35,12 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
         tc.args = t.value("args", std::vector<std::string>{});
 
         const std::filesystem::path scene = testsDir / t.at("scene").get<std::string>();
-        tc.args.push_back("--scene=" + scene.string());
+        tc.args.push_back("--scene=" + scene.generic_string());
 
         int width = 0;
         int height = 0;
         int comp = 0;
-        if (stbi_info(tc.goldenPath.string().c_str(), &width, &height, &comp) != 0)
+        if (stbi_info(tc.goldenPath.generic_string().c_str(), &width, &height, &comp) != 0)
         {
             tc.args.push_back("--width=" + std::to_string(width));
             tc.args.push_back("--height=" + std::to_string(height));

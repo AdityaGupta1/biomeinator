@@ -36,7 +36,7 @@ TEST_CASE("Image-based tests")
 
             std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
             const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
-            std::string command = (exePath.string() + " --testOutput " + generatedImagePath.string());
+            std::string command = (exePath.generic_string() + " --testOutput=" + generatedImagePath.generic_string());
             for (const std::string& arg : test.args)
             {
                 command += " " + arg;
@@ -48,13 +48,13 @@ TEST_CASE("Image-based tests")
             int genW = 0;
             int genH = 0;
             int genC = 0;
-            unsigned char* generated = stbi_load(generatedImagePath.string().c_str(), &genW, &genH, &genC, 3);
+            unsigned char* generated = stbi_load(generatedImagePath.generic_string().c_str(), &genW, &genH, &genC, 3);
             REQUIRE(generated != nullptr);
 
             int goldW = 0;
             int goldH = 0;
             int goldC = 0;
-            unsigned char* golden = stbi_load(goldenCopy.string().c_str(), &goldW, &goldH, &goldC, 3);
+            unsigned char* golden = stbi_load(goldenCopy.generic_string().c_str(), &goldW, &goldH, &goldC, 3);
             REQUIRE(golden != nullptr);
 
             REQUIRE(genW == goldW);
