@@ -40,7 +40,7 @@ namespace GltfLoader
 
 void loadGltf(const std::string& filePathStr, ::Scene& scene)
 {
-    printf("Loading GLTF file: %s\n", filePathStr.c_str());
+    printf("Loading GLTF file: %s\n", std::filesystem::path(filePathStr).generic_string().c_str());
 
     scene.clear();
 

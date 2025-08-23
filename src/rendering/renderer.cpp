@@ -874,7 +874,7 @@ void finalizeQueuedScreenshot()
                    pixels.data(),
                    screenshotRequest.width * 4);
 
-    printf("Saved screenshot to %s\n", path.string().c_str());
+    printf("Saved screenshot to %s\n", path.generic_string().c_str());
 
     screenshotRequest.readbackBuffer.Reset();
     screenshotRequest = ScreenshotRequest();

@@ -19,8 +19,8 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
     optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("16"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
-    optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>());
-    optionAdder("test-output", "Test screenshot output path (*.png)", cxxopts::value<std::string>());
+    optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
+    optionAdder("test-output", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
 
     parseResult = options.parse(argc, argv);
 
