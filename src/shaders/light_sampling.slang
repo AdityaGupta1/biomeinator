@@ -32,8 +32,8 @@ StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(REGISTER_AREA_LIG
 
 AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {
-    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * renderParams.numAreaLights)];
-    pdf = 1.f / renderParams.numAreaLights;
+    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
+    pdf = 1.f / sceneParams.numAreaLights;
     return areaLights[lightIdx];
 }
 
@@ -106,7 +106,7 @@ float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 poin
 
     const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
     const AreaLight light = areaLights[areaLightIdx];
-    const float lightPickPdf = 1.f / renderParams.numAreaLights;
+    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
 }

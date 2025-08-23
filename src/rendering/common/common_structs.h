@@ -169,17 +169,20 @@ struct CameraParams
     float tanHalfFovY;
 };
 
+struct SceneParams
+{
+    uint numAreaLights;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
 struct RenderParams
 {
     uint frameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
-    uint numAreaLights;
-
     uint enableMis;
-    uint pad0;
-    uint pad1;
-    uint pad2;
 };
 
 #if !_hlsl

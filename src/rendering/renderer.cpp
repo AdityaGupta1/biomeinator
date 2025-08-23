@@ -902,7 +902,8 @@ void render()
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    renderParams->numAreaLights = scene.getNumAreaLights();
+    auto& sceneParams = paramBlockManager.sceneParams;
+    sceneParams->numAreaLights = scene.getNumAreaLights();
 
     if (scene.hasTlas())
     {

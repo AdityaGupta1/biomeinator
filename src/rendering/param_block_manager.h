@@ -29,6 +29,7 @@ private:
 
 public:
     CameraParams* cameraParams{ nullptr };
+    SceneParams* sceneParams{ nullptr };
     RenderParams* renderParams{ nullptr };
 
     void init();
