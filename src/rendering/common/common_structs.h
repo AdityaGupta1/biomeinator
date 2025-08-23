@@ -175,6 +175,11 @@ struct SceneParams
     uint maxPathDepth;
     uint frameNumber;
     uint numAreaLights;
+
+    uint enableMis;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 #if !_hlsl

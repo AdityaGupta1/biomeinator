@@ -10,9 +10,9 @@ int main(int argc, char** argv)
     WindowManager::init();
     Renderer::init();
 
-    if (SettingsManager::hasOption("test-output"))
+    if (SettingsManager::hasOption("testOutput"))
     {
-        const std::string path = SettingsManager::getAsString("test-output");
+        const std::string path = SettingsManager::getAsString("testOutput");
         Renderer::queueScreenshot(true /*useTestOutputPath*/);
         Renderer::render();
         Renderer::flush();

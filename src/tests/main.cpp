@@ -36,7 +36,7 @@ TEST_CASE("Image-based tests")
 
             std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
             const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
-            std::string command = (exePath.string() + " --test-output " + generatedImagePath.string());
+            std::string command = (exePath.string() + " --testOutput " + generatedImagePath.string());
             for (const std::string& arg : test.args)
             {
                 command += " " + arg;

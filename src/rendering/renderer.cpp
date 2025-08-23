@@ -838,7 +838,7 @@ void finalizeQueuedScreenshot()
     std::filesystem::path path;
     if (screenshotRequest.useTestOutputPath)
     {
-        path = std::filesystem::absolute(SettingsManager::getAsString("test-output"));
+        path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
     }
     else
     {
@@ -895,6 +895,8 @@ void render()
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     sceneParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
+    sceneParams->enableMis = SettingsManager::getAsBool("enableMis");
+
     sceneParams->frameNumber = frameNumber;
 
     beginFrame();

@@ -102,21 +102,24 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         calcPathPosAndNormal(ray, payload, surfPos_WS, surfNor_WS);
         const float3 wo_WS = -ray.Direction;
 
-        // TODO: don't do this if material is only specular refl/trans and has 0 roughness
-        const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
-        if (lightSample.didHitLight)
+        if (sceneParams.enableMis == 1)
         {
-            // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
-            const float3 bsdfVal = evaluateBsdf<true /*calculateFresnelReflectance*/>(
-                surfMaterial,
+            // TODO: don't do this if material is only specular refl/trans and has 0 roughness
+            const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
+            if (lightSample.didHitLight)
+            {
+                // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
+                const float3 bsdfVal = evaluateBsdf<true /*calculateFresnelReflectance*/>(
+                    surfMaterial,
                 payload.hitInfo.uv,
                 wo_WS,
                 lightSample.wi_WS,
                 surfNor_WS);
-            const float bsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-            const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdf);
-            payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
+                const float bsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdf);
+                payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
                 * lightSample.Le / lightSample.pdf;
+            }
         }
 
         const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
@@ -140,17 +143,20 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             return;
         }
 
-        const Material hitMaterial = materials[payload.materialId];
-        if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
+        if (sceneParams.enableMis == 1)
         {
-            float3 hitPos_WS, hitNor_WS;
-            calcPathPosAndNormal(ray, payload, hitPos_WS, hitNor_WS);
+            const Material hitMaterial = materials[payload.materialId];
+            if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
+            {
+                float3 hitPos_WS, hitNor_WS;
+                calcPathPosAndNormal(ray, payload, hitPos_WS, hitNor_WS);
 
-            const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, hitPos_WS, ray.Direction);
-            const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
-            payload.pathWeight *= misWeight;
+                const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, hitPos_WS, ray.Direction);
+                const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
+                payload.pathWeight *= misWeight;
+            }
+            // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
         }
-        // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
     }
 }
 

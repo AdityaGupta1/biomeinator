@@ -20,7 +20,8 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("16"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
-    optionAdder("test-output", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
+    optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
+    optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
 
     parseResult = options.parse(argc, argv);
 
@@ -30,12 +31,12 @@ void parseArgs(const int argc, const char* const* argv)
         exit(0);
     }
 
-    if (hasOption("test-output"))
+    if (hasOption("testOutput"))
     {
-        const std::string& testOutputPath = getAsString("test-output");
+        const std::string& testOutputPath = getAsString("testOutput");
         if (!testOutputPath.ends_with(".png"))
         {
-            std::cerr << "--test-output must be a .png" << std::endl;
+            std::cerr << "--testOutput must be a .png" << std::endl;
             exit(-1);
         }
     }
