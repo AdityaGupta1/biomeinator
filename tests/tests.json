@@ -4,21 +4,21 @@
 	        "name": "two_triangles",
 	        "scene": "two_triangles/two_triangles.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "two_triangles/golden.png",
-	        "threshold": 0.01
+	        "threshold": 0.001
 	    },
 	    {
 	        "name": "emissive_cube",
 	        "scene": "emissive_cube/emissive_cube.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "emissive_cube/golden.png",
-	        "threshold": 0.01
+	        "threshold": 0.002
 	    },
 	    {
 	        "name": "many_monkeys",
@@ -28,23 +28,23 @@
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "many_monkeys/golden.png",
-	        "threshold": 0.01
+	        "threshold": 0.005
 	    },
 	    {
 	        "name": "textured_cube",
 	        "scene": "textured_cube/textured_cube.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "textured_cube/golden.png",
-	        "threshold": 0.01
+	        "threshold": 0.003
 	    },
 	    {
 	        "name": "cornell_box",
 	        "scene": "cornell_box/cornell_box.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=12"
 	        ],
 	        "golden": "cornell_box/golden.png",
@@ -54,7 +54,7 @@
 	        "name": "fancy_cornell_box",
 	        "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
 	        "args": [
-	            "--spp=4096",
+	            "--spp=8192",
 	            "--maxPathDepth=12"
 	        ],
 	        "golden": "fancy_cornell_box/golden.png",
