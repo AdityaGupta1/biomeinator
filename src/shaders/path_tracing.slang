@@ -50,12 +50,6 @@ float3 evalRayPos(const RayDesc ray, const float t)
     return mad(ray.Direction, t, ray.Origin);
 }
 
-void calcPathPosAndNormal(const RayDesc ray, const Payload payload, out float3 hitPos_WS, out float3 normal_WS)
-{
-    hitPos_WS = evalRayPos(ray, payload.hitInfo.hitT);
-    normal_WS = faceforward(payload.hitInfo.normal_WS, -ray.Direction);
-}
-
 float powerHeuristic(const float pdfA, const float pdfB)
 {
     const float pdfA2 = pdfA * pdfA;
@@ -98,9 +92,9 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
              payload.pathWeight /= survivalProbability;
         }
 
-        float3 surfPos_WS, surfNor_WS;
-        calcPathPosAndNormal(ray, payload, surfPos_WS, surfNor_WS);
         const float3 wo_WS = -ray.Direction;
+        const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
 
         if (renderParams.enableMis == 1)
         {
@@ -144,10 +138,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             const Material hitMaterial = materials[payload.materialId];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                float3 hitPos_WS, hitNor_WS;
-                calcPathPosAndNormal(ray, payload, hitPos_WS, hitNor_WS);
-
-                const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, hitPos_WS, ray.Direction);
+                const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
                 payload.pathWeight *= misWeight;
             }
@@ -167,9 +158,12 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
 
-    const float3 normal_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    payload.hitInfo.normal_WS = normalize(mul(normal_OS, (float3x3) ObjectToWorld4x3()));
-    payload.hitInfo.hitT = RayTCurrent();
+    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
+
+    const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
+    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3) ObjectToWorld4x3()));
+
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
