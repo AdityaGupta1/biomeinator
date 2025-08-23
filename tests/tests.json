@@ -11,6 +11,16 @@
 	        "threshold": 0.001
 	    },
 	    {
+	        "name": "occluded_light",
+	        "scene": "occluded_light/occluded_light.gltf",
+	        "args": [
+	            "--spp=8192",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "occluded_light/golden.png",
+	        "threshold": 0.002
+	    },
+	    {
 	        "name": "emissive_cube",
 	        "scene": "emissive_cube/emissive_cube.gltf",
 	        "args": [
@@ -31,6 +41,16 @@
 	        "threshold": 0.005
 	    },
 	    {
+	        "name": "many_faces_emitter",
+	        "scene": "many_faces_emitter/many_faces_emitter.gltf",
+	        "args": [
+	            "--spp=8192",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "many_faces_emitter/golden.png",
+	        "threshold": 0.005
+	    },
+	    {
 	        "name": "textured_cube",
 	        "scene": "textured_cube/textured_cube.gltf",
 	        "args": [
@@ -39,6 +59,16 @@
 	        ],
 	        "golden": "textured_cube/golden.png",
 	        "threshold": 0.003
+	    },
+	    {
+	        "name": "penguin_gallery",
+	        "scene": "penguin_gallery/penguin_gallery.gltf",
+	        "args": [
+	            "--spp=8192",
+	            "--maxPathDepth=2"
+	        ],
+	        "golden": "penguin_gallery/golden.png",
+	        "threshold": 0.002
 	    },
 	    {
 	        "name": "cornell_box",

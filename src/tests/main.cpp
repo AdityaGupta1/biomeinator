@@ -70,6 +70,7 @@ int main(int argc, char** argv)
         printf("=============================================\n\n");
 
         const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
+        TEST_ASSERT(std::filesystem::is_regular_file(test.goldenPath));
         std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
