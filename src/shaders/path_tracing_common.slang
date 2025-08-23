@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../rendering/common/common_structs.h"
 
-#define RAY_ORIGIN_OFFSET_EPSILON 0.0001f
+#define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(REGISTER_RAYTRACING_ACS, REGISTER_SPACE_BUFFERS);
 

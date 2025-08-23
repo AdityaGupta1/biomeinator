@@ -24,12 +24,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 struct HitInfo
 {
-    float3 normal_WS;
-    float hitT;
+    float3 hitPos_WS;
+    uint instanceId;
+
+    float3 hitNor_WS;
+    uint triangleIdx;
 
     float2 uv;
-    uint instanceId;
-    uint triangleIdx;
+    uint pad0;
+    uint pad1;
 };
 
 struct Payload
