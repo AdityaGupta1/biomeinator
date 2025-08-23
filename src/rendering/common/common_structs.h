@@ -171,9 +171,9 @@ struct CameraParams
 
 struct SceneParams
 {
+    uint frameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
-    uint frameNumber;
     uint numAreaLights;
 
     uint enableMis;

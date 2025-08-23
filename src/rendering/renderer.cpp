@@ -893,11 +893,10 @@ void render()
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
     auto& sceneParams = paramBlockManager.sceneParams;
+    sceneParams->frameNumber = frameNumber;
     sceneParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     sceneParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     sceneParams->enableMis = SettingsManager::getAsBool("enableMis");
-
-    sceneParams->frameNumber = frameNumber;
 
     beginFrame();
 
