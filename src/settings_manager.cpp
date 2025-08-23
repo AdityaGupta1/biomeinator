@@ -12,7 +12,7 @@ ParseResult parseResult;
 
 void parseArgs(const int argc, const char* const* argv)
 {
-    Options options("Biomeinator.exe", "Real-time path traced voxel engine");
+    Options options("Biomeinator", "Real-time path traced voxel engine");
     OptionAdder optionAdder = options.add_options();
     optionAdder("h,help", "Print this message");
     optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));

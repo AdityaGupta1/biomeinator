@@ -1,14 +1,15 @@
 #include "test_loader.h"
 
+#define CXXOPTS_NO_EXCEPTIONS
+#include <cxxopts/cxxopts.hpp>
+
 #include <filesystem>
 #include <stb/stb_image.h>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
-
-static int numAsserts = 0;
-static int numFailedAsserts = 0;
+#include <regex>
 
 #define TEST_ASSERT(cond)                                                                                              \
     do                                                                                                                 \
@@ -24,6 +25,25 @@ static int numFailedAsserts = 0;
 
 int main(int argc, char** argv)
 {
+    using namespace cxxopts;
+
+    Options options("BiomeinatorTests", "Tests for Biomeinator");
+    OptionAdder optionAdder = options.add_options();
+    optionAdder("h,help", "Print this message");
+    optionAdder("f,filter", "Test filter (regex)", cxxopts::value<std::string>()->default_value(".*"));
+
+    ParseResult parseResult = options.parse(argc, argv);
+
+    if (parseResult.count("help"))
+    {
+        std::cout << options.help() << std::endl;
+        exit(0);
+    }
+
+    const std::string& testFilterStr = parseResult["filter"].as<std::string>();
+    printf("Filtering tests with regex: %s\n", testFilterStr.c_str());
+    const std::regex testFilter(parseResult["filter"].as<std::string>());
+
     const auto testsOutputPath = std::filesystem::absolute("test_output");
     printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
     if (std::filesystem::exists(testsOutputPath))
@@ -33,8 +53,18 @@ int main(int argc, char** argv)
     std::filesystem::create_directories(testsOutputPath);
 
     const auto tests = loadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
+    const int numTests = tests.size();
+    std::vector<std::string> failedTestNames;
     for (const TestCase& test : tests)
     {
+        if (!std::regex_match(test.name, testFilter))
+        {
+            continue;
+        }
+
+        int numAsserts = 0;
+        int numFailedAsserts = 0;
+
         printf("\n=============================================\n");
         printf("STARTING TEST: %s\n", test.name.c_str());
         printf("=============================================\n\n");
@@ -81,19 +111,40 @@ int main(int argc, char** argv)
         const double rmse = std::sqrt(sumSq / count) / 255.0;
         TEST_ASSERT(rmse <= test.threshold);
 
+        if (numFailedAsserts == 0)
+        {
+            printf("\033[32mAll (%d) assertions passed.\033[0m\n", numAsserts);
+        }
+        else
+        {
+            printf("\033[31m%d/%d assertion(s) failed.\033[0m\n", numFailedAsserts, numAsserts);
+            failedTestNames.push_back(test.name);
+        }
+
         printf("\n=============================================\n");
         printf("FINISHED TEST: %s\n", test.name.c_str());
         printf("Error: %.4f, Threshold: %.4f\n", rmse, test.threshold);
         printf("=============================================\n\n");
     }
 
-    if (numFailedAsserts == 0)
+    const int numFailedTests = failedTestNames.size();
+    const bool didFail = (numFailedTests > 0);
+    printf(didFail ? "\033[31m" : "\033[32m");
+    printf("\n=============================================\n");
+    if (numFailedTests == 0)
     {
-        printf("\033[32mAll (%d) assertions passed.\033[0m\n", numAsserts);
+        printf("All (%d) tests passed.\n", numTests);
     }
     else
     {
-        printf("\033[31m%d/%d assertion(s) failed.\033[0m\n", numFailedAsserts, numAsserts);
+        printf("%d/%d tests(s) failed:\n", numFailedTests, numTests);
+        for (const auto& testName : failedTestNames)
+        {
+            printf("- %s\n", testName.c_str());
+        }
     }
-    return (numFailedAsserts == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    printf("=============================================\n\n");
+    printf("\033[0m");
+
+    return (numFailedTests == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
