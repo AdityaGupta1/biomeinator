@@ -108,7 +108,7 @@ void init()
     for (auto& frame : frameCtxs)
     {
         camera.copyParamsTo(frame.paramBlockManager.cameraParams);
-        frame.paramBlockManager.sceneParams->frameNumber = 0;
+        frame.paramBlockManager.renderParams->frameNumber = 0;
     }
 
     scene.init();
@@ -892,17 +892,17 @@ void render()
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    auto& sceneParams = paramBlockManager.sceneParams;
-    sceneParams->frameNumber = frameNumber;
-    sceneParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
-    sceneParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
-    sceneParams->enableMis = SettingsManager::getAsBool("enableMis");
+    auto& renderParams = paramBlockManager.renderParams;
+    renderParams->frameNumber = frameNumber;
+    renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
+    renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
+    renderParams->enableMis = SettingsManager::getAsBool("enableMis");
 
     beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    sceneParams->numAreaLights = scene.getNumAreaLights();
+    renderParams->numAreaLights = scene.getNumAreaLights();
 
     if (scene.hasTlas())
     {

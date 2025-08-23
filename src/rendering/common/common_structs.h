@@ -169,7 +169,7 @@ struct CameraParams
     float tanHalfFovY;
 };
 
-struct SceneParams
+struct RenderParams
 {
     uint frameNumber;
     uint numSamplesPerPixel;

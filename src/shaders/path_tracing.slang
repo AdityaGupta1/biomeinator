@@ -72,7 +72,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         return;
     }
 
-    for (uint pathDepth = 0; pathDepth < sceneParams.maxPathDepth; ++pathDepth)
+    for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         const Material surfMaterial = materials[payload.materialId];
 
@@ -81,7 +81,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
 
-        const bool isLastBounce = pathDepth == sceneParams.maxPathDepth - 1;
+        const bool isLastBounce = pathDepth == renderParams.maxPathDepth - 1;
         if (!surfMaterial.canScatter() || isLastBounce)
         {
             return;
@@ -102,7 +102,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         calcPathPosAndNormal(ray, payload, surfPos_WS, surfNor_WS);
         const float3 wo_WS = -ray.Direction;
 
-        if (sceneParams.enableMis == 1)
+        if (renderParams.enableMis == 1)
         {
             // TODO: don't do this if material is only specular refl/trans and has 0 roughness
             const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
@@ -139,7 +139,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             return;
         }
 
-        if (sceneParams.enableMis == 1)
+        if (renderParams.enableMis == 1)
         {
             const Material hitMaterial = materials[payload.materialId];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
