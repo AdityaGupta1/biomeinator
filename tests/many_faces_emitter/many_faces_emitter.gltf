@@ -25,15 +25,31 @@
 				3,
 				3,
 				3
+			],
+			"translation":[
+				0,
+				0,
+				-2
 			]
 		},
 		{
 			"mesh":1,
-			"name":"Icosphere",
+			"name":"Plane.001",
+			"rotation":[
+				0,
+				0,
+				1,
+				1.6292068494294654e-07
+			],
+			"scale":[
+				3,
+				3,
+				3
+			],
 			"translation":[
 				0,
-				2,
-				0
+				3,
+				-2
 			]
 		}
 	],
@@ -96,7 +112,7 @@
 			]
 		},
 		{
-			"name":"Icosphere",
+			"name":"Plane.001",
 			"primitives":[
 				{
 					"attributes":{
@@ -148,35 +164,35 @@
 		{
 			"bufferView":4,
 			"componentType":5126,
-			"count":10593,
+			"count":16641,
 			"max":[
 				1,
-				1,
-				0.9999999403953552
+				0,
+				1
 			],
 			"min":[
-				-0.9999999403953552,
 				-1,
-				-0.9999999403953552
+				0,
+				-1
 			],
 			"type":"VEC3"
 		},
 		{
 			"bufferView":5,
 			"componentType":5126,
-			"count":10593,
+			"count":16641,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":6,
 			"componentType":5126,
-			"count":10593,
+			"count":16641,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":7,
 			"componentType":5123,
-			"count":61440,
+			"count":98304,
 			"type":"SCALAR"
 		}
 	],
@@ -207,32 +223,32 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":127116,
+			"byteLength":199692,
 			"byteOffset":140,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":127116,
-			"byteOffset":127256,
+			"byteLength":199692,
+			"byteOffset":199832,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":84744,
-			"byteOffset":254372,
+			"byteLength":133128,
+			"byteOffset":399524,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":122880,
-			"byteOffset":339116,
+			"byteLength":196608,
+			"byteOffset":532652,
 			"target":34963
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":461996,
+			"byteLength":729260,
 			"uri":"many_faces_emitter.bin"
 		}
 	]
