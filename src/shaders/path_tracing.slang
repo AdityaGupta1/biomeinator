@@ -158,11 +158,13 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
 
+    const float4x3 objectToWorldMat = ObjectToWorld4x3();
+
     const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
-    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
 
     const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3) ObjectToWorld4x3()));
+    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3)objectToWorldMat));
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     payload.hitInfo.instanceId = InstanceID();
