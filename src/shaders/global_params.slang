@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 cbuffer GlobalParams : REGISTER_B(REGISTER_GLOBAL_PARAMS, REGISTER_SPACE_BUFFERS)
 {
+    ConstantParams constantParams;
     CameraParams cameraParams;
     SceneParams sceneParams;
+    RenderParams renderParams;
 };

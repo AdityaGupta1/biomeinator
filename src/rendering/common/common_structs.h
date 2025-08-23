@@ -154,6 +154,14 @@ public:
     uint pad2;
 };
 
+struct ConstantParams
+{
+    uint rngSeed;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
 struct CameraParams
 {
     float3 pos_WS;
@@ -171,15 +179,18 @@ struct CameraParams
 
 struct SceneParams
 {
-    uint numSamplesPerPixel;
-    uint maxPathDepth;
-    uint frameNumber;
     uint numAreaLights;
-
-    uint enableMis;
     uint pad0;
     uint pad1;
     uint pad2;
+};
+
+struct RenderParams
+{
+    uint frameNumber;
+    uint numSamplesPerPixel;
+    uint maxPathDepth;
+    uint enableMis;
 };
 
 #if !_hlsl

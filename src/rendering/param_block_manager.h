@@ -28,8 +28,10 @@ private:
     void* host_paramBuffer{ nullptr };
 
 public:
+    ConstantParams* constantParams{ nullptr };
     CameraParams* cameraParams{ nullptr };
     SceneParams* sceneParams{ nullptr };
+    RenderParams* renderParams{ nullptr };
 
     void init();
 

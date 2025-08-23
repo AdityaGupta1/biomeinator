@@ -59,6 +59,7 @@ namespace Renderer
 void initDevice();
 void initRenderTarget();
 void initCommand();
+void initConstantParams();
 void initRootSignature();
 void compileShadersAndInitPipeline();
 
@@ -103,13 +104,9 @@ void init()
         frame.paramBlockManager.init();
     }
 
-    camera.init(XMConvertToRadians(defaultFovYDegrees));
+    initConstantParams();
 
-    for (auto& frame : frameCtxs)
-    {
-        camera.copyParamsTo(frame.paramBlockManager.cameraParams);
-        frame.paramBlockManager.sceneParams->frameNumber = 0;
-    }
+    camera.init(XMConvertToRadians(defaultFovYDegrees));
 
     scene.init();
 
@@ -279,6 +276,20 @@ void initCommand()
     device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
 
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+}
+
+void initConstantParams()
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint32_t> dist(0, std::numeric_limits<uint32_t>::max());
+    const uint32_t rngSeed = dist(gen);
+
+    for (auto& frame : frameCtxs)
+    {
+        auto& constantParams = frame.paramBlockManager.constantParams;
+        constantParams->rngSeed = rngSeed;
+    }
 }
 
 enum class Param
@@ -892,17 +903,17 @@ void render()
     camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    auto& sceneParams = paramBlockManager.sceneParams;
-    sceneParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
-    sceneParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
-    sceneParams->enableMis = SettingsManager::getAsBool("enableMis");
-
-    sceneParams->frameNumber = frameNumber;
+    auto& renderParams = paramBlockManager.renderParams;
+    renderParams->frameNumber = frameNumber;
+    renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
+    renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
+    renderParams->enableMis = SettingsManager::getAsBool("enableMis");
 
     beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
+    auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
     if (scene.hasTlas())
