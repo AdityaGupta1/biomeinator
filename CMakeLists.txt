@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(Biomeinator LANGUAGES CXX)
 
-include(FetchContent)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -51,14 +49,6 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
 
-FetchContent_Declare(
-  Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG        v3.8.1
-)
-
-FetchContent_MakeAvailable(Catch2)
-
 file(GLOB TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"
     "${SRC_DIR}/tests/*.h"
@@ -77,7 +67,6 @@ target_include_directories(BiomeinatorTests PRIVATE
     ${SRC_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
 )
-target_link_libraries(BiomeinatorTests PRIVATE Catch2::Catch2WithMain)
 add_dependencies(BiomeinatorTests Biomeinator)
 target_compile_definitions(BiomeinatorTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
