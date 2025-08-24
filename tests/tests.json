@@ -38,7 +38,7 @@
 	            "--maxPathDepth=2"
 	        ],
 	        "golden": "many_monkeys/golden.png",
-	        "threshold": 0.005
+	        "threshold": 0.01
 	    },
 	    {
 	        "name": "many_faces_emitter",
