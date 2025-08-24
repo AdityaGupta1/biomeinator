@@ -27,7 +27,6 @@ float luminance(const float3 color)
 
 float3 applyTonemapping(float3 color)
 {
-    return linearToSrgb(color);
+    return linearToSrgb(applyKhronosPbrNeutral(color));
     //return linearToSrgb(applyAgx(color));
-    //return applyAgx(color);
 }

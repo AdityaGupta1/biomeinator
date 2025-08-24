@@ -26,49 +26,46 @@
 #pragma once
 
 float3 srgbToLinear(float3 srgbColor) {
-    bool3 isLower = srgbColor < float3(0.04045);
-    float3 higher = pow((srgbColor + float3(0.055f)) / float3(1.055f), float3(2.4f));
-    float3 lower = srgbColor / float3(12.92);
+    const bool3 isLower = srgbColor < float3(0.04045);
+    const float3 higher = pow((srgbColor + float3(0.055f)) / float3(1.055f), float3(2.4f));
+    const float3 lower = srgbColor / float3(12.92);
 
     return select(isLower, lower, higher);
 }
 
 float3 linearToSrgb(float3 linearColor) {
-    bool3 isLower = linearColor < float3(0.0031308f);
-    float3 higher = float3(1.055f) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
-    float3 lower = linearColor * float3(12.92f);
+    const bool3 isLower = linearColor < float3(0.0031308f);
+    const float3 higher = float3(1.055f) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
+    const float3 lower = linearColor * float3(12.92f);
     return select(isLower, lower, higher);
 }
 
-// Mean error^2: 1.85907662e-06
+// Mean error^2: 3.6705141e-06
 float3 agxDefaultContrastApprox(float3 x) {
-    float3 x2 = x * x;
-    float3 x4 = x2 * x2;
-    float3 x6 = x4 * x2;
+    const float3 x2 = x * x;
+    const float3 x4 = x2 * x2;
 
-    return -17.86f * x6 * x
-         + 78.01f * x6
-         - 126.7f * x4 * x
-         + 92.06f * x4
-         - 28.72f * x2 * x
-         + 4.361f * x2
-         - 0.1718f * x
-         + 0.002857f;
+    return + 15.5     * x4 * x2
+           - 40.14    * x4 * x
+           + 31.96    * x4
+           - 6.868    * x2 * x
+           + 0.4298   * x2
+           + 0.1191   * x
+           - 0.00232;
 }
 
 float3 agx(float3 val) {
     const float3x3 agx_mat = float3x3(
-        0.842479062253094f, 0.0423282422610123f, 0.0423756549057051f,
-        0.0784335999999992f, 0.878468636469772f, 0.0784336f,
-        0.0792237451477643f, 0.0791661274605434f, 0.879142973793104f
+        0.842479062253094f, 0.0784335999999992f, 0.0792237451477643f,
+        0.0423282422610123f, 0.878468636469772f, 0.0791661274605434f,
+        0.0423756549057051f, 0.0784336f, 0.879142973793104f
     );
 
     const float min_ev = -12.47393f;
     const float max_ev = 4.026069f;
 
     // Input transform (inset)
-    val = mul(val, agx_mat);
-    //val = mul(agx_mat, val);
+    val = mul(agx_mat, val);
 
     // Log2 space encoding
     val = clamp(log2(val), min_ev, max_ev);
@@ -82,19 +79,16 @@ float3 agx(float3 val) {
 
 float3 agxEotf(float3 val) {
     const float3x3 agx_mat_inv = float3x3(
-        1.19687900512017f, -0.0528968517574562f, -0.0529716355144438f,
-        -0.0980208811401368f, 1.15190312990417f, -0.0980434501171241f,
-        -0.0990297440797205f, -0.0989611768448433f, 1.15107367264116f
+        1.19687900512017f, -0.0980208811401368f, -0.0990297440797205f,
+        -0.0528968517574562f, 1.15190312990417f, -0.0989611768448433f,
+        -0.0529716355144438f, -0.0980434501171241f, 1.15107367264116f
     );
 
     // Inverse input transform (outset)
-    val = mul(val, agx_mat_inv);
-    // val = mul(agx_mat_inv, val);
+    val = mul(agx_mat_inv, val);
 
-    // sRGB IEC 61966-2-1 2.2 Exponent Reference EOTF Display
-    // NOTE: We're linearizing the output here. Comment/adjust when
-    // *not* using a sRGB render target
-    val = srgbToLinear(val);
+    // Linearize for sRGB output
+    val = pow(val, 2.2f);
 
     return val;
 }
@@ -104,4 +98,25 @@ float3 applyAgx(float3 color)
     color = agx(color);
     color = agxEotf(color);
     return color;
+}
+
+// TODO: license here? or as a separate file?
+
+float3 applyKhronosPbrNeutral(float3 color) {
+    const float startCompression = 0.8 - 0.04;
+    const float desaturation = 0.15;
+
+    float x = min(color.r, min(color.g, color.b));
+    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    color -= offset;
+
+    float peak = max(color.r, max(color.g, color.b));
+    if (peak < startCompression) return color;
+
+    const float d = 1. - startCompression;
+    float newPeak = 1. - d * d / (peak + d - startCompression);
+    color *= newPeak / peak;
+
+    float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
+    return lerp(color, newPeak * float3(1, 1, 1), g);
 }
