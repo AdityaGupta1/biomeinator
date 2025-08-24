@@ -87,9 +87,6 @@ float3 agxEotf(float3 val) {
     // Inverse input transform (outset)
     val = mul(agx_mat_inv, val);
 
-    // Linearize for sRGB output
-    val = pow(val, 2.2f);
-
     return val;
 }
 
