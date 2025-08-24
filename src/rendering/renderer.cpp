@@ -907,7 +907,8 @@ void render()
     renderParams->frameNumber = frameNumber;
     renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
-    renderParams->enableMis = SettingsManager::getAsBool("enableMis");
+    renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
+    renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
     beginFrame();
 

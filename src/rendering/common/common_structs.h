@@ -185,12 +185,27 @@ struct SceneParams
     uint pad2;
 };
 
+enum Tonemapping
+{
+    NONE,
+    STANDARD,
+    AGX,
+    KHRONOS_PBR_NEUTRAL,
+
+    COUNT
+};
+
 struct RenderParams
 {
     uint frameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
     uint enableMis;
+
+    uint tonemapping;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 #if !_hlsl

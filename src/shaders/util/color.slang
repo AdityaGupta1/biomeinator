@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "tonemapping/agx.slang"
 #include "tonemapping/khronos_pbr_neutral.slang"
 
+#include "global_params.slang"
+
 float luminance(const float3 color)
 {
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
@@ -43,6 +45,21 @@ float3 linearToSrgb(float3 linearColor) {
 
 float3 applyTonemapping(float3 color)
 {
-    // return linearToSrgb(applyAgx(color));
-    return linearToSrgb(applyKhronosPbrNeutral(color));
+    float3 tonemappedColor;
+    switch ((Tonemapping)renderParams.tonemapping)
+    {
+    case Tonemapping::NONE:
+        tonemappedColor = color;
+        break;
+    case Tonemapping::STANDARD:
+        tonemappedColor = linearToSrgb(color);
+        break;
+    case Tonemapping::AGX:
+        tonemappedColor = linearToSrgb(applyAgx(color));
+        break;
+    case Tonemapping::KHRONOS_PBR_NEUTRAL:
+        tonemappedColor = linearToSrgb(applyKhronosPbrNeutral(color));
+        break;
+    }
+    return tonemappedColor;
 }
