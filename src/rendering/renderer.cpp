@@ -93,6 +93,8 @@ ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 Scene scene;
 
+bool testMode = false;
+
 void init()
 {
     initDevice();
@@ -119,7 +121,11 @@ void init()
         loadGltf(defaultScene);
     }
 
-    SetForegroundWindow(hwnd);
+    testMode = (SettingsManager::getAsString("testOutput") != "");
+    if (!testMode)
+    {
+        SetForegroundWindow(hwnd);
+    }
 }
 
 void loadGltf(const std::string& filePathStr)
@@ -900,7 +906,10 @@ void render()
     auto& frameCtx = frameCtxs[frameCtxIdx];
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
-    camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
+    if (!testMode)
+    {
+        camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
+    }
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
     auto& renderParams = paramBlockManager.renderParams;
