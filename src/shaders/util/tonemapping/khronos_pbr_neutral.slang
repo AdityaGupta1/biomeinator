@@ -1,4 +1,4 @@
-// TODO: license here? or as a separate file?
+#pragma once
 
 float3 applyKhronosPbrNeutral(float3 color) {
     const float startCompression = 0.8 - 0.04;

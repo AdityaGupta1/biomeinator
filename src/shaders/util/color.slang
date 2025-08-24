@@ -43,6 +43,6 @@ float3 linearToSrgb(float3 linearColor) {
 
 float3 applyTonemapping(float3 color)
 {
-    return linearToSrgb(applyKhronosPbrNeutral(color));
     // return linearToSrgb(applyAgx(color));
+    return linearToSrgb(applyKhronosPbrNeutral(color));
 }
