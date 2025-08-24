@@ -27,7 +27,9 @@ This project uses various third-party libraries:
 - [tinygltf](https://github.com/syoyo/tinygltf) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
-- [Slang](https://github.com/shader-slang/slang) - Apache-2.0 WITH LLVM-exception
+- [Slang](https://github.com/shader-slang/slang) - Apache-2.0 with LLVM-exception
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
+- [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
+- [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 
-All third-party licenses are available in `external/licenses/`.
+Third-party license text files are available in `external/licenses/`.
