@@ -3,13 +3,18 @@
 #define CXXOPTS_NO_EXCEPTIONS
 #include <cxxopts/cxxopts.hpp>
 
-#include <filesystem>
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
+
+#include <filesystem>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
 #include <regex>
+#include <vector>
 
 #define TEST_ASSERT(cond)                                                                                              \
     do                                                                                                                 \
@@ -53,7 +58,7 @@ int main(int argc, char** argv)
     std::filesystem::create_directories(testsOutputPath);
 
     const auto tests = loadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
-    const int numTests = tests.size();
+    int numTests = 0;
     std::vector<std::string> failedTestNames;
     for (const TestCase& test : tests)
     {
@@ -61,6 +66,8 @@ int main(int argc, char** argv)
         {
             continue;
         }
+
+        ++numTests;
 
         int numAsserts = 0;
         int numFailedAsserts = 0;
@@ -99,22 +106,29 @@ int main(int argc, char** argv)
         TEST_ASSERT(genW == goldW);
         TEST_ASSERT(genH == goldH);
 
-        double sumSq = 0.0;
+        float sumSq = 0.f;
         const size_t count = static_cast<size_t>(genW) * genH * 3;
+        std::vector<uint8_t> diffImg(count);
         for (size_t i = 0; i < count; ++i)
         {
-            const double diff = static_cast<double>(generated[i]) - static_cast<double>(golden[i]);
-            sumSq += diff * diff;
+            const int diff = static_cast<int>(generated[i]) - static_cast<int>(golden[i]);
+            sumSq += static_cast<float>(diff * diff);
+            diffImg[i] = static_cast<uint8_t>(std::clamp(std::abs(diff), 0, 255));
         }
         stbi_image_free(generated);
         stbi_image_free(golden);
 
-        const double rmse = std::sqrt(sumSq / count) / 255.0;
+        const auto diffPath = testsOutputPath / (test.name + "_DIFF.png");
+        const int writeResult =
+            stbi_write_png(diffPath.generic_string().c_str(), genW, genH, 3, diffImg.data(), genW * 3);
+        TEST_ASSERT(writeResult != 0);
+
+        const float rmse = std::sqrt(sumSq / count) / 255.f;
         TEST_ASSERT(rmse <= test.threshold);
 
         if (numFailedAsserts == 0)
         {
-            printf("\033[32mAll (%d) assertions passed.\033[0m\n", numAsserts);
+            printf("\033[32mAll (%d) assertion(s) passed.\033[0m\n", numAsserts);
         }
         else
         {
@@ -134,7 +148,7 @@ int main(int argc, char** argv)
     printf("\n=============================================\n");
     if (numFailedTests == 0)
     {
-        printf("All (%d) tests passed.\n", numTests);
+        printf("All (%d) test(s) passed.\n", numTests);
     }
     else
     {
