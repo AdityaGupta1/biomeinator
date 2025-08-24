@@ -20,23 +20,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// All values used to derive this implementation are sourced from Troy’s initial AgX implementation/OCIO config file available here:
+// All values used to derive this implementation are sourced from Troy's initial AgX implementation/OCIO config file available here:
 //   https://github.com/sobotka/AgX
 
 #pragma once
 
-// Mean error^2: 3.6705141e-06
+float3 srgbToLinear(float3 srgbColor) {
+    bool3 isLower = srgbColor < float3(0.04045);
+    float3 higher = pow((srgbColor + float3(0.055f)) / float3(1.055f), float3(2.4f));
+    float3 lower = srgbColor / float3(12.92);
+
+    return select(isLower, lower, higher);
+}
+
+float3 linearToSrgb(float3 linearColor) {
+    bool3 isLower = linearColor < float3(0.0031308f);
+    float3 higher = float3(1.055f) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
+    float3 lower = linearColor * float3(12.92f);
+    return select(isLower, lower, higher);
+}
+
+// Mean error^2: 1.85907662e-06
 float3 agxDefaultContrastApprox(float3 x) {
     float3 x2 = x * x;
     float3 x4 = x2 * x2;
+    float3 x6 = x4 * x2;
 
-    return +15.5 * x4 * x2
-         - 40.14 * x4 * x
-         + 31.96 * x4
-         - 6.868 * x2 * x
-         + 0.4298 * x2
-         + 0.1191 * x
-         - 0.00232;
+    return -17.86 * x6 * x
+         + 78.01 * x6
+         - 126.7 * x4 * x
+         + 92.06 * x4
+         - 28.72 * x2 * x
+         + 4.361 * x2
+         - 0.1718 * x
+         + 0.002857;
 }
 
 float3 agx(float3 val) {
@@ -51,6 +68,7 @@ float3 agx(float3 val) {
 
     // Input transform (inset)
     val = mul(val, agx_mat);
+    //val = mul(agx_mat, val);
 
     // Log2 space encoding
     val = clamp(log2(val), min_ev, max_ev);
@@ -71,11 +89,12 @@ float3 agxEotf(float3 val) {
 
     // Inverse input transform (outset)
     val = mul(val, agx_mat_inv);
+    // val = mul(agx_mat_inv, val);
 
     // sRGB IEC 61966-2-1 2.2 Exponent Reference EOTF Display
     // NOTE: We're linearizing the output here. Comment/adjust when
     // *not* using a sRGB render target
-    //val = pow(val, float3(2.2));
+    //val = srgbToLinear(val);
 
     return val;
 }

@@ -25,16 +25,9 @@ float luminance(const float3 color)
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
 }
 
-float3 linearToSRGB(float3 linearColor) {
-    bool3 isLower = linearColor < float3(0.0031308);
-    float3 higher = float3(1.055) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
-    float3 lower = linearColor * float3(12.92);
-    return select(isLower, lower, higher);
-}
-
 float3 applyTonemapping(float3 color)
 {
-    //return linearToSRGB(color);
-    //return linearToSRGB(applyAgx(color));
+    //return linearToSrgb(color);
+    //return linearToSrgb(applyAgx(color));
     return applyAgx(color);
 }
