@@ -57,7 +57,7 @@ int main(int argc, char** argv)
     std::vector<std::string> failedTestNames;
     for (const TestCase& test : tests)
     {
-        if (!std::regex_match(test.name, testFilter))
+        if (!std::regex_search(test.name, testFilter))
         {
             continue;
         }
