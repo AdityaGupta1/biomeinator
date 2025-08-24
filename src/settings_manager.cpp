@@ -3,12 +3,16 @@
 #define CXXOPTS_NO_EXCEPTIONS
 #include <cxxopts/cxxopts.hpp>
 
+#include <variant>
+#include <unordered_map>
+
 namespace SettingsManager
 {
 
 using namespace cxxopts;
 
-ParseResult parseResult;
+using settingValue = std::variant<bool, int, uint32_t, std::string>;
+static std::unordered_map<std::string, settingValue> settings;
 
 void parseArgs(const int argc, const char* const* argv)
 {
@@ -23,7 +27,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
 
-    parseResult = options.parse(argc, argv);
+    ParseResult parseResult = options.parse(argc, argv);
 
     if (parseResult.count("help"))
     {
@@ -31,40 +35,47 @@ void parseArgs(const int argc, const char* const* argv)
         exit(0);
     }
 
-    if (hasOption("testOutput"))
+    if (parseResult.contains("testOutput"))
     {
-        const std::string& testOutputPath = getAsString("testOutput");
+        const std::string& testOutputPath = parseResult["testOutput"].as<std::string>();
         if (!testOutputPath.ends_with(".png"))
         {
             std::cerr << "--testOutput must be a .png" << std::endl;
             exit(-1);
         }
     }
-}
 
-bool hasOption(const std::string& name)
-{
-    return parseResult.count(name) > 0;
+#define COPY_SETTING(name, type) settings[name] = parseResult[name].as<type>()
+
+    COPY_SETTING("width", uint32_t);
+    COPY_SETTING("height", uint32_t);
+    COPY_SETTING("spp", uint32_t);
+    COPY_SETTING("maxPathDepth", uint32_t);
+    COPY_SETTING("scene", std::string);
+    COPY_SETTING("testOutput", std::string);
+    COPY_SETTING("enableMis", bool);
+
+#undef COPY_SETTING
 }
 
 bool getAsBool(const std::string& name)
 {
-    return parseResult[name].as<bool>();
+    return std::get<bool>(settings.at(name));
 }
 
 int getAsInt(const std::string& name)
 {
-    return parseResult[name].as<int>();
+    return std::get<int>(settings.at(name));
 }
 
 uint32_t getAsUint(const std::string& name)
 {
-    return parseResult[name].as<uint32_t>();
+    return std::get<uint32_t>(settings.at(name));
 }
 
 std::string getAsString(const std::string& name)
 {
-    return parseResult[name].as<std::string>();
+    return std::get<std::string>(settings.at(name));
 }
 
 } // namespace SettingsManager

@@ -10,7 +10,7 @@ int main(int argc, char** argv)
     WindowManager::init();
     Renderer::init();
 
-    if (SettingsManager::hasOption("testOutput"))
+    if (SettingsManager::getAsString("testOutput") != "")
     {
         const std::string path = SettingsManager::getAsString("testOutput");
         Renderer::queueScreenshot(true /*useTestOutputPath*/);
