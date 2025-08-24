@@ -18,15 +18,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "agx.slang"
+#include "tonemapping/agx.slang"
+#include "tonemapping/khronos_pbr_neutral.slang"
 
 float luminance(const float3 color)
 {
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
 }
 
+float3 srgbToLinear(float3 srgbColor) {
+    const bool3 isLower = srgbColor < float3(0.04045);
+    const float3 higher = pow((srgbColor + float3(0.055f)) / float3(1.055f), float3(2.4f));
+    const float3 lower = srgbColor / float3(12.92);
+
+    return select(isLower, lower, higher);
+}
+
+float3 linearToSrgb(float3 linearColor) {
+    const bool3 isLower = linearColor < float3(0.0031308f);
+    const float3 higher = float3(1.055f) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
+    const float3 lower = linearColor * float3(12.92f);
+    return select(isLower, lower, higher);
+}
+
 float3 applyTonemapping(float3 color)
 {
-    //return linearToSrgb(applyKhronosPbrNeutral(color));
-    return linearToSrgb(applyAgx(color));
+    return linearToSrgb(applyKhronosPbrNeutral(color));
+    // return linearToSrgb(applyAgx(color));
 }
