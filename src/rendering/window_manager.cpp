@@ -123,7 +123,7 @@ void init()
     WNDCLASSW wcw = {
         .lpfnWndProc = &onWindowMessage,
         .hCursor = LoadCursor(nullptr, IDC_ARROW),
-        .lpszClassName = L"GigaMinecraftClass",
+        .lpszClassName = L"BiomeinatorClass",
     };
     RegisterClassW(&wcw);
 
@@ -138,8 +138,8 @@ void init()
     const int height = rect.bottom - rect.top;
 
     hwnd = CreateWindowExW(0,
-                           L"GigaMinecraftClass",
-                           L"Giga Minecraft",
+                           L"BiomeinatorClass",
+                           L"Biomeinator",
                            WS_VISIBLE | WS_OVERLAPPEDWINDOW,
                            320,
                            180,

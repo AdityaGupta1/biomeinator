@@ -757,7 +757,7 @@ void updateFps(double deltaTime)
         frameCount = 0;
         elapsedTime = 0.0;
 
-        std::wstring title = L"Giga Minecraft - FPS: " + std::to_wstring(lastFps);
+        std::wstring title = L"Biomeinator - FPS: " + std::to_wstring(lastFps);
         SetWindowTextW(hwnd, title.c_str());
     }
 }
