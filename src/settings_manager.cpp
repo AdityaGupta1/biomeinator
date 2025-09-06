@@ -1,7 +1,7 @@
 #include "settings_manager.h"
 
 #define CXXOPTS_NO_EXCEPTIONS
-#include <cxxopts/cxxopts.hpp>
+#include <cxxopts.hpp>
 
 #include <variant>
 #include <unordered_map>

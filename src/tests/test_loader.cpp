@@ -1,9 +1,9 @@
 #include "test_loader.h"
 
 #include <fstream>
-#include <tinygltf/json.hpp>
+#include <json.hpp>
 
-#include <stb/stb_image.h>
+#include <stb_image.h>
 
 std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
 {

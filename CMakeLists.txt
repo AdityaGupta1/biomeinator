@@ -27,13 +27,20 @@ endforeach()
 
 add_executable(Biomeinator ${SRC_FILES})
 
+set(EXT "${CMAKE_SOURCE_DIR}/external")
+
 target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
+    "${EXT}/cxxopts/include"
+    "${EXT}/json/include"
+    "${EXT}/slang/include"
+    "${EXT}/stb/include"
+    "${EXT}/tinygltf/include"
 )
 
 target_link_directories(Biomeinator PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/external/lib"
+    "${EXT}/dxc/lib/x64"
+    "${EXT}/slang/lib"
 )
 
 target_compile_definitions(Biomeinator PRIVATE
@@ -42,7 +49,11 @@ target_compile_definitions(Biomeinator PRIVATE
 )
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang d3dcompiler)
 
-file(GLOB RUNTIME_DLLS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/external/bin/*.dll")
+set(RUNTIME_DLLS
+    "${EXT}/dxc/bin/x64/dxcompiler.dll"
+    "${EXT}/dxc/bin/x64/dxil.dll"
+    "${EXT}/slang/bin/slang.dll"
+)
 
 add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -65,7 +76,9 @@ endforeach()
 add_executable(BiomeinatorTests ${TESTS_SRC})
 target_include_directories(BiomeinatorTests PRIVATE
     ${SRC_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/external/include"
+    "${EXT}/cxxopts/include"
+    "${EXT}/json/include"
+    "${EXT}/stb/include"
 )
 add_dependencies(BiomeinatorTests Biomeinator)
 target_compile_definitions(BiomeinatorTests PRIVATE

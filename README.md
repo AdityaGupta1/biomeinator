@@ -25,6 +25,7 @@ Once the project is running, you can open a glTF scene from `test_scenes/` with 
 This project uses various third-party libraries:
 
 - [tinygltf](https://github.com/syoyo/tinygltf) - MIT
+- [json](https://github.com/nlohmann/json) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
 - [Slang](https://github.com/shader-slang/slang) - Apache-2.0 with LLVM-exception
@@ -32,4 +33,4 @@ This project uses various third-party libraries:
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 
-Third-party license text files are available in `external/licenses/`.
+Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
