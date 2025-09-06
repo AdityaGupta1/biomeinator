@@ -33,6 +33,7 @@ target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/json/include"
+    "${EXT}/nvapi"
     "${EXT}/slang/include"
     "${EXT}/stb/include"
     "${EXT}/tinygltf/include"
@@ -41,13 +42,14 @@ target_include_directories(Biomeinator PRIVATE
 target_link_directories(Biomeinator PRIVATE
     "${EXT}/dxc/lib/"
     "${EXT}/slang/lib/"
+    "${EXT}/nvapi/amd64"
 )
 
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
 )
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang d3dcompiler)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang d3dcompiler nvapi64)
 
 set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"

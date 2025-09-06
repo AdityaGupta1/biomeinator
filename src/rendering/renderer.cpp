@@ -49,6 +49,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
+#include <nvapi.h>
+#include <nvShaderExtnEnums.h>
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -140,6 +143,9 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
+    NvAPI_Initialize();
+    NvAPI_Unload();
+
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
@@ -190,11 +196,17 @@ void initDevice()
     device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue));
 
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+
+    bool serSupported = false;
+    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    if (!serSupported)
+    {
+        fprintf(stderr, "WARNING: SER not supported\n");
+    }
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
-constexpr uint32_t swapChainFlags =
-    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 ComPtr<ID3D12DescriptorHeap> sharedHeap;
 void initRenderTarget()
 {
