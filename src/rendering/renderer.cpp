@@ -199,9 +199,13 @@ void initDevice()
 
     bool serSupported = false;
     NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-    if (!serSupported)
+    if (serSupported)
     {
-        fprintf(stderr, "WARNING: SER not supported\n");
+        printf("SER supported on this device\n");
+    }
+    else
+    {
+        fprintf(stderr, "WARNING: SER not supported on this device\n");
     }
 }
 

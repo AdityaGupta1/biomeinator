@@ -8,12 +8,14 @@ Real-time path traced voxel engine
 
 ## Building
 
-You should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
+Make sure to clone with `--recurse-submodules` to gather all required dependencies.
+
+Then, you should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
 
 Or, you can:
 
 - Run `setup.bat`
-  - You might need some Windows SDK installed, not sure because I haven't tested this step in a clean environment
+  - You probably need CMake installed for this to work
 - Load the Visual Studio solution at `build/Biomeinator.sln`
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
