@@ -39,8 +39,8 @@ target_include_directories(Biomeinator PRIVATE
 )
 
 target_link_directories(Biomeinator PRIVATE
-    "${EXT}/dxc/lib/x64"
-    "${EXT}/slang/lib"
+    "${EXT}/dxc/lib/"
+    "${EXT}/slang/lib/"
 )
 
 target_compile_definitions(Biomeinator PRIVATE
@@ -50,8 +50,8 @@ target_compile_definitions(Biomeinator PRIVATE
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi slang d3dcompiler)
 
 set(RUNTIME_DLLS
-    "${EXT}/dxc/bin/x64/dxcompiler.dll"
-    "${EXT}/dxc/bin/x64/dxil.dll"
+    "${EXT}/dxc/bin/dxcompiler.dll"
+    "${EXT}/dxc/bin/dxil.dll"
     "${EXT}/slang/bin/slang.dll"
 )
 
