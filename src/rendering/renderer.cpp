@@ -515,7 +515,7 @@ void compileShadersAndInitPipeline()
 
     TargetDesc targetDesc = {
         .format = SLANG_DXIL,
-        .profile = globalSession->findProfile("sm_6_3"),
+        .profile = globalSession->findProfile("sm_6_6"),
     };
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
