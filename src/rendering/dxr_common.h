@@ -48,15 +48,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob) (expr)
 #endif
 
-#define CHECK_SLANG_DIAGNOSTICS(blob)                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if ((blob))                                                                                                    \
-        {                                                                                                              \
-            fprintf(stderr, "Slang diagnostics: %s\n", (const char*)(blob)->getBufferPointer());                       \
-        }                                                                                                              \
-    } while (0)
-
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,
     .Quality = 0

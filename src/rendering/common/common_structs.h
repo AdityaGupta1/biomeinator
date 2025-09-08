@@ -159,27 +159,16 @@ public:
     uint pad2;
 };
 
-#if _hlsl
 struct HeapIndices
 {
     struct
     {
-        RWTexture2D<float4>.Handle renderTarget;
+        uint renderTargetIdx;
+        uint pad0;
         uint pad1;
         uint pad2;
     } uav;
 };
-#else
-struct HeapIndices
-{
-    struct
-    {
-        uint renderTargetIdx[2];
-        uint pad1;
-        uint pad2;
-    } uav;
-};
-#endif
 
 struct ConstantParams
 {
@@ -214,12 +203,12 @@ struct SceneParams
 
 enum Tonemapping
 {
-    NONE,
-    STANDARD,
-    AGX,
-    KHRONOS_PBR_NEUTRAL,
+    TONEMAPPING_NONE,
+    TONEMAPPING_STANDARD,
+    TONEMAPPING_AGX,
+    TONEMAPPING_KHRONOS_PBR_NEUTRAL,
 
-    COUNT
+    TONEMAPPING_COUNT
 };
 
 struct RenderParams

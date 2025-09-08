@@ -40,14 +40,14 @@ float3 agxDefaultContrastApprox(float3 x) {
 }
 
 float3 agx(float3 val) {
-    constexpr float3x3 agx_mat = float3x3(
+    const float3x3 agx_mat = float3x3(
         0.842479062253094f, 0.0784335999999992f, 0.0792237451477643f,
         0.0423282422610123f, 0.878468636469772f, 0.0791661274605434f,
         0.0423756549057051f, 0.0784336f, 0.879142973793104f
     );
 
-    constexpr float min_ev = -12.47393f;
-    constexpr float max_ev = 4.026069f;
+    const float min_ev = -12.47393f;
+    const float max_ev = 4.026069f;
 
     // Input transform (inset)
     val = mul(agx_mat, val);
@@ -63,7 +63,7 @@ float3 agx(float3 val) {
 }
 
 float3 agxEotf(float3 val) {
-    constexpr float3x3 agx_mat_inv = float3x3(
+    const float3x3 agx_mat_inv = float3x3(
         1.19687900512017f, -0.0980208811401368f, -0.0990297440797205f,
         -0.0528968517574562f, 1.15190312990417f, -0.0989611768448433f,
         -0.0529716355144438f, -0.0980434501171241f, 1.15107367264116f

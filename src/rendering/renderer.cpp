@@ -45,10 +45,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <cstdio>
 #include <shlobj.h>
 
-#include <slang.h>
-#include <slang-com-ptr.h>
-
 #include <stb_image_write.h>
+
+#include "main.fxh"
 
 using namespace DirectX;
 
@@ -281,8 +280,7 @@ void resize()
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.renderTargetIdx[0] = uavIdx;
-        frame.paramBlockManager.heapIndices->uav.renderTargetIdx[1] = 0;
+        frame.paramBlockManager.heapIndices->uav.renderTargetIdx = uavIdx;
     }
 }
 
@@ -484,224 +482,18 @@ ComPtr<ID3D12StateObject> rtPso;
 ComPtr<ID3D12Resource> dev_rtShaderIds;
 D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
 
-static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::path>& dirs)
-{
-    constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ull;
-    constexpr uint64_t FNV_PRIME = 1099511628211ull;
-
-    uint64_t hash = FNV_OFFSET_BASIS;
-
-    std::vector<std::filesystem::path> files;
-    for (const auto& dir : dirs)
-    {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
-        {
-            if (!entry.is_regular_file())
-            {
-                continue;
-            }
-
-            const auto ext = entry.path().extension();
-            if (ext != ".slang" && ext != ".h")
-            {
-                continue;
-            }
-
-            files.push_back(entry.path());
-        }
-    }
-
-    std::sort(files.begin(), files.end());
-
-    for (const auto& file : files)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        const std::vector<char> data((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-        for (char c : data)
-        {
-            hash ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
-            hash *= FNV_PRIME;
-        }
-    }
-
-    return hash;
-}
 void compileShadersAndInitPipeline()
 {
-    const bool enableSer = SettingsManager::getAsBool("enableSer");
-
-    using namespace slang;
-
-    Slang::ComPtr<IGlobalSession> globalSession;
-    SlangGlobalSessionDesc globalSessionDesc = {};
-    CHECK_HRESULT(createGlobalSession(&globalSessionDesc, globalSession.writeRef()));
-
-    SessionDesc sessionDesc;
-
-    constexpr int shaderMajorVersion = 6;
-    constexpr int shaderMinorVersion = 6;
-    const std::string shaderMajorVersionStr = std::to_string(shaderMajorVersion);
-    const std::string shaderMinorVersionStr = std::to_string(shaderMinorVersion);
-    const std::string profileStr = "lib_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
-
-    TargetDesc targetDesc = {
-        .format = SLANG_DXIL,
-        .profile = globalSession->findProfile(profileStr.c_str()),
-    };
-    sessionDesc.targets = &targetDesc;
-    sessionDesc.targetCount = 1;
-
-    std::vector<slang::PreprocessorMacroDesc> preprocessorMacroDescs;
-    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MAJOR", shaderMajorVersionStr.c_str() });
-    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MINOR", shaderMinorVersionStr.c_str() });
-    sessionDesc.preprocessorMacros = preprocessorMacroDescs.data();
-    sessionDesc.preprocessorMacroCount = preprocessorMacroDescs.size();
-
-    std::vector<CompilerOptionEntry> compilerOptionEntries = {
-        {
-            .name = CompilerOptionName::DownstreamArgs,
-            .value = {
-                .kind = CompilerOptionValueKind::String,
-                .stringValue0 = "dxc",
-                .stringValue1 = "-Tlib6_6",
-            },
-        }
-    };
-    sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
-    sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
-
-    const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
-    const std::string shadersPathStr = std::filesystem::absolute(shadersPath).generic_string();
-    std::vector<char const*> searchPaths = { shadersPathStr.c_str() };
-    sessionDesc.searchPaths = searchPaths.data();
-    sessionDesc.searchPathCount = searchPaths.size();
-
-    Slang::ComPtr<ISession> session;
-    CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
-
-    Slang::ComPtr<IBlob> diagnostics;
-
-    std::vector<std::string> mainShaderNames = {
-        "main.rgs",
-    };
-
-    std::unordered_map<std::string, Slang::ComPtr<IModule>> modules;
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    const std::filesystem::path shaderBlobsPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders";
-    std::filesystem::create_directories(shaderBlobsPath);
-
-    const auto shaderDirs = {
-        shadersPath,
-        std::filesystem::path(CMAKE_SOURCE_DIR) / "src/rendering/common",
-    };
-
-    const std::filesystem::path shaderHashPath = shaderBlobsPath / "shaders.hash";
-    const uint64_t currentHash = computeShaderHash(shaderDirs);
-
-    const bool forceRecompileShaders = SettingsManager::getAsBool("forceRecompileShaders");
-    bool needsRecompile = true;
-    if (std::filesystem::is_regular_file(shaderHashPath) && !forceRecompileShaders)
-    {
-        std::ifstream hashIn(shaderHashPath, std::ios::binary);
-        uint64_t storedHash = 0;
-        hashIn.read(reinterpret_cast<char*>(&storedHash), sizeof(storedHash));
-        if (storedHash != currentHash)
-        {
-            printf("Shader hash has changed; need to recompile...\n");
-            needsRecompile = true;
-        }
-        else
-        {
-            needsRecompile = false;
-        }
-    }
-
-    for (const auto& mainShaderName : mainShaderNames)
-    {
-        const std::string mainShaderFileName = mainShaderName + ".slang";
-        const std::filesystem::path shaderBlobPath = shaderBlobsPath / (mainShaderName + ".slang-module");
-
-        Slang::ComPtr<IModule>& module = modules[mainShaderName];
-
-        if (needsRecompile)
-        {
-            printf("Compiling %s...\n", mainShaderFileName.c_str());
-            module = session->loadModule(mainShaderName.c_str(), diagnostics.writeRef());
-            CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-            printf("Serializing %s and writing to disk...\n", mainShaderFileName.c_str());
-            Slang::ComPtr<slang::IBlob> serialized;
-            CHECK_HRESULT(module->serialize(serialized.writeRef()));
-            CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
-
-            std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
-            hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
-        }
-        else
-        {
-            printf("Loading %s from blob...\n", mainShaderFileName.c_str());
-            ID3DBlob* d3dBlob = nullptr;
-            CHECK_HRESULT(D3DReadFileToBlob(std::wstring(shaderBlobPath.wstring()).c_str(), &d3dBlob));
-
-            Slang::ComPtr<slang::IBlob> slangBlob;
-            slangBlob.attach(reinterpret_cast<slang::IBlob*>(d3dBlob));
-
-            module = session->loadModuleFromIRBlob(
-                mainShaderName.c_str(), shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
-            CHECK_SLANG_DIAGNOSTICS(diagnostics);
-        }
-    }
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-    printf("Shader init took %lld ms\n", durationMs);
-
     // ===================================
     // RAYTRACING
     // ===================================
     {
-        IModule* rtModule = modules["main.rgs"].get();
-
-        std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
-        std::vector<IComponentType*> components = { rtModule };
-        const uint32_t numEntryPoints = rtModule->getDefinedEntryPointCount();
-        for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-        {
-            Slang::ComPtr<IEntryPoint> entryPoint;
-            rtModule->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
-            entryPoints.push_back(entryPoint);
-            components.push_back(entryPoint.get());
-        }
-
-        Slang::ComPtr<IComponentType> program;
-        CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
-
-        Slang::ComPtr<IComponentType> linkedProgram;
-        CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-        std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
-        std::vector<D3D12_DXIL_LIBRARY_DESC> rtDxilLibs;
-        rtDxilLibs.reserve(numEntryPoints);
-
-        for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-        {
-            auto& entryPointBlob = entryPointBlobs[entryPointIdx];
-
-            CHECK_HRESULT(
-                linkedProgram->getEntryPointCode(entryPointIdx, 0, entryPointBlob.writeRef(), diagnostics.writeRef()));
-            CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-            D3D12_DXIL_LIBRARY_DESC lib = {
-                .DXILLibrary = {
-                    .pShaderBytecode = entryPointBlob->getBufferPointer(),
-                    .BytecodeLength = entryPointBlob->getBufferSize(),
-                },
-            };
-            rtDxilLibs.push_back(lib);
-        }
+        D3D12_DXIL_LIBRARY_DESC lib = {
+            .DXILLibrary = {
+                .pShaderBytecode = main_shaderBytecode,
+                .BytecodeLength = std::size(main_shaderBytecode),
+            },
+        };
 
         constexpr uint32_t NUM_HIT_GROUPS = 2;
         std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
@@ -731,11 +523,7 @@ void compileShadersAndInitPipeline()
 
         std::vector<D3D12_STATE_SUBOBJECT> subobjects;
         {
-            for (auto& lib : rtDxilLibs)
-            {
-                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
-            }
-
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
             subobjects.push_back(

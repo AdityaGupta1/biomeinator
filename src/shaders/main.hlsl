@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "path_tracing.slang"
+#include "path_tracing.hlsli"
 
 [shader("raygeneration")]
 void RayGeneration()
@@ -53,6 +53,6 @@ void RayGeneration()
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
     const float3 colorPostTonemap = applyTonemapping(colorPreTonemap);
 
-    RWTexture2D<float4> renderTarget = heapIndices.uav.renderTarget;
+    RWTexture2D<float4> renderTarget = ResourceDescriptorHeap[heapIndices.uav.renderTargetIdx];
     renderTarget[pixelIdx] = float4(colorPostTonemap, 1);
 }

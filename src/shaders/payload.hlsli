@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "util/rng.slang"
+#include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
 

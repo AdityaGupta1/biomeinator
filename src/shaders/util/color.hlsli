@@ -18,10 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "tonemapping/agx.slang"
-#include "tonemapping/khronos_pbr_neutral.slang"
+#include "tonemapping/agx.hlsli"
+#include "tonemapping/khronos_pbr_neutral.hlsli"
 
-#include "global_params.slang"
+#include "global_params.hlsli"
 
 float luminance(const float3 color)
 {
@@ -29,32 +29,32 @@ float luminance(const float3 color)
 }
 
 float3 srgbToLinear(float3 srgbColor) {
-    const float3 higher = pow((srgbColor + float3(0.055f)) / float3(1.055f), float3(2.4f));
-    const float3 lower = srgbColor / float3(12.92);
-    return lerp(lower, higher, float3(srgbColor >= float3(0.04045)));
+    const float3 higher = pow((srgbColor + 0.055f) / 1.055f, 2.4f);
+    const float3 lower = srgbColor / 12.92f;
+    return lerp(lower, higher, float3(srgbColor >= 0.04045f));
 }
 
 float3 linearToSrgb(float3 linearColor) {
-    const float3 higher = float3(1.055f) * pow(linearColor, float3(1.f / 2.4f)) - float3(0.055f);
-    const float3 lower = linearColor * float3(12.92f);
-    return lerp(lower, higher, float3(linearColor >= float3(0.0031308f)));
+    const float3 higher = 1.055f * pow(linearColor, 1.f / 2.4f) - 0.055f;
+    const float3 lower = linearColor * 12.92f;
+    return lerp(lower, higher, float3(linearColor >= 0.0031308f));
 }
 
 float3 applyTonemapping(float3 color)
 {
     float3 tonemappedColor;
-    switch ((Tonemapping)renderParams.tonemapping)
+    switch (renderParams.tonemapping)
     {
-    case Tonemapping::NONE:
+    case TONEMAPPING_NONE:
         tonemappedColor = color;
         break;
-    case Tonemapping::STANDARD:
+    case TONEMAPPING_STANDARD:
         tonemappedColor = linearToSrgb(color);
         break;
-    case Tonemapping::AGX:
+    case TONEMAPPING_AGX:
         tonemappedColor = linearToSrgb(applyAgx(color));
         break;
-    case Tonemapping::KHRONOS_PBR_NEUTRAL:
+    case TONEMAPPING_KHRONOS_PBR_NEUTRAL:
         tonemappedColor = linearToSrgb(applyKhronosPbrNeutral(color));
         break;
     }

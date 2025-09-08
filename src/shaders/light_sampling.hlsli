@@ -21,11 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_structs.h"
 
-#include "global_params.slang"
-#include "materials.slang"
-#include "path_tracing_common.slang"
-#include "payload.slang"
-#include "util/math.slang"
+#include "global_params.hlsli"
+#include "materials.hlsli"
+#include "path_tracing_common.hlsli"
+#include "payload.hlsli"
+#include "util/math.hlsli"
 
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT_REGISTER_AREA_LIGHTS, RT_REGISTER_SPACE_BUFFERS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE_BUFFERS);

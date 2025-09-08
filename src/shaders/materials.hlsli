@@ -21,8 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "util/math.slang"
-#include "util/rng.slang"
+#include "util/math.hlsli"
+#include "util/rng.hlsli"
 
 StructuredBuffer<Material> materials : REGISTER_T(RT_REGISTER_MATERIALS, RT_REGISTER_SPACE_BUFFERS);
 
@@ -63,12 +63,13 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
+float3 evaluateBsdf(
     const Material material,
     const float2 uv,
     const float3 wo_WS,
     const float3 wi_WS,
     const float3 surfNor_WS,
+    bool calculateFresnelReflectance,
     float fresnelReflectance = 0.f)
 {
     if (material.hasDiffuse())
@@ -148,7 +149,7 @@ BsdfSample sampleBsdf(
         const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
         result.wi_WS = wi_WS;
         result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
-        const float3 bsdfValue = evaluateBsdf<false /*calculateFresnelReflectance*/>(material, uv, wo_WS, wi_WS, surfNor_WS, fresnelReflectance);
+        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, false /*calculateFresnelReflectance*/, fresnelReflectance);
         result.bsdfValue = bsdfValue;
     }
 
