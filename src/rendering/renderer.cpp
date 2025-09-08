@@ -52,6 +52,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <nvapi.h>
 #include <nvShaderExtnEnums.h>
 
+#define FORCE_RECOMPILE_SHADERS 0
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -338,19 +340,28 @@ void initRootSignature()
     std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
 
     descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        .NumDescriptors = 1,
-        .BaseShaderRegister = REGISTER_RENDER_TARGET,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-        .OffsetInDescriptorsFromTableStart = MAX_NUM_TEXTURES,
-    });
-
-    descriptorRanges.push_back({
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         .NumDescriptors = MAX_NUM_TEXTURES,
         .BaseShaderRegister = REGISTER_TEXTURES,
         .RegisterSpace = REGISTER_SPACE_TEXTURES,
         .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
+    });
+
+    descriptorRanges.push_back({
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = REGISTER_RENDER_TARGET,
+        .RegisterSpace = REGISTER_SPACE_TEXTURES,
+        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+    });
+
+    // fake UAV slot for SER
+    descriptorRanges.push_back({
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
     });
 
     std::array<D3D12_ROOT_PARAMETER1, PARAM_IDX(COUNT)> params;
@@ -521,6 +532,8 @@ static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::p
 }
 void compileShadersAndInitPipeline()
 {
+    NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+
     using namespace slang;
 
     Slang::ComPtr<IGlobalSession> globalSession;
@@ -529,37 +542,45 @@ void compileShadersAndInitPipeline()
 
     SessionDesc sessionDesc;
 
+    constexpr int shaderMajorVersion = 6;
+    constexpr int shaderMinorVersion = 6;
+    const std::string shaderMajorVersionStr = std::to_string(shaderMajorVersion);
+    const std::string shaderMinorVersionStr = std::to_string(shaderMinorVersion);
+    const std::string profileStr = "hlsl_nvapi+sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
+
     TargetDesc targetDesc = {
         .format = SLANG_DXIL,
-        .profile = globalSession->findProfile("sm_6_6"),
+        .profile = globalSession->findProfile(profileStr.c_str()),
     };
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
 
-    //std::vector<CompilerOptionEntry> compilerOptionEntries = {
-    //    {
-    //        .name = CompilerOptionName::WarningsAsErrors,
-    //        .value = {
-    //            .kind = CompilerOptionValueKind::String,
-    //            .stringValue0 = "all",
-    //        },
-    //    },
-    //    {
-    //        .name = CompilerOptionName::Optimization,
-    //        .value = {
-    //            .kind = CompilerOptionValueKind::Int,
-    //            .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE,
-    //        },
-    //    },
-    //};
-    //sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
-    //sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
+    std::vector<slang::PreprocessorMacroDesc> preprocessorMacroDescs;
+    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MAJOR", shaderMajorVersionStr.c_str() });
+    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MINOR", shaderMinorVersionStr.c_str() });
+    sessionDesc.preprocessorMacros = preprocessorMacroDescs.data();
+    sessionDesc.preprocessorMacroCount = preprocessorMacroDescs.size();
+
+    const std::filesystem::path nvapiPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "external/nvapi";
+    const std::string nvapiPathArgStr = "-I" + std::filesystem::absolute(nvapiPath).generic_string();
+    std::vector<CompilerOptionEntry> compilerOptionEntries = {
+        {
+            .name = CompilerOptionName::DownstreamArgs,
+            .value = {
+                .kind = CompilerOptionValueKind::String,
+                .stringValue0 = "dxc",
+                .stringValue1 = nvapiPathArgStr.c_str(),
+            },
+        }
+    };
+    sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
+    sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
 
     const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
-    const std::string shadersPathStr = std::filesystem::absolute(shadersPath).string();
-    const char* searchPaths[] = { shadersPathStr.c_str() };
-    sessionDesc.searchPaths = searchPaths;
-    sessionDesc.searchPathCount = 1;
+    const std::string shadersPathStr = std::filesystem::absolute(shadersPath).generic_string();
+    std::vector<char const*> searchPaths = { shadersPathStr.c_str() };
+    sessionDesc.searchPaths = searchPaths.data();
+    sessionDesc.searchPathCount = searchPaths.size();
 
     Slang::ComPtr<ISession> session;
     CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
@@ -580,6 +601,7 @@ void compileShadersAndInitPipeline()
     const std::filesystem::path shaderHashPath = shaderBlobPath.string() + ".hash";
     const uint64_t currentHash = computeShaderHash(shaderDirs);
 
+#if !FORCE_RECOMPILE_SHADERS
     bool needsRecompile = true;
     if (std::filesystem::is_regular_file(shaderBlobPath) &&
         std::filesystem::is_regular_file(shaderHashPath))
@@ -599,6 +621,7 @@ void compileShadersAndInitPipeline()
     }
 
     if (needsRecompile)
+#endif
     {
         printf("Compiling shaders...\n");
         module = session->loadModule("main", diagnostics.writeRef());
@@ -612,6 +635,7 @@ void compileShadersAndInitPipeline()
         std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
         hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
     }
+#if !FORCE_RECOMPILE_SHADERS
     else
     {
         printf("Loading shaders from blob...\n");
@@ -625,6 +649,7 @@ void compileShadersAndInitPipeline()
             session->loadModuleFromIRBlob("main", shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
         CHECK_SLANG_DIAGNOSTICS(diagnostics);
     }
+#endif
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();

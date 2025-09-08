@@ -30,7 +30,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
             fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
-            __debugbreak();                                                                                            \
         }                                                                                                              \
     } while (0)
 #else

@@ -126,7 +126,9 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+        HitObject hitObject = HitObject::TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+        ReorderThread(hitObject, 0, 0);
+        HitObject::Invoke(raytracingAcs, hitObject, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {

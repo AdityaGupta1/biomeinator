@@ -52,6 +52,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // s#
 #define REGISTER_TEX_SAMPLER 0
 
+// =============================================
+// fake UAV slot for SER
+// =============================================
+
+#if _hlsl
+#define NV_SHADER_EXTN_REGISTER_SPACE space1738
+#define NV_SHADER_EXTN_SLOT u1738
+#else
+#define NV_SHADER_EXTN_REGISTER_SPACE 1738
+#define NV_SHADER_EXTN_SLOT 1738
+#endif
+
+// =============================================
+// helper macros
+// =============================================
+
 #if _hlsl
 #define _REGISTER_IMPL(type, reg, spc) register(type##reg, space##spc)
 #define REGISTER_U(reg, spc) _REGISTER_IMPL(u, reg, spc)
