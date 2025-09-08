@@ -31,13 +31,13 @@ float luminance(const float3 color)
 float3 srgbToLinear(float3 srgbColor) {
     const float3 higher = pow((srgbColor + 0.055f) / 1.055f, 2.4f);
     const float3 lower = srgbColor / 12.92f;
-    return lerp(lower, higher, float3(srgbColor >= 0.04045f));
+    return select(srgbColor < 0.04045f, lower, higher);
 }
 
 float3 linearToSrgb(float3 linearColor) {
     const float3 higher = 1.055f * pow(linearColor, 1.f / 2.4f) - 0.055f;
     const float3 lower = linearColor * 12.92f;
-    return lerp(lower, higher, float3(linearColor >= 0.0031308f));
+    return select(linearColor < 0.0031308f, lower, higher);
 }
 
 float3 applyTonemapping(float3 color)
