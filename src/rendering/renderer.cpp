@@ -603,23 +603,26 @@ void compileShadersAndInitPipeline()
     Slang::ComPtr<IBlob> diagnostics;
     Slang::ComPtr<IModule> module;
 
+    std::vector<std::string> mainShaderNames = {
+        "main.rgs",
+    };
+
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    const std::filesystem::path shaderBlobPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders/main.slang-module";
-    std::filesystem::create_directories(shaderBlobPath.parent_path());
+    const std::filesystem::path shaderBlobsPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders";
+    std::filesystem::create_directories(shaderBlobsPath);
 
     const auto shaderDirs = {
         shadersPath,
         std::filesystem::path(CMAKE_SOURCE_DIR) / "src/rendering/common",
     };
 
-    const std::filesystem::path shaderHashPath = shaderBlobPath.string() + ".hash";
+    const std::filesystem::path shaderHashPath = shaderBlobsPath / "shaders.hash";
     const uint64_t currentHash = computeShaderHash(shaderDirs);
 
     const bool forceRecompileShaders = SettingsManager::getAsBool("forceRecompileShaders");
     bool needsRecompile = true;
-    if (!forceRecompileShaders && std::filesystem::is_regular_file(shaderBlobPath) &&
-        std::filesystem::is_regular_file(shaderHashPath))
+    if (std::filesystem::is_regular_file(shaderHashPath) && !forceRecompileShaders)
     {
         std::ifstream hashIn(shaderHashPath, std::ios::binary);
         uint64_t storedHash = 0;
@@ -635,32 +638,39 @@ void compileShadersAndInitPipeline()
         }
     }
 
-    if (needsRecompile)
+    for (const auto& mainShaderName : mainShaderNames)
     {
-        printf("Compiling shaders...\n");
-        module = session->loadModule("main", diagnostics.writeRef());
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+        const std::string mainShaderFileName = mainShaderName + ".slang";
 
-        printf("Serializing shaders and writing to disk...\n");
-        Slang::ComPtr<slang::IBlob> serialized;
-        CHECK_HRESULT(module->serialize(serialized.writeRef()));
-        CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
+        const std::filesystem::path shaderBlobPath = shaderBlobsPath / (mainShaderName + ".slang-module");
 
-        std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
-        hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
-    }
-    else
-    {
-        printf("Loading shaders from blob...\n");
-        ID3DBlob* d3dBlob = nullptr;
-        CHECK_HRESULT(D3DReadFileToBlob(std::wstring(shaderBlobPath.wstring()).c_str(), &d3dBlob));
+        if (needsRecompile)
+        {
+            printf("Compiling %s...\n", mainShaderFileName.c_str());
+            module = session->loadModule(mainShaderName.c_str(), diagnostics.writeRef());
+            CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
-        Slang::ComPtr<slang::IBlob> slangBlob;
-        slangBlob.attach(reinterpret_cast<slang::IBlob*>(d3dBlob));
+            printf("Serializing %s and writing to disk...\n", mainShaderFileName.c_str());
+            Slang::ComPtr<slang::IBlob> serialized;
+            CHECK_HRESULT(module->serialize(serialized.writeRef()));
+            CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
 
-        module =
-            session->loadModuleFromIRBlob("main", shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
+            std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
+            hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
+        }
+        else
+        {
+            printf("Loading %s from blob...\n", mainShaderFileName.c_str());
+            ID3DBlob* d3dBlob = nullptr;
+            CHECK_HRESULT(D3DReadFileToBlob(std::wstring(shaderBlobPath.wstring()).c_str(), &d3dBlob));
+
+            Slang::ComPtr<slang::IBlob> slangBlob;
+            slangBlob.attach(reinterpret_cast<slang::IBlob*>(d3dBlob));
+
+            module = session->loadModuleFromIRBlob(
+                mainShaderName.c_str(), shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
+            CHECK_SLANG_DIAGNOSTICS(diagnostics);
+        }
     }
 
     auto endTime = std::chrono::high_resolution_clock::now();
