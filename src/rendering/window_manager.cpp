@@ -39,7 +39,6 @@ static void onKeyDown(WPARAM wparam)
     switch (wparam)
     {
     case VK_ESCAPE:
-        Renderer::flush();
         PostMessage(hwnd, WM_CLOSE, 0, 0);
         break;
     case 'O':
@@ -80,6 +79,7 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     {
     case WM_CLOSE:
     case WM_DESTROY:
+        Renderer::destroy();
         PostQuitMessage(0);
         break;
     case WM_SIZING:

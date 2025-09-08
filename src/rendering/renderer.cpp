@@ -1080,4 +1080,10 @@ void flush()
     }
 }
 
+void destroy()
+{
+    flush();
+    device.Reset();
+}
+
 } // namespace Renderer

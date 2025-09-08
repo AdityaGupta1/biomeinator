@@ -33,9 +33,11 @@ void resize();
 
 void render();
 
+void queueScreenshot(const bool useTestOutputPath = false);
+
 void flush();
 
-void queueScreenshot(const bool useTestOutputPath = false);
+void destroy();
 
 extern ComPtr<ID3D12Device5> device;
 
