@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-cbuffer GlobalParams : REGISTER_B(REGISTER_GLOBAL_PARAMS, REGISTER_SPACE_BUFFERS)
+cbuffer GlobalParams : REGISTER_B(RT_REGISTER_GLOBAL_PARAMS, RT_REGISTER_SPACE_BUFFERS)
 {
     ConstantParams constantParams;
     CameraParams cameraParams;

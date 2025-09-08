@@ -24,10 +24,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.slang"
 #include "util/rng.slang"
 
-StructuredBuffer<Material> materials : REGISTER_T(REGISTER_MATERIALS, REGISTER_SPACE_BUFFERS);
+StructuredBuffer<Material> materials : REGISTER_T(RT_REGISTER_MATERIALS, RT_REGISTER_SPACE_BUFFERS);
 
-Texture2D<float4> textures[MAX_NUM_TEXTURES] : REGISTER_T(REGISTER_TEXTURES, REGISTER_SPACE_TEXTURES);
-SamplerState texSampler : REGISTER_S(REGISTER_TEX_SAMPLER, REGISTER_SPACE_TEXTURES);
+Texture2D<float4> textures[RT_MAX_NUM_TEXTURES] : REGISTER_T(RT_REGISTER_TEXTURES, RT_REGISTER_SPACE_TEXTURES);
+SamplerState texSampler : REGISTER_S(RT_REGISTER_TEX_SAMPLER, RT_REGISTER_SPACE_TEXTURES);
 
 float3 sampleHemisphereCosineWeighted(const float3 normal_WS, inout RandomSampler rng)
 {

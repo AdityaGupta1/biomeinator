@@ -27,8 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "payload.slang"
 #include "util/math.slang"
 
-StructuredBuffer<AreaLight> areaLights : REGISTER_T(REGISTER_AREA_LIGHTS, REGISTER_SPACE_BUFFERS);
-StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, REGISTER_SPACE_BUFFERS);
+StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT_REGISTER_AREA_LIGHTS, RT_REGISTER_SPACE_BUFFERS);
+StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE_BUFFERS);
 
 AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {

@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "path_tracing.slang"
 
-RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_SPACE_TEXTURES);
+RWTexture2D<float4> renderTarget : REGISTER_U(RT_REGISTER_RENDER_TARGET, RT_REGISTER_SPACE_TEXTURES);
 
 [shader("raygeneration")]
 void RayGeneration()

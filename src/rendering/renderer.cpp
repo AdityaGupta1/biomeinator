@@ -237,7 +237,7 @@ void initRenderTarget()
 
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = MAX_NUM_TEXTURES + 1,
+        .NumDescriptors = RT_MAX_NUM_TEXTURES + 1,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
     };
     device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedHeap));
@@ -292,7 +292,7 @@ void resize()
     };
     const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-                                                    MAX_NUM_TEXTURES * descriptorSize };
+                                                    RT_MAX_NUM_TEXTURES * descriptorSize };
     device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
 }
 
@@ -351,17 +351,17 @@ void initRootSignature()
 
         descriptorRanges.push_back({
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            .NumDescriptors = MAX_NUM_TEXTURES,
-            .BaseShaderRegister = REGISTER_TEXTURES,
-            .RegisterSpace = REGISTER_SPACE_TEXTURES,
+            .NumDescriptors = RT_MAX_NUM_TEXTURES,
+            .BaseShaderRegister = RT_REGISTER_TEXTURES,
+            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
             .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
         });
 
         descriptorRanges.push_back({
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
             .NumDescriptors = 1,
-            .BaseShaderRegister = REGISTER_RENDER_TARGET,
-            .RegisterSpace = REGISTER_SPACE_TEXTURES,
+            .BaseShaderRegister = RT_REGISTER_RENDER_TARGET,
+            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
         });
 
@@ -390,72 +390,72 @@ void initRootSignature()
         rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(RAYTRACING_ACS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(VERTS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_VERTS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_VERTS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(IDXS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_IDXS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_IDXS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(PER_TRI_DATAS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_PER_TRI_DATAS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_PER_TRI_DATAS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_INSTANCE_DATAS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(MATERIALS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_MATERIALS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_MATERIALS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(AREA_LIGHTS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_AREA_LIGHTS,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_AREA_LIGHTS,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
         rtParams[RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+                .ShaderRegister = RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
 
@@ -466,8 +466,8 @@ void initRootSignature()
             .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .ShaderRegister = REGISTER_TEX_SAMPLER,
-            .RegisterSpace = REGISTER_SPACE_TEXTURES,
+            .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
+            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
         });
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
