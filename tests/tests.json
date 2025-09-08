@@ -131,7 +131,18 @@
 	            "--maxPathDepth=12"
 	        ],
 	        "golden": "evil_room/golden.png",
-	        "threshold": 0.02
+	        "threshold": 0.015
+	    },
+	    {
+	        "name": "evil_room_blender_no_tonemap",
+	        "scene": "evil_room/evil_room.gltf",
+	        "args": [
+	            "--spp=8192",
+	            "--maxPathDepth=12",
+	            "--tonemapping=0"
+	        ],
+	        "golden": "evil_room/golden_blender_no_tonemap.png",
+	        "threshold": 0.025
 	    }
 	]
 }

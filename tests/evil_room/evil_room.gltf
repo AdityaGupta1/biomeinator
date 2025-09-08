@@ -23,7 +23,9 @@
 				8,
 				9,
 				10,
-				11
+				11,
+				12,
+				13
 			]
 		}
 	],
@@ -236,6 +238,41 @@
 				2.954152822494507,
 				0.5027602314949036
 			]
+		},
+		{
+			"mesh":9,
+			"name":"chicken",
+			"rotation":[
+				-0.6963035464286804,
+				0.12313133478164673,
+				0.12313132733106613,
+				0.6963036060333252
+			],
+			"scale":[
+				-1.7296664714813232,
+				-1.7296664714813232,
+				-1.7296664714813232
+			],
+			"translation":[
+				-3.85072660446167,
+				1.7219258546829224,
+				-1.2137402296066284
+			]
+		},
+		{
+			"mesh":10,
+			"name":"toucan",
+			"rotation":[
+				0.8789728879928589,
+				-0.12686115503311157,
+				0.11928623169660568,
+				0.4439413845539093
+			],
+			"translation":[
+				1.9831408262252808,
+				2.7466788291931152,
+				-0.8219054341316223
+			]
 		}
 	],
 	"materials":[
@@ -403,6 +440,40 @@
 					1
 				]
 			}
+		},
+		{
+			"alphaMode":"BLEND",
+			"doubleSided":true,
+			"extensions":{
+				"KHR_materials_specular":{
+					"specularFactor":0
+				}
+			},
+			"name":"chicken",
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":0
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.5
+			}
+		},
+		{
+			"alphaMode":"BLEND",
+			"doubleSided":true,
+			"extensions":{
+				"KHR_materials_specular":{
+					"specularFactor":0
+				}
+			},
+			"name":"toucan",
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":1
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.5
+			}
 		}
 	],
 	"meshes":[
@@ -529,6 +600,56 @@
 					"material":8
 				}
 			]
+		},
+		{
+			"name":"chicken",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":34,
+						"NORMAL":35,
+						"TEXCOORD_0":36
+					},
+					"indices":37,
+					"material":9
+				}
+			]
+		},
+		{
+			"name":"toucan",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":38,
+						"NORMAL":39,
+						"TEXCOORD_0":40
+					},
+					"indices":37,
+					"material":10
+				}
+			]
+		}
+	],
+	"textures":[
+		{
+			"sampler":0,
+			"source":0
+		},
+		{
+			"sampler":0,
+			"source":1
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/png",
+			"name":"chicken",
+			"uri":"chicken.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"toucan",
+			"uri":"toucan.png"
 		}
 	],
 	"accessors":[
@@ -825,6 +946,68 @@
 			"componentType":5123,
 			"count":10128,
 			"type":"SCALAR"
+		},
+		{
+			"bufferView":34,
+			"componentType":5126,
+			"count":4,
+			"max":[
+				0.33337196707725525,
+				0,
+				0.5
+			],
+			"min":[
+				-0.33337196707725525,
+				0,
+				-0.5
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":35,
+			"componentType":5126,
+			"count":4,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":36,
+			"componentType":5126,
+			"count":4,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":37,
+			"componentType":5123,
+			"count":6,
+			"type":"SCALAR"
+		},
+		{
+			"bufferView":38,
+			"componentType":5126,
+			"count":4,
+			"max":[
+				0.5065855979919434,
+				0,
+				0.5
+			],
+			"min":[
+				-0.5065855979919434,
+				0,
+				-0.5
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":39,
+			"componentType":5126,
+			"count":4,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":40,
+			"componentType":5126,
+			"count":4,
+			"type":"VEC2"
 		}
 	],
 	"bufferViews":[
@@ -1031,11 +1214,61 @@
 			"byteLength":20256,
 			"byteOffset":51721260,
 			"target":34963
+		},
+		{
+			"buffer":0,
+			"byteLength":48,
+			"byteOffset":51741516,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":48,
+			"byteOffset":51741564,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":32,
+			"byteOffset":51741612,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":12,
+			"byteOffset":51741644,
+			"target":34963
+		},
+		{
+			"buffer":0,
+			"byteLength":48,
+			"byteOffset":51741656,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":48,
+			"byteOffset":51741704,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":32,
+			"byteOffset":51741752,
+			"target":34962
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987,
+			"wrapS":33071,
+			"wrapT":33071
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":51741516,
+			"byteLength":51741784,
 			"uri":"evil_room.bin"
 		}
 	]
