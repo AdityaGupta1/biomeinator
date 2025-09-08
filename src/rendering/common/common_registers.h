@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common_preamble.h"
 
+#define RESOURCE_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
+
 // =============================================
 #define RT_REGISTER_SPACE_BUFFERS 0
 // =============================================
@@ -40,8 +42,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // =============================================
 #define RT_REGISTER_SPACE_TEXTURES 1
 // =============================================
-
-#define RT_MAX_NUM_TEXTURES 8
 
 // u#
 #define RT_REGISTER_RENDER_TARGET 0

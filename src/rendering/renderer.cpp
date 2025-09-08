@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
+#include "buffer/descriptor_heap_allocator.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
 #include "common/common_hitgroups.h"
@@ -103,14 +104,14 @@ void init()
 {
     initDevice();
     initDescriptorHeaps();
-    initRenderTarget();
-    initCommand();
 
     for (auto& frame : frameCtxs)
     {
         frame.paramBlockManager.init();
     }
 
+    initRenderTarget();
+    initCommand();
     initConstantParams();
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
@@ -220,15 +221,18 @@ void initDevice()
 }
 
 ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+DescriptorHeapAllocator sharedDescHeapAlloc;
 
 void initDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = RT_MAX_NUM_TEXTURES + 1,
+        .NumDescriptors = RESOURCE_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
     device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
+
+    sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
@@ -296,10 +300,15 @@ void resize()
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
-    const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-                                                    RT_MAX_NUM_TEXTURES * descriptorSize };
+    D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
+    uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
     device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
+
+    for (auto& frame : frameCtxs)
+    {
+        frame.paramBlockManager.heapIndices->uav.renderTargetIdx[0] = uavIdx;
+        frame.paramBlockManager.heapIndices->uav.renderTargetIdx[1] = 0;
+    }
 }
 
 void initCommand()
@@ -330,7 +339,7 @@ void initConstantParams()
 
 enum class RtParam
 {
-    SHARED_DESCRIPTOR_HEAP,
+    //SHARED_DESCRIPTOR_HEAP,
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
     VERTS,
@@ -355,7 +364,7 @@ void initRootSignature()
     {
         std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
 
-        descriptorRanges.push_back({
+        /*descriptorRanges.push_back({
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
             .NumDescriptors = RT_MAX_NUM_TEXTURES,
             .BaseShaderRegister = RT_REGISTER_TEXTURES,
@@ -369,29 +378,30 @@ void initRootSignature()
             .BaseShaderRegister = RT_REGISTER_RENDER_TARGET,
             .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-        });
+        });*/
 
-        if (SettingsManager::getAsBool("enableSer"))
-        {
-            // fake UAV slot for SER
-            descriptorRanges.push_back({
-                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                .NumDescriptors = 1,
-                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-                .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-            });
-        }
+        // TODO: figure out what to do here for bindless
+        //if (SettingsManager::getAsBool("enableSer"))
+        //{
+        //    // fake UAV slot for SER
+        //    descriptorRanges.push_back({
+        //        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        //        .NumDescriptors = 1,
+        //        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+        //        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+        //        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+        //    });
+        //}
 
         std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
 
-        rtParams[RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-            .DescriptorTable = {
-                .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
-                .pDescriptorRanges = descriptorRanges.data(),
-            },
-        };
+        //rtParams[RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP)] = {
+        //    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+        //    .DescriptorTable = {
+        //        .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
+        //        .pDescriptorRanges = descriptorRanges.data(),
+        //    },
+        //};
 
         rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
@@ -483,14 +493,15 @@ void initRootSignature()
                 .pParameters = rtParams.data(),
                 .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
                 .pStaticSamplers = staticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
             },
         };
 
         ComPtr<ID3DBlob> blob, errorBlob;
         CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
                                       errorBlob);
-        device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig));
+        CHECK_HRESULT(
+            device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
     }
 }
 
@@ -561,7 +572,9 @@ void compileShadersAndInitPipeline()
     constexpr int shaderMinorVersion = 6;
     const std::string shaderMajorVersionStr = std::to_string(shaderMajorVersion);
     const std::string shaderMinorVersionStr = std::to_string(shaderMinorVersion);
-    const std::string profileStr = "hlsl_nvapi+sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
+    //const std::string profileStr = "hlsl_nvapi+sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
+    const std::string profileStr = "sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
+    // TODO: add hlsl_nvapi only if SER is enabled
 
     TargetDesc targetDesc = {
         .format = SLANG_DXIL,
@@ -584,8 +597,9 @@ void compileShadersAndInitPipeline()
             .name = CompilerOptionName::DownstreamArgs,
             .value = {
                 .kind = CompilerOptionValueKind::String,
-                .stringValue0 = "dxc",
-                .stringValue1 = nvapiPathArgStr.c_str(),
+                .stringValue0 = "dxc", // TODO: pass nvapi path only if SER is enabled
+                //.stringValue1 = nvapiPathArgStr.c_str(),
+                .stringValue1 = "-Tlib6_6",
             },
         }
     };
@@ -1007,7 +1021,7 @@ void render()
         cmdList->SetDescriptorHeaps(1, heaps);
 
         // clang-format off
-        cmdList->SetComputeRootDescriptorTable(RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+        //cmdList->SetComputeRootDescriptorTable(RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());

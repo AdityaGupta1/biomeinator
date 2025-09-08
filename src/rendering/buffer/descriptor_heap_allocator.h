@@ -18,23 +18,23 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_structs.h"
+#include "rendering/dxr_includes.h"
 
-class ParamBlockManager
+#include <vector>
+
+class DescriptorHeapAllocator
 {
 private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
+    ID3D12DescriptorHeap* heapPtr{ nullptr };
+    D3D12_CPU_DESCRIPTOR_HANDLE heapStartCpu;
+    D3D12_GPU_DESCRIPTOR_HANDLE heapStartGpu;
+    uint32_t heapHandleIncrement;
+    std::vector<uint32_t> freeIdxs;
 
 public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
+    void init(ID3D12Device* device, ID3D12DescriptorHeap* heapPtr);
 
-    void init();
+    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle);
 
-    ID3D12Resource* getDevBuffer() const;
+    void free(uint32_t idx);
 };

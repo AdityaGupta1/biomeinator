@@ -21,8 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "path_tracing.slang"
 
-RWTexture2D<float4> renderTarget : REGISTER_U(RT_REGISTER_RENDER_TARGET, RT_REGISTER_SPACE_TEXTURES);
-
 [shader("raygeneration")]
 void RayGeneration()
 {
@@ -54,5 +52,7 @@ void RayGeneration()
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
     const float3 colorPostTonemap = applyTonemapping(colorPreTonemap);
+
+    RWTexture2D<float4> renderTarget = heapIndices.uav.renderTarget;
     renderTarget[pixelIdx] = float4(colorPostTonemap, 1);
 }

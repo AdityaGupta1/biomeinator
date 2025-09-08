@@ -120,7 +120,7 @@ private:
     MappedArray<::Material> mappedMaterialsArray{};
 
     uint32_t nextTextureId{ 0 };
-    std::array<ComPtr<ID3D12Resource>, RT_MAX_NUM_TEXTURES> textures{};
+    std::array<ComPtr<ID3D12Resource>, 8> textures{}; // TODO: remove
     struct PendingTexture
     {
         std::vector<uint8_t> data;

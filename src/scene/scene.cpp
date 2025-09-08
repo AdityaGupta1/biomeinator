@@ -201,7 +201,7 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
 {
     const uint32_t texId = this->nextTextureId++;
-    ASSERT(texId < RT_MAX_NUM_TEXTURES);
+    //ASSERT(texId < RT_MAX_NUM_TEXTURES);
     this->pendingTextures.push_back({ std::move(data), width, height, texId });
     return texId;
 }

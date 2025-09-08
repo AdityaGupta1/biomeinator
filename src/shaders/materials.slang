@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 StructuredBuffer<Material> materials : REGISTER_T(RT_REGISTER_MATERIALS, RT_REGISTER_SPACE_BUFFERS);
 
-Texture2D<float4> textures[RT_MAX_NUM_TEXTURES] : REGISTER_T(RT_REGISTER_TEXTURES, RT_REGISTER_SPACE_TEXTURES);
+//Texture2D<float4> textures[RT_MAX_NUM_TEXTURES] : REGISTER_T(RT_REGISTER_TEXTURES, RT_REGISTER_SPACE_TEXTURES);
 SamplerState texSampler : REGISTER_S(RT_REGISTER_TEX_SAMPLER, RT_REGISTER_SPACE_TEXTURES);
 
 float3 sampleHemisphereCosineWeighted(const float3 normal_WS, inout RandomSampler rng)
@@ -76,7 +76,7 @@ float3 evaluateBsdf<let calculateFresnelReflectance : bool>(
         float3 baseColor = material.baseColor;
         if (material.baseColorTextureId != TEXTURE_ID_INVALID)
         {
-            baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
+            //baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
         }
 
         if (calculateFresnelReflectance && material.hasSpecularReflection())

@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 cbuffer GlobalParams : REGISTER_B(RT_REGISTER_GLOBAL_PARAMS, RT_REGISTER_SPACE_BUFFERS)
 {
+    HeapIndices heapIndices;
     ConstantParams constantParams;
     CameraParams cameraParams;
     SceneParams sceneParams;

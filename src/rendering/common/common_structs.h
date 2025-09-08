@@ -159,6 +159,28 @@ public:
     uint pad2;
 };
 
+#if _hlsl
+struct HeapIndices
+{
+    struct
+    {
+        RWTexture2D<float4>.Handle renderTarget;
+        uint pad1;
+        uint pad2;
+    } uav;
+};
+#else
+struct HeapIndices
+{
+    struct
+    {
+        uint renderTargetIdx[2];
+        uint pad1;
+        uint pad2;
+    } uav;
+};
+#endif
+
 struct ConstantParams
 {
     uint rngSeed;
