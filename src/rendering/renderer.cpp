@@ -343,154 +343,149 @@ enum class RtParam
 ComPtr<ID3D12RootSignature> rtRootSig;
 void initRootSignature()
 {
-    std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
-
-    descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-        .NumDescriptors = MAX_NUM_TEXTURES,
-        .BaseShaderRegister = REGISTER_TEXTURES,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-        .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
-    });
-
-    descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        .NumDescriptors = 1,
-        .BaseShaderRegister = REGISTER_RENDER_TARGET,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-    });
-
-    if (SettingsManager::getAsBool("enableSer"))
+    // ===================================
+    // RAYTRACING
+    // ===================================
     {
-        // fake UAV slot for SER
+        std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
+
+        descriptorRanges.push_back({
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            .NumDescriptors = MAX_NUM_TEXTURES,
+            .BaseShaderRegister = REGISTER_TEXTURES,
+            .RegisterSpace = REGISTER_SPACE_TEXTURES,
+            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
+        });
+
         descriptorRanges.push_back({
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
             .NumDescriptors = 1,
-            .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-            .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+            .BaseShaderRegister = REGISTER_RENDER_TARGET,
+            .RegisterSpace = REGISTER_SPACE_TEXTURES,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
         });
-    }
 
-    std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
-
-    rtParams[RT_PARAM_IDX(SHARED_HEAP)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-        .DescriptorTable = {
-            .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
-            .pDescriptorRanges = descriptorRanges.data(),
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_GLOBAL_PARAMS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(RAYTRACING_ACS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_RAYTRACING_ACS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(VERTS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_VERTS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(IDXS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_IDXS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(PER_TRI_DATAS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_PER_TRI_DATAS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_INSTANCE_DATAS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(MATERIALS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_MATERIALS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(AREA_LIGHTS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_AREA_LIGHTS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    rtParams[RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
-
-    staticSamplers.push_back({
-        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = REGISTER_TEX_SAMPLER,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-    });
-
-    D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
-        .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-        .Desc_1_1 = {
-            .NumParameters = static_cast<uint32_t>(rtParams.size()),
-            .pParameters = rtParams.data(),
-            .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
-            .pStaticSamplers = staticSamplers.data(),
-            .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
-        },
-    };
-
-    ComPtr<ID3DBlob> blob;
-    ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob);
-#ifdef _DEBUG
-    if (FAILED(hr))
-    {
-        if (errorBlob)
+        if (SettingsManager::getAsBool("enableSer"))
         {
-            printf("Root signature serialization error: %s\n", (const char*)errorBlob->GetBufferPointer());
+            // fake UAV slot for SER
+            descriptorRanges.push_back({
+                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+                .NumDescriptors = 1,
+                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+                .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+            });
         }
-        __debugbreak();
+
+        std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
+
+        rtParams[RT_PARAM_IDX(SHARED_HEAP)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
+                .pDescriptorRanges = descriptorRanges.data(),
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(RAYTRACING_ACS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_RAYTRACING_ACS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(VERTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_VERTS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(IDXS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_IDXS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(PER_TRI_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_PER_TRI_DATAS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_INSTANCE_DATAS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(MATERIALS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_MATERIALS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(AREA_LIGHTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_AREA_LIGHTS,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+                .RegisterSpace = REGISTER_SPACE_BUFFERS,
+            },
+        };
+
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back({
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .ShaderRegister = REGISTER_TEX_SAMPLER,
+            .RegisterSpace = REGISTER_SPACE_TEXTURES,
+        });
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(rtParams.size()),
+                .pParameters = rtParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig));
     }
-#endif
-    device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig));
 }
 
 ComPtr<ID3D12StateObject> rtPso;
@@ -679,7 +674,9 @@ void compileShadersAndInitPipeline()
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
     printf("Shader init took %lld ms\n", durationMs);
 
-    // raytracing
+    // ===================================
+    // RAYTRACING
+    // ===================================
     {
         IModule* rtModule = modules["main.rgs"].get();
 
@@ -714,11 +711,11 @@ void compileShadersAndInitPipeline()
             CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
             D3D12_DXIL_LIBRARY_DESC lib = {
-            .DXILLibrary = {
-                .pShaderBytecode = entryPointBlob->getBufferPointer(),
-                .BytecodeLength = entryPointBlob->getBufferSize(),
-            },
-        };
+                .DXILLibrary = {
+                    .pShaderBytecode = entryPointBlob->getBufferPointer(),
+                    .BytecodeLength = entryPointBlob->getBufferSize(),
+                },
+            };
             rtDxilLibs.push_back(lib);
         }
 
