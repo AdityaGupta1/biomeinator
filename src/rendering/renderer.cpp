@@ -601,11 +601,12 @@ void compileShadersAndInitPipeline()
     CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
 
     Slang::ComPtr<IBlob> diagnostics;
-    Slang::ComPtr<IModule> module;
 
     std::vector<std::string> mainShaderNames = {
         "main.rgs",
     };
+
+    std::unordered_map<std::string, Slang::ComPtr<IModule>> modules;
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -641,8 +642,9 @@ void compileShadersAndInitPipeline()
     for (const auto& mainShaderName : mainShaderNames)
     {
         const std::string mainShaderFileName = mainShaderName + ".slang";
-
         const std::filesystem::path shaderBlobPath = shaderBlobsPath / (mainShaderName + ".slang-module");
+
+        Slang::ComPtr<IModule>& module = modules[mainShaderName];
 
         if (needsRecompile)
         {
@@ -677,136 +679,143 @@ void compileShadersAndInitPipeline()
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
     printf("Shader init took %lld ms\n", durationMs);
 
-    std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
-    std::vector<IComponentType*> components = { module };
-    const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
-    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
+    // raytracing
     {
-        Slang::ComPtr<IEntryPoint> entryPoint;
-        module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
-        entryPoints.push_back(entryPoint);
-        components.push_back(entryPoint.get());
-    }
+        IModule* rtModule = modules["main.rgs"].get();
 
-    Slang::ComPtr<IComponentType> program;
-    CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
+        std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
+        std::vector<IComponentType*> components = { rtModule };
+        const uint32_t numEntryPoints = rtModule->getDefinedEntryPointCount();
+        for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
+        {
+            Slang::ComPtr<IEntryPoint> entryPoint;
+            rtModule->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
+            entryPoints.push_back(entryPoint);
+            components.push_back(entryPoint.get());
+        }
 
-    Slang::ComPtr<IComponentType> linkedProgram;
-    CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
+        Slang::ComPtr<IComponentType> program;
+        CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
 
-    std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
-    std::vector<D3D12_DXIL_LIBRARY_DESC> libs;
-    libs.reserve(numEntryPoints);
-
-    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-    {
-        auto& entryPointBlob = entryPointBlobs[entryPointIdx];
-
-        CHECK_HRESULT(linkedProgram->getEntryPointCode(entryPointIdx, 0, entryPointBlob.writeRef(), diagnostics.writeRef()));
+        Slang::ComPtr<IComponentType> linkedProgram;
+        CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
         CHECK_SLANG_DIAGNOSTICS(diagnostics);
 
-        D3D12_DXIL_LIBRARY_DESC lib = {
+        std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
+        std::vector<D3D12_DXIL_LIBRARY_DESC> rtDxilLibs;
+        rtDxilLibs.reserve(numEntryPoints);
+
+        for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
+        {
+            auto& entryPointBlob = entryPointBlobs[entryPointIdx];
+
+            CHECK_HRESULT(
+                linkedProgram->getEntryPointCode(entryPointIdx, 0, entryPointBlob.writeRef(), diagnostics.writeRef()));
+            CHECK_SLANG_DIAGNOSTICS(diagnostics);
+
+            D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
                 .pShaderBytecode = entryPointBlob->getBufferPointer(),
                 .BytecodeLength = entryPointBlob->getBufferSize(),
             },
         };
-        libs.push_back(lib);
-    }
-
-    constexpr uint32_t NUM_HIT_GROUPS = 2;
-    std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
-    hitGroups[HITGROUP_PRIMARY] = {
-        .HitGroupExport = L"HitGroup_Primary",
-        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit_Primary",
-    };
-    hitGroups[HITGROUP_LIGHTS] = {
-        .HitGroupExport = L"HitGroup_Lights",
-        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit_Lights",
-    };
-
-    D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-        .MaxPayloadSizeInBytes = 96,
-        .MaxAttributeSizeInBytes = 8,
-    };
-
-    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
-        rtRootSig.Get(),
-    };
-
-    D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-        .MaxTraceRecursionDepth = 1,
-    };
-
-    std::vector<D3D12_STATE_SUBOBJECT> subobjects;
-    {
-        for (auto& lib : libs)
-        {
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+            rtDxilLibs.push_back(lib);
         }
 
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+        constexpr uint32_t NUM_HIT_GROUPS = 2;
+        std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
+        hitGroups[HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        hitGroups[HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
 
+        D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
+            .MaxPayloadSizeInBytes = 96,
+            .MaxAttributeSizeInBytes = 8,
+        };
+
+        D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
+            rtRootSig.Get(),
+        };
+
+        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
+            .MaxTraceRecursionDepth = 1,
+        };
+
+        std::vector<D3D12_STATE_SUBOBJECT> subobjects;
+        {
+            for (auto& lib : rtDxilLibs)
+            {
+                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+            }
+
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
+            subobjects.push_back(
+                { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+
+            for (const auto& hitGroup : hitGroups)
+            {
+                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+            }
+        }
+
+        D3D12_STATE_OBJECT_DESC desc = {
+            .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+            .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
+            .pSubobjects = subobjects.data(),
+        };
+        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&rtPso)));
+
+        const uint32_t shaderIdsSizeBytes =
+            2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+        dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+
+        ComPtr<ID3D12StateObjectProperties> props;
+        rtPso.As(&props);
+
+        uint8_t* host_shaderIds;
+        dev_rtShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+
+        auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
+        {
+            void* id = props->GetShaderIdentifier(name);
+            memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+            host_shaderIds += incrementSizeBytes;
+        };
+
+        writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+        writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
         for (const auto& hitGroup : hitGroups)
         {
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+            writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
         }
+
+        dev_rtShaderIds->Unmap(0, nullptr);
+
+        rtDispatchDesc = {
+            .RayGenerationShaderRecord = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress(),
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .MissShaderTable = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .HitGroupTable = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+                .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+        };
+        rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
     }
-
-    D3D12_STATE_OBJECT_DESC desc = {
-        .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-        .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
-        .pSubobjects = subobjects.data(),
-    };
-    CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&rtPso)));
-
-    const uint32_t shaderIdsSizeBytes =
-        2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-    dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
-
-    ComPtr<ID3D12StateObjectProperties> props;
-    rtPso.As(&props);
-
-    uint8_t* host_shaderIds;
-    dev_rtShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
-
-    auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
-    {
-        void* id = props->GetShaderIdentifier(name);
-        memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        host_shaderIds += incrementSizeBytes;
-    };
-
-    writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-    writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-    for (const auto& hitGroup : hitGroups)
-    {
-        writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-    }
-
-    dev_rtShaderIds->Unmap(0, nullptr);
-
-    rtDispatchDesc = {
-        .RayGenerationShaderRecord = {
-            .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress(),
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-        .MissShaderTable = {
-            .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-        .HitGroupTable = {
-            .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-    };
-    rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
 }
 
 static int frameCount = 0;
