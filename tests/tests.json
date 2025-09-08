@@ -122,6 +122,16 @@
 	        ],
 	        "golden": "fancy_cornell_box/golden_blender_no_tonemap.png",
 	        "threshold": 0.01
+	    },
+	    {
+	        "name": "evil_room",
+	        "scene": "evil_room/evil_room.gltf",
+	        "args": [
+	            "--spp=8192",
+	            "--maxPathDepth=12"
+	        ],
+	        "golden": "evil_room/golden.png",
+	        "threshold": 0.02
 	    }
 	]
 }

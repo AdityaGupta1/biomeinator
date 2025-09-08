@@ -91,6 +91,11 @@ public:
         return emissiveStrength > 0.f;
     }
 
+    bool isOnlySpecular()
+    {
+        return (flags == MATERIAL_FLAG_HAS_SPECULAR);
+    }
+
     bool canReflect()
     {
         return bool(flags & MATERIAL_FLAG_HAS_SPECULAR); // TODO: add more conditions here later?
