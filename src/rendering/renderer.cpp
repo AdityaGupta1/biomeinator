@@ -52,8 +52,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <nvapi.h>
 #include <nvShaderExtnEnums.h>
 
-#define FORCE_RECOMPILE_SHADERS 0
-
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -145,8 +143,13 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
-    NvAPI_Initialize();
-    NvAPI_Unload();
+    const bool enableSer = SettingsManager::getAsBool("enableSer");
+
+    if (enableSer)
+    {
+        NvAPI_Initialize();
+        NvAPI_Unload();
+    }
 
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
@@ -199,15 +202,18 @@ void initDevice()
 
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
 
-    bool serSupported = false;
-    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-    if (serSupported)
+    if (enableSer)
     {
-        printf("SER supported on this device\n");
-    }
-    else
-    {
-        fprintf(stderr, "WARNING: SER not supported on this device\n");
+        bool serSupported = false;
+        NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+        if (serSupported)
+        {
+            printf("SER supported on this device\n");
+        }
+        else
+        {
+            fprintf(stderr, "WARNING: SER not supported on this device\n");
+        }
     }
 }
 
@@ -355,14 +361,17 @@ void initRootSignature()
         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
     });
 
-    // fake UAV slot for SER
-    descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        .NumDescriptors = 1,
-        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-    });
+    if (SettingsManager::getAsBool("enableSer"))
+    {
+        // fake UAV slot for SER
+        descriptorRanges.push_back({
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+            .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+        });
+    }
 
     std::array<D3D12_ROOT_PARAMETER1, PARAM_IDX(COUNT)> params;
 
@@ -532,7 +541,12 @@ static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::p
 }
 void compileShadersAndInitPipeline()
 {
-    NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+    const bool enableSer = SettingsManager::getAsBool("enableSer");
+
+    if (enableSer)
+    {
+        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+    }
 
     using namespace slang;
 
@@ -558,6 +572,7 @@ void compileShadersAndInitPipeline()
     std::vector<slang::PreprocessorMacroDesc> preprocessorMacroDescs;
     preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MAJOR", shaderMajorVersionStr.c_str() });
     preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MINOR", shaderMinorVersionStr.c_str() });
+    preprocessorMacroDescs.push_back({ "DO_REORDER", enableSer ? "1" : "0" });
     sessionDesc.preprocessorMacros = preprocessorMacroDescs.data();
     sessionDesc.preprocessorMacroCount = preprocessorMacroDescs.size();
 
@@ -601,9 +616,9 @@ void compileShadersAndInitPipeline()
     const std::filesystem::path shaderHashPath = shaderBlobPath.string() + ".hash";
     const uint64_t currentHash = computeShaderHash(shaderDirs);
 
-#if !FORCE_RECOMPILE_SHADERS
+    const bool forceRecompileShaders = SettingsManager::getAsBool("forceRecompileShaders");
     bool needsRecompile = true;
-    if (std::filesystem::is_regular_file(shaderBlobPath) &&
+    if (!forceRecompileShaders && std::filesystem::is_regular_file(shaderBlobPath) &&
         std::filesystem::is_regular_file(shaderHashPath))
     {
         std::ifstream hashIn(shaderHashPath, std::ios::binary);
@@ -621,7 +636,6 @@ void compileShadersAndInitPipeline()
     }
 
     if (needsRecompile)
-#endif
     {
         printf("Compiling shaders...\n");
         module = session->loadModule("main", diagnostics.writeRef());
@@ -635,7 +649,6 @@ void compileShadersAndInitPipeline()
         std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
         hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
     }
-#if !FORCE_RECOMPILE_SHADERS
     else
     {
         printf("Loading shaders from blob...\n");
@@ -649,7 +662,6 @@ void compileShadersAndInitPipeline()
             session->loadModuleFromIRBlob("main", shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
         CHECK_SLANG_DIAGNOSTICS(diagnostics);
     }
-#endif
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();

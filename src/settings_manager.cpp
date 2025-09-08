@@ -29,6 +29,8 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
+    optionAdder("enableSer", "Enable SER", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("forceRecompileShaders", "Force recompile shaders", cxxopts::value<bool>()->default_value("false"));
 
     ParseResult parseResult = options.parse(argc, argv);
 
@@ -58,6 +60,8 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("enableMis", bool);
     COPY_SETTING("tonemapping", uint32_t);
+    COPY_SETTING("enableSer", bool);
+    COPY_SETTING("forceRecompileShaders", bool);
 
 #undef COPY_SETTING
 

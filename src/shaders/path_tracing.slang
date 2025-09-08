@@ -29,7 +29,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
+#ifndef DO_REORDER
 #define DO_REORDER 0
+#endif
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
