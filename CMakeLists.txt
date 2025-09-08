@@ -25,9 +25,21 @@ foreach(FILE IN LISTS SRC_FILES)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(Biomeinator ${SRC_FILES})
-
 set(EXT "${CMAKE_SOURCE_DIR}/external")
+
+file(GLOB IMGUI_SRC
+    "${EXT}/imgui/*.cpp"
+    "${EXT}/imgui/*.h"
+)
+
+list(APPEND IMGUI_SRC
+    "${EXT}/imgui/backends/imgui_impl_win32.cpp"
+    "${EXT}/imgui/backends/imgui_impl_win32.h"
+    "${EXT}/imgui/backends/imgui_impl_dx12.cpp"
+    "${EXT}/imgui/backends/imgui_impl_dx12.h"
+)
+
+add_executable(Biomeinator ${SRC_FILES} ${IMGUI_SRC})
 
 target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}

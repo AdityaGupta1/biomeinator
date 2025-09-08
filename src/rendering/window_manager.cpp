@@ -27,6 +27,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <locale>
 #include <codecvt>
 
+#include <imgui_impl_win32.h>
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace WindowManager
 {
 
@@ -75,6 +79,11 @@ static void onKeyDown(WPARAM wparam)
 
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
+    {
+        return true;
+    }
+
     switch (msg)
     {
     case WM_CLOSE:

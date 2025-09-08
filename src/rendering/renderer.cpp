@@ -52,9 +52,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <nvapi.h>
 #include <nvShaderExtnEnums.h>
 
-#include <imgui.h>
-#include <imgui_impl_win32.h>
-#include <imgui_impl_dx12.h>
+#include "imgui_helpers.h"
 
 using namespace DirectX;
 
@@ -70,6 +68,8 @@ void initCommand();
 void initConstantParams();
 void initRootSignature();
 void compileShadersAndInitPipeline();
+
+void initImgui();
 
 void beginFrame();
 void submitCmd();
@@ -123,6 +123,8 @@ void init()
 
     initRootSignature();
     compileShadersAndInitPipeline();
+
+    initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
     if (!defaultScene.empty())
@@ -224,14 +226,22 @@ void initDevice()
 }
 
 ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+
+constexpr uint32_t numImguiDescriptors = 4; // not sure how many it needs so giving it 4 for now
+ImguiDescriptorHeapAllocator imguiDescriptorHeapAlloc;
+
 void initDescriptorHeaps()
 {
+    const uint32_t numNonImguiDescriptors = MAX_NUM_TEXTURES + 1;
     D3D12_DESCRIPTOR_HEAP_DESC sharedDescriptorHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = MAX_NUM_TEXTURES + 1,
+        .NumDescriptors = numNonImguiDescriptors + numImguiDescriptors,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
     device->CreateDescriptorHeap(&sharedDescriptorHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
+
+    imguiDescriptorHeapAlloc.init(
+        device.Get(), sharedDescriptorHeap.Get(), numImguiDescriptors, numNonImguiDescriptors);
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
@@ -809,6 +819,33 @@ void compileShadersAndInitPipeline()
     dispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
 }
 
+void initImgui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui_ImplWin32_Init(hwnd);
+
+    ImGui_ImplDX12_InitInfo imguiDX12InitInfo = {};
+    imguiDX12InitInfo.Device = device.Get();
+    imguiDX12InitInfo.CommandQueue = cmdQueue.Get();
+    imguiDX12InitInfo.NumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
+    imguiDX12InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    imguiDX12InitInfo.SrvDescriptorHeap = sharedDescriptorHeap.Get();
+    imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
+                                            D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
+                                            D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
+    { return imguiDescriptorHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
+    imguiDX12InitInfo.SrvDescriptorFreeFn =
+        [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle)
+    { return imguiDescriptorHeapAlloc.free(cpuHandle, gpuHandle); };
+
+    ImGui_ImplDX12_Init(&imguiDX12InitInfo);
+}
+
 static int frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
@@ -960,6 +997,11 @@ void finalizeQueuedScreenshot()
 
 void render()
 {
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+    ImGui::ShowDemoWindow();
+
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
@@ -992,7 +1034,7 @@ void render()
         cmdList->SetPipelineState1(pso.Get());
         cmdList->SetComputeRootSignature(rootSignature.Get());
         ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
-        cmdList->SetDescriptorHeaps(1, heaps);
+        cmdList->SetDescriptorHeaps(_countof(heaps), heaps);
 
         // clang-format off
         cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
@@ -1030,7 +1072,11 @@ void render()
 
     backBuffer.Reset();
 
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
+
     submitCmd();
+
     const uint64_t fenceValue = nextFenceValue++;
     cmdQueue->Signal(fence.Get(), fenceValue);
     frameCtx.fenceValue = fenceValue;
@@ -1092,6 +1138,11 @@ void flush()
 void destroy()
 {
     flush();
+
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+
     device.Reset();
 }
 
