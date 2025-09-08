@@ -37,6 +37,8 @@ target_include_directories(Biomeinator PRIVATE
     "${EXT}/slang/include"
     "${EXT}/stb/include"
     "${EXT}/tinygltf/include"
+    "${EXT}/imgui/"
+    "${EXT}/imgui/backends"
 )
 
 target_link_directories(Biomeinator PRIVATE

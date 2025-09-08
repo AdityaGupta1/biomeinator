@@ -30,6 +30,7 @@ This project uses various third-party libraries:
 - [json](https://github.com/nlohmann/json) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
+- [Dear ImGui](https://github.com/ocornut/imgui) - MIT
 - [Slang](https://github.com/shader-slang/slang) - Apache-2.0 with LLVM-exception
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT

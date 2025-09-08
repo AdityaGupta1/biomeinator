@@ -52,6 +52,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <nvapi.h>
 #include <nvShaderExtnEnums.h>
 
+#include <imgui.h>
+#include <imgui_impl_win32.h>
+#include <imgui_impl_dx12.h>
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
