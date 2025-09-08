@@ -20,7 +20,7 @@ Or, you can:
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
 
-Once the project is running, you can open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>
+Once the project is running, you can open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>.
 
 ## Third-Party Licenses
 
