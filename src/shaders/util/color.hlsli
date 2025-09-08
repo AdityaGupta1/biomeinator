@@ -46,6 +46,7 @@ float3 applyTonemapping(float3 color)
     switch (renderParams.tonemapping)
     {
     case TONEMAPPING_NONE:
+    default:
         tonemappedColor = color;
         break;
     case TONEMAPPING_STANDARD:
