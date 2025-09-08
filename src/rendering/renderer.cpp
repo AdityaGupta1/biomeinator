@@ -50,9 +50,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
-#include <nvapi.h>
-#include <nvShaderExtnEnums.h>
-
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -146,14 +143,6 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
-    const bool enableSer = SettingsManager::getAsBool("enableSer");
-
-    if (enableSer)
-    {
-        NvAPI_Initialize();
-        NvAPI_Unload();
-    }
-
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
@@ -204,20 +193,6 @@ void initDevice()
     device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue));
 
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-
-    if (enableSer)
-    {
-        bool serSupported = false;
-        NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-        if (serSupported)
-        {
-            printf("SER supported on this device\n");
-        }
-        else
-        {
-            fprintf(stderr, "WARNING: SER not supported on this device\n");
-        }
-    }
 }
 
 ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
@@ -555,11 +530,6 @@ void compileShadersAndInitPipeline()
 {
     const bool enableSer = SettingsManager::getAsBool("enableSer");
 
-    if (enableSer)
-    {
-        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
-    }
-
     using namespace slang;
 
     Slang::ComPtr<IGlobalSession> globalSession;
@@ -572,9 +542,7 @@ void compileShadersAndInitPipeline()
     constexpr int shaderMinorVersion = 6;
     const std::string shaderMajorVersionStr = std::to_string(shaderMajorVersion);
     const std::string shaderMinorVersionStr = std::to_string(shaderMinorVersion);
-    //const std::string profileStr = "hlsl_nvapi+sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
-    const std::string profileStr = "sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
-    // TODO: add hlsl_nvapi only if SER is enabled
+    const std::string profileStr = "lib_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
 
     TargetDesc targetDesc = {
         .format = SLANG_DXIL,
@@ -586,19 +554,15 @@ void compileShadersAndInitPipeline()
     std::vector<slang::PreprocessorMacroDesc> preprocessorMacroDescs;
     preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MAJOR", shaderMajorVersionStr.c_str() });
     preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MINOR", shaderMinorVersionStr.c_str() });
-    preprocessorMacroDescs.push_back({ "DO_REORDER", enableSer ? "1" : "0" });
     sessionDesc.preprocessorMacros = preprocessorMacroDescs.data();
     sessionDesc.preprocessorMacroCount = preprocessorMacroDescs.size();
 
-    const std::filesystem::path nvapiPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "external/nvapi";
-    const std::string nvapiPathArgStr = "-I" + std::filesystem::absolute(nvapiPath).generic_string();
     std::vector<CompilerOptionEntry> compilerOptionEntries = {
         {
             .name = CompilerOptionName::DownstreamArgs,
             .value = {
                 .kind = CompilerOptionValueKind::String,
-                .stringValue0 = "dxc", // TODO: pass nvapi path only if SER is enabled
-                //.stringValue1 = nvapiPathArgStr.c_str(),
+                .stringValue0 = "dxc",
                 .stringValue1 = "-Tlib6_6",
             },
         }

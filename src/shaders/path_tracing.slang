@@ -29,10 +29,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.slang"
 #include "util/math.slang"
 
-#ifndef DO_REORDER
-#define DO_REORDER 0
-#endif
-
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
     const float2 uv = idx / size;
@@ -132,13 +128,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-#if DO_REORDER
-        HitObject hitObject = HitObject::TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-        ReorderThread(hitObject, 0, 0);
-        HitObject::Invoke(raytracingAcs, hitObject, payload);
-#else
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-#endif
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {
