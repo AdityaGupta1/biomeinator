@@ -44,11 +44,10 @@ public:
         this->size = size;
         const uint32_t sizeBytes = sizeof(T) * size;
 
-        upload_buffer = BufferHelper::createBasicBuffer(sizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
-        upload_buffer->Map(0, nullptr, reinterpret_cast<void**>(&host_buffer));
+        this->upload_buffer = BufferHelper::createBasicBuffer(sizeBytes, &UPLOAD_HEAP);
+        this->upload_buffer->Map(0, nullptr, reinterpret_cast<void**>(&host_buffer));
 
-        dev_buffer =
-            BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
 
         this->setNotDirty();
     }

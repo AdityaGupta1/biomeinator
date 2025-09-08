@@ -746,7 +746,7 @@ void compileShadersAndInitPipeline()
     const uint32_t shaderIdsSizeBytes =
         2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
     dev_shaderIds =
-        BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP, D3D12_RESOURCE_STATE_GENERIC_READ);
+        BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
 
     ComPtr<ID3D12StateObjectProperties> props;
     pso.As(&props);
@@ -844,8 +844,7 @@ void captureQueuedScreenshot()
         ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
     const uint32_t readbackSizeBytes = screenshotRequest.rowPitchBytesAligned * height;
 
-    screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(
-        readbackSizeBytes, &READBACK_HEAP, D3D12_RESOURCE_STATE_COPY_DEST);
+    screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
         .pResource = renderTarget.Get(),

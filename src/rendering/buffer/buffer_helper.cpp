@@ -21,8 +21,34 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 
+#include "debug.h"
+
 namespace BufferHelper
 {
+
+ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
+                                         const D3D12_HEAP_PROPERTIES* heapProperties,
+                                         BufferCreationFlags optionalFlags)
+{
+    D3D12_RESOURCE_STATES initialResourceState;
+    switch (heapProperties->Type)
+    {
+    case D3D12_HEAP_TYPE_UPLOAD:
+        initialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
+        break;
+    case D3D12_HEAP_TYPE_DEFAULT:
+        initialResourceState = D3D12_RESOURCE_STATE_COMMON;
+        break;
+    case D3D12_HEAP_TYPE_READBACK:
+        initialResourceState = D3D12_RESOURCE_STATE_COPY_DEST;
+        break;
+    default:
+        ASSERT(false, "Unsupported heap type");
+        return nullptr;
+    }
+
+    return createBasicBuffer(width, heapProperties, initialResourceState, optionalFlags);
+}
 
 ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
                                          const D3D12_HEAP_PROPERTIES* heapProperties,

@@ -57,7 +57,7 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 {
     ASSERT(sizeBytes > 0);
 
-    this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->initialResourceState);
+    this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties);
     this->bufferSizeBytes = sizeBytes;
 
     this->freeAll();
@@ -151,7 +151,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
-    this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties, this->initialResourceState);
+    this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties);
     this->bufferSizeBytes = newSizeBytes;
 
     BufferHelper::copyBufferRegion(cmdList,

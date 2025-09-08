@@ -30,12 +30,6 @@ namespace AcsHelper
 static ComPtr<ID3D12Resource> sharedAcsScratchBuffer = nullptr;
 static uint64_t sharedAsScratchSize = 0;
 
-ComPtr<ID3D12Resource> makeAcsBuffer(uint32_t sizeBytes, D3D12_RESOURCE_STATES initialState)
-{
-    return BufferHelper::createBasicBuffer(
-        sizeBytes, &DEFAULT_HEAP, initialState, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-}
-
 struct AcsBuildInfo
 {
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc; // optional, used only for BLAS
@@ -61,7 +55,8 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
             toFreeList.pushResource(sharedAcsScratchBuffer, false);
         }
 
-        sharedAcsScratchBuffer = makeAcsBuffer(maxScratchSize, D3D12_RESOURCE_STATE_COMMON);
+        sharedAcsScratchBuffer = BufferHelper::createBasicBuffer(
+            maxScratchSize, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
         sharedAsScratchSize = maxScratchSize;
     }
 
@@ -69,8 +64,11 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         const auto& buildInfo = buildInfos[i];
 
-        *buildInfo.outAcs = makeAcsBuffer(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
-                                          D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+        *buildInfo.outAcs =
+            BufferHelper::createBasicBuffer(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
+                                            &DEFAULT_HEAP,
+                                            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+                                            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = (*buildInfo.outAcs)->GetGPUVirtualAddress(),

@@ -31,6 +31,10 @@ struct BufferCreationFlags
 
 ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
                                          const D3D12_HEAP_PROPERTIES* heapProperties,
+                                         BufferCreationFlags optionalFlags = {});
+
+ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
+                                         const D3D12_HEAP_PROPERTIES* heapProperties,
                                          D3D12_RESOURCE_STATES initialResourceState,
                                          BufferCreationFlags optionalFlags = {});
 
