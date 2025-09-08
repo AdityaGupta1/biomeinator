@@ -2,7 +2,7 @@
 
 Real-time path traced voxel engine
 
-![](img/fancy_cornell_box.png)
+![](img/evil_room.png)
 
 (this is just a test scene, I will put actual voxel terrain here once it exists lol)
 
