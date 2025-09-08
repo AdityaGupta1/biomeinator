@@ -60,6 +60,7 @@ namespace Renderer
 {
 
 void initDevice();
+void initDescriptorHeaps();
 void initRenderTarget();
 void initCommand();
 void initConstantParams();
@@ -101,6 +102,7 @@ bool testMode = false;
 void init()
 {
     initDevice();
+    initDescriptorHeaps();
     initRenderTarget();
     initCommand();
 
@@ -217,9 +219,20 @@ void initDevice()
     }
 }
 
+ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+
+void initDescriptorHeaps()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = RT_MAX_NUM_TEXTURES + 1,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+    };
+    device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
+}
+
 ComPtr<IDXGISwapChain3> swapChain;
 constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-ComPtr<ID3D12DescriptorHeap> sharedHeap;
 void initRenderTarget()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -234,13 +247,6 @@ void initRenderTarget()
     swapChain1.As(&swapChain);
 
     factory.Reset();
-
-    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
-        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = RT_MAX_NUM_TEXTURES + 1,
-        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-    };
-    device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedHeap));
 
     resize();
 }
@@ -291,7 +297,7 @@ void resize()
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr +
                                                     RT_MAX_NUM_TEXTURES * descriptorSize };
     device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
 }
@@ -324,7 +330,7 @@ void initConstantParams()
 
 enum class RtParam
 {
-    SHARED_HEAP,
+    SHARED_DESCRIPTOR_HEAP,
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
     VERTS,
@@ -379,7 +385,7 @@ void initRootSignature()
 
         std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
 
-        rtParams[RT_PARAM_IDX(SHARED_HEAP)] = {
+        rtParams[RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
             .DescriptorTable = {
                 .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
@@ -997,11 +1003,11 @@ void render()
     {
         cmdList->SetPipelineState1(rtPso.Get());
         cmdList->SetComputeRootSignature(rtRootSig.Get());
-        ID3D12DescriptorHeap* heaps[] = { sharedHeap.Get() };
+        ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
         cmdList->SetDescriptorHeaps(1, heaps);
 
         // clang-format off
-        cmdList->SetComputeRootDescriptorTable(RT_PARAM_IDX(SHARED_HEAP), sharedHeap->GetGPUDescriptorHandleForHeapStart());
+        cmdList->SetComputeRootDescriptorTable(RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());

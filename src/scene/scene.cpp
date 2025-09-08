@@ -374,7 +374,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     const uint32_t descriptorSize =
         Renderer::device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     const D3D12_CPU_DESCRIPTOR_HANDLE heapCpuHandle =
-        Renderer::sharedHeap->GetCPUDescriptorHandleForHeapStart();
+        Renderer::sharedDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
     for (const auto& pendingTex : this->pendingTextures)
     {
