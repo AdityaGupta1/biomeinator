@@ -871,6 +871,8 @@ void render()
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+
     ImGui::Begin("Hello, world!");
     ImGui::Text("This is some useful text.");
     ImGui::End();
