@@ -880,6 +880,7 @@ void imguiBeginFrame()
     ImGui::PushItemWidth(120.f);
 
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
+    SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
 
     ImGui::End();
