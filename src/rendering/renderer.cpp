@@ -872,11 +872,16 @@ void imguiBeginFrame()
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::SetNextWindowPos(ImVec2(10, 10));
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Once);
 
     ImGui::Begin("Settings");
+
+    ImGui::PushItemWidth(120.f);
+
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
+
     ImGui::End();
 }
 
