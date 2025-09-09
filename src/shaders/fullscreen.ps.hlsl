@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 
 #include "global_params.hlsli"
+#include "util/color.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS_REGISTER_TEX_SAMPLER, POSTPROCESS_REGISTER_SPACE);
 
@@ -30,11 +31,10 @@ struct PsIn
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    // TODO: make host side texture float4 instead of unorm
-    Texture2D<float4> tex = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
-    float4 texColor = tex.Sample(texSampler, psIn.uv);
+    Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
+    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
 
-    // TODO: tonemapping
+    const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
 
-    return texColor;
+    return float4(colorPostTonemap, pathTracingColor.a);
 }

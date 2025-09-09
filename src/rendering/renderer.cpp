@@ -289,7 +289,7 @@ void resize()
         .Height = height,
         .DepthOrArraySize = 1,
         .MipLevels = 1,
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .SampleDesc = NO_AA,
         .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
     };
@@ -301,7 +301,7 @@ void resize()
                                     IID_PPV_ARGS(&pathTracingTarget));
 
     const D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
@@ -309,7 +309,7 @@ void resize()
     device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     // TODO: see if these values can be left as default instead of explicitly specifying them
     srvDesc.Texture2D = {
