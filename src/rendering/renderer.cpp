@@ -640,6 +640,8 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
+    beginFrame();
+
     auto& frameCtx = frameCtxs[frameCtxIdx];
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
@@ -664,8 +666,6 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
-
-    beginFrame();
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
