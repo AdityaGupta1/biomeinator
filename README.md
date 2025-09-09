@@ -33,5 +33,6 @@ This project uses various third-party libraries:
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
+- [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
