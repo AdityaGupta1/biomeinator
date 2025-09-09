@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/descriptor_heap_allocator.h"
@@ -62,14 +63,10 @@ private:
             toFreeList->pushDescriptor(this->srvDescriptorIdx);
         }
 
-        const D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-            .Format = DXGI_FORMAT_UNKNOWN,
-            .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
-            .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-            .Buffer = {
-                .NumElements = this->size,
-                .StructureByteStride = sizeof(T),
-            },
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
+        srvDesc.Buffer = {
+            .NumElements = this->size,
+            .StructureByteStride = sizeof(T),
         };
         this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
         Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
