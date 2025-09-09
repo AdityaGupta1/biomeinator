@@ -126,13 +126,6 @@ foreach(FXH IN LISTS COMPILED_HEADERS)
     source_group("generated_shaders\\${FILTER_PATH}" FILES "${FXH}")
 endforeach()
 
-add_executable(Biomeinator
-    ${SRC_FILES}
-    ${COMPILED_HEADERS}
-    ${SHADER_FILES}
-    ${SHADER_INCLUDE_FILES}
-)
-
 set(EXT "${CMAKE_SOURCE_DIR}/external")
 
 file(GLOB IMGUI_SRC
@@ -147,7 +140,13 @@ list(APPEND IMGUI_SRC
     "${EXT}/imgui/backends/imgui_impl_dx12.h"
 )
 
-add_executable(Biomeinator ${SRC_FILES} ${IMGUI_SRC}) # TODO: see if IMGUI_SRC really needs to be included here, or if target_include_directories below is enough
+add_executable(Biomeinator
+    ${SRC_FILES}
+    ${IMGUI_SRC} # TODO: see if IMGUI_SRC really needs to be included here, or if target_include_directories below is enough
+    ${COMPILED_HEADERS}
+    ${SHADER_FILES}
+    ${SHADER_INCLUDE_FILES}
+)
 
 target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
