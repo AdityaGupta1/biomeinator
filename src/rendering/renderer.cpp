@@ -63,7 +63,7 @@ void initRenderTarget();
 void initCommand();
 void initConstantParams();
 void initRootSignature();
-void compileShadersAndInitPipeline();
+void initPipeline();
 
 void beginFrame();
 void submitCmd();
@@ -116,7 +116,7 @@ void init()
     scene.init();
 
     initRootSignature();
-    compileShadersAndInitPipeline();
+    initPipeline();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
     if (!defaultScene.empty())
@@ -443,7 +443,7 @@ ComPtr<ID3D12StateObject> rtPso;
 ComPtr<ID3D12Resource> dev_rtShaderIds;
 D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
 
-void compileShadersAndInitPipeline()
+void initPipeline()
 {
     // ===================================
     // RAYTRACING
