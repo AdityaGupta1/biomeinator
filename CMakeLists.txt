@@ -37,9 +37,9 @@ endif()
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SHADER_DIR "${SRC_DIR}/shaders")
 set(COMMON_DIR "${SRC_DIR}/rendering/common")
-set(GENERATED_SHADER_HEADERS "${CMAKE_BINARY_DIR}/generated_shaders")
+set(GENERATED_SHADER_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated_shaders")
 
-file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS})
+file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS_DIR})
 
 file(GLOB_RECURSE SRC_FILES
     CONFIGURE_DEPENDS
@@ -66,7 +66,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
     file(RELATIVE_PATH REL_PATH ${SHADER_DIR} ${SHADER})
     string(REPLACE "\\" "/" REL_PATH_UNIX ${REL_PATH})
     string(REPLACE ".hlsl" ".fxh" FXH_FILENAME ${REL_PATH_UNIX})
-    set(FXH_OUT "${GENERATED_SHADER_HEADERS}/${FXH_FILENAME}")
+    set(FXH_OUT "${GENERATED_SHADER_HEADERS_DIR}/${FXH_FILENAME}")
     get_filename_component(FXH_DIR ${FXH_OUT} DIRECTORY)
     file(MAKE_DIRECTORY ${FXH_DIR})
 
@@ -109,22 +109,19 @@ endforeach()
 # Mark shader source files as headers only
 set_source_files_properties(${SHADER_FILES} ${SHADER_INCLUDE_FILES} ${COMPILED_HEADERS} PROPERTIES HEADER_FILE_ONLY TRUE)
 
-# Set up Visual Studio filters based on directory structure
-foreach(FILE IN LISTS SRC_FILES SHADER_FILES SHADER_INCLUDE_FILES)
-    file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
-    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
-    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
-    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
-    source_group("src\\${FILTER_PATH}" FILES "${FILE}")
-endforeach()
+# Sets up Visual Studio filters based on directory structure
+function(assign_source_group FILTER_ROOT BASE_DIR FILES)
+    foreach(FILE IN LISTS FILES)
+        file(RELATIVE_PATH REL_PATH "${BASE_DIR}" "${FILE}")
+        get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
+        string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
+        string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
+        source_group("${FILTER_ROOT}\\${FILTER_PATH}" FILES "${FILE}")
+    endforeach()
+endfunction()
 
-foreach(FXH IN LISTS COMPILED_HEADERS)
-    file(RELATIVE_PATH REL_PATH "${GENERATED_SHADER_HEADERS}" "${FXH}")
-    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
-    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
-    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
-    source_group("generated_shaders\\${FILTER_PATH}" FILES "${FXH}")
-endforeach()
+assign_source_group("src" "${SRC_DIR}" "${SRC_FILES};${SHADER_FILES};${SHADER_INCLUDE_FILES}")
+assign_source_group("generated_shaders" "${GENERATED_SHADER_HEADERS_DIR}" "${COMPILED_HEADERS}")
 
 set(EXT "${CMAKE_SOURCE_DIR}/external")
 
@@ -140,13 +137,7 @@ list(APPEND IMGUI_SRC
     "${EXT}/imgui/backends/imgui_impl_dx12.h"
 )
 
-foreach(FILE IN LISTS IMGUI_SRC)
-    file(RELATIVE_PATH REL_PATH "${EXT}" "${FILE}")
-    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
-    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
-    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
-    source_group("external\\${FILTER_PATH}" FILES "${FILE}")
-endforeach()
+assign_source_group("external" "${EXT}" "${IMGUI_SRC}")
 
 add_executable(Biomeinator
     ${SRC_FILES}
@@ -158,14 +149,14 @@ add_executable(Biomeinator
 
 target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
-    ${GENERATED_SHADER_HEADERS}
+    ${GENERATED_SHADER_HEADERS_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/DirectX-Headers/include/directx"
     "${EXT}/json/include"
     "${EXT}/nvapi"
     "${EXT}/stb/include"
     "${EXT}/tinygltf/include"
-    "${EXT}/imgui/"
+    "${EXT}/imgui"
     "${EXT}/imgui/backends"
 )
 
