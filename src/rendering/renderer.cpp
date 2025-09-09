@@ -242,9 +242,14 @@ void initRenderTarget()
 }
 
 ComPtr<ID3D12Resource> pathTracingTarget;
+uint32_t pathTracingTargetUavIdx = ~0u;
+uint32_t pathTracingTargetSrvIdx = ~0u;
+
 std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
+
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
+
 void resize()
 {
     if (!swapChain)
@@ -278,6 +283,16 @@ void resize()
         device->CreateRenderTargetView(backBuffer, nullptr, cpuHandle);
     }
 
+    if (pathTracingTargetUavIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetUavIdx);
+    }
+
+    if (pathTracingTargetSrvIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetSrvIdx);
+    }
+
     if (pathTracingTarget)
     {
         pathTracingTarget.Reset();
@@ -305,7 +320,7 @@ void resize()
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
-    const uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
+    pathTracingTargetUavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
     device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
@@ -317,13 +332,13 @@ void resize()
         .PlaneSlice = 0,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
-    const uint32_t srvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
+    pathTracingTargetSrvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
     device->CreateShaderResourceView(pathTracingTarget.Get(), &srvDesc, srvHandle);
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = uavIdx;
-        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = srvIdx;
+        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = pathTracingTargetUavIdx;
+        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = pathTracingTargetSrvIdx;
     }
 }
 
