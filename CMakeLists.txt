@@ -86,7 +86,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
 endforeach()
 
 # Mark shader source files as headers only
-set_source_files_properties(${SHADER_FILES} ${SHADER_INCLUDE_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+set_source_files_properties(${SHADER_FILES} ${SHADER_INCLUDE_FILES} ${COMPILED_HEADERS} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 # Set up Visual Studio filters based on directory structure
 foreach(FILE IN LISTS SRC_FILES SHADER_FILES SHADER_INCLUDE_FILES)
@@ -133,7 +133,7 @@ target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
 )
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler nvapi64)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
 
 set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"

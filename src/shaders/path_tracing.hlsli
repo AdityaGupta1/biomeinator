@@ -106,8 +106,8 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
                     // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
                     const float3 bsdfVal = evaluateBsdf(
                         surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
-                    const float sampledBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    const float misWeight = powerHeuristic(lightSample.pdf, sampledBsdfPdf);
+                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                    const float misWeight = powerHeuristic(lightSample.pdf, lightSampleBsdfPdf);
                     payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
                         * lightSample.Le / lightSample.pdf;
                 }
@@ -140,8 +140,8 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             const Material hitMaterial = materials[payload.materialId];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                const float sampledLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
-                const float misWeight = powerHeuristic(surfBsdfSample.pdf, sampledLightPdf);
+                const float bsdfSampleLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
+                const float misWeight = powerHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
                 payload.pathWeight *= misWeight;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1

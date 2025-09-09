@@ -43,12 +43,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RT_REGISTER_SPACE_TEXTURES 1
 // =============================================
 
-// u#
-#define RT_REGISTER_RENDER_TARGET 0
-
-// t#
-#define RT_REGISTER_TEXTURES 0
-
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0
 
