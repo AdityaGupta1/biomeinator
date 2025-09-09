@@ -30,20 +30,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
             fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
+            __debugbreak();                                                                                            \
+        }                                                                                                              \
+    } while (0)
+
+#define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob)                                                                      \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        HRESULT _hr = (expr);                                                                                          \
+        if (FAILED(_hr))                                                                                               \
+        {                                                                                                              \
+            fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
+            fprintf(stderr, "Error: %s\n", (const char*)blob->GetBufferPointer());                                     \
+            __debugbreak();                                                                                            \
         }                                                                                                              \
     } while (0)
 #else
 #define CHECK_HRESULT(expr) (expr)
+#define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob) (expr)
 #endif
-
-#define CHECK_SLANG_DIAGNOSTICS(blob)                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if ((blob))                                                                                                    \
-        {                                                                                                              \
-            fprintf(stderr, "Slang diagnostics: %s\n", (const char*)(blob)->getBufferPointer());                       \
-        }                                                                                                              \
-    } while (0)
 
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,
@@ -71,4 +76,10 @@ constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
     .SampleDesc = NO_AA,
     .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
     .Flags = D3D12_RESOURCE_FLAG_NONE,
+};
+
+constexpr D3D12_SHADER_RESOURCE_VIEW_DESC BASIC_SRV_DESC = {
+    .Format = DXGI_FORMAT_UNKNOWN,
+    .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+    .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
 };

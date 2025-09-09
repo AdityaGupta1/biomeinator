@@ -44,6 +44,14 @@ public:
     void free() const;
 };
 
+struct ManagedBufferOptions
+{
+    bool isResizable{ false };
+    bool isMapped{ false };
+    bool hasSrvDescriptor{ false };
+    uint32_t srvElementByteSize{ 0 };
+};
+
 class ManagedBuffer
 {
     friend class ManagedBufferSection;
@@ -53,18 +61,23 @@ private:
     const D3D12_HEAP_PROPERTIES* heapProperties;
     const D3D12_RESOURCE_STATES initialResourceState;
 
-    const bool isResizable;
-    const bool isMapped;
+    const ManagedBufferOptions options;
 
     void* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
     uint32_t bufferSizeBytes{ 0 };
 
+    uint32_t srvDescriptorIdx{ ~0u };
+    D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
+
     std::list<ManagedBufferSection> freeSectionList;
+
+    void allocSrvDescriptor(ToFreeList* toFreeList);
 
     ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                          ToFreeList& toFreeList,
                                          uint32_t sizeBytes);
+
     // resize() works only for non-mapped buffers
     void resize(ID3D12GraphicsCommandList* cmdList,
                 ToFreeList& toFreeList,
@@ -76,8 +89,7 @@ private:
 public:
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                   const D3D12_RESOURCE_STATES initialResourceState,
-                  const bool isResizable,
-                  const bool isMapped);
+                  const ManagedBufferOptions options);
 
     void init(uint32_t sizeBytes);
 
@@ -113,5 +125,7 @@ public:
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
+    bool hasValidSrvDescriptor() const;
+    uint32_t getSrvDescriptorIdx() const;
     uint32_t getSizeBytes() const;
 };

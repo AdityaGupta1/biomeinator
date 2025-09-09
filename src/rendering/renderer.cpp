@@ -44,13 +44,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <cstdio>
 #include <shlobj.h>
 
-#include <slang.h>
-#include <slang-com-ptr.h>
-
 #include <stb_image_write.h>
 
-#include <nvapi.h>
-#include <nvShaderExtnEnums.h>
+#include "main.rgs.fxh"
+#include "fullscreen.vs.fxh"
+#include "fullscreen.ps.fxh"
+
+#define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
 #include "imgui_helpers.h"
 
@@ -67,7 +67,7 @@ void initRenderTarget();
 void initCommand();
 void initConstantParams();
 void initRootSignature();
-void compileShadersAndInitPipeline();
+void initPipeline();
 
 void initImgui();
 
@@ -107,14 +107,14 @@ void init()
 {
     initDevice();
     initDescriptorHeaps();
-    initRenderTarget();
-    initCommand();
 
     for (auto& frame : frameCtxs)
     {
         frame.paramBlockManager.init();
     }
 
+    initRenderTarget();
+    initCommand();
     initConstantParams();
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
@@ -122,7 +122,7 @@ void init()
     scene.init();
 
     initRootSignature();
-    compileShadersAndInitPipeline();
+    initPipeline();
 
     initImgui();
 
@@ -151,14 +151,6 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
-    const bool enableSer = SettingsManager::getAsBool("enableSer");
-
-    if (enableSer)
-    {
-        NvAPI_Initialize();
-        NvAPI_Unload();
-    }
-
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
@@ -209,39 +201,54 @@ void initDevice()
     device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue));
 
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-
-    if (enableSer)
-    {
-        bool serSupported = false;
-        NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-        if (serSupported)
-        {
-            printf("SER supported on this device\n");
-        }
-        else
-        {
-            fprintf(stderr, "WARNING: SER not supported on this device\n");
-        }
-    }
 }
 
 ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+DescriptorHeapAllocator sharedDescHeapAlloc;
 
-constexpr uint32_t numImguiDescriptors = 4; // not sure how many it needs so giving it 4 for now
-ImguiDescriptorHeapAllocator imguiDescriptorHeapAlloc;
+ComPtr<ID3D12DescriptorHeap> rtvHeap;
 
 void initDescriptorHeaps()
 {
-    const uint32_t numNonImguiDescriptors = MAX_NUM_TEXTURES + 1;
-    D3D12_DESCRIPTOR_HEAP_DESC sharedDescriptorHeapDesc = {
+    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = numNonImguiDescriptors + numImguiDescriptors,
+        .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
-    device->CreateDescriptorHeap(&sharedDescriptorHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
+    CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
 
-    imguiDescriptorHeapAlloc.init(
-        device.Get(), sharedDescriptorHeap.Get(), numImguiDescriptors, numNonImguiDescriptors);
+    sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
+
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+        .NumDescriptors = NUM_FRAMES_IN_FLIGHT,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+    };
+    CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
+}
+
+ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+DescriptorHeapAllocator sharedDescHeapAlloc;
+
+ComPtr<ID3D12DescriptorHeap> rtvHeap;
+
+void initDescriptorHeaps()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+    };
+    CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
+
+    sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
+
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+        .NumDescriptors = NUM_FRAMES_IN_FLIGHT,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+    };
+    CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
@@ -264,7 +271,15 @@ void initRenderTarget()
     resize();
 }
 
-ComPtr<ID3D12Resource> renderTarget;
+ComPtr<ID3D12Resource> pathTracingTarget;
+uint32_t pathTracingTargetUavIdx = ~0u;
+uint32_t pathTracingTargetSrvIdx = ~0u;
+
+std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
+
+D3D12_VIEWPORT viewport;
+D3D12_RECT scissor;
+
 void resize()
 {
     if (!swapChain)
@@ -277,42 +292,84 @@ void resize()
     const uint32_t width = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t height = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
+    viewport = { 0, 0, static_cast<float>(width), static_cast<float>(height) };
+    scissor = { 0, 0, static_cast<long>(width), static_cast<long>(height) };
+
     flush();
 
     swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, swapChainFlags);
     swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
     frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
-    if (renderTarget)
+    const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
     {
-        renderTarget.Reset();
+        ComPtr<ID3D12Resource> backBuffer;
+        swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
+        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
+        cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        cpuHandle.ptr += i * rtvIncrementSize;
+        device->CreateRenderTargetView(backBuffer.Get(), nullptr, cpuHandle);
     }
 
-    const D3D12_RESOURCE_DESC renderTargetDesc = {
+    if (pathTracingTargetUavIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetUavIdx);
+    }
+
+    if (pathTracingTargetSrvIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetSrvIdx);
+    }
+
+    if (pathTracingTarget)
+    {
+        pathTracingTarget.Reset();
+    }
+
+    const D3D12_RESOURCE_DESC pathTracingTargetDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         .Width = width,
         .Height = height,
         .DepthOrArraySize = 1,
         .MipLevels = 1,
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .SampleDesc = NO_AA,
         .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
     };
     device->CreateCommittedResource(&DEFAULT_HEAP,
                                     D3D12_HEAP_FLAG_NONE,
-                                    &renderTargetDesc,
+                                    &pathTracingTargetDesc,
                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                     nullptr,
-                                    IID_PPV_ARGS(&renderTarget));
+                                    IID_PPV_ARGS(&pathTracingTarget));
 
     const D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
-    const uint32_t descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE uavHandle = { sharedDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-                                                    MAX_NUM_TEXTURES * descriptorSize };
-    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
+    D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
+    pathTracingTargetUavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
+    device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
+    srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D = {
+        .MostDetailedMip = 0,
+        .MipLevels = static_cast<uint32_t>(-1),
+        .PlaneSlice = 0,
+    };
+    D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
+    pathTracingTargetSrvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
+    device->CreateShaderResourceView(pathTracingTarget.Get(), &srvDesc, srvHandle);
+
+    for (auto& frame : frameCtxs)
+    {
+        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = pathTracingTargetUavIdx;
+        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = pathTracingTargetSrvIdx;
+    }
 }
 
 void initCommand()
@@ -341,9 +398,8 @@ void initConstantParams()
     }
 }
 
-enum class Param
+enum class RtParam
 {
-    SHARED_HEAP,
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
     VERTS,
@@ -357,466 +413,303 @@ enum class Param
     COUNT
 };
 
-#define PARAM_IDX(param) static_cast<uint32_t>(Param::param)
+enum class PostprocessParam
+{
+    GLOBAL_PARAMS,
 
-ComPtr<ID3D12RootSignature> rootSignature;
+    COUNT
+};
+
+#define RT_PARAM_IDX(param) static_cast<uint32_t>(RtParam::param)
+#define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
+
+ComPtr<ID3D12RootSignature> rtRootSig;
+ComPtr<ID3D12RootSignature> postprocessRootSig;
 void initRootSignature()
 {
-    std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
-
-    descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-        .NumDescriptors = MAX_NUM_TEXTURES,
-        .BaseShaderRegister = REGISTER_TEXTURES,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-        .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
-    });
-
-    descriptorRanges.push_back({
-        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        .NumDescriptors = 1,
-        .BaseShaderRegister = REGISTER_RENDER_TARGET,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-    });
-
-    if (SettingsManager::getAsBool("enableSer"))
+    // ===================================
+    // RAYTRACING
+    // ===================================
     {
-        // fake UAV slot for SER
-        descriptorRanges.push_back({
-            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-            .NumDescriptors = 1,
-            .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-            .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-        });
-    }
+        std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
 
-    std::array<D3D12_ROOT_PARAMETER1, PARAM_IDX(COUNT)> params;
-
-    params[PARAM_IDX(SHARED_HEAP)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-        .DescriptorTable = {
-            .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
-            .pDescriptorRanges = descriptorRanges.data(),
-        },
-    };
-
-    params[PARAM_IDX(GLOBAL_PARAMS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_GLOBAL_PARAMS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(RAYTRACING_ACS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_RAYTRACING_ACS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(VERTS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_VERTS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(IDXS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_IDXS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(PER_TRI_DATAS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_PER_TRI_DATAS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(INSTANCE_DATAS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_INSTANCE_DATAS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(MATERIALS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_MATERIALS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(AREA_LIGHTS)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_AREA_LIGHTS,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    params[PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
-        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-        .Descriptor = {
-            .ShaderRegister = REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-            .RegisterSpace = REGISTER_SPACE_BUFFERS,
-        },
-    };
-
-    std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
-
-    staticSamplers.push_back({
-        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = REGISTER_TEX_SAMPLER,
-        .RegisterSpace = REGISTER_SPACE_TEXTURES,
-    });
-
-    D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = {
-        .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-        .Desc_1_1 = {
-            .NumParameters = static_cast<uint32_t>(params.size()),
-            .pParameters = params.data(),
-            .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
-            .pStaticSamplers = staticSamplers.data(),
-            .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
-        },
-    };
-
-    ComPtr<ID3DBlob> blob;
-    ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeVersionedRootSignature(&rootSigDesc, &blob, &errorBlob);
-#ifdef _DEBUG
-    if (FAILED(hr))
-    {
-        if (errorBlob)
-        {
-            printf("Root signature serialization error: %s\n", (const char*)errorBlob->GetBufferPointer());
-        }
-        __debugbreak();
-    }
-#endif
-    device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
-}
-
-ComPtr<ID3D12StateObject> pso;
-ComPtr<ID3D12Resource> dev_shaderIds;
-D3D12_DISPATCH_RAYS_DESC dispatchDesc;
-
-static uint64_t computeShaderHash(const std::initializer_list<std::filesystem::path>& dirs)
-{
-    constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ull;
-    constexpr uint64_t FNV_PRIME = 1099511628211ull;
-
-    uint64_t hash = FNV_OFFSET_BASIS;
-
-    std::vector<std::filesystem::path> files;
-    for (const auto& dir : dirs)
-    {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
-        {
-            if (!entry.is_regular_file())
-            {
-                continue;
-            }
-
-            const auto ext = entry.path().extension();
-            if (ext != ".slang" && ext != ".h")
-            {
-                continue;
-            }
-
-            files.push_back(entry.path());
-        }
-    }
-
-    std::sort(files.begin(), files.end());
-
-    for (const auto& file : files)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        const std::vector<char> data((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-        for (char c : data)
-        {
-            hash ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
-            hash *= FNV_PRIME;
-        }
-    }
-
-    return hash;
-}
-void compileShadersAndInitPipeline()
-{
-    const bool enableSer = SettingsManager::getAsBool("enableSer");
-
-    if (enableSer)
-    {
-        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
-    }
-
-    using namespace slang;
-
-    Slang::ComPtr<IGlobalSession> globalSession;
-    SlangGlobalSessionDesc globalSessionDesc = {};
-    CHECK_HRESULT(createGlobalSession(&globalSessionDesc, globalSession.writeRef()));
-
-    SessionDesc sessionDesc;
-
-    constexpr int shaderMajorVersion = 6;
-    constexpr int shaderMinorVersion = 6;
-    const std::string shaderMajorVersionStr = std::to_string(shaderMajorVersion);
-    const std::string shaderMinorVersionStr = std::to_string(shaderMinorVersion);
-    const std::string profileStr = "hlsl_nvapi+sm_" + shaderMajorVersionStr + "_" + shaderMinorVersionStr;
-
-    TargetDesc targetDesc = {
-        .format = SLANG_DXIL,
-        .profile = globalSession->findProfile(profileStr.c_str()),
-    };
-    sessionDesc.targets = &targetDesc;
-    sessionDesc.targetCount = 1;
-
-    std::vector<slang::PreprocessorMacroDesc> preprocessorMacroDescs;
-    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MAJOR", shaderMajorVersionStr.c_str() });
-    preprocessorMacroDescs.push_back({ "__SHADER_TARGET_MINOR", shaderMinorVersionStr.c_str() });
-    preprocessorMacroDescs.push_back({ "DO_REORDER", enableSer ? "1" : "0" });
-    sessionDesc.preprocessorMacros = preprocessorMacroDescs.data();
-    sessionDesc.preprocessorMacroCount = preprocessorMacroDescs.size();
-
-    const std::filesystem::path nvapiPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "external/nvapi";
-    const std::string nvapiPathArgStr = "-I" + std::filesystem::absolute(nvapiPath).generic_string();
-    std::vector<CompilerOptionEntry> compilerOptionEntries = {
-        {
-            .name = CompilerOptionName::DownstreamArgs,
-            .value = {
-                .kind = CompilerOptionValueKind::String,
-                .stringValue0 = "dxc",
-                .stringValue1 = nvapiPathArgStr.c_str(),
-            },
-        }
-    };
-    sessionDesc.compilerOptionEntries = compilerOptionEntries.data();
-    sessionDesc.compilerOptionEntryCount = compilerOptionEntries.size();
-
-    const std::filesystem::path shadersPath = std::filesystem::path(CMAKE_SOURCE_DIR) / "src/shaders";
-    const std::string shadersPathStr = std::filesystem::absolute(shadersPath).generic_string();
-    std::vector<char const*> searchPaths = { shadersPathStr.c_str() };
-    sessionDesc.searchPaths = searchPaths.data();
-    sessionDesc.searchPathCount = searchPaths.size();
-
-    Slang::ComPtr<ISession> session;
-    CHECK_HRESULT(globalSession->createSession(sessionDesc, session.writeRef()));
-
-    Slang::ComPtr<IBlob> diagnostics;
-    Slang::ComPtr<IModule> module;
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    const std::filesystem::path shaderBlobPath = std::filesystem::path(CMAKE_BINARY_DIR) / "shaders/main.slang-module";
-    std::filesystem::create_directories(shaderBlobPath.parent_path());
-
-    const auto shaderDirs = {
-        shadersPath,
-        std::filesystem::path(CMAKE_SOURCE_DIR) / "src/rendering/common",
-    };
-
-    const std::filesystem::path shaderHashPath = shaderBlobPath.string() + ".hash";
-    const uint64_t currentHash = computeShaderHash(shaderDirs);
-
-    const bool forceRecompileShaders = SettingsManager::getAsBool("forceRecompileShaders");
-    bool needsRecompile = true;
-    if (!forceRecompileShaders && std::filesystem::is_regular_file(shaderBlobPath) &&
-        std::filesystem::is_regular_file(shaderHashPath))
-    {
-        std::ifstream hashIn(shaderHashPath, std::ios::binary);
-        uint64_t storedHash = 0;
-        hashIn.read(reinterpret_cast<char*>(&storedHash), sizeof(storedHash));
-        if (storedHash != currentHash)
-        {
-            printf("Shader hash has changed; need to recompile...\n");
-            needsRecompile = true;
-        }
-        else
-        {
-            needsRecompile = false;
-        }
-    }
-
-    if (needsRecompile)
-    {
-        printf("Compiling shaders...\n");
-        module = session->loadModule("main", diagnostics.writeRef());
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-        printf("Serializing shaders and writing to disk...\n");
-        Slang::ComPtr<slang::IBlob> serialized;
-        CHECK_HRESULT(module->serialize(serialized.writeRef()));
-        CHECK_HRESULT(module->writeToFile(shaderBlobPath.string().c_str()));
-
-        std::ofstream hashOut(shaderHashPath, std::ios::binary | std::ios::trunc);
-        hashOut.write(reinterpret_cast<const char*>(&currentHash), sizeof(currentHash));
-    }
-    else
-    {
-        printf("Loading shaders from blob...\n");
-        ID3DBlob* d3dBlob = nullptr;
-        CHECK_HRESULT(D3DReadFileToBlob(std::wstring(shaderBlobPath.wstring()).c_str(), &d3dBlob));
-
-        Slang::ComPtr<slang::IBlob> slangBlob;
-        slangBlob.attach(reinterpret_cast<slang::IBlob*>(d3dBlob));
-
-        module =
-            session->loadModuleFromIRBlob("main", shaderBlobPath.string().c_str(), slangBlob, diagnostics.writeRef());
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
-    }
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-    printf("Shader init took %lld ms\n", durationMs);
-
-    std::vector<Slang::ComPtr<IEntryPoint>> entryPoints;
-    std::vector<IComponentType*> components = { module };
-    const uint32_t numEntryPoints = module->getDefinedEntryPointCount();
-    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-    {
-        Slang::ComPtr<IEntryPoint> entryPoint;
-        module->getDefinedEntryPoint(entryPointIdx, entryPoint.writeRef());
-        entryPoints.push_back(entryPoint);
-        components.push_back(entryPoint.get());
-    }
-
-    Slang::ComPtr<IComponentType> program;
-    CHECK_HRESULT(session->createCompositeComponentType(components.data(), components.size(), program.writeRef()));
-
-    Slang::ComPtr<IComponentType> linkedProgram;
-    CHECK_HRESULT(program->link(linkedProgram.writeRef(), diagnostics.writeRef()));
-    CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-    std::vector<Slang::ComPtr<IBlob>> entryPointBlobs(numEntryPoints);
-    std::vector<D3D12_DXIL_LIBRARY_DESC> libs;
-    libs.reserve(numEntryPoints);
-
-    for (uint32_t entryPointIdx = 0; entryPointIdx < numEntryPoints; ++entryPointIdx)
-    {
-        auto& entryPointBlob = entryPointBlobs[entryPointIdx];
-
-        CHECK_HRESULT(linkedProgram->getEntryPointCode(entryPointIdx, 0, entryPointBlob.writeRef(), diagnostics.writeRef()));
-        CHECK_SLANG_DIAGNOSTICS(diagnostics);
-
-        D3D12_DXIL_LIBRARY_DESC lib = {
-            .DXILLibrary = {
-                .pShaderBytecode = entryPointBlob->getBufferPointer(),
-                .BytecodeLength = entryPointBlob->getBufferSize(),
+        rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
-        libs.push_back(lib);
+
+        rtParams[RT_PARAM_IDX(RAYTRACING_ACS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(VERTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_VERTS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(IDXS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_IDXS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(PER_TRI_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_PER_TRI_DATAS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(MATERIALS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_MATERIALS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(AREA_LIGHTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_AREA_LIGHTS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        rtParams[RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back({
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
+            .RegisterSpace = RT_REGISTER_SPACE,
+        });
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(rtParams.size()),
+                .pParameters = rtParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(
+            device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
     }
 
-    constexpr uint32_t NUM_HIT_GROUPS = 2;
-    std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
-    hitGroups[HITGROUP_PRIMARY] = {
-        .HitGroupExport = L"HitGroup_Primary",
-        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit_Primary",
-    };
-    hitGroups[HITGROUP_LIGHTS] = {
-        .HitGroupExport = L"HitGroup_Lights",
-        .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-        .ClosestHitShaderImport = L"ClosestHit_Lights",
-    };
-
-    D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-        .MaxPayloadSizeInBytes = 96,
-        .MaxAttributeSizeInBytes = 8,
-    };
-
-    D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
-        rootSignature.Get(),
-    };
-
-    D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-        .MaxTraceRecursionDepth = 1,
-    };
-
-    std::vector<D3D12_STATE_SUBOBJECT> subobjects;
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
     {
-        for (auto& lib : libs)
+        std::array<D3D12_ROOT_PARAMETER1, POSTPROCESS_PARAM_IDX(COUNT)> postprocessParams;
+
+        postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back({
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .ShaderRegister = POSTPROCESS_REGISTER_TEX_SAMPLER,
+            .RegisterSpace = POSTPROCESS_REGISTER_SPACE,
+        });
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC postprocessRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(postprocessParams.size()),
+                .pParameters = postprocessParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&postprocessRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&postprocessRootSig)));
+    }
+}
+
+ComPtr<ID3D12StateObject> rtPso;
+ComPtr<ID3D12Resource> dev_rtShaderIds;
+D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
+
+ComPtr<ID3D12PipelineState> postprocessPso;
+
+void initPipeline()
+{
+    // ===================================
+    // RAYTRACING
+    // ===================================
+    {
+        D3D12_DXIL_LIBRARY_DESC lib = {
+            .DXILLibrary = {
+                .pShaderBytecode = main_rgs_shaderBytecode,
+                .BytecodeLength = sizeof(main_rgs_shaderBytecode),
+            },
+        };
+
+        constexpr uint32_t NUM_HIT_GROUPS = 2;
+        std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
+        hitGroups[HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        hitGroups[HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+
+        D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
+            .MaxPayloadSizeInBytes = 96,
+            .MaxAttributeSizeInBytes = 8,
+        };
+
+        D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
+            rtRootSig.Get(),
+        };
+
+        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
+            .MaxTraceRecursionDepth = 1,
+        };
+
+        std::vector<D3D12_STATE_SUBOBJECT> subobjects;
         {
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
+            subobjects.push_back(
+                { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+
+            for (const auto& hitGroup : hitGroups)
+            {
+                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+            }
         }
 
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+        D3D12_STATE_OBJECT_DESC desc = {
+            .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+            .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
+            .pSubobjects = subobjects.data(),
+        };
+        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&rtPso)));
 
+        const uint32_t shaderIdsSizeBytes =
+            2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+        dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+
+        ComPtr<ID3D12StateObjectProperties> props;
+        rtPso.As(&props);
+
+        uint8_t* host_shaderIds;
+        dev_rtShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+
+        auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
+        {
+            void* id = props->GetShaderIdentifier(name);
+            memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+            host_shaderIds += incrementSizeBytes;
+        };
+
+        writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+        writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
         for (const auto& hitGroup : hitGroups)
         {
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+            writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
         }
+
+        dev_rtShaderIds->Unmap(0, nullptr);
+
+        rtDispatchDesc = {
+            .RayGenerationShaderRecord = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress(),
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .MissShaderTable = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .HitGroupTable = {
+                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+                .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+        };
+        rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
     }
 
-    D3D12_STATE_OBJECT_DESC desc = {
-        .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-        .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
-        .pSubobjects = subobjects.data(),
-    };
-    CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&pso)));
-
-    const uint32_t shaderIdsSizeBytes =
-        2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-    dev_shaderIds =
-        BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
-
-    ComPtr<ID3D12StateObjectProperties> props;
-    pso.As(&props);
-
-    uint8_t* host_shaderIds;
-    dev_shaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
-
-    auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
     {
-        void* id = props->GetShaderIdentifier(name);
-        memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        host_shaderIds += incrementSizeBytes;
-    };
-
-    writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-    writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-    for (const auto& hitGroup : hitGroups)
-    {
-        writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = postprocessRootSig.Get();
+        psoDesc.VS = { fullscreen_vs_shaderBytecode, sizeof(fullscreen_vs_shaderBytecode) };
+        psoDesc.PS = { fullscreen_ps_shaderBytecode, sizeof(fullscreen_ps_shaderBytecode) };
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = {
+            .DepthEnable = FALSE,
+            .StencilEnable = FALSE,
+        };
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        psoDesc.SampleDesc = NO_AA;
+        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
     }
-
-    dev_shaderIds->Unmap(0, nullptr);
-
-    dispatchDesc = {
-        .RayGenerationShaderRecord = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress(),
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-        .MissShaderTable = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-        .HitGroupTable = {
-            .StartAddress = dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-            .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        },
-    };
-    dispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
 }
 
 void initImgui()
@@ -838,10 +731,10 @@ void initImgui()
     imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
                                             D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
                                             D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
-    { return imguiDescriptorHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
+    { return sharedDescHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
     imguiDX12InitInfo.SrvDescriptorFreeFn =
         [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle)
-    { return imguiDescriptorHeapAlloc.free(cpuHandle, gpuHandle); };
+    { return sharedDescHeapAlloc.free(cpuHandle, gpuHandle); };
 
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
 }
@@ -904,8 +797,11 @@ void captureQueuedScreenshot()
 
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
+    ComPtr<ID3D12Resource> backBuffer;
+    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
-        .pResource = renderTarget.Get(),
+        .pResource = backBuffer.Get(),
         .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
         .SubresourceIndex = 0,
     };
@@ -924,15 +820,11 @@ void captureQueuedScreenshot()
         },
     };
 
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
     cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
 }
 
 void finalizeQueuedScreenshot()
@@ -1009,7 +901,12 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
+    beginFrame();
+
     auto& frameCtx = frameCtxs[frameCtxIdx];
+
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
+
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     if (!testMode)
@@ -1025,55 +922,70 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
-    beginFrame();
-
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
-
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
+    ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
+    cmdList->SetDescriptorHeaps(1, heaps);
+
     if (scene.hasTlas())
     {
-        cmdList->SetPipelineState1(pso.Get());
-        cmdList->SetComputeRootSignature(rootSignature.Get());
-        ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
-        cmdList->SetDescriptorHeaps(_countof(heaps), heaps);
+        cmdList->SetPipelineState1(rtPso.Get());
+        cmdList->SetComputeRootSignature(rtRootSig.Get());
 
         // clang-format off
-        cmdList->SetComputeRootDescriptorTable(PARAM_IDX(SHARED_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-        cmdList->SetComputeRootConstantBufferView(PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+        cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
-        const auto renderTargetDesc = renderTarget->GetDesc();
+        const auto renderTargetDesc = pathTracingTarget->GetDesc();
 
-        dispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
-        dispatchDesc.Height = renderTargetDesc.Height;
-        cmdList->DispatchRays(&dispatchDesc);
+        rtDispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
+        rtDispatchDesc.Height = renderTargetDesc.Height;
+        cmdList->DispatchRays(&rtDispatchDesc);
     }
 
-    ComPtr<ID3D12Resource> backBuffer;
-    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+    cmdList->SetPipelineState(postprocessPso.Get());
+    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
 
-    BufferHelper::copyResource(cmdList.Get(),
-                               backBuffer.Get(),
-                               D3D12_RESOURCE_STATE_PRESENT,
-                               renderTarget.Get(),
-                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
+                                               paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+    ComPtr<ID3D12Resource> backBuffer;
+    const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
+    swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer));
+
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+    cmdList->RSSetViewports(1, &viewport);
+    cmdList->RSSetScissorRects(1, &scissor);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvCpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvCpuHandle.ptr +=
+        currentBackBufferIndex * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    cmdList->OMSetRenderTargets(1, &rtvCpuHandle, FALSE, nullptr);
+
+    const float clearColor[] = { 1.f, 0.f, 1.f, 1.f };
+    cmdList->ClearRenderTargetView(rtvCpuHandle, clearColor, 0, nullptr);
+
+    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmdList->DrawInstanced(3, 1, 0, 0);
+
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
     if (screenshotRequest.active)
     {
         captureQueuedScreenshot();
     }
-
-    backBuffer.Reset();
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
@@ -1140,11 +1052,22 @@ void flush()
 
 void destroy()
 {
+    if (device == nullptr)
+    {
+        return;
+    }
+
     flush();
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+
+    ComPtr<ID3D12DebugDevice> debugDevice;
+    if (SUCCEEDED(device.As(&debugDevice)))
+    {
+        debugDevice->ReportLiveDeviceObjects(D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL);
+    }
 
     device.Reset();
 }

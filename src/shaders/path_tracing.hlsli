@@ -22,16 +22,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "global_params.slang"
-#include "light_sampling.slang"
-#include "materials.slang"
-#include "payload.slang"
-#include "util/color.slang"
-#include "util/math.slang"
-
-#ifndef DO_REORDER
-#define DO_REORDER 0
-#endif
+#include "global_params.hlsli"
+#include "light_sampling.hlsli"
+#include "materials.hlsli"
+#include "payload.hlsli"
+#include "util/color.hlsli"
+#include "util/math.hlsli"
 
 float3 calculateRayTarget(const float2 idx, const float2 size)
 {
@@ -108,10 +104,10 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
                 if (lightSample.didHitLight)
                 {
                     // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
-                    const float3 bsdfVal = evaluateBsdf<true /*calculateFresnelReflectance*/>(
-                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    const float bsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    const float misWeight = powerHeuristic(lightSample.pdf, bsdfPdf);
+                    const float3 bsdfVal = evaluateBsdf(
+                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
+                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                    const float misWeight = powerHeuristic(lightSample.pdf, lightSampleBsdfPdf);
                     payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
                         * lightSample.Le / lightSample.pdf;
                 }
@@ -132,13 +128,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-#if DO_REORDER
-        HitObject hitObject = HitObject::TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-        ReorderThread(hitObject, 0, 0);
-        HitObject::Invoke(raytracingAcs, hitObject, payload);
-#else
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-#endif
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {
@@ -150,8 +140,8 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
             const Material hitMaterial = materials[payload.materialId];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                const float lightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
-                const float misWeight = powerHeuristic(surfBsdfSample.pdf, lightPdf);
+                const float bsdfSampleLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
+                const float misWeight = powerHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
                 payload.pathWeight *= misWeight;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1

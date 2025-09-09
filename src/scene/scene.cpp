@@ -139,8 +139,7 @@ void Scene::clear()
     this->isTlasDirty = false;
     this->dev_tlas = nullptr;
 
-    this->textures.fill(nullptr);
-    this->nextTextureId = 0;
+    this->textures.clear();
     this->pendingTextures.clear();
 
     this->numAreaLights = 0;
@@ -200,9 +199,9 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 
 uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
 {
-    const uint32_t texId = this->nextTextureId++;
-    ASSERT(texId < MAX_NUM_TEXTURES);
-    this->pendingTextures.push_back({ std::move(data), width, height, texId });
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+    const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
+    this->pendingTextures.push_back({ std::move(data), width, height, cpuHandle });
     return texId;
 }
 
@@ -268,8 +267,9 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     ManagedBuffer uploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
-        false /*isResizable*/,
-        true /*isMapped*/,
+        {
+            .isMapped = true,
+        },
     };
     const uint32_t uploadBufferSize = (numPerTriDatas * sizeof(PerTriangleData) + (numAreaLights * sizeof(AreaLight)));
     uploadBuffer.init(uploadBufferSize);
@@ -371,11 +371,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    const uint32_t descriptorSize =
-        Renderer::device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    const D3D12_CPU_DESCRIPTOR_HANDLE heapCpuHandle =
-        Renderer::sharedDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-
     for (const auto& pendingTex : this->pendingTextures)
     {
         D3D12_RESOURCE_DESC texDesc = {};
@@ -437,7 +432,6 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         BufferHelper::stateTransitionResourceBarrier(
             cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        const D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorHandle = { heapCpuHandle.ptr + descriptorSize * pendingTex.id };
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {
             .Format = texDesc.Format,
             .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D,
@@ -446,9 +440,9 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                 .MipLevels = 1,
             },
         };
-        Renderer::device->CreateShaderResourceView(dev_texture.Get(), &srvDesc, cpuDescriptorHandle);
+        Renderer::device->CreateShaderResourceView(dev_texture.Get(), &srvDesc, pendingTex.cpuHandle);
 
-        this->textures[pendingTex.id] = dev_texture;
+        this->textures.push_back(dev_texture);
         toFreeList.pushResource(dev_uploadBuffer, true);
     }
 

@@ -16,25 +16,25 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "../rendering/common/common_registers.h"
 
-#include "dxr_includes.h"
-#include "common/common_structs.h"
+#include "global_params.hlsli"
+#include "util/color.hlsli"
 
-class ParamBlockManager
+SamplerState texSampler : REGISTER_S(POSTPROCESS_REGISTER_TEX_SAMPLER, POSTPROCESS_REGISTER_SPACE);
+
+struct PsIn
 {
-private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
-
-public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
-
-    void init();
-
-    ID3D12Resource* getDevBuffer() const;
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
 };
+
+float4 psMain(PsIn psIn) : SV_Target
+{
+    Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
+    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
+
+    const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
+
+    return float4(colorPostTonemap, pathTracingColor.a);
+}

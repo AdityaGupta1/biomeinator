@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
+#include <d3dx12.h>
 #include <DirectXMath.h>
 #include <Windows.h>
 #include <d3d12.h>

@@ -18,23 +18,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_structs.h"
+#include "util/rng.hlsli"
 
-class ParamBlockManager
+#define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
+
+struct HitInfo
 {
-private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
+    float3 hitPos_WS;
+    uint instanceId;
 
-public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
+    float3 hitNor_WS;
+    uint triangleIdx;
 
-    void init();
+    float2 uv;
+    uint pad0;
+    uint pad1;
+};
 
-    ID3D12Resource* getDevBuffer() const;
+struct Payload
+{
+    float3 pathWeight;
+    uint flags;
+
+    float3 pathColor;
+    uint materialId;
+
+    HitInfo hitInfo;
+
+    RandomSampler rng;
 };

@@ -19,6 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /*
 This file is mostly AI-generated and exists solely to load test scenes for verifying path tracing results. It works
 on a specific subset of glTF files and is not guaranteed to work for files outside that subset.
+
+For example, exporting a Blender scene with a Glossy BSDF as a glTF does not preserve the glossy color. For scenes with
+colored glossy reflection, I manually added the color to the respective glTF files.
 */
 
 #include "gltf_loader.h"

@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "dxr_includes.h"
 
+#include "buffer/descriptor_heap_allocator.h"
+
 #include <string>
 
 namespace Renderer
@@ -41,6 +43,6 @@ void destroy();
 
 extern ComPtr<ID3D12Device5> device;
 
-extern ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+extern DescriptorHeapAllocator sharedDescHeapAlloc;
 
 } // namespace Renderer

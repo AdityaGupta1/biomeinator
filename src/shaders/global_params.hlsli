@@ -18,23 +18,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_structs.h"
+#include "../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
 
-class ParamBlockManager
+cbuffer GlobalParams : REGISTER_B(RT_REGISTER_GLOBAL_PARAMS, RT_REGISTER_SPACE)
 {
-private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
-
-public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
-
-    void init();
-
-    ID3D12Resource* getDevBuffer() const;
+    HeapIndices heapIndices;
+    ConstantParams constantParams;
+    CameraParams cameraParams;
+    SceneParams sceneParams;
+    RenderParams renderParams;
 };

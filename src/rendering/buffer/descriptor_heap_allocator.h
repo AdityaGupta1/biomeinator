@@ -18,32 +18,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "util/rng.slang"
+#include "rendering/dxr_includes.h"
 
-#define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
+#include <vector>
 
-struct HitInfo
+class DescriptorHeapAllocator
 {
-    float3 hitPos_WS;
-    uint instanceId;
+private:
+    ID3D12DescriptorHeap* heapPtr{ nullptr };
+    D3D12_CPU_DESCRIPTOR_HANDLE heapStartCpu{};
+    D3D12_GPU_DESCRIPTOR_HANDLE heapStartGpu{};
+    uint32_t heapHandleIncrement{ ~0u };
+    std::vector<uint32_t> freeIdxs{};
 
-    float3 hitNor_WS;
-    uint triangleIdx;
+public:
+    void init(ID3D12Device* device, ID3D12DescriptorHeap* heapPtr);
 
-    float2 uv;
-    uint pad0;
-    uint pad1;
-};
+    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle);
+    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle);
 
-struct Payload
-{
-    float3 pathWeight;
-    uint flags;
-
-    float3 pathColor;
-    uint materialId;
-
-    HitInfo hitInfo;
-
-    RandomSampler rng;
+    void free(uint32_t idx);
+    void free(D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle);
 };

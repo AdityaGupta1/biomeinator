@@ -131,14 +131,16 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     ManagedBuffer vertsUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
-        false /*isResizable*/,
-        true /*isMapped*/,
+        {
+            .isMapped = true,
+        },
     };
     ManagedBuffer idxsUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
-        false /*isResizable*/,
-        true /*isMapped*/,
+        {
+            .isMapped = true,
+        },
     };
 
     uint32_t vertBufferTotalSizeBytes = 0;

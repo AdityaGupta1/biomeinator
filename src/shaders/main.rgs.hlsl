@@ -19,9 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "path_tracing.slang"
-
-RWTexture2D<float4> renderTarget : REGISTER_U(REGISTER_RENDER_TARGET, REGISTER_SPACE_TEXTURES);
+#include "path_tracing.hlsli"
 
 [shader("raygeneration")]
 void RayGeneration()
@@ -53,6 +51,7 @@ void RayGeneration()
     }
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
-    const float3 colorPostTonemap = applyTonemapping(colorPreTonemap);
-    renderTarget[pixelIdx] = float4(colorPostTonemap, 1);
+
+    RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
+    pathTracingTarget[pixelIdx] = float4(colorPreTonemap, 1);
 }

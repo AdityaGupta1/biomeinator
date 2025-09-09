@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "buffer_helper.h"
 #include "to_free_list.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
 
 #include "debug.h"
 #include <stdexcept>
@@ -47,10 +49,8 @@ void ManagedBufferSection::free() const
 
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_RESOURCE_STATES initialResourceState,
-                             const bool isResizable,
-                             const bool isMapped)
-    : heapProperties(heapProperties), initialResourceState(initialResourceState), isResizable(isResizable),
-      isMapped(isMapped)
+                             const ManagedBufferOptions options)
+    : heapProperties(heapProperties), initialResourceState(initialResourceState), options(options)
 {}
 
 void ManagedBuffer::init(uint32_t sizeBytes)
@@ -62,9 +62,14 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 
     this->freeAll();
 
-    if (this->isMapped)
+    if (this->options.isMapped)
     {
         this->map();
+    }
+
+    if (this->options.hasSrvDescriptor)
+    {
+        this->allocSrvDescriptor(nullptr);
     }
 }
 
@@ -82,6 +87,27 @@ void ManagedBuffer::map()
 void ManagedBuffer::unmap()
 {
     this->dev_buffer->Unmap(0, nullptr);
+}
+
+void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
+{
+    ASSERT(this->options.hasSrvDescriptor);
+    ASSERT(toFreeList != nullptr || !this->hasValidSrvDescriptor());
+
+    if (toFreeList != nullptr && this->hasValidSrvDescriptor())
+    {
+        toFreeList->pushDescriptor(this->srvDescriptorIdx);
+    }
+
+    ASSERT(this->options.srvElementByteSize > 0);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
+    srvDesc.Buffer = {
+        .NumElements = this->getSizeBytes() / this->options.srvElementByteSize,
+        .StructureByteStride = this->options.srvElementByteSize,
+    };
+    this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
+    Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
 }
 
 // TODO: keep a persistent rotating pointer into freeSectionList to avoid biasing towards beginning of list for new
@@ -111,12 +137,13 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
     }
 
 #ifdef _DEBUG
-    if (!this->isResizable)
+    if (!this->options.isResizable)
     {
         throw std::runtime_error("ManagedBuffer out of space");
     }
 #endif
 
+    // true if the backmost section of the toFreeList is empty and we can resize it to fit the new section
     bool useBackFreeSection = false;
     uint32_t backSizeBytes = 0;
     if (!this->freeSectionList.empty())
@@ -146,7 +173,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-    ASSERT(!this->isMapped, "Cannot resize mapped ManagedBuffer");
+    ASSERT(!this->options.isMapped, "Cannot resize mapped ManagedBuffer");
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -173,6 +200,11 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
     {
         this->freeSectionList.push_back({ this, oldSizeBytes, diffSizeBytes });
     }
+
+    if (this->options.hasSrvDescriptor)
+    {
+        this->allocSrvDescriptor(&toFreeList);
+    }
 }
 
 ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
@@ -180,7 +212,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
                                                        const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
-    ASSERT(this->isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
+    ASSERT(this->options.isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 
@@ -265,6 +297,18 @@ ID3D12Resource* ManagedBuffer::getBuffer() const
 D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getBufferGpuAddress() const
 {
     return this->dev_buffer->GetGPUVirtualAddress();
+}
+
+bool ManagedBuffer::hasValidSrvDescriptor() const
+{
+    return this->srvDescriptorIdx != ~0u;
+}
+
+uint32_t ManagedBuffer::getSrvDescriptorIdx() const
+{
+    ASSERT(this->options.hasSrvDescriptor);
+    ASSERT(this->hasValidSrvDescriptor());
+    return this->srvDescriptorIdx;
 }
 
 uint32_t ManagedBuffer::getSizeBytes() const

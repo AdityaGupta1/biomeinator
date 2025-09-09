@@ -31,9 +31,10 @@ This project uses various third-party libraries:
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
 - [Dear ImGui](https://github.com/ocornut/imgui) - MIT
-- [Slang](https://github.com/shader-slang/slang) - Apache-2.0 with LLVM-exception
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
+- [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) - MIT
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
+- [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.

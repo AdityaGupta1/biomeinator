@@ -18,12 +18,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/descriptor_heap_allocator.h"
 #include "rendering/buffer/to_free_list.h"
+
+#include "debug.h"
+
+struct MappedArrayOptions
+{
+    bool hasSrvDescriptor{ false };
+};
 
 template<typename T> class MappedArray
 {
 private:
+    const MappedArrayOptions options;
+
     uint32_t size{ 0 };
     T* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> upload_buffer{ nullptr };
@@ -32,14 +44,35 @@ private:
     uint32_t dirtyBeginIdx{ 0 };
     uint32_t dirtyEndIdx{ 0 };
 
+    uint32_t srvDescriptorIdx{ ~0u };
+    D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
+
     void setNotDirty()
     {
         this->dirtyBeginIdx = this->size;
         this->dirtyEndIdx = 0;
     }
 
-public:
-    void init(uint32_t size)
+    void allocSrvDescriptor(ToFreeList* toFreeList)
+    {
+        ASSERT(this->options.hasSrvDescriptor);
+        ASSERT(toFreeList != nullptr || !this->hasValidSrvDescriptor());
+
+        if (toFreeList != nullptr && this->hasValidSrvDescriptor())
+        {
+            toFreeList->pushDescriptor(this->srvDescriptorIdx);
+        }
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
+        srvDesc.Buffer = {
+            .NumElements = this->size,
+            .StructureByteStride = sizeof(T),
+        };
+        this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
+        Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
+    }
+
+    void init(uint32_t size, ToFreeList* toFreeList)
     {
         this->size = size;
         const uint32_t sizeBytes = sizeof(T) * size;
@@ -50,6 +83,21 @@ public:
         this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
 
         this->setNotDirty();
+
+        if (this->options.hasSrvDescriptor)
+        {
+            this->allocSrvDescriptor(toFreeList);
+        }
+    }
+
+public:
+    MappedArray(MappedArrayOptions options)
+        : options(options)
+    {}
+
+    void init(uint32_t size)
+    {
+        this->init(size, nullptr);
     }
 
     T& operator[](uint32_t idx)
@@ -97,7 +145,7 @@ public:
         toFreeList.pushResource(this->upload_buffer, true);
         toFreeList.pushResource(this->dev_buffer, false);
 
-        this->init(newSize);
+        this->init(newSize, &toFreeList);
 
         const uint32_t copyCount = std::min(oldSize, newSize);
         memcpy(this->host_buffer, host_oldBuffer, sizeof(T) * copyCount);
@@ -129,5 +177,17 @@ public:
     inline D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const
     {
         return this->dev_buffer->GetGPUVirtualAddress();
+    }
+
+    bool hasValidSrvDescriptor() const
+    {
+        return this->srvDescriptorIdx != ~0u;
+    }
+
+    uint32_t getSrvDescriptorIdx() const
+    {
+        ASSERT(this->options.hasSrvDescriptor);
+        ASSERT(this->hasValidSrvDescriptor());
+        return this->srvDescriptorIdx;
     }
 };
