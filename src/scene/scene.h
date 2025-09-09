@@ -89,20 +89,23 @@ private:
     ManagedBuffer managedVertsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     ManagedBuffer managedIdxsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     ManagedBuffer managedPerTriDatasBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
 
     uint32_t maxNumInstances{ 0 };
@@ -132,8 +135,9 @@ private:
     ManagedBuffer managedAreaLightsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     uint32_t numAreaLights{ 0 };
     MappedArray<uint32_t> areaLightSamplingStructure{};

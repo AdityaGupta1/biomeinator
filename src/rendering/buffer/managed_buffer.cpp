@@ -47,10 +47,8 @@ void ManagedBufferSection::free() const
 
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_RESOURCE_STATES initialResourceState,
-                             const bool isResizable,
-                             const bool isMapped)
-    : heapProperties(heapProperties), initialResourceState(initialResourceState), isResizable(isResizable),
-      isMapped(isMapped)
+                             const ManagedBufferOptions options)
+    : heapProperties(heapProperties), initialResourceState(initialResourceState), options(options)
 {}
 
 void ManagedBuffer::init(uint32_t sizeBytes)
@@ -62,7 +60,7 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 
     this->freeAll();
 
-    if (this->isMapped)
+    if (this->options.isMapped)
     {
         this->map();
     }
@@ -111,7 +109,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
     }
 
 #ifdef _DEBUG
-    if (!this->isResizable)
+    if (!this->options.isResizable)
     {
         throw std::runtime_error("ManagedBuffer out of space");
     }
@@ -146,7 +144,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-    ASSERT(!this->isMapped, "Cannot resize mapped ManagedBuffer");
+    ASSERT(!this->options.isMapped, "Cannot resize mapped ManagedBuffer");
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -180,7 +178,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
                                                        const void* host_srcBuffer,
                                                        uint32_t sizeBytes)
 {
-    ASSERT(this->isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
+    ASSERT(this->options.isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
 
     const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
 

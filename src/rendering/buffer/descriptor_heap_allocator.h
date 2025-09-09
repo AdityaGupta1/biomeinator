@@ -26,10 +26,10 @@ class DescriptorHeapAllocator
 {
 private:
     ID3D12DescriptorHeap* heapPtr{ nullptr };
-    D3D12_CPU_DESCRIPTOR_HANDLE heapStartCpu;
-    D3D12_GPU_DESCRIPTOR_HANDLE heapStartGpu;
-    uint32_t heapHandleIncrement;
-    std::vector<uint32_t> freeIdxs;
+    D3D12_CPU_DESCRIPTOR_HANDLE heapStartCpu{};
+    D3D12_GPU_DESCRIPTOR_HANDLE heapStartGpu{};
+    uint32_t heapHandleIncrement{ ~0u };
+    std::vector<uint32_t> freeIdxs{};
 
 public:
     void init(ID3D12Device* device, ID3D12DescriptorHeap* heapPtr);

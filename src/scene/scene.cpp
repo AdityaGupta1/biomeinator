@@ -267,8 +267,9 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     ManagedBuffer uploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
-        false /*isResizable*/,
-        true /*isMapped*/,
+        {
+            .isMapped = true,
+        },
     };
     const uint32_t uploadBufferSize = (numPerTriDatas * sizeof(PerTriangleData) + (numAreaLights * sizeof(AreaLight)));
     uploadBuffer.init(uploadBufferSize);
