@@ -26,7 +26,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
-#include "buffer/descriptor_heap_allocator.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
 #include "common/common_hitgroups.h"
@@ -312,7 +311,6 @@ void initConstantParams()
 
 enum class RtParam
 {
-    //SHARED_DESCRIPTOR_HEAP,
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
     VERTS,
@@ -335,46 +333,7 @@ void initRootSignature()
     // RAYTRACING
     // ===================================
     {
-        std::vector<D3D12_DESCRIPTOR_RANGE1> descriptorRanges;
-
-        /*descriptorRanges.push_back({
-            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            .NumDescriptors = RT_MAX_NUM_TEXTURES,
-            .BaseShaderRegister = RT_REGISTER_TEXTURES,
-            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
-            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE,
-        });
-
-        descriptorRanges.push_back({
-            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-            .NumDescriptors = 1,
-            .BaseShaderRegister = RT_REGISTER_RENDER_TARGET,
-            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
-            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-        });*/
-
-        // TODO: figure out what to do here for bindless
-        //if (SettingsManager::getAsBool("enableSer"))
-        //{
-        //    // fake UAV slot for SER
-        //    descriptorRanges.push_back({
-        //        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        //        .NumDescriptors = 1,
-        //        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-        //        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-        //        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-        //    });
-        //}
-
         std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
-
-        //rtParams[RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP)] = {
-        //    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-        //    .DescriptorTable = {
-        //        .NumDescriptorRanges = static_cast<uint32_t>(descriptorRanges.size()),
-        //        .pDescriptorRanges = descriptorRanges.data(),
-        //    },
-        //};
 
         rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
@@ -773,7 +732,6 @@ void render()
         cmdList->SetDescriptorHeaps(1, heaps);
 
         // clang-format off
-        //cmdList->SetComputeRootDescriptorTable(RT_PARAM_IDX(SHARED_DESCRIPTOR_HEAP), sharedDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());

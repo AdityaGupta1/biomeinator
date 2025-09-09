@@ -77,7 +77,8 @@ float3 evaluateBsdf(
         float3 baseColor = material.baseColor;
         if (material.baseColorTextureId != TEXTURE_ID_INVALID)
         {
-            //baseColor = textures[material.baseColorTextureId].SampleLevel(texSampler, uv, 0).rgb;
+            Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
+            baseColor = tex.SampleLevel(texSampler, uv, 0).rgb;
         }
 
         if (calculateFresnelReflectance && material.hasSpecularReflection())
