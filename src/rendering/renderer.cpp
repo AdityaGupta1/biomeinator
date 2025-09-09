@@ -484,7 +484,7 @@ void initRootSignature()
 
         ComPtr<ID3DBlob> blob, errorBlob;
         CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
-            errorBlob);
+                                      errorBlob);
         CHECK_HRESULT(
             device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
     }
@@ -899,12 +899,6 @@ void render()
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-
-    //BufferHelper::copyResource(cmdList.Get(),
-    //                           backBuffer.Get(),
-    //                           D3D12_RESOURCE_STATE_PRESENT,
-    //                           pathTracingTarget.Get(),
-    //                           D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     if (screenshotRequest.active)
     {

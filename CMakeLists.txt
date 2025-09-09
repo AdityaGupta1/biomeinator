@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ==================================================
+# Biomeinator
+# ==================================================
+
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
     file(GLOB DXC_POSSIBLE_PATHS
@@ -147,10 +151,6 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/nvapi/amd64"
 )
 
-target_compile_definitions(Biomeinator PRIVATE
-    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
-)
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
 
 set(RUNTIME_DLLS
@@ -162,6 +162,15 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
+
+target_compile_definitions(Biomeinator PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+)
+
+# ==================================================
+# BiomeinatorTests
+# ==================================================
 
 file(GLOB TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"
