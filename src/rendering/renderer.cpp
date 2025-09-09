@@ -52,7 +52,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
-#include "imgui_helpers.h"
+#include <imgui.h>
+#include <imgui_impl_win32.h>
+#include <imgui_impl_dx12.h>
 
 using namespace DirectX;
 
