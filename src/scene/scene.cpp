@@ -471,12 +471,12 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
 
 uint32_t Scene::getVertsDescriptorIdx() const
 {
-    return managedVertsBuffer.getSrvDescriptorIdx();
+    return this->managedVertsBuffer.getSrvDescriptorIdx();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
+uint32_t Scene::getIdxsDescriptorIdx() const
 {
-    return this->managedIdxsBuffer.getBufferGpuAddress();
+    return this->managedIdxsBuffer.getSrvDescriptorIdx();
 }
 
 uint32_t Scene::getPerTriDatasDescriptorIdx() const

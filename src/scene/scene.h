@@ -100,6 +100,8 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .hasSrvDescriptor = true,
+            .srvElementByteSize = sizeof(uint32_t),
         },
     };
     ManagedBuffer managedPerTriDatasBuffer{
@@ -193,7 +195,7 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
     uint32_t getVertsDescriptorIdx() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
+    uint32_t getIdxsDescriptorIdx() const;
     uint32_t getPerTriDatasDescriptorIdx() const;
 
     uint32_t getNumAreaLights() const;

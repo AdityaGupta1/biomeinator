@@ -28,7 +28,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // t#
 #define RT_REGISTER_RAYTRACING_ACS 0
-#define RT_REGISTER_IDXS 1
 
 // b#
 #define RT_REGISTER_GLOBAL_PARAMS 0
