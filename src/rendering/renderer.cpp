@@ -48,6 +48,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "main.fxh"
 
+#define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -200,7 +202,7 @@ void initDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = RESOURCE_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
+        .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
     device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
