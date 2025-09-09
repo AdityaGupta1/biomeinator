@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "param_block_manager.h"
 #include "settings_manager.h"
+#include "settings_gui_helpers.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
@@ -865,17 +866,32 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
-void render()
+void imguiBeginFrame()
 {
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+    ImGui::SetNextWindowPos(ImVec2(10, 10));
 
-    ImGui::Begin("Hello, world!");
-    ImGui::Text("This is some useful text.");
+    ImGui::Begin("Settings");
+    SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
+    SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     ImGui::End();
+}
+
+void imguiEndFrame()
+{
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
+}
+
+void render()
+{
+    if (!testMode)
+    {
+        imguiBeginFrame();
+    }
 
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
@@ -967,8 +983,10 @@ void render()
         captureQueuedScreenshot();
     }
 
-    ImGui::Render();
-    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
+    if (!testMode)
+    {
+        imguiEndFrame();
+    }
 
     submitCmd();
 

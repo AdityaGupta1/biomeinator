@@ -106,4 +106,24 @@ std::string getAsString(const std::string& name)
     return std::get<std::string>(settings.at(name));
 }
 
+void setAsBool(const std::string& name, bool value)
+{
+    settings[name] = value;
+}
+
+void setAsInt(const std::string& name, int value)
+{
+    settings[name] = value;
+}
+
+void setAsUint(const std::string& name, uint32_t value)
+{
+    settings[name] = value;
+}
+
+void setAsString(const std::string& name, const std::string& value)
+{
+    settings[name] = value;
+}
+
 } // namespace SettingsManager
