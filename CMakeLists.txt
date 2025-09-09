@@ -147,13 +147,11 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/nvapi/amd64"
 )
 
-add_subdirectory("${EXT}/DirectX-Headers" EXCLUDE_FROM_ALL)
-
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
 )
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler DirectX-Headers DirectX-Guids)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
 
 set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"

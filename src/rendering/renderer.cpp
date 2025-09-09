@@ -972,7 +972,15 @@ void flush()
 
 void destroy()
 {
+
     flush();
+
+    ComPtr<ID3D12DebugDevice> debugDevice;
+    if (SUCCEEDED(device.As(&debugDevice)))
+    {
+        debugDevice->ReportLiveDeviceObjects(D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL);
+    }
+
     device.Reset();
 }
 
