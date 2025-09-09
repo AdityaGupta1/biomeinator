@@ -227,30 +227,6 @@ void initDescriptorHeaps()
     CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
 }
 
-ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
-DescriptorHeapAllocator sharedDescHeapAlloc;
-
-ComPtr<ID3D12DescriptorHeap> rtvHeap;
-
-void initDescriptorHeaps()
-{
-    D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
-        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
-        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-    };
-    CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
-
-    sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
-
-    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
-        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-        .NumDescriptors = NUM_FRAMES_IN_FLIGHT,
-        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-    };
-    CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
-}
-
 ComPtr<IDXGISwapChain3> swapChain;
 constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 void initRenderTarget()
@@ -731,10 +707,10 @@ void initImgui()
     imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
                                             D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
                                             D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
-    { return sharedDescHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
+    { sharedDescHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
     imguiDX12InitInfo.SrvDescriptorFreeFn =
         [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle)
-    { return sharedDescHeapAlloc.free(cpuHandle, gpuHandle); };
+    { sharedDescHeapAlloc.free(cpuHandle, gpuHandle); };
 
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
 }

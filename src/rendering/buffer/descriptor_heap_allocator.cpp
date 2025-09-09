@@ -39,8 +39,7 @@ void DescriptorHeapAllocator::init(ID3D12Device* device, ID3D12DescriptorHeap* h
 
 uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle)
 {
-    D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle;
-    return alloc(outCpuHandle, outGpuHandle);
+    return alloc(outCpuHandle, nullptr);
 }
 
 uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
@@ -50,7 +49,10 @@ uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandl
     const uint32_t idx = this->freeIdxs.back();
     this->freeIdxs.pop_back();
     outCpuHandle->ptr = this->heapStartCpu.ptr + (idx * this->heapHandleIncrement);
-    outGpuHandle->ptr = this->heapStartGpu.ptr + (idx * this->heapHandleIncrement);
+    if (outGpuHandle != nullptr)
+    {
+        outGpuHandle->ptr = this->heapStartGpu.ptr + (idx * this->heapHandleIncrement);
+    }
     return idx;
 }
 

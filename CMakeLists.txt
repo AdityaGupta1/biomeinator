@@ -143,6 +143,7 @@ list(APPEND IMGUI_SRC
 add_executable(Biomeinator
     ${SRC_FILES}
     ${IMGUI_SRC} # TODO: see if IMGUI_SRC really needs to be included here, or if target_include_directories below is enough
+                 # also figure out how to not show imgui files in solution explorer if possible
     ${COMPILED_HEADERS}
     ${SHADER_FILES}
     ${SHADER_INCLUDE_FILES}
