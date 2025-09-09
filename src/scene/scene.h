@@ -92,7 +92,7 @@ private:
         {
             .isResizable = true,
             .hasSrvDescriptor = true,
-            .srvByteElementSize = static_cast<uint32_t>(sizeof(Vertex)),
+            .srvElementByteSize = sizeof(Vertex),
         },
     };
     ManagedBuffer managedIdxsBuffer{
@@ -107,6 +107,8 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .hasSrvDescriptor = true,
+            .srvElementByteSize = sizeof(PerTriangleData),
         },
     };
 
@@ -139,6 +141,8 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .hasSrvDescriptor = true,
+            .srvElementByteSize = sizeof(AreaLight),
         },
     };
     uint32_t numAreaLights{ 0 };
@@ -174,9 +178,9 @@ public:
 
     uint32_t getVertsDescriptorIdx() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
+    uint32_t getPerTriDatasDescriptorIdx() const;
 
     uint32_t getNumAreaLights() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;
+    uint32_t getAreaLightsDescriptorIdx() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightSamplingStructureAddress() const;
 };

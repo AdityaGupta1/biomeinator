@@ -479,9 +479,9 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
     return this->managedIdxsBuffer.getBufferGpuAddress();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
+uint32_t Scene::getPerTriDatasDescriptorIdx() const
 {
-    return this->managedPerTriDatasBuffer.getBufferGpuAddress();
+    return this->managedPerTriDatasBuffer.getSrvDescriptorIdx();
 }
 
 uint32_t Scene::getNumAreaLights() const
@@ -489,9 +489,9 @@ uint32_t Scene::getNumAreaLights() const
     return this->numAreaLights;
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightsBufferAddress() const
+uint32_t Scene::getAreaLightsDescriptorIdx() const
 {
-    return this->managedAreaLightsBuffer.getBufferGpuAddress();
+    return this->managedAreaLightsBuffer.getSrvDescriptorIdx();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightSamplingStructureAddress() const

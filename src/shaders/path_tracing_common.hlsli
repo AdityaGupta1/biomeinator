@@ -29,7 +29,6 @@ RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT_REGISTER_RAYTRACIN
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_DATAS, RT_REGISTER_SPACE_BUFFERS);
 
 ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE_BUFFERS);
-StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE_BUFFERS);
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {

@@ -27,13 +27,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "payload.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT_REGISTER_AREA_LIGHTS, RT_REGISTER_SPACE_BUFFERS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE_BUFFERS);
 
 AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {
     const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     pdf = 1.f / sceneParams.numAreaLights;
+    StructuredBuffer<AreaLight> areaLights = ResourceDescriptorHeap[heapIndices.srv.areaLightsIdx];
     return areaLights[lightIdx];
 }
 
@@ -98,6 +98,8 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
 float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
+
+    StructuredBuffer<PerTriangleData> perTriDatas = ResourceDescriptorHeap[heapIndices.srv.perTriDatasIdx];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
     if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
     {
@@ -105,6 +107,7 @@ float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_W
     }
 
     const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
+    StructuredBuffer<AreaLight> areaLights = ResourceDescriptorHeap[heapIndices.srv.areaLightsIdx];
     const AreaLight light = areaLights[areaLightIdx];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);

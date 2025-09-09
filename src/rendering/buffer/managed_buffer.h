@@ -49,7 +49,7 @@ struct ManagedBufferOptions
     bool isResizable{ false };
     bool isMapped{ false };
     bool hasSrvDescriptor{ false };
-    uint32_t srvByteElementSize{ 0 };
+    uint32_t srvElementByteSize{ 0 };
 };
 
 class ManagedBuffer
