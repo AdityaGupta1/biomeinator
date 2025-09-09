@@ -53,6 +53,6 @@ void RayGeneration()
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
     const float3 colorPostTonemap = applyTonemapping(colorPreTonemap);
 
-    RWTexture2D<float4> renderTarget = ResourceDescriptorHeap[heapIndices.uav.renderTargetIdx];
-    renderTarget[pixelIdx] = float4(colorPostTonemap, 1);
+    RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
+    pathTracingTarget[pixelIdx] = float4(colorPostTonemap, 1);
 }

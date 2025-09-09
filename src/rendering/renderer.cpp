@@ -47,6 +47,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "main.rgs.fxh"
+#include "fullscreen.vs.fxh"
+#include "fullscreen.ps.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -230,7 +232,7 @@ void initRenderTarget()
     resize();
 }
 
-ComPtr<ID3D12Resource> renderTarget;
+ComPtr<ID3D12Resource> pathTracingTarget;
 void resize()
 {
     if (!swapChain)
@@ -249,12 +251,12 @@ void resize()
     swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
     frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
-    if (renderTarget)
+    if (pathTracingTarget)
     {
-        renderTarget.Reset();
+        pathTracingTarget.Reset();
     }
 
-    const D3D12_RESOURCE_DESC renderTargetDesc = {
+    const D3D12_RESOURCE_DESC pathTracingTargetDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         .Width = width,
         .Height = height,
@@ -266,10 +268,10 @@ void resize()
     };
     device->CreateCommittedResource(&DEFAULT_HEAP,
                                     D3D12_HEAP_FLAG_NONE,
-                                    &renderTargetDesc,
+                                    &pathTracingTargetDesc,
                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                     nullptr,
-                                    IID_PPV_ARGS(&renderTarget));
+                                    IID_PPV_ARGS(&pathTracingTarget));
 
     const D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -277,11 +279,11 @@ void resize()
     };
     D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
     uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
-    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
+    device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.renderTargetIdx = uavIdx;
+        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = uavIdx;
     }
 }
 
@@ -586,23 +588,23 @@ void initPipeline()
     // ===================================
     // POSTPROCESSING
     // ===================================
-    //{
-    //    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
-    //    psoDesc.pRootSignature = postprocessRootSig.Get();
-    //    psoDesc.VS = { fullscreen_vs_shaderBytecode, std::size(fullscreen_vs_shaderBytecode) };
-    //    psoDesc.PS = { fullscreen_ps_shaderBytecode, std::size(fullscreen_ps_shaderBytecode) };
-    //    psoDesc.BlendState = {};
-    //    psoDesc.SampleMask = UINT_MAX;
-    //    psoDesc.RasterizerState = {};
-    //    psoDesc.DepthStencilState = {};
-    //    psoDesc.DepthStencilState.DepthEnable = FALSE;
-    //    psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
-    //    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    //    psoDesc.NumRenderTargets = 1;
-    //    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    //    psoDesc.SampleDesc = NO_AA;
-    //    CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
-    //}
+    {
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = postprocessRootSig.Get();
+        psoDesc.VS = { fullscreen_vs_shaderBytecode, std::size(fullscreen_vs_shaderBytecode) };
+        psoDesc.PS = { fullscreen_ps_shaderBytecode, std::size(fullscreen_ps_shaderBytecode) };
+        psoDesc.BlendState = {};
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.RasterizerState = {};
+        psoDesc.DepthStencilState = {};
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        psoDesc.SampleDesc = NO_AA;
+        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+    }
 }
 
 static int frameCount = 0;
@@ -663,8 +665,11 @@ void captureQueuedScreenshot()
 
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
+    ComPtr<ID3D12Resource> backBuffer;
+    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
-        .pResource = renderTarget.Get(),
+        .pResource = backBuffer.Get(),
         .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
         .SubresourceIndex = 0,
     };
@@ -683,15 +688,11 @@ void captureQueuedScreenshot()
         },
     };
 
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
     cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
 }
 
 void finalizeQueuedScreenshot()
@@ -803,7 +804,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
-        const auto renderTargetDesc = renderTarget->GetDesc();
+        const auto renderTargetDesc = pathTracingTarget->GetDesc();
 
         rtDispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
         rtDispatchDesc.Height = renderTargetDesc.Height;
@@ -816,7 +817,7 @@ void render()
     BufferHelper::copyResource(cmdList.Get(),
                                backBuffer.Get(),
                                D3D12_RESOURCE_STATE_PRESENT,
-                               renderTarget.Get(),
+                               pathTracingTarget.Get(),
                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     if (screenshotRequest.active)
