@@ -70,12 +70,26 @@ foreach(SHADER IN LISTS SHADER_FILES)
     string(REGEX REPLACE "\\.hlsl$" "" NAME_NO_HLSL "${FILE_NAME}")
     string(REPLACE "." "_" NAME_SAFE "${NAME_NO_HLSL}")
 
+    if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
+        set(DXC_TARGET "lib_6_6")
+        set(DXC_ENTRY "")
+    elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
+        set(DXC_TARGET "vs_6_6")
+        set(DXC_ENTRY "/E vsMain")
+    elseif (FILE_NAME MATCHES "\\.ps\\.hlsl$")
+        set(DXC_TARGET "ps_6_6")
+        set(DXC_ENTRY "/E psMain")
+    else()
+        message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl)")
+    endif()
+
     add_custom_command(
         OUTPUT ${FXH_OUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${FXH_DIR}
         COMMAND ${DXC_EXECUTABLE}
                 ${SHADER}
-                /T lib_6_6
+                /T ${DXC_TARGET}
+                ${DXC_ENTRY}
                 /Fh ${FXH_OUT}
                 /Vn ${NAME_SAFE}_shaderBytecode
                 /I ${SHADER_DIR}
@@ -121,6 +135,7 @@ target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
     ${GENERATED_SHADER_HEADERS}
     "${EXT}/cxxopts/include"
+    "${EXT}/DirectX-Headers/include/directx"
     "${EXT}/json/include"
     "${EXT}/nvapi"
     "${EXT}/stb/include"
@@ -132,11 +147,13 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/nvapi/amd64"
 )
 
+add_subdirectory("${EXT}/DirectX-Headers" EXCLUDE_FROM_ALL)
+
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
 )
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
+target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler DirectX-Headers DirectX-Guids)
 
 set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"

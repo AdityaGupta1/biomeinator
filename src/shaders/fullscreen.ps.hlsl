@@ -33,10 +33,12 @@ struct PsIn
 float4 psMain(PsIn psIn) : SV_Target
 {
     // TODO: make texture float4 instead of unorm
-    Texture2D<float4> tex = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx]; // TODO: add SRV on host side
-    float4 texColor = tex.Sample(texSampler, psIn.uv);
+    //Texture2D<float4> tex = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx]; // TODO: add SRV on host side
+    //float4 texColor = tex.Sample(texSampler, psIn.uv);
 
     // TODO: tonemapping
 
-    return texColor;
+    //return texColor;
+
+    return float4(psIn.uv, 0, 1);
 }

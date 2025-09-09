@@ -25,9 +25,9 @@ struct VsOut
 VsOut vsMain(uint id : SV_VertexID)
 {
     // (-1,-1), (3,-1), (-1,3) covers screen without diagonal seam
-    float2 pos = (id == 0) ? float2(-1, -1) :
+    float2 pos = (id == 0) ? float2(-1, 3) :
                  (id == 1) ? float2(3, -1) :
-                             float2(-1, 3);
+                             float2(-1, -1);
     VsOut vsOut;
     vsOut.pos = float4(pos, 0, 1);
     vsOut.uv = 0.5f * pos + 0.5f; // map clip-space to [0,1]

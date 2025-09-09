@@ -31,6 +31,7 @@ This project uses various third-party libraries:
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
+- [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) - MIT
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
