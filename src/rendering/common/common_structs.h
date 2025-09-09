@@ -174,7 +174,12 @@ struct HeapIndices
         uint instanceDatasIdx;
         uint vertsIdx;
         uint perTriDatasIdx;
+        uint materialsIdx;
+
         uint areaLightsIdx;
+        uint areaLightSamplingStructureIdx;
+        uint pad0;
+        uint pad1;
     } srv;
 };
 

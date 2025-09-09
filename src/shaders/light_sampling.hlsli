@@ -27,12 +27,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "payload.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE_BUFFERS);
-
 AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {
+    StructuredBuffer<uint> areaLightSamplingStructure = ResourceDescriptorHeap[heapIndices.srv.areaLightSamplingStructureIdx];
     const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     pdf = 1.f / sceneParams.numAreaLights;
+
     StructuredBuffer<AreaLight> areaLights = ResourceDescriptorHeap[heapIndices.srv.areaLightsIdx];
     return areaLights[lightIdx];
 }
@@ -88,6 +88,7 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
     }
 
     result.didHitLight = true;
+    StructuredBuffer<Material> materials = ResourceDescriptorHeap[heapIndices.srv.materialsIdx];
     const Material material = materials[lightPayload.materialId];
     result.Le = material.getEmissiveColor();
     result.pdf = lightPickPdf * lightSamplePdf;

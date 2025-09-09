@@ -134,7 +134,7 @@ private:
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{
         {
-            .hasSrvDescriptor = false, // TODO: set to true
+            .hasSrvDescriptor = true,
         },
     };
 
@@ -160,7 +160,7 @@ private:
     uint32_t numAreaLights{ 0 };
     MappedArray<uint32_t> areaLightSamplingStructure{
         {
-            .hasSrvDescriptor = false, // TODO: set to true
+            .hasSrvDescriptor = true,
         },
     };
 
@@ -185,9 +185,9 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    uint32_t getInstanceDatasDescriptorIndex() const;
+    uint32_t getInstanceDatasDescriptorIdx() const;
 
-    D3D12_GPU_VIRTUAL_ADDRESS getDevMaterialsAddress() const;
+    uint32_t getMaterialsDescriptorIdx() const;
 
     bool hasTlas() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
@@ -198,5 +198,5 @@ public:
 
     uint32_t getNumAreaLights() const;
     uint32_t getAreaLightsDescriptorIdx() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightSamplingStructureAddress() const;
+    uint32_t getAreaLightSamplingStructureDescriptorIdx() const;
 };

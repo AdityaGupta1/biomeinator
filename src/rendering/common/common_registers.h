@@ -28,13 +28,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // t#
 #define RT_REGISTER_RAYTRACING_ACS 0
-#define RT_REGISTER_VERTS 1
-#define RT_REGISTER_IDXS 2
-#define RT_REGISTER_PER_TRI_DATAS 3
-#define RT_REGISTER_INSTANCE_DATAS 4
-#define RT_REGISTER_MATERIALS 5
-#define RT_REGISTER_AREA_LIGHTS 6
-#define RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
+#define RT_REGISTER_IDXS 1
 
 // b#
 #define RT_REGISTER_GLOBAL_PARAMS 0

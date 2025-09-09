@@ -59,6 +59,8 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
+    StructuredBuffer<Material> materials = ResourceDescriptorHeap[heapIndices.srv.materialsIdx];
+
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)

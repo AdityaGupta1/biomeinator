@@ -449,14 +449,14 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     this->pendingTextures.clear();
 }
 
-uint32_t Scene::getInstanceDatasDescriptorIndex() const
+uint32_t Scene::getInstanceDatasDescriptorIdx() const
 {
     return this->mappedInstanceDatasArray.getSrvDescriptorIdx();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
+uint32_t Scene::getMaterialsDescriptorIdx() const
 {
-    return this->mappedMaterialsArray.getBufferGpuAddress();
+    return this->mappedMaterialsArray.getSrvDescriptorIdx();
 }
 
 bool Scene::hasTlas() const
@@ -494,7 +494,7 @@ uint32_t Scene::getAreaLightsDescriptorIdx() const
     return this->managedAreaLightsBuffer.getSrvDescriptorIdx();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightSamplingStructureAddress() const
+uint32_t Scene::getAreaLightSamplingStructureDescriptorIdx() const
 {
-    return this->areaLightSamplingStructure.getBufferGpuAddress();
+    return this->areaLightSamplingStructure.getSrvDescriptorIdx();
 }
