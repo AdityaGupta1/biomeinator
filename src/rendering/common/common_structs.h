@@ -168,6 +168,14 @@ struct HeapIndices
         uint pad1;
         uint pad2;
     } uav;
+
+    struct
+    {
+        uint vertsIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
+    } srv;
 };
 
 struct ConstantParams

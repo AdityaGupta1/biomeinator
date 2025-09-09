@@ -91,6 +91,8 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .hasSrvDescriptor = true,
+            .srvByteElementSize = static_cast<uint32_t>(sizeof(Vertex)),
         },
     };
     ManagedBuffer managedIdxsBuffer{
@@ -170,7 +172,7 @@ public:
     bool hasTlas() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
-    D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
+    uint32_t getVertsDescriptorIdx() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 

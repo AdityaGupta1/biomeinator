@@ -20,13 +20,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../rendering/common/common_structs.h"
 
+#include "global_params.hlsli"
+
 #define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT_REGISTER_RAYTRACING_ACS, RT_REGISTER_SPACE_BUFFERS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_DATAS, RT_REGISTER_SPACE_BUFFERS);
 
-StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE_BUFFERS);
 ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE_BUFFERS);
 StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE_BUFFERS);
 
@@ -46,6 +47,8 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
         i1 = i0 + 1;
         i2 = i0 + 2;
     }
+
+    StructuredBuffer<Vertex> verts = ResourceDescriptorHeap[heapIndices.srv.vertsIdx];
 
     v0 = verts[instanceData.vertsBufferOffset + i0];
     v1 = verts[instanceData.vertsBufferOffset + i1];

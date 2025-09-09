@@ -469,9 +469,9 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
     return this->dev_tlas.Get()->GetGPUVirtualAddress();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
+uint32_t Scene::getVertsDescriptorIdx() const
 {
-    return this->managedVertsBuffer.getBufferGpuAddress();
+    return managedVertsBuffer.getSrvDescriptorIdx();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const

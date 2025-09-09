@@ -313,7 +313,6 @@ enum class RtParam
 {
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
-    VERTS,
     IDXS,
     PER_TRI_DATAS,
     INSTANCE_DATAS,
@@ -347,14 +346,6 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
-            },
-        };
-
-        rtParams[RT_PARAM_IDX(VERTS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_VERTS,
                 .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
@@ -704,6 +695,9 @@ void render()
     auto& frameCtx = frameCtxs[frameCtxIdx];
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
+    auto& heapIndices = paramBlockManager.heapIndices;
+    heapIndices->srv.vertsIdx = scene.getVertsDescriptorIdx();
+
     if (!testMode)
     {
         camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
@@ -734,7 +728,6 @@ void render()
         // clang-format off
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
