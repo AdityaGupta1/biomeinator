@@ -60,12 +60,15 @@ file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 set(COMPILED_HEADERS "")
 foreach(SHADER IN LISTS SHADER_FILES)
     file(RELATIVE_PATH REL_PATH ${SHADER_DIR} ${SHADER})
-    get_filename_component(NAME_WE ${REL_PATH} NAME_WE)
     string(REPLACE "\\" "/" REL_PATH_UNIX ${REL_PATH})
     string(REPLACE ".hlsl" ".fxh" FXH_FILENAME ${REL_PATH_UNIX})
     set(FXH_OUT "${GENERATED_SHADER_HEADERS}/${FXH_FILENAME}")
     get_filename_component(FXH_DIR ${FXH_OUT} DIRECTORY)
     file(MAKE_DIRECTORY ${FXH_DIR})
+
+    get_filename_component(FILE_NAME "${REL_PATH}" NAME)
+    string(REGEX REPLACE "\\.hlsl$" "" NAME_NO_HLSL "${FILE_NAME}")
+    string(REPLACE "." "_" NAME_SAFE "${NAME_NO_HLSL}")
 
     add_custom_command(
         OUTPUT ${FXH_OUT}
@@ -74,7 +77,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 ${SHADER}
                 /T lib_6_6
                 /Fh ${FXH_OUT}
-                /Vn ${NAME_WE}_shaderBytecode
+                /Vn ${NAME_SAFE}_shaderBytecode
                 /I ${SHADER_DIR}
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"

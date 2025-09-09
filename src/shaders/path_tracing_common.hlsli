@@ -22,13 +22,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
 
-RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT_REGISTER_RAYTRACING_ACS, RT_REGISTER_SPACE_BUFFERS);
+RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT_REGISTER_RAYTRACING_ACS, RT_REGISTER_SPACE);
 
-StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_DATAS, RT_REGISTER_SPACE_BUFFERS);
+StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_DATAS, RT_REGISTER_SPACE);
 
-StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE_BUFFERS);
-ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE_BUFFERS);
-StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE_BUFFERS);
+StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE);
+ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE);
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {

@@ -46,7 +46,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
-#include "main.fxh"
+#include "main.rgs.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -329,6 +329,7 @@ enum class RtParam
 #define RT_PARAM_IDX(rtParam) static_cast<uint32_t>(RtParam::rtParam)
 
 ComPtr<ID3D12RootSignature> rtRootSig;
+ComPtr<ID3D12RootSignature> postprocessRootSig;
 void initRootSignature()
 {
     // ===================================
@@ -341,7 +342,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -349,7 +350,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -357,7 +358,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_VERTS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -365,7 +366,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_IDXS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -373,7 +374,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_PER_TRI_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -381,7 +382,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -389,7 +390,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_MATERIALS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -397,7 +398,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_AREA_LIGHTS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -405,7 +406,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -417,7 +418,7 @@ void initRootSignature()
             .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
-            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
+            .RegisterSpace = RT_REGISTER_SPACE,
         });
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
@@ -433,15 +434,50 @@ void initRootSignature()
 
         ComPtr<ID3DBlob> blob, errorBlob;
         CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
+            errorBlob);
         CHECK_HRESULT(
             device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
+    }
+
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
+    {
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back({
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .ShaderRegister = POSTPROCESS_REGISTER_TEX_SAMPLER,
+            .RegisterSpace = POSTPROCESS_REGISTER_SPACE,
+        });
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC postprocessRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = 0,
+                .pParameters = nullptr,
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&postprocessRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&postprocessRootSig)));
     }
 }
 
 ComPtr<ID3D12StateObject> rtPso;
 ComPtr<ID3D12Resource> dev_rtShaderIds;
 D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
+
+ComPtr<ID3D12StateObject> postprocessPso;
 
 void initPipeline()
 {
@@ -451,8 +487,8 @@ void initPipeline()
     {
         D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
-                .pShaderBytecode = main_shaderBytecode,
-                .BytecodeLength = std::size(main_shaderBytecode),
+                .pShaderBytecode = main_rgs_shaderBytecode,
+                .BytecodeLength = std::size(main_rgs_shaderBytecode),
             },
         };
 
@@ -546,6 +582,27 @@ void initPipeline()
         };
         rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
     }
+
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
+    //{
+    //    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
+    //    psoDesc.pRootSignature = postprocessRootSig.Get();
+    //    psoDesc.VS = { fullscreen_vs_shaderBytecode, std::size(fullscreen_vs_shaderBytecode) };
+    //    psoDesc.PS = { fullscreen_ps_shaderBytecode, std::size(fullscreen_ps_shaderBytecode) };
+    //    psoDesc.BlendState = {};
+    //    psoDesc.SampleMask = UINT_MAX;
+    //    psoDesc.RasterizerState = {};
+    //    psoDesc.DepthStencilState = {};
+    //    psoDesc.DepthStencilState.DepthEnable = FALSE;
+    //    psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
+    //    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    //    psoDesc.NumRenderTargets = 1;
+    //    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    //    psoDesc.SampleDesc = NO_AA;
+    //    CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+    //}
 }
 
 static int frameCount = 0;
