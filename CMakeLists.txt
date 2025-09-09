@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ==================================================
+# Biomeinator
+# ==================================================
+
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
     file(GLOB DXC_POSSIBLE_PATHS
@@ -60,21 +64,38 @@ file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 set(COMPILED_HEADERS "")
 foreach(SHADER IN LISTS SHADER_FILES)
     file(RELATIVE_PATH REL_PATH ${SHADER_DIR} ${SHADER})
-    get_filename_component(NAME_WE ${REL_PATH} NAME_WE)
     string(REPLACE "\\" "/" REL_PATH_UNIX ${REL_PATH})
     string(REPLACE ".hlsl" ".fxh" FXH_FILENAME ${REL_PATH_UNIX})
     set(FXH_OUT "${GENERATED_SHADER_HEADERS}/${FXH_FILENAME}")
     get_filename_component(FXH_DIR ${FXH_OUT} DIRECTORY)
     file(MAKE_DIRECTORY ${FXH_DIR})
 
+    get_filename_component(FILE_NAME "${REL_PATH}" NAME)
+    string(REGEX REPLACE "\\.hlsl$" "" NAME_NO_HLSL "${FILE_NAME}")
+    string(REPLACE "." "_" NAME_SAFE "${NAME_NO_HLSL}")
+
+    if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
+        set(DXC_TARGET "lib_6_6")
+        set(DXC_ENTRY "")
+    elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
+        set(DXC_TARGET "vs_6_6")
+        set(DXC_ENTRY "/E vsMain")
+    elseif (FILE_NAME MATCHES "\\.ps\\.hlsl$")
+        set(DXC_TARGET "ps_6_6")
+        set(DXC_ENTRY "/E psMain")
+    else()
+        message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl)")
+    endif()
+
     add_custom_command(
         OUTPUT ${FXH_OUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${FXH_DIR}
         COMMAND ${DXC_EXECUTABLE}
                 ${SHADER}
-                /T lib_6_6
+                /T ${DXC_TARGET}
+                ${DXC_ENTRY}
                 /Fh ${FXH_OUT}
-                /Vn ${NAME_WE}_shaderBytecode
+                /Vn ${NAME_SAFE}_shaderBytecode
                 /I ${SHADER_DIR}
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
@@ -118,6 +139,7 @@ target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
     ${GENERATED_SHADER_HEADERS}
     "${EXT}/cxxopts/include"
+    "${EXT}/DirectX-Headers/include/directx"
     "${EXT}/json/include"
     "${EXT}/nvapi"
     "${EXT}/stb/include"
@@ -129,10 +151,6 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/nvapi/amd64"
 )
 
-target_compile_definitions(Biomeinator PRIVATE
-    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
-)
 target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
 
 set(RUNTIME_DLLS
@@ -144,6 +162,15 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
+
+target_compile_definitions(Biomeinator PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+)
+
+# ==================================================
+# BiomeinatorTests
+# ==================================================
 
 file(GLOB TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"

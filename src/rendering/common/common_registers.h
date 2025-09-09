@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "common_preamble.h"
 
 // =============================================
-#define RT_REGISTER_SPACE_BUFFERS 0
+#define RT_REGISTER_SPACE 0
 // =============================================
 
 // t#
@@ -37,12 +37,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // b#
 #define RT_REGISTER_GLOBAL_PARAMS 0
 
+// s#
+#define RT_REGISTER_TEX_SAMPLER 0
+
 // =============================================
-#define RT_REGISTER_SPACE_TEXTURES 1
+#define POSTPROCESS_REGISTER_SPACE 0
 // =============================================
 
 // s#
-#define RT_REGISTER_TEX_SAMPLER 0
+#define POSTPROCESS_REGISTER_TEX_SAMPLER 0
 
 // =============================================
 // helper macros

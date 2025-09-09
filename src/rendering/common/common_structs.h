@@ -163,11 +163,19 @@ struct HeapIndices
 {
     struct
     {
-        uint renderTargetIdx;
+        uint pathTracingTargetIdx;
         uint pad0;
         uint pad1;
         uint pad2;
     } uav;
+
+    struct
+    {
+        uint pathTracingTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
+    } srv;
 };
 
 struct ConstantParams

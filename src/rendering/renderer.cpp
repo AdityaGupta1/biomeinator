@@ -46,7 +46,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
-#include "main.fxh"
+#include "main.rgs.fxh"
+#include "fullscreen.vs.fxh"
+#include "fullscreen.ps.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -198,6 +200,8 @@ void initDevice()
 ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
 DescriptorHeapAllocator sharedDescHeapAlloc;
 
+ComPtr<ID3D12DescriptorHeap> rtvHeap;
+
 void initDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
@@ -205,9 +209,16 @@ void initDescriptorHeaps()
         .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
-    device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
+    CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
 
     sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
+
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+        .NumDescriptors = NUM_FRAMES_IN_FLIGHT,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+    };
+    CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
 }
 
 ComPtr<IDXGISwapChain3> swapChain;
@@ -230,7 +241,10 @@ void initRenderTarget()
     resize();
 }
 
-ComPtr<ID3D12Resource> renderTarget;
+ComPtr<ID3D12Resource> pathTracingTarget;
+std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
+D3D12_VIEWPORT viewport;
+D3D12_RECT scissor;
 void resize()
 {
     if (!swapChain)
@@ -243,45 +257,73 @@ void resize()
     const uint32_t width = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t height = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
+    viewport = { 0, 0, static_cast<float>(width), static_cast<float>(height) };
+    scissor = { 0, 0, static_cast<long>(width), static_cast<long>(height) };
+
     flush();
 
     swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, swapChainFlags);
     swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
     frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
-    if (renderTarget)
+    const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
     {
-        renderTarget.Reset();
+        ID3D12Resource* backBuffer = nullptr;
+        swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
+        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
+        cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        cpuHandle.ptr += i * rtvIncrementSize;
+        device->CreateRenderTargetView(backBuffer, nullptr, cpuHandle);
     }
 
-    const D3D12_RESOURCE_DESC renderTargetDesc = {
+    if (pathTracingTarget)
+    {
+        pathTracingTarget.Reset();
+    }
+
+    const D3D12_RESOURCE_DESC pathTracingTargetDesc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
         .Width = width,
         .Height = height,
         .DepthOrArraySize = 1,
         .MipLevels = 1,
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .SampleDesc = NO_AA,
         .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
     };
     device->CreateCommittedResource(&DEFAULT_HEAP,
                                     D3D12_HEAP_FLAG_NONE,
-                                    &renderTargetDesc,
+                                    &pathTracingTargetDesc,
                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                     nullptr,
-                                    IID_PPV_ARGS(&renderTarget));
+                                    IID_PPV_ARGS(&pathTracingTarget));
 
     const D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
-    uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
-    device->CreateUnorderedAccessView(renderTarget.Get(), nullptr, &uavDesc, uavHandle);
+    const uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
+    device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
+    srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D = {
+        .MostDetailedMip = 0,
+        .MipLevels = static_cast<uint32_t>(-1),
+        .PlaneSlice = 0,
+    };
+    D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
+    const uint32_t srvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
+    device->CreateShaderResourceView(pathTracingTarget.Get(), &srvDesc, srvHandle);
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.renderTargetIdx = uavIdx;
+        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = uavIdx;
+        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = srvIdx;
     }
 }
 
@@ -326,9 +368,18 @@ enum class RtParam
     COUNT
 };
 
-#define RT_PARAM_IDX(rtParam) static_cast<uint32_t>(RtParam::rtParam)
+enum class PostprocessParam
+{
+    GLOBAL_PARAMS,
+
+    COUNT
+};
+
+#define RT_PARAM_IDX(param) static_cast<uint32_t>(RtParam::param)
+#define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 
 ComPtr<ID3D12RootSignature> rtRootSig;
+ComPtr<ID3D12RootSignature> postprocessRootSig;
 void initRootSignature()
 {
     // ===================================
@@ -341,7 +392,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -349,7 +400,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -357,7 +408,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_VERTS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -365,7 +416,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_IDXS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -373,7 +424,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_PER_TRI_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -381,7 +432,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -389,7 +440,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_MATERIALS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -397,7 +448,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_AREA_LIGHTS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -405,7 +456,7 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
+                .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
@@ -417,7 +468,7 @@ void initRootSignature()
             .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
             .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
-            .RegisterSpace = RT_REGISTER_SPACE_TEXTURES,
+            .RegisterSpace = RT_REGISTER_SPACE,
         });
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
@@ -437,11 +488,56 @@ void initRootSignature()
         CHECK_HRESULT(
             device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
     }
+
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, POSTPROCESS_PARAM_IDX(COUNT)> postprocessParams;
+
+        postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back({
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .ShaderRegister = POSTPROCESS_REGISTER_TEX_SAMPLER,
+            .RegisterSpace = POSTPROCESS_REGISTER_SPACE,
+        });
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC postprocessRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(postprocessParams.size()),
+                .pParameters = postprocessParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&postprocessRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&postprocessRootSig)));
+    }
 }
 
 ComPtr<ID3D12StateObject> rtPso;
 ComPtr<ID3D12Resource> dev_rtShaderIds;
 D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
+
+ComPtr<ID3D12PipelineState> postprocessPso;
 
 void initPipeline()
 {
@@ -451,8 +547,8 @@ void initPipeline()
     {
         D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
-                .pShaderBytecode = main_shaderBytecode,
-                .BytecodeLength = std::size(main_shaderBytecode),
+                .pShaderBytecode = main_rgs_shaderBytecode,
+                .BytecodeLength = sizeof(main_rgs_shaderBytecode),
             },
         };
 
@@ -546,6 +642,29 @@ void initPipeline()
         };
         rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
     }
+
+    // ===================================
+    // POSTPROCESSING
+    // ===================================
+    {
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = postprocessRootSig.Get();
+        psoDesc.VS = { fullscreen_vs_shaderBytecode, sizeof(fullscreen_vs_shaderBytecode) };
+        psoDesc.PS = { fullscreen_ps_shaderBytecode, sizeof(fullscreen_ps_shaderBytecode) };
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = {
+            .DepthEnable = FALSE,
+            .StencilEnable = FALSE,
+        };
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        psoDesc.SampleDesc = NO_AA;
+        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+    }
 }
 
 static int frameCount = 0;
@@ -606,8 +725,11 @@ void captureQueuedScreenshot()
 
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
+    ComPtr<ID3D12Resource> backBuffer;
+    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
-        .pResource = renderTarget.Get(),
+        .pResource = backBuffer.Get(),
         .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
         .SubresourceIndex = 0,
     };
@@ -626,15 +748,11 @@ void captureQueuedScreenshot()
         },
     };
 
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
     cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 renderTarget.Get(),
-                                                 D3D12_RESOURCE_STATE_COPY_SOURCE,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
 }
 
 void finalizeQueuedScreenshot()
@@ -727,12 +845,13 @@ void render()
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
+    ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
+    cmdList->SetDescriptorHeaps(1, heaps);
+
     if (scene.hasTlas())
     {
         cmdList->SetPipelineState1(rtPso.Get());
         cmdList->SetComputeRootSignature(rtRootSig.Get());
-        ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
-        cmdList->SetDescriptorHeaps(1, heaps);
 
         // clang-format off
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -746,28 +865,45 @@ void render()
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
-        const auto renderTargetDesc = renderTarget->GetDesc();
+        const auto renderTargetDesc = pathTracingTarget->GetDesc();
 
         rtDispatchDesc.Width = static_cast<uint32_t>(renderTargetDesc.Width);
         rtDispatchDesc.Height = renderTargetDesc.Height;
         cmdList->DispatchRays(&rtDispatchDesc);
     }
 
+    cmdList->SetPipelineState(postprocessPso.Get());
+    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
+
+    cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
+                                               paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
     ComPtr<ID3D12Resource> backBuffer;
     swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
 
-    BufferHelper::copyResource(cmdList.Get(),
-                               backBuffer.Get(),
-                               D3D12_RESOURCE_STATE_PRESENT,
-                               renderTarget.Get(),
-                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+    cmdList->RSSetViewports(1, &viewport);
+    cmdList->RSSetScissorRects(1, &scissor);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvCpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvCpuHandle.ptr += frameCtxIdx * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    cmdList->OMSetRenderTargets(1, &rtvCpuHandle, FALSE, nullptr);
+
+    const float clearColor[] = { 1.f, 0.f, 1.f, 1.f };
+    cmdList->ClearRenderTargetView(rtvCpuHandle, clearColor, 0, nullptr);
+
+    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    cmdList->DrawInstanced(3, 1, 0, 0);
+
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
     if (screenshotRequest.active)
     {
         captureQueuedScreenshot();
     }
-
-    backBuffer.Reset();
 
     submitCmd();
     const uint64_t fenceValue = nextFenceValue++;
@@ -830,7 +966,15 @@ void flush()
 
 void destroy()
 {
+
     flush();
+
+    ComPtr<ID3D12DebugDevice> debugDevice;
+    if (SUCCEEDED(device.As(&debugDevice)))
+    {
+        debugDevice->ReportLiveDeviceObjects(D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL);
+    }
+
     device.Reset();
 }
 

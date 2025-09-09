@@ -16,16 +16,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+struct VsOut
+{
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
 
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
+VsOut vsMain(uint vertIdx : SV_VertexID)
+{
+    float2 pos2d = -1.f + 4.f * float2(vertIdx == 0, vertIdx == 2);
 
-#include <d3dx12.h>
-#include <DirectXMath.h>
-#include <Windows.h>
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <wrl/client.h>
+    VsOut vsOut;
+    vsOut.pos = float4(pos2d, 0, 1);
+    vsOut.uv = pos2d * float2(0.5f, -0.5f) + 0.5f;
+    return vsOut;
+}
 
-using Microsoft::WRL::ComPtr;

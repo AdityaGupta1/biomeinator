@@ -16,16 +16,25 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "../rendering/common/common_registers.h"
 
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
+#include "global_params.hlsli"
+#include "util/color.hlsli"
 
-#include <d3dx12.h>
-#include <DirectXMath.h>
-#include <Windows.h>
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <wrl/client.h>
+SamplerState texSampler : REGISTER_S(POSTPROCESS_REGISTER_TEX_SAMPLER, POSTPROCESS_REGISTER_SPACE);
 
-using Microsoft::WRL::ComPtr;
+struct PsIn
+{
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 psMain(PsIn psIn) : SV_Target
+{
+    Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
+    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
+
+    const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
+
+    return float4(colorPostTonemap, pathTracingColor.a);
+}
