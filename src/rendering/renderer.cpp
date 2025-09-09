@@ -311,12 +311,10 @@ void resize()
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
     srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    // TODO: see if these values can be left as default instead of explicitly specifying them
     srvDesc.Texture2D = {
         .MostDetailedMip = 0,
         .MipLevels = static_cast<uint32_t>(-1),
         .PlaneSlice = 0,
-        .ResourceMinLODClamp = 0.f,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
     const uint32_t srvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
