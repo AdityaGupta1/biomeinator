@@ -894,7 +894,8 @@ void render()
                                                paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
 
     ComPtr<ID3D12Resource> backBuffer;
-    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+    const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
+    swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer));
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -903,7 +904,8 @@ void render()
     cmdList->RSSetScissorRects(1, &scissor);
 
     D3D12_CPU_DESCRIPTOR_HANDLE rtvCpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
-    rtvCpuHandle.ptr += frameCtxIdx * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    rtvCpuHandle.ptr +=
+        currentBackBufferIndex * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     cmdList->OMSetRenderTargets(1, &rtvCpuHandle, FALSE, nullptr);
 
     const float clearColor[] = { 1.f, 0.f, 1.f, 1.f };
@@ -981,7 +983,6 @@ void flush()
 
 void destroy()
 {
-
     flush();
 
     ComPtr<ID3D12DebugDevice> debugDevice;
