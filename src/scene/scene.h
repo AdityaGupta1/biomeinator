@@ -91,8 +91,6 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .hasSrvDescriptor = true,
-            .srvElementByteSize = sizeof(Vertex),
         },
     };
     ManagedBuffer managedIdxsBuffer{
@@ -100,8 +98,6 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .hasSrvDescriptor = true,
-            .srvElementByteSize = sizeof(uint32_t),
         },
     };
     ManagedBuffer managedPerTriDatasBuffer{
@@ -109,22 +105,12 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .hasSrvDescriptor = true,
-            .srvElementByteSize = sizeof(PerTriangleData),
         },
     };
 
     uint32_t maxNumInstances{ 0 };
-    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{
-        {
-            .hasSrvDescriptor = false,
-        },
-    };
-    MappedArray<InstanceData> mappedInstanceDatasArray{
-        {
-            .hasSrvDescriptor = true,
-        },
-    };
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{ {} };
+    MappedArray<InstanceData> mappedInstanceDatasArray{ {} };
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
@@ -134,11 +120,7 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t nextMaterialIdx{ 0 };
-    MappedArray<::Material> mappedMaterialsArray{
-        {
-            .hasSrvDescriptor = true,
-        },
-    };
+    MappedArray<::Material> mappedMaterialsArray{ {} };
 
     std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
@@ -155,16 +137,10 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .hasSrvDescriptor = true,
-            .srvElementByteSize = sizeof(AreaLight),
         },
     };
     uint32_t numAreaLights{ 0 };
-    MappedArray<uint32_t> areaLightSamplingStructure{
-        {
-            .hasSrvDescriptor = true,
-        },
-    };
+    MappedArray<uint32_t> areaLightSamplingStructure{ {} };
 
     void freeInstance(Instance* instance);
 
@@ -187,18 +163,18 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    uint32_t getInstanceDatasDescriptorIdx() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 
-    uint32_t getMaterialsDescriptorIdx() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevMaterialsAddress() const;
 
     bool hasTlas() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
-    uint32_t getVertsDescriptorIdx() const;
-    uint32_t getIdxsDescriptorIdx() const;
-    uint32_t getPerTriDatasDescriptorIdx() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
-    uint32_t getAreaLightsDescriptorIdx() const;
-    uint32_t getAreaLightSamplingStructureDescriptorIdx() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightSamplingStructureAddress() const;
 };

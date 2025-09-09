@@ -449,14 +449,14 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     this->pendingTextures.clear();
 }
 
-uint32_t Scene::getInstanceDatasDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevInstanceDatasAddress() const
 {
-    return this->mappedInstanceDatasArray.getSrvDescriptorIdx();
+    return this->mappedInstanceDatasArray.getBufferGpuAddress();
 }
 
-uint32_t Scene::getMaterialsDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
 {
-    return this->mappedMaterialsArray.getSrvDescriptorIdx();
+    return this->mappedMaterialsArray.getBufferGpuAddress();
 }
 
 bool Scene::hasTlas() const
@@ -469,19 +469,19 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
     return this->dev_tlas.Get()->GetGPUVirtualAddress();
 }
 
-uint32_t Scene::getVertsDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 {
-    return this->managedVertsBuffer.getSrvDescriptorIdx();
+    return this->managedVertsBuffer.getBufferGpuAddress();
 }
 
-uint32_t Scene::getIdxsDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
 {
-    return this->managedIdxsBuffer.getSrvDescriptorIdx();
+    return this->managedIdxsBuffer.getBufferGpuAddress();
 }
 
-uint32_t Scene::getPerTriDatasDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
 {
-    return this->managedPerTriDatasBuffer.getSrvDescriptorIdx();
+    return this->managedPerTriDatasBuffer.getBufferGpuAddress();
 }
 
 uint32_t Scene::getNumAreaLights() const
@@ -489,12 +489,12 @@ uint32_t Scene::getNumAreaLights() const
     return this->numAreaLights;
 }
 
-uint32_t Scene::getAreaLightsDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightsBufferAddress() const
 {
-    return this->managedAreaLightsBuffer.getSrvDescriptorIdx();
+    return this->managedAreaLightsBuffer.getBufferGpuAddress();
 }
 
-uint32_t Scene::getAreaLightSamplingStructureDescriptorIdx() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightSamplingStructureAddress() const
 {
-    return this->areaLightSamplingStructure.getSrvDescriptorIdx();
+    return this->areaLightSamplingStructure.getBufferGpuAddress();
 }

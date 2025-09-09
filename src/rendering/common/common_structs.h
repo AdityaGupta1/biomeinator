@@ -168,19 +168,6 @@ struct HeapIndices
         uint pad1;
         uint pad2;
     } uav;
-
-    struct
-    {
-        uint instanceDatasIdx;
-        uint vertsIdx;
-        uint idxsIdx;
-        uint perTriDatasIdx;
-
-        uint materialsIdx;
-        uint areaLightsIdx;
-        uint areaLightSamplingStructureIdx;
-        uint pad0;
-    } srv;
 };
 
 struct ConstantParams

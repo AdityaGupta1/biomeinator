@@ -59,8 +59,6 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
-    StructuredBuffer<Material> materials = ResourceDescriptorHeap[heapIndices.srv.materialsIdx];
-
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
@@ -154,7 +152,6 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 [shader("closesthit")]
 void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
-    StructuredBuffer<InstanceData> instanceDatas = ResourceDescriptorHeap[heapIndices.srv.instanceDatasIdx];
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
     Vertex v0, v1, v2;
