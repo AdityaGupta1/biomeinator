@@ -22,15 +22,15 @@ struct VsOut
     float2 uv : TEXCOORD0;
 };
 
-VsOut vsMain(uint id : SV_VertexID)
+VsOut vsMain(uint vertIdx : SV_VertexID)
 {
-    // (-1,-1), (3,-1), (-1,3) covers screen without diagonal seam
-    float2 pos = (id == 0) ? float2(-1, 3) :
-                 (id == 1) ? float2(3, -1) :
-                             float2(-1, -1);
+    // TODO: remove branching
+    float2 pos = (vertIdx == 0) ? float2(-1, 3) :
+                 (vertIdx == 1) ? float2(3, -1) :
+                                  float2(-1, -1);
     VsOut vsOut;
     vsOut.pos = float4(pos, 0, 1);
-    vsOut.uv = 0.5f * pos + 0.5f; // map clip-space to [0,1]
+    vsOut.uv = pos * float2(0.5f, -0.5f) + 0.5f;
     return vsOut;
 }
 

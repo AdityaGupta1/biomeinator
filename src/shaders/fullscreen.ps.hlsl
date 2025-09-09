@@ -22,8 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS_REGISTER_TEX_SAMPLER, POSTPROCESS_REGISTER_SPACE);
 
-// TODO: remove pos?
-// TODO: if that's not possible, maybe define VsOut and PsIn as the same struct in the same place?
 struct PsIn
 {
     float4 pos : SV_Position;
@@ -32,13 +30,11 @@ struct PsIn
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    // TODO: make texture float4 instead of unorm
-    //Texture2D<float4> tex = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx]; // TODO: add SRV on host side
-    //float4 texColor = tex.Sample(texSampler, psIn.uv);
+    // TODO: make host side texture float4 instead of unorm
+    Texture2D<float4> tex = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
+    float4 texColor = tex.Sample(texSampler, psIn.uv);
 
     // TODO: tonemapping
 
-    //return texColor;
-
-    return float4(psIn.uv, 0, 1);
+    return texColor;
 }
