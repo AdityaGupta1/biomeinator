@@ -48,6 +48,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "main.fxh"
 
+#define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -200,7 +202,7 @@ void initDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = RESOURCE_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
+        .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
     device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap));
@@ -701,7 +703,12 @@ void render()
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
 
+    beginFrame();
+
     auto& frameCtx = frameCtxs[frameCtxIdx];
+
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
+
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     if (!testMode)
@@ -716,10 +723,6 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
-
-    beginFrame();
-
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();

@@ -109,8 +109,8 @@ private:
     };
 
     uint32_t maxNumInstances{ 0 };
-    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{};
-    MappedArray<InstanceData> mappedInstanceDatasArray{};
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{ {} };
+    MappedArray<InstanceData> mappedInstanceDatasArray{ {} };
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
@@ -120,7 +120,7 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t nextMaterialIdx{ 0 };
-    MappedArray<::Material> mappedMaterialsArray{};
+    MappedArray<::Material> mappedMaterialsArray{ {} };
 
     std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
@@ -140,7 +140,7 @@ private:
         },
     };
     uint32_t numAreaLights{ 0 };
-    MappedArray<uint32_t> areaLightSamplingStructure{};
+    MappedArray<uint32_t> areaLightSamplingStructure{ {} };
 
     void freeInstance(Instance* instance);
 

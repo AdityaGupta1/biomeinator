@@ -49,6 +49,7 @@ struct ManagedBufferOptions
     bool isResizable{ false };
     bool isMapped{ false };
     bool hasSrvDescriptor{ false };
+    uint32_t srvElementByteSize{ 0 };
 };
 
 class ManagedBuffer
@@ -66,11 +67,17 @@ private:
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
     uint32_t bufferSizeBytes{ 0 };
 
+    uint32_t srvDescriptorIdx{ ~0u };
+    D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
+
     std::list<ManagedBufferSection> freeSectionList;
+
+    void allocSrvDescriptor(ToFreeList* toFreeList);
 
     ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                          ToFreeList& toFreeList,
                                          uint32_t sizeBytes);
+
     // resize() works only for non-mapped buffers
     void resize(ID3D12GraphicsCommandList* cmdList,
                 ToFreeList& toFreeList,
@@ -118,5 +125,7 @@ public:
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
+    bool hasValidSrvDescriptor() const;
+    uint32_t getSrvDescriptorIdx() const;
     uint32_t getSizeBytes() const;
 };

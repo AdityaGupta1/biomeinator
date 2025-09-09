@@ -37,6 +37,8 @@ private:
 
     std::vector<Instance*> instances;
 
+    std::vector<uint32_t> descriptorIdxs;
+
 public:
     // The caller is responsible for nulling the ComPtr if necessary.
     ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped);
@@ -46,6 +48,8 @@ public:
     void pushManagedBufferSection(const ManagedBufferSection& bufferSection);
 
     void pushInstance(Instance* instance);
+
+    void pushDescriptor(const uint32_t idx);
 
     void freeAll();
 };
