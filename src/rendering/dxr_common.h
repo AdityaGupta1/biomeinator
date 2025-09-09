@@ -32,18 +32,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
         }                                                                                                              \
     } while (0)
-#else
-#define CHECK_HRESULT(expr) (expr)
-#endif
 
-#define CHECK_SLANG_DIAGNOSTICS(blob)                                                                                  \
+#define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob)                                                                      \
     do                                                                                                                 \
     {                                                                                                                  \
-        if ((blob))                                                                                                    \
+        HRESULT _hr = (expr);                                                                                          \
+        if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
-            fprintf(stderr, "Slang diagnostics: %s\n", (const char*)(blob)->getBufferPointer());                       \
+            fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
+            fprintf(stderr, "Error: %s\n", (const char*)blob->GetBufferPointer());                                     \
         }                                                                                                              \
     } while (0)
+#else
+#define CHECK_HRESULT(expr) (expr)
+#define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob) (expr)
+#endif
 
 constexpr DXGI_SAMPLE_DESC NO_AA = {
     .Count = 1,

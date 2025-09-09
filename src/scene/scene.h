@@ -89,20 +89,23 @@ private:
     ManagedBuffer managedVertsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     ManagedBuffer managedIdxsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     ManagedBuffer managedPerTriDatasBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
 
     uint32_t maxNumInstances{ 0 };
@@ -119,22 +122,22 @@ private:
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{};
 
-    uint32_t nextTextureId{ 0 };
-    std::array<ComPtr<ID3D12Resource>, MAX_NUM_TEXTURES> textures{};
+    std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
     {
         std::vector<uint8_t> data;
         uint32_t width;
         uint32_t height;
-        uint32_t id;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     };
     std::vector<PendingTexture> pendingTextures;
 
     ManagedBuffer managedAreaLightsBuffer{
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        true /*isResizable*/,
-        false /*isMapped*/,
+        {
+            .isResizable = true,
+        },
     };
     uint32_t numAreaLights{ 0 };
     MappedArray<uint32_t> areaLightSamplingStructure{};

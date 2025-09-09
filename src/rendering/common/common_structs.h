@@ -159,6 +159,17 @@ public:
     uint pad2;
 };
 
+struct HeapIndices
+{
+    struct
+    {
+        uint renderTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
+    } uav;
+};
+
 struct ConstantParams
 {
     uint rngSeed;
@@ -192,12 +203,12 @@ struct SceneParams
 
 enum Tonemapping
 {
-    NONE,
-    STANDARD,
-    AGX,
-    KHRONOS_PBR_NEUTRAL,
+    TONEMAPPING_NONE,
+    TONEMAPPING_STANDARD,
+    TONEMAPPING_AGX,
+    TONEMAPPING_KHRONOS_PBR_NEUTRAL,
 
-    COUNT
+    TONEMAPPING_COUNT
 };
 
 struct RenderParams

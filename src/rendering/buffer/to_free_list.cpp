@@ -30,7 +30,7 @@ ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource,
 
 void ToFreeList::pushManagedBuffer(const ManagedBuffer* buffer)
 {
-    this->pushResource(buffer->dev_buffer, buffer->isMapped);
+    this->pushResource(buffer->dev_buffer, buffer->options.isMapped);
 }
 
 void ToFreeList::pushManagedBufferSection(const ManagedBufferSection& bufferSection)

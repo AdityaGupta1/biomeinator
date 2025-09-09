@@ -20,49 +20,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common_preamble.h"
 
+#define RESOURCE_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
+
 // =============================================
-#define REGISTER_SPACE_BUFFERS 0
+#define RT_REGISTER_SPACE_BUFFERS 0
 // =============================================
 
 // t#
-#define REGISTER_RAYTRACING_ACS 0
-#define REGISTER_VERTS 1
-#define REGISTER_IDXS 2
-#define REGISTER_PER_TRI_DATAS 3
-#define REGISTER_INSTANCE_DATAS 4
-#define REGISTER_MATERIALS 5
-#define REGISTER_AREA_LIGHTS 6
-#define REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
+#define RT_REGISTER_RAYTRACING_ACS 0
+#define RT_REGISTER_VERTS 1
+#define RT_REGISTER_IDXS 2
+#define RT_REGISTER_PER_TRI_DATAS 3
+#define RT_REGISTER_INSTANCE_DATAS 4
+#define RT_REGISTER_MATERIALS 5
+#define RT_REGISTER_AREA_LIGHTS 6
+#define RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
 
 // b#
-#define REGISTER_GLOBAL_PARAMS 0
+#define RT_REGISTER_GLOBAL_PARAMS 0
 
 // =============================================
-#define REGISTER_SPACE_TEXTURES 1
+#define RT_REGISTER_SPACE_TEXTURES 1
 // =============================================
-
-#define MAX_NUM_TEXTURES 8
-
-// u#
-#define REGISTER_RENDER_TARGET 0
-
-// t#
-#define REGISTER_TEXTURES 0
 
 // s#
-#define REGISTER_TEX_SAMPLER 0
-
-// =============================================
-// fake UAV slot for SER
-// =============================================
-
-#if _hlsl
-#define NV_SHADER_EXTN_REGISTER_SPACE space1738
-#define NV_SHADER_EXTN_SLOT u1738
-#else
-#define NV_SHADER_EXTN_REGISTER_SPACE 1738
-#define NV_SHADER_EXTN_SLOT 1738
-#endif
+#define RT_REGISTER_TEX_SAMPLER 0
 
 // =============================================
 // helper macros

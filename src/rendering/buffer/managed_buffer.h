@@ -44,6 +44,13 @@ public:
     void free() const;
 };
 
+struct ManagedBufferOptions
+{
+    bool isResizable{ false };
+    bool isMapped{ false };
+    bool hasSrvDescriptor{ false };
+};
+
 class ManagedBuffer
 {
     friend class ManagedBufferSection;
@@ -53,8 +60,7 @@ private:
     const D3D12_HEAP_PROPERTIES* heapProperties;
     const D3D12_RESOURCE_STATES initialResourceState;
 
-    const bool isResizable;
-    const bool isMapped;
+    const ManagedBufferOptions options;
 
     void* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
@@ -76,8 +82,7 @@ private:
 public:
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                   const D3D12_RESOURCE_STATES initialResourceState,
-                  const bool isResizable,
-                  const bool isMapped);
+                  const ManagedBufferOptions options);
 
     void init(uint32_t sizeBytes);
 
