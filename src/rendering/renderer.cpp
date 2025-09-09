@@ -643,6 +643,9 @@ void render()
     beginFrame();
 
     auto& frameCtx = frameCtxs[frameCtxIdx];
+
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
+
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     auto& heapIndices = paramBlockManager.heapIndices;
@@ -666,8 +669,6 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
-
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
