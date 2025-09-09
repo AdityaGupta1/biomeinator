@@ -983,6 +983,11 @@ void flush()
 
 void destroy()
 {
+    if (device == nullptr)
+    {
+        return;
+    }
+
     flush();
 
     ComPtr<ID3D12DebugDevice> debugDevice;
