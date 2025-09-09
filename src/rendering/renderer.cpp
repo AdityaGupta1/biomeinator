@@ -275,7 +275,7 @@ void resize()
 
     for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
     {
-        Microsoft::WRL::ComPtr<ID3D12Resource> backBuffer;
+        ComPtr<ID3D12Resource> backBuffer;
         swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
         D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
         cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
