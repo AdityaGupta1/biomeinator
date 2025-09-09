@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#ifdef __HLSL__
+#ifdef __HLSL_VERSION
 #define _hlsl 1
 #else
 #define _hlsl 0

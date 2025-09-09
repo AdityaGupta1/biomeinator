@@ -76,7 +76,6 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /Fh ${FXH_OUT}
                 /Vn ${NAME_WE}_shaderBytecode
                 /I ${SHADER_DIR}
-                /D __HLSL__
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
