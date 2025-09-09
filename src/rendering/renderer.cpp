@@ -275,12 +275,12 @@ void resize()
 
     for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
     {
-        ID3D12Resource* backBuffer = nullptr;
+        Microsoft::WRL::ComPtr<ID3D12Resource> backBuffer;
         swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
         D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
         cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
         cpuHandle.ptr += i * rtvIncrementSize;
-        device->CreateRenderTargetView(backBuffer, nullptr, cpuHandle);
+        device->CreateRenderTargetView(backBuffer.Get(), nullptr, cpuHandle);
     }
 
     if (pathTracingTargetUavIdx != ~0u)
