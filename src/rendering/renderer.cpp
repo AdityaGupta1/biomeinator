@@ -242,9 +242,14 @@ void initRenderTarget()
 }
 
 ComPtr<ID3D12Resource> pathTracingTarget;
+uint32_t pathTracingTargetUavIdx = ~0u;
+uint32_t pathTracingTargetSrvIdx = ~0u;
+
 std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
+
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
+
 void resize()
 {
     if (!swapChain)
@@ -270,12 +275,22 @@ void resize()
 
     for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
     {
-        ID3D12Resource* backBuffer = nullptr;
+        ComPtr<ID3D12Resource> backBuffer;
         swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
         D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
         cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
         cpuHandle.ptr += i * rtvIncrementSize;
-        device->CreateRenderTargetView(backBuffer, nullptr, cpuHandle);
+        device->CreateRenderTargetView(backBuffer.Get(), nullptr, cpuHandle);
+    }
+
+    if (pathTracingTargetUavIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetUavIdx);
+    }
+
+    if (pathTracingTargetSrvIdx != ~0u)
+    {
+        sharedDescHeapAlloc.free(pathTracingTargetSrvIdx);
     }
 
     if (pathTracingTarget)
@@ -305,7 +320,7 @@ void resize()
         .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
-    const uint32_t uavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
+    pathTracingTargetUavIdx = sharedDescHeapAlloc.alloc(&uavHandle);
     device->CreateUnorderedAccessView(pathTracingTarget.Get(), nullptr, &uavDesc, uavHandle);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
@@ -317,13 +332,13 @@ void resize()
         .PlaneSlice = 0,
     };
     D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
-    const uint32_t srvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
+    pathTracingTargetSrvIdx = sharedDescHeapAlloc.alloc(&srvHandle);
     device->CreateShaderResourceView(pathTracingTarget.Get(), &srvDesc, srvHandle);
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = uavIdx;
-        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = srvIdx;
+        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = pathTracingTargetUavIdx;
+        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = pathTracingTargetSrvIdx;
     }
 }
 
@@ -879,7 +894,8 @@ void render()
                                                paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
 
     ComPtr<ID3D12Resource> backBuffer;
-    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+    const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
+    swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer));
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -888,7 +904,8 @@ void render()
     cmdList->RSSetScissorRects(1, &scissor);
 
     D3D12_CPU_DESCRIPTOR_HANDLE rtvCpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
-    rtvCpuHandle.ptr += frameCtxIdx * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    rtvCpuHandle.ptr +=
+        currentBackBufferIndex * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     cmdList->OMSetRenderTargets(1, &rtvCpuHandle, FALSE, nullptr);
 
     const float clearColor[] = { 1.f, 0.f, 1.f, 1.f };
@@ -966,6 +983,10 @@ void flush()
 
 void destroy()
 {
+    if (device == nullptr)
+    {
+        return;
+    }
 
     flush();
 
