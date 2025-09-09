@@ -314,7 +314,6 @@ enum class RtParam
     GLOBAL_PARAMS,
     RAYTRACING_ACS,
     IDXS,
-    INSTANCE_DATAS,
     MATERIALS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
@@ -352,14 +351,6 @@ void initRootSignature()
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_IDXS,
-                .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
-            },
-        };
-
-        rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
                 .RegisterSpace = RT_REGISTER_SPACE_BUFFERS,
             },
         };
@@ -678,6 +669,7 @@ void render()
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     auto& heapIndices = paramBlockManager.heapIndices;
+    heapIndices->srv.instanceDatasIdx = scene.getInstanceDatasDescriptorIndex();
     heapIndices->srv.vertsIdx = scene.getVertsDescriptorIdx();
     heapIndices->srv.perTriDatasIdx = scene.getPerTriDatasDescriptorIdx();
     heapIndices->srv.areaLightsIdx = scene.getAreaLightsDescriptorIdx();
@@ -713,7 +705,6 @@ void render()
         cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on

@@ -152,6 +152,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 [shader("closesthit")]
 void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
+    StructuredBuffer<InstanceData> instanceDatas = ResourceDescriptorHeap[heapIndices.srv.instanceDatasIdx];
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
     Vertex v0, v1, v2;

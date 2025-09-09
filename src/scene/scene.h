@@ -113,8 +113,16 @@ private:
     };
 
     uint32_t maxNumInstances{ 0 };
-    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{};
-    MappedArray<InstanceData> mappedInstanceDatasArray{};
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{
+        {
+            .hasSrvDescriptor = false,
+        },
+    };
+    MappedArray<InstanceData> mappedInstanceDatasArray{
+        {
+            .hasSrvDescriptor = true,
+        },
+    };
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
@@ -124,7 +132,11 @@ private:
     bool isTlasDirty{ false };
 
     uint32_t nextMaterialIdx{ 0 };
-    MappedArray<::Material> mappedMaterialsArray{};
+    MappedArray<::Material> mappedMaterialsArray{
+        {
+            .hasSrvDescriptor = false, // TODO: set to true
+        },
+    };
 
     std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
@@ -146,7 +158,11 @@ private:
         },
     };
     uint32_t numAreaLights{ 0 };
-    MappedArray<uint32_t> areaLightSamplingStructure{};
+    MappedArray<uint32_t> areaLightSamplingStructure{
+        {
+            .hasSrvDescriptor = false, // TODO: set to true
+        },
+    };
 
     void freeInstance(Instance* instance);
 
@@ -169,7 +185,7 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
+    uint32_t getInstanceDatasDescriptorIndex() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevMaterialsAddress() const;
 

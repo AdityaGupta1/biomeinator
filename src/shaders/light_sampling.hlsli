@@ -97,6 +97,7 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
 
 float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
 {
+    StructuredBuffer<InstanceData> instanceDatas = ResourceDescriptorHeap[heapIndices.srv.instanceDatasIdx];
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
 
     StructuredBuffer<PerTriangleData> perTriDatas = ResourceDescriptorHeap[heapIndices.srv.perTriDatasIdx];
@@ -120,6 +121,7 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
+    StructuredBuffer<InstanceData> instanceDatas = ResourceDescriptorHeap[heapIndices.srv.instanceDatasIdx];
     const InstanceData instanceData = instanceDatas[InstanceID()];
     payload.materialId = instanceData.materialId;
 }

@@ -171,10 +171,10 @@ struct HeapIndices
 
     struct
     {
+        uint instanceDatasIdx;
         uint vertsIdx;
         uint perTriDatasIdx;
         uint areaLightsIdx;
-        uint pad2;
     } srv;
 };
 

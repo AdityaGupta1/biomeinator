@@ -449,9 +449,9 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     this->pendingTextures.clear();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevInstanceDatasAddress() const
+uint32_t Scene::getInstanceDatasDescriptorIndex() const
 {
-    return this->mappedInstanceDatasArray.getBufferGpuAddress();
+    return this->mappedInstanceDatasArray.getSrvDescriptorIdx();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
