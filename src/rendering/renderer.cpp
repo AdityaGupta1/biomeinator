@@ -883,6 +883,8 @@ void imguiBeginFrame()
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
 
+    ImGui::PopItemWidth();
+
     ImGui::End();
 }
 
