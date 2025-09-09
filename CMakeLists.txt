@@ -140,10 +140,17 @@ list(APPEND IMGUI_SRC
     "${EXT}/imgui/backends/imgui_impl_dx12.h"
 )
 
+foreach(FILE IN LISTS IMGUI_SRC)
+    file(RELATIVE_PATH REL_PATH "${EXT}" "${FILE}")
+    get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
+    string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
+    string(REPLACE "/" "\\" FILTER_PATH "${DIR_PATH}")
+    source_group("external\\${FILTER_PATH}" FILES "${FILE}")
+endforeach()
+
 add_executable(Biomeinator
     ${SRC_FILES}
-    ${IMGUI_SRC} # TODO: see if IMGUI_SRC really needs to be included here, or if target_include_directories below is enough
-                 # also figure out how to not show imgui files in solution explorer if possible
+    ${IMGUI_SRC}
     ${COMPILED_HEADERS}
     ${SHADER_FILES}
     ${SHADER_INCLUDE_FILES}
