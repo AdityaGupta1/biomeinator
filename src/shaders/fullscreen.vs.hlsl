@@ -24,13 +24,11 @@ struct VsOut
 
 VsOut vsMain(uint vertIdx : SV_VertexID)
 {
-    // TODO: remove branching
-    float2 pos = (vertIdx == 0) ? float2(-1, 3) :
-                 (vertIdx == 1) ? float2(3, -1) :
-                                  float2(-1, -1);
+    float2 pos2d = -1.f + 4.f * float2(vertIdx == 0, vertIdx == 2);
+
     VsOut vsOut;
-    vsOut.pos = float4(pos, 0, 1);
-    vsOut.uv = pos * float2(0.5f, -0.5f) + 0.5f;
+    vsOut.pos = float4(pos2d, 0, 1);
+    vsOut.uv = pos2d * float2(0.5f, -0.5f) + 0.5f;
     return vsOut;
 }
 
