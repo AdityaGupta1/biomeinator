@@ -36,7 +36,18 @@ namespace WindowManager
 
 HWND hwnd;
 
-bool didWindowJustRegainFocus = true;
+bool ignoreOneCursorMovement = true;
+bool isCursorVisible = true;
+bool isInCursorMode = false;
+
+void setCursorVisibility(bool showCursor)
+{
+    if (isCursorVisible != showCursor)
+    {
+        ShowCursor(showCursor);
+    }
+    isCursorVisible = showCursor;
+}
 
 static void onKeyDown(WPARAM wparam)
 {
@@ -71,6 +82,14 @@ static void onKeyDown(WPARAM wparam)
         break;
     case 'P':
         Renderer::queueScreenshot();
+        break;
+    case 'Z':
+        isInCursorMode = !isInCursorMode;
+        if (!isInCursorMode)
+        {
+            ignoreOneCursorMovement = true;
+        }
+        setCursorVisibility(isInCursorMode);
         break;
     default:
         break;
@@ -110,12 +129,13 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     case WM_ACTIVATE:
         if (wparam == WA_INACTIVE)
         {
-            ShowCursor(true);
+            setCursorVisibility(true);
         }
         else
         {
-            didWindowJustRegainFocus = true;
-            ShowCursor(false);
+            ignoreOneCursorMovement = true;
+            isInCursorMode = false;
+            setCursorVisibility(false);
         }
         break;
     default:
@@ -164,7 +184,7 @@ PlayerInput getPlayerInput()
 {
     PlayerInput input;
 
-    if (GetForegroundWindow() != WindowManager::hwnd)
+    if (GetForegroundWindow() != WindowManager::hwnd || isInCursorMode)
     {
         return input;
     }
@@ -223,9 +243,9 @@ PlayerInput getPlayerInput()
     const int centerX = (windowRect.left + windowRect.right) / 2;
     const int centerY = (windowRect.top + windowRect.bottom) / 2;
 
-    if (didWindowJustRegainFocus)
+    if (ignoreOneCursorMovement)
     {
-        didWindowJustRegainFocus = false;
+        ignoreOneCursorMovement = false;
     }
     else
     {
