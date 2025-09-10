@@ -21,6 +21,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/renderer.h"
 #include "rendering/window_manager.h"
 
+extern "C"
+{
+    __declspec(dllexport) extern const UINT D3D12SDKVersion = 616;
+    __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
+}
+
 int main(int argc, char** argv)
 {
     SettingsManager::parseArgs(argc, argv);

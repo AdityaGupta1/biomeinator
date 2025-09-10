@@ -166,6 +166,19 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
 
+set(AGILITY_SDK_DLLS
+    "${EXT}/AgilitySDK/bin/D3D12Core.dll"
+    "${EXT}/AgilitySDK/bin/d3d12SDKLayers.dll"
+)
+
+add_custom_command(TARGET Biomeinator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:Biomeinator>/D3D12
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${AGILITY_SDK_DLLS}
+            $<TARGET_FILE_DIR:Biomeinator>/D3D12
+)
+
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
