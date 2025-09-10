@@ -155,12 +155,12 @@ target_include_directories(Biomeinator PRIVATE
     ${GENERATED_SHADER_HEADERS_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/DirectX-Headers/include/directx"
+    "${EXT}/imgui"
+    "${EXT}/imgui/backends"
     "${EXT}/json/include"
     "${EXT}/nvapi"
     "${EXT}/stb/include"
     "${EXT}/tinygltf/include"
-    "${EXT}/imgui"
-    "${EXT}/imgui/backends"
 )
 
 target_link_directories(Biomeinator PRIVATE
