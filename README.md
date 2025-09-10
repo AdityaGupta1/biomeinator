@@ -33,6 +33,7 @@ This project uses various third-party libraries:
 - [Dear ImGui](https://github.com/ocornut/imgui) - MIT
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 - [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) - MIT
+- [Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/) - Microsoft Software License
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT

@@ -60,6 +60,8 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
+SET(SHADER_VERSION "6_6")
+
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
 foreach(SHADER IN LISTS SHADER_FILES)
@@ -75,13 +77,13 @@ foreach(SHADER IN LISTS SHADER_FILES)
     string(REPLACE "." "_" NAME_SAFE "${NAME_NO_HLSL}")
 
     if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
-        set(DXC_TARGET "lib_6_6")
+        set(DXC_TARGET "lib_${SHADER_VERSION}")
         set(DXC_ENTRY "")
     elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
-        set(DXC_TARGET "vs_6_6")
+        set(DXC_TARGET "vs_${SHADER_VERSION}")
         set(DXC_ENTRY "/E vsMain")
     elseif (FILE_NAME MATCHES "\\.ps\\.hlsl$")
-        set(DXC_TARGET "ps_6_6")
+        set(DXC_TARGET "ps_${SHADER_VERSION}")
         set(DXC_ENTRY "/E psMain")
     else()
         message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl)")
@@ -97,6 +99,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /Fh ${FXH_OUT}
                 /Vn ${NAME_SAFE}_shaderBytecode
                 /I ${SHADER_DIR}
+                /HV 2021
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
@@ -176,6 +179,19 @@ add_custom_command(TARGET Biomeinator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${RUNTIME_DLLS}
     $<TARGET_FILE_DIR:Biomeinator>)
+
+set(AGILITY_SDK_DLLS
+    "${EXT}/AgilitySDK/bin/D3D12Core.dll"
+    "${EXT}/AgilitySDK/bin/d3d12SDKLayers.dll"
+)
+
+add_custom_command(TARGET Biomeinator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:Biomeinator>/D3D12
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${AGILITY_SDK_DLLS}
+            $<TARGET_FILE_DIR:Biomeinator>/D3D12
+)
 
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
