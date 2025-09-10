@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/renderer.h"
 #include "rendering/window_manager.h"
 
+// Agility SDK
 extern "C"
 {
     __declspec(dllexport) extern const UINT D3D12SDKVersion = 616;
