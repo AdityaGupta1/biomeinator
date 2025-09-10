@@ -697,6 +697,8 @@ void initImgui()
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = NULL;
+    io.LogFilename = NULL;
 
     ImGui_ImplWin32_Init(hwnd);
 
