@@ -23,9 +23,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <imgui.h>
 
 #include <algorithm>
+#include <vector>
+
+#include "debug.h"
 
 namespace SettingsGuiHelpers
 {
+
+constexpr float inputWidth = 120.f;
+constexpr float sliderWidth = 200.f;
+constexpr float comboWidth = 200.f;
+
+struct ScopedItemWidth
+{
+    ScopedItemWidth(float width)
+    {
+        ImGui::PushItemWidth(width);
+    }
+
+    ~ScopedItemWidth()
+    {
+        ImGui::PopItemWidth();
+    }
+};
 
 inline void Checkbox(const char* label, const char* settingName)
 {
@@ -38,6 +58,7 @@ inline void Checkbox(const char* label, const char* settingName)
 
 inline void InputInt(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
 {
+    ScopedItemWidth width(inputWidth);
     int value = SettingsManager::getAsInt(settingName);
     if (ImGui::InputInt(label, &value, step))
     {
@@ -48,6 +69,7 @@ inline void InputInt(const char* label, const char* settingName, int minVal, int
 
 inline void SliderInt(const char* label, const char* settingName, int minVal, int maxVal)
 {
+    ScopedItemWidth width(sliderWidth);
     int value = SettingsManager::getAsInt(settingName);
     if (ImGui::SliderInt(label, &value, minVal, maxVal))
     {
@@ -58,6 +80,7 @@ inline void SliderInt(const char* label, const char* settingName, int minVal, in
 
 inline void InputUint(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
 {
+    ScopedItemWidth width(inputWidth);
     int value = static_cast<int>(SettingsManager::getAsUint(settingName));
     if (ImGui::InputInt(label, &value, step))
     {
@@ -68,10 +91,22 @@ inline void InputUint(const char* label, const char* settingName, int minVal, in
 
 inline void SliderUint(const char* label, const char* settingName, int minVal, int maxVal)
 {
+    ScopedItemWidth width(sliderWidth);
     int value = static_cast<int>(SettingsManager::getAsUint(settingName));
     if (ImGui::SliderInt(label, &value, minVal, maxVal))
     {
         value = std::clamp(std::max(value, 0), minVal, maxVal);
+        SettingsManager::setAsUint(settingName, static_cast<uint32_t>(value));
+    }
+}
+
+inline void ComboUint(const char* label, const char* settingName, const std::vector<const char*>& items)
+{
+    ScopedItemWidth width(comboWidth);
+    int value = static_cast<int>(SettingsManager::getAsUint(settingName));
+    ASSERT(value < items.size());
+    if (ImGui::Combo(label, &value, items.data(), static_cast<int>(items.size())))
+    {
         SettingsManager::setAsUint(settingName, static_cast<uint32_t>(value));
     }
 }

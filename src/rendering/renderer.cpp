@@ -866,6 +866,8 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
+static std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
+
 void imguiBeginFrame()
 {
     ImGui_ImplDX12_NewFrame();
@@ -877,13 +879,10 @@ void imguiBeginFrame()
 
     ImGui::Begin("Settings");
 
-    ImGui::PushItemWidth(120.f);
-
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
-
-    ImGui::PopItemWidth();
+    SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
     ImGui::End();
 }
