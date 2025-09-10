@@ -60,6 +60,8 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
+SET(SHADER_VERSION "6_6")
+
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
 foreach(SHADER IN LISTS SHADER_FILES)
@@ -75,13 +77,13 @@ foreach(SHADER IN LISTS SHADER_FILES)
     string(REPLACE "." "_" NAME_SAFE "${NAME_NO_HLSL}")
 
     if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
-        set(DXC_TARGET "lib_6_6")
+        set(DXC_TARGET "lib_${SHADER_VERSION}")
         set(DXC_ENTRY "")
     elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
-        set(DXC_TARGET "vs_6_6")
+        set(DXC_TARGET "vs_${SHADER_VERSION}")
         set(DXC_ENTRY "/E vsMain")
     elseif (FILE_NAME MATCHES "\\.ps\\.hlsl$")
-        set(DXC_TARGET "ps_6_6")
+        set(DXC_TARGET "ps_${SHADER_VERSION}")
         set(DXC_ENTRY "/E psMain")
     else()
         message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl)")
