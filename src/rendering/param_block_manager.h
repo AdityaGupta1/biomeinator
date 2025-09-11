@@ -35,6 +35,9 @@ public:
     RenderParams* renderParams{ nullptr };
 
     void init();
+    void reset();
 
     ID3D12Resource* getDevBuffer() const;
+
+    void setName(const std::wstring& name);
 };

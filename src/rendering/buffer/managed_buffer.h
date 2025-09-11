@@ -58,6 +58,8 @@ class ManagedBuffer
     friend class ToFreeList;
 
 private:
+    std::wstring name{ L"ManagedBuffer" };
+
     const D3D12_HEAP_PROPERTIES* heapProperties;
     const D3D12_RESOURCE_STATES initialResourceState;
 
@@ -86,6 +88,8 @@ private:
 
     void freeSection(ManagedBufferSection section);
 
+    void setBufferName();
+
 public:
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                   const D3D12_RESOURCE_STATES initialResourceState,
@@ -93,10 +97,10 @@ public:
 
     void init(uint32_t sizeBytes);
 
-    void freeAll();
-
     void map();
     void unmap();
+
+    void reset();
 
     ManagedBufferSection copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
                                             ToFreeList& toFreeList,
@@ -128,4 +132,6 @@ public:
     bool hasValidSrvDescriptor() const;
     uint32_t getSrvDescriptorIdx() const;
     uint32_t getSizeBytes() const;
+
+    void setName(const std::wstring& name);
 };

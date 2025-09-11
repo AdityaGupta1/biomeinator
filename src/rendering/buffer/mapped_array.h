@@ -34,6 +34,8 @@ struct MappedArrayOptions
 template<typename T> class MappedArray
 {
 private:
+    std::wstring name{ L"MappedArray" };
+
     const MappedArrayOptions options;
 
     uint32_t size{ 0 };
@@ -77,10 +79,16 @@ private:
         this->size = size;
         const uint32_t sizeBytes = sizeof(T) * size;
 
+        const std::wstring sizeStr = L"(size = " + std::to_wstring(sizeBytes) + L" bytes) ";
+
         this->upload_buffer = BufferHelper::createBasicBuffer(sizeBytes, &UPLOAD_HEAP);
         this->upload_buffer->Map(0, nullptr, reinterpret_cast<void**>(&host_buffer));
+        const std::wstring uploadBufferNameWithSize = this->name + L" upload_buffer" + sizeStr;
+        this->upload_buffer->SetName(uploadBufferNameWithSize.c_str());
 
         this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
+        const std::wstring devBufferNameWithSize = this->name + L" dev_buffer" + sizeStr;
+        this->dev_buffer->SetName(devBufferNameWithSize.c_str());
 
         this->setNotDirty();
 
@@ -95,7 +103,7 @@ public:
         : options(options)
     {}
 
-    void init(uint32_t size)
+    inline void init(uint32_t size)
     {
         this->init(size, nullptr);
     }
@@ -154,6 +162,13 @@ public:
         this->dirtyEndIdx = newSize;
     }
 
+    inline void reset()
+    {
+        this->upload_buffer->Unmap(0, nullptr);
+        this->upload_buffer.Reset();
+        this->dev_buffer.Reset();
+    }
+
     inline uint32_t getSize() const
     {
         return this->size;
@@ -179,15 +194,20 @@ public:
         return this->dev_buffer->GetGPUVirtualAddress();
     }
 
-    bool hasValidSrvDescriptor() const
+    inline bool hasValidSrvDescriptor() const
     {
         return this->srvDescriptorIdx != ~0u;
     }
 
-    uint32_t getSrvDescriptorIdx() const
+    inline uint32_t getSrvDescriptorIdx() const
     {
         ASSERT(this->options.hasSrvDescriptor);
         ASSERT(this->hasValidSrvDescriptor());
         return this->srvDescriptorIdx;
+    }
+
+    inline void setName(const std::wstring& name)
+    {
+        this->name = name;
     }
 };

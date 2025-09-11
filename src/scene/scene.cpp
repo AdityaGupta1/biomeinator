@@ -34,7 +34,7 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
-void Instance::free()
+void Instance::reset(bool alsoFreeFromScene)
 {
     this->geoWrapper.dev_blas.Reset();
     this->geoWrapper.vertsBufferSection.free();
@@ -43,7 +43,10 @@ void Instance::free()
 
     this->areaLightsBufferSection.free();
 
-    this->scene->freeInstance(this);
+    if (alsoFreeFromScene)
+    {
+        this->scene->freeInstance(this);
+    }
 }
 
 uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
@@ -102,48 +105,66 @@ void Instance::setMaterialId(uint32_t id)
 void Scene::init()
 {
     // these resources can be dynamically resized later
+    this->managedVertsBuffer.setName(L"scene verts");
     this->managedVertsBuffer.init(512 /*bytes*/);
+    this->managedIdxsBuffer.setName(L"scene idxs");
     this->managedIdxsBuffer.init(128 /*bytes*/);
+    this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
     this->managedPerTriDatasBuffer.init(128 /*bytes*/);
 
     this->maxNumInstances = 1;
+    this->mappedInstanceDescsArray.setName(L"scene instanceDescs");
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
+    this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
     for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
     {
         availableInstanceIds.push(instanceIdx);
     }
 
-    this->mappedMaterialsArray.init(1);
+    this->mappedMaterialsArray.setName(L"scene materials");
+    this->mappedMaterialsArray.init(1 /*element*/);
 
+    this->managedAreaLightsBuffer.setName(L"scene areaLights");
     this->managedAreaLightsBuffer.init(512 /*bytes*/);
-    this->areaLightSamplingStructure.init(1);
+    this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
+    this->areaLightSamplingStructure.init(1 /*element*/);
 }
 
-void Scene::clear()
+void Scene::reset()
 {
-    this->managedVertsBuffer.freeAll();
-    this->managedIdxsBuffer.freeAll();
-    this->managedPerTriDatasBuffer.freeAll();
+    for (auto& [_, instance] : this->instances)
+    {
+        instance->reset(false);
+    }
+
+    this->managedVertsBuffer.reset();
+    this->managedIdxsBuffer.reset();
+    this->managedPerTriDatasBuffer.reset();
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
     this->availableInstanceIds = {};
-    for (uint32_t instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
-    {
-        this->availableInstanceIds.push(instanceIdx);
-    }
+    this->mappedInstanceDescsArray.reset();
+    this->mappedInstanceDatasArray.reset();
 
     this->nextMaterialIdx = 0;
 
     this->isTlasDirty = false;
-    this->dev_tlas = nullptr;
+    this->dev_tlas.Reset();
 
+    for (ComPtr<ID3D12Resource>& texture : this->textures)
+    {
+        texture.Reset();
+    }
     this->textures.clear();
     this->pendingTextures.clear();
 
+    this->mappedMaterialsArray.reset();
+
     this->numAreaLights = 0;
-    this->managedAreaLightsBuffer.freeAll();
+    this->managedAreaLightsBuffer.reset();
+    this->areaLightSamplingStructure.reset();
 }
 
 Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
@@ -389,6 +410,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                                 nullptr,
                                                                 IID_PPV_ARGS(&dev_texture)));
+        dev_texture->SetName(L"scene texture");
 
         const uint32_t rowPitchBytes = pendingTex.width * 4;
         const uint32_t rowPitchBytesAligned =

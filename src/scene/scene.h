@@ -63,7 +63,7 @@ private:
 
     Instance(::Scene* scene, uint32_t id);
 
-    void free();
+    void reset(bool alsoFreeFromScene = true);
 
 public:
     std::vector<Vertex> host_verts;
@@ -152,7 +152,7 @@ private:
 public:
     void init();
 
-    void clear();
+    void reset();
 
     void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 

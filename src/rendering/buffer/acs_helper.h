@@ -63,4 +63,6 @@ struct TlasBuildInputs
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs);
 
+void reset();
+
 }  // namespace AcsHelper

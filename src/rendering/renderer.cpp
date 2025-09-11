@@ -113,9 +113,11 @@ void init()
     initDevice();
     initDescriptorHeaps();
 
-    for (auto& frame : frameCtxs)
+    for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
-        frame.paramBlockManager.init();
+        FrameContext& frameCtx = frameCtxs[frameIdx];
+        frameCtx.paramBlockManager.init();
+        frameCtx.paramBlockManager.setName(L"paramBlockManager " + std::to_wstring(frameIdx));
     }
 
     initSwapChain();
@@ -602,6 +604,7 @@ void initPipeline()
         const uint32_t shaderIdsSizeBytes =
             2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
         dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+        dev_rtShaderIds->SetName(L"dev_rtShaderIds");
 
         ComPtr<ID3D12StateObjectProperties> props;
         rtPso.As(&props);
@@ -1081,6 +1084,42 @@ void destroy()
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+
+    scene.reset();
+    AcsHelper::reset();
+
+    for (RtTarget* rtTarget : rtTargets)
+    {
+        rtTarget->reset();
+    }
+
+    screenshotRequest.readbackBuffer.Reset();
+
+    rtPso.Reset();
+    postprocessPso.Reset();
+    rtRootSig.Reset();
+    postprocessRootSig.Reset();
+
+    dev_rtShaderIds.Reset();
+
+    swapChain.Reset();
+    rtvHeap.Reset();
+    sharedDescriptorHeap.Reset();
+
+    for (FrameContext& frameCtx : frameCtxs)
+    {
+        frameCtx.cmdAlloc.Reset();
+        frameCtx.paramBlockManager.reset();
+    }
+
+    cmdList.Reset();
+
+    fence.Reset();
+    CloseHandle(fenceEvent);
+    CloseHandle(frameLatencyWaitable);
+
+    cmdQueue.Reset();
+    factory.Reset();
 
 #ifdef _DEBUG
     ComPtr<ID3D12DebugDevice> debugDevice;
