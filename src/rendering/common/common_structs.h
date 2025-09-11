@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
+
+#define enum enum class
 #endif // !_hlsl
 
 struct Vertex
@@ -219,6 +221,12 @@ enum Tonemapping
     TONEMAPPING_COUNT
 };
 
+enum DebugView
+{
+    DEBUG_VIEW_OFF,
+    DEBUG_VIEW_DIFFUSE_ALBEDO,
+};
+
 struct RenderParams
 {
     uint frameNumber;
@@ -227,7 +235,7 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint pad0;
+    uint debugView;
     uint pad1;
     uint pad2;
 };
@@ -237,4 +245,6 @@ struct RenderParams
 
 #undef float2
 #undef float3
+
+#undef enum
 #endif // !_hlsl

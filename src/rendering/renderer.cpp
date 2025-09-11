@@ -844,7 +844,12 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
-static std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
+static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
+static const std::vector<const char*> debugViewComboOptions = { "off", "diffuse albedo" };
+static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
+    { "off", DebugView::DEBUG_VIEW_OFF },
+    { "diffuse albedo", DebugView::DEBUG_VIEW_DIFFUSE_ALBEDO },
+};
 
 void imguiBeginFrame()
 {
@@ -853,14 +858,20 @@ void imguiBeginFrame()
     ImGui::NewFrame();
 
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Once);
 
-    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus);
+    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
 
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+
+    ImGui::Spacing();
+
+    if (ImGui::CollapsingHeader("Debug"))
+    {
+        SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+    }
 
     ImGui::End();
 
@@ -907,6 +918,13 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
+
+    const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
+    renderParams->debugView = static_cast<uint32_t>(DebugView::DEBUG_VIEW_OFF);
+    if (debugViewComboMap.contains(debugViewSettingStr))
+    {
+        renderParams->debugView = static_cast<uint32_t>(debugViewComboMap.at(debugViewSettingStr));
+    }
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
