@@ -49,8 +49,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "main.rgs.fxh"
-#include "fullscreen.vs.fxh"
-#include "fullscreen.ps.fxh"
+#include "postprocess.vs.fxh"
+#include "postprocess.ps.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -253,7 +253,7 @@ void initSwapChain()
 }
 
 RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
-RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
 
 std::vector<RtTarget*> rtTargets;
 
@@ -649,8 +649,8 @@ void initPipeline()
     {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
         psoDesc.pRootSignature = postprocessRootSig.Get();
-        psoDesc.VS = { fullscreen_vs_shaderBytecode, sizeof(fullscreen_vs_shaderBytecode) };
-        psoDesc.PS = { fullscreen_ps_shaderBytecode, sizeof(fullscreen_ps_shaderBytecode) };
+        psoDesc.VS = { postprocess_vs_shaderBytecode, sizeof(postprocess_vs_shaderBytecode) };
+        psoDesc.PS = { postprocess_ps_shaderBytecode, sizeof(postprocess_ps_shaderBytecode) };
         psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         psoDesc.DepthStencilState = {

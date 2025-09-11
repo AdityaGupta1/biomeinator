@@ -16,7 +16,7 @@ RtTarget::RtTarget(const std::wstring& name, DXGI_FORMAT format, bool hasUav, bo
     }
     if (!this->hasSrv)
     {
-        targetResourceFlags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
+        targetResourceFlags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE; // untested
     }
 
     this->targetResourceDesc = {
@@ -109,8 +109,7 @@ void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOU
         return;
     }
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, this->target.Get(), this->targetResourceState, newState);
+    BufferHelper::stateTransitionResourceBarrier(cmdList, this->target.Get(), this->targetResourceState, newState);
     this->targetResourceState = newState;
 }
 
