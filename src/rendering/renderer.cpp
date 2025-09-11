@@ -1099,6 +1099,8 @@ void destroy()
     rtRootSig.Reset();
     postprocessRootSig.Reset();
 
+    dev_rtShaderIds.Reset();
+
     swapChain.Reset();
     rtvHeap.Reset();
     sharedDescriptorHeap.Reset();
