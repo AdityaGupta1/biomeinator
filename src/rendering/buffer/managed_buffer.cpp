@@ -101,7 +101,6 @@ void ManagedBuffer::reset()
             isBufferOccupied = false;
         }
     }
-
     ASSERT(!isBufferOccupied);
 
     this->dev_buffer.Reset();

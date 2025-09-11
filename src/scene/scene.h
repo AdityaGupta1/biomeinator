@@ -63,7 +63,7 @@ private:
 
     Instance(::Scene* scene, uint32_t id);
 
-    void reset(bool freeFromScene = true);
+    void reset(bool alsoFreeFromScene = true);
 
 public:
     std::vector<Vertex> host_verts;

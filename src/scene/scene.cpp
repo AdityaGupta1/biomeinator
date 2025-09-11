@@ -34,7 +34,7 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
-void Instance::reset(bool freeFromScene)
+void Instance::reset(bool alsoFreeFromScene)
 {
     this->geoWrapper.dev_blas.Reset();
     this->geoWrapper.vertsBufferSection.free();
@@ -43,7 +43,7 @@ void Instance::reset(bool freeFromScene)
 
     this->areaLightsBufferSection.free();
 
-    if (freeFromScene)
+    if (alsoFreeFromScene)
     {
         this->scene->freeInstance(this);
     }
@@ -123,12 +123,12 @@ void Scene::init()
     }
 
     this->mappedMaterialsArray.setName(L"scene materials");
-    this->mappedMaterialsArray.init(1);
+    this->mappedMaterialsArray.init(1 /*element*/);
 
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
     this->managedAreaLightsBuffer.init(512 /*bytes*/);
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
-    this->areaLightSamplingStructure.init(1);
+    this->areaLightSamplingStructure.init(1 /*element*/);
 }
 
 void Scene::reset()

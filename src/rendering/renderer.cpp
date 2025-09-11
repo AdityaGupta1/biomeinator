@@ -604,6 +604,7 @@ void initPipeline()
         const uint32_t shaderIdsSizeBytes =
             2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
         dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+        dev_rtShaderIds->SetName(L"dev_rtShaderIds");
 
         ComPtr<ID3D12StateObjectProperties> props;
         rtPso.As(&props);

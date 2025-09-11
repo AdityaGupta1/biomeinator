@@ -103,7 +103,7 @@ public:
         : options(options)
     {}
 
-    void init(uint32_t size)
+    inline void init(uint32_t size)
     {
         this->init(size, nullptr);
     }
@@ -162,7 +162,7 @@ public:
         this->dirtyEndIdx = newSize;
     }
 
-    void reset()
+    inline void reset()
     {
         this->upload_buffer->Unmap(0, nullptr);
         this->upload_buffer.Reset();
