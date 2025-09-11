@@ -30,4 +30,9 @@ int getAsInt(const std::string& name);
 uint32_t getAsUint(const std::string& name);
 std::string getAsString(const std::string& name);
 
+void setAsBool(const std::string& name, bool value);
+void setAsInt(const std::string& name, int value);
+void setAsUint(const std::string& name, uint32_t value);
+void setAsString(const std::string& name, const std::string& value);
+
 } // namespace SettingsManager

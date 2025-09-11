@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "param_block_manager.h"
 #include "settings_manager.h"
+#include "settings_gui_helpers.h"
 #include "window_manager.h"
 #include "buffer/acs_helper.h"
 #include "buffer/buffer_helper.h"
@@ -52,6 +53,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
+#include <imgui.h>
+#include <imgui_impl_win32.h>
+#include <imgui_impl_dx12.h>
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -66,6 +71,8 @@ void initCommand();
 void initConstantParams();
 void initRootSignature();
 void initPipeline();
+
+void initImgui();
 
 void beginFrame();
 void submitCmd();
@@ -119,6 +126,8 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
     if (!defaultScene.empty())
@@ -682,6 +691,35 @@ void initPipeline()
     }
 }
 
+void initImgui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = NULL;
+    io.LogFilename = NULL;
+
+    ImGui_ImplWin32_Init(hwnd);
+
+    ImGui_ImplDX12_InitInfo imguiDX12InitInfo = {};
+    imguiDX12InitInfo.Device = device.Get();
+    imguiDX12InitInfo.CommandQueue = cmdQueue.Get();
+    imguiDX12InitInfo.NumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
+    imguiDX12InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    imguiDX12InitInfo.SrvDescriptorHeap = sharedDescriptorHeap.Get();
+    imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
+                                            D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
+                                            D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
+    { sharedDescHeapAlloc.alloc(outCpuHandle, outGpuHandle); };
+    imguiDX12InitInfo.SrvDescriptorFreeFn =
+        [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle)
+    { sharedDescHeapAlloc.free(cpuHandle, gpuHandle); };
+
+    ImGui_ImplDX12_Init(&imguiDX12InitInfo);
+}
+
 static int frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
@@ -830,8 +868,45 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
+static std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
+
+void imguiBeginFrame()
+{
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Once);
+
+    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus);
+
+    SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
+    SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+    SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
+    SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+
+    ImGui::End();
+
+    if (frameNumber == 0)
+    {
+        ImGui::SetWindowFocus(NULL);
+    }
+}
+
+void imguiEndFrame()
+{
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
+}
+
 void render()
 {
+    if (!testMode)
+    {
+        imguiBeginFrame();
+    }
+
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
     lastTimePoint = currentTimePoint;
@@ -922,7 +997,13 @@ void render()
         captureQueuedScreenshot();
     }
 
+    if (!testMode)
+    {
+        imguiEndFrame();
+    }
+
     submitCmd();
+
     const uint64_t fenceValue = nextFenceValue++;
     cmdQueue->Signal(fence.Get(), fenceValue);
     frameCtx.fenceValue = fenceValue;
@@ -989,6 +1070,10 @@ void destroy()
     }
 
     flush();
+
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
 
 #ifdef _DEBUG
     ComPtr<ID3D12DebugDevice> debugDevice;

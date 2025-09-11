@@ -34,7 +34,9 @@ private:
 public:
     void init(ID3D12Device* device, ID3D12DescriptorHeap* heapPtr);
 
-    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle);
+    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle);
+    uint32_t alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle);
 
     void free(uint32_t idx);
+    void free(D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle);
 };

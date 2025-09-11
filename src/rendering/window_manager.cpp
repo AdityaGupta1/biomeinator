@@ -27,15 +27,50 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <locale>
 #include <codecvt>
 
+#include <imgui_impl_win32.h>
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace WindowManager
 {
 
 HWND hwnd;
 
-bool didWindowJustRegainFocus = true;
+bool ignoreOneCursorMovement = true;
+bool isCursorVisible = true;
+bool isInCursorMode = true;
+
+void setCursorVisibility(bool showCursor)
+{
+    if (isCursorVisible != showCursor)
+    {
+        ShowCursor(showCursor);
+    }
+    isCursorVisible = showCursor;
+}
+
+void setIsInCursorMode(bool newIsInCursorMode)
+{
+    if (newIsInCursorMode)
+    {
+        isInCursorMode = true;
+    }
+    else
+    {
+        ignoreOneCursorMovement = true;
+        isInCursorMode = false;
+    }
+
+    setCursorVisibility(isInCursorMode);
+}
 
 static void onKeyDown(WPARAM wparam)
 {
+    if (ImGui::GetIO().WantCaptureKeyboard)
+    {
+        return;
+    }
+
     switch (wparam)
     {
     case VK_ESCAPE:
@@ -68,6 +103,9 @@ static void onKeyDown(WPARAM wparam)
     case 'P':
         Renderer::queueScreenshot();
         break;
+    case 'Z':
+        setIsInCursorMode(!isInCursorMode);
+        break;
     default:
         break;
     }
@@ -75,6 +113,11 @@ static void onKeyDown(WPARAM wparam)
 
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
+    {
+        return true;
+    }
+
     switch (msg)
     {
     case WM_CLOSE:
@@ -101,12 +144,17 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     case WM_ACTIVATE:
         if (wparam == WA_INACTIVE)
         {
-            ShowCursor(true);
+            setCursorVisibility(true);
         }
         else
         {
-            didWindowJustRegainFocus = true;
-            ShowCursor(false);
+            setIsInCursorMode(false);
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        if (isInCursorMode && !ImGui::GetIO().WantCaptureMouse)
+        {
+            setIsInCursorMode(false);
         }
         break;
     default:
@@ -155,7 +203,7 @@ PlayerInput getPlayerInput()
 {
     PlayerInput input;
 
-    if (GetForegroundWindow() != WindowManager::hwnd)
+    if (GetForegroundWindow() != WindowManager::hwnd || isInCursorMode)
     {
         return input;
     }
@@ -214,9 +262,9 @@ PlayerInput getPlayerInput()
     const int centerX = (windowRect.left + windowRect.right) / 2;
     const int centerY = (windowRect.top + windowRect.bottom) / 2;
 
-    if (didWindowJustRegainFocus)
+    if (ignoreOneCursorMovement)
     {
-        didWindowJustRegainFocus = false;
+        ignoreOneCursorMovement = false;
     }
     else
     {

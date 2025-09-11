@@ -20,7 +20,7 @@ Or, you can:
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
 
-Once the project is running, you can open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>.
+Once the project is running, you can open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>. Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. You can also press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu, hold <kbd>C</kbd> to zoom, or press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`).
 
 ## Third-Party Licenses
 
@@ -30,6 +30,7 @@ This project uses various third-party libraries:
 - [json](https://github.com/nlohmann/json) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
+- [Dear ImGui](https://github.com/ocornut/imgui) - MIT
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 - [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) - MIT
 - [Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/) - Microsoft Software License
