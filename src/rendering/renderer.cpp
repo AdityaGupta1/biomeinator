@@ -1082,6 +1082,39 @@ void destroy()
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
 
+    // TODO: destroy scene
+
+    for (RtTarget* rtTarget : rtTargets)
+    {
+        rtTarget->reset();
+    }
+
+    screenshotRequest.readbackBuffer.Reset();
+
+    rtPso.Reset();
+    postprocessPso.Reset();
+    rtRootSig.Reset();
+    postprocessRootSig.Reset();
+
+    swapChain.Reset();
+    rtvHeap.Reset();
+    sharedDescriptorHeap.Reset();
+
+    for (FrameContext& frameCtx : frameCtxs)
+    {
+        frameCtx.cmdAlloc.Reset();
+        // TODO: reset paramBlockManager
+    }
+
+    cmdList.Reset();
+
+    fence.Reset();
+    CloseHandle(fenceEvent);
+    CloseHandle(frameLatencyWaitable);
+
+    cmdQueue.Reset();
+    factory.Reset();
+
 #ifdef _DEBUG
     ComPtr<ID3D12DebugDevice> debugDevice;
     if (SUCCEEDED(device.As(&debugDevice)))
