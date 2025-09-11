@@ -31,10 +31,14 @@ struct PsIn
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
-    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
+    Texture2D<float4> albedoTarget = ResourceDescriptorHeap[heapIndices.srv.albedoTargetIdx];
+    const float3 albedo = albedoTarget.Sample(texSampler, psIn.uv).rgb;
+    return float4(albedo, 1);
 
-    const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
-
-    return float4(colorPostTonemap, pathTracingColor.a);
+    //Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
+    //const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
+    //
+    //const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
+    //
+    //return float4(colorPostTonemap, pathTracingColor.a);
 }

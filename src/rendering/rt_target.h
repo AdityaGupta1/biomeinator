@@ -2,9 +2,13 @@
 
 #include "dxr_includes.h"
 
+#include <string>
+
 struct RtTarget
 {
 private:
+    const std::wstring name;
+
     ComPtr<ID3D12Resource> target{ nullptr };
     D3D12_RESOURCE_DESC targetResourceDesc{};
     D3D12_RESOURCE_STATES targetResourceState{ D3D12_RESOURCE_STATE_COMMON };
@@ -25,7 +29,7 @@ public:
     const bool hasUav;
     const bool hasSrv;
 
-    RtTarget(DXGI_FORMAT format, bool hasUav, bool hasSrv);
+    RtTarget(const std::wstring& name, DXGI_FORMAT format, bool hasUav, bool hasSrv);
 
     void setDimensions(uint32_t width, uint32_t height);
 

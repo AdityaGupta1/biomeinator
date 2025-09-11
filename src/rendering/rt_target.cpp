@@ -6,8 +6,8 @@
 
 #include "debug.h"
 
-RtTarget::RtTarget(DXGI_FORMAT format, bool hasUav, bool hasSrv)
-    : hasUav(hasUav), hasSrv(hasSrv)
+RtTarget::RtTarget(const std::wstring& name, DXGI_FORMAT format, bool hasUav, bool hasSrv)
+    : name(name), hasUav(hasUav), hasSrv(hasSrv)
 {
     D3D12_RESOURCE_FLAGS targetResourceFlags = D3D12_RESOURCE_FLAG_NONE;
     if (this->hasUav)
@@ -66,6 +66,7 @@ void RtTarget::init()
                                               this->targetResourceState,
                                               nullptr,
                                               IID_PPV_ARGS(&this->target));
+    this->target->SetName(this->name.c_str());
 
     if (this->hasUav)
     {

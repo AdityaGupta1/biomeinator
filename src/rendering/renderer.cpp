@@ -252,13 +252,15 @@ void initSwapChain()
     factory.Reset();
 }
 
-RtTarget pathTracingTarget{ DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget albedoTarget{ L"albedoTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
 
 std::vector<RtTarget*> rtTargets;
 
 void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
+    rtTargets.push_back(&albedoTarget);
 
     resize();
 }
@@ -291,14 +293,16 @@ void resize()
 
     const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-    for (uint32_t i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i)
+    for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
         ComPtr<ID3D12Resource> backBuffer;
-        swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
-        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[i];
+        swapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer));
+        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[frameIdx];
         cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
-        cpuHandle.ptr += i * rtvIncrementSize;
+        cpuHandle.ptr += frameIdx * rtvIncrementSize;
         device->CreateRenderTargetView(backBuffer.Get(), nullptr, cpuHandle);
+        const std::wstring backBufferName = L"backBuffer " + std::to_wstring(frameIdx);
+        backBuffer->SetName(backBufferName.c_str());
     }
 
     for (RtTarget* rtTarget : rtTargets)
@@ -310,8 +314,15 @@ void resize()
 
     for (auto& frame : frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav.pathTracingTargetIdx = pathTracingTarget.getUavIdx();
-        frame.paramBlockManager.heapIndices->srv.pathTracingTargetIdx = pathTracingTarget.getSrvIdx();
+        frame.paramBlockManager.heapIndices->uav = {
+            .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
+            .albedoTargetIdx = albedoTarget.getUavIdx(),
+        };
+
+        frame.paramBlockManager.heapIndices->srv = {
+            .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
+            .albedoTargetIdx = albedoTarget.getSrvIdx(),
+        };
     }
 }
 
@@ -323,6 +334,7 @@ void initCommand()
     }
 
     device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
+    cmdList->SetName(L"main cmdList");
 
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
@@ -554,7 +566,7 @@ void initPipeline()
         };
 
         D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-            .MaxPayloadSizeInBytes = 96,
+            .MaxPayloadSizeInBytes = 112,
             .MaxAttributeSizeInBytes = 8,
         };
 
@@ -766,10 +778,10 @@ void captureQueuedScreenshot()
     };
 
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
     cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 }
 
 void finalizeQueuedScreenshot()
@@ -924,6 +936,7 @@ void render()
         // clang-format on
 
         pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        albedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         rtDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -949,6 +962,7 @@ void render()
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
     pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    albedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);
@@ -964,9 +978,6 @@ void render()
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->DrawInstanced(3, 1, 0, 0);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-
     if (screenshotRequest.active)
     {
         captureQueuedScreenshot();
@@ -976,6 +987,9 @@ void render()
     {
         imguiEndFrame();
     }
+
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
     submitCmd();
 
