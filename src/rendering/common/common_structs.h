@@ -164,7 +164,7 @@ struct HeapIndices
     struct
     {
         uint pathTracingTargetIdx;
-        uint pad0;
+        uint diffuseAlbedoTargetIdx;
         uint pad1;
         uint pad2;
     } uav;
@@ -172,7 +172,7 @@ struct HeapIndices
     struct
     {
         uint pathTracingTargetIdx;
-        uint pad0;
+        uint diffuseAlbedoTargetIdx;
         uint pad1;
         uint pad2;
     } srv;
@@ -209,14 +209,20 @@ struct SceneParams
     uint pad2;
 };
 
-enum Tonemapping
+enum class Tonemapping : uint
 {
-    TONEMAPPING_NONE,
-    TONEMAPPING_STANDARD,
-    TONEMAPPING_AGX,
-    TONEMAPPING_KHRONOS_PBR_NEUTRAL,
+    NONE,
+    STANDARD,
+    AGX,
+    KHRONOS_PBR_NEUTRAL,
 
-    TONEMAPPING_COUNT
+    COUNT
+};
+
+enum class DebugView : uint
+{
+    OFF,
+    DIFFUSE_ALBEDO,
 };
 
 struct RenderParams
@@ -227,7 +233,7 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint pad0;
+    uint debugView;
     uint pad1;
     uint pad2;
 };

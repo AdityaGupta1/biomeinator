@@ -35,6 +35,7 @@ void RayGeneration()
         payload.pathWeight = float3(1, 1, 1);
         payload.pathColor = float3(0, 0, 0);
         payload.flags = 0;
+        payload.pixelIdx = pixelIdx;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
 
         const float2 jitter = float2(payload.rng.nextFloat(), payload.rng.nextFloat());

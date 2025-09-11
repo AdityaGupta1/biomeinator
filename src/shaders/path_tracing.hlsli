@@ -70,6 +70,12 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
     {
         const Material surfMaterial = materials[payload.materialId];
 
+        if (pathDepth == 0)
+        {
+            RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
+            diffuseAlbedoTarget[payload.pixelIdx] = float4(surfMaterial.baseColor, 1);
+        }
+
         if (surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();

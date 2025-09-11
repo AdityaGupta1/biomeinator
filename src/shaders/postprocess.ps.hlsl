@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"
 #include "util/color.hlsli"
@@ -29,12 +30,34 @@ struct PsIn
     float2 uv : TEXCOORD0;
 };
 
-float4 psMain(PsIn psIn) : SV_Target
+float3 getPathTracingFinalColor(float2 uv)
 {
     Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
-    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
+    const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, uv);
 
-    const float3 colorPostTonemap = applyTonemapping(pathTracingColor.rgb);
+    const float3 tonemappedColor = applyTonemapping(pathTracingColor.rgb);
+    return tonemappedColor;
+}
 
-    return float4(colorPostTonemap, pathTracingColor.a);
+float4 psMain(PsIn psIn) : SV_Target
+{
+    float3 finalColor = 0;
+
+    switch ((DebugView)renderParams.debugView)
+    {
+    case DebugView::DIFFUSE_ALBEDO:
+        {
+            Texture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.srv.diffuseAlbedoTargetIdx];
+            finalColor = diffuseAlbedoTarget.Sample(texSampler, psIn.uv).rgb;
+            break;
+        }
+    case DebugView::OFF:
+    default:
+        {
+            finalColor = getPathTracingFinalColor(psIn.uv);
+            break;
+        }
+    }
+
+    return float4(finalColor, 1);
 }

@@ -152,6 +152,7 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
         }
         break;
     case WM_LBUTTONDOWN:
+    case WM_RBUTTONDOWN:
         if (isInCursorMode && !ImGui::GetIO().WantCaptureMouse)
         {
             setIsInCursorMode(false);
