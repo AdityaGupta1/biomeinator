@@ -50,7 +50,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CHECK_HRESULT_WITH_ERROR_BLOB(expr, blob) (expr)
 #endif
 
-constexpr DXGI_SAMPLE_DESC NO_AA = {
+constexpr DXGI_SAMPLE_DESC SAMPLE_DESC_NO_AA = {
     .Count = 1,
     .Quality = 0
 };
@@ -73,7 +73,7 @@ constexpr D3D12_RESOURCE_DESC BASIC_BUFFER_DESC = {
     .Height = 1,
     .DepthOrArraySize = 1,
     .MipLevels = 1,
-    .SampleDesc = NO_AA,
+    .SampleDesc = SAMPLE_DESC_NO_AA,
     .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
     .Flags = D3D12_RESOURCE_FLAG_NONE,
 };

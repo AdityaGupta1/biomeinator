@@ -380,7 +380,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         texDesc.DepthOrArraySize = 1;
         texDesc.MipLevels = 1;
         texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-        texDesc.SampleDesc = NO_AA;
+        texDesc.SampleDesc = SAMPLE_DESC_NO_AA;
 
         ComPtr<ID3D12Resource> dev_texture;
         CHECK_HRESULT(Renderer::device->CreateCommittedResource(&DEFAULT_HEAP,
