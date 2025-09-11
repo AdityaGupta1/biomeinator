@@ -38,7 +38,7 @@ HWND hwnd;
 
 bool ignoreOneCursorMovement = true;
 bool isCursorVisible = true;
-bool isInCursorMode = false;
+bool isInCursorMode = true;
 
 void setCursorVisibility(bool showCursor)
 {
@@ -49,8 +49,28 @@ void setCursorVisibility(bool showCursor)
     isCursorVisible = showCursor;
 }
 
+void setIsInCursorMode(bool newIsInCursorMode)
+{
+    if (newIsInCursorMode)
+    {
+        isInCursorMode = true;
+    }
+    else
+    {
+        ignoreOneCursorMovement = true;
+        isInCursorMode = false;
+    }
+
+    setCursorVisibility(isInCursorMode);
+}
+
 static void onKeyDown(WPARAM wparam)
 {
+    if (ImGui::GetIO().WantCaptureKeyboard)
+    {
+        return;
+    }
+
     switch (wparam)
     {
     case VK_ESCAPE:
@@ -84,12 +104,7 @@ static void onKeyDown(WPARAM wparam)
         Renderer::queueScreenshot();
         break;
     case 'Z':
-        isInCursorMode = !isInCursorMode;
-        if (!isInCursorMode)
-        {
-            ignoreOneCursorMovement = true;
-        }
-        setCursorVisibility(isInCursorMode);
+        setIsInCursorMode(!isInCursorMode);
         break;
     default:
         break;
@@ -133,9 +148,13 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
         }
         else
         {
-            ignoreOneCursorMovement = true;
-            isInCursorMode = false;
-            setCursorVisibility(false);
+            setIsInCursorMode(false);
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        if (isInCursorMode && !ImGui::GetIO().WantCaptureMouse)
+        {
+            setIsInCursorMode(false);
         }
         break;
     default:

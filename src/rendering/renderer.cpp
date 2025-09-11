@@ -879,7 +879,7 @@ void imguiBeginFrame()
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Once);
 
-    ImGui::Begin("Settings");
+    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus);
 
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
@@ -887,6 +887,11 @@ void imguiBeginFrame()
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
     ImGui::End();
+
+    if (frameNumber == 0)
+    {
+        ImGui::SetWindowFocus(NULL);
+    }
 }
 
 void imguiEndFrame()
