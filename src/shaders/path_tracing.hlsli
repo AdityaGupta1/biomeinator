@@ -59,9 +59,6 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
-    RWTexture2D<float4> albedoTarget = ResourceDescriptorHeap[heapIndices.uav.albedoTargetIdx];
-    albedoTarget[payload.pixelIdx] = float4(1, 0, 0, 1);
-
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
@@ -72,6 +69,12 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         const Material surfMaterial = materials[payload.materialId];
+
+        if (pathDepth == 0)
+        {
+            RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
+            diffuseAlbedoTarget[payload.pixelIdx] = float4(surfMaterial.baseColor, 1);
+        }
 
         if (surfMaterial.hasEmission())
         {

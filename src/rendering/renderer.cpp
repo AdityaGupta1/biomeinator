@@ -253,14 +253,14 @@ void initSwapChain()
 }
 
 RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
-RtTarget albedoTarget{ L"albedoTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
 
 std::vector<RtTarget*> rtTargets;
 
 void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
-    rtTargets.push_back(&albedoTarget);
+    rtTargets.push_back(&diffuseAlbedoTarget);
 
     resize();
 }
@@ -316,12 +316,12 @@ void resize()
     {
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
-            .albedoTargetIdx = albedoTarget.getUavIdx(),
+            .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
         };
 
         frame.paramBlockManager.heapIndices->srv = {
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
-            .albedoTargetIdx = albedoTarget.getSrvIdx(),
+            .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
         };
     }
 }
@@ -936,7 +936,7 @@ void render()
         // clang-format on
 
         pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        albedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        diffuseAlbedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         rtDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -962,7 +962,7 @@ void render()
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
     pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    albedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    diffuseAlbedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);

@@ -164,7 +164,7 @@ struct HeapIndices
     struct
     {
         uint pathTracingTargetIdx;
-        uint albedoTargetIdx;
+        uint diffuseAlbedoTargetIdx;
         uint pad1;
         uint pad2;
     } uav;
@@ -172,7 +172,7 @@ struct HeapIndices
     struct
     {
         uint pathTracingTargetIdx;
-        uint albedoTargetIdx;
+        uint diffuseAlbedoTargetIdx;
         uint pad1;
         uint pad2;
     } srv;

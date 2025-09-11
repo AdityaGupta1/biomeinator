@@ -31,9 +31,9 @@ struct PsIn
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    Texture2D<float4> albedoTarget = ResourceDescriptorHeap[heapIndices.srv.albedoTargetIdx];
-    const float3 albedo = albedoTarget.Sample(texSampler, psIn.uv).rgb;
-    return float4(albedo, 1);
+    Texture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.srv.diffuseAlbedoTargetIdx];
+    const float3 diffuseAlbedo = diffuseAlbedoTarget.Sample(texSampler, psIn.uv).rgb;
+    return float4(diffuseAlbedo, 1);
 
     //Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
     //const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, psIn.uv);
