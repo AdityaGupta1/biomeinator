@@ -83,7 +83,7 @@ void ToFreeList::freeAll()
 
     for (Instance* instance : this->instances)
     {
-        instance->free();
+        instance->reset();
     }
     instances.clear();
 }

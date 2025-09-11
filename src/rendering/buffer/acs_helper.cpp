@@ -57,6 +57,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
         sharedAcsScratchBuffer = BufferHelper::createBasicBuffer(
             maxScratchSize, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+        sharedAcsScratchBuffer->SetName(L"sharedAcsScratchBuffer");
         sharedAsScratchSize = maxScratchSize;
     }
 
@@ -69,6 +70,7 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
                                             &DEFAULT_HEAP,
                                             D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
                                             { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+        (*buildInfo.outAcs)->SetName(L"buildInfo.outAcs");
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = (*buildInfo.outAcs)->GetGPUVirtualAddress(),
@@ -228,6 +230,11 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
     buildInfo.outAcs = inputs.outTlas;
 
     makeAccelerationStructures(cmdList, toFreeList, { buildInfo });
+}
+
+void reset()
+{
+    sharedAcsScratchBuffer.Reset();
 }
 
 } // namespace AcsHelper

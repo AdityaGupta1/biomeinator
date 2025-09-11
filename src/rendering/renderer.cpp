@@ -113,9 +113,11 @@ void init()
     initDevice();
     initDescriptorHeaps();
 
-    for (auto& frame : frameCtxs)
+    for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
-        frame.paramBlockManager.init();
+        FrameContext& frameCtx = frameCtxs[frameIdx];
+        frameCtx.paramBlockManager.init();
+        frameCtx.paramBlockManager.setName(L"paramBlockManager " + std::to_wstring(frameIdx));
     }
 
     initSwapChain();
@@ -1082,7 +1084,8 @@ void destroy()
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
 
-    // TODO: destroy scene
+    scene.reset();
+    AcsHelper::reset();
 
     for (RtTarget* rtTarget : rtTargets)
     {
@@ -1103,7 +1106,7 @@ void destroy()
     for (FrameContext& frameCtx : frameCtxs)
     {
         frameCtx.cmdAlloc.Reset();
-        // TODO: reset paramBlockManager
+        frameCtx.paramBlockManager.reset();
     }
 
     cmdList.Reset();

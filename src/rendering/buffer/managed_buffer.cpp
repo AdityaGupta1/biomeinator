@@ -59,8 +59,10 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 
     this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties);
     this->bufferSizeBytes = sizeBytes;
+    this->setBufferName();
 
-    this->freeAll();
+    this->freeSectionList.clear();
+    this->freeSectionList.push_back({ this, 0, this->bufferSizeBytes });
 
     if (this->options.isMapped)
     {
@@ -73,12 +75,6 @@ void ManagedBuffer::init(uint32_t sizeBytes)
     }
 }
 
-void ManagedBuffer::freeAll()
-{
-    this->freeSectionList.clear();
-    this->freeSectionList.push_back({ this, 0, this->bufferSizeBytes });
-}
-
 void ManagedBuffer::map()
 {
     this->dev_buffer->Map(0, nullptr, &this->host_buffer);
@@ -87,6 +83,28 @@ void ManagedBuffer::map()
 void ManagedBuffer::unmap()
 {
     this->dev_buffer->Unmap(0, nullptr);
+}
+
+void ManagedBuffer::reset()
+{
+    if (this->options.isMapped)
+    {
+        this->unmap();
+    }
+
+    bool isBufferOccupied = true;
+    if (this->freeSectionList.size() == 1)
+    {
+        ManagedBufferSection& freeSection = this->freeSectionList.front();
+        if (freeSection.offsetBytes == 0 && freeSection.sizeBytes == this->bufferSizeBytes)
+        {
+            isBufferOccupied = false;
+        }
+    }
+
+    //ASSERT(!isBufferOccupied); TODO: figure out why this assert is being triggered
+
+    this->dev_buffer.Reset();
 }
 
 void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
@@ -180,6 +198,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
 
     this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties);
     this->bufferSizeBytes = newSizeBytes;
+    this->setBufferName();
 
     BufferHelper::copyBufferRegion(cmdList,
                                    this->dev_buffer.Get(),
@@ -314,4 +333,15 @@ uint32_t ManagedBuffer::getSrvDescriptorIdx() const
 uint32_t ManagedBuffer::getSizeBytes() const
 {
     return this->bufferSizeBytes;
+}
+
+void ManagedBuffer::setName(const std::wstring& name)
+{
+    this->name = name;
+}
+
+void ManagedBuffer::setBufferName()
+{
+    const std::wstring nameWithSize = this->name + L" (size = " + std::to_wstring(this->bufferSizeBytes) + L" bytes)";
+    this->dev_buffer->SetName(nameWithSize.c_str());
 }

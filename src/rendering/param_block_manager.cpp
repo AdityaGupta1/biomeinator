@@ -37,7 +37,17 @@ void ParamBlockManager::init()
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
 }
 
+void ParamBlockManager::reset()
+{
+    this->dev_paramBuffer.Reset();
+}
+
 ID3D12Resource* ParamBlockManager::getDevBuffer() const
 {
     return this->dev_paramBuffer.Get();
+}
+
+void ParamBlockManager::setName(const std::wstring& name)
+{
+    this->dev_paramBuffer->SetName(name.c_str());
 }
