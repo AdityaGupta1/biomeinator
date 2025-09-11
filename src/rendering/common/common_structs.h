@@ -27,8 +27,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
-
-#define enum enum class
 #endif // !_hlsl
 
 struct Vertex
@@ -211,20 +209,20 @@ struct SceneParams
     uint pad2;
 };
 
-enum Tonemapping
+enum class Tonemapping : uint
 {
-    TONEMAPPING_NONE,
-    TONEMAPPING_STANDARD,
-    TONEMAPPING_AGX,
-    TONEMAPPING_KHRONOS_PBR_NEUTRAL,
+    NONE,
+    STANDARD,
+    AGX,
+    KHRONOS_PBR_NEUTRAL,
 
-    TONEMAPPING_COUNT
+    COUNT
 };
 
-enum DebugView
+enum class DebugView : uint
 {
-    DEBUG_VIEW_OFF,
-    DEBUG_VIEW_DIFFUSE_ALBEDO,
+    OFF,
+    DIFFUSE_ALBEDO,
 };
 
 struct RenderParams
@@ -245,6 +243,4 @@ struct RenderParams
 
 #undef float2
 #undef float3
-
-#undef enum
 #endif // !_hlsl

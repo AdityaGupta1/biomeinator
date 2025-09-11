@@ -43,15 +43,15 @@ float4 psMain(PsIn psIn) : SV_Target
 {
     float3 finalColor = 0;
 
-    switch (renderParams.debugView)
+    switch ((DebugView)renderParams.debugView)
     {
-    case DEBUG_VIEW_DIFFUSE_ALBEDO:
+    case DebugView::DIFFUSE_ALBEDO:
         {
             Texture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.srv.diffuseAlbedoTargetIdx];
             finalColor = diffuseAlbedoTarget.Sample(texSampler, psIn.uv).rgb;
             break;
         }
-    case DEBUG_VIEW_OFF:
+    case DebugView::OFF:
     default:
         {
             finalColor = getPathTracingFinalColor(psIn.uv);

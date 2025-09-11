@@ -81,7 +81,7 @@ void parseArgs(const int argc, const char* const* argv)
 
 #undef COPY_SETTING
 
-    if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::TONEMAPPING_COUNT))
+    if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
     {
         std::cerr << "Invalid tonemapping option" << std::endl;
         exit(-1);

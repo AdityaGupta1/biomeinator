@@ -847,8 +847,8 @@ void finalizeQueuedScreenshot()
 static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
 static const std::vector<const char*> debugViewComboOptions = { "off", "diffuse albedo" };
 static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
-    { "off", DebugView::DEBUG_VIEW_OFF },
-    { "diffuse albedo", DebugView::DEBUG_VIEW_DIFFUSE_ALBEDO },
+    { "off", DebugView::OFF },
+    { "diffuse albedo", DebugView::DIFFUSE_ALBEDO },
 };
 
 void imguiBeginFrame()
@@ -920,7 +920,7 @@ void render()
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
-    renderParams->debugView = static_cast<uint32_t>(DebugView::DEBUG_VIEW_OFF);
+    renderParams->debugView = static_cast<uint32_t>(DebugView::OFF);
     if (debugViewComboMap.contains(debugViewSettingStr))
     {
         renderParams->debugView = static_cast<uint32_t>(debugViewComboMap.at(debugViewSettingStr));
