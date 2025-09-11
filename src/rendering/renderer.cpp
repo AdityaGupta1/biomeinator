@@ -845,10 +845,10 @@ void finalizeQueuedScreenshot()
 }
 
 static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
-static const std::vector<const char*> debugViewComboOptions = { "off", "diffuse albedo" };
+static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo" };
 static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
     { "off", DebugView::OFF },
-    { "diffuse albedo", DebugView::DIFFUSE_ALBEDO },
+    { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
 };
 
 void imguiBeginFrame()
