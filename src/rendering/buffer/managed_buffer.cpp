@@ -102,7 +102,7 @@ void ManagedBuffer::reset()
         }
     }
 
-    //ASSERT(!isBufferOccupied); TODO: figure out why this assert is being triggered
+    ASSERT(!isBufferOccupied);
 
     this->dev_buffer.Reset();
 }
@@ -279,7 +279,7 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
     auto it = this->freeSectionList.begin();
     for (; it != this->freeSectionList.end(); ++it)
     {
-        if (section.offsetBytes + section.sizeBytes < it->offsetBytes)
+        if (section.offsetBytes + section.sizeBytes <= it->offsetBytes)
         {
             break;
         }
