@@ -33,6 +33,7 @@ public:
     CameraParams* cameraParams{ nullptr };
     SceneParams* sceneParams{ nullptr };
     RenderParams* renderParams{ nullptr };
+    DebugParams* debugParams{ nullptr };
 
     void init();
     void reset();

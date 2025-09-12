@@ -246,9 +246,17 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint debugView;
+    uint pad0;
     uint pad1;
     uint pad2;
+};
+
+struct DebugParams
+{
+    uint debugOutputSrvIdx;
+    uint debugOutputChannels;
+    uint pad0;
+    uint pad1;
 };
 
 #if !_hlsl

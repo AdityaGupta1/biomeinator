@@ -963,12 +963,38 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
+    uint32_t debugOutputSrvIdx = ~0u;
+    uint32_t debugOutputChannels = 3;
+
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
-    renderParams->debugView = static_cast<uint32_t>(DebugView::OFF);
     if (debugViewComboMap.contains(debugViewSettingStr))
     {
-        renderParams->debugView = static_cast<uint32_t>(debugViewComboMap.at(debugViewSettingStr));
+        switch ((DebugView)debugViewComboMap.at(debugViewSettingStr))
+        {
+        case DebugView::DIFFUSE_ALBEDO:
+            debugOutputSrvIdx = diffuseAlbedoTarget.getSrvIdx();
+            break;
+        case DebugView::DEPTH:
+            debugOutputSrvIdx = depthTarget.getSrvIdx();
+            debugOutputChannels = 1;
+            break;
+        case DebugView::LINEAR_DEPTH:
+            debugOutputSrvIdx = linearDepthTarget.getSrvIdx();
+            debugOutputChannels = 1;
+            break;
+        case DebugView::DEBUG:
+            debugOutputSrvIdx = debugTarget.getSrvIdx();
+            debugOutputChannels = 4;
+            break;
+        case DebugView::OFF:
+        default:
+            break;
+        }
     }
+
+    auto& debugParams = paramBlockManager.debugParams;
+    debugParams->debugOutputSrvIdx = debugOutputSrvIdx;
+    debugParams->debugOutputChannels = debugOutputChannels;
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();

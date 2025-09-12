@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 void ParamBlockManager::init()
 {
     constexpr uint32_t bufferSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
-                                    sizeof(SceneParams) + sizeof(RenderParams);
+                                    sizeof(SceneParams) + sizeof(RenderParams) + sizeof(DebugParams);
     this->dev_paramBuffer = BufferHelper::createBasicBuffer(bufferSize, &UPLOAD_HEAP);
     this->dev_paramBuffer->Map(0, nullptr, &this->host_paramBuffer);
 
@@ -35,6 +35,7 @@ void ParamBlockManager::init()
     this->cameraParams = reinterpret_cast<CameraParams*>(this->constantParams + 1);
     this->sceneParams = reinterpret_cast<SceneParams*>(this->cameraParams + 1);
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
+    this->debugParams = reinterpret_cast<DebugParams*>(this->renderParams + 1);
 }
 
 void ParamBlockManager::reset()

@@ -30,58 +30,48 @@ struct PsIn
     float2 uv : TEXCOORD0;
 };
 
-float3 getPathTracingFinalColor(float2 uv)
+float4 getPathTracingFinalColor(float2 uv)
 {
     Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
     const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, uv);
 
     const float3 tonemappedColor = applyTonemapping(pathTracingColor.rgb);
-    return tonemappedColor;
+    return float4(tonemappedColor, 1);
+}
+
+float4 getDebugOutputColor(float2 uv)
+{
+    if (debugParams.debugOutputChannels == 4)
+    {
+        Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+        return debugTexture.Sample(texSampler, uv).rgba;
+    }
+    else if (debugParams.debugOutputChannels == 3)
+    {
+        Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+        return float4(debugTexture.Sample(texSampler, uv).rgb, 1);
+    }
+    else if (debugParams.debugOutputChannels == 1)
+    {
+        Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+        return float4(debugTexture.Sample(texSampler, uv).rrr, 1);
+    }
+
+    return 0;
 }
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    float3 finalColor = 0;
+    float4 finalColor = 0;
 
-    uint debugTextureIdx = ~0u;
-    uint debugTextureChannels = 3;
-
-    // TODO: do this switch case thing on the host side and pass in debugTextureIdx and debugTextureChannels
-    switch ((DebugView)renderParams.debugView)
+    if (debugParams.debugOutputSrvIdx == ~0u)
     {
-    case DebugView::DIFFUSE_ALBEDO:
-        debugTextureIdx = heapIndices.srv.diffuseAlbedoTargetIdx;
-        break;
-    case DebugView::DEPTH:
-        debugTextureIdx = heapIndices.srv.depthTargetIdx;
-        debugTextureChannels = 1;
-        break;
-    case DebugView::LINEAR_DEPTH:
-        debugTextureIdx = heapIndices.srv.linearDepthTargetIdx;
-        debugTextureChannels = 1;
-        break;
-    case DebugView::DEBUG:
-        debugTextureIdx = heapIndices.srv.debugTargetIdx;
-        break;
-    case DebugView::OFF:
-    default:
         finalColor = getPathTracingFinalColor(psIn.uv);
-        break;
     }
-
-    if (debugTextureIdx != ~0u)
+    else
     {
-        if (debugTextureChannels == 3)
-        {
-            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugTextureIdx];
-            finalColor = debugTexture.Sample(texSampler, psIn.uv).rgb;
-        }
-        else if (debugTextureChannels == 1)
-        {
-            Texture2D<float> debugTexture = ResourceDescriptorHeap[debugTextureIdx];
-            finalColor = debugTexture.Sample(texSampler, psIn.uv).rrr;
-        }
+        finalColor = getDebugOutputColor(psIn.uv);
     }
 
-    return float4(finalColor, 1);
+    return finalColor;
 }
