@@ -165,16 +165,21 @@ target_include_directories(Biomeinator PRIVATE
 )
 
 target_link_directories(Biomeinator PRIVATE
-    "${EXT}/dxc/lib/"
+    "${EXT}/dxc/lib"
     #"${EXT}/nvapi/amd64"
+    "${EXT}/streamline/lib/x64"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 d3d12 dxgi d3dcompiler)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler)
+
+#set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64/development")
+set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
 set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"
     "${EXT}/dxc/bin/dxil.dll"
-    "${EXT}/streamline/bin/x64/sl.interposer.dll"
+    "${STREAMLINE_DLL_DIR}/sl.interposer.dll"
+    "${STREAMLINE_DLL_DIR}/sl.dlss.dll"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD
@@ -198,7 +203,7 @@ add_custom_command(TARGET Biomeinator POST_BUILD
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
-    SL_INTERPOSER_DLL_PATH="$<TARGET_FILE_DIR:Biomeinator>/sl.interposer.dll"
+    TARGET_FILE_DIR="$<TARGET_FILE_DIR:Biomeinator>"
 )
 
 # ==================================================

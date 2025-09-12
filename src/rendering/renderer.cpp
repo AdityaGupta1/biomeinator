@@ -60,7 +60,36 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <sl.h>
 #include <sl_consts.h>
+#include <sl_dlss.h>
 #include <sl_security.h>
+
+#ifdef _DEBUG
+void printSlResultError(sl::Result result)
+{
+    switch (result)
+    {
+        case sl::Result::eErrorNoPlugins:
+            fprintf(stderr, "No plugins found\n");
+            break;
+        default:
+            fprintf(stderr, "Unknown Streamline error: %u\n", static_cast<uint32_t>(result));
+            break;
+    }
+}
+
+#define CHECK_SL_RESULT(expr)                                                                                          \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (SL_FAILED(result, expr))                                                                                   \
+        {                                                                                                              \
+            fprintf(stderr, "sl::Result failed: %s\n", #expr);                                                         \
+            printSlResultError(result);                                                                                \
+            __debugbreak();                                                                                            \
+        }                                                                                                              \
+    } while (0)
+#else
+#define CHECK_SL_RESULT(expr) expr
+#endif
 
 using namespace DirectX;
 
@@ -69,6 +98,7 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
+void initStreamline();
 void initDevice();
 void initDescriptorHeaps();
 void initSwapChain();
@@ -114,13 +144,7 @@ bool testMode = false;
 
 void init()
 {
-    const std::wstring slInterposerDllPath = Util::to_wstring(SL_INTERPOSER_DLL_PATH);
-    if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
-    {
-        fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
-        printf("Exiting...");
-        exit(0);
-    }
+    initStreamline();
 
     initDevice();
     initDescriptorHeaps();
@@ -165,13 +189,46 @@ void loadGltf(const std::string& filePathStr)
     GltfLoader::loadGltf(filePathStr, scene);
 }
 
+void initStreamline()
+{
+    const std::wstring targetFileDirPath = Util::to_wstring(TARGET_FILE_DIR);
+    const std::wstring slInterposerDllPath = targetFileDirPath + L"/sl.interposer.dll";
+
+    // TODO: verify using WinVerifyTrust
+
+    if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
+    {
+        fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
+        printf("Exiting...");
+        exit(-1);
+    }
+
+    sl::Preferences prefs = {};
+#ifdef _DEBUG
+    prefs.showConsole = true;
+    prefs.logLevel = sl::LogLevel::eVerbose;
+#else
+    prefs.showConsole = false;
+    prefs.logLevel = sl::LogLevel::eDefault;
+#endif
+
+    const sl::Feature features[] = { sl::kFeatureDLSS };
+    prefs.featuresToLoad = features;
+    prefs.numFeaturesToLoad = _countof(features);
+
+    prefs.applicationId = 1738; // TODO: not sure what to put here lol
+
+    CHECK_SL_RESULT(slInit(prefs));
+}
+
 ComPtr<IDXGIFactory4> factory;
 ComPtr<ID3D12Device5> device;
 ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
-    auto slMod = LoadLibrary(SL_INTERPOSER_DLL_PATH);
+    const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
+    auto slMod = LoadLibrary(slInterposerDllPath.c_str());
 
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
@@ -207,7 +264,7 @@ void initDevice()
     for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
         DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
+        CHECK_HRESULT(adapter->GetDesc1(&desc));
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
         {
             adapter.Reset();
@@ -222,6 +279,8 @@ void initDevice()
 
         adapter.Reset();
     }
+
+    CHECK_SL_RESULT(slSetD3DDevice(device.Get()));
 
     D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -1206,6 +1265,8 @@ void destroy()
     }
 
     flush();
+
+    // TODO: slShutdown()
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
