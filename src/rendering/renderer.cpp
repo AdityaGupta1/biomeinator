@@ -311,6 +311,8 @@ std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 uint32_t viewportWidth;
 uint32_t viewportHeight;
+uint32_t renderWidth;
+uint32_t renderHeight;
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
 
@@ -325,6 +327,10 @@ void resize()
     GetClientRect(hwnd, &rect);
     uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
     uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
+
+    // will be different than viewportWidth/Height after adding DLSS super resolution
+    renderWidth = viewportWidth;
+    renderHeight = viewportHeight;
 
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
@@ -352,7 +358,7 @@ void resize()
     for (RtTarget* rtTarget : rtTargets)
     {
         rtTarget->reset();
-        rtTarget->setDimensions(viewportWidth, viewportHeight);
+        rtTarget->setDimensions(renderWidth, renderHeight);
         rtTarget->init();
     }
 
@@ -379,7 +385,7 @@ void resize()
         };
     }
 
-    camera.setAspectRatio(static_cast<float>(viewportHeight) / static_cast<float>(viewportWidth));
+    camera.setAspectRatio(static_cast<float>(renderHeight) / static_cast<float>(renderWidth));
 }
 
 void initCommand()
