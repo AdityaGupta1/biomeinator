@@ -57,23 +57,44 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
-void outputGuideBuffers(const uint2 pixelIdx, const Material surfMaterial, const RayDesc ray, const HitInfo hitInfo)
+void outputGuideBuffers(const Payload payload)
 {
+    const uint2 pixelIdx = payload.pixelIdx;
+
+    float3 diffuseAlbedo = 0;
+    float depth = 1.f;
+    float linearDepth = 100000.f;
+
+    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+    {
+        const Material surfMaterial = materials[payload.materialId];
+        diffuseAlbedo = surfMaterial.getDiffuseAlbedo();
+
+        float4 ndc = mul(cameraParams.viewProjMat, float4(payload.hitInfo.hitPos_WS, 1));
+        ndc /= ndc.w;
+        depth = ndc.z;
+
+        linearDepth = distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS);
+    }
+
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
-    diffuseAlbedoTarget[pixelIdx] = float4(surfMaterial.baseColor, 1);
+    diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
 
     RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
-    float4 ndc = mul(cameraParams.viewProjMat, float4(hitInfo.hitPos_WS, 1));
-    ndc /= ndc.w;
-    depthTarget[pixelIdx] = ndc.z;
+    depthTarget[pixelIdx] = depth;
 
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
-    linearDepthTarget[pixelIdx] = distance(ray.Origin, hitInfo.hitPos_WS);
+    linearDepthTarget[pixelIdx] = linearDepth;
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 {
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+    if (isFirstSample)
+    {
+        outputGuideBuffers(payload);
+    }
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
     {
@@ -83,11 +104,6 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         const Material surfMaterial = materials[payload.materialId];
-
-        if (isFirstSample && pathDepth == 0)
-        {
-            outputGuideBuffers(payload.pixelIdx, surfMaterial, ray, payload.hitInfo);
-        }
 
         if (surfMaterial.hasEmission())
         {
@@ -192,6 +208,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialId = instanceData.materialId;
+
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }
 
 [shader("miss")]

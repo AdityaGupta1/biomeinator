@@ -118,6 +118,18 @@ public:
     {
         return emissiveColor * emissiveStrength;
     }
+
+    float3 getDiffuseAlbedo()
+    {
+        if (emissiveStrength > 0.f)
+        {
+            return getEmissiveColor();
+        }
+        else
+        {
+            return baseColor;
+        }
+    }
 #else
     void setHasDiffuse(bool enable)
     {
