@@ -257,7 +257,7 @@ struct RenderParams
 struct DebugParams
 {
     uint debugOutputSrvIdx;
-    uint debugOutputChannels;
+    uint debugOutputNumChannels;
     float debugOutputScale;
     uint pad0;
 };

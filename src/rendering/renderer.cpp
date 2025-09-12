@@ -257,35 +257,35 @@ void initSwapChain()
 RtTarget pathTracingTarget{
     L"pathTracingTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
-    3, /*debugOutputChannels*/
+    3, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget diffuseAlbedoTarget{
     L"diffuseAlbedoTarget",
     DXGI_FORMAT_R16G16B16A16_FLOAT,
-    3, /*debugOutputChannels*/
+    3, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget depthTarget{
     L"depthTarget",
     DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputChannels*/
+    1, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget linearDepthTarget{
     L"linearDepthTarget",
     DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputChannels*/
+    1, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget motionTarget{
     L"motionTarget",
     DXGI_FORMAT_R16G16_FLOAT,
-    2, /*debugOutputChannels*/
+    2, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
@@ -293,7 +293,7 @@ RtTarget motionTarget{
 RtTarget debugTarget{
     L"debugTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
-    4, /*debugOutputChannels*/
+    4, /*debugOutputNumChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
@@ -315,10 +315,6 @@ void initRtTargets()
 
 std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
-uint32_t viewportWidth;
-uint32_t viewportHeight;
-uint32_t renderWidth;
-uint32_t renderHeight;
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
 
@@ -331,12 +327,12 @@ void resize()
 
     RECT rect;
     GetClientRect(hwnd, &rect);
-    uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
-    uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
+    const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
+    const uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
     // will be different than viewportWidth/Height after adding DLSS super resolution
-    renderWidth = viewportWidth;
-    renderHeight = viewportHeight;
+    const uint32_t renderWidth = viewportWidth;
+    const uint32_t renderHeight = viewportHeight;
 
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
@@ -1012,12 +1008,11 @@ void render()
     if (debugOutputTarget == nullptr)
     {
         debugParams->debugOutputSrvIdx = ~0u;
-        debugParams->debugOutputChannels = 3;
     }
     else
     {
         debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
-        debugParams->debugOutputChannels = debugOutputTarget->debugOutputChannels;
+        debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
@@ -1050,7 +1045,10 @@ void render()
 
         for (RtTarget* rtTarget : rtTargets)
         {
-            rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            if (rtTarget->hasUav)
+            {
+                rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            }
         }
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
@@ -1078,7 +1076,10 @@ void render()
 
     for (RtTarget* rtTarget : rtTargets)
     {
-        rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        if (rtTarget->hasSrv)
+        {
+            rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
     }
 
     cmdList->RSSetViewports(1, &viewport);

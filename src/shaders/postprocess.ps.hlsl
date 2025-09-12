@@ -43,7 +43,7 @@ float4 getDebugOutputColor(float2 uv)
 {
     float4 debugColor = 0;
 
-    switch (debugParams.debugOutputChannels)
+    switch (debugParams.debugOutputNumChannels)
     {
         case 4:
         {
