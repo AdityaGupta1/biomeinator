@@ -57,6 +57,17 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
+void writeToGuideBuffers(const uint2 pixelIdx, const Material surfMaterial, const RayDesc ray, const HitInfo hitInfo)
+{
+    RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
+    diffuseAlbedoTarget[pixelIdx] = float4(surfMaterial.baseColor, 1);
+
+    // TODO: write to depthTarget
+
+    RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
+    linearDepthTarget[pixelIdx] = distance(ray.Origin, hitInfo.hitPos_WS);
+}
+
 void pathTraceRay(RayDesc ray, inout Payload payload)
 {
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
@@ -72,8 +83,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
 
         if (pathDepth == 0)
         {
-            RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
-            diffuseAlbedoTarget[payload.pixelIdx] = float4(surfMaterial.baseColor, 1);
+            writeToGuideBuffers(payload.pixelIdx, surfMaterial, ray, payload.hitInfo);
         }
 
         if (surfMaterial.hasEmission())

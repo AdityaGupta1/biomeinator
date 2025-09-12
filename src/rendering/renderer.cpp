@@ -254,8 +254,30 @@ void initSwapChain()
     factory.Reset();
 }
 
-RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
-RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget pathTracingTarget{
+    L"pathTracingTarget",
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget diffuseAlbedoTarget{
+    L"diffuseAlbedoTarget",
+    DXGI_FORMAT_R16G16B16A16_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget depthTarget{
+    L"depthTarget",
+    DXGI_FORMAT_R16_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget linearDepthTarget{
+    L"linearDepthTarget",
+    DXGI_FORMAT_R16_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
 
 std::vector<RtTarget*> rtTargets;
 
@@ -263,6 +285,8 @@ void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
+    rtTargets.push_back(&depthTarget);
+    rtTargets.push_back(&linearDepthTarget);
 
     resize();
 }
@@ -319,11 +343,15 @@ void resize()
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
+            .depthTargetIdx = depthTarget.getUavIdx(),
+            .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
         };
 
         frame.paramBlockManager.heapIndices->srv = {
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
+            .depthTargetIdx = depthTarget.getSrvIdx(),
+            .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
         };
     }
 }
@@ -848,10 +876,12 @@ void finalizeQueuedScreenshot()
 }
 
 static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
-static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo" };
+static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo", "depth", "linearDepth" };
 static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
     { "off", DebugView::OFF },
     { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
+    { "depth", DebugView::DEPTH },
+    { "linearDepth", DebugView::LINEAR_DEPTH },
 };
 
 void imguiBeginFrame()

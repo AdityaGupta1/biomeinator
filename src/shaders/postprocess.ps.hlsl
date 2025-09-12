@@ -43,19 +43,40 @@ float4 psMain(PsIn psIn) : SV_Target
 {
     float3 finalColor = 0;
 
+    uint debugTextureIdx = ~0u;
+    uint debugTextureChannels = 3;
+
+    // TODO: do this switch case thing on the host side and pass in debugTextureIdx and debugTextureChannels
     switch ((DebugView)renderParams.debugView)
     {
     case DebugView::DIFFUSE_ALBEDO:
-        {
-            Texture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.srv.diffuseAlbedoTargetIdx];
-            finalColor = diffuseAlbedoTarget.Sample(texSampler, psIn.uv).rgb;
-            break;
-        }
+        debugTextureIdx = heapIndices.srv.diffuseAlbedoTargetIdx;
+        break;
+    case DebugView::DEPTH:
+        debugTextureIdx = heapIndices.srv.depthTargetIdx;
+        debugTextureChannels = 1;
+        break;
+    case DebugView::LINEAR_DEPTH:
+        debugTextureIdx = heapIndices.srv.linearDepthTargetIdx;
+        debugTextureChannels = 1;
+        break;
     case DebugView::OFF:
     default:
+        finalColor = getPathTracingFinalColor(psIn.uv);
+        break;
+    }
+
+    if (debugTextureIdx != ~0u)
+    {
+        if (debugTextureChannels == 3)
         {
-            finalColor = getPathTracingFinalColor(psIn.uv);
-            break;
+            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugTextureIdx];
+            finalColor = debugTexture.Sample(texSampler, psIn.uv).rgb;
+        }
+        else if (debugTextureChannels == 1)
+        {
+            Texture2D<float> debugTexture = ResourceDescriptorHeap[debugTextureIdx];
+            finalColor = debugTexture.Sample(texSampler, psIn.uv).rrr;
         }
     }
 

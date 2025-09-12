@@ -165,16 +165,16 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
-        uint pad1;
-        uint pad2;
+        uint depthTargetIdx;
+        uint linearDepthTargetIdx;
     } uav;
 
     struct
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
-        uint pad1;
-        uint pad2;
+        uint depthTargetIdx;
+        uint linearDepthTargetIdx;
     } srv;
 };
 
@@ -223,6 +223,8 @@ enum class DebugView : uint
 {
     OFF,
     DIFFUSE_ALBEDO,
+    DEPTH,
+    LINEAR_DEPTH
 };
 
 struct RenderParams
