@@ -45,19 +45,19 @@ float3 applyTonemapping(float3 color)
     float3 tonemappedColor;
     switch ((Tonemapping)renderParams.tonemapping)
     {
-    case Tonemapping::NONE:
-    default:
-        tonemappedColor = color;
-        break;
-    case Tonemapping::STANDARD:
-        tonemappedColor = linearToSrgb(color);
-        break;
-    case Tonemapping::AGX:
-        tonemappedColor = linearToSrgb(applyAgx(color));
-        break;
-    case Tonemapping::KHRONOS_PBR_NEUTRAL:
-        tonemappedColor = linearToSrgb(applyKhronosPbrNeutral(color));
-        break;
+        case Tonemapping::NONE:
+        default:
+            tonemappedColor = color;
+            break;
+        case Tonemapping::STANDARD:
+            tonemappedColor = linearToSrgb(color);
+            break;
+        case Tonemapping::AGX:
+            tonemappedColor = linearToSrgb(applyAgx(color));
+            break;
+        case Tonemapping::KHRONOS_PBR_NEUTRAL:
+            tonemappedColor = linearToSrgb(applyKhronosPbrNeutral(color));
+            break;
     }
     return tonemappedColor;
 }
