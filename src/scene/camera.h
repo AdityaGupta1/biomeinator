@@ -53,7 +53,7 @@ public:
 
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
-    void update(const PlayerInput& input, double deltaTime);
+    void update(double deltaTime, const PlayerInput& input);
     void setAspectRatio(float aspectRatio);
 
     void copyParamsTo(CameraParams* dest) const;

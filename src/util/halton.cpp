@@ -56,7 +56,7 @@ void HaltonSequence::init(uint32_t sequenceLength)
 
 DirectX::XMFLOAT2 HaltonSequence::next()
 {
-    DirectX::XMFLOAT2 nextVal = this->sequence[this->sequencePtr];
+    const DirectX::XMFLOAT2 nextVal = this->sequence[this->sequencePtr];
     if (++this->sequencePtr >= this->sequence.size())
     {
         this->sequencePtr = 0;

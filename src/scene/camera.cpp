@@ -104,7 +104,7 @@ constexpr float mouseSensitivity = 0.16f;
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
 
-void Camera::update(const PlayerInput& input, double deltaTime)
+void Camera::update(double deltaTime, const PlayerInput& input)
 {
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {
