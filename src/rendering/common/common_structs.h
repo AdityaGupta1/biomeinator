@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
+
+#define float4x4 DirectX::XMFLOAT4X4
 #endif // !_hlsl
 
 struct Vertex
@@ -198,6 +200,9 @@ struct ConstantParams
 
 struct CameraParams
 {
+    float4x4 viewProjMat;
+    float4x4 prevViewProjMat;
+
     float3 pos_WS;
     uint pad0;
 
