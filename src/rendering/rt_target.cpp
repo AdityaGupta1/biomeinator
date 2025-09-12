@@ -6,8 +6,13 @@
 
 #include "debug.h"
 
-RtTarget::RtTarget(const std::wstring& name, DXGI_FORMAT format, uint32_t debugOutputNumChannels, bool hasUav, bool hasSrv)
-    : name(name), debugOutputNumChannels(debugOutputNumChannels), hasUav(hasUav), hasSrv(hasSrv)
+RtTarget::RtTarget(const std::wstring& name,
+                   DXGI_FORMAT format,
+                   uint32_t debugOutputNumChannels,
+                   bool hasUav,
+                   bool hasSrv,
+                   bool isFullSize)
+    : name(name), debugOutputNumChannels(debugOutputNumChannels), hasUav(hasUav), hasSrv(hasSrv), isFullSize(isFullSize)
 {
     D3D12_RESOURCE_FLAGS targetResourceFlags = D3D12_RESOURCE_FLAG_NONE;
     if (this->hasUav)

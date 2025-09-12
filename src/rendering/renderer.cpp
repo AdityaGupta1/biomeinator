@@ -343,44 +343,45 @@ RtTarget pathTracingTarget{
     L"pathTracingTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
     3, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
 };
 RtTarget diffuseAlbedoTarget{
     L"diffuseAlbedoTarget",
     DXGI_FORMAT_R16G16B16A16_FLOAT,
     3, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
 };
 RtTarget depthTarget{
     L"depthTarget",
     DXGI_FORMAT_R16_FLOAT,
     1, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
 };
 RtTarget linearDepthTarget{
     L"linearDepthTarget",
     DXGI_FORMAT_R16_FLOAT,
     1, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
 };
 RtTarget motionTarget{
     L"motionTarget",
     DXGI_FORMAT_R16G16_FLOAT,
     2, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
 };
 
 RtTarget debugTarget{
     L"debugTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
     4, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
+    true, /*hasUav*/
+    true, /*hasSrv*/
+    true, /*isFullSize*/
 };
 
 std::vector<RtTarget*> rtTargets;
@@ -464,7 +465,14 @@ void resize()
     for (RtTarget* rtTarget : rtTargets)
     {
         rtTarget->reset();
-        rtTarget->setDimensions(renderWidth, renderHeight);
+        if (rtTarget->isFullSize)
+        {
+            rtTarget->setDimensions(viewportWidth, viewportHeight);
+        }
+        else
+        {
+            rtTarget->setDimensions(renderWidth, renderHeight);
+        }
         rtTarget->init();
     }
 
