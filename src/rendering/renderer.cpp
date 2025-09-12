@@ -491,7 +491,7 @@ void resize()
         };
     }
 
-    camera.setAspectRatio(static_cast<float>(renderHeight) / static_cast<float>(renderWidth));
+    camera.setAspectRatio(static_cast<float>(renderWidth) / static_cast<float>(renderHeight));
 
     // DLSS programming guide says to use this as the jitter sequence length:
     // Total Phases = Base Phase Count * (Target Resolution / Render Resolution) ^ 2
