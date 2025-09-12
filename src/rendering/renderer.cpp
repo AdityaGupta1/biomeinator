@@ -330,7 +330,7 @@ void resize()
     const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
-    // will be different than viewportWidth/Height after adding DLSS super resolution
+    // will be different than viewport width/height after adding DLSS super resolution
     const uint32_t renderWidth = viewportWidth;
     const uint32_t renderHeight = viewportHeight;
 
