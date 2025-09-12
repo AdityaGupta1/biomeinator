@@ -30,7 +30,7 @@ class Camera
 private:
     CameraParams params{};
 
-    bool isViewProjDirty{ true };
+    bool areMatricesDirty{ true };
 
     HaltonSequence jitterHalton;
 
@@ -46,7 +46,7 @@ private:
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void setViewProjMat();
+    void setMatrices();
 
 public:
     void init(float defaultFovYRadians);

@@ -179,8 +179,8 @@ struct HeapIndices
 
         uint motionTargetIdx;
         uint debugTargetIdx;
+        uint pad0;
         uint pad1;
-        uint pad2;
     } uav;
 
     struct
@@ -191,9 +191,9 @@ struct HeapIndices
         uint linearDepthTargetIdx;
 
         uint motionTargetIdx;
+        uint dlssOutputTarget;
         uint debugTargetIdx;
-        uint pad1;
-        uint pad2;
+        uint pad0;
     } srv;
 };
 
@@ -207,8 +207,8 @@ struct ConstantParams
 
 struct CameraParams
 {
-    float4x4 viewProjMat;
-    float4x4 prevViewProjMat;
+    float4x4 worldToClipMat;
+    float4x4 prevWorldToClipMat;
 
     float2 jitter;
     float2 prevJitter;

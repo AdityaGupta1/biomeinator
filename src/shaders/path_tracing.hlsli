@@ -79,9 +79,9 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         motionHitPos = evalRayPos(ray, cameraParams.farPlane);
     }
 
-    float4 currNdc = mul(cameraParams.viewProjMat, float4(motionHitPos, 1));
+    float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
     currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.prevViewProjMat, float4(motionHitPos, 1));
+    float4 prevNdc = mul(cameraParams.prevWorldToClipMat, float4(motionHitPos, 1));
     prevNdc /= prevNdc.w;
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];

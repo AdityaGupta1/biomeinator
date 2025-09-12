@@ -375,6 +375,15 @@ RtTarget motionTarget{
     true, /*hasSrv*/
 };
 
+RtTarget dlssOutputTarget{
+    L"dlssOutputTarget",
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    4, /*debugOutputNumChannels*/
+    false, /*hasUav*/
+    true, /*hasSrv*/
+    true, /*isFullSize*/
+};
+
 RtTarget debugTarget{
     L"debugTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
@@ -394,6 +403,7 @@ void initRtTargets()
     rtTargets.push_back(&linearDepthTarget);
     rtTargets.push_back(&motionTarget);
 
+    rtTargets.push_back(&dlssOutputTarget);
     rtTargets.push_back(&debugTarget);
 
     resize();
@@ -423,7 +433,7 @@ void resize()
 
     sl::DLSSOptimalSettings dlssSettings;
     sl::DLSSOptions dlssOptions;
-    dlssOptions.mode = sl::DLSSMode::eBalanced;
+    dlssOptions.mode = sl::DLSSMode::eBalanced; // TODO: expose this in the GUI
     dlssOptions.outputWidth = viewportWidth;
     dlssOptions.outputHeight = viewportHeight;
     CHECK_SL_RESULT(slDLSSGetOptimalSettings(dlssOptions, dlssSettings));
@@ -494,6 +504,8 @@ void resize()
             .depthTargetIdx = depthTarget.getSrvIdx(),
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
+
+            .dlssOutputTarget = dlssOutputTarget.getSrvIdx(),
 
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };

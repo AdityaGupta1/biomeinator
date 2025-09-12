@@ -81,7 +81,7 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-void Camera::setViewProjMat()
+void Camera::setMatrices()
 {
     const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
@@ -92,7 +92,7 @@ void Camera::setViewProjMat()
         this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
 
     const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-    XMStoreFloat4x4(&this->params.viewProjMat, viewProj);
+    XMStoreFloat4x4(&this->params.worldToClipMat, viewProj);
 }
 
 constexpr float playerHorizontalSpeed = 11.0f;
@@ -114,14 +114,14 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         XMFLOAT3 storedLinearMovement;
         XMStoreFloat3(&storedLinearMovement, linearMovement);
         this->moveLinear(storedLinearMovement);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
         const float mouseMovementMultiplier = deltaTime * mouseSensitivity;
         this->rotate(input.mouseMovement.x * mouseMovementMultiplier, input.mouseMovement.y * mouseMovementMultiplier);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
     const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
@@ -139,14 +139,14 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         }
 
         this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
-    this->params.prevViewProjMat = this->params.viewProjMat;
-    if (this->isViewProjDirty)
+    this->params.prevWorldToClipMat = this->params.worldToClipMat;
+    if (this->areMatricesDirty)
     {
-        this->setViewProjMat();
-        this->isViewProjDirty = false;
+        this->setMatrices();
+        this->areMatricesDirty = false;
     }
 
     this->params.prevJitter = this->params.jitter;
@@ -156,7 +156,7 @@ void Camera::update(double deltaTime, const PlayerInput& input)
 void Camera::setAspectRatio(float aspectRatio)
 {
     this->aspectRatio = aspectRatio;
-    this->isViewProjDirty = true;
+    this->areMatricesDirty = true;
 }
 
 void Camera::copyParamsTo(CameraParams* dest) const
