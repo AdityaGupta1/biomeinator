@@ -47,7 +47,9 @@ void RayGeneration()
         ray.TMin = 0.001;
         ray.TMax = 1000;
 
-        pathTraceRay(ray, payload);
+        const bool isFirstSample = (sampleIdx == 0);
+        pathTraceRay(ray, payload, isFirstSample);
+
         accumulatedColor += payload.pathColor;
     }
 

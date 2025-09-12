@@ -68,7 +68,7 @@ void writeToGuideBuffers(const uint2 pixelIdx, const Material surfMaterial, cons
     linearDepthTarget[pixelIdx] = distance(ray.Origin, hitInfo.hitPos_WS);
 }
 
-void pathTraceRay(RayDesc ray, inout Payload payload)
+void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 {
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
@@ -81,7 +81,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
     {
         const Material surfMaterial = materials[payload.materialId];
 
-        if (pathDepth == 0)
+        if (isFirstSample && pathDepth == 0)
         {
             writeToGuideBuffers(payload.pixelIdx, surfMaterial, ray, payload.hitInfo);
         }
