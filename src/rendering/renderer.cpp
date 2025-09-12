@@ -257,30 +257,35 @@ void initSwapChain()
 RtTarget pathTracingTarget{
     L"pathTracingTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
+    3, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget diffuseAlbedoTarget{
     L"diffuseAlbedoTarget",
     DXGI_FORMAT_R16G16B16A16_FLOAT,
+    3, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget depthTarget{
     L"depthTarget",
     DXGI_FORMAT_R16_FLOAT,
+    1, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget linearDepthTarget{
     L"linearDepthTarget",
     DXGI_FORMAT_R16_FLOAT,
+    1, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
 RtTarget motionTarget{
     L"motionTarget",
     DXGI_FORMAT_R16G16_FLOAT,
+    2, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
@@ -288,6 +293,7 @@ RtTarget motionTarget{
 RtTarget debugTarget{
     L"debugTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
+    4, /*debugOutputChannels*/
     true /*hasUav*/,
     true /*hasSrv*/,
 };
@@ -995,32 +1001,26 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
-    uint32_t debugOutputSrvIdx = ~0u;
-    uint32_t debugOutputChannels = 3;
-
+    RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (debugViewComboMap.contains(debugViewSettingStr))
     {
         switch ((DebugView)debugViewComboMap.at(debugViewSettingStr))
         {
             case DebugView::DIFFUSE_ALBEDO:
-                debugOutputSrvIdx = diffuseAlbedoTarget.getSrvIdx();
+                debugOutputTarget = &diffuseAlbedoTarget;
                 break;
             case DebugView::DEPTH:
-                debugOutputSrvIdx = depthTarget.getSrvIdx();
-                debugOutputChannels = 1;
+                debugOutputTarget = &depthTarget;
                 break;
             case DebugView::LINEAR_DEPTH:
-                debugOutputSrvIdx = linearDepthTarget.getSrvIdx();
-                debugOutputChannels = 1;
-                break;
-            case DebugView::DEBUG:
-                debugOutputSrvIdx = debugTarget.getSrvIdx();
-                debugOutputChannels = 4;
+                debugOutputTarget = &linearDepthTarget;
                 break;
             case DebugView::MOTION:
-                debugOutputSrvIdx = motionTarget.getSrvIdx();
-                debugOutputChannels = 2;
+                debugOutputTarget = &motionTarget;
+                break;
+            case DebugView::DEBUG:
+                debugOutputTarget = &debugTarget;
                 break;
             case DebugView::OFF:
             default:
@@ -1029,8 +1029,16 @@ void render()
     }
 
     auto& debugParams = paramBlockManager.debugParams;
-    debugParams->debugOutputSrvIdx = debugOutputSrvIdx;
-    debugParams->debugOutputChannels = debugOutputChannels;
+    if (debugOutputTarget == nullptr)
+    {
+        debugParams->debugOutputSrvIdx = ~0u;
+        debugParams->debugOutputChannels = 3;
+    }
+    else
+    {
+        debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
+        debugParams->debugOutputChannels = debugOutputTarget->debugOutputChannels;
+    }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
     auto& sceneParams = paramBlockManager.sceneParams;

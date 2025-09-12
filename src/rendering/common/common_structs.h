@@ -121,15 +121,9 @@ public:
 
     float3 getDiffuseAlbedo()
     {
-        if (emissiveStrength > 0.f)
-        {
-            return getEmissiveColor(); // should technically include diffuse color as well but I doubt I'll have
-                                       // materials with both emission and diffuse
-        }
-        else
-        {
-            return baseColor;
-        }
+        // this should technically include diffuse color as well but I doubt I'll have materials that are both emissive
+        // and diffuse
+        return (emissiveStrength > 0.f) ? getEmissiveColor() : baseColor;
     }
 #else
     void setHasDiffuse(bool enable)
@@ -276,7 +270,7 @@ struct DebugParams
     uint debugOutputSrvIdx;
     uint debugOutputChannels;
     float debugOutputScale;
-    uint pad1;
+    uint pad0;
 };
 
 #if !_hlsl
