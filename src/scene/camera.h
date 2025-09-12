@@ -31,6 +31,17 @@ private:
     CameraParams params{};
 
     bool areMatricesDirty{ true };
+    struct
+    {
+        DirectX::XMFLOAT4X4 viewToClipMat;
+        DirectX::XMFLOAT4X4 clipToViewMat;
+
+        DirectX::XMFLOAT4X4 clipToPrevClipMat;
+        DirectX::XMFLOAT4X4 prevClipToClipMat;
+    } dlssMatrices;
+
+    DirectX::XMFLOAT4X4 worldToPrevViewMat;
+    DirectX::XMFLOAT4X4 prevViewToPrevClipMat;
 
     HaltonSequence jitterHalton;
 

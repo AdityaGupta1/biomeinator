@@ -208,7 +208,7 @@ struct ConstantParams
 struct CameraParams
 {
     float4x4 worldToClipMat;
-    float4x4 prevWorldToClipMat;
+    float4x4 worldToPrevClipMat;
 
     float2 jitter;
     float2 prevJitter;

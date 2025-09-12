@@ -81,7 +81,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
     currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.prevWorldToClipMat, float4(motionHitPos, 1));
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(motionHitPos, 1));
     prevNdc /= prevNdc.w;
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
@@ -95,7 +95,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     float2 motion = (prevNdc.xy - currNdc.xy) / 2;
-    motion = float2(motion.x, -motion.y) * DispatchRaysDimensions().xy;
+    motion.y = -motion.y;
+    //motion *= DispatchRaysDimensions().xy;
     motionTarget[pixelIdx] = motion;
 }
 
