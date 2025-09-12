@@ -32,6 +32,9 @@ void Camera::init(float defaultFovYRadians)
     this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
 
     this->setDirectionVectorsFromAngles();
+
+    this->params.nearPlane = 0.1f;
+    this->params.farPlane = 10000.f;
 }
 
 void Camera::setDirectionVectorsFromAngles()
@@ -80,9 +83,8 @@ void Camera::setViewProjMat()
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
     const XMMATRIX view = XMMatrixLookAtRH(eye, lookAt, up);
 
-    constexpr float nearPlane = 0.1f;
-    constexpr float farPlane = 1000.0f;
-    const XMMATRIX proj = XMMatrixPerspectiveFovRH(this->currentFovYRadians, this->aspectRatio, nearPlane, farPlane);
+    const XMMATRIX proj = XMMatrixPerspectiveFovRH(
+        this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
 
     const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
     XMStoreFloat4x4(&this->params.viewProjMat, viewProj);
@@ -135,9 +137,9 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
         this->isViewProjDirty = true;
     }
 
+    this->params.prevViewProjMat = this->params.viewProjMat;
     if (this->isViewProjDirty)
     {
-        this->params.prevViewProjMat = this->params.viewProjMat;
         this->setViewProjMat();
         this->isViewProjDirty = false;
     }

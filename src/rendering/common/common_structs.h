@@ -123,7 +123,8 @@ public:
     {
         if (emissiveStrength > 0.f)
         {
-            return getEmissiveColor();
+            return getEmissiveColor(); // should technically include diffuse color as well but I doubt I'll have
+                                       // materials with both emission and diffuse
         }
         else
         {
@@ -216,10 +217,10 @@ struct CameraParams
     float4x4 prevViewProjMat;
 
     float3 pos_WS;
-    uint pad0;
+    float nearPlane;
 
     float3 forward_WS;
-    uint pad1;
+    float farPlane;
 
     float3 right_WS;
     uint pad2;

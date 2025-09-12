@@ -57,43 +57,44 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
-void outputGuideBuffers(const Payload payload)
+void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = payload.pixelIdx;
 
     float3 diffuseAlbedo = 0.f;
-    float depth = 1.f;
-    float linearDepth = 100000.f;
-    float2 motion = 0.f;
+    float linearDepth = cameraParams.farPlane;
+    float3 motionHitPos;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         const Material surfMaterial = materials[payload.materialId];
         diffuseAlbedo = surfMaterial.getDiffuseAlbedo();
 
-        float4 ndc = mul(cameraParams.viewProjMat, float4(payload.hitInfo.hitPos_WS, 1));
-        ndc /= ndc.w;
-        depth = ndc.z;
+        linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
-        linearDepth = distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS);
-
-        motion = float2(1, 0); // TODO: hit motion
+        motionHitPos = payload.hitInfo.hitPos_WS;
     }
     else
     {
-        motion = float2(0, 1); // TODO: miss motion
+        motionHitPos = evalRayPos(ray, cameraParams.farPlane);
     }
+
+    float4 currNdc = mul(cameraParams.viewProjMat, float4(motionHitPos, 1));
+    currNdc /= currNdc.w;
+    float4 prevNdc = mul(cameraParams.prevViewProjMat, float4(motionHitPos, 1));
+    prevNdc /= prevNdc.w;
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
     diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
 
     RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
-    depthTarget[pixelIdx] = depth;
+    depthTarget[pixelIdx] = currNdc.z;
 
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
+    const float2 motion = (prevNdc.xy - currNdc.xy) / 2;
     motionTarget[pixelIdx] = motion;
 }
 
@@ -103,7 +104,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 
     if (isFirstSample)
     {
-        outputGuideBuffers(payload);
+        outputGuideBuffers(payload, ray);
     }
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
