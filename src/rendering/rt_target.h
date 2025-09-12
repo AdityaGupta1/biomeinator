@@ -26,10 +26,12 @@ private:
     } srv;
 
 public:
+    const uint32_t debugOutputNumChannels;
+
     const bool hasUav;
     const bool hasSrv;
 
-    RtTarget(const std::wstring& name, DXGI_FORMAT format, bool hasUav, bool hasSrv);
+    RtTarget(const std::wstring& name, DXGI_FORMAT format, uint32_t debugOutputNumChannels, bool hasUav, bool hasSrv);
 
     void setDimensions(uint32_t width, uint32_t height);
 

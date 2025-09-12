@@ -57,9 +57,56 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
-void pathTraceRay(RayDesc ray, inout Payload payload)
+void outputGuideBuffers(const Payload payload, const RayDesc ray)
+{
+    const uint2 pixelIdx = payload.pixelIdx;
+
+    float3 diffuseAlbedo = 0.f;
+    float linearDepth = cameraParams.farPlane;
+    float3 motionHitPos;
+
+    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+    {
+        const Material surfMaterial = materials[payload.materialId];
+        diffuseAlbedo = surfMaterial.getDiffuseAlbedo();
+
+        linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
+
+        motionHitPos = payload.hitInfo.hitPos_WS;
+    }
+    else
+    {
+        motionHitPos = evalRayPos(ray, cameraParams.farPlane);
+    }
+
+    float4 currNdc = mul(cameraParams.viewProjMat, float4(motionHitPos, 1));
+    currNdc /= currNdc.w;
+    float4 prevNdc = mul(cameraParams.prevViewProjMat, float4(motionHitPos, 1));
+    prevNdc /= prevNdc.w;
+
+    RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
+    diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
+
+    RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
+    depthTarget[pixelIdx] = currNdc.z;
+
+    RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
+    linearDepthTarget[pixelIdx] = linearDepth;
+
+    RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
+    float2 motion = (prevNdc.xy - currNdc.xy) / 2;
+    motion = float2(motion.x, -motion.y) * DispatchRaysDimensions().xy;
+    motionTarget[pixelIdx] = motion;
+}
+
+void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 {
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+    if (isFirstSample)
+    {
+        outputGuideBuffers(payload, ray);
+    }
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
     {
@@ -69,12 +116,6 @@ void pathTraceRay(RayDesc ray, inout Payload payload)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         const Material surfMaterial = materials[payload.materialId];
-
-        if (pathDepth == 0)
-        {
-            RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
-            diffuseAlbedoTarget[payload.pixelIdx] = float4(surfMaterial.baseColor, 1);
-        }
 
         if (surfMaterial.hasEmission())
         {
@@ -179,6 +220,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialId = instanceData.materialId;
+
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }
 
 [shader("miss")]

@@ -32,6 +32,9 @@ void Camera::init(float defaultFovYRadians)
     this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
 
     this->setDirectionVectorsFromAngles();
+
+    this->params.nearPlane = 0.1f;
+    this->params.farPlane = 10000.f;
 }
 
 void Camera::setDirectionVectorsFromAngles()
@@ -73,6 +76,20 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
+void Camera::setViewProjMat()
+{
+    const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
+    const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
+    const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
+    const XMMATRIX view = XMMatrixLookAtRH(eye, lookAt, up);
+
+    const XMMATRIX proj = XMMatrixPerspectiveFovRH(
+        this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
+
+    const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
+    XMStoreFloat4x4(&this->params.viewProjMat, viewProj);
+}
+
 constexpr float playerHorizontalSpeed = 11.0f;
 constexpr float playerVerticalSpeed = 7.0f;
 constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
@@ -92,33 +109,49 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
         XMFLOAT3 storedLinearMovement;
         XMStoreFloat3(&storedLinearMovement, linearMovement);
         this->moveLinear(storedLinearMovement);
+        this->isViewProjDirty = true;
     }
 
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
         const float mouseMovementMultiplier = deltaTime * mouseSensitivity;
         this->rotate(input.mouseMovement.x * mouseMovementMultiplier, input.mouseMovement.y * mouseMovementMultiplier);
+        this->isViewProjDirty = true;
     }
 
     const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
     const float deltaFov = targetFov - this->currentFovYRadians;
     const float maxStep = fovTransitionSpeed * fabsf(deltaFov) * static_cast<float>(deltaTime);
-    if (fabsf(deltaFov) <= maxStep)
-    {
-        this->currentFovYRadians = targetFov;
-    }
-    else
-    {
-        this->currentFovYRadians += (deltaFov > 0 ? maxStep : -maxStep);
-    }
-
     if (fabsf(deltaFov) > 0.f)
     {
+        if (fabsf(deltaFov) <= maxStep)
+        {
+            this->currentFovYRadians = targetFov;
+        }
+        else
+        {
+            this->currentFovYRadians += (deltaFov > 0 ? maxStep : -maxStep);
+        }
+
         this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
+        this->isViewProjDirty = true;
+    }
+
+    this->params.prevViewProjMat = this->params.viewProjMat;
+    if (this->isViewProjDirty)
+    {
+        this->setViewProjMat();
+        this->isViewProjDirty = false;
     }
 }
 
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
+}
+
+void Camera::setAspectRatio(float aspectRatio)
+{
+    this->aspectRatio = aspectRatio;
+    this->isViewProjDirty = true;
 }

@@ -30,34 +30,63 @@ struct PsIn
     float2 uv : TEXCOORD0;
 };
 
-float3 getPathTracingFinalColor(float2 uv)
+float4 getPathTracingFinalColor(float2 uv)
 {
     Texture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.srv.pathTracingTargetIdx];
     const float4 pathTracingColor = pathTracingTarget.Sample(texSampler, uv);
 
     const float3 tonemappedColor = applyTonemapping(pathTracingColor.rgb);
-    return tonemappedColor;
+    return float4(tonemappedColor, 1);
 }
 
-float4 psMain(PsIn psIn) : SV_Target
+float4 getDebugOutputColor(float2 uv)
 {
-    float3 finalColor = 0;
+    float4 debugColor = 0;
 
-    switch ((DebugView) renderParams.debugView)
+    switch (debugParams.debugOutputNumChannels)
     {
-        case DebugView::DIFFUSE_ALBEDO:
+        case 4:
         {
-            Texture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.srv.diffuseAlbedoTargetIdx];
-            finalColor = diffuseAlbedoTarget.Sample(texSampler, psIn.uv).rgb;
+            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            debugColor = debugTexture.Sample(texSampler, uv).rgba;
             break;
         }
-        case DebugView::OFF:
-        default:
+        case 3:
         {
-            finalColor = getPathTracingFinalColor(psIn.uv);
+            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rgb, 1);
+            break;
+        }
+        case 2:
+        {
+            Texture2D<float2> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rg, 0, 1);
+            break;
+        }
+        case 1:
+        {
+            Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rrr, 1);
             break;
         }
     }
 
-    return float4(finalColor, 1);
+    debugColor.rgb *= debugParams.debugOutputScale;
+    return debugColor;
+}
+
+float4 psMain(PsIn psIn) : SV_Target
+{
+    float4 finalColor = 0;
+
+    if (debugParams.debugOutputSrvIdx == ~0u)
+    {
+        finalColor = getPathTracingFinalColor(psIn.uv);
+    }
+    else
+    {
+        finalColor = getDebugOutputColor(psIn.uv);
+    }
+
+    return finalColor;
 }

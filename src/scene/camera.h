@@ -29,16 +29,21 @@ class Camera
 private:
     CameraParams params{};
 
+    bool isViewProjDirty{ true };
+
     float phi{ 0 };
     float theta{ std::numbers::pi_v<float> };
 
     float defaultFovYRadians{ 0 };
     float currentFovYRadians{ 0 };
+    float aspectRatio{ 1.f };
 
     void setDirectionVectorsFromAngles();
 
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
+
+    void setViewProjMat();
 
 public:
     void init(float defaultFovYRadians);
@@ -46,4 +51,5 @@ public:
     void copyParamsTo(CameraParams* dest) const;
 
     void processPlayerInput(const PlayerInput& input, double deltaTime);
+    void setAspectRatio(float aspectRatio);
 };

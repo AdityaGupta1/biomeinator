@@ -31,7 +31,7 @@ namespace SettingsManager
 
 using namespace cxxopts;
 
-using settingValue = std::variant<bool, int, uint32_t, std::string>;
+using settingValue = std::variant<bool, int, uint32_t, float, std::string>;
 static std::unordered_map<std::string, settingValue> settings;
 
 void parseArgs(const int argc, const char* const* argv)
@@ -48,6 +48,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
+    optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
 
     ParseResult parseResult = options.parse(argc, argv);
 
@@ -78,6 +79,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("enableMis", bool);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("debugView", std::string);
+    COPY_SETTING("debugViewScale", float);
 
 #undef COPY_SETTING
 
@@ -103,6 +105,11 @@ uint32_t getAsUint(const std::string& name)
     return std::get<uint32_t>(settings.at(name));
 }
 
+float getAsFloat(const std::string& name)
+{
+    return std::get<float>(settings.at(name));
+}
+
 std::string getAsString(const std::string& name)
 {
     return std::get<std::string>(settings.at(name));
@@ -119,6 +126,11 @@ void setAsInt(const std::string& name, int value)
 }
 
 void setAsUint(const std::string& name, uint32_t value)
+{
+    settings[name] = value;
+}
+
+void setAsFloat(const std::string& name, float value)
 {
     settings[name] = value;
 }

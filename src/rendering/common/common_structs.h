@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
+
+#define float4x4 DirectX::XMFLOAT4X4
 #endif // !_hlsl
 
 struct Vertex
@@ -116,6 +118,13 @@ public:
     {
         return emissiveColor * emissiveStrength;
     }
+
+    float3 getDiffuseAlbedo()
+    {
+        // this should technically include diffuse color as well but I doubt I'll have materials that are both emissive
+        // and diffuse
+        return (emissiveStrength > 0.f) ? getEmissiveColor() : baseColor;
+    }
 #else
     void setHasDiffuse(bool enable)
     {
@@ -165,6 +174,11 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint depthTargetIdx;
+        uint linearDepthTargetIdx;
+
+        uint motionTargetIdx;
+        uint debugTargetIdx;
         uint pad1;
         uint pad2;
     } uav;
@@ -173,6 +187,11 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint depthTargetIdx;
+        uint linearDepthTargetIdx;
+
+        uint motionTargetIdx;
+        uint debugTargetIdx;
         uint pad1;
         uint pad2;
     } srv;
@@ -188,11 +207,14 @@ struct ConstantParams
 
 struct CameraParams
 {
+    float4x4 viewProjMat;
+    float4x4 prevViewProjMat;
+
     float3 pos_WS;
-    uint pad0;
+    float nearPlane;
 
     float3 forward_WS;
-    uint pad1;
+    float farPlane;
 
     float3 right_WS;
     uint pad2;
@@ -219,12 +241,6 @@ enum class Tonemapping : uint
     COUNT
 };
 
-enum class DebugView : uint
-{
-    OFF,
-    DIFFUSE_ALBEDO,
-};
-
 struct RenderParams
 {
     uint frameNumber;
@@ -233,9 +249,17 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint debugView;
+    uint pad0;
     uint pad1;
     uint pad2;
+};
+
+struct DebugParams
+{
+    uint debugOutputSrvIdx;
+    uint debugOutputNumChannels;
+    float debugOutputScale;
+    uint pad0;
 };
 
 #if !_hlsl

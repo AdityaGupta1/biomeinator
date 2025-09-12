@@ -254,8 +254,49 @@ void initSwapChain()
     factory.Reset();
 }
 
-RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
-RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, true /*hasUav*/, true /*hasSrv*/ };
+RtTarget pathTracingTarget{
+    L"pathTracingTarget",
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    3, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget diffuseAlbedoTarget{
+    L"diffuseAlbedoTarget",
+    DXGI_FORMAT_R16G16B16A16_FLOAT,
+    3, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget depthTarget{
+    L"depthTarget",
+    DXGI_FORMAT_R16_FLOAT,
+    1, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget linearDepthTarget{
+    L"linearDepthTarget",
+    DXGI_FORMAT_R16_FLOAT,
+    1, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+RtTarget motionTarget{
+    L"motionTarget",
+    DXGI_FORMAT_R16G16_FLOAT,
+    2, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+
+RtTarget debugTarget{
+    L"debugTarget",
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    4, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
 
 std::vector<RtTarget*> rtTargets;
 
@@ -263,6 +304,11 @@ void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
+    rtTargets.push_back(&depthTarget);
+    rtTargets.push_back(&linearDepthTarget);
+    rtTargets.push_back(&motionTarget);
+
+    rtTargets.push_back(&debugTarget);
 
     resize();
 }
@@ -283,6 +329,10 @@ void resize()
     GetClientRect(hwnd, &rect);
     const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
+
+    // will be different than viewportWidth/Height after adding DLSS super resolution
+    const uint32_t renderWidth = viewportWidth;
+    const uint32_t renderHeight = viewportHeight;
 
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
@@ -310,7 +360,7 @@ void resize()
     for (RtTarget* rtTarget : rtTargets)
     {
         rtTarget->reset();
-        rtTarget->setDimensions(viewportWidth, viewportHeight);
+        rtTarget->setDimensions(renderWidth, renderHeight);
         rtTarget->init();
     }
 
@@ -319,13 +369,25 @@ void resize()
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
+            .depthTargetIdx = depthTarget.getUavIdx(),
+            .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+            .motionTargetIdx = motionTarget.getUavIdx(),
+
+            .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
         frame.paramBlockManager.heapIndices->srv = {
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
+            .depthTargetIdx = depthTarget.getSrvIdx(),
+            .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+            .motionTargetIdx = motionTarget.getSrvIdx(),
+
+            .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
+
+    camera.setAspectRatio(static_cast<float>(renderHeight) / static_cast<float>(renderWidth));
 }
 
 void initCommand()
@@ -847,11 +909,23 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
-static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
-static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo" };
-static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
-    { "off", DebugView::OFF },
-    { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
+static const std::vector<const char*> tonemappingComboOptions = {
+    "none",
+    "standard",
+    "AgX",
+    "Khronos PBR neutral",
+};
+static const std::vector<const char*> debugViewComboOptions = {
+    "off", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
+};
+static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
+    { "off", nullptr },
+    { "diffuseAlbedo", &diffuseAlbedoTarget },
+    { "depth", &depthTarget },
+    { "linearDepth", &linearDepthTarget },
+    { "motion", &motionTarget },
+
+    { "debug", &debugTarget },
 };
 
 void imguiBeginFrame()
@@ -874,6 +948,7 @@ void imguiBeginFrame()
     if (ImGui::CollapsingHeader("Debug"))
     {
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+        SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
     }
 
     ImGui::End();
@@ -922,12 +997,24 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
 
+    RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
-    renderParams->debugView = static_cast<uint32_t>(DebugView::OFF);
     if (debugViewComboMap.contains(debugViewSettingStr))
     {
-        renderParams->debugView = static_cast<uint32_t>(debugViewComboMap.at(debugViewSettingStr));
+        debugOutputTarget = debugViewComboMap.at(debugViewSettingStr);
     }
+
+    auto& debugParams = paramBlockManager.debugParams;
+    if (debugOutputTarget == nullptr)
+    {
+        debugParams->debugOutputSrvIdx = ~0u;
+    }
+    else
+    {
+        debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
+        debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
+    }
+    debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
@@ -956,8 +1043,13 @@ void render()
         cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
         // clang-format on
 
-        pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        diffuseAlbedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        for (RtTarget* rtTarget : rtTargets)
+        {
+            if (rtTarget->hasUav)
+            {
+                rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            }
+        }
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         rtDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -982,8 +1074,13 @@ void render()
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-    pathTracingTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    diffuseAlbedoTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    for (RtTarget* rtTarget : rtTargets)
+    {
+        if (rtTarget->hasSrv)
+        {
+            rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
+    }
 
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);
