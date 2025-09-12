@@ -167,6 +167,11 @@ struct HeapIndices
         uint diffuseAlbedoTargetIdx;
         uint depthTargetIdx;
         uint linearDepthTargetIdx;
+
+        uint debugTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
     } uav;
 
     struct
@@ -175,6 +180,11 @@ struct HeapIndices
         uint diffuseAlbedoTargetIdx;
         uint depthTargetIdx;
         uint linearDepthTargetIdx;
+
+        uint debugTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
     } srv;
 };
 
@@ -224,7 +234,8 @@ enum class DebugView : uint
     OFF,
     DIFFUSE_ALBEDO,
     DEPTH,
-    LINEAR_DEPTH
+    LINEAR_DEPTH,
+    DEBUG
 };
 
 struct RenderParams

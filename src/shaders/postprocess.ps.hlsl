@@ -60,6 +60,9 @@ float4 psMain(PsIn psIn) : SV_Target
         debugTextureIdx = heapIndices.srv.linearDepthTargetIdx;
         debugTextureChannels = 1;
         break;
+    case DebugView::DEBUG:
+        debugTextureIdx = heapIndices.srv.debugTargetIdx;
+        break;
     case DebugView::OFF:
     default:
         finalColor = getPathTracingFinalColor(psIn.uv);

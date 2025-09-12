@@ -279,6 +279,13 @@ RtTarget linearDepthTarget{
     true /*hasSrv*/,
 };
 
+RtTarget debugTarget{
+    L"debugTarget",
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
+
 std::vector<RtTarget*> rtTargets;
 
 void initRtTargets()
@@ -287,6 +294,7 @@ void initRtTargets()
     rtTargets.push_back(&diffuseAlbedoTarget);
     rtTargets.push_back(&depthTarget);
     rtTargets.push_back(&linearDepthTarget);
+    rtTargets.push_back(&debugTarget);
 
     resize();
 }
@@ -345,6 +353,7 @@ void resize()
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
             .depthTargetIdx = depthTarget.getUavIdx(),
             .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+            .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
         frame.paramBlockManager.heapIndices->srv = {
@@ -352,6 +361,7 @@ void resize()
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
             .depthTargetIdx = depthTarget.getSrvIdx(),
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+            .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
 }
@@ -876,12 +886,13 @@ void finalizeQueuedScreenshot()
 }
 
 static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
-static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo", "depth", "linearDepth" };
+static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo", "depth", "linearDepth", "debug" };
 static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
     { "off", DebugView::OFF },
     { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
     { "depth", DebugView::DEPTH },
     { "linearDepth", DebugView::LINEAR_DEPTH },
+    { "debug", DebugView::DEBUG },
 };
 
 void imguiBeginFrame()

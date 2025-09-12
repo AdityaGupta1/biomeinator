@@ -29,3 +29,8 @@ cbuffer GlobalParams : REGISTER_B(RT_REGISTER_GLOBAL_PARAMS, RT_REGISTER_SPACE)
     SceneParams sceneParams;
     RenderParams renderParams;
 };
+
+RWTexture2D<float4> getDebugTexture()
+{
+    return ResourceDescriptorHeap[heapIndices.uav.debugTargetIdx];
+}
