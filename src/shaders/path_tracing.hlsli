@@ -61,10 +61,10 @@ void outputGuideBuffers(const Payload payload)
 {
     const uint2 pixelIdx = payload.pixelIdx;
 
-    float3 diffuseAlbedo = 0;
+    float3 diffuseAlbedo = 0.f;
     float depth = 1.f;
     float linearDepth = 100000.f;
-    float2 motion;
+    float2 motion = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {

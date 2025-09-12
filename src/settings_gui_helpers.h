@@ -116,6 +116,18 @@ inline void ComboUint(const char* label, const char* settingName, const std::vec
     }
 }
 
+inline void SliderFloat(const char* label, const char* settingName, float minVal, float maxVal)
+{
+    ScopedItemWidth width(sliderWidth);
+
+    float value = SettingsManager::getAsFloat(settingName);
+    if (ImGui::SliderFloat(label, &value, minVal, maxVal))
+    {
+        value = std::clamp(value, minVal, maxVal);
+        SettingsManager::setAsFloat(settingName, value);
+    }
+}
+
 inline void ComboString(const char* label, const char* settingName, const std::vector<const char*>& items)
 {
     ScopedItemWidth width(comboWidth);

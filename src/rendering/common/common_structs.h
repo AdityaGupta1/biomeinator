@@ -274,7 +274,7 @@ struct DebugParams
 {
     uint debugOutputSrvIdx;
     uint debugOutputChannels;
-    uint pad0;
+    float debugOutputScale;
     uint pad1;
 };
 

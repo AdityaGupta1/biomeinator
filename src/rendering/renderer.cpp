@@ -940,6 +940,7 @@ void imguiBeginFrame()
     if (ImGui::CollapsingHeader("Debug"))
     {
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+        SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
     }
 
     ImGui::End();
@@ -1024,6 +1025,7 @@ void render()
     auto& debugParams = paramBlockManager.debugParams;
     debugParams->debugOutputSrvIdx = debugOutputSrvIdx;
     debugParams->debugOutputChannels = debugOutputChannels;
+    debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();

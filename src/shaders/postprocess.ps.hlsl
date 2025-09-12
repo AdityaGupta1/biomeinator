@@ -41,31 +41,38 @@ float4 getPathTracingFinalColor(float2 uv)
 
 float4 getDebugOutputColor(float2 uv)
 {
+    float4 debugColor = 0;
+
     switch (debugParams.debugOutputChannels)
     {
         case 4:
         {
             Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            return debugTexture.Sample(texSampler, uv).rgba;
+            debugColor = debugTexture.Sample(texSampler, uv).rgba;
+            break;
         }
         case 3:
         {
             Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            return float4(debugTexture.Sample(texSampler, uv).rgb, 1);
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rgb, 1);
+            break;
         }
         case 2:
         {
             Texture2D<float2> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            return float4(debugTexture.Sample(texSampler, uv).rg, 0, 1);
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rg, 0, 1);
+            break;
         }
         case 1:
         {
             Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            return float4(debugTexture.Sample(texSampler, uv).rrr, 1);
+            debugColor = float4(debugTexture.Sample(texSampler, uv).rrr, 1);
+            break;
         }
     }
 
-    return 0;
+    debugColor.rgb *= debugParams.debugOutputScale;
+    return debugColor;
 }
 
 float4 psMain(PsIn psIn) : SV_Target
