@@ -15,3 +15,4 @@ PenaltyReturnTypeOnItsOwnLine: 100000
 SpaceAfterTemplateKeyword: false
 AlignTrailingComments:
     Kind: Never
+IndentCaseLabels: true

@@ -219,34 +219,34 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         size_t componentSize = 0;
         switch (accessor.componentType)
         {
-        case TINYGLTF_COMPONENT_TYPE_FLOAT:
-            componentSize = 4;
-            break;
-        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-            componentSize = 2;
-            break;
-        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-            componentSize = 4;
-            break;
-        default:
-            componentSize = 4;
-            break;
+            case TINYGLTF_COMPONENT_TYPE_FLOAT:
+                componentSize = 4;
+                break;
+            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                componentSize = 2;
+                break;
+            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+                componentSize = 4;
+                break;
+            default:
+                componentSize = 4;
+                break;
         }
 
         int numComponents = 1;
         switch (accessor.type)
         {
-        case TINYGLTF_TYPE_VEC2:
-            numComponents = 2;
-            break;
-        case TINYGLTF_TYPE_VEC3:
-            numComponents = 3;
-            break;
-        case TINYGLTF_TYPE_VEC4:
-            numComponents = 4;
-            break;
-        default:
-            break;
+            case TINYGLTF_TYPE_VEC2:
+                numComponents = 2;
+                break;
+            case TINYGLTF_TYPE_VEC3:
+                numComponents = 3;
+                break;
+            case TINYGLTF_TYPE_VEC4:
+                numComponents = 4;
+                break;
+            default:
+                break;
         }
 
         return componentSize * static_cast<size_t>(numComponents);
@@ -356,17 +356,17 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     uint32_t idx = 0;
                     switch (idxAccessor.componentType)
                     {
-                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-                        idx = *(reinterpret_cast<const uint8_t*>(idxData + idxStride * i));
-                        break;
-                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-                        idx = *(reinterpret_cast<const uint16_t*>(idxData + idxStride * i));
-                        break;
-                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-                        idx = *(reinterpret_cast<const uint32_t*>(idxData + idxStride * i));
-                        break;
-                    default:
-                        break;
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+                            idx = *(reinterpret_cast<const uint8_t*>(idxData + idxStride * i));
+                            break;
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                            idx = *(reinterpret_cast<const uint16_t*>(idxData + idxStride * i));
+                            break;
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+                            idx = *(reinterpret_cast<const uint32_t*>(idxData + idxStride * i));
+                            break;
+                        default:
+                            break;
                     }
                     instance->host_idxs[i] = idx;
                 }

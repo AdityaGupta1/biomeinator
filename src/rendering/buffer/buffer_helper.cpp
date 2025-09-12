@@ -33,18 +33,18 @@ ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
     D3D12_RESOURCE_STATES initialResourceState;
     switch (heapProperties->Type)
     {
-    case D3D12_HEAP_TYPE_UPLOAD:
-        initialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
-        break;
-    case D3D12_HEAP_TYPE_DEFAULT:
-        initialResourceState = D3D12_RESOURCE_STATE_COMMON;
-        break;
-    case D3D12_HEAP_TYPE_READBACK:
-        initialResourceState = D3D12_RESOURCE_STATE_COPY_DEST;
-        break;
-    default:
-        ASSERT(false, "Unsupported heap type");
-        return nullptr;
+        case D3D12_HEAP_TYPE_UPLOAD:
+            initialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
+            break;
+        case D3D12_HEAP_TYPE_DEFAULT:
+            initialResourceState = D3D12_RESOURCE_STATE_COMMON;
+            break;
+        case D3D12_HEAP_TYPE_READBACK:
+            initialResourceState = D3D12_RESOURCE_STATE_COPY_DEST;
+            break;
+        default:
+            ASSERT(false, "Unsupported heap type");
+            return nullptr;
     }
 
     return createBasicBuffer(width, heapProperties, initialResourceState, optionalFlags);

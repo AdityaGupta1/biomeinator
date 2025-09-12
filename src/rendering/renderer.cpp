@@ -996,28 +996,28 @@ void render()
     {
         switch ((DebugView)debugViewComboMap.at(debugViewSettingStr))
         {
-        case DebugView::DIFFUSE_ALBEDO:
-            debugOutputSrvIdx = diffuseAlbedoTarget.getSrvIdx();
-            break;
-        case DebugView::DEPTH:
-            debugOutputSrvIdx = depthTarget.getSrvIdx();
-            debugOutputChannels = 1;
-            break;
-        case DebugView::LINEAR_DEPTH:
-            debugOutputSrvIdx = linearDepthTarget.getSrvIdx();
-            debugOutputChannels = 1;
-            break;
-        case DebugView::DEBUG:
-            debugOutputSrvIdx = debugTarget.getSrvIdx();
-            debugOutputChannels = 4;
-            break;
-        case DebugView::MOTION:
-            debugOutputSrvIdx = motionTarget.getSrvIdx();
-            debugOutputChannels = 2;
-            break;
-        case DebugView::OFF:
-        default:
-            break;
+            case DebugView::DIFFUSE_ALBEDO:
+                debugOutputSrvIdx = diffuseAlbedoTarget.getSrvIdx();
+                break;
+            case DebugView::DEPTH:
+                debugOutputSrvIdx = depthTarget.getSrvIdx();
+                debugOutputChannels = 1;
+                break;
+            case DebugView::LINEAR_DEPTH:
+                debugOutputSrvIdx = linearDepthTarget.getSrvIdx();
+                debugOutputChannels = 1;
+                break;
+            case DebugView::DEBUG:
+                debugOutputSrvIdx = debugTarget.getSrvIdx();
+                debugOutputChannels = 4;
+                break;
+            case DebugView::MOTION:
+                debugOutputSrvIdx = motionTarget.getSrvIdx();
+                debugOutputChannels = 2;
+                break;
+            case DebugView::OFF:
+            default:
+                break;
         }
     }
 
