@@ -58,6 +58,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx12.h>
 
+#include <sl.h>
+#include <sl_consts.h>
+#include <sl_security.h>
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -110,6 +114,14 @@ bool testMode = false;
 
 void init()
 {
+    const std::wstring slInterposerDllPath = Util::to_wstring(SL_INTERPOSER_DLL_PATH);
+    if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
+    {
+        fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
+        printf("Exiting...");
+        exit(0);
+    }
+
     initDevice();
     initDescriptorHeaps();
 
@@ -159,29 +171,37 @@ ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
+    auto slMod = LoadLibrary(SL_INTERPOSER_DLL_PATH);
+
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory2)(UINT, REFIID, void**);
+    typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
+    typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
+
+    auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
+    auto slCreateDXGIFactory1 = reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
+    auto slCreateDXGIFactory2 = reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
+    auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
+    auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
+
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
-    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
-    {
-        printf("Enabled debug layer\n");
-        debug->EnableDebugLayer();
-    }
+    CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
+    printf("Enabled debug layer\n");
+    debug->EnableDebugLayer();
 
-    if (SUCCEEDED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory))))
-    {
-        printf("Created debug factory\n");
-    }
-    else
-    {
-        printf("Failed to create debug factory, falling back to non-debug\n");
-    }
+#define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
+#else
+#define DXGI_FACTORY_FLAGS 0
 #endif
 
-    if (!factory)
+    if (SUCCEEDED(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory))))
     {
-        CHECK_HRESULT(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
         printf("Created factory\n");
     }
+
+#undef DXGI_FACTORY_FLAGS
 
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
@@ -194,7 +214,7 @@ void initDevice()
             continue;
         }
 
-        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
+        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
             printf("Selected adapter: %ls\n", desc.Description);
             break;

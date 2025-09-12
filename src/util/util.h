@@ -33,4 +33,9 @@ template<typename T> inline uint32_t convertByteSizeToCount(uint32_t sizeBytes)
     return sizeBytes / static_cast<uint32_t>(sizeof(T));
 }
 
+inline std::wstring to_wstring(const char* str)
+{
+    return std::wstring(str, str + std::strlen(str));
+}
+
 } // namespace Util
