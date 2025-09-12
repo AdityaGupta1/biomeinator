@@ -210,6 +210,9 @@ struct CameraParams
     float4x4 viewProjMat;
     float4x4 prevViewProjMat;
 
+    float2 jitter;
+    float2 prevJitter;
+
     float3 pos_WS;
     float nearPlane;
 
@@ -267,4 +270,6 @@ struct DebugParams
 
 #undef float2
 #undef float3
+
+#undef float4x4
 #endif // !_hlsl

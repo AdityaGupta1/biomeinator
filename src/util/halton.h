@@ -18,19 +18,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <cstdint>
+#include <DirectXMath.h>
 #include <vector>
 
-namespace Util
+class HaltonSequence
 {
+private:
+    std::vector<DirectX::XMFLOAT2> sequence;
+    uint32_t sequencePtr;
 
-template<typename T> inline uint32_t getVectorSizeBytes(const std::vector<T>& vec)
-{
-    return vec.size() * sizeof(T);
-}
+    void generateSequenceDimension(uint32_t dim, uint32_t base);
 
-template<typename T> inline uint32_t convertByteSizeToCount(uint32_t sizeBytes)
-{
-    return sizeBytes / static_cast<uint32_t>(sizeof(T));
-}
+public:
+    void init(uint32_t sequenceLength);
 
-} // namespace Util
+    DirectX::XMFLOAT2 next();
+};

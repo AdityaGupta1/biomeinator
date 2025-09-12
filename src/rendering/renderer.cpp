@@ -388,6 +388,11 @@ void resize()
     }
 
     camera.setAspectRatio(static_cast<float>(renderHeight) / static_cast<float>(renderWidth));
+
+    const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderWidth);
+    const uint32_t jitterHaltonSequenceLength =
+        static_cast<uint32_t>(ceilf(8 * (dlssScaleFactor * dlssScaleFactor)));
+    camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 }
 
 void initCommand()
@@ -984,10 +989,16 @@ void render()
 
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
-    if (!testMode)
+    PlayerInput playerInput;
+    if (testMode)
     {
-        camera.processPlayerInput(WindowManager::getPlayerInput(), deltaTime);
+        playerInput = {};
     }
+    else
+    {
+        playerInput = WindowManager::getPlayerInput();
+    }
+    camera.update(playerInput, deltaTime);
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
     auto& renderParams = paramBlockManager.renderParams;

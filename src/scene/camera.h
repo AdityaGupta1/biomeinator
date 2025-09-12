@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
 #include "rendering/common/common_structs.h"
+#include "util/halton.h"
 
 #include <numbers>
 
@@ -30,6 +31,8 @@ private:
     CameraParams params{};
 
     bool isViewProjDirty{ true };
+
+    HaltonSequence jitterHalton;
 
     float phi{ 0 };
     float theta{ std::numbers::pi_v<float> };
@@ -48,8 +51,10 @@ private:
 public:
     void init(float defaultFovYRadians);
 
-    void copyParamsTo(CameraParams* dest) const;
+    void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
-    void processPlayerInput(const PlayerInput& input, double deltaTime);
+    void update(const PlayerInput& input, double deltaTime);
     void setAspectRatio(float aspectRatio);
+
+    void copyParamsTo(CameraParams* dest) const;
 };

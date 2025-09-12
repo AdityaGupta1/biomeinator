@@ -37,6 +37,11 @@ void Camera::init(float defaultFovYRadians)
     this->params.farPlane = 10000.f;
 }
 
+void Camera::setJitterHaltonSequenceLength(uint32_t sequenceLength)
+{
+    this->jitterHalton.init(sequenceLength);
+}
+
 void Camera::setDirectionVectorsFromAngles()
 {
     const float cosPhi = cosf(phi);
@@ -99,7 +104,7 @@ constexpr float mouseSensitivity = 0.16f;
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
 
-void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
+void Camera::update(const PlayerInput& input, double deltaTime)
 {
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {
@@ -143,15 +148,18 @@ void Camera::processPlayerInput(const PlayerInput& input, double deltaTime)
         this->setViewProjMat();
         this->isViewProjDirty = false;
     }
-}
 
-void Camera::copyParamsTo(CameraParams* dest) const
-{
-    memcpy(dest, &this->params, sizeof(CameraParams));
+    this->params.prevJitter = this->params.jitter;
+    this->params.jitter = this->jitterHalton.next();
 }
 
 void Camera::setAspectRatio(float aspectRatio)
 {
     this->aspectRatio = aspectRatio;
     this->isViewProjDirty = true;
+}
+
+void Camera::copyParamsTo(CameraParams* dest) const
+{
+    memcpy(dest, &this->params, sizeof(CameraParams));
 }
