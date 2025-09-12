@@ -180,6 +180,7 @@ set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxil.dll"
     "${STREAMLINE_DLL_DIR}/sl.interposer.dll"
     "${STREAMLINE_DLL_DIR}/sl.dlss.dll"
+    "${STREAMLINE_DLL_DIR}/nvngx_dlss.dll"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD
