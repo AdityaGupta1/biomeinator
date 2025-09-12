@@ -64,6 +64,7 @@ void outputGuideBuffers(const Payload payload)
     float3 diffuseAlbedo = 0;
     float depth = 1.f;
     float linearDepth = 100000.f;
+    float2 motion;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -75,6 +76,12 @@ void outputGuideBuffers(const Payload payload)
         depth = ndc.z;
 
         linearDepth = distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS);
+
+        motion = float2(1, 0); // TODO: hit motion
+    }
+    else
+    {
+        motion = float2(0, 1); // TODO: miss motion
     }
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
@@ -85,6 +92,9 @@ void outputGuideBuffers(const Payload payload)
 
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;
+
+    RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
+    motionTarget[pixelIdx] = motion;
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)

@@ -278,6 +278,12 @@ RtTarget linearDepthTarget{
     true /*hasUav*/,
     true /*hasSrv*/,
 };
+RtTarget motionTarget{
+    L"motionTarget",
+    DXGI_FORMAT_R16G16_FLOAT,
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
 
 RtTarget debugTarget{
     L"debugTarget",
@@ -294,6 +300,8 @@ void initRtTargets()
     rtTargets.push_back(&diffuseAlbedoTarget);
     rtTargets.push_back(&depthTarget);
     rtTargets.push_back(&linearDepthTarget);
+    rtTargets.push_back(&motionTarget);
+
     rtTargets.push_back(&debugTarget);
 
     resize();
@@ -355,6 +363,8 @@ void resize()
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
             .depthTargetIdx = depthTarget.getUavIdx(),
             .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+            .motionTargetIdx = motionTarget.getUavIdx(),
+
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -363,6 +373,8 @@ void resize()
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
             .depthTargetIdx = depthTarget.getSrvIdx(),
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+            .motionTargetIdx = motionTarget.getSrvIdx(),
+
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -889,13 +901,22 @@ void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
-static const std::vector<const char*> tonemappingComboOptions = { "none", "standard", "AgX", "Khronos PBR neutral" };
-static const std::vector<const char*> debugViewComboOptions = { "off", "diffuseAlbedo", "depth", "linearDepth", "debug" };
+static const std::vector<const char*> tonemappingComboOptions = {
+    "none",
+    "standard",
+    "AgX",
+    "Khronos PBR neutral",
+};
+static const std::vector<const char*> debugViewComboOptions = {
+    "off", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
+};
 static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
     { "off", DebugView::OFF },
     { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
     { "depth", DebugView::DEPTH },
     { "linearDepth", DebugView::LINEAR_DEPTH },
+    { "motion", DebugView::MOTION },
+
     { "debug", DebugView::DEBUG },
 };
 
@@ -989,6 +1010,10 @@ void render()
         case DebugView::DEBUG:
             debugOutputSrvIdx = debugTarget.getSrvIdx();
             debugOutputChannels = 4;
+            break;
+        case DebugView::MOTION:
+            debugOutputSrvIdx = motionTarget.getSrvIdx();
+            debugOutputChannels = 2;
             break;
         case DebugView::OFF:
         default:

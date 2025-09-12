@@ -41,20 +41,28 @@ float4 getPathTracingFinalColor(float2 uv)
 
 float4 getDebugOutputColor(float2 uv)
 {
-    if (debugParams.debugOutputChannels == 4)
+    switch (debugParams.debugOutputChannels)
     {
-        Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-        return debugTexture.Sample(texSampler, uv).rgba;
-    }
-    else if (debugParams.debugOutputChannels == 3)
-    {
-        Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-        return float4(debugTexture.Sample(texSampler, uv).rgb, 1);
-    }
-    else if (debugParams.debugOutputChannels == 1)
-    {
-        Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-        return float4(debugTexture.Sample(texSampler, uv).rrr, 1);
+        case 4:
+        {
+            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            return debugTexture.Sample(texSampler, uv).rgba;
+        }
+        case 3:
+        {
+            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            return float4(debugTexture.Sample(texSampler, uv).rgb, 1);
+        }
+        case 2:
+        {
+            Texture2D<float2> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            return float4(debugTexture.Sample(texSampler, uv).rg, 0, 1);
+        }
+        case 1:
+        {
+            Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
+            return float4(debugTexture.Sample(texSampler, uv).rrr, 1);
+        }
     }
 
     return 0;
