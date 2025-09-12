@@ -273,6 +273,12 @@ void initDevice()
 
         if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
+            sl::AdapterInfo adapterInfo{};
+            adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
+            adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
+
+            CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo));
+
             printf("Selected adapter: %ls\n", desc.Description);
             break;
         }
@@ -397,6 +403,8 @@ std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
 
+sl::ViewportHandle slViewport{ 1738 }; // TODO: does this need to be a meaningful number?
+
 void resize()
 {
     if (!swapChain)
@@ -409,12 +417,29 @@ void resize()
     const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
-    // will be different than viewport width/height after adding DLSS super resolution
-    const uint32_t renderWidth = viewportWidth;
-    const uint32_t renderHeight = viewportHeight;
-
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
+
+    sl::DLSSOptimalSettings dlssSettings;
+    sl::DLSSOptions dlssOptions;
+    dlssOptions.mode = sl::DLSSMode::eBalanced;
+    dlssOptions.outputWidth = viewportWidth;
+    dlssOptions.outputHeight = viewportHeight;
+    CHECK_SL_RESULT(slDLSSGetOptimalSettings(dlssOptions, dlssSettings));
+
+    const uint32_t renderWidth = dlssSettings.optimalRenderWidth;
+    const uint32_t renderHeight = dlssSettings.optimalRenderHeight;
+
+    dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
+    dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
+    dlssOptions.balancedPreset = sl::DLSSPreset::ePresetK;
+    dlssOptions.performancePreset = sl::DLSSPreset::ePresetK;
+    dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetF;
+    dlssOptions.sharpness = dlssSettings.optimalSharpness;
+    dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+    dlssOptions.useAutoExposure = sl::Boolean::eTrue; // TODO: use actual exposure texture
+    dlssOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+    CHECK_SL_RESULT(slDLSSSetOptions(slViewport, dlssOptions));
 
     flush();
 
@@ -1266,7 +1291,7 @@ void destroy()
 
     flush();
 
-    // TODO: slShutdown()
+    CHECK_SL_RESULT(slShutdown());
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
