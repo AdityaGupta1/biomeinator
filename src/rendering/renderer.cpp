@@ -922,14 +922,14 @@ static const std::vector<const char*> tonemappingComboOptions = {
 static const std::vector<const char*> debugViewComboOptions = {
     "off", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
 };
-static const std::unordered_map<std::string, DebugView> debugViewComboMap = {
-    { "off", DebugView::OFF },
-    { "diffuseAlbedo", DebugView::DIFFUSE_ALBEDO },
-    { "depth", DebugView::DEPTH },
-    { "linearDepth", DebugView::LINEAR_DEPTH },
-    { "motion", DebugView::MOTION },
+static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
+    { "off", nullptr },
+    { "diffuseAlbedo", &diffuseAlbedoTarget },
+    { "depth", &depthTarget },
+    { "linearDepth", &linearDepthTarget },
+    { "motion", &motionTarget },
 
-    { "debug", DebugView::DEBUG },
+    { "debug", &debugTarget },
 };
 
 void imguiBeginFrame()
@@ -1005,27 +1005,7 @@ void render()
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (debugViewComboMap.contains(debugViewSettingStr))
     {
-        switch ((DebugView)debugViewComboMap.at(debugViewSettingStr))
-        {
-            case DebugView::DIFFUSE_ALBEDO:
-                debugOutputTarget = &diffuseAlbedoTarget;
-                break;
-            case DebugView::DEPTH:
-                debugOutputTarget = &depthTarget;
-                break;
-            case DebugView::LINEAR_DEPTH:
-                debugOutputTarget = &linearDepthTarget;
-                break;
-            case DebugView::MOTION:
-                debugOutputTarget = &motionTarget;
-                break;
-            case DebugView::DEBUG:
-                debugOutputTarget = &debugTarget;
-                break;
-            case DebugView::OFF:
-            default:
-                break;
-        }
+        debugOutputTarget = debugViewComboMap.at(debugViewSettingStr);
     }
 
     auto& debugParams = paramBlockManager.debugParams;

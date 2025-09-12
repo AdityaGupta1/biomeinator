@@ -241,17 +241,6 @@ enum class Tonemapping : uint
     COUNT
 };
 
-enum class DebugView : uint
-{
-    OFF,
-    DIFFUSE_ALBEDO,
-    DEPTH,
-    LINEAR_DEPTH,
-    MOTION,
-
-    DEBUG
-};
-
 struct RenderParams
 {
     uint frameNumber;
