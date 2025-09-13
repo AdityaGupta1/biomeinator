@@ -341,80 +341,18 @@ void initSwapChain()
     factory.Reset();
 }
 
-RtTarget pathTracingTarget{
-    L"pathTracingTarget",
-    DXGI_FORMAT_R32G32B32A32_FLOAT,
-    3, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-};
-RtTarget diffuseAlbedoTarget{
-    L"diffuseAlbedoTarget",
-    DXGI_FORMAT_R16G16B16A16_FLOAT,
-    3, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-};
-RtTarget specularAlbedoTarget{
-    L"specularAlbedoTarget",
-    DXGI_FORMAT_R16G16B16A16_FLOAT,
-    3, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget depthTarget{
-    L"depthTarget",
-    DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-};
-RtTarget linearDepthTarget{
-    L"linearDepthTarget",
-    DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-};
-RtTarget normalsAndRoughnessTarget{
-    L"normalsAndRoughnessTarget",
-    DXGI_FORMAT_R16G16B16A16_FLOAT,
-    3, /*debugOutputNumChannels*/ // should really be 4 but it would be mostly transparent then
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget motionTarget{
-    L"motionTarget",
-    DXGI_FORMAT_R16G16_FLOAT,
-    2, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-};
+RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R16_FLOAT, 1 };
+RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R16_FLOAT, 1 };
+// should really be 4 debug channels but it would be mostly transparent then
+RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+RtTarget specularMotionTarget{ L"specularMotionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 
-RtTarget dlssOutputTarget{
-    L"dlssOutputTarget",
-    DXGI_FORMAT_R32G32B32A32_FLOAT,
-    4, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-    true, /*isFullSize*/
-};
-RtTarget specularMotionTarget{
-    L"specularMotionTarget",
-    DXGI_FORMAT_R16G16_FLOAT,
-    2, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-
-RtTarget debugTarget{
-    L"debugTarget",
-    DXGI_FORMAT_R32G32B32A32_FLOAT,
-    4, /*debugOutputNumChannels*/
-    true, /*hasUav*/
-    true, /*hasSrv*/
-    true, /*isFullSize*/
-};
+RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
 std::vector<RtTarget*> rtTargets;
 

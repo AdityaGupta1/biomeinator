@@ -28,17 +28,17 @@ private:
 public:
     const uint32_t debugOutputNumChannels;
 
+    const bool isFullSize;
+
     const bool hasUav;
     const bool hasSrv;
-
-    const bool isFullSize;
 
     RtTarget(const std::wstring& name,
              DXGI_FORMAT format,
              uint32_t debugOutputNumChannels,
-             bool hasUav,
-             bool hasSrv,
-             bool isFullSize = false);
+             bool isFullSize = false,
+             bool hasUav = true,
+             bool hasSrv = true);
 
     void setDimensions(uint32_t width, uint32_t height);
 
