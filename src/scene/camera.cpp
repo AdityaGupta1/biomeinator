@@ -181,11 +181,6 @@ void Camera::setAspectRatio(float aspectRatio)
     this->areMatricesDirty = true;
 }
 
-inline sl::float2 toSlFloat2(const DirectX::XMFLOAT2& v)
-{
-    return { v.x, v.y };
-}
-
 inline sl::float3 toSlFloat3(const DirectX::XMFLOAT3& v)
 {
     return { v.x, v.y, v.z };
@@ -208,7 +203,7 @@ void Camera::copySlConstantsTo(sl::Constants* constants)
     constants->clipToPrevClip = toSlFloat4x4(this->dlssMatrices.clipToPrevClipMat);
     constants->prevClipToClip = toSlFloat4x4(this->dlssMatrices.prevClipToClipMat);
 
-    constants->jitterOffset = toSlFloat2(this->params.jitter);
+    constants->jitterOffset = { 0.5f - this->params.jitter.x, 0.5f - this->params.jitter.y };
     constants->mvecScale = { 1, 1 };
     constants->cameraPos = toSlFloat3(this->params.pos_WS);
     constants->cameraUp = toSlFloat3(this->params.up_WS);

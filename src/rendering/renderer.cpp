@@ -60,7 +60,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <sl.h>
 #include <sl_consts.h>
-#include <sl_dlss.h>
+#include <sl_dlss_d.h>
 #include <sl_security.h>
 
 #ifdef _DEBUG
@@ -212,7 +212,7 @@ void initStreamline()
     prefs.logLevel = sl::LogLevel::eDefault;
 #endif
 
-    const sl::Feature features[] = { sl::kFeatureDLSS };
+    const sl::Feature features[] = { sl::kFeatureDLSS_RR };
     prefs.featuresToLoad = features;
     prefs.numFeaturesToLoad = _countof(features);
 
@@ -279,7 +279,7 @@ void initDevice()
             adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
             adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
 
-            CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo));
+            CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
 
             printf("Selected adapter: %ls\n", desc.Description);
             break;
@@ -355,6 +355,13 @@ RtTarget diffuseAlbedoTarget{
     true, /*hasUav*/
     true, /*hasSrv*/
 };
+RtTarget specularAlbedoTarget{
+    L"specularAlbedoTarget",
+    DXGI_FORMAT_R16G16B16A16_FLOAT,
+    3, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
 RtTarget depthTarget{
     L"depthTarget",
     DXGI_FORMAT_R16_FLOAT,
@@ -368,6 +375,13 @@ RtTarget linearDepthTarget{
     1, /*debugOutputNumChannels*/
     true, /*hasUav*/
     true, /*hasSrv*/
+};
+RtTarget normalsAndRoughnessTarget{
+    L"normalsAndRoughnessTarget",
+    DXGI_FORMAT_R16G16B16A16_FLOAT,
+    3, /*debugOutputNumChannels*/ // should really be 4 but it would be mostly transparent then
+    true /*hasUav*/,
+    true /*hasSrv*/,
 };
 RtTarget motionTarget{
     L"motionTarget",
@@ -385,6 +399,13 @@ RtTarget dlssOutputTarget{
     true, /*hasSrv*/
     true, /*isFullSize*/
 };
+RtTarget specularMotionTarget{
+    L"specularMotionTarget",
+    DXGI_FORMAT_R16G16_FLOAT,
+    2, /*debugOutputNumChannels*/
+    true /*hasUav*/,
+    true /*hasSrv*/,
+};
 
 RtTarget debugTarget{
     L"debugTarget",
@@ -401,9 +422,12 @@ void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
+    rtTargets.push_back(&specularAlbedoTarget);
     rtTargets.push_back(&depthTarget);
     rtTargets.push_back(&linearDepthTarget);
+    rtTargets.push_back(&normalsAndRoughnessTarget);
     rtTargets.push_back(&motionTarget);
+    rtTargets.push_back(&specularMotionTarget);
 
     rtTargets.push_back(&dlssOutputTarget);
     rtTargets.push_back(&debugTarget);
@@ -437,28 +461,28 @@ void resize()
 
     slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
-    sl::DLSSOptimalSettings dlssSettings;
-    sl::DLSSOptions dlssOptions;
-    dlssOptions.mode = sl::DLSSMode::eBalanced; // TODO: expose this in the GUI
-    dlssOptions.outputWidth = viewportWidth;
-    dlssOptions.outputHeight = viewportHeight;
-    CHECK_SL_RESULT(slDLSSGetOptimalSettings(dlssOptions, dlssSettings));
+    sl::DLSSDOptimalSettings dlssdSettings;
+    sl::DLSSDOptions dlssdOptions;
+    dlssdOptions.mode = sl::DLSSMode::eBalanced; // TODO: expose this in the GUI
+    dlssdOptions.outputWidth = viewportWidth;
+    dlssdOptions.outputHeight = viewportHeight;
+    CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
 
-    const uint32_t renderWidth = dlssSettings.optimalRenderWidth;
-    const uint32_t renderHeight = dlssSettings.optimalRenderHeight;
+    const uint32_t renderWidth = dlssdSettings.optimalRenderWidth;
+    const uint32_t renderHeight = dlssdSettings.optimalRenderHeight;
 
     slRenderExtent = { 0, 0, renderWidth, renderHeight };
 
-    dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
-    dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
-    dlssOptions.balancedPreset = sl::DLSSPreset::ePresetK;
-    dlssOptions.performancePreset = sl::DLSSPreset::ePresetK;
-    dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetF;
-    dlssOptions.sharpness = dlssSettings.optimalSharpness;
-    dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
-    dlssOptions.useAutoExposure = sl::Boolean::eTrue; // TODO: use actual exposure texture
-    dlssOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
-    CHECK_SL_RESULT(slDLSSSetOptions(slViewport, dlssOptions));
+    dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
+    dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
+    dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
+    dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
+    dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+    dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
+    dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+    // TODO: exposure?
+    dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+    CHECK_SL_RESULT(slDLSSDSetOptions(slViewport, dlssdOptions));
 
     flush();
 
@@ -499,9 +523,13 @@ void resize()
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
+            .specularAlbedoTargetIdx = specularAlbedoTarget.getUavIdx(),
             .depthTargetIdx = depthTarget.getUavIdx(),
+
             .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+            .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
+            .specularMotionTargetIdx = specularMotionTarget.getUavIdx(),
 
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
@@ -509,12 +537,15 @@ void resize()
         frame.paramBlockManager.heapIndices->srv = {
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
+            .specularAlbedoTargetIdx = specularAlbedoTarget.getSrvIdx(),
             .depthTargetIdx = depthTarget.getSrvIdx(),
+
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+            .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
+            .specularMotionTargetIdx = specularMotionTarget.getSrvIdx(),
 
             .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
-
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -1055,7 +1086,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "depth", "linearDepth", "motion", "normals", "debug",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
@@ -1065,6 +1096,7 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "depth", &depthTarget },
     { "linearDepth", &linearDepthTarget },
     { "motion", &motionTarget },
+    { "normals", &normalsAndRoughnessTarget },
 
     { "debug", &debugTarget },
 };
@@ -1106,6 +1138,15 @@ void imguiEndFrame()
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
 
+inline sl::Resource makeSlResource(RtTarget* target)
+{
+    return {
+        sl::ResourceType::eTex2d,
+        target->getTarget(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    };
+}
+
 void render()
 {
     if (!testMode)
@@ -1122,54 +1163,31 @@ void render()
     sl::FrameToken* frameToken;
     CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
 
-    sl::Resource colorIn = {
-        sl::ResourceType::eTex2d,
-        pathTracingTarget.getTarget(),
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-    };
-    sl::Resource colorOut = {
-        sl::ResourceType::eTex2d,
-        dlssOutputTarget.getTarget(),
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-    };
-    sl::Resource depth = {
-        sl::ResourceType::eTex2d,
-        depthTarget.getTarget(),
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-    };
-    sl::Resource mvec = {
-        sl::ResourceType::eTex2d,
-        motionTarget.getTarget(),
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-    };
+    {
+        // clang-format off
+        sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
+        sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
+        sl::Resource depthResource = makeSlResource(&depthTarget);
+        sl::Resource motionResource = makeSlResource(&motionTarget);
+        sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
+        sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
+        sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
+        sl::Resource specularMotionResource = makeSlResource(&specularMotionTarget);
 
-    sl::ResourceTag colorInTag = sl::ResourceTag{
-        &colorIn,
-        sl::kBufferTypeScalingInputColor,
-        sl::ResourceLifecycle::eValidUntilPresent,
-        &slRenderExtent,
-    };
-    sl::ResourceTag colorOutTag = sl::ResourceTag{
-        &colorOut,
-        sl::kBufferTypeScalingOutputColor,
-        sl::ResourceLifecycle::eValidUntilPresent,
-        &slViewportExtent,
-    };
-    sl::ResourceTag depthTag = sl::ResourceTag{
-        &depth,
-        sl::kBufferTypeDepth,
-        sl::ResourceLifecycle::eValidUntilPresent,
-        &slRenderExtent,
-    };
-    sl::ResourceTag mvecTag = sl::ResourceTag{
-        &mvec,
-        sl::kBufferTypeMotionVectors,
-        sl::ResourceLifecycle::eValidUntilPresent,
-        &slRenderExtent,
-    };
+        sl::ResourceTag resourceTags[] = {
+            {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
+            {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&specularMotionResource, sl::kBufferTypeSpecularMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+        };
+        // clang-format on
 
-    sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag };
-    slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
+        slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
+    }
 
     sl::Constants slConstants = {};
     slConstants.depthInverted = sl::Boolean::eFalse;
@@ -1271,7 +1289,7 @@ void render()
     // ===================================
 
     const sl::BaseStructure* inputs[] = { &slViewport };
-    CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+    CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
 
     // ===================================
     // POSTPROCESSING

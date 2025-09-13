@@ -64,15 +64,20 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float3 diffuseAlbedo = 0.f;
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos;
+    float3 hitNor_WS = 0.f;
+    float roughness = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         const Material surfMaterial = materials[payload.materialId];
-        diffuseAlbedo = surfMaterial.getDiffuseAlbedo();
+        diffuseAlbedo = surfMaterial.getDiffuseEmissiveAlbedo();
 
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
         motionHitPos = payload.hitInfo.hitPos_WS;
+        hitNor_WS = payload.hitInfo.hitNor_WS;
+
+        // TODO: eventually set roughness
     }
     else
     {
@@ -98,6 +103,9 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     motion.y = -motion.y;
     motion *= DispatchRaysDimensions().xy;
     motionTarget[pixelIdx] = motion;
+
+    RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
+    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)

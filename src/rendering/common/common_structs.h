@@ -114,16 +114,21 @@ public:
     }
 
 #if _hlsl
+    float3 getDiffuseAlbedo()
+    {
+        return hasDiffuse() ? baseColor : 0;
+    }
+
     float3 getEmissiveColor()
     {
         return emissiveColor * emissiveStrength;
     }
 
-    float3 getDiffuseAlbedo()
+    float3 getDiffuseEmissiveAlbedo()
     {
         // this should technically include diffuse color as well but I doubt I'll have materials that are both emissive
         // and diffuse
-        return (emissiveStrength > 0.f) ? getEmissiveColor() : baseColor;
+        return (emissiveStrength > 0.f) ? getEmissiveColor() : getDiffuseAlbedo();
     }
 #else
     void setHasDiffuse(bool enable)
@@ -174,26 +179,36 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
         uint depthTargetIdx;
-        uint linearDepthTargetIdx;
 
+        uint linearDepthTargetIdx;
+        uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
+        uint specularMotionTargetIdx;
+
         uint debugTargetIdx;
         uint pad0;
         uint pad1;
+        uint pad2;
     } uav;
 
     struct
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
         uint depthTargetIdx;
-        uint linearDepthTargetIdx;
 
+        uint linearDepthTargetIdx;
+        uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
+        uint specularMotionTargetIdx;
+
         uint dlssOutputTargetIdx;
         uint debugTargetIdx;
         uint pad0;
+        uint pad1;
     } srv;
 };
 
