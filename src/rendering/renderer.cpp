@@ -1228,7 +1228,6 @@ void render()
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
     ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
-    cmdList->SetDescriptorHeaps(1, heaps);
 
     // ===================================
     // RAYTRACING
@@ -1236,6 +1235,8 @@ void render()
 
     if (scene.hasTlas())
     {
+        cmdList->SetDescriptorHeaps(1, heaps);
+
         cmdList->SetPipelineState1(rtPso.Get());
         cmdList->SetComputeRootSignature(rtRootSig.Get());
 
@@ -1276,6 +1277,8 @@ void render()
     // ===================================
     // POSTPROCESSING
     // ===================================
+
+    cmdList->SetDescriptorHeaps(1, heaps);
 
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
