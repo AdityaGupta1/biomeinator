@@ -204,6 +204,7 @@ void Camera::copySlConstantsTo(sl::Constants* constants)
 
     constants->jitterOffset = { 0.5f - this->params.jitter.x, 0.5f - this->params.jitter.y };
     constants->mvecScale = { 1, 1 };
+    constants->cameraPinholeOffset = { 0, 0 };
     constants->cameraPos = toSlFloat3(this->params.pos_WS);
     constants->cameraUp = toSlFloat3(this->params.up_WS);
     constants->cameraRight = toSlFloat3(this->params.right_WS);

@@ -278,6 +278,8 @@ void initDevice()
 
         if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
+            CHECK_SL_RESULT(slSetD3DDevice(device.Get()));
+
             sl::AdapterInfo adapterInfo{};
             adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
             adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
@@ -290,8 +292,6 @@ void initDevice()
 
         adapter.Reset();
     }
-
-    CHECK_SL_RESULT(slSetD3DDevice(device.Get()));
 
     D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -497,9 +497,12 @@ void resize()
 
     // DLSS programming guide says to use this as the jitter sequence length:
     // Total Phases = Base Phase Count * (Target Resolution / Render Resolution) ^ 2
+    //
+    // Streamline programming guide says there's no reason to limit the sequence length, so I'm using 64 for the "Base
+    // Phase Count" instead of the default/recommended of 8.
     const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderWidth);
     const uint32_t jitterHaltonSequenceLength =
-        static_cast<uint32_t>(ceilf(8 * (dlssScaleFactor * dlssScaleFactor)));
+        static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 }
 
@@ -1111,6 +1114,7 @@ void render()
         sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
         sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
         sl::Resource depthResource = makeSlResource(&depthTarget);
+        sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
         sl::Resource motionResource = makeSlResource(&motionTarget);
         sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
         sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
@@ -1121,6 +1125,7 @@ void render()
             {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
             {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
