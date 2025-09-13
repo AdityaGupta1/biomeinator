@@ -171,7 +171,6 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = false;
     }
 
-    this->params.prevJitter = this->params.jitter;
     this->params.jitter = this->jitterHalton.next();
 }
 
