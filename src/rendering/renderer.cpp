@@ -218,6 +218,8 @@ void initStreamline()
 
     prefs.applicationId = 1738; // TODO: not sure what to put here lol
 
+    prefs.flags |= sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+
     CHECK_SL_RESULT(slInit(prefs));
 }
 
@@ -415,6 +417,8 @@ D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
 
 sl::ViewportHandle slViewport{ 1738 }; // TODO: does this need to be a meaningful number?
+sl::Extent slRenderExtent;
+sl::Extent slViewportExtent;
 
 void resize()
 {
@@ -431,6 +435,8 @@ void resize()
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
 
+    slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
+
     sl::DLSSOptimalSettings dlssSettings;
     sl::DLSSOptions dlssOptions;
     dlssOptions.mode = sl::DLSSMode::eBalanced; // TODO: expose this in the GUI
@@ -440,6 +446,8 @@ void resize()
 
     const uint32_t renderWidth = dlssSettings.optimalRenderWidth;
     const uint32_t renderHeight = dlssSettings.optimalRenderHeight;
+
+    slRenderExtent = { 0, 0, renderWidth, renderHeight };
 
     dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
     dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
@@ -1111,6 +1119,55 @@ void render()
 
     sl::FrameToken* frameToken;
     CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
+
+    sl::Resource colorIn = {
+        sl::ResourceType::eTex2d,
+        pathTracingTarget.getTarget(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    };
+    sl::Resource colorOut = {
+        sl::ResourceType::eTex2d,
+        dlssOutputTarget.getTarget(),
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+    };
+    sl::Resource depth = {
+        sl::ResourceType::eTex2d,
+        depthTarget.getTarget(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    };
+    sl::Resource mvec = {
+        sl::ResourceType::eTex2d,
+        motionTarget.getTarget(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    };
+
+    sl::ResourceTag colorInTag = sl::ResourceTag{
+        &colorIn,
+        sl::kBufferTypeScalingInputColor,
+        sl::ResourceLifecycle::eValidUntilPresent,
+        &slRenderExtent,
+    };
+    sl::ResourceTag colorOutTag = sl::ResourceTag{
+        &colorOut,
+        sl::kBufferTypeScalingOutputColor,
+        sl::ResourceLifecycle::eValidUntilPresent,
+        &slViewportExtent,
+    };
+    sl::ResourceTag depthTag = sl::ResourceTag{
+        &depth,
+        sl::kBufferTypeDepth,
+        sl::ResourceLifecycle::eValidUntilPresent,
+        &slRenderExtent,
+    };
+    sl::ResourceTag mvecTag = sl::ResourceTag{
+        &mvec,
+        sl::kBufferTypeMotionVectors,
+        sl::ResourceLifecycle::eValidUntilPresent,
+        &slRenderExtent,
+    };
+
+    sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag };
+    slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
 
     sl::Constants slConstants = {};
     slConstants.depthInverted = sl::Boolean::eFalse;
