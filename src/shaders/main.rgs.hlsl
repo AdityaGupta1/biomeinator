@@ -38,7 +38,7 @@ void RayGeneration()
         payload.pixelIdx = pixelIdx;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
 
-        const float3 targetPos_WS = calculateRayTarget(pixelIdx + cameraParams.jitter, size);
+        const float3 targetPos_WS = calculateRayTarget(float2(pixelIdx) + cameraParams.jitter, size);
 
         RayDesc ray;
         ray.Origin = cameraParams.pos_WS;

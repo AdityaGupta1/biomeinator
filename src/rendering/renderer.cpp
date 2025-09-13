@@ -1061,7 +1061,7 @@ void imguiBeginFrame()
 
     ImGui::Spacing();
 
-    if (ImGui::CollapsingHeader("Debug"))
+    if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
