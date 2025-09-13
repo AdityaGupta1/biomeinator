@@ -381,7 +381,7 @@ RtTarget dlssOutputTarget{
     L"dlssOutputTarget",
     DXGI_FORMAT_R32G32B32A32_FLOAT,
     4, /*debugOutputNumChannels*/
-    false, /*hasUav*/
+    true, /*hasUav*/
     true, /*hasSrv*/
     true, /*isFullSize*/
 };
@@ -1128,7 +1128,7 @@ void render()
     sl::Resource colorOut = {
         sl::ResourceType::eTex2d,
         dlssOutputTarget.getTarget(),
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     };
     sl::Resource depth = {
         sl::ResourceType::eTex2d,
@@ -1262,6 +1262,14 @@ void render()
         rtDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&rtDispatchDesc);
     }
+
+    // ===================================
+    // DLSS
+    // ===================================
+
+    const sl::BaseStructure* inputs[] = { &slViewport };
+    CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+    // TODO: restore cmdList state?
 
     // ===================================
     // POSTPROCESSING
