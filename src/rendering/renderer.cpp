@@ -513,7 +513,7 @@ void resize()
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
 
-            .dlssOutputTarget = dlssOutputTarget.getSrvIdx(),
+            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
 
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
@@ -1055,10 +1055,12 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
+
+    { "pathTracing", &pathTracingTarget },
     { "diffuseAlbedo", &diffuseAlbedoTarget },
     { "depth", &depthTarget },
     { "linearDepth", &linearDepthTarget },

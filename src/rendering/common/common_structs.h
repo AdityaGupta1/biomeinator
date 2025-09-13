@@ -191,7 +191,7 @@ struct HeapIndices
         uint linearDepthTargetIdx;
 
         uint motionTargetIdx;
-        uint dlssOutputTarget;
+        uint dlssOutputTargetIdx;
         uint debugTargetIdx;
         uint pad0;
     } srv;
