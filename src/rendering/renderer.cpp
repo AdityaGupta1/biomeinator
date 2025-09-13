@@ -1109,9 +1109,19 @@ void render()
 
     beginFrame();
 
-    auto& frameCtx = frameCtxs[frameCtxIdx];
+    sl::FrameToken* frameToken;
+    CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
 
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
+    sl::Constants slConstants = {};
+    slConstants.depthInverted = sl::Boolean::eFalse;
+    slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+    slConstants.motionVectors3D = sl::Boolean::eFalse;
+    slConstants.reset = sl::Boolean::eFalse;
+    slConstants.orthographicProjection = sl::Boolean::eFalse;
+    slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+    slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+
+    auto& frameCtx = frameCtxs[frameCtxIdx];
 
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
@@ -1121,7 +1131,13 @@ void render()
         playerInput = WindowManager::getPlayerInput();
     }
     camera.update(deltaTime, playerInput);
+
+    camera.copySlConstantsTo(&slConstants);
+    CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewport));
+
     camera.copyParamsTo(paramBlockManager.cameraParams);
+
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;

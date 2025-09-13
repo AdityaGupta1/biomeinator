@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <numbers>
 
+#include <sl_consts.h>
+
 class Camera
 {
 private:
@@ -67,5 +69,6 @@ public:
     void update(double deltaTime, const PlayerInput& input);
     void setAspectRatio(float aspectRatio);
 
+    void copySlConstantsTo(sl::Constants* constants);
     void copyParamsTo(CameraParams* dest) const;
 };

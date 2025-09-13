@@ -181,6 +181,46 @@ void Camera::setAspectRatio(float aspectRatio)
     this->areMatricesDirty = true;
 }
 
+inline sl::float2 toSlFloat2(const DirectX::XMFLOAT2& v)
+{
+    return { v.x, v.y };
+}
+
+inline sl::float3 toSlFloat3(const DirectX::XMFLOAT3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
+inline sl::float4x4 toSlFloat4x4(const DirectX::XMFLOAT4X4& m)
+{
+    sl::float4x4 result;
+    result.setRow(0, { m._11, m._12, m._13, m._14 });
+    result.setRow(1, { m._21, m._22, m._23, m._24 });
+    result.setRow(2, { m._31, m._32, m._33, m._34 });
+    result.setRow(3, { m._41, m._42, m._43, m._44 });
+    return result;
+}
+
+void Camera::copySlConstantsTo(sl::Constants* constants)
+{
+    constants->cameraViewToClip = toSlFloat4x4(this->dlssMatrices.viewToClipMat);
+    constants->clipToCameraView = toSlFloat4x4(this->dlssMatrices.clipToViewMat);
+    constants->clipToPrevClip = toSlFloat4x4(this->dlssMatrices.clipToPrevClipMat);
+    constants->prevClipToClip = toSlFloat4x4(this->dlssMatrices.prevClipToClipMat);
+
+    constants->jitterOffset = toSlFloat2(this->params.jitter);
+    constants->mvecScale = { 1, 1 };
+    constants->cameraPos = toSlFloat3(this->params.pos_WS);
+    constants->cameraUp = toSlFloat3(this->params.up_WS);
+    constants->cameraRight = toSlFloat3(this->params.right_WS);
+    constants->cameraFwd = toSlFloat3(this->params.forward_WS);
+
+    constants->cameraNear = this->params.nearPlane;
+    constants->cameraFar = this->params.farPlane;
+    constants->cameraFOV = this->currentFovYRadians;
+    constants->cameraAspectRatio = this->aspectRatio;
+}
+
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
