@@ -82,6 +82,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     else
     {
         motionHitPos = evalRayPos(ray, cameraParams.farPlane);
+        hitNor_WS = normalize(-ray.Direction);
     }
 
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
