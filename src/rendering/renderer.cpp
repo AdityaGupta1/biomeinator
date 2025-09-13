@@ -1227,7 +1227,7 @@ void render()
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
-    ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
+    ID3D12DescriptorHeap* descHeaps[] = { sharedDescriptorHeap.Get() };
 
     // ===================================
     // RAYTRACING
@@ -1235,7 +1235,7 @@ void render()
 
     if (scene.hasTlas())
     {
-        cmdList->SetDescriptorHeaps(1, heaps);
+        cmdList->SetDescriptorHeaps(1, descHeaps);
 
         cmdList->SetPipelineState1(rtPso.Get());
         cmdList->SetComputeRootSignature(rtRootSig.Get());
@@ -1272,13 +1272,12 @@ void render()
 
     const sl::BaseStructure* inputs[] = { &slViewport };
     CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), cmdList.Get()));
-    // TODO: restore cmdList state?
 
     // ===================================
     // POSTPROCESSING
     // ===================================
 
-    cmdList->SetDescriptorHeaps(1, heaps);
+    cmdList->SetDescriptorHeaps(1, descHeaps);
 
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
