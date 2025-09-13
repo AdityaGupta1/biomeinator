@@ -96,7 +96,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     float2 motion = (prevNdc.xy - currNdc.xy) / 2;
     motion.y = -motion.y;
-    //motion *= DispatchRaysDimensions().xy;
+    motion *= DispatchRaysDimensions().xy;
     motionTarget[pixelIdx] = motion;
 }
 
