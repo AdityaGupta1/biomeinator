@@ -71,6 +71,9 @@ void printSlResultError(sl::Result result)
         case sl::Result::eErrorNoPlugins:
             fprintf(stderr, "No plugins found\n");
             break;
+        case sl::Result::eErrorInvalidParameter:
+            fprintf(stderr, "Invalid parameter\n");
+            break;
         default:
             fprintf(stderr, "Unknown Streamline error: %u\n", static_cast<uint32_t>(result));
             break;
@@ -341,6 +344,7 @@ void initSwapChain()
     factory.Reset();
 }
 
+// clang-format off
 RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
 RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
@@ -353,6 +357,7 @@ RtTarget specularMotionTarget{ L"specularMotionTarget", DXGI_FORMAT_R16G16_FLOAT
 
 RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+// clang-format on
 
 std::vector<RtTarget*> rtTargets;
 
