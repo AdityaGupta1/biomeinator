@@ -114,21 +114,9 @@ public:
     }
 
 #if _hlsl
-    float3 getDiffuseAlbedo()
-    {
-        return hasDiffuse() ? baseColor : 0;
-    }
-
     float3 getEmissiveColor()
     {
         return emissiveColor * emissiveStrength;
-    }
-
-    float3 getDiffuseEmissiveAlbedo()
-    {
-        // this should technically include diffuse color as well but I doubt I'll have materials that are both emissive
-        // and diffuse
-        return (emissiveStrength > 0.f) ? getEmissiveColor() : getDiffuseAlbedo();
     }
 #else
     void setHasDiffuse(bool enable)

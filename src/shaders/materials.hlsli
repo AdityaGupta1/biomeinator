@@ -62,6 +62,17 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
+float3 getMaterialDiffuseAlbedo(const Material material, const float2 uv)
+{
+    float3 diffuseAlbedo = material.baseColor;
+    if (material.baseColorTextureId != TEXTURE_ID_INVALID)
+    {
+        Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
+        diffuseAlbedo = tex.SampleLevel(texSampler, uv, 0).rgb;
+    }
+    return diffuseAlbedo;
+}
+
 float3 evaluateBsdf(
     const Material material,
     const float2 uv,
@@ -73,19 +84,14 @@ float3 evaluateBsdf(
 {
     if (material.hasDiffuse())
     {
-        float3 baseColor = material.baseColor;
-        if (material.baseColorTextureId != TEXTURE_ID_INVALID)
-        {
-            Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-            baseColor = tex.SampleLevel(texSampler, uv, 0).rgb;
-        }
+        const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
 
         if (calculateFresnelReflectance && material.hasSpecularReflection())
         {
             fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         }
 
-        return baseColor * M_INV_PI * (1.f - fresnelReflectance);
+        return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance);
     }
 
     return float3(0, 0, 0);
