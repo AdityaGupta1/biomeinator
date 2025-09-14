@@ -96,7 +96,6 @@ void Camera::setMatrices()
         this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
 
     const XMMATRIX worldToClip = XMMatrixMultiply(worldToView, viewToClip);
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
     XMStoreFloat4x4(&this->params.worldToClipMat, worldToClip);
 
     XMStoreFloat4x4(&this->dlssMatrices.viewToClipMat, viewToClip);
@@ -165,6 +164,7 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
+    this->params.worldToPrevClipMat = this->params.worldToClipMat;
     if (this->areMatricesDirty)
     {
         this->setMatrices();
