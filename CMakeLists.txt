@@ -172,7 +172,6 @@ target_link_directories(Biomeinator PRIVATE
 
 target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler)
 
-#set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64/development")
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
 set(RUNTIME_DLLS
@@ -180,7 +179,8 @@ set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxil.dll"
     "${STREAMLINE_DLL_DIR}/sl.interposer.dll"
     "${STREAMLINE_DLL_DIR}/sl.dlss_d.dll"
-    "${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
+    #"${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
+    "${STREAMLINE_DLL_DIR}/development/nvngx_dlssd.dll"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD

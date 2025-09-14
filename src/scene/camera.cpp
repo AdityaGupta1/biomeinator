@@ -34,7 +34,7 @@ void Camera::init(float defaultFovYRadians)
     this->setDirectionVectorsFromAngles();
 
     this->params.nearPlane = 0.1f;
-    this->params.farPlane = 10000.f;
+    this->params.farPlane = 1000.f;
 
     XMMATRIX identity = XMMatrixIdentity();
     XMStoreFloat4x4(&this->worldToPrevViewMat, identity);
