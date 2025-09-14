@@ -348,7 +348,7 @@ void initSwapChain()
 RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
 RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 }; // TODO: remove?
+RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 }; // TODO: remove
 RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 // should really be 4 debug channels but it would be mostly transparent then
 RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
@@ -1113,7 +1113,7 @@ void render()
         // clang-format off
         sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
         sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
-        sl::Resource depthResource = makeSlResource(&depthTarget);
+        // sl::Resource depthResource = makeSlResource(&depthTarget);
         sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
         sl::Resource motionResource = makeSlResource(&motionTarget);
         sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
@@ -1124,7 +1124,7 @@ void render()
         sl::ResourceTag resourceTags[] = {
             {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
-            {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            // {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},

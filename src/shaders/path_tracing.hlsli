@@ -66,6 +66,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float3 motionHitPos;
     float3 hitNor_WS = 0.f;
     float roughness = 0.f;
+    float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -78,11 +79,15 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         hitNor_WS = payload.hitInfo.hitNor_WS;
 
         // TODO: eventually set roughness
+
+        // TODO: set correct specular albedo
     }
     else
     {
         motionHitPos = evalRayPos(ray, cameraParams.farPlane);
         hitNor_WS = normalize(-ray.Direction);
+
+        specularAlbedo = 0.5f;
     }
 
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
@@ -107,6 +112,9 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
+
+    RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
+    specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
