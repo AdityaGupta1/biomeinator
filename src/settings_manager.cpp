@@ -49,6 +49,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
+    optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("3")); // sl::DLSSMode::eBalanced
 
     ParseResult parseResult = options.parse(argc, argv);
 
@@ -80,6 +81,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
+    COPY_SETTING("dlssMode", uint32_t);
 
 #undef COPY_SETTING
 

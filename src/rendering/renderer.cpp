@@ -387,6 +387,18 @@ sl::ViewportHandle slViewport{ 1738 }; // TODO: does this need to be a meaningfu
 sl::Extent slRenderExtent;
 sl::Extent slViewportExtent;
 
+static const std::vector<const char*> dlssModeOptions = {
+    "off", "DLAA", "quality", "balanced", "performance", "ultra performance",
+};
+static const std::vector<sl::DLSSMode> dlssModes = {
+    sl::DLSSMode::eOff,
+    sl::DLSSMode::eDLAA,
+    sl::DLSSMode::eMaxQuality,
+    sl::DLSSMode::eBalanced,
+    sl::DLSSMode::eMaxPerformance,
+    sl::DLSSMode::eUltraPerformance,
+};
+
 void resize()
 {
     if (!swapChain)
@@ -406,7 +418,7 @@ void resize()
 
     sl::DLSSDOptimalSettings dlssdSettings;
     sl::DLSSDOptions dlssdOptions;
-    dlssdOptions.mode = sl::DLSSMode::eBalanced; // TODO: expose this in the GUI
+    dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
     dlssdOptions.outputWidth = viewportWidth;
     dlssdOptions.outputHeight = viewportHeight;
     CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
@@ -1047,7 +1059,7 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "debug", &debugTarget },
 };
 
-void imguiBeginFrame()
+void imguiBeginFrame(bool& needsResize)
 {
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -1068,6 +1080,8 @@ void imguiBeginFrame()
     {
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+
+        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
     }
 
     ImGui::End();
@@ -1093,11 +1107,19 @@ inline sl::Resource makeSlResource(RtTarget* target)
     };
 }
 
+bool needsResize = false;
+
 void render()
 {
+    if (/*frameNumber > 0 && */needsResize)
+    {
+        resize();
+        needsResize = false;
+    }
+
     if (!testMode)
     {
-        imguiBeginFrame();
+        imguiBeginFrame(needsResize);
     }
 
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
