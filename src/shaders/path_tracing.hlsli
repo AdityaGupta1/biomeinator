@@ -80,7 +80,12 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         // TODO: eventually set roughness
 
-        // TODO: set correct specular albedo
+        if (surfMaterial.hasSpecularReflection())
+        {
+            const float alpha = roughness * roughness;
+            const float nDotV = dot(hitNor_WS, -ray.Direction);
+            specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.specularColor, alpha, nDotV);
+        }
     }
     else
     {
