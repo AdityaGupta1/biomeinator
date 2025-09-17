@@ -87,7 +87,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         motionHitPos = evalRayPos(ray, cameraParams.farPlane);
         hitNor_WS = normalize(-ray.Direction);
 
-        specularAlbedo = 0.5f;
+        specularAlbedo = 0.5f; // this was suggested somewhere for miss specular albedo (I forgot where though)
     }
 
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));

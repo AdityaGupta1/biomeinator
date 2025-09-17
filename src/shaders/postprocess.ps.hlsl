@@ -32,10 +32,10 @@ struct PsIn
 
 float4 getPathTracingFinalColor(float2 uv)
 {
-    Texture2D<float4> dlssOutputTarget = ResourceDescriptorHeap[renderParams.finalColorSrvIdx];
-    const float4 pathTracingColor = dlssOutputTarget.Sample(texSampler, uv);
+    Texture2D<float4> preTonemappedColorTarget = ResourceDescriptorHeap[renderParams.preTonemappedColorSrvIdx];
+    const float4 preTonemappedColor = preTonemappedColorTarget.Sample(texSampler, uv);
 
-    const float3 tonemappedColor = applyTonemapping(pathTracingColor.rgb);
+    const float3 tonemappedColor = applyTonemapping(preTonemappedColor.rgb);
     return float4(tonemappedColor, 1);
 }
 

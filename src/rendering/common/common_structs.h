@@ -256,7 +256,7 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint finalColorSrvIdx;
+    uint preTonemappedColorSrvIdx;
     uint pad1;
     uint pad2;
 };
