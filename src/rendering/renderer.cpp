@@ -74,6 +74,9 @@ void printSlResultError(sl::Result result)
         case sl::Result::eErrorInvalidParameter:
             fprintf(stderr, "Invalid parameter\n");
             break;
+        case sl::Result::eErrorMissingConstants:
+            fprintf(stderr, "Missing constants\n");
+            break;
         default:
             fprintf(stderr, "Unknown Streamline error: %u\n", static_cast<uint32_t>(result));
             break;
@@ -388,10 +391,9 @@ sl::Extent slRenderExtent;
 sl::Extent slViewportExtent;
 
 static const std::vector<const char*> dlssModeOptions = {
-    "off", "DLAA", "quality", "balanced", "performance", "ultra performance",
+    "DLAA", "quality", "balanced", "performance", "ultra performance",
 };
 static const std::vector<sl::DLSSMode> dlssModes = {
-    sl::DLSSMode::eOff,
     sl::DLSSMode::eDLAA,
     sl::DLSSMode::eMaxQuality,
     sl::DLSSMode::eBalanced,
@@ -414,30 +416,41 @@ void resize()
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
 
-    slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
+    uint32_t renderWidth;
+    uint32_t renderHeight;
 
-    sl::DLSSDOptimalSettings dlssdSettings;
-    sl::DLSSDOptions dlssdOptions;
-    dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
-    dlssdOptions.outputWidth = viewportWidth;
-    dlssdOptions.outputHeight = viewportHeight;
-    CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
+    if (SettingsManager::getAsBool("enableDlss"))
+    {
+        slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
-    const uint32_t renderWidth = dlssdSettings.optimalRenderWidth;
-    const uint32_t renderHeight = dlssdSettings.optimalRenderHeight;
+        sl::DLSSDOptimalSettings dlssdSettings;
+        sl::DLSSDOptions dlssdOptions;
+        dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
+        dlssdOptions.outputWidth = viewportWidth;
+        dlssdOptions.outputHeight = viewportHeight;
+        CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
 
-    slRenderExtent = { 0, 0, renderWidth, renderHeight };
+        renderWidth = dlssdSettings.optimalRenderWidth;
+        renderHeight = dlssdSettings.optimalRenderHeight;
 
-    dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
-    dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
-    dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
-    dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
-    dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
-    dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
-    dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
-    // TODO: exposure?
-    dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
-    CHECK_SL_RESULT(slDLSSDSetOptions(slViewport, dlssdOptions));
+        slRenderExtent = { 0, 0, renderWidth, renderHeight };
+
+        dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
+        dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+        // TODO: exposure?
+        dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+        CHECK_SL_RESULT(slDLSSDSetOptions(slViewport, dlssdOptions));
+    }
+    else
+    {
+        renderWidth = viewportWidth;
+        renderHeight = viewportHeight;
+    }
 
     flush();
 
@@ -1059,12 +1072,15 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "debug", &debugTarget },
 };
 
-void imguiBeginFrame(bool& needsResize)
+void imguiBeginFrame()
 {
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+}
 
+void imguiEndFrame(bool& needsResize)
+{
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
@@ -1074,14 +1090,19 @@ void imguiBeginFrame(bool& needsResize)
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
-    ImGui::Spacing();
+    SettingsGuiHelpers::VerticalSpacing();
 
     if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        SettingsGuiHelpers::SectionTitle("DLSS");
+        needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
+        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+
+        SettingsGuiHelpers::VerticalSpacing();
+
+        SettingsGuiHelpers::SectionTitle("Debug view");
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
-
-        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
     }
 
     ImGui::End();
@@ -1090,10 +1111,7 @@ void imguiBeginFrame(bool& needsResize)
     {
         ImGui::SetWindowFocus(NULL);
     }
-}
 
-void imguiEndFrame()
-{
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
@@ -1111,7 +1129,7 @@ bool needsResize = false;
 
 void render()
 {
-    if (/*frameNumber > 0 && */needsResize)
+    if (needsResize)
     {
         resize();
         needsResize = false;
@@ -1119,7 +1137,7 @@ void render()
 
     if (!testMode)
     {
-        imguiBeginFrame(needsResize);
+        imguiBeginFrame();
     }
 
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
@@ -1128,45 +1146,50 @@ void render()
 
     beginFrame();
 
+    const bool enableDlss = SettingsManager::getAsBool("enableDlss");
+
     sl::FrameToken* frameToken;
-    CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
-
-    {
-        // clang-format off
-        sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
-        sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
-        // sl::Resource depthResource = makeSlResource(&depthTarget);
-        sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
-        sl::Resource motionResource = makeSlResource(&motionTarget);
-        sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
-        sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
-        sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
-        sl::Resource specularMotionResource = makeSlResource(&specularMotionTarget);
-
-        sl::ResourceTag resourceTags[] = {
-            {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
-            // {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-            {&specularMotionResource, sl::kBufferTypeSpecularMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-        };
-        // clang-format on
-
-        slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
-    }
-
     sl::Constants slConstants = {};
-    slConstants.depthInverted = sl::Boolean::eFalse;
-    slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
-    slConstants.motionVectors3D = sl::Boolean::eFalse;
-    slConstants.reset = sl::Boolean::eFalse;
-    slConstants.orthographicProjection = sl::Boolean::eFalse;
-    slConstants.motionVectorsDilated = sl::Boolean::eFalse;
-    slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+    if (enableDlss)
+    {
+        CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
+
+        {
+            // clang-format off
+            sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
+            sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
+            // sl::Resource depthResource = makeSlResource(&depthTarget);
+            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
+            sl::Resource motionResource = makeSlResource(&motionTarget);
+            sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
+            sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
+            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
+            sl::Resource specularMotionResource = makeSlResource(&specularMotionTarget);
+
+            sl::ResourceTag resourceTags[] = {
+                {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
+                // {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&specularMotionResource, sl::kBufferTypeSpecularMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            };
+            // clang-format on
+
+            slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
+        }
+
+        slConstants.depthInverted = sl::Boolean::eFalse;
+        slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+        slConstants.motionVectors3D = sl::Boolean::eFalse;
+        slConstants.reset = sl::Boolean::eFalse;
+        slConstants.orthographicProjection = sl::Boolean::eFalse;
+        slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+        slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+    }
 
     auto& frameCtx = frameCtxs[frameCtxIdx];
 
@@ -1179,8 +1202,11 @@ void render()
     }
     camera.update(deltaTime, playerInput);
 
-    camera.copySlConstantsTo(&slConstants);
-    CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewport));
+    if (enableDlss)
+    {
+        camera.copySlConstantsTo(&slConstants);
+        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewport));
+    }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
@@ -1192,6 +1218,7 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
+    renderParams->finalColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1258,8 +1285,11 @@ void render()
     // DLSS
     // ===================================
 
-    const sl::BaseStructure* inputs[] = { &slViewport };
-    CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+    if (enableDlss)
+    {
+        const sl::BaseStructure* inputs[] = { &slViewport };
+        CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+    }
 
     // ===================================
     // POSTPROCESSING
@@ -1309,7 +1339,7 @@ void render()
 
     if (!testMode)
     {
-        imguiEndFrame();
+        imguiEndFrame(needsResize);
     }
 
     BufferHelper::stateTransitionResourceBarrier(

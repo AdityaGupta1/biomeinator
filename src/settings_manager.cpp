@@ -41,7 +41,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("h,help", "Print this message");
     optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));
     optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
-    optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("16"));
+    optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("1"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
@@ -49,7 +49,8 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
-    optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("3")); // sl::DLSSMode::eBalanced
+    optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
 
     ParseResult parseResult = options.parse(argc, argv);
 
@@ -81,6 +82,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
+    COPY_SETTING("enableDlss", bool);
     COPY_SETTING("dlssMode", uint32_t);
 
 #undef COPY_SETTING
