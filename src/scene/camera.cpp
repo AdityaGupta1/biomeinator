@@ -94,11 +94,11 @@ void Camera::setMatrices()
 
     const XMMATRIX viewToClip = XMMatrixPerspectiveFovRH(
         this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
+    XMStoreFloat4x4(&this->dlssMatrices.viewToClipMat, viewToClip);
 
     const XMMATRIX worldToClip = XMMatrixMultiply(worldToView, viewToClip);
     XMStoreFloat4x4(&this->params.worldToClipMat, worldToClip);
 
-    XMStoreFloat4x4(&this->dlssMatrices.viewToClipMat, viewToClip);
     XMVECTOR det;
     const XMMATRIX clipToView = XMMatrixInverse(&det, viewToClip);
     XMStoreFloat4x4(&this->dlssMatrices.clipToViewMat, clipToView);
@@ -113,8 +113,9 @@ void Camera::setMatrices()
     const XMMATRIX prevClipToClip = XMMatrixInverse(&det, clipToPrevClip);
     XMStoreFloat4x4(&this->dlssMatrices.prevClipToClipMat, prevClipToClip);
 
+    this->params.worldToPrevClipMat = this->params.worldToClipMat;
     XMStoreFloat4x4(&this->worldToPrevViewMat, worldToView);
-    XMStoreFloat4x4(&this->prevViewToPrevClipMat, viewToClip);
+    this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
 
 constexpr float playerHorizontalSpeed = 11.0f;
@@ -164,7 +165,6 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
     if (this->areMatricesDirty)
     {
         this->setMatrices();
