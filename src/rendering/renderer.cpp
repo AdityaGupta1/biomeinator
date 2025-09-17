@@ -1055,7 +1055,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "normals", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularMotion", "normals", "debug",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
@@ -1065,6 +1065,7 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "specularAlbedo", &specularAlbedoTarget },
     { "linearDepth", &linearDepthTarget },
     { "motion", &motionTarget },
+    { "specularMotion", &specularMotionTarget },
     { "normals", &normalsAndRoughnessTarget },
 
     { "debug", &debugTarget },
