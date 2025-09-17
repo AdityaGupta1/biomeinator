@@ -66,7 +66,7 @@ void setIsInCursorMode(bool newIsInCursorMode)
 
 static void onKeyDown(WPARAM wparam)
 {
-    if (ImGui::GetIO().WantCaptureKeyboard)
+    if (ImGui::GetIO().WantCaptureKeyboard && wparam != VK_ESCAPE)
     {
         return;
     }
@@ -111,6 +111,8 @@ static void onKeyDown(WPARAM wparam)
     }
 }
 
+bool isInitialized = false;
+
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
@@ -127,7 +129,10 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             break;
         case WM_SIZING:
         case WM_SIZE:
-            Renderer::resize();
+            if (isInitialized)
+            {
+                Renderer::resize();
+            }
             break;
         case WM_KEYDOWN:
             onKeyDown(wparam);
@@ -198,6 +203,8 @@ void init()
                            nullptr,
                            nullptr,
                            nullptr);
+
+    isInitialized = true;
 }
 
 PlayerInput getPlayerInput()

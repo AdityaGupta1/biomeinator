@@ -118,13 +118,6 @@ public:
     {
         return emissiveColor * emissiveStrength;
     }
-
-    float3 getDiffuseAlbedo()
-    {
-        // this should technically include diffuse color as well but I doubt I'll have materials that are both emissive
-        // and diffuse
-        return (emissiveStrength > 0.f) ? getEmissiveColor() : baseColor;
-    }
 #else
     void setHasDiffuse(bool enable)
     {
@@ -174,11 +167,16 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
         uint depthTargetIdx;
-        uint linearDepthTargetIdx;
 
+        uint linearDepthTargetIdx;
+        uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
+        uint specularMotionTargetIdx;
+
         uint debugTargetIdx;
+        uint pad0;
         uint pad1;
         uint pad2;
     } uav;
@@ -187,13 +185,18 @@ struct HeapIndices
     {
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
         uint depthTargetIdx;
-        uint linearDepthTargetIdx;
 
+        uint linearDepthTargetIdx;
+        uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
+        uint specularMotionTargetIdx;
+
+        uint dlssOutputTargetIdx;
         uint debugTargetIdx;
+        uint pad0;
         uint pad1;
-        uint pad2;
     } srv;
 };
 
@@ -207,11 +210,12 @@ struct ConstantParams
 
 struct CameraParams
 {
-    float4x4 viewProjMat;
-    float4x4 prevViewProjMat;
+    float4x4 worldToClipMat;
+    float4x4 worldToPrevClipMat;
 
     float2 jitter;
-    float2 prevJitter;
+    uint pad0;
+    uint pad1;
 
     float3 pos_WS;
     float nearPlane;
@@ -252,7 +256,7 @@ struct RenderParams
     uint enableMis;
 
     uint tonemapping;
-    uint pad0;
+    uint preTonemappedColorSrvIdx;
     uint pad1;
     uint pad2;
 };

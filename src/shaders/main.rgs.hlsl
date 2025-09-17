@@ -28,6 +28,13 @@ void RayGeneration()
     const uint2 size = DispatchRaysDimensions().xy;
     const uint linearPixelIdx = pixelIdx.y * size.x + pixelIdx.x;
 
+    RayDesc ray;
+    ray.Origin = cameraParams.pos_WS;
+    const float3 targetPos_WS = calculateRayTarget(float2(pixelIdx) + cameraParams.jitter, size);
+    ray.Direction = normalize(targetPos_WS - cameraParams.pos_WS);
+    ray.TMin = 0.001;
+    ray.TMax = 1000;
+
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
@@ -37,14 +44,6 @@ void RayGeneration()
         payload.flags = 0;
         payload.pixelIdx = pixelIdx;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
-
-        const float3 targetPos_WS = calculateRayTarget(pixelIdx + cameraParams.jitter, size);
-
-        RayDesc ray;
-        ray.Origin = cameraParams.pos_WS;
-        ray.Direction = normalize(targetPos_WS - cameraParams.pos_WS);
-        ray.TMin = 0.001;
-        ray.TMax = 1000;
 
         const bool isFirstSample = (sampleIdx == 0);
         pathTraceRay(ray, payload, isFirstSample);

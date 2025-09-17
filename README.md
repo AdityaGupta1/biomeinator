@@ -37,5 +37,6 @@ This project uses various third-party libraries:
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
+- [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.

@@ -25,12 +25,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <numbers>
 
+#include <sl_consts.h>
+
 class Camera
 {
 private:
     CameraParams params{};
 
-    bool isViewProjDirty{ true };
+    bool areMatricesDirty{ true };
+    struct
+    {
+        DirectX::XMFLOAT4X4 viewToClipMat;
+        DirectX::XMFLOAT4X4 clipToViewMat;
+
+        DirectX::XMFLOAT4X4 clipToPrevClipMat;
+        DirectX::XMFLOAT4X4 prevClipToClipMat;
+    } dlssMatrices;
+
+    DirectX::XMFLOAT4X4 worldToPrevViewMat;
+    DirectX::XMFLOAT4X4 prevViewToPrevClipMat;
 
     HaltonSequence jitterHalton;
 
@@ -46,7 +59,7 @@ private:
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void setViewProjMat();
+    void setMatrices();
 
 public:
     void init(float defaultFovYRadians);
@@ -56,5 +69,6 @@ public:
     void update(double deltaTime, const PlayerInput& input);
     void setAspectRatio(float aspectRatio);
 
+    void copySlConstantsTo(sl::Constants* constants);
     void copyParamsTo(CameraParams* dest) const;
 };

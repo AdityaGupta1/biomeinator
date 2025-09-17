@@ -34,7 +34,11 @@ void Camera::init(float defaultFovYRadians)
     this->setDirectionVectorsFromAngles();
 
     this->params.nearPlane = 0.1f;
-    this->params.farPlane = 10000.f;
+    this->params.farPlane = 1000.f;
+
+    XMMATRIX identity = XMMatrixIdentity();
+    XMStoreFloat4x4(&this->worldToPrevViewMat, identity);
+    XMStoreFloat4x4(&this->prevViewToPrevClipMat, identity);
 }
 
 void Camera::setJitterHaltonSequenceLength(uint32_t sequenceLength)
@@ -81,18 +85,37 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-void Camera::setViewProjMat()
+void Camera::setMatrices()
 {
     const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
-    const XMMATRIX view = XMMatrixLookAtRH(eye, lookAt, up);
+    const XMMATRIX worldToView = XMMatrixLookAtRH(eye, lookAt, up);
 
-    const XMMATRIX proj = XMMatrixPerspectiveFovRH(
+    const XMMATRIX viewToClip = XMMatrixPerspectiveFovRH(
         this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
+    XMStoreFloat4x4(&this->dlssMatrices.viewToClipMat, viewToClip);
 
-    const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-    XMStoreFloat4x4(&this->params.viewProjMat, viewProj);
+    const XMMATRIX worldToClip = XMMatrixMultiply(worldToView, viewToClip);
+    XMStoreFloat4x4(&this->params.worldToClipMat, worldToClip);
+
+    XMVECTOR det;
+    const XMMATRIX clipToView = XMMatrixInverse(&det, viewToClip);
+    XMStoreFloat4x4(&this->dlssMatrices.clipToViewMat, clipToView);
+
+    const XMMATRIX viewToWorld = XMMatrixInverse(&det, worldToView);
+    const XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
+    const XMMATRIX viewToPrevView = XMMatrixMultiply(viewToWorld, worldToPrevView);
+    const XMMATRIX clipToPrevView = XMMatrixMultiply(clipToView, viewToPrevView);
+    const XMMATRIX prevViewToPrevClip = XMLoadFloat4x4(&this->prevViewToPrevClipMat);
+    const XMMATRIX clipToPrevClip = XMMatrixMultiply(clipToPrevView, prevViewToPrevClip);
+    XMStoreFloat4x4(&this->dlssMatrices.clipToPrevClipMat, clipToPrevClip);
+    const XMMATRIX prevClipToClip = XMMatrixInverse(&det, clipToPrevClip);
+    XMStoreFloat4x4(&this->dlssMatrices.prevClipToClipMat, prevClipToClip);
+
+    this->params.worldToPrevClipMat = this->params.worldToClipMat;
+    XMStoreFloat4x4(&this->worldToPrevViewMat, worldToView);
+    this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
 
 constexpr float playerHorizontalSpeed = 11.0f;
@@ -114,14 +137,14 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         XMFLOAT3 storedLinearMovement;
         XMStoreFloat3(&storedLinearMovement, linearMovement);
         this->moveLinear(storedLinearMovement);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
         const float mouseMovementMultiplier = deltaTime * mouseSensitivity;
         this->rotate(input.mouseMovement.x * mouseMovementMultiplier, input.mouseMovement.y * mouseMovementMultiplier);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
     const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
@@ -139,24 +162,58 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         }
 
         this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
-        this->isViewProjDirty = true;
+        this->areMatricesDirty = true;
     }
 
-    this->params.prevViewProjMat = this->params.viewProjMat;
-    if (this->isViewProjDirty)
+    if (this->areMatricesDirty)
     {
-        this->setViewProjMat();
-        this->isViewProjDirty = false;
+        this->setMatrices();
+        this->areMatricesDirty = false;
     }
 
-    this->params.prevJitter = this->params.jitter;
     this->params.jitter = this->jitterHalton.next();
 }
 
 void Camera::setAspectRatio(float aspectRatio)
 {
     this->aspectRatio = aspectRatio;
-    this->isViewProjDirty = true;
+    this->areMatricesDirty = true;
+}
+
+inline sl::float3 toSlFloat3(const DirectX::XMFLOAT3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
+inline sl::float4x4 toSlFloat4x4(const DirectX::XMFLOAT4X4& m)
+{
+    sl::float4x4 result;
+    result.setRow(0, { m._11, m._12, m._13, m._14 });
+    result.setRow(1, { m._21, m._22, m._23, m._24 });
+    result.setRow(2, { m._31, m._32, m._33, m._34 });
+    result.setRow(3, { m._41, m._42, m._43, m._44 });
+    return result;
+}
+
+void Camera::copySlConstantsTo(sl::Constants* constants)
+{
+    constants->cameraViewToClip = toSlFloat4x4(this->dlssMatrices.viewToClipMat);
+    constants->clipToCameraView = toSlFloat4x4(this->dlssMatrices.clipToViewMat);
+    constants->clipToPrevClip = toSlFloat4x4(this->dlssMatrices.clipToPrevClipMat);
+    constants->prevClipToClip = toSlFloat4x4(this->dlssMatrices.prevClipToClipMat);
+
+    constants->jitterOffset = { 0.5f - this->params.jitter.x, 0.5f - this->params.jitter.y };
+    constants->mvecScale = { 1, 1 };
+    constants->cameraPinholeOffset = { 0, 0 };
+    constants->cameraPos = toSlFloat3(this->params.pos_WS);
+    constants->cameraUp = toSlFloat3(this->params.up_WS);
+    constants->cameraRight = toSlFloat3(this->params.right_WS);
+    constants->cameraFwd = toSlFloat3(this->params.forward_WS);
+
+    constants->cameraNear = this->params.nearPlane;
+    constants->cameraFar = this->params.farPlane;
+    constants->cameraFOV = this->currentFovYRadians;
+    constants->cameraAspectRatio = this->aspectRatio;
 }
 
 void Camera::copyParamsTo(CameraParams* dest) const

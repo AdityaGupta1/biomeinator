@@ -64,24 +64,35 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float3 diffuseAlbedo = 0.f;
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos;
+    float3 hitNor_WS = 0.f;
+    float roughness = 0.f;
+    float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         const Material surfMaterial = materials[payload.materialId];
-        diffuseAlbedo = surfMaterial.getDiffuseAlbedo();
+        diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
 
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
         motionHitPos = payload.hitInfo.hitPos_WS;
+        hitNor_WS = payload.hitInfo.hitNor_WS;
+
+        // TODO: eventually set roughness
+
+        // TODO: set correct specular albedo
     }
     else
     {
         motionHitPos = evalRayPos(ray, cameraParams.farPlane);
+        hitNor_WS = normalize(-ray.Direction);
+
+        specularAlbedo = 0.5f; // this was suggested somewhere for miss specular albedo (I forgot where though)
     }
 
-    float4 currNdc = mul(cameraParams.viewProjMat, float4(motionHitPos, 1));
+    float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
     currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.prevViewProjMat, float4(motionHitPos, 1));
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(motionHitPos, 1));
     prevNdc /= prevNdc.w;
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
@@ -95,8 +106,15 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     float2 motion = (prevNdc.xy - currNdc.xy) / 2;
-    motion = float2(motion.x, -motion.y) * DispatchRaysDimensions().xy;
+    motion.y = -motion.y;
+    //motion *= DispatchRaysDimensions().xy;
     motionTarget[pixelIdx] = motion;
+
+    RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
+    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
+
+    RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
+    specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)

@@ -58,6 +58,45 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx12.h>
 
+#include <sl.h>
+#include <sl_consts.h>
+#include <sl_dlss_d.h>
+#include <sl_security.h>
+
+#ifdef _DEBUG
+void printSlResultError(sl::Result result)
+{
+    switch (result)
+    {
+        case sl::Result::eErrorNoPlugins:
+            fprintf(stderr, "No plugins found\n");
+            break;
+        case sl::Result::eErrorInvalidParameter:
+            fprintf(stderr, "Invalid parameter\n");
+            break;
+        case sl::Result::eErrorMissingConstants:
+            fprintf(stderr, "Missing constants\n");
+            break;
+        default:
+            fprintf(stderr, "Unknown Streamline error: %u\n", static_cast<uint32_t>(result));
+            break;
+    }
+}
+
+#define CHECK_SL_RESULT(expr)                                                                                          \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (SL_FAILED(result, expr))                                                                                   \
+        {                                                                                                              \
+            fprintf(stderr, "sl::Result failed: %s\n", #expr);                                                         \
+            printSlResultError(result);                                                                                \
+            __debugbreak();                                                                                            \
+        }                                                                                                              \
+    } while (0)
+#else
+#define CHECK_SL_RESULT(expr) expr
+#endif
+
 using namespace DirectX;
 
 using WindowManager::hwnd;
@@ -65,6 +104,7 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
+void initStreamline();
 void initDevice();
 void initDescriptorHeaps();
 void initSwapChain();
@@ -110,6 +150,10 @@ bool testMode = false;
 
 void init()
 {
+    testMode = (SettingsManager::getAsString("testOutput") != "");
+
+    initStreamline();
+
     initDevice();
     initDescriptorHeaps();
 
@@ -140,7 +184,6 @@ void init()
         loadGltf(defaultScene);
     }
 
-    testMode = (SettingsManager::getAsString("testOutput") != "");
     if (!testMode)
     {
         SetForegroundWindow(hwnd);
@@ -153,49 +196,102 @@ void loadGltf(const std::string& filePathStr)
     GltfLoader::loadGltf(filePathStr, scene);
 }
 
+void initStreamline()
+{
+    const std::wstring targetFileDirPath = Util::to_wstring(TARGET_FILE_DIR);
+    const std::wstring slInterposerDllPath = targetFileDirPath + L"/sl.interposer.dll";
+
+    // TODO: verify using WinVerifyTrust
+
+    if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
+    {
+        fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
+        printf("Exiting...\n");
+        exit(-1);
+    }
+
+    sl::Preferences prefs = {};
+    prefs.showConsole = false;
+    prefs.logLevel = sl::LogLevel::eDefault;
+#ifdef _DEBUG
+    if (!testMode)
+    {
+        prefs.showConsole = true;
+        prefs.logLevel = sl::LogLevel::eVerbose;
+    }
+#endif
+
+    const sl::Feature features[] = { sl::kFeatureDLSS_RR };
+    prefs.featuresToLoad = features;
+    prefs.numFeaturesToLoad = _countof(features);
+
+    prefs.applicationId = 1738; // TODO: not sure what to put here lol
+
+    prefs.flags |= sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+
+    CHECK_SL_RESULT(slInit(prefs));
+}
+
 ComPtr<IDXGIFactory4> factory;
 ComPtr<ID3D12Device5> device;
 ComPtr<ID3D12CommandQueue> cmdQueue;
 ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
+    const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
+    const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
+
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
+    typedef HRESULT(WINAPI * PFunCreateDXGIFactory2)(UINT, REFIID, void**);
+    typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
+    typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
+
+    //const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
+    //const auto slCreateDXGIFactory1 = reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
+    const auto slCreateDXGIFactory2 = reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
+    //const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
+    const auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
+
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
-    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
-    {
-        printf("Enabled debug layer\n");
-        debug->EnableDebugLayer();
-    }
+    CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
+    printf("Enabled debug layer\n");
+    debug->EnableDebugLayer();
 
-    if (SUCCEEDED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory))))
-    {
-        printf("Created debug factory\n");
-    }
-    else
-    {
-        printf("Failed to create debug factory, falling back to non-debug\n");
-    }
+#define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
+#else
+#define DXGI_FACTORY_FLAGS 0
 #endif
 
-    if (!factory)
+    if (SUCCEEDED(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory))))
     {
-        CHECK_HRESULT(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
         printf("Created factory\n");
     }
+
+#undef DXGI_FACTORY_FLAGS
 
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
         DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
+        CHECK_HRESULT(adapter->GetDesc1(&desc));
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
         {
             adapter.Reset();
             continue;
         }
 
-        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
+        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
         {
+            CHECK_SL_RESULT(slSetD3DDevice(device.Get()));
+
+            sl::AdapterInfo adapterInfo{};
+            adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
+            adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
+
+            CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
+
             printf("Selected adapter: %ls\n", desc.Description);
             break;
         }
@@ -254,49 +350,20 @@ void initSwapChain()
     factory.Reset();
 }
 
-RtTarget pathTracingTarget{
-    L"pathTracingTarget",
-    DXGI_FORMAT_R32G32B32A32_FLOAT,
-    3, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget diffuseAlbedoTarget{
-    L"diffuseAlbedoTarget",
-    DXGI_FORMAT_R16G16B16A16_FLOAT,
-    3, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget depthTarget{
-    L"depthTarget",
-    DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget linearDepthTarget{
-    L"linearDepthTarget",
-    DXGI_FORMAT_R16_FLOAT,
-    1, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
-RtTarget motionTarget{
-    L"motionTarget",
-    DXGI_FORMAT_R16G16_FLOAT,
-    2, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
+// clang-format off
+RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 }; // TODO: remove
+RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+// should really be 4 debug channels but it would be mostly transparent then
+RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+RtTarget specularMotionTarget{ L"specularMotionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 
-RtTarget debugTarget{
-    L"debugTarget",
-    DXGI_FORMAT_R32G32B32A32_FLOAT,
-    4, /*debugOutputNumChannels*/
-    true /*hasUav*/,
-    true /*hasSrv*/,
-};
+RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+// clang-format on
 
 std::vector<RtTarget*> rtTargets;
 
@@ -304,10 +371,14 @@ void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
+    rtTargets.push_back(&specularAlbedoTarget);
     rtTargets.push_back(&depthTarget);
     rtTargets.push_back(&linearDepthTarget);
+    rtTargets.push_back(&normalsAndRoughnessTarget);
     rtTargets.push_back(&motionTarget);
+    rtTargets.push_back(&specularMotionTarget);
 
+    rtTargets.push_back(&dlssOutputTarget);
     rtTargets.push_back(&debugTarget);
 
     resize();
@@ -317,6 +388,21 @@ std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
+
+sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
+sl::Extent slRenderExtent;
+sl::Extent slViewportExtent;
+
+static const std::vector<const char*> dlssModeOptions = {
+    "DLAA", "quality", "balanced", "performance", "ultra performance",
+};
+static const std::vector<sl::DLSSMode> dlssModes = {
+    sl::DLSSMode::eDLAA,
+    sl::DLSSMode::eMaxQuality,
+    sl::DLSSMode::eBalanced,
+    sl::DLSSMode::eMaxPerformance,
+    sl::DLSSMode::eUltraPerformance,
+};
 
 void resize()
 {
@@ -330,12 +416,44 @@ void resize()
     const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
     const uint32_t viewportHeight = std::max<uint32_t>(rect.bottom - rect.top, 1);
 
-    // will be different than viewport width/height after adding DLSS super resolution
-    const uint32_t renderWidth = viewportWidth;
-    const uint32_t renderHeight = viewportHeight;
-
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
+
+    uint32_t renderWidth;
+    uint32_t renderHeight;
+
+    if (SettingsManager::getAsBool("enableDlss"))
+    {
+        slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
+
+        sl::DLSSDOptimalSettings dlssdSettings;
+        sl::DLSSDOptions dlssdOptions;
+        dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
+        dlssdOptions.outputWidth = viewportWidth;
+        dlssdOptions.outputHeight = viewportHeight;
+        CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
+
+        renderWidth = dlssdSettings.optimalRenderWidth;
+        renderHeight = dlssdSettings.optimalRenderHeight;
+
+        slRenderExtent = { 0, 0, renderWidth, renderHeight };
+
+        dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+        dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
+        dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+        // TODO: exposure?
+        dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+        CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
+    }
+    else
+    {
+        renderWidth = viewportWidth;
+        renderHeight = viewportHeight;
+    }
 
     flush();
 
@@ -360,7 +478,14 @@ void resize()
     for (RtTarget* rtTarget : rtTargets)
     {
         rtTarget->reset();
-        rtTarget->setDimensions(renderWidth, renderHeight);
+        if (rtTarget->isFullSize)
+        {
+            rtTarget->setDimensions(viewportWidth, viewportHeight);
+        }
+        else
+        {
+            rtTarget->setDimensions(renderWidth, renderHeight);
+        }
         rtTarget->init();
     }
 
@@ -369,9 +494,13 @@ void resize()
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
+            .specularAlbedoTargetIdx = specularAlbedoTarget.getUavIdx(),
             .depthTargetIdx = depthTarget.getUavIdx(),
+
             .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+            .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
+            .specularMotionTargetIdx = specularMotionTarget.getUavIdx(),
 
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
@@ -379,21 +508,29 @@ void resize()
         frame.paramBlockManager.heapIndices->srv = {
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
+            .specularAlbedoTargetIdx = specularAlbedoTarget.getSrvIdx(),
             .depthTargetIdx = depthTarget.getSrvIdx(),
-            .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
-            .motionTargetIdx = motionTarget.getSrvIdx(),
 
+            .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+            .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
+            .motionTargetIdx = motionTarget.getSrvIdx(),
+            .specularMotionTargetIdx = specularMotionTarget.getSrvIdx(),
+
+            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
 
-    camera.setAspectRatio(static_cast<float>(renderHeight) / static_cast<float>(renderWidth));
+    camera.setAspectRatio(static_cast<float>(renderWidth) / static_cast<float>(renderHeight));
 
     // DLSS programming guide says to use this as the jitter sequence length:
     // Total Phases = Base Phase Count * (Target Resolution / Render Resolution) ^ 2
+    //
+    // Streamline programming guide says there's no reason to limit the sequence length, so I'm using 64 for the "Base
+    // Phase Count" instead of the default/recommended of 8.
     const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderWidth);
     const uint32_t jitterHaltonSequenceLength =
-        static_cast<uint32_t>(ceilf(8 * (dlssScaleFactor * dlssScaleFactor)));
+        static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 }
 
@@ -923,14 +1060,17 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "diffuseAlbedo", "depth", "linearDepth", "motion", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "depth", "linearDepth", "motion", "normals", "debug",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
+
+    { "pathTracing", &pathTracingTarget },
     { "diffuseAlbedo", &diffuseAlbedoTarget },
     { "depth", &depthTarget },
     { "linearDepth", &linearDepthTarget },
     { "motion", &motionTarget },
+    { "normals", &normalsAndRoughnessTarget },
 
     { "debug", &debugTarget },
 };
@@ -940,7 +1080,10 @@ void imguiBeginFrame()
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+}
 
+void imguiEndFrame(bool& needsResize)
+{
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
@@ -950,10 +1093,17 @@ void imguiBeginFrame()
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
-    ImGui::Spacing();
+    SettingsGuiHelpers::VerticalSpacing();
 
-    if (ImGui::CollapsingHeader("Debug"))
+    if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        SettingsGuiHelpers::SectionTitle("DLSS");
+        needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
+        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+
+        SettingsGuiHelpers::VerticalSpacing();
+
+        SettingsGuiHelpers::SectionTitle("Debug view");
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
     }
@@ -964,16 +1114,30 @@ void imguiBeginFrame()
     {
         ImGui::SetWindowFocus(NULL);
     }
-}
 
-void imguiEndFrame()
-{
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
 
+inline sl::Resource makeSlResource(RtTarget* target)
+{
+    return {
+        sl::ResourceType::eTex2d,
+        target->getTarget(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    };
+}
+
+bool needsResize = false;
+
 void render()
 {
+    if (needsResize)
+    {
+        resize();
+        needsResize = false;
+    }
+
     if (!testMode)
     {
         imguiBeginFrame();
@@ -985,9 +1149,54 @@ void render()
 
     beginFrame();
 
-    auto& frameCtx = frameCtxs[frameCtxIdx];
+    const bool enableDlss = SettingsManager::getAsBool("enableDlss");
 
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
+    sl::FrameToken* frameToken;
+    sl::Constants slConstants;
+    if (enableDlss)
+    {
+        CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
+
+        {
+            // clang-format off
+            sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
+            sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
+            // sl::Resource depthResource = makeSlResource(&depthTarget);
+            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
+            sl::Resource motionResource = makeSlResource(&motionTarget);
+            sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
+            sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
+            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
+            sl::Resource specularMotionResource = makeSlResource(&specularMotionTarget);
+
+            sl::ResourceTag resourceTags[] = {
+                {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
+                // {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&specularMotionResource, sl::kBufferTypeSpecularMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+            };
+            // clang-format on
+
+            CHECK_SL_RESULT(
+                slSetTagForFrame(*frameToken, slViewportHandle, resourceTags, _countof(resourceTags), cmdList.Get()));
+        }
+
+        slConstants = {};
+        slConstants.depthInverted = sl::Boolean::eFalse;
+        slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+        slConstants.motionVectors3D = sl::Boolean::eFalse;
+        slConstants.reset = sl::Boolean::eFalse;
+        slConstants.orthographicProjection = sl::Boolean::eFalse;
+        slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+        slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+    }
+
+    auto& frameCtx = frameCtxs[frameCtxIdx];
 
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
@@ -997,7 +1206,16 @@ void render()
         playerInput = WindowManager::getPlayerInput();
     }
     camera.update(deltaTime, playerInput);
+
+    if (enableDlss)
+    {
+        camera.copySlConstantsTo(&slConstants);
+        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
+    }
+
     camera.copyParamsTo(paramBlockManager.cameraParams);
+
+    scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;
@@ -1005,6 +1223,7 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
+    renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1028,8 +1247,7 @@ void render()
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
-    ID3D12DescriptorHeap* heaps[] = { sharedDescriptorHeap.Get() };
-    cmdList->SetDescriptorHeaps(1, heaps);
+    ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
     // ===================================
     // RAYTRACING
@@ -1037,6 +1255,8 @@ void render()
 
     if (scene.hasTlas())
     {
+        cmdList->SetDescriptorHeaps(1, descHeaps);
+
         cmdList->SetPipelineState1(rtPso.Get());
         cmdList->SetComputeRootSignature(rtRootSig.Get());
 
@@ -1067,8 +1287,20 @@ void render()
     }
 
     // ===================================
+    // DLSS
+    // ===================================
+
+    if (enableDlss)
+    {
+        const sl::BaseStructure* inputs[] = { &slViewportHandle };
+        CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+    }
+
+    // ===================================
     // POSTPROCESSING
     // ===================================
+
+    cmdList->SetDescriptorHeaps(1, descHeaps);
 
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
@@ -1112,7 +1344,7 @@ void render()
 
     if (!testMode)
     {
-        imguiEndFrame();
+        imguiEndFrame(needsResize);
     }
 
     BufferHelper::stateTransitionResourceBarrier(
@@ -1186,6 +1418,8 @@ void destroy()
     }
 
     flush();
+
+    CHECK_SL_RESULT(slShutdown());
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();

@@ -47,13 +47,15 @@ struct ScopedItemWidth
     }
 };
 
-inline void Checkbox(const char* label, const char* settingName)
+inline bool Checkbox(const char* label, const char* settingName)
 {
     bool value = SettingsManager::getAsBool(settingName);
-    if (ImGui::Checkbox(label, &value))
+    const bool didChange = ImGui::Checkbox(label, &value);
+    if (didChange)
     {
         SettingsManager::setAsBool(settingName, value);
     }
+    return didChange;
 }
 
 inline void InputInt(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
@@ -104,16 +106,18 @@ inline void SliderUint(const char* label, const char* settingName, int minVal, i
     }
 }
 
-inline void ComboUint(const char* label, const char* settingName, const std::vector<const char*>& items)
+inline bool ComboUint(const char* label, const char* settingName, const std::vector<const char*>& items)
 {
     ScopedItemWidth width(comboWidth);
 
     int value = static_cast<int>(SettingsManager::getAsUint(settingName));
     ASSERT(value < items.size());
-    if (ImGui::Combo(label, &value, items.data(), static_cast<int>(items.size())))
+    const bool didChange = ImGui::Combo(label, &value, items.data(), static_cast<int>(items.size()));
+    if (didChange)
     {
         SettingsManager::setAsUint(settingName, static_cast<uint32_t>(value));
     }
+    return didChange;
 }
 
 inline void SliderFloat(const char* label, const char* settingName, float minVal, float maxVal)
@@ -147,6 +151,17 @@ inline void ComboString(const char* label, const char* settingName, const std::v
     {
         SettingsManager::setAsString(settingName, items[value]);
     }
+}
+
+inline void SectionTitle(const char* settingName)
+{
+    ImGui::Text(settingName);
+    ImGui::Separator();
+}
+
+inline void VerticalSpacing()
+{
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
 }
 
 }
