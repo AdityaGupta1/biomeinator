@@ -98,9 +98,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
     diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
 
-    RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
-    depthTarget[pixelIdx] = currNdc.z;
-
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;
 

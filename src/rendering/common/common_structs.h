@@ -168,17 +168,12 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint depthTargetIdx;
-
         uint linearDepthTargetIdx;
+
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
         uint specularMotionTargetIdx;
-
         uint debugTargetIdx;
-        uint pad0;
-        uint pad1;
-        uint pad2;
     } uav;
 
     struct
@@ -186,17 +181,17 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint depthTargetIdx;
-
         uint linearDepthTargetIdx;
+
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
         uint specularMotionTargetIdx;
-
         uint dlssOutputTargetIdx;
+
         uint debugTargetIdx;
         uint pad0;
         uint pad1;
+        uint pad2;
     } srv;
 };
 

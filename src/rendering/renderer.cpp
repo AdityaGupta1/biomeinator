@@ -354,7 +354,6 @@ void initSwapChain()
 RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
 RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 }; // TODO: remove
 RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 // should really be 4 debug channels but it would be mostly transparent then
 RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
@@ -372,7 +371,6 @@ void initRtTargets()
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
     rtTargets.push_back(&specularAlbedoTarget);
-    rtTargets.push_back(&depthTarget);
     rtTargets.push_back(&linearDepthTarget);
     rtTargets.push_back(&normalsAndRoughnessTarget);
     rtTargets.push_back(&motionTarget);
@@ -495,13 +493,11 @@ void resize()
             .pathTracingTargetIdx = pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getUavIdx(),
             .specularAlbedoTargetIdx = specularAlbedoTarget.getUavIdx(),
-            .depthTargetIdx = depthTarget.getUavIdx(),
-
             .linearDepthTargetIdx = linearDepthTarget.getUavIdx(),
+
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
             .specularMotionTargetIdx = specularMotionTarget.getUavIdx(),
-
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -509,14 +505,13 @@ void resize()
             .pathTracingTargetIdx = pathTracingTarget.getSrvIdx(),
             .diffuseAlbedoTargetIdx = diffuseAlbedoTarget.getSrvIdx(),
             .specularAlbedoTargetIdx = specularAlbedoTarget.getSrvIdx(),
-            .depthTargetIdx = depthTarget.getSrvIdx(),
-
             .linearDepthTargetIdx = linearDepthTarget.getSrvIdx(),
+
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
             .specularMotionTargetIdx = specularMotionTarget.getSrvIdx(),
-
             .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
+
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -1067,7 +1062,6 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
 
     { "pathTracing", &pathTracingTarget },
     { "diffuseAlbedo", &diffuseAlbedoTarget },
-    { "depth", &depthTarget },
     { "linearDepth", &linearDepthTarget },
     { "motion", &motionTarget },
     { "normals", &normalsAndRoughnessTarget },
@@ -1161,7 +1155,6 @@ void render()
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
-            // sl::Resource depthResource = makeSlResource(&depthTarget);
             sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
             sl::Resource motionResource = makeSlResource(&motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
@@ -1172,7 +1165,6 @@ void render()
             sl::ResourceTag resourceTags[] = {
                 {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
-                // {&depthResource, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
