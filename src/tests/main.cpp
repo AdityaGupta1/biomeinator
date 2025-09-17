@@ -76,8 +76,8 @@ int main(int argc, char** argv)
         printf("STARTING TEST: %s\n", test.name.c_str());
         printf("=============================================\n\n");
 
-        const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
         TEST_ASSERT(std::filesystem::is_regular_file(test.goldenPath));
+        const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
         std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
@@ -100,31 +100,38 @@ int main(int argc, char** argv)
         int goldW = 0;
         int goldH = 0;
         int goldC = 0;
-        unsigned char* golden = stbi_load(goldenCopy.generic_string().c_str(), &goldW, &goldH, &goldC, 3);
+        unsigned char* golden = stbi_load(test.goldenPath.generic_string().c_str(), &goldW, &goldH, &goldC, 3);
         TEST_ASSERT(golden != nullptr);
 
-        TEST_ASSERT(genW == goldW);
-        TEST_ASSERT(genH == goldH);
+        const bool widthMatches = (genW == goldW);
+        const bool heightMatches = (genH == goldH);
 
-        float sumSq = 0.f;
-        const size_t count = static_cast<size_t>(genW) * genH * 3;
-        std::vector<uint8_t> diffImg(count);
-        for (size_t i = 0; i < count; ++i)
+        TEST_ASSERT(widthMatches);
+        TEST_ASSERT(heightMatches);
+
+        float rmse = FLT_MAX;
+        if (widthMatches && heightMatches)
         {
-            const int diff = static_cast<int>(generated[i]) - static_cast<int>(golden[i]);
-            sumSq += static_cast<float>(diff * diff);
-            diffImg[i] = static_cast<uint8_t>(std::clamp(std::abs(diff), 0, 255));
-        }
-        stbi_image_free(generated);
-        stbi_image_free(golden);
+            float sumSq = 0.f;
+            const size_t count = static_cast<size_t>(genW) * genH * 3;
+            std::vector<uint8_t> diffImg(count);
+            for (size_t i = 0; i < count; ++i)
+            {
+                const int diff = static_cast<int>(generated[i]) - static_cast<int>(golden[i]);
+                sumSq += static_cast<float>(diff * diff);
+                diffImg[i] = static_cast<uint8_t>(std::clamp(std::abs(diff), 0, 255));
+            }
+            stbi_image_free(generated);
+            stbi_image_free(golden);
 
-        const auto diffPath = testsOutputPath / (test.name + "_DIFF.png");
-        const int writeResult =
+            const auto diffPath = testsOutputPath / (test.name + "_DIFF.png");
             stbi_write_png(diffPath.generic_string().c_str(), genW, genH, 3, diffImg.data(), genW * 3);
-        TEST_ASSERT(writeResult != 0);
 
-        const float rmse = std::sqrt(sumSq / count) / 255.f;
-        TEST_ASSERT(rmse <= test.threshold);
+            rmse = std::sqrt(sumSq / count) / 255.f;
+        }
+
+        const bool errorUnderThreshold = (rmse <= test.threshold);
+        TEST_ASSERT(errorUnderThreshold);
 
         if (numFailedAsserts == 0)
         {
