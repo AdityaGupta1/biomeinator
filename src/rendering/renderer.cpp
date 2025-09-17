@@ -150,6 +150,8 @@ bool testMode = false;
 
 void init()
 {
+    testMode = (SettingsManager::getAsString("testOutput") != "");
+
     initStreamline();
 
     initDevice();
@@ -182,7 +184,6 @@ void init()
         loadGltf(defaultScene);
     }
 
-    testMode = (SettingsManager::getAsString("testOutput") != "");
     if (!testMode)
     {
         SetForegroundWindow(hwnd);
@@ -205,17 +206,19 @@ void initStreamline()
     if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
     {
         fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
-        printf("Exiting...");
+        printf("Exiting...\n");
         exit(-1);
     }
 
     sl::Preferences prefs = {};
-#ifdef _DEBUG
-    prefs.showConsole = true;
-    prefs.logLevel = sl::LogLevel::eVerbose;
-#else
     prefs.showConsole = false;
     prefs.logLevel = sl::LogLevel::eDefault;
+#ifdef _DEBUG
+    if (!testMode)
+    {
+        prefs.showConsole = true;
+        prefs.logLevel = sl::LogLevel::eVerbose;
+    }
 #endif
 
     const sl::Feature features[] = { sl::kFeatureDLSS_RR };
@@ -236,7 +239,7 @@ ComPtr<ID3D12Fence> fence;
 void initDevice()
 {
     const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
-    auto slMod = LoadLibrary(slInterposerDllPath.c_str());
+    const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
 
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
@@ -244,11 +247,11 @@ void initDevice()
     typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
     typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
 
-    auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
-    auto slCreateDXGIFactory1 = reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
-    auto slCreateDXGIFactory2 = reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
-    auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
-    auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
+    //const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
+    //const auto slCreateDXGIFactory1 = reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
+    const auto slCreateDXGIFactory2 = reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
+    //const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
+    const auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
 
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
@@ -386,7 +389,7 @@ std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 D3D12_VIEWPORT viewport;
 D3D12_RECT scissor;
 
-sl::ViewportHandle slViewport{ 1738 }; // TODO: does this need to be a meaningful number?
+sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
 sl::Extent slRenderExtent;
 sl::Extent slViewportExtent;
 
@@ -444,7 +447,7 @@ void resize()
         dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
         // TODO: exposure?
         dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
-        CHECK_SL_RESULT(slDLSSDSetOptions(slViewport, dlssdOptions));
+        CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
     }
     else
     {
@@ -1149,7 +1152,7 @@ void render()
     const bool enableDlss = SettingsManager::getAsBool("enableDlss");
 
     sl::FrameToken* frameToken;
-    sl::Constants slConstants = {};
+    sl::Constants slConstants;
     if (enableDlss)
     {
         CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
@@ -1179,9 +1182,11 @@ void render()
             };
             // clang-format on
 
-            slSetTagForFrame(*frameToken, slViewport, resourceTags, _countof(resourceTags), cmdList.Get());
+            CHECK_SL_RESULT(
+                slSetTagForFrame(*frameToken, slViewportHandle, resourceTags, _countof(resourceTags), cmdList.Get()));
         }
 
+        slConstants = {};
         slConstants.depthInverted = sl::Boolean::eFalse;
         slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
         slConstants.motionVectors3D = sl::Boolean::eFalse;
@@ -1205,7 +1210,7 @@ void render()
     if (enableDlss)
     {
         camera.copySlConstantsTo(&slConstants);
-        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewport));
+        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
     }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
@@ -1242,7 +1247,7 @@ void render()
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
 
-    ID3D12DescriptorHeap* descHeaps[] = { sharedDescriptorHeap.Get() };
+    ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
     // ===================================
     // RAYTRACING
@@ -1287,7 +1292,7 @@ void render()
 
     if (enableDlss)
     {
-        const sl::BaseStructure* inputs[] = { &slViewport };
+        const sl::BaseStructure* inputs[] = { &slViewportHandle };
         CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
     }
 
