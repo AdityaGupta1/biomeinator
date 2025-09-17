@@ -113,7 +113,6 @@ void Camera::setMatrices()
     const XMMATRIX prevClipToClip = XMMatrixInverse(&det, clipToPrevClip);
     XMStoreFloat4x4(&this->dlssMatrices.prevClipToClipMat, prevClipToClip);
 
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
     XMStoreFloat4x4(&this->worldToPrevViewMat, worldToView);
     this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
@@ -165,6 +164,7 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // this has to happen regardless of if matrices are dirty
     if (this->areMatricesDirty)
     {
         this->setMatrices();
