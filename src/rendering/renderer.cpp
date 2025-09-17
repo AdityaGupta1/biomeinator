@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include <d3dcompiler.h>
 
+#include "camera.h"
 #include "param_block_manager.h"
 #include "rt_target.h"
 #include "settings_manager.h"
@@ -32,7 +33,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "buffer/to_free_list.h"
 #include "common/common_hitgroups.h"
 #include "common/common_registers.h"
-#include "scene/camera.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 
