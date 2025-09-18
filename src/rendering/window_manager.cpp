@@ -23,9 +23,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/gltf_loader.h"
 
 #include <commdlg.h>
-
 #include <locale>
 #include <codecvt>
+
+#include <hidsdi.h>
+#include <vector>
+
+#include "logger.h"
 
 #include <imgui_impl_win32.h>
 
@@ -36,9 +40,8 @@ namespace WindowManager
 
 HWND hwnd;
 
-bool ignoreOneCursorMovement = true;
-bool isCursorVisible = true;
-bool isInCursorMode = true;
+static bool isCursorVisible = true;
+static bool isInCursorMode = true;
 
 void setCursorVisibility(bool showCursor)
 {
@@ -49,6 +52,14 @@ void setCursorVisibility(bool showCursor)
     isCursorVisible = showCursor;
 }
 
+static int mouseRawDx = 0;
+static int mouseRawDy = 0;
+
+void resetMouseRawDeltas()
+{
+    mouseRawDx = mouseRawDy = 0;
+}
+
 void setIsInCursorMode(bool newIsInCursorMode)
 {
     if (newIsInCursorMode)
@@ -57,8 +68,8 @@ void setIsInCursorMode(bool newIsInCursorMode)
     }
     else
     {
-        ignoreOneCursorMovement = true;
         isInCursorMode = false;
+        resetMouseRawDeltas();
     }
 
     setCursorVisibility(isInCursorMode);
@@ -111,7 +122,31 @@ static void onKeyDown(WPARAM wparam)
     }
 }
 
-bool isInitialized = false;
+void setMouseDeltas(const LPARAM lparam)
+{
+    UINT byteSize = 0;
+    GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, nullptr, &byteSize, sizeof(RAWINPUTHEADER));
+    if (byteSize == 0)
+    {
+        return;
+    }
+
+    std::vector<BYTE> buf(byteSize);
+    if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, buf.data(), &byteSize, sizeof(RAWINPUTHEADER)) !=
+        byteSize)
+    {
+        return;
+    }
+
+    RAWINPUT* ri = reinterpret_cast<RAWINPUT*>(buf.data());
+    if (ri->header.dwType == RIM_TYPEMOUSE)
+    {
+        mouseRawDx += static_cast<int>(ri->data.mouse.lLastX);
+        mouseRawDy += static_cast<int>(ri->data.mouse.lLastY);
+    }
+}
+
+static bool isInitialized = false;
 
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -163,6 +198,11 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                 setIsInCursorMode(false);
             }
             break;
+        case WM_INPUT:
+        {
+            setMouseDeltas(lparam);
+            break;
+        }
         default:
             break;
     }
@@ -203,6 +243,17 @@ void init()
                            nullptr,
                            nullptr,
                            nullptr);
+
+    RAWINPUTDEVICE rid{};
+    rid.usUsagePage = 0x01; // generic desktop controls
+    rid.usUsage = 0x02; // mouse
+    rid.dwFlags = 0; // receive when focused; keep legacy messages for ImGui
+    rid.hwndTarget = hwnd;
+
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
+    {
+        Logger::logWarning("Failed to register raw input devices");
+    }
 
     isInitialized = true;
 }
@@ -262,24 +313,14 @@ PlayerInput getPlayerInput()
 
 #undef KEY_DOWN
 
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
+    input.mouseMovement.x = mouseRawDx;
+    input.mouseMovement.y = mouseRawDy;
+    resetMouseRawDeltas();
 
     RECT windowRect;
     GetWindowRect(WindowManager::hwnd, &windowRect);
     const int centerX = (windowRect.left + windowRect.right) / 2;
     const int centerY = (windowRect.top + windowRect.bottom) / 2;
-
-    if (ignoreOneCursorMovement)
-    {
-        ignoreOneCursorMovement = false;
-    }
-    else
-    {
-        input.mouseMovement.x = static_cast<float>(cursorPos.x - centerX);
-        input.mouseMovement.y = static_cast<float>(cursorPos.y - centerY);
-    }
-
     SetCursorPos(centerX, centerY);
 
     return input;
