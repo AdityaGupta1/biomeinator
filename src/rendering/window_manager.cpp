@@ -29,6 +29,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <imgui_impl_win32.h>
 
+#include <hidsdi.h>
+#include <vector>
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace WindowManager
@@ -111,6 +114,33 @@ static void onKeyDown(WPARAM wparam)
     }
 }
 
+static int mouseRawDx = 0;
+static int mouseRawDy = 0;
+
+void setMouseDeltas(const LPARAM lparam)
+{
+    UINT byteSize = 0;
+    GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, nullptr, &byteSize, sizeof(RAWINPUTHEADER));
+    if (byteSize == 0)
+    {
+        return;
+    }
+
+    std::vector<BYTE> buf(byteSize);
+    if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, buf.data(), &byteSize, sizeof(RAWINPUTHEADER)) !=
+        byteSize)
+    {
+        return;
+    }
+
+    RAWINPUT* ri = reinterpret_cast<RAWINPUT*>(buf.data());
+    if (ri->header.dwType == RIM_TYPEMOUSE)
+    {
+        mouseRawDx += static_cast<int>(ri->data.mouse.lLastX);
+        mouseRawDy += static_cast<int>(ri->data.mouse.lLastY);
+    }
+}
+
 bool isInitialized = false;
 
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -163,6 +193,11 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                 setIsInCursorMode(false);
             }
             break;
+        case WM_INPUT:
+        {
+            setMouseDeltas(lparam);
+            break;
+        }
         default:
             break;
     }
@@ -203,6 +238,17 @@ void init()
                            nullptr,
                            nullptr,
                            nullptr);
+
+    RAWINPUTDEVICE rid{};
+    rid.usUsagePage = 0x01; // Generic desktop controls
+    rid.usUsage = 0x02; // Mouse
+    rid.dwFlags = 0; // receive when focused; keep legacy messages for ImGui
+    rid.hwndTarget = hwnd;
+
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
+    {
+        // TODO: log error
+    }
 
     isInitialized = true;
 }
@@ -262,24 +308,23 @@ PlayerInput getPlayerInput()
 
 #undef KEY_DOWN
 
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
-
-    RECT windowRect;
-    GetWindowRect(WindowManager::hwnd, &windowRect);
-    const int centerX = (windowRect.left + windowRect.right) / 2;
-    const int centerY = (windowRect.top + windowRect.bottom) / 2;
-
     if (ignoreOneCursorMovement)
     {
         ignoreOneCursorMovement = false;
     }
     else
     {
-        input.mouseMovement.x = static_cast<float>(cursorPos.x - centerX);
-        input.mouseMovement.y = static_cast<float>(cursorPos.y - centerY);
+        input.mouseMovement.x = mouseRawDx;
+        input.mouseMovement.y = mouseRawDy;
     }
 
+    mouseRawDx = 0;
+    mouseRawDy = 0;
+
+    RECT windowRect;
+    GetWindowRect(WindowManager::hwnd, &windowRect);
+    const int centerX = (windowRect.left + windowRect.right) / 2;
+    const int centerY = (windowRect.top + windowRect.bottom) / 2;
     SetCursorPos(centerX, centerY);
 
     return input;

@@ -121,7 +121,7 @@ constexpr float playerHorizontalSpeed = 11.0f;
 constexpr float playerVerticalSpeed = 7.0f;
 constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
 
-constexpr float mouseSensitivity = 0.16f;
+constexpr float mouseSensitivity = 0.0016f;
 
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
@@ -141,8 +141,7 @@ void Camera::update(double deltaTime, const PlayerInput& input)
 
     if (input.mouseMovement.x != 0 || input.mouseMovement.y != 0)
     {
-        const float mouseMovementMultiplier = deltaTime * mouseSensitivity;
-        this->rotate(input.mouseMovement.x * mouseMovementMultiplier, input.mouseMovement.y * mouseMovementMultiplier);
+        this->rotate(input.mouseMovement.x * mouseSensitivity, input.mouseMovement.y * mouseSensitivity);
         this->areMatricesDirty = true;
     }
 
