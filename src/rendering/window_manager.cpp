@@ -39,9 +39,8 @@ namespace WindowManager
 
 HWND hwnd;
 
-bool ignoreOneCursorMovement = true;
-bool isCursorVisible = true;
-bool isInCursorMode = true;
+static bool isCursorVisible = true;
+static bool isInCursorMode = true;
 
 void setCursorVisibility(bool showCursor)
 {
@@ -52,6 +51,14 @@ void setCursorVisibility(bool showCursor)
     isCursorVisible = showCursor;
 }
 
+static int mouseRawDx = 0;
+static int mouseRawDy = 0;
+
+void resetMouseRawDeltas()
+{
+    mouseRawDx = mouseRawDy = 0;
+}
+
 void setIsInCursorMode(bool newIsInCursorMode)
 {
     if (newIsInCursorMode)
@@ -60,8 +67,8 @@ void setIsInCursorMode(bool newIsInCursorMode)
     }
     else
     {
-        ignoreOneCursorMovement = true;
         isInCursorMode = false;
+        resetMouseRawDeltas();
     }
 
     setCursorVisibility(isInCursorMode);
@@ -114,9 +121,6 @@ static void onKeyDown(WPARAM wparam)
     }
 }
 
-static int mouseRawDx = 0;
-static int mouseRawDy = 0;
-
 void setMouseDeltas(const LPARAM lparam)
 {
     UINT byteSize = 0;
@@ -141,7 +145,7 @@ void setMouseDeltas(const LPARAM lparam)
     }
 }
 
-bool isInitialized = false;
+static bool isInitialized = false;
 
 static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -308,18 +312,9 @@ PlayerInput getPlayerInput()
 
 #undef KEY_DOWN
 
-    if (ignoreOneCursorMovement)
-    {
-        ignoreOneCursorMovement = false;
-    }
-    else
-    {
-        input.mouseMovement.x = mouseRawDx;
-        input.mouseMovement.y = mouseRawDy;
-    }
-
-    mouseRawDx = 0;
-    mouseRawDy = 0;
+    input.mouseMovement.x = mouseRawDx;
+    input.mouseMovement.y = mouseRawDy;
+    resetMouseRawDeltas();
 
     RECT windowRect;
     GetWindowRect(WindowManager::hwnd, &windowRect);
