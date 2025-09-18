@@ -244,14 +244,14 @@ void init()
                            nullptr);
 
     RAWINPUTDEVICE rid{};
-    rid.usUsagePage = 0x01; // Generic desktop controls
-    rid.usUsage = 0x02; // Mouse
+    rid.usUsagePage = 0x01; // generic desktop controls
+    rid.usUsage = 0x02; // mouse
     rid.dwFlags = 0; // receive when focused; keep legacy messages for ImGui
     rid.hwndTarget = hwnd;
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
     {
-        // TODO: log error
+        fprintf(stderr, "WARNING: Failed to register raw input devices\n");
     }
 
     isInitialized = true;
