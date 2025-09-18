@@ -43,8 +43,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fstream>
 #include <algorithm>
 #include <vector>
-#include <cstdio>
 #include <shlobj.h>
+
+#include "logger.h"
 
 #include <stb_image_write.h>
 
@@ -66,21 +67,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef _DEBUG
 void printSlResultError(sl::Result result)
 {
+    std::string msg;
+
     switch (result)
     {
         case sl::Result::eErrorNoPlugins:
-            fprintf(stderr, "No plugins found\n");
+            msg = "No plugins found";
             break;
         case sl::Result::eErrorInvalidParameter:
-            fprintf(stderr, "Invalid parameter\n");
+            msg = "Invalid parameter";
             break;
         case sl::Result::eErrorMissingConstants:
-            fprintf(stderr, "Missing constants\n");
+            msg = "Missing constants";
             break;
         default:
-            fprintf(stderr, "Unknown Streamline error: %u\n", static_cast<uint32_t>(result));
+            msg = "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
             break;
     }
+
+    Logger::logError(msg.c_str());
 }
 
 #define CHECK_SL_RESULT(expr)                                                                                          \
@@ -88,7 +93,7 @@ void printSlResultError(sl::Result result)
     {                                                                                                                  \
         if (SL_FAILED(result, expr))                                                                                   \
         {                                                                                                              \
-            fprintf(stderr, "sl::Result failed: %s\n", #expr);                                                         \
+            Logger::logError("sl::Result failed: %s", #expr);                                                          \
             printSlResultError(result);                                                                                \
             __debugbreak();                                                                                            \
         }                                                                                                              \
@@ -205,8 +210,8 @@ void initStreamline()
 
     if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
     {
-        fprintf(stderr, "Could not verify signature of sl.interposer.dll\n");
-        printf("Exiting...\n");
+        Logger::logError("Could not verify signature of sl.interposer.dll");
+        Logger::log("Exiting...");
         exit(-1);
     }
 
@@ -256,7 +261,7 @@ void initDevice()
 #ifdef _DEBUG
     ComPtr<ID3D12Debug> debug;
     CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
-    printf("Enabled debug layer\n");
+    Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
 #define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
@@ -266,7 +271,7 @@ void initDevice()
 
     if (SUCCEEDED(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory))))
     {
-        printf("Created factory\n");
+        Logger::log("Created factory");
     }
 
 #undef DXGI_FACTORY_FLAGS
@@ -292,7 +297,7 @@ void initDevice()
 
             CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
 
-            printf("Selected adapter: %ls\n", desc.Description);
+            Logger::log("Selected adapter: %ls", desc.Description);
             break;
         }
 
@@ -533,10 +538,11 @@ void initCommand()
 {
     for (auto& frame : frameCtxs)
     {
-        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc));
+        CHECK_HRESULT(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc)));
     }
 
-    device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList));
+    CHECK_HRESULT(device->CreateCommandList1(
+        0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList)));
     cmdList->SetName(L"main cmdList");
 
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1042,7 +1048,7 @@ void finalizeQueuedScreenshot()
                    pixels.data(),
                    screenshotRequest.width * 4);
 
-    printf("Saved screenshot to %s\n", path.generic_string().c_str());
+    Logger::log("Saved screenshot to %s", path.generic_string().c_str());
 
     screenshotRequest.readbackBuffer.Reset();
     screenshotRequest = ScreenshotRequest();

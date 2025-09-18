@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_includes.h"
 #include "common/common_structs.h"
 
+#include "logger.h"
+
 #ifdef _DEBUG
 #include <stdio.h>
 #define CHECK_HRESULT(expr)                                                                                            \
@@ -29,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         HRESULT _hr = (expr);                                                                                          \
         if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
-            fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
+            Logger::logError("HRESULT failed: %s (0x%08X)", #expr, static_cast<unsigned int>(_hr));                    \
             __debugbreak();                                                                                            \
         }                                                                                                              \
     } while (0)
@@ -40,8 +42,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         HRESULT _hr = (expr);                                                                                          \
         if (FAILED(_hr))                                                                                               \
         {                                                                                                              \
-            fprintf(stderr, "HRESULT failed: %s (0x%08X)\n", #expr, static_cast<unsigned int>(_hr));                   \
-            fprintf(stderr, "Error: %s\n", (const char*)blob->GetBufferPointer());                                     \
+            Logger::logError("HRESULT failed: %s (0x%08X)", #expr, static_cast<unsigned int>(_hr));                    \
+            Logger::logError((const char*)blob->GetBufferPointer());                                                   \
             __debugbreak();                                                                                            \
         }                                                                                                              \
     } while (0)

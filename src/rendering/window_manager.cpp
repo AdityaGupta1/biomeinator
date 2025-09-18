@@ -23,14 +23,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/gltf_loader.h"
 
 #include <commdlg.h>
-
 #include <locale>
 #include <codecvt>
 
-#include <imgui_impl_win32.h>
-
 #include <hidsdi.h>
 #include <vector>
+
+#include "logger.h"
+
+#include <imgui_impl_win32.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -251,7 +252,7 @@ void init()
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
     {
-        fprintf(stderr, "WARNING: Failed to register raw input devices\n");
+        Logger::logWarning("Failed to register raw input devices");
     }
 
     isInitialized = true;

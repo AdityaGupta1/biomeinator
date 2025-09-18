@@ -36,6 +36,8 @@ colored glossy reflection, I manually added the color to the respective glTF fil
 #include "rendering/common/common_structs.h"
 #include "scene.h"
 
+#include "logger.h"
+
 using namespace tinygltf;
 
 namespace GltfLoader
@@ -43,7 +45,7 @@ namespace GltfLoader
 
 void loadGltf(const std::string& filePathStr, ::Scene& scene)
 {
-    printf("Loading GLTF file: %s\n", std::filesystem::path(filePathStr).generic_string().c_str());
+    Logger::log("Loading GLTF file: %s", std::filesystem::path(filePathStr).generic_string().c_str());
 
     scene.reset();
     scene.init();
@@ -59,11 +61,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
     if (!warn.empty())
     {
-        printf("glTF warning: %s\n", warn.c_str());
+        Logger::logWarning("glTF warning: %s\n", warn.c_str());
     }
     if (!err.empty())
     {
-        printf("glTF error: %s\n", err.c_str());
+        Logger::logError("glTF error: %s\n", err.c_str());
     }
     if (!loaded)
     {
