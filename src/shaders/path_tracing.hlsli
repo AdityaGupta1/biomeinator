@@ -217,7 +217,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
             return;
         }
 
-        if (pathDepth == 0 && surfBsdfSample.wasSpecular)
+        if (isFirstSample && pathDepth == 0 && surfBsdfSample.wasSpecular)
         {
             outputSpecularMotion(payload.pixelIdx, payload.hitInfo.hitPos_WS);
         }
