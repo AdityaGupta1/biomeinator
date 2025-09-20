@@ -107,7 +107,7 @@ static void onKeyDown(WPARAM wparam)
                     const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
                     // strip hidden characters which otherwise cause issues with file extension comparison
                     const std::string filePathStrClean = std::string(filePathStr.c_str());
-                    Renderer::loadGltf(filePathStrClean);
+                    Renderer::loadScene(filePathStrClean);
                 }
             }
             break;

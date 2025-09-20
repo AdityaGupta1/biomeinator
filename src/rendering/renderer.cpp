@@ -186,7 +186,7 @@ void init()
     const std::string& defaultScene = SettingsManager::getAsString("scene");
     if (!defaultScene.empty())
     {
-        loadGltf(defaultScene);
+        loadScene(defaultScene);
     }
 
     if (!testMode)
@@ -195,10 +195,13 @@ void init()
     }
 }
 
-void loadGltf(const std::string& filePathStr)
+bool dlssNeedsReset = false;
+
+void loadScene(const std::string& filePathStr)
 {
     flush();
     GltfLoader::loadGltf(filePathStr, scene);
+    dlssNeedsReset = true;
 }
 
 void initStreamline()
@@ -1191,10 +1194,19 @@ void render()
         slConstants.depthInverted = sl::Boolean::eFalse;
         slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
         slConstants.motionVectors3D = sl::Boolean::eFalse;
-        slConstants.reset = sl::Boolean::eFalse;
         slConstants.orthographicProjection = sl::Boolean::eFalse;
         slConstants.motionVectorsDilated = sl::Boolean::eFalse;
         slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+
+        if (dlssNeedsReset)
+        {
+            slConstants.reset = sl::Boolean::eTrue;
+            dlssNeedsReset = false;
+        }
+        else
+        {
+            slConstants.reset = sl::Boolean::eFalse;
+        }
     }
 
     auto& frameCtx = frameCtxs[frameCtxIdx];

@@ -29,7 +29,7 @@ namespace Renderer
 
 void init();
 
-void loadGltf(const std::string& filePathStr);
+void loadScene(const std::string& filePathStr);
 
 void resize();
 
