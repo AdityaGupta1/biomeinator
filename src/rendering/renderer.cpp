@@ -363,7 +363,7 @@ RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 // should really be 4 debug channels but it would be mostly transparent then
 RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
-RtTarget specularMotionTarget{ L"specularMotionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
 RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
@@ -379,7 +379,7 @@ void initRtTargets()
     rtTargets.push_back(&linearDepthTarget);
     rtTargets.push_back(&normalsAndRoughnessTarget);
     rtTargets.push_back(&motionTarget);
-    rtTargets.push_back(&specularMotionTarget);
+    rtTargets.push_back(&specularHitDistanceTarget);
 
     rtTargets.push_back(&dlssOutputTarget);
     rtTargets.push_back(&debugTarget);
@@ -407,6 +407,8 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eUltraPerformance,
 };
 
+sl::DLSSDOptions dlssdOptions;
+
 void resize()
 {
     if (!swapChain)
@@ -430,7 +432,6 @@ void resize()
         slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
         sl::DLSSDOptimalSettings dlssdSettings;
-        sl::DLSSDOptions dlssdOptions;
         dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
         dlssdOptions.outputWidth = viewportWidth;
         dlssdOptions.outputHeight = viewportHeight;
@@ -502,7 +503,7 @@ void resize()
 
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
-            .specularMotionTargetIdx = specularMotionTarget.getUavIdx(),
+            .specularHitDistanceTargetIdx = specularHitDistanceTarget.getUavIdx(),
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -514,7 +515,7 @@ void resize()
 
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
-            .specularMotionTargetIdx = specularMotionTarget.getSrvIdx(),
+            .specularHitDistanceTargetIdx = specularHitDistanceTarget.getSrvIdx(),
             .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
 
             .debugTargetIdx = debugTarget.getSrvIdx(),
@@ -1061,7 +1062,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularMotion", "normals", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularHitDistance", "normals", "debug",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
@@ -1071,7 +1072,7 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "specularAlbedo", &specularAlbedoTarget },
     { "linearDepth", &linearDepthTarget },
     { "motion", &motionTarget },
-    { "specularMotion", &specularMotionTarget },
+    { "specularHitDistance", &specularHitDistanceTarget },
     { "normals", &normalsAndRoughnessTarget },
 
     { "debug", &debugTarget },
@@ -1168,7 +1169,7 @@ void render()
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
             sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
-            sl::Resource specularMotionResource = makeSlResource(&specularMotionTarget);
+            sl::Resource specularHitDistanceResource = makeSlResource(&specularHitDistanceTarget);
 
             sl::ResourceTag resourceTags[] = {
                 {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
@@ -1178,7 +1179,7 @@ void render()
                 {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
                 {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&specularMotionResource, sl::kBufferTypeSpecularMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
             };
             // clang-format on
 
@@ -1211,6 +1212,9 @@ void render()
     {
         camera.copySlConstantsTo(&slConstants);
         CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
+
+        camera.copyMatricesToDlssOptions(&dlssdOptions.worldToCameraView, &dlssdOptions.cameraViewToWorld);
+        CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
     }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);

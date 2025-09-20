@@ -117,21 +117,11 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS);
 
-    // TODO: do this somehow without writing to the texture to avoid writing twice in the case of specular reflection
-    RWTexture2D<float2> specularMotionTarget = ResourceDescriptorHeap[heapIndices.uav.specularMotionTargetIdx];
-    specularMotionTarget[pixelIdx] = 0;
-
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
 
     RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
     specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);
-}
-
-void outputSpecularMotion(const uint2 pixelIdx, const float3 hitPos_WS)
-{
-    RWTexture2D<float2> specularMotionTarget = ResourceDescriptorHeap[heapIndices.uav.specularMotionTargetIdx];
-    specularMotionTarget[pixelIdx] = calculateMotionFromPos(hitPos_WS);
 }
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
@@ -219,7 +209,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 
         if (isFirstSample && pathDepth == 0 && surfBsdfSample.wasSpecular)
         {
-            outputSpecularMotion(payload.pixelIdx, payload.hitInfo.hitPos_WS);
+            payload.specularHitDistance = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
         }
 
         if (renderParams.enableMis == 1)

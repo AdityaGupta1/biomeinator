@@ -91,6 +91,7 @@ void Camera::setMatrices()
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
     const XMMATRIX worldToView = XMMatrixLookAtRH(eye, lookAt, up);
+    XMStoreFloat4x4(&this->worldToViewMat, worldToView);
 
     const XMMATRIX viewToClip = XMMatrixPerspectiveFovRH(
         this->currentFovYRadians, this->aspectRatio, this->params.nearPlane, this->params.farPlane);
@@ -104,6 +105,7 @@ void Camera::setMatrices()
     XMStoreFloat4x4(&this->dlssMatrices.clipToViewMat, clipToView);
 
     const XMMATRIX viewToWorld = XMMatrixInverse(&det, worldToView);
+    XMStoreFloat4x4(&this->viewToWorldMat, viewToWorld);
     const XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
     const XMMATRIX viewToPrevView = XMMatrixMultiply(viewToWorld, worldToPrevView);
     const XMMATRIX clipToPrevView = XMMatrixMultiply(clipToView, viewToPrevView);
@@ -213,6 +215,12 @@ void Camera::copySlConstantsTo(sl::Constants* constants)
     constants->cameraFar = this->params.farPlane;
     constants->cameraFOV = this->currentFovYRadians;
     constants->cameraAspectRatio = this->aspectRatio;
+}
+
+void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::float4x4* cameraViewToWorld)
+{
+    *worldToCameraView = toSlFloat4x4(this->worldToViewMat);
+    *cameraViewToWorld = toSlFloat4x4(this->viewToWorldMat);
 }
 
 void Camera::copyParamsTo(CameraParams* dest) const
