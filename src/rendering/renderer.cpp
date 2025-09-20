@@ -49,7 +49,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
-#include "main.rgs.fxh"
+#include "path_tracing.rgs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
 
@@ -760,8 +760,8 @@ void initPipeline()
     {
         D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
-                .pShaderBytecode = main_rgs_shaderBytecode,
-                .BytecodeLength = sizeof(main_rgs_shaderBytecode),
+                .pShaderBytecode = path_tracing_rgs_shaderBytecode,
+                .BytecodeLength = sizeof(path_tracing_rgs_shaderBytecode),
             },
         };
 
