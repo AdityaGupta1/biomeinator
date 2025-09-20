@@ -172,7 +172,7 @@ struct HeapIndices
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
-        uint specularMotionTargetIdx;
+        uint specularHitDistanceTargetIdx;
         uint debugTargetIdx;
     } uav;
 
@@ -185,7 +185,7 @@ struct HeapIndices
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
-        uint specularMotionTargetIdx;
+        uint specularHitDistanceTargetIdx;
         uint dlssOutputTargetIdx;
 
         uint debugTargetIdx;

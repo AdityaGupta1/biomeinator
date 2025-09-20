@@ -44,11 +44,19 @@ void RayGeneration()
         payload.flags = 0;
         payload.pixelIdx = pixelIdx;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
+        payload.specularHitDistance = 0;
 
         const bool isFirstSample = (sampleIdx == 0);
         pathTraceRay(ray, payload, isFirstSample);
 
         accumulatedColor += payload.pathColor;
+
+        if (isFirstSample)
+        {
+            RWTexture2D<float2> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+            specularHitDistanceTarget[pixelIdx] = payload.specularHitDistance;
+        }
+
     }
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;

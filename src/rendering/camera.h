@@ -45,6 +45,9 @@ private:
     DirectX::XMFLOAT4X4 worldToPrevViewMat;
     DirectX::XMFLOAT4X4 prevViewToPrevClipMat;
 
+    DirectX::XMFLOAT4X4 worldToViewMat;
+    DirectX::XMFLOAT4X4 viewToWorldMat;
+
     HaltonSequence jitterHalton;
 
     float phi{ 0 };
@@ -70,5 +73,6 @@ public:
     void setAspectRatio(float aspectRatio);
 
     void copySlConstantsTo(sl::Constants* constants);
+    void copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::float4x4* cameraViewToWorld);
     void copyParamsTo(CameraParams* dest) const;
 };

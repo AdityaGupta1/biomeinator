@@ -57,13 +57,26 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
+float2 calculateMotionFromPos(const float3 pos_WS)
+{
+    float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
+    currNdc /= currNdc.w;
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1));
+    prevNdc /= prevNdc.w;
+
+    float2 motion = (prevNdc.xy - currNdc.xy) / 2;
+    motion.y = -motion.y;
+    //motion *= DispatchRaysDimensions().xy;
+    return motion;
+}
+
 void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = payload.pixelIdx;
 
     float3 diffuseAlbedo = 0.f;
     float linearDepth = cameraParams.farPlane;
-    float3 motionHitPos;
+    float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
@@ -75,7 +88,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
-        motionHitPos = payload.hitInfo.hitPos_WS;
+        motionHitPos_WS = payload.hitInfo.hitPos_WS;
         hitNor_WS = payload.hitInfo.hitNor_WS;
 
         // TODO: eventually set roughness
@@ -89,16 +102,11 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     }
     else
     {
-        motionHitPos = evalRayPos(ray, cameraParams.farPlane);
+        motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
         hitNor_WS = normalize(-ray.Direction);
 
         specularAlbedo = 0.5f; // this was suggested somewhere for miss specular albedo (I forgot where though)
     }
-
-    float4 currNdc = mul(cameraParams.worldToClipMat, float4(motionHitPos, 1));
-    currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(motionHitPos, 1));
-    prevNdc /= prevNdc.w;
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
     diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
@@ -107,10 +115,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     linearDepthTarget[pixelIdx] = linearDepth;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
-    float2 motion = (prevNdc.xy - currNdc.xy) / 2;
-    motion.y = -motion.y;
-    //motion *= DispatchRaysDimensions().xy;
-    motionTarget[pixelIdx] = motion;
+    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
@@ -200,6 +205,11 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
         {
             return;
+        }
+
+        if (isFirstSample && pathDepth == 0 && surfBsdfSample.wasSpecular)
+        {
+            payload.specularHitDistance = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
         }
 
         if (renderParams.enableMis == 1)
