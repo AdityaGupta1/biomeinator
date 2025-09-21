@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common_preamble.h"
 
-#define GBUFFER_HITGROUP 0
+#define GBUFFER_HITGROUP_PRIMARY 0
 
 #define PT_HITGROUP_PRIMARY 0
 #define PT_HITGROUP_LIGHTS 1

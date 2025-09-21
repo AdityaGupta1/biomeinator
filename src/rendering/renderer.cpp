@@ -790,7 +790,7 @@ void initPipeline()
         gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
 
         gbufferPipelineInputs.hitGroups.resize(1);
-        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP] = {
+        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"HitGroup",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
