@@ -43,7 +43,7 @@ HWND hwnd;
 static bool isCursorVisible = true;
 static bool isInCursorMode = true;
 
-void setCursorVisibility(bool showCursor)
+static void setCursorVisibility(bool showCursor)
 {
     if (isCursorVisible != showCursor)
     {
@@ -55,12 +55,12 @@ void setCursorVisibility(bool showCursor)
 static int mouseRawDx = 0;
 static int mouseRawDy = 0;
 
-void resetMouseRawDeltas()
+static void resetMouseRawDeltas()
 {
     mouseRawDx = mouseRawDy = 0;
 }
 
-void setIsInCursorMode(bool newIsInCursorMode)
+static void setIsInCursorMode(bool newIsInCursorMode)
 {
     if (newIsInCursorMode)
     {
@@ -122,7 +122,7 @@ static void onKeyDown(WPARAM wparam)
     }
 }
 
-void setMouseDeltas(const LPARAM lparam)
+static void setMouseDeltas(const LPARAM lparam)
 {
     UINT byteSize = 0;
     GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, nullptr, &byteSize, sizeof(RAWINPUTHEADER));

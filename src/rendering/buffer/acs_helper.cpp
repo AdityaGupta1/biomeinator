@@ -38,9 +38,9 @@ struct AcsBuildInfo
     ComPtr<ID3D12Resource>* outAcs;
 };
 
-void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
-                                ToFreeList& toFreeList,
-                                const std::vector<AcsBuildInfo>& buildInfos)
+static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
+                                       ToFreeList& toFreeList,
+                                       const std::vector<AcsBuildInfo>& buildInfos)
 {
     uint64_t maxScratchSize = 0;
     for (const auto& buildInfo : buildInfos)
@@ -88,10 +88,10 @@ void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
-void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
-                       ComPtr<ID3D12Resource>* outBlas,
-                       ManagedBufferSection vertsBufferSection,
-                       ManagedBufferSection idxsBufferSection)
+static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
+                              ComPtr<ID3D12Resource>* outBlas,
+                              ManagedBufferSection vertsBufferSection,
+                              ManagedBufferSection idxsBufferSection)
 {
     const bool hasIdxs = (idxsBufferSection.sizeBytes > 0);
 

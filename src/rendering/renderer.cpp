@@ -67,7 +67,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sl_security.h>
 
 #ifdef _DEBUG
-void printSlResultError(sl::Result result)
+static void printSlResultError(sl::Result result)
 {
     std::string msg;
 
@@ -111,22 +111,22 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-void initStreamline();
-void initDevice();
-void initDescriptorHeaps();
-void initSwapChain();
-void initRtTargets();
-void initCommand();
-void initConstantParams();
-void initRootSignature();
-void initPipeline();
+static void initStreamline();
+static void initDevice();
+static void initDescriptorHeaps();
+static void initSwapChain();
+static void initRtTargets();
+static void initCommand();
+static void initConstantParams();
+static void initRootSignature();
+static void initPipeline();
 
-void initImgui();
+static void initImgui();
 
-void beginFrame();
-void submitCmd();
+static void beginFrame();
+static void submitCmd();
 
-constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
+static constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
 
 struct FrameContext
 {
@@ -138,22 +138,22 @@ struct FrameContext
     ParamBlockManager paramBlockManager{};
 };
 
-FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
-uint32_t frameCtxIdx = 0;
-uint64_t nextFenceValue = 1;
-HANDLE fenceEvent;
-HANDLE frameLatencyWaitable;
+static FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
+static uint32_t frameCtxIdx = 0;
+static uint64_t nextFenceValue = 1;
+static HANDLE fenceEvent;
+static HANDLE frameLatencyWaitable;
 
-uint32_t frameNumber = 0;
+static uint32_t frameNumber = 0;
 
-constexpr float defaultFovYDegrees = 35;
-Camera camera;
+static constexpr float defaultFovYDegrees = 35;
+static Camera camera;
 
-ComPtr<ID3D12GraphicsCommandList4> cmdList;
+static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
-Scene scene;
+static Scene scene;
 
-bool testMode = false;
+static bool testMode = false;
 
 void init()
 {
@@ -197,7 +197,7 @@ void init()
     }
 }
 
-bool dlssNeedsReset = false;
+static bool dlssNeedsReset = false;
 
 void loadScene(const std::string& filePathStr)
 {
@@ -206,7 +206,7 @@ void loadScene(const std::string& filePathStr)
     dlssNeedsReset = true;
 }
 
-void initStreamline()
+static void initStreamline()
 {
     const std::wstring targetFileDirPath = Util::to_wstring(TARGET_FILE_DIR);
     const std::wstring slInterposerDllPath = targetFileDirPath + L"/sl.interposer.dll";
@@ -242,11 +242,12 @@ void initStreamline()
     CHECK_SL_RESULT(slInit(prefs));
 }
 
-ComPtr<IDXGIFactory4> factory;
 ComPtr<ID3D12Device5> device;
-ComPtr<ID3D12CommandQueue> cmdQueue;
-ComPtr<ID3D12Fence> fence;
-void initDevice()
+
+static ComPtr<IDXGIFactory4> factory;
+static ComPtr<ID3D12CommandQueue> cmdQueue;
+static ComPtr<ID3D12Fence> fence;
+static void initDevice()
 {
     const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
     const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
@@ -317,12 +318,12 @@ void initDevice()
     device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
 }
 
-ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+static ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
 DescriptorHeapAllocator sharedDescHeapAlloc;
 
-ComPtr<ID3D12DescriptorHeap> rtvHeap;
+static ComPtr<ID3D12DescriptorHeap> rtvHeap;
 
-void initDescriptorHeaps()
+static void initDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC sharedHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -341,10 +342,10 @@ void initDescriptorHeaps()
     CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
 }
 
-ComPtr<IDXGISwapChain3> swapChain;
-constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+static ComPtr<IDXGISwapChain3> swapChain;
+static constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
-void initSwapChain()
+static void initSwapChain()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -376,7 +377,7 @@ RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
 std::vector<RtTarget*> rtTargets;
 
-void initRtTargets()
+static void initRtTargets()
 {
     rtTargets.push_back(&pathTracingTarget);
     rtTargets.push_back(&diffuseAlbedoTarget);
@@ -392,16 +393,16 @@ void initRtTargets()
     resize();
 }
 
-ComPtr<ID3D12Resource> dev_gbuffer;
+static ComPtr<ID3D12Resource> dev_gbuffer;
 
-std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
+static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
-D3D12_VIEWPORT viewport;
-D3D12_RECT scissor;
+static D3D12_VIEWPORT viewport;
+static D3D12_RECT scissor;
 
-sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
-sl::Extent slRenderExtent;
-sl::Extent slViewportExtent;
+static sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
+static sl::Extent slRenderExtent;
+static sl::Extent slViewportExtent;
 
 static const std::vector<const char*> dlssModeOptions = {
     "DLAA", "quality", "balanced", "performance", "ultra performance",
@@ -414,7 +415,7 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eUltraPerformance,
 };
 
-sl::DLSSDOptions dlssdOptions;
+static sl::DLSSDOptions dlssdOptions;
 
 void resize()
 {
@@ -546,7 +547,7 @@ void resize()
     camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 }
 
-void initCommand()
+static void initCommand()
 {
     for (auto& frame : frameCtxs)
     {
@@ -560,7 +561,7 @@ void initCommand()
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
 
-void initConstantParams()
+static void initConstantParams()
 {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -618,7 +619,9 @@ enum class PostprocessParam
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 
-D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type, const uint32_t reg, const uint32_t regSpace)
+static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
+                                       const uint32_t reg,
+                                       const uint32_t regSpace)
 {
     return {
         .ParameterType = type,
@@ -632,10 +635,10 @@ D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type, const uint
 #define MAKE_PARAM(type, regPrefix, name)                                                                              \
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
-ComPtr<ID3D12RootSignature> gbufferRootSig;
-ComPtr<ID3D12RootSignature> ptRootSig;
-ComPtr<ID3D12RootSignature> postprocessRootSig;
-void initRootSignature()
+static ComPtr<ID3D12RootSignature> gbufferRootSig;
+static ComPtr<ID3D12RootSignature> ptRootSig;
+static ComPtr<ID3D12RootSignature> postprocessRootSig;
+static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
@@ -757,19 +760,19 @@ void initRootSignature()
     }
 }
 
-ComPtr<ID3D12StateObject> gbufferPso;
-ComPtr<ID3D12Resource> dev_gbufferShaderIds;
-D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
+static ComPtr<ID3D12StateObject> gbufferPso;
+static ComPtr<ID3D12Resource> dev_gbufferShaderIds;
+static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
 
-ComPtr<ID3D12StateObject> ptPso;
-ComPtr<ID3D12Resource> dev_ptShaderIds;
-D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
+static ComPtr<ID3D12StateObject> ptPso;
+static ComPtr<ID3D12Resource> dev_ptShaderIds;
+static D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
 
-ComPtr<ID3D12PipelineState> postprocessPso;
+static ComPtr<ID3D12PipelineState> postprocessPso;
 
-constexpr uint32_t maxPayloadSizeBytes = 96;
+static constexpr uint32_t maxPayloadSizeBytes = 96;
 
-void initPipeline()
+static void initPipeline()
 {
     // ===================================
     // GBUFFER
@@ -854,7 +857,7 @@ void initPipeline()
     }
 }
 
-void initImgui()
+static void initImgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -888,7 +891,7 @@ static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
 
-void updateFps(double deltaTime)
+static void updateFps(double deltaTime)
 {
     frameCount++;
     elapsedTime += deltaTime;
@@ -923,7 +926,7 @@ void queueScreenshot(const bool useTestOutputPath)
     screenshotRequest.useTestOutputPath = useTestOutputPath;
 }
 
-void captureQueuedScreenshot()
+static void captureQueuedScreenshot()
 {
     RECT rect;
     GetClientRect(hwnd, &rect);
@@ -971,7 +974,7 @@ void captureQueuedScreenshot()
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 }
 
-void finalizeQueuedScreenshot()
+static void finalizeQueuedScreenshot()
 {
     flush();
 
@@ -1054,14 +1057,14 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "debug", &debugTarget },
 };
 
-void imguiBeginFrame()
+static void imguiBeginFrame()
 {
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 }
 
-void imguiEndFrame(bool& needsResize)
+static void imguiEndFrame(bool& needsResize)
 {
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
@@ -1098,7 +1101,7 @@ void imguiEndFrame(bool& needsResize)
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
 
-inline sl::Resource makeSlResource(RtTarget* target)
+static inline sl::Resource makeSlResource(RtTarget* target)
 {
     return {
         sl::ResourceType::eTex2d,
@@ -1107,7 +1110,7 @@ inline sl::Resource makeSlResource(RtTarget* target)
     };
 }
 
-bool needsResize = false;
+static bool needsResize = false;
 
 void render()
 {
@@ -1396,7 +1399,7 @@ void render()
     }
 }
 
-void waitForFence(const uint64_t fenceValue)
+static void waitForFence(const uint64_t fenceValue)
 {
     if (fence->GetCompletedValue() < fenceValue)
     {
@@ -1405,7 +1408,7 @@ void waitForFence(const uint64_t fenceValue)
     }
 }
 
-void beginFrame()
+static void beginFrame()
 {
     FrameContext& frame = frameCtxs[frameCtxIdx];
 
@@ -1417,7 +1420,7 @@ void beginFrame()
     cmdList->Reset(frame.cmdAlloc.Get(), nullptr);
 }
 
-void submitCmd()
+static void submitCmd()
 {
     cmdList->Close();
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
