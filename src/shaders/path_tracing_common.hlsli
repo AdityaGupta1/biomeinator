@@ -37,7 +37,7 @@ float3 getPrimaryRayDirection(const uint2 pixelIdx)
 {
     const float2 size = DispatchRaysDimensions().xy;
 
-    const float2 uv = pixelIdx / size;
+    const float2 uv = (pixelIdx + cameraParams.jitter) / size;
     const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
 
     const float aspect = size.x / size.y;
