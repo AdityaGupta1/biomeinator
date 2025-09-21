@@ -50,6 +50,8 @@ struct GbufferData
 
     uint materialIdx;
     uint payloadFlags;
+    uint pad0;
+    uint pad1;
 };
 
 struct Vertex
