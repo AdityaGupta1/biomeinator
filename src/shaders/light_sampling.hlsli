@@ -27,8 +27,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "payload.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT_REGISTER_AREA_LIGHTS, RT_REGISTER_SPACE);
-StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(PT_REGISTER_PER_TRI_DATAS, PT_REGISTER_SPACE);
+
+StructuredBuffer<AreaLight> areaLights : REGISTER_T(PT_REGISTER_AREA_LIGHTS, PT_REGISTER_SPACE);
+StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, PT_REGISTER_SPACE);
 
 AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
 {
@@ -79,16 +81,16 @@ DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 
     ray.TMax = 10000.f;
 
     Payload lightPayload;
-    lightPayload.materialId = MATERIAL_ID_INVALID;
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
-    if (lightPayload.materialId == MATERIAL_ID_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {
         return result;
     }
 
     result.didHitLight = true;
-    const Material material = materials[lightPayload.materialId];
+    const Material material = materials[lightPayload.materialIdx];
     result.Le = material.getEmissiveColor();
     result.pdf = lightPickPdf * lightSamplePdf;
 
@@ -118,5 +120,5 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     const InstanceData instanceData = instanceDatas[InstanceID()];
-    payload.materialId = instanceData.materialId;
+    payload.materialIdx = instanceData.materialIdx;
 }

@@ -81,8 +81,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
     ToFreeList toFreeList;
 
-    std::vector<uint32_t> materialIds;
-    materialIds.reserve(model.materials.size());
+    std::vector<uint32_t> materialIdxs;
+    materialIdxs.reserve(model.materials.size());
     std::vector<bool> materialIsEmissive;
     materialIsEmissive.reserve(model.materials.size());
     for (const tinygltf::Material& gltfMat : model.materials)
@@ -201,7 +201,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         material.setHasSpecularReflection(hasSpecularReflection);
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
-        materialIds.push_back(id);
+        materialIdxs.push_back(id);
         materialIsEmissive.push_back(material.emissiveStrength > 0.f);
     }
 
@@ -302,12 +302,12 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         {
             Instance* instance = scene.requestNewInstance(toFreeList);
 
-            uint32_t matId = MATERIAL_ID_INVALID;
-            if (prim.material >= 0 && static_cast<size_t>(prim.material) < materialIds.size())
+            uint32_t materialIdx = MATERIAL_IDX_INVALID;
+            if (prim.material >= 0 && static_cast<size_t>(prim.material) < materialIdxs.size())
             {
-                matId = materialIds[prim.material];
+                materialIdx = materialIdxs[prim.material];
             }
-            instance->setMaterialId(matId);
+            instance->setMaterialIdx(materialIdx);
 
             const Accessor& posAccessor = model.accessors[prim.attributes.find("POSITION")->second];
             const Accessor& norAccessor = model.accessors[prim.attributes.find("NORMAL")->second];

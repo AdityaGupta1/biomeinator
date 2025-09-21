@@ -18,7 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
+
+#include "global_params.hlsli"
+#include "payload.hlsli"
 
 #define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
 
@@ -28,7 +32,29 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_D
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE);
 ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE);
-StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE);
+
+float3 getPrimaryRayDirection(const uint2 pixelIdx)
+{
+    const float2 size = DispatchRaysDimensions().xy;
+
+    const float2 uv = (pixelIdx + cameraParams.jitter) / size;
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
+
+    const float aspect = size.x / size.y;
+    const float yScale = cameraParams.tanHalfFovY;
+    const float xScale = yScale * aspect;
+
+    const float3 targetPos_WS = cameraParams.pos_WS
+        + cameraParams.right_WS * ndc.x * xScale
+        + cameraParams.up_WS * ndc.y * yScale
+        + cameraParams.forward_WS;
+    return normalize(targetPos_WS - cameraParams.pos_WS);
+}
+
+float3 evalRayPos(const RayDesc ray, const float t)
+{
+    return mad(ray.Direction, t, ray.Origin);
+}
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
@@ -50,4 +76,38 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v0 = verts[instanceData.vertsBufferOffset + i0];
     v1 = verts[instanceData.vertsBufferOffset + i1];
     v2 = verts[instanceData.vertsBufferOffset + i2];
+}
+
+[shader("closesthit")]
+void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+{
+    const InstanceData instanceData = instanceDatas[InstanceID()];
+
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float4x3 objectToWorldMat = ObjectToWorld4x3();
+
+    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
+
+    const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
+    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3) objectToWorldMat));
+
+    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
+
+    payload.materialIdx = instanceData.materialIdx;
+
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
+}
+
+[shader("miss")]
+void Miss(inout Payload payload)
+{
+    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

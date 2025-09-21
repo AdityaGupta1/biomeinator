@@ -109,13 +109,11 @@ void RtTarget::reset()
 
 void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState)
 {
-    if (newState == this->targetResourceState)
+    if (newState != this->targetResourceState)
     {
-        return;
+        BufferHelper::stateTransitionResourceBarrier(cmdList, this->target.Get(), this->targetResourceState, newState);
+        this->targetResourceState = newState;
     }
-
-    BufferHelper::stateTransitionResourceBarrier(cmdList, this->target.Get(), this->targetResourceState, newState);
-    this->targetResourceState = newState;
 }
 
 ID3D12Resource* RtTarget::getTarget() const

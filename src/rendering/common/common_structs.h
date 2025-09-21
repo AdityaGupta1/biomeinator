@@ -31,6 +31,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define float4x4 DirectX::XMFLOAT4X4
 #endif // !_hlsl
 
+struct HitInfo
+{
+    float3 hitPos_WS;
+    uint instanceId;
+
+    float3 hitNor_WS;
+    uint triangleIdx;
+
+    float2 uv;
+    uint pad0;
+    uint pad1;
+};
+
+struct GbufferData
+{
+    HitInfo hitInfo;
+
+    uint materialIdx;
+    uint payloadFlags;
+    uint pad0;
+    uint pad1;
+};
+
 struct Vertex
 {
     float3 pos;
@@ -46,12 +69,12 @@ struct InstanceData
     uint perTriDatasBufferOffset;
 
     uint areaLightsBufferOffset;
-    uint materialId;
+    uint materialIdx;
     uint pad1;
     uint pad2;
 };
 
-#define MATERIAL_ID_INVALID ~0u
+#define MATERIAL_IDX_INVALID ~0u
 #define TEXTURE_ID_INVALID ~0u
 
 #define MATERIAL_FLAG_HAS_DIFFUSE (1 << 0)

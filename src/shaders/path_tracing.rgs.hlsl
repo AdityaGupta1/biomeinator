@@ -23,30 +23,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "materials.hlsli"
+#include "path_tracing_common.hlsli"
 #include "payload.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-float3 calculateRayTarget(const float2 idx, const float2 size)
-{
-    const float2 uv = idx / size;
-    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
-
-    const float aspect = size.x / size.y;
-    const float yScale = cameraParams.tanHalfFovY;
-    const float xScale = yScale * aspect;
-
-    const float3 target = cameraParams.pos_WS
-        + cameraParams.right_WS * ndc.x * xScale
-        + cameraParams.up_WS * ndc.y * yScale
-        + cameraParams.forward_WS;
-    return target;
-}
-
-float3 evalRayPos(const RayDesc ray, const float t)
-{
-    return mad(ray.Direction, t, ray.Origin);
-}
+StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
 
 float powerHeuristic(const float pdfA, const float pdfB)
 {
@@ -55,90 +37,19 @@ float powerHeuristic(const float pdfA, const float pdfB)
     return pdfA2 / (pdfA2 + pdfB2);
 }
 
-float2 calculateMotionFromPos(const float3 pos_WS)
+void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
-    float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
-    currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1));
-    prevNdc /= prevNdc.w;
+    RayDesc ray;
+    ray.Direction = getPrimaryRayDirection(payload.pixelIdx);
 
-    float2 motion = (prevNdc.xy - currNdc.xy) / 2;
-    motion.y = -motion.y;
-    //motion *= DispatchRaysDimensions().xy;
-    return motion;
-}
-
-void outputGuideBuffers(const Payload payload, const RayDesc ray)
-{
-    const uint2 pixelIdx = payload.pixelIdx;
-
-    float3 diffuseAlbedo = 0.f;
-    float linearDepth = cameraParams.farPlane;
-    float3 motionHitPos_WS;
-    float3 hitNor_WS = 0.f;
-    float roughness = 0.f;
-    float3 specularAlbedo = 0.f;
-
-    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
-    {
-        const Material surfMaterial = materials[payload.materialId];
-        diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
-
-        linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-
-        motionHitPos_WS = payload.hitInfo.hitPos_WS;
-        hitNor_WS = payload.hitInfo.hitNor_WS;
-
-        // TODO: eventually set roughness
-
-        if (surfMaterial.hasSpecularReflection())
-        {
-            const float alpha = roughness * roughness;
-            const float nDotV = dot(hitNor_WS, -ray.Direction);
-            specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.specularColor, alpha, nDotV);
-        }
-    }
-    else
-    {
-        motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
-        hitNor_WS = normalize(-ray.Direction);
-
-        specularAlbedo = 0.5f; // this was suggested somewhere for miss specular albedo (I forgot where though)
-    }
-
-    RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
-    diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
-
-    RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
-    linearDepthTarget[pixelIdx] = linearDepth;
-
-    RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
-    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS);
-
-    RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
-
-    RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
-    specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);
-}
-
-void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
-{
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
-
-    if (isFirstSample)
-    {
-        outputGuideBuffers(payload, ray);
-    }
-
-    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         return;
     }
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const Material surfMaterial = materials[payload.materialId];
+        const Material surfMaterial = materials[payload.materialIdx];
 
         if (surfMaterial.hasEmission())
         {
@@ -198,9 +109,9 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
             return;
         }
@@ -212,7 +123,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 
         if (renderParams.enableMis == 1)
         {
-            const Material hitMaterial = materials[payload.materialId];
+            const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
@@ -224,67 +135,30 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
     }
 }
 
-[shader("closesthit")]
-void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
-{
-    const InstanceData instanceData = instanceDatas[InstanceID()];
-
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
-
-    const float2 bary2 = attribs.barycentrics;
-    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-
-    const float4x3 objectToWorldMat = ObjectToWorld4x3();
-
-    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
-    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
-
-    const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3)objectToWorldMat));
-
-    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    payload.materialId = instanceData.materialId;
-
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
-}
-
-[shader("miss")]
-void Miss(inout Payload payload)
-{
-    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
-}
-
 [shader("raygeneration")]
 void RayGeneration()
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
-    const uint2 size = DispatchRaysDimensions().xy;
-    const uint linearPixelIdx = pixelIdx.y * size.x + pixelIdx.x;
+    const uint linearPixelIdx = pixelIdx.y * DispatchRaysDimensions().x + pixelIdx.x;
 
-    RayDesc ray;
-    ray.Origin = cameraParams.pos_WS;
-    const float3 targetPos_WS = calculateRayTarget(float2(pixelIdx) + cameraParams.jitter, size);
-    ray.Direction = normalize(targetPos_WS - cameraParams.pos_WS);
-    ray.TMin = 0.001;
-    ray.TMax = 1000;
+    const GbufferData gbufferData = gbuffer[linearPixelIdx];
+    Payload gbufferPayload;
+    gbufferPayload.hitInfo = gbufferData.hitInfo;
+    gbufferPayload.materialIdx = gbufferData.materialIdx;
+    gbufferPayload.flags = gbufferData.payloadFlags;
+    gbufferPayload.pathWeight = float3(1, 1, 1);
+    gbufferPayload.pathColor = float3(0, 0, 0);
+    gbufferPayload.pixelIdx = pixelIdx;
+    gbufferPayload.specularHitDistance = 0;
 
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
-        Payload payload;
-        payload.pathWeight = float3(1, 1, 1);
-        payload.pathColor = float3(0, 0, 0);
-        payload.flags = 0;
-        payload.pixelIdx = pixelIdx;
+        Payload payload = gbufferPayload;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
-        payload.specularHitDistance = 0;
 
         const bool isFirstSample = (sampleIdx == 0);
-        pathTraceRay(ray, payload, isFirstSample);
+        pathTraceRay(payload, isFirstSample);
 
         accumulatedColor += payload.pathColor;
 

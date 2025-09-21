@@ -21,27 +21,45 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "common_preamble.h"
 
 // =============================================
-#define RT_REGISTER_SPACE 0
+#define COMMON_REGISTER_SPACE 0
+// =============================================
+
+// b#
+#define COMMON_REGISTER_GLOBAL_PARAMS 0
+
+// =============================================
+#define RT_REGISTER_SPACE 1
 // =============================================
 
 // t#
 #define RT_REGISTER_RAYTRACING_ACS 0
 #define RT_REGISTER_VERTS 1
 #define RT_REGISTER_IDXS 2
-#define RT_REGISTER_PER_TRI_DATAS 3
-#define RT_REGISTER_INSTANCE_DATAS 4
-#define RT_REGISTER_MATERIALS 5
-#define RT_REGISTER_AREA_LIGHTS 6
-#define RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
-
-// b#
-#define RT_REGISTER_GLOBAL_PARAMS 0
+#define RT_REGISTER_INSTANCE_DATAS 3
+#define RT_REGISTER_MATERIALS 4
 
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0
 
 // =============================================
-#define POSTPROCESS_REGISTER_SPACE 0
+#define GBUFFER_REGISTER_SPACE 2
+// =============================================
+
+// u#
+#define GBUFFER_REGISTER_GBUFFER 0
+
+// =============================================
+#define PT_REGISTER_SPACE 2
+// =============================================
+
+// t#
+#define PT_REGISTER_GBUFFER 0
+#define PT_REGISTER_PER_TRI_DATAS 1
+#define PT_REGISTER_AREA_LIGHTS 2
+#define PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 3
+
+// =============================================
+#define POSTPROCESS_REGISTER_SPACE 2
 // =============================================
 
 // s#
