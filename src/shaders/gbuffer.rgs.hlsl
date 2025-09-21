@@ -111,6 +111,7 @@ void RayGeneration()
     payload.flags = 0;
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
     outputGuideBuffers(payload, ray);
 
     GbufferData outGbufferData;

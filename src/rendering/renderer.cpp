@@ -620,8 +620,7 @@ enum class PostprocessParam
 
 D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type, const uint32_t reg, const uint32_t regSpace)
 {
-    return
-    {
+    return {
         .ParameterType = type,
         .Descriptor = {
             .ShaderRegister = reg,
@@ -1282,8 +1281,8 @@ void render()
         // PATH TRACING
         // ===================================
 
-        // dev_gbuffer should be auto-promoted to UNORDERED_ACCESS when accessed by the gbuffer, and then should decay
-        // back to COMMON after executing the command list
+        // dev_gbuffer should be auto-promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
+        // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_gbuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,

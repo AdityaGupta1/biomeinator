@@ -146,16 +146,16 @@ void RayGeneration()
     gbufferPayload.hitInfo = gbufferData.hitInfo;
     gbufferPayload.materialIdx = gbufferData.materialIdx;
     gbufferPayload.flags = gbufferData.payloadFlags;
+    gbufferPayload.pathWeight = float3(1, 1, 1);
+    gbufferPayload.pathColor = float3(0, 0, 0);
+    gbufferPayload.pixelIdx = pixelIdx;
+    gbufferPayload.specularHitDistance = 0;
 
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
         Payload payload = gbufferPayload;
-        payload.pathWeight = float3(1, 1, 1);
-        payload.pathColor = float3(0, 0, 0);
-        payload.pixelIdx = pixelIdx;
         payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
-        payload.specularHitDistance = 0;
 
         const bool isFirstSample = (sampleIdx == 0);
         pathTraceRay(payload, isFirstSample);
