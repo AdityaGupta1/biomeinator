@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "camera.h"
 #include "param_block_manager.h"
+#include "pipeline_builder.h"
 #include "rt_target.h"
 #include "settings_manager.h"
 #include "settings_gui_helpers.h"
@@ -775,199 +776,59 @@ void initPipeline()
     // GBUFFER
     // ===================================
     {
-        D3D12_DXIL_LIBRARY_DESC lib = {
-            .DXILLibrary = {
-                .pShaderBytecode = gbuffer_rgs_shaderBytecode,
-                .BytecodeLength = sizeof(gbuffer_rgs_shaderBytecode),
-            },
+        RtPipelineInputs gbufferPipelineInputs = {
+            .name = L"gbuffer",
+            .pso = gbufferPso,
+            .dev_shaderIds = dev_gbufferShaderIds,
+            .rgsShaderName = L"RayGeneration",
+            .missShaderName = L"Miss",
+            .dispatchDesc = gbufferDispatchDesc,
         };
 
-        constexpr uint32_t NUM_HIT_GROUPS = 1;
-        std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
-        hitGroups[GBUFFER_HITGROUP] = {
+        gbufferPipelineInputs.shaderBytecode = gbuffer_rgs_shaderBytecode;
+        gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+        gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
+
+        gbufferPipelineInputs.hitGroups.resize(1);
+        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP] = {
             .HitGroupExport = L"HitGroup",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
 
-        D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-            .MaxPayloadSizeInBytes = maxPayloadSizeBytes,
-            .MaxAttributeSizeInBytes = 8,
-        };
-
-        D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
-            gbufferRootSig.Get(),
-        };
-
-        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-            .MaxTraceRecursionDepth = 1,
-        };
-
-        std::vector<D3D12_STATE_SUBOBJECT> subobjects;
-        {
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
-
-            for (const auto& hitGroup : hitGroups)
-            {
-                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
-            }
-        }
-
-        D3D12_STATE_OBJECT_DESC desc = {
-            .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-            .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
-            .pSubobjects = subobjects.data(),
-        };
-        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&gbufferPso)));
-
-        const uint32_t shaderIdsSizeBytes =
-            2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-        dev_gbufferShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
-        dev_gbufferShaderIds->SetName(L"dev_gbufferShaderIds");
-
-        ComPtr<ID3D12StateObjectProperties> props;
-        gbufferPso.As(&props);
-
-        uint8_t* host_shaderIds;
-        dev_gbufferShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
-
-        auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
-        {
-            void* id = props->GetShaderIdentifier(name);
-            memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-            host_shaderIds += incrementSizeBytes;
-        };
-
-        writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-        writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-        for (const auto& hitGroup : hitGroups)
-        {
-            writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        }
-
-        dev_gbufferShaderIds->Unmap(0, nullptr);
-
-        gbufferDispatchDesc = {
-            .RayGenerationShaderRecord = {
-                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress(),
-                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .MissShaderTable = {
-                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .HitGroupTable = {
-                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-                .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-                .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .Depth = 1,
-        };
+        makeRtPipeline(gbufferPipelineInputs);
     }
 
     // ===================================
     // PATH TRACING
     // ===================================
     {
-        D3D12_DXIL_LIBRARY_DESC lib = {
-            .DXILLibrary = {
-                .pShaderBytecode = path_tracing_rgs_shaderBytecode,
-                .BytecodeLength = sizeof(path_tracing_rgs_shaderBytecode),
-            },
+        RtPipelineInputs ptPipelineInputs = {
+            .name = L"pathTracing",
+            .pso = ptPso,
+            .dev_shaderIds = dev_ptShaderIds,
+            .rgsShaderName = L"RayGeneration",
+            .missShaderName = L"Miss",
+            .dispatchDesc = ptDispatchDesc,
         };
 
-        constexpr uint32_t NUM_HIT_GROUPS = 2;
-        std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
-        hitGroups[PT_HITGROUP_PRIMARY] = {
+        ptPipelineInputs.shaderBytecode = path_tracing_rgs_shaderBytecode;
+        ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+        ptPipelineInputs.rootSig = ptRootSig.Get();
+
+        ptPipelineInputs.hitGroups.resize(2);
+        ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
-        hitGroups[PT_HITGROUP_LIGHTS] = {
+        ptPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
             .HitGroupExport = L"HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
 
-        D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-            .MaxPayloadSizeInBytes = maxPayloadSizeBytes,
-            .MaxAttributeSizeInBytes = 8,
-        };
-
-        D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
-            ptRootSig.Get(),
-        };
-
-        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
-            .MaxTraceRecursionDepth = 1,
-        };
-
-        std::vector<D3D12_STATE_SUBOBJECT> subobjects;
-        {
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
-
-            for (const auto& hitGroup : hitGroups)
-            {
-                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
-            }
-        }
-
-        D3D12_STATE_OBJECT_DESC desc = {
-            .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-            .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
-            .pSubobjects = subobjects.data(),
-        };
-        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&ptPso)));
-
-        const uint32_t shaderIdsSizeBytes =
-            2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-        dev_ptShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
-        dev_ptShaderIds->SetName(L"dev_ptShaderIds");
-
-        ComPtr<ID3D12StateObjectProperties> props;
-        ptPso.As(&props);
-
-        uint8_t* host_shaderIds;
-        dev_ptShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
-
-        auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
-        {
-            void* id = props->GetShaderIdentifier(name);
-            memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-            host_shaderIds += incrementSizeBytes;
-        };
-
-        writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-        writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-        for (const auto& hitGroup : hitGroups)
-        {
-            writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-        }
-
-        dev_ptShaderIds->Unmap(0, nullptr);
-
-        ptDispatchDesc = {
-            .RayGenerationShaderRecord = {
-                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress(),
-                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .MissShaderTable = {
-                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .HitGroupTable = {
-                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
-                .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-                .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-            },
-            .Depth = 1,
-        };
+        makeRtPipeline(ptPipelineInputs);
     }
 
     // ===================================
@@ -976,8 +837,8 @@ void initPipeline()
     {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
         psoDesc.pRootSignature = postprocessRootSig.Get();
-        psoDesc.VS = { postprocess_vs_shaderBytecode, sizeof(postprocess_vs_shaderBytecode) };
-        psoDesc.PS = { postprocess_ps_shaderBytecode, sizeof(postprocess_ps_shaderBytecode) };
+        psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
+        psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
         psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         psoDesc.DepthStencilState = {
