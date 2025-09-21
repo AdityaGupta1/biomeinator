@@ -617,6 +617,21 @@ enum class PostprocessParam
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 
+D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type, const uint32_t reg, const uint32_t regSpace)
+{
+    return
+    {
+        .ParameterType = type,
+        .Descriptor = {
+            .ShaderRegister = reg,
+            .RegisterSpace = regSpace,
+        },
+    };
+}
+
+#define MAKE_PARAM(type, regPrefix, name)                                                                              \
+    makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
+
 ComPtr<ID3D12RootSignature> gbufferRootSig;
 ComPtr<ID3D12RootSignature> ptRootSig;
 ComPtr<ID3D12RootSignature> postprocessRootSig;
@@ -639,61 +654,15 @@ void initRootSignature()
     {
         std::array<D3D12_ROOT_PARAMETER1, GBUFFER_PARAM_IDX(COUNT)> gbufferParams;
 
-        gbufferParams[GBUFFER_PARAM_IDX(GLOBAL_PARAMS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-            .Descriptor = {
-                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = COMMON_REGISTER_SPACE,
-            },
-        };
+        gbufferParams[GBUFFER_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
-        gbufferParams[GBUFFER_PARAM_IDX(RAYTRACING_ACS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
+        gbufferParams[GBUFFER_PARAM_IDX(RAYTRACING_ACS)] = MAKE_PARAM(SRV, RT, RAYTRACING_ACS);
+        gbufferParams[GBUFFER_PARAM_IDX(VERTS)] = MAKE_PARAM(SRV, RT, VERTS);
+        gbufferParams[GBUFFER_PARAM_IDX(IDXS)] = MAKE_PARAM(SRV, RT, IDXS);
+        gbufferParams[GBUFFER_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
+        gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
-        gbufferParams[GBUFFER_PARAM_IDX(VERTS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_VERTS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        gbufferParams[GBUFFER_PARAM_IDX(IDXS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_IDXS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        gbufferParams[GBUFFER_PARAM_IDX(INSTANCE_DATAS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_MATERIALS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        gbufferParams[GBUFFER_PARAM_IDX(GBUFFER)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV,
-            .Descriptor = {
-                .ShaderRegister = GBUFFER_REGISTER_GBUFFER,
-                .RegisterSpace = GBUFFER_REGISTER_SPACE,
-            },
-        };
+        gbufferParams[GBUFFER_PARAM_IDX(GBUFFER)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -719,85 +688,18 @@ void initRootSignature()
     {
         std::array<D3D12_ROOT_PARAMETER1, PT_PARAM_IDX(COUNT)> ptParams;
 
-        ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-            .Descriptor = {
-                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = COMMON_REGISTER_SPACE,
-            },
-        };
+        ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
-        ptParams[PT_PARAM_IDX(RAYTRACING_ACS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
+        ptParams[PT_PARAM_IDX(RAYTRACING_ACS)] = MAKE_PARAM(SRV, RT, RAYTRACING_ACS);
+        ptParams[PT_PARAM_IDX(VERTS)] = MAKE_PARAM(SRV, RT, VERTS);
+        ptParams[PT_PARAM_IDX(IDXS)] = MAKE_PARAM(SRV, RT, IDXS);
+        ptParams[PT_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
+        ptParams[PT_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
-        ptParams[PT_PARAM_IDX(VERTS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_VERTS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(IDXS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_IDXS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(INSTANCE_DATAS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(MATERIALS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_MATERIALS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(GBUFFER)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = PT_REGISTER_GBUFFER,
-                .RegisterSpace = PT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = PT_REGISTER_PER_TRI_DATAS,
-                .RegisterSpace = PT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = PT_REGISTER_AREA_LIGHTS,
-                .RegisterSpace = PT_REGISTER_SPACE,
-            },
-        };
-
-        ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
-                .RegisterSpace = PT_REGISTER_SPACE,
-            },
-        };
+        ptParams[PT_PARAM_IDX(GBUFFER)] = MAKE_PARAM(SRV, PT, GBUFFER);
+        ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
+        ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
+        ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -823,13 +725,7 @@ void initRootSignature()
     {
         std::array<D3D12_ROOT_PARAMETER1, POSTPROCESS_PARAM_IDX(COUNT)> postprocessParams;
 
-        postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-            .Descriptor = {
-                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = COMMON_REGISTER_SPACE,
-            },
-        };
+        postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
         std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
 
