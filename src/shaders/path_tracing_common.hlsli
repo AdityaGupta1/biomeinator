@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
+#include "global_params.hlsli"
 #include "payload.hlsli"
 
 #define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
@@ -31,6 +32,24 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_D
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE);
 ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE);
+
+float3 getPrimaryRayDirection(const uint2 pixelIdx)
+{
+    const float2 size = DispatchRaysDimensions().xy;
+
+    const float2 uv = pixelIdx / size;
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
+
+    const float aspect = size.x / size.y;
+    const float yScale = cameraParams.tanHalfFovY;
+    const float xScale = yScale * aspect;
+
+    const float3 targetPos_WS = cameraParams.pos_WS
+        + cameraParams.right_WS * ndc.x * xScale
+        + cameraParams.up_WS * ndc.y * yScale
+        + cameraParams.forward_WS;
+    return normalize(targetPos_WS - cameraParams.pos_WS);
+}
 
 float3 evalRayPos(const RayDesc ray, const float t)
 {

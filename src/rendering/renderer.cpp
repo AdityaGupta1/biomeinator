@@ -455,7 +455,6 @@ void resize()
         dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
         dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
         dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
-        // TODO: exposure?
         dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
         CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
     }
@@ -643,8 +642,8 @@ void initRootSignature()
         gbufferParams[GBUFFER_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = GBUFFER_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = GBUFFER_REGISTER_SPACE,
+                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = COMMON_REGISTER_SPACE,
             },
         };
 
@@ -723,8 +722,8 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = PT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = PT_REGISTER_SPACE,
+                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = COMMON_REGISTER_SPACE,
             },
         };
 
@@ -827,8 +826,8 @@ void initRootSignature()
         postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = PT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = PT_REGISTER_SPACE,
+                .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = COMMON_REGISTER_SPACE,
             },
         };
 
