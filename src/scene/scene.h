@@ -51,7 +51,7 @@ class Instance
 private:
     ::Scene* const scene;
     const uint32_t id;
-    uint32_t materialId{ MATERIAL_ID_INVALID };
+    uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
     ManagedBufferSection perTriDatasBufferSection{};
@@ -77,7 +77,7 @@ public:
 
     uint32_t getId() const;
 
-    void setMaterialId(uint32_t id);
+    void setMaterialIdx(uint32_t id);
 };
 
 class Scene

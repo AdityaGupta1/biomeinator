@@ -18,23 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "../rendering/common/common_structs.h"
+
 #include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
 #define PAYLOAD_FLAG_DID_HIT (1 << 1)
-
-struct HitInfo
-{
-    float3 hitPos_WS;
-    uint instanceId;
-
-    float3 hitNor_WS;
-    uint triangleIdx;
-
-    float2 uv;
-    uint pad0;
-    uint pad1;
-};
 
 struct Payload
 {
@@ -42,13 +31,11 @@ struct Payload
     uint flags;
 
     float3 pathColor;
-    uint materialId;
+    uint materialIdx;
 
     uint2 pixelIdx;
     float specularHitDistance;
-    uint pad1;
+    RandomSampler rng;
 
     HitInfo hitInfo;
-
-    RandomSampler rng;
 };

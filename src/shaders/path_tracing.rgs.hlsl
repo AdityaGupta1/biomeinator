@@ -23,30 +23,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "materials.hlsli"
+#include "path_tracing_common.hlsli"
 #include "payload.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-float3 calculateRayTarget(const float2 idx, const float2 size)
-{
-    const float2 uv = idx / size;
-    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
-
-    const float aspect = size.x / size.y;
-    const float yScale = cameraParams.tanHalfFovY;
-    const float xScale = yScale * aspect;
-
-    const float3 target = cameraParams.pos_WS
-        + cameraParams.right_WS * ndc.x * xScale
-        + cameraParams.up_WS * ndc.y * yScale
-        + cameraParams.forward_WS;
-    return target;
-}
-
-float3 evalRayPos(const RayDesc ray, const float t)
-{
-    return mad(ray.Direction, t, ray.Origin);
-}
+StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
 
 float powerHeuristic(const float pdfA, const float pdfB)
 {
@@ -81,7 +63,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        const Material surfMaterial = materials[payload.materialId];
+        const Material surfMaterial = materials[payload.materialIdx];
         diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
 
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
@@ -124,21 +106,21 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
 void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 {
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     if (isFirstSample)
     {
         outputGuideBuffers(payload, ray);
     }
 
-    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         return;
     }
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const Material surfMaterial = materials[payload.materialId];
+        const Material surfMaterial = materials[payload.materialIdx];
 
         if (surfMaterial.hasEmission())
         {
@@ -198,9 +180,9 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialId == MATERIAL_ID_INVALID)
+        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
             return;
         }
@@ -212,7 +194,7 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
 
         if (renderParams.enableMis == 1)
         {
-            const Material hitMaterial = materials[payload.materialId];
+            const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
@@ -224,38 +206,21 @@ void pathTraceRay(RayDesc ray, inout Payload payload, bool isFirstSample)
     }
 }
 
-[shader("closesthit")]
-void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+// TODO: move to gbuffer
+float3 calculateRayTarget(const float2 idx, const float2 size)
 {
-    const InstanceData instanceData = instanceDatas[InstanceID()];
+    const float2 uv = idx / size;
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
 
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+    const float aspect = size.x / size.y;
+    const float yScale = cameraParams.tanHalfFovY;
+    const float xScale = yScale * aspect;
 
-    const float2 bary2 = attribs.barycentrics;
-    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-
-    const float4x3 objectToWorldMat = ObjectToWorld4x3();
-
-    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
-    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
-
-    const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3)objectToWorldMat));
-
-    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    payload.materialId = instanceData.materialId;
-
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
-}
-
-[shader("miss")]
-void Miss(inout Payload payload)
-{
-    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+    const float3 target = cameraParams.pos_WS
+        + cameraParams.right_WS * ndc.x * xScale
+        + cameraParams.up_WS * ndc.y * yScale
+        + cameraParams.forward_WS;
+    return target;
 }
 
 [shader("raygeneration")]

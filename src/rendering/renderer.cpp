@@ -49,6 +49,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
+#include "gbuffer.rgs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
@@ -390,6 +391,8 @@ void initRtTargets()
     resize();
 }
 
+ComPtr<ID3D12Resource> dev_gbuffer;
+
 std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 D3D12_VIEWPORT viewport;
@@ -467,6 +470,11 @@ void resize()
     swapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, swapChainFlags);
     swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
     frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
+
+    dev_gbuffer.Reset();
+    dev_gbuffer = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(GbufferData),
+                                                  &DEFAULT_HEAP,
+                                                  { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
 
     const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
@@ -566,15 +574,33 @@ void initConstantParams()
     }
 }
 
-enum class RtParam
+enum class GbufferParam
 {
     GLOBAL_PARAMS,
+
     RAYTRACING_ACS,
     VERTS,
     IDXS,
-    PER_TRI_DATAS,
     INSTANCE_DATAS,
     MATERIALS,
+
+    GBUFFER,
+
+    COUNT
+};
+
+enum class PtParam
+{
+    GLOBAL_PARAMS,
+
+    RAYTRACING_ACS,
+    VERTS,
+    IDXS,
+    INSTANCE_DATAS,
+    MATERIALS,
+
+    GBUFFER,
+    PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
@@ -588,28 +614,41 @@ enum class PostprocessParam
     COUNT
 };
 
-#define RT_PARAM_IDX(param) static_cast<uint32_t>(RtParam::param)
+#define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
+#define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 
-ComPtr<ID3D12RootSignature> rtRootSig;
+ComPtr<ID3D12RootSignature> gbufferRootSig;
+ComPtr<ID3D12RootSignature> ptRootSig;
 ComPtr<ID3D12RootSignature> postprocessRootSig;
 void initRootSignature()
 {
+    std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
+
+    rtStaticSamplers.push_back({
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
+        .RegisterSpace = RT_REGISTER_SPACE,
+    });
+
     // ===================================
-    // RAYTRACING
+    // GBUFFER
     // ===================================
     {
-        std::array<D3D12_ROOT_PARAMETER1, RT_PARAM_IDX(COUNT)> rtParams;
+        std::array<D3D12_ROOT_PARAMETER1, GBUFFER_PARAM_IDX(COUNT)> gbufferParams;
 
-        rtParams[RT_PARAM_IDX(GLOBAL_PARAMS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = RT_REGISTER_SPACE,
+                .ShaderRegister = GBUFFER_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = GBUFFER_REGISTER_SPACE,
             },
         };
 
-        rtParams[RT_PARAM_IDX(RAYTRACING_ACS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(RAYTRACING_ACS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
@@ -617,7 +656,7 @@ void initRootSignature()
             },
         };
 
-        rtParams[RT_PARAM_IDX(VERTS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(VERTS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_VERTS,
@@ -625,7 +664,7 @@ void initRootSignature()
             },
         };
 
-        rtParams[RT_PARAM_IDX(IDXS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(IDXS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_IDXS,
@@ -633,15 +672,7 @@ void initRootSignature()
             },
         };
 
-        rtParams[RT_PARAM_IDX(PER_TRI_DATAS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-            .Descriptor = {
-                .ShaderRegister = RT_REGISTER_PER_TRI_DATAS,
-                .RegisterSpace = RT_REGISTER_SPACE,
-            },
-        };
-
-        rtParams[RT_PARAM_IDX(INSTANCE_DATAS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(INSTANCE_DATAS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
@@ -649,7 +680,7 @@ void initRootSignature()
             },
         };
 
-        rtParams[RT_PARAM_IDX(MATERIALS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
                 .ShaderRegister = RT_REGISTER_MATERIALS,
@@ -657,40 +688,125 @@ void initRootSignature()
             },
         };
 
-        rtParams[RT_PARAM_IDX(AREA_LIGHTS)] = {
+        gbufferParams[GBUFFER_PARAM_IDX(GBUFFER)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV,
+            .Descriptor = {
+                .ShaderRegister = GBUFFER_REGISTER_GBUFFER,
+                .RegisterSpace = GBUFFER_REGISTER_SPACE,
+            },
+        };
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(gbufferParams.size()),
+                .pParameters = gbufferParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
+                .pStaticSamplers = rtStaticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&gbufferRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&gbufferRootSig)));
+    }
+
+    // ===================================
+    // PATH TRACING
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, PT_PARAM_IDX(COUNT)> ptParams;
+
+        ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+            .Descriptor = {
+                .ShaderRegister = PT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = PT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(RAYTRACING_ACS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = RT_REGISTER_AREA_LIGHTS,
+                .ShaderRegister = RT_REGISTER_RAYTRACING_ACS,
                 .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
-        rtParams[RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+        ptParams[PT_PARAM_IDX(VERTS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
             .Descriptor = {
-                .ShaderRegister = RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+                .ShaderRegister = RT_REGISTER_VERTS,
                 .RegisterSpace = RT_REGISTER_SPACE,
             },
         };
 
-        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+        ptParams[PT_PARAM_IDX(IDXS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_IDXS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
 
-        staticSamplers.push_back({
-            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
-            .RegisterSpace = RT_REGISTER_SPACE,
-        });
+        ptParams[PT_PARAM_IDX(INSTANCE_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_INSTANCE_DATAS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(MATERIALS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = RT_REGISTER_MATERIALS,
+                .RegisterSpace = RT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(GBUFFER)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = PT_REGISTER_GBUFFER,
+                .RegisterSpace = PT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = PT_REGISTER_PER_TRI_DATAS,
+                .RegisterSpace = PT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = PT_REGISTER_AREA_LIGHTS,
+                .RegisterSpace = PT_REGISTER_SPACE,
+            },
+        };
+
+        ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+            .Descriptor = {
+                .ShaderRegister = PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE,
+                .RegisterSpace = PT_REGISTER_SPACE,
+            },
+        };
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
             .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(rtParams.size()),
-                .pParameters = rtParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
-                .pStaticSamplers = staticSamplers.data(),
+                .NumParameters = static_cast<uint32_t>(ptParams.size()),
+                .pParameters = ptParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
+                .pStaticSamplers = rtStaticSamplers.data(),
                 .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
             },
         };
@@ -699,7 +815,7 @@ void initRootSignature()
         CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
                                       errorBlob);
         CHECK_HRESULT(
-            device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rtRootSig)));
+            device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&ptRootSig)));
     }
 
     // ===================================
@@ -711,8 +827,8 @@ void initRootSignature()
         postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
             .Descriptor = {
-                .ShaderRegister = RT_REGISTER_GLOBAL_PARAMS,
-                .RegisterSpace = RT_REGISTER_SPACE,
+                .ShaderRegister = PT_REGISTER_GLOBAL_PARAMS,
+                .RegisterSpace = PT_REGISTER_SPACE,
             },
         };
 
@@ -746,45 +862,46 @@ void initRootSignature()
     }
 }
 
-ComPtr<ID3D12StateObject> rtPso;
-ComPtr<ID3D12Resource> dev_rtShaderIds;
-D3D12_DISPATCH_RAYS_DESC rtDispatchDesc;
+ComPtr<ID3D12StateObject> gbufferPso;
+ComPtr<ID3D12Resource> dev_gbufferShaderIds;
+D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
+
+ComPtr<ID3D12StateObject> ptPso;
+ComPtr<ID3D12Resource> dev_ptShaderIds;
+D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
 
 ComPtr<ID3D12PipelineState> postprocessPso;
+
+constexpr uint32_t maxPayloadSizeBytes = 96;
 
 void initPipeline()
 {
     // ===================================
-    // RAYTRACING
+    // GBUFFER
     // ===================================
     {
         D3D12_DXIL_LIBRARY_DESC lib = {
             .DXILLibrary = {
-                .pShaderBytecode = path_tracing_rgs_shaderBytecode,
-                .BytecodeLength = sizeof(path_tracing_rgs_shaderBytecode),
+                .pShaderBytecode = gbuffer_rgs_shaderBytecode,
+                .BytecodeLength = sizeof(gbuffer_rgs_shaderBytecode),
             },
         };
 
-        constexpr uint32_t NUM_HIT_GROUPS = 2;
+        constexpr uint32_t NUM_HIT_GROUPS = 1;
         std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
-        hitGroups[HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"HitGroup_Primary",
+        hitGroups[GBUFFER_HITGROUP] = {
+            .HitGroupExport = L"HitGroup",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
-        hitGroups[HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"HitGroup_Lights",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
 
         D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
-            .MaxPayloadSizeInBytes = 112,
+            .MaxPayloadSizeInBytes = maxPayloadSizeBytes,
             .MaxAttributeSizeInBytes = 8,
         };
 
         D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
-            rtRootSig.Get(),
+            gbufferRootSig.Get(),
         };
 
         D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
@@ -796,8 +913,7 @@ void initPipeline()
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
             subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-            subobjects.push_back(
-                { .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
 
             for (const auto& hitGroup : hitGroups)
             {
@@ -810,18 +926,18 @@ void initPipeline()
             .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
             .pSubobjects = subobjects.data(),
         };
-        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&rtPso)));
+        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&gbufferPso)));
 
         const uint32_t shaderIdsSizeBytes =
             2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-        dev_rtShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
-        dev_rtShaderIds->SetName(L"dev_rtShaderIds");
+        dev_gbufferShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+        dev_gbufferShaderIds->SetName(L"dev_gbufferShaderIds");
 
         ComPtr<ID3D12StateObjectProperties> props;
-        rtPso.As(&props);
+        gbufferPso.As(&props);
 
         uint8_t* host_shaderIds;
-        dev_rtShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+        dev_gbufferShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
 
         auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
         {
@@ -837,24 +953,126 @@ void initPipeline()
             writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
         }
 
-        dev_rtShaderIds->Unmap(0, nullptr);
+        dev_gbufferShaderIds->Unmap(0, nullptr);
 
-        rtDispatchDesc = {
+        gbufferDispatchDesc = {
             .RayGenerationShaderRecord = {
-                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress(),
+                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress(),
                 .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
             },
             .MissShaderTable = {
-                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
                 .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
             },
             .HitGroupTable = {
-                .StartAddress = dev_rtShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .StartAddress = dev_gbufferShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
                 .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
                 .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
             },
+            .Depth = 1,
         };
-        rtDispatchDesc.Depth = 1; // z-dimension of ray dispatch (e.g. for path splitting, maybe)
+    }
+
+    // ===================================
+    // PATH TRACING
+    // ===================================
+    {
+        D3D12_DXIL_LIBRARY_DESC lib = {
+            .DXILLibrary = {
+                .pShaderBytecode = path_tracing_rgs_shaderBytecode,
+                .BytecodeLength = sizeof(path_tracing_rgs_shaderBytecode),
+            },
+        };
+
+        constexpr uint32_t NUM_HIT_GROUPS = 2;
+        std::array<D3D12_HIT_GROUP_DESC, NUM_HIT_GROUPS> hitGroups;
+        hitGroups[PT_HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        hitGroups[PT_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+
+        D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
+            .MaxPayloadSizeInBytes = maxPayloadSizeBytes,
+            .MaxAttributeSizeInBytes = 8,
+        };
+
+        D3D12_GLOBAL_ROOT_SIGNATURE globalSig = {
+            ptRootSig.Get(),
+        };
+
+        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
+            .MaxTraceRecursionDepth = 1,
+        };
+
+        std::vector<D3D12_STATE_SUBOBJECT> subobjects;
+        {
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
+            subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+
+            for (const auto& hitGroup : hitGroups)
+            {
+                subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup });
+            }
+        }
+
+        D3D12_STATE_OBJECT_DESC desc = {
+            .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+            .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
+            .pSubobjects = subobjects.data(),
+        };
+        CHECK_HRESULT(device->CreateStateObject(&desc, IID_PPV_ARGS(&ptPso)));
+
+        const uint32_t shaderIdsSizeBytes =
+            2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+        dev_ptShaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
+        dev_ptShaderIds->SetName(L"dev_ptShaderIds");
+
+        ComPtr<ID3D12StateObjectProperties> props;
+        ptPso.As(&props);
+
+        uint8_t* host_shaderIds;
+        dev_ptShaderIds->Map(0, nullptr, reinterpret_cast<void**>(&host_shaderIds));
+
+        auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
+        {
+            void* id = props->GetShaderIdentifier(name);
+            memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+            host_shaderIds += incrementSizeBytes;
+        };
+
+        writeShaderId(L"RayGeneration", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+        writeShaderId(L"Miss", D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+        for (const auto& hitGroup : hitGroups)
+        {
+            writeShaderId(hitGroup.HitGroupExport, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+        }
+
+        dev_ptShaderIds->Unmap(0, nullptr);
+
+        ptDispatchDesc = {
+            .RayGenerationShaderRecord = {
+                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress(),
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .MissShaderTable = {
+                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .HitGroupTable = {
+                .StartAddress = dev_ptShaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+                .SizeInBytes = NUM_HIT_GROUPS * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+                .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            },
+            .Depth = 1,
+        };
     }
 
     // ===================================
@@ -1265,29 +1483,32 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
-    // ===================================
-    // RAYTRACING
-    // ===================================
-
     if (scene.hasTlas())
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
-        cmdList->SetPipelineState1(rtPso.Get());
-        cmdList->SetComputeRootSignature(rtRootSig.Get());
+        // ===================================
+        // GBUFFER
+        // ===================================
+
+        cmdList->SetPipelineState1(gbufferPso.Get());
+        cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
         // clang-format off
-        cmdList->SetComputeRootConstantBufferView(RT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(RT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+        cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
         // clang-format on
 
+        // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
+        // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
+        // the before state doesn't match reality)
         for (RtTarget* rtTarget : rtTargets)
         {
             if (rtTarget->hasUav)
@@ -1297,19 +1518,54 @@ void render()
         }
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
-        rtDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
-        rtDispatchDesc.Height = pathTracingTargetDesc.Height;
-        cmdList->DispatchRays(&rtDispatchDesc);
-    }
+        gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
+        gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
+        cmdList->DispatchRays(&gbufferDispatchDesc);
 
-    // ===================================
-    // DLSS
-    // ===================================
+        // ===================================
+        // PATH TRACING
+        // ===================================
 
-    if (enableDlss)
-    {
-        const sl::BaseStructure* inputs[] = { &slViewportHandle };
-        CHECK_SL_RESULT(slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+        // dev_gbuffer should be auto-promoted to UNORDERED_ACCESS when accessed by the gbuffer, and then should decay
+        // back to COMMON after executing the command list
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_gbuffer.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        cmdList->SetPipelineState1(ptPso.Get());
+        cmdList->SetComputeRootSignature(ptRootSig.Get());
+
+        // clang-format off
+        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+        // clang-format on
+
+        // TODO: will be different with path splitting (see #163)
+        ptDispatchDesc.Width = gbufferDispatchDesc.Width;
+        ptDispatchDesc.Height = gbufferDispatchDesc.Height;
+        cmdList->DispatchRays(&ptDispatchDesc);
+
+        // ===================================
+        // DLSS
+        // ===================================
+
+        if (enableDlss)
+        {
+            const sl::BaseStructure* inputs[] = { &slViewportHandle };
+            CHECK_SL_RESULT(
+                slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
+        }
     }
 
     // ===================================
@@ -1449,14 +1705,20 @@ void destroy()
         rtTarget->reset();
     }
 
+    dev_gbuffer.Reset();
+
     screenshotRequest.readbackBuffer.Reset();
 
-    rtPso.Reset();
+    gbufferPso.Reset();
+    ptPso.Reset();
     postprocessPso.Reset();
-    rtRootSig.Reset();
+
+    gbufferRootSig.Reset();
+    ptRootSig.Reset();
     postprocessRootSig.Reset();
 
-    dev_rtShaderIds.Reset();
+    dev_gbufferShaderIds.Reset();
+    dev_ptShaderIds.Reset();
 
     swapChain.Reset();
     rtvHeap.Reset();

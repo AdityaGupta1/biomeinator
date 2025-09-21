@@ -97,9 +97,9 @@ uint32_t Instance::getId() const
     return this->id;
 }
 
-void Instance::setMaterialId(uint32_t id)
+void Instance::setMaterialIdx(uint32_t id)
 {
-    this->materialId = id;
+    this->materialIdx = id;
 }
 
 void Scene::init()
@@ -212,10 +212,10 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
         this->mappedMaterialsArray.resize(toFreeList, this->mappedMaterialsArray.getSize() * 2);
     }
 
-    const uint32_t materialIdx = this->nextMaterialIdx++;
-    this->mappedMaterialsArray[materialIdx] = *material;
+    const uint32_t materialIdxx = this->nextMaterialIdx++;
+    this->mappedMaterialsArray[materialIdxx] = *material;
 
-    return materialIdx;
+    return materialIdxx;
 }
 
 uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height)
@@ -306,7 +306,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
-        instanceData.materialId = instance->materialId;
+        instanceData.materialIdx = instance->materialIdx;
 
         instance->host_verts.clear();
         instance->host_idxs.clear();
