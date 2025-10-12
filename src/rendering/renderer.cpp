@@ -1421,8 +1421,8 @@ void render()
         cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
 
-        const uint32_t dispatchWidth = Util::getDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
-        const uint32_t dispatchHeight = Util::getDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
         cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
         // ===================================
