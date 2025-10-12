@@ -41,7 +41,7 @@ float powerHeuristic(const float pdfA, const float pdfB)
 void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
     RayDesc ray;
-    ray.Direction = getPrimaryRayDirection(payload.pixelIdx);
+    ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
