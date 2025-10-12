@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
+RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
 float powerHeuristic(const float pdfA, const float pdfB)
 {
@@ -171,6 +172,5 @@ void RayGeneration()
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
 
-    RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
-    pathTracingTarget[pixelIdx] = float4(colorPreTonemap, 1);
+    pathTracingRawBuffer[linearPixelIdx] = float4(colorPreTonemap, 1);
 }

@@ -275,8 +275,8 @@ struct RenderParams
 
     uint tonemapping;
     uint preTonemappedColorSrvIdx;
-    uint pad1;
-    uint pad2;
+    uint renderWidth;
+    uint renderHeight;
 };
 
 struct DebugParams
