@@ -85,8 +85,11 @@ foreach(SHADER IN LISTS SHADER_FILES)
     elseif (FILE_NAME MATCHES "\\.ps\\.hlsl$")
         set(DXC_TARGET "ps_${SHADER_VERSION}")
         set(DXC_ENTRY "/E psMain")
+    elseif (FILE_NAME MATCHES "\\.cs\\.hlsl$")
+        set(DXC_TARGET "cs_${SHADER_VERSION}")
+        set(DXC_ENTRY "/E csMain")
     else()
-        message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl)")
+        message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl, .cs.hlsl)")
     endif()
 
     add_custom_command(

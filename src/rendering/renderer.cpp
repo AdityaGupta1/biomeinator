@@ -33,9 +33,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
 #include "common/common_hitgroups.h"
+#include "common/common_params.h"
 #include "common/common_registers.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
+#include "util/util.h"
 
 #include <chrono>
 #include <random>
@@ -52,6 +54,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "gbuffer.rgs.fxh"
 #include "path_tracing.rgs.fxh"
+#include "collect.cs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
 
@@ -394,11 +397,15 @@ static void initRtTargets()
 }
 
 static ComPtr<ID3D12Resource> dev_gbuffer;
+static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
 static D3D12_RECT scissor;
+
+static uint32_t renderWidth;
+static uint32_t renderHeight;
 
 static sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
 static sl::Extent slRenderExtent;
@@ -431,9 +438,6 @@ void resize()
 
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
-
-    uint32_t renderWidth;
-    uint32_t renderHeight;
 
     if (SettingsManager::getAsBool("enableDlss"))
     {
@@ -476,6 +480,14 @@ void resize()
     dev_gbuffer = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(GbufferData),
                                                   &DEFAULT_HEAP,
                                                   { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_gbuffer->SetName(L"dev_gbuffer");
+
+    dev_pathTracingRawBuffer.Reset();
+    dev_pathTracingRawBuffer =
+        BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(float) * 4,
+                                        &DEFAULT_HEAP,
+                                        { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
 
     const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
@@ -605,6 +617,8 @@ enum class PtParam
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
+    PATH_TRACING_RAW_BUFFER,
+
     COUNT
 };
 
@@ -615,8 +629,18 @@ enum class PostprocessParam
     COUNT
 };
 
+enum class CollectParam
+{
+    GLOBAL_PARAMS,
+
+    PATH_TRACING_RAW_BUFFER,
+
+    COUNT
+};
+
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
+#define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 
 static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
@@ -637,6 +661,7 @@ static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
 
 static ComPtr<ID3D12RootSignature> gbufferRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
+static ComPtr<ID3D12RootSignature> collectRootSig;
 static ComPtr<ID3D12RootSignature> postprocessRootSig;
 static void initRootSignature()
 {
@@ -704,6 +729,8 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
+        ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
+
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
             .Desc_1_1 = {
@@ -720,6 +747,33 @@ static void initRootSignature()
                                       errorBlob);
         CHECK_HRESULT(
             device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&ptRootSig)));
+    }
+
+    // ===================================
+    // COLLECT
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, COLLECT_PARAM_IDX(COUNT)> collectParams;
+
+        collectParams[COLLECT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC collectRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(collectParams.size()),
+                .pParameters = collectParams.data(),
+                .NumStaticSamplers = 0,
+                .pStaticSamplers = nullptr,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&collectRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&collectRootSig)));
     }
 
     // ===================================
@@ -767,6 +821,8 @@ static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
 static ComPtr<ID3D12StateObject> ptPso;
 static ComPtr<ID3D12Resource> dev_ptShaderIds;
 static D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
+
+static ComPtr<ID3D12PipelineState> collectPso;
 
 static ComPtr<ID3D12PipelineState> postprocessPso;
 
@@ -831,6 +887,16 @@ static void initPipeline()
         };
 
         makeRtPipeline(ptPipelineInputs);
+    }
+
+    // ===================================
+    // COLLECT
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = collectRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(collect_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&collectPso)));
     }
 
     // ===================================
@@ -1228,6 +1294,8 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
     renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
+    renderParams->renderWidth = renderWidth;
+    renderParams->renderHeight = renderHeight;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1329,12 +1397,33 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
         // TODO: will be different with path splitting (see #163)
         ptDispatchDesc.Width = gbufferDispatchDesc.Width;
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
+
+        // ===================================
+        // COLLECT
+        // ===================================
+
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_pathTracingRawBuffer.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        cmdList->SetPipelineState(collectPso.Get());
+        cmdList->SetComputeRootSignature(collectRootSig.Get());
+
+        cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+
+        const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
         // ===================================
         // DLSS
@@ -1486,15 +1575,18 @@ void destroy()
     }
 
     dev_gbuffer.Reset();
+    dev_pathTracingRawBuffer.Reset();
 
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
     ptPso.Reset();
+    collectPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
     ptRootSig.Reset();
+    collectRootSig.Reset();
     postprocessRootSig.Reset();
 
     dev_gbufferShaderIds.Reset();

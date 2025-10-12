@@ -58,8 +58,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PT_REGISTER_AREA_LIGHTS 2
 #define PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 3
 
+// u#
+#define PT_REGISTER_PATH_TRACING_RAW_BUFFER 0
+
 // =============================================
-#define POSTPROCESS_REGISTER_SPACE 2
+#define COLLECT_REGISTER_SPACE 2
+// =============================================
+
+// t#
+#define COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER 0
+
+// =============================================
+#define POSTPROCESS_REGISTER_SPACE 3
 // =============================================
 
 // s#
