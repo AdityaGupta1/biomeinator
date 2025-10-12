@@ -30,13 +30,24 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint2 pixelIdx = dispatchThreadId.xy;
 
-    if (pixelIdx.x >= renderParams.renderWidth || pixelIdx.y >= renderParams.renderHeight)
+    if (pixelIdx.x >= renderParams.renderSize.x || pixelIdx.y >= renderParams.renderSize.y)
     {
         return;
     }
 
-    const uint linearPixelIdx = pixelIdx.y * renderParams.renderWidth + pixelIdx.x;
-    const float4 color = pathTracingRawBuffer[linearPixelIdx];
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+
+    float4 color;
+    if (renderParams.enablePathSplitting)
+    {
+        const float4 color0 = pathTracingRawBuffer[linearPixelIdx * 2];
+        const float4 color1 = pathTracingRawBuffer[linearPixelIdx * 2 + 1];
+        color = (color0 + color1) * 0.5; // TODO: remove 0.5 multiplier once paths are split by material
+    }
+    else
+    {
+        color = pathTracingRawBuffer[linearPixelIdx];
+    }
 
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
     pathTracingTarget[pixelIdx] = color;

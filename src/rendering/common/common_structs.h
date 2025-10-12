@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DirectXMath.h>
 
 #define uint uint32_t
+#define uint2 DirectX::XMUINT2
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
@@ -273,8 +274,12 @@ struct RenderParams
 
     uint tonemapping;
     uint preTonemappedColorSrvIdx;
-    uint renderWidth;
-    uint renderHeight;
+    uint2 renderSize;
+
+    uint enablePathSplitting;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct DebugParams
@@ -297,6 +302,7 @@ struct DebugParams
 
 #ifdef __cplusplus
 #undef uint
+#undef uint2
 
 #undef float2
 #undef float3

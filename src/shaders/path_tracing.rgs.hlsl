@@ -139,8 +139,8 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 [shader("raygeneration")]
 void RayGeneration()
 {
-    const uint2 pixelIdx = DispatchRaysIndex().xy;
-    const uint linearPixelIdx = pixelIdx.y * DispatchRaysDimensions().x + pixelIdx.x;
+    const uint2 pixelIdx = getPixelIdx();
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     const GbufferData gbufferData = gbuffer[linearPixelIdx];
     Payload gbufferPayload;
@@ -152,18 +152,20 @@ void RayGeneration()
     gbufferPayload.pixelIdx = pixelIdx;
     gbufferPayload.specularHitDistance = 0;
 
+    const uint pathSplitIdx = getPathSplitIdx();
+
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
         Payload payload = gbufferPayload;
-        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
+        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, sampleIdx, renderParams.frameNumber));
 
         const bool isFirstSample = (sampleIdx == 0);
         pathTraceRay(payload, isFirstSample);
 
         accumulatedColor += payload.pathColor;
 
-        if (isFirstSample)
+        if (isFirstSample && pathSplitIdx == 0)
         {
             RWTexture2D<float2> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = payload.specularHitDistance;
@@ -172,5 +174,6 @@ void RayGeneration()
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
 
-    pathTracingRawBuffer[linearPixelIdx] = float4(colorPreTonemap, 1);
+    const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
+    pathTracingRawBuffer[writePixelIdx] = float4(colorPreTonemap, 1);
 }

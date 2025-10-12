@@ -47,11 +47,12 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
-    optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
-    optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
     optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
+    optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("false"));
 
+    optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
+    optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
     optionAdder("debugBool0", "Debug bool 0", cxxopts::value<bool>()->default_value("false"));
     optionAdder("debugBool1", "Debug bool 1", cxxopts::value<bool>()->default_value("false"));
     optionAdder("debugBool2", "Debug bool 2", cxxopts::value<bool>()->default_value("false"));
@@ -89,11 +90,12 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("enableMis", bool);
     COPY_SETTING("tonemapping", uint32_t);
-    COPY_SETTING("debugView", std::string);
-    COPY_SETTING("debugViewScale", float);
     COPY_SETTING("enableDlss", bool);
     COPY_SETTING("dlssMode", uint32_t);
+    COPY_SETTING("enablePathSplitting", bool);
 
+    COPY_SETTING("debugView", std::string);
+    COPY_SETTING("debugViewScale", float);
     COPY_SETTING("debugBool0", bool);
     COPY_SETTING("debugBool1", bool);
     COPY_SETTING("debugBool2", bool);

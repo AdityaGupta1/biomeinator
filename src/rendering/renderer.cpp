@@ -483,10 +483,11 @@ void resize()
     dev_gbuffer->SetName(L"dev_gbuffer");
 
     dev_pathTracingRawBuffer.Reset();
-    dev_pathTracingRawBuffer =
-        BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(float) * 4,
-                                        &DEFAULT_HEAP,
-                                        { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
+    const uint32_t pathTracingRawBufferSizeBytes =
+        renderWidth * renderHeight * (enablePathSplitting ? 2 : 1) * sizeof(float) * 4;
+    dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
+        pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
 
     const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -1140,6 +1141,7 @@ static void imguiEndFrame(bool& needsResize)
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+    needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
     SettingsGuiHelpers::VerticalSpacing();
 
@@ -1294,8 +1296,9 @@ void render()
     renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
     renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
-    renderParams->renderWidth = renderWidth;
-    renderParams->renderHeight = renderHeight;
+    renderParams->renderSize = { renderWidth, renderHeight };
+    const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
+    renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1401,8 +1404,7 @@ void render()
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
-        // TODO: will be different with path splitting (see #163)
-        ptDispatchDesc.Width = gbufferDispatchDesc.Width;
+        ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
 
