@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "../rendering/common/common_params.h"
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
@@ -24,7 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 StructuredBuffer<float4> pathTracingRawBuffer : REGISTER_T(COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER, COLLECT_REGISTER_SPACE);
 
 [shader("compute")]
-[numthreads(16, 16, 1)]
+[numthreads(COLLECT_WORKGROUP_SIZE_X, COLLECT_WORKGROUP_SIZE_Y, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint2 pixelIdx = dispatchThreadId.xy;
