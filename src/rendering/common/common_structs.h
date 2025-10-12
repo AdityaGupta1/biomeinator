@@ -18,9 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "common_preamble.h"
-
-#if !_hlsl
+#ifdef __cplusplus
 #include <DirectXMath.h>
 
 #define uint uint32_t
@@ -29,7 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define float3 DirectX::XMFLOAT3
 
 #define float4x4 DirectX::XMFLOAT4X4
-#endif // !_hlsl
+#endif
 
 struct HitInfo
 {
@@ -82,7 +80,7 @@ struct InstanceData
 
 struct Material
 {
-#if !_hlsl
+#ifdef __cplusplus
 public:
     Material();
 #endif
@@ -136,12 +134,7 @@ public:
         return canReflect() || canTransmit();
     }
 
-#if _hlsl
-    float3 getEmissiveColor()
-    {
-        return emissiveColor * emissiveStrength;
-    }
-#else
+#ifdef __cplusplus
     void setHasDiffuse(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_HAS_DIFFUSE) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_DIFFUSE);
@@ -150,6 +143,11 @@ public:
     void setHasSpecularReflection(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_HAS_SPECULAR) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_SPECULAR);
+    }
+#else
+    float3 getEmissiveColor()
+    {
+        return emissiveColor * emissiveStrength;
     }
 #endif
 };
@@ -173,7 +171,7 @@ struct AreaLight
 
 struct PerTriangleData
 {
-#if !_hlsl
+#ifdef __cplusplus
 public:
     PerTriangleData();
 #endif
@@ -297,11 +295,11 @@ struct DebugParams
     float debugFloat3;
 };
 
-#if !_hlsl
+#ifdef __cplusplus
 #undef uint
 
 #undef float2
 #undef float3
 
 #undef float4x4
-#endif // !_hlsl
+#endif

@@ -18,8 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "common_preamble.h"
-
 // =============================================
 #define COMMON_REGISTER_SPACE 0
 // =============================================
@@ -79,7 +77,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // helper macros
 // =============================================
 
-#if _hlsl
+#ifndef __cplusplus
 #define _REGISTER_IMPL(type, reg, spc) register(type##reg, space##spc)
 #define REGISTER_U(reg, spc) _REGISTER_IMPL(u, reg, spc)
 #define REGISTER_T(reg, spc) _REGISTER_IMPL(t, reg, spc)
