@@ -1088,6 +1088,18 @@ static void imguiEndFrame(bool& needsResize)
         SettingsGuiHelpers::SectionTitle("Debug view");
         SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+
+        SettingsGuiHelpers::VerticalSpacing();
+
+        SettingsGuiHelpers::SectionTitle("Debug parameters");
+        SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+        SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+        SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+        SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+        SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+        SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+        SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+        SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
     }
 
     ImGui::End();
@@ -1235,6 +1247,16 @@ void render()
         debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
+
+    debugParams->debugBool0 = SettingsManager::getAsBool("debugBool0");
+    debugParams->debugBool1 = SettingsManager::getAsBool("debugBool1");
+    debugParams->debugBool2 = SettingsManager::getAsBool("debugBool2");
+    debugParams->debugBool3 = SettingsManager::getAsBool("debugBool3");
+
+    debugParams->debugFloat0 = SettingsManager::getAsFloat("debugFloat0");
+    debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
+    debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
+    debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();

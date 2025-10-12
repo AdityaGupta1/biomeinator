@@ -52,6 +52,15 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
 
+    optionAdder("debugBool0", "Debug bool 0", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("debugBool1", "Debug bool 1", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("debugBool2", "Debug bool 2", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("debugBool3", "Debug bool 3", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("debugFloat0", "Debug float 0", cxxopts::value<float>()->default_value("0.f"));
+    optionAdder("debugFloat1", "Debug float 1", cxxopts::value<float>()->default_value("0.f"));
+    optionAdder("debugFloat2", "Debug float 2", cxxopts::value<float>()->default_value("0.f"));
+    optionAdder("debugFloat3", "Debug float 3", cxxopts::value<float>()->default_value("0.f"));
+
     ParseResult parseResult = options.parse(argc, argv);
 
     if (parseResult.count("help"))
@@ -84,6 +93,15 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("debugViewScale", float);
     COPY_SETTING("enableDlss", bool);
     COPY_SETTING("dlssMode", uint32_t);
+
+    COPY_SETTING("debugBool0", bool);
+    COPY_SETTING("debugBool1", bool);
+    COPY_SETTING("debugBool2", bool);
+    COPY_SETTING("debugBool3", bool);
+    COPY_SETTING("debugFloat0", float);
+    COPY_SETTING("debugFloat1", float);
+    COPY_SETTING("debugFloat2", float);
+    COPY_SETTING("debugFloat3", float);
 
 #undef COPY_SETTING
 

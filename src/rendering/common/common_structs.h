@@ -285,6 +285,16 @@ struct DebugParams
     uint debugOutputNumChannels;
     float debugOutputScale;
     uint pad0;
+
+    uint debugBool0;
+    uint debugBool1;
+    uint debugBool2;
+    uint debugBool3;
+
+    float debugFloat0;
+    float debugFloat1;
+    float debugFloat2;
+    float debugFloat3;
 };
 
 #if !_hlsl
