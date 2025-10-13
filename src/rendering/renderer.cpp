@@ -898,6 +898,7 @@ static void initPipeline()
         psoDesc.pRootSignature = collectRootSig.Get();
         psoDesc.CS = makeShaderBytecode(collect_cs_shaderBytecode);
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&collectPso)));
+        collectPso->SetName(L"collectPso");
     }
 
     // ===================================
@@ -921,6 +922,7 @@ static void initPipeline()
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         psoDesc.SampleDesc = SAMPLE_DESC_NO_AA;
         CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+        postprocessPso->SetName(L"postprocessPso");
     }
 }
 

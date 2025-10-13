@@ -54,7 +54,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
     {
         Material surfMaterial = materials[payload.materialIdx];
 
-        // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to sample it twice and multiply by Fresnel reflectance
+        // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
