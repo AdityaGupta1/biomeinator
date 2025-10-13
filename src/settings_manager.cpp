@@ -49,7 +49,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
-    optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
