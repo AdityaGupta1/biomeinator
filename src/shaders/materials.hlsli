@@ -143,22 +143,22 @@ BsdfSample sampleBsdf(
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    const bool canReflect = material.canReflect();
-    const bool canTransmit = material.canTransmit();
+    const bool hasGlossyReflection = material.hasGlossyReflection();
+    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
 
-    if (!canReflect && !canTransmit)
+    if (!hasGlossyReflection && !hasDiffuseOrTransmission)
     {
         return result;
     }
 
     float fresnelReflectance;
     bool chooseReflect;
-    if (canReflect && !canTransmit)
+    if (hasGlossyReflection && !hasDiffuseOrTransmission)
     {
         fresnelReflectance = 1.f;
         chooseReflect = true;
     }
-    else if (!canReflect && canTransmit)
+    else if (!hasGlossyReflection && hasDiffuseOrTransmission)
     {
         fresnelReflectance = 0.f;
         chooseReflect = false;
@@ -200,17 +200,17 @@ float bsdfPdf(
         return 0.f;
     }
 
-    const bool canReflect = material.canReflect();
-    const bool canTransmit = material.canTransmit();
+    const bool hasGlossyReflection = material.hasGlossyReflection();
+    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
 
-    if (!canTransmit)
+    if (!hasDiffuseOrTransmission)
     {
         return 0.f; // TODO: update this after adding microfacet reflection
     }
 
     float pdf = absCosTheta(wi_WS, surfNor_WS) * M_INV_PI;
 
-    if (canReflect)
+    if (hasGlossyReflection)
     {
         const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         pdf *= (1.f - fresnelReflectance);
@@ -221,7 +221,7 @@ float bsdfPdf(
 
 bool shouldSplitMaterial(const Material material)
 {
-    return material.canReflect() && (material.canTransmit() || material.hasEmission());
+    return material.hasGlossyReflection() && (material.hasDiffuseOrTransmission() || material.hasEmission());
 }
 
 Material getSplitMaterial(const Material material, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
@@ -239,8 +239,8 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
 
     if (pathSplitIdx == 0)
     {
-        // "Transmit" lobes and emission
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_TRANSMIT;
+        // Diffuse and transmission lobes, and emission
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION;
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
         splitMaterial.emissiveStrength = material.emissiveStrength;
@@ -249,8 +249,8 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
     }
     else
     {
-        // "Reflect" lobes
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_REFLECT;
+        // Glossy reflection lobes
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_GLOSSY_REFLECTION;
         splitMaterial.specularColor = material.specularColor;
         splitMaterial.ior = material.ior;
         pathWeight *= fresnelReflectance;

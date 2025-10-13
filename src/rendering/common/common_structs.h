@@ -79,9 +79,8 @@ struct InstanceData
 #define MATERIAL_FLAG_HAS_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_HAS_SPECULAR (1 << 1)
 
-#define MATERIAL_FLAGS_TRANSMIT (MATERIAL_FLAG_HAS_DIFFUSE) // TODO: use a more appropriate word than "transmit"?
-                                                            // TODO: add more conditions here later? (e.g. specular transmission)
-#define MATERIAL_FLAGS_REFLECT (MATERIAL_FLAG_HAS_SPECULAR) // TODO: add more conditions here later?
+#define MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION (MATERIAL_FLAG_HAS_DIFFUSE) // TODO: add more conditions here later (e.g. specular transmission)
+#define MATERIAL_FLAGS_GLOSSY_REFLECTION (MATERIAL_FLAG_HAS_SPECULAR) // TODO: add more conditions here later
 
 struct Material
 {
@@ -124,19 +123,19 @@ public:
         return (flags == MATERIAL_FLAG_HAS_SPECULAR);
     }
 
-    bool canReflect()
+    bool hasGlossyReflection()
     {
-        return bool(flags & MATERIAL_FLAGS_REFLECT);
+        return bool(flags & MATERIAL_FLAGS_GLOSSY_REFLECTION);
     }
 
-    bool canTransmit()
+    bool hasDiffuseOrTransmission()
     {
-        return bool(flags & MATERIAL_FLAGS_TRANSMIT);
+        return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION);
     }
 
     bool canScatter()
     {
-        return canReflect() || canTransmit();
+        return hasGlossyReflection() || hasDiffuseOrTransmission();
     }
 
 #ifdef __cplusplus
