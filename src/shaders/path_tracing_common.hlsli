@@ -33,9 +33,34 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_D
 StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE);
 ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE);
 
+uint getPathSplitIdx()
+{
+    if (renderParams.enablePathSplitting)
+    {
+        return DispatchRaysIndex().x % 2;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+uint2 getPixelIdx()
+{
+    const uint2 dispatchIdx = DispatchRaysIndex().xy;
+    if (renderParams.enablePathSplitting)
+    {
+        return uint2(dispatchIdx.x / 2, dispatchIdx.y);
+    }
+    else
+    {
+        return dispatchIdx;
+    }
+}
+
 float3 getPrimaryRayDirection(const uint2 pixelIdx)
 {
-    const float2 size = DispatchRaysDimensions().xy;
+    const float2 size = float2(renderParams.renderSize);
 
     const float2 uv = (pixelIdx + cameraParams.jitter) / size;
     const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);

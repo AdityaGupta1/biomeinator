@@ -40,6 +40,8 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
+    const uint pathSplitIdx = getPathSplitIdx();
+
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
@@ -50,11 +52,27 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const Material surfMaterial = materials[payload.materialIdx];
+        Material surfMaterial = materials[payload.materialIdx];
 
-        if (surfMaterial.hasEmission())
+        // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
+        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
+        }
+
+        const float3 wo_WS = -ray.Direction;
+        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+
+        if (pathDepth == 0 && renderParams.enablePathSplitting)
+        {
+            if (shouldSplitMaterial(surfMaterial))
+            {
+                surfMaterial = getSplitMaterial(surfMaterial, surfNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
+            }
+            else if (pathSplitIdx == 1)
+            {
+                return;
+            }
         }
 
         const bool isLastBounce = pathDepth == renderParams.maxPathDepth - 1;
@@ -74,9 +92,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
              payload.pathWeight /= survivalProbability;
         }
 
-        const float3 wo_WS = -ray.Direction;
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
-        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
 
         if (renderParams.enableMis == 1)
         {
@@ -139,8 +155,8 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 [shader("raygeneration")]
 void RayGeneration()
 {
-    const uint2 pixelIdx = DispatchRaysIndex().xy;
-    const uint linearPixelIdx = pixelIdx.y * DispatchRaysDimensions().x + pixelIdx.x;
+    const uint2 pixelIdx = getPixelIdx();
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     const GbufferData gbufferData = gbuffer[linearPixelIdx];
     Payload gbufferPayload;
@@ -152,18 +168,20 @@ void RayGeneration()
     gbufferPayload.pixelIdx = pixelIdx;
     gbufferPayload.specularHitDistance = 0;
 
+    const uint pathSplitIdx = getPathSplitIdx();
+
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
         Payload payload = gbufferPayload;
-        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed, linearPixelIdx, sampleIdx, renderParams.frameNumber));
+        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, sampleIdx, renderParams.frameNumber));
 
         const bool isFirstSample = (sampleIdx == 0);
         pathTraceRay(payload, isFirstSample);
 
         accumulatedColor += payload.pathColor;
 
-        if (isFirstSample)
+        if (isFirstSample && pathSplitIdx == 0)
         {
             RWTexture2D<float2> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = payload.specularHitDistance;
@@ -172,5 +190,6 @@ void RayGeneration()
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
 
-    pathTracingRawBuffer[linearPixelIdx] = float4(colorPreTonemap, 1);
+    const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
+    pathTracingRawBuffer[writePixelIdx] = float4(colorPreTonemap, 1);
 }

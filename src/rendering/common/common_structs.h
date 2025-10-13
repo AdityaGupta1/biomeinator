@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DirectXMath.h>
 
 #define uint uint32_t
+#define uint2 DirectX::XMUINT2
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
@@ -78,6 +79,9 @@ struct InstanceData
 #define MATERIAL_FLAG_HAS_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_HAS_SPECULAR (1 << 1)
 
+#define MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION (MATERIAL_FLAG_HAS_DIFFUSE) // TODO: add more conditions here later (e.g. specular transmission)
+#define MATERIAL_FLAGS_GLOSSY_REFLECTION (MATERIAL_FLAG_HAS_SPECULAR) // TODO: add more conditions here later
+
 struct Material
 {
 #ifdef __cplusplus
@@ -119,19 +123,19 @@ public:
         return (flags == MATERIAL_FLAG_HAS_SPECULAR);
     }
 
-    bool canReflect()
+    bool hasGlossyReflection()
     {
-        return bool(flags & MATERIAL_FLAG_HAS_SPECULAR); // TODO: add more conditions here later?
+        return bool(flags & MATERIAL_FLAGS_GLOSSY_REFLECTION);
     }
 
-    bool canTransmit() // TODO: use a more appropriate word than "transmit"?
+    bool hasDiffuseOrTransmission()
     {
-        return bool(flags & MATERIAL_FLAG_HAS_DIFFUSE); // TODO: add more conditions here later? (e.g. specular transmission)
+        return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION);
     }
 
     bool canScatter()
     {
-        return canReflect() || canTransmit();
+        return hasGlossyReflection() || hasDiffuseOrTransmission();
     }
 
 #ifdef __cplusplus
@@ -273,8 +277,12 @@ struct RenderParams
 
     uint tonemapping;
     uint preTonemappedColorSrvIdx;
-    uint renderWidth;
-    uint renderHeight;
+    uint2 renderSize;
+
+    uint enablePathSplitting;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct DebugParams
@@ -297,6 +305,7 @@ struct DebugParams
 
 #ifdef __cplusplus
 #undef uint
+#undef uint2
 
 #undef float2
 #undef float3
