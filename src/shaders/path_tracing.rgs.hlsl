@@ -40,6 +40,8 @@ float powerHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
+    const uint pathSplitIdx = getPathSplitIdx();
+
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(payload.pixelIdx);
 
@@ -50,11 +52,27 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const Material surfMaterial = materials[payload.materialIdx];
+        Material surfMaterial = materials[payload.materialIdx];
 
-        if (surfMaterial.hasEmission())
+        // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to sample it twice and multiply by Fresnel reflectance
+        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
+        }
+
+        const float3 wo_WS = -ray.Direction;
+        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+
+        if (pathDepth == 0 && renderParams.enablePathSplitting)
+        {
+            if (shouldSplitMaterial(surfMaterial))
+            {
+                surfMaterial = getSplitMaterial(surfMaterial, surfNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
+            }
+            else if (pathSplitIdx == 1)
+            {
+                return;
+            }
         }
 
         const bool isLastBounce = pathDepth == renderParams.maxPathDepth - 1;
@@ -74,9 +92,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
              payload.pathWeight /= survivalProbability;
         }
 
-        const float3 wo_WS = -ray.Direction;
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
-        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
 
         if (renderParams.enableMis == 1)
         {

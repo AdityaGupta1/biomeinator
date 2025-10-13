@@ -42,7 +42,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         const float4 color0 = pathTracingRawBuffer[linearPixelIdx * 2];
         const float4 color1 = pathTracingRawBuffer[linearPixelIdx * 2 + 1];
-        color = (color0 + color1) * 0.5; // TODO: remove 0.5 multiplier once paths are split by material
+        color = color0 + color1;
     }
     else
     {

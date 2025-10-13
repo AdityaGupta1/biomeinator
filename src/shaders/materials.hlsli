@@ -218,3 +218,43 @@ float bsdfPdf(
 
     return pdf;
 }
+
+bool shouldSplitMaterial(const Material material)
+{
+    return material.canReflect() && (material.canTransmit() || material.hasEmission());
+}
+
+Material getSplitMaterial(const Material material, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
+{
+    const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
+
+    Material splitMaterial;
+    splitMaterial.flags = 0;
+    splitMaterial.baseColor = float3(0, 0, 0);
+    splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+    splitMaterial.specularColor = float3(0, 0, 0);
+    splitMaterial.ior = 1.f;
+    splitMaterial.emissiveStrength = 0.f;
+    splitMaterial.emissiveColor = float3(0, 0, 0);
+
+    if (pathSplitIdx == 0)
+    {
+        // "Transmit" lobes and emission
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_TRANSMIT;
+        splitMaterial.baseColor = material.baseColor;
+        splitMaterial.baseColorTextureId = material.baseColorTextureId;
+        splitMaterial.emissiveStrength = material.emissiveStrength;
+        splitMaterial.emissiveColor = material.emissiveColor;
+        pathWeight *= (1.f - fresnelReflectance);
+    }
+    else
+    {
+        // "Reflect" lobes
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_REFLECT;
+        splitMaterial.specularColor = material.specularColor;
+        splitMaterial.ior = material.ior;
+        pathWeight *= fresnelReflectance;
+    }
+
+    return splitMaterial;
+}

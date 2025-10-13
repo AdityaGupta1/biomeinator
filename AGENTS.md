@@ -5,6 +5,7 @@ This project aims to implement a real-time path traced voxel engine using DXR. I
 == Coding Conventions
 
 - Always use `const` for local variables that will not change.
+- Variables called `pad#` are just for padding to a (usually 16-byte) boundary and do not need to be initialized. The one exception is if the compiler requires them to be initialized (e.g. for UAV writes).
 
 == Formatting
 
