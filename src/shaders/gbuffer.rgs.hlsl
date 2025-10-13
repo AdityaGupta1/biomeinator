@@ -44,17 +44,20 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
 
-    float3 diffuseAlbedo = 0.f;
+    float3 diffuseAlbedo = 0.5f;
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
     float roughness = 0.f;
-    float3 specularAlbedo = 0.f;
+    float3 specularAlbedo = 0.5f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         const Material surfMaterial = materials[payload.materialIdx];
-        diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
+        if (surfMaterial.hasDiffuse())
+        {
+            diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
+        }
 
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
@@ -74,8 +77,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     {
         motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
         hitNor_WS = normalize(-ray.Direction);
-
-        specularAlbedo = 0.5f; // this was suggested somewhere for miss specular albedo (I forgot where though)
     }
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
@@ -92,6 +93,9 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
     specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);
+
+    RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+    specularHitDistanceTarget[pixelIdx] = 0; // will be overwritten in path tracing pass
 }
 
 [shader("raygeneration")]

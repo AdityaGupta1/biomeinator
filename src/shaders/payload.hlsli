@@ -34,8 +34,8 @@ struct Payload
     uint materialIdx;
 
     uint2 pixelIdx;
-    float specularHitDistance;
     RandomSampler rng;
+    uint pad0;
 
     HitInfo hitInfo;
 };

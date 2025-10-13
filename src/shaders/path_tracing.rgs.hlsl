@@ -135,7 +135,8 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
         if (isFirstSample && pathDepth == 0 && surfBsdfSample.wasSpecular)
         {
-            payload.specularHitDistance = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+            RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+            specularHitDistanceTarget[payload.pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
         }
 
         if (renderParams.enableMis == 1)
@@ -166,7 +167,6 @@ void RayGeneration()
     gbufferPayload.pathWeight = float3(1, 1, 1);
     gbufferPayload.pathColor = float3(0, 0, 0);
     gbufferPayload.pixelIdx = pixelIdx;
-    gbufferPayload.specularHitDistance = 0;
 
     const uint pathSplitIdx = getPathSplitIdx();
 
@@ -180,12 +180,6 @@ void RayGeneration()
         pathTraceRay(payload, isFirstSample);
 
         accumulatedColor += payload.pathColor;
-
-        if (isFirstSample && pathSplitIdx == 0)
-        {
-            RWTexture2D<float2> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
-            specularHitDistanceTarget[pixelIdx] = payload.specularHitDistance;
-        }
     }
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
