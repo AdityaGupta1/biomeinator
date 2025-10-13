@@ -137,6 +137,10 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[payload.pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+
+            const float3 secondBounceNor_WS = faceforward(payload.hitInfo.hitNor_WS, -ray.Direction);
+            RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
+            normalsAndRoughnessTarget[payload.pixelIdx].xyz = secondBounceNor_WS;
         }
 
         if (renderParams.enableMis == 1)
