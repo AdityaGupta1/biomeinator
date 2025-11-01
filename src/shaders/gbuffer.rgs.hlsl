@@ -53,12 +53,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        const Material surfMaterial = materials[payload.materialIdx];
-        if (surfMaterial.hasDiffuse())
-        {
-            diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
-        }
-
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
@@ -66,11 +60,20 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         // TODO: eventually set roughness
 
-        if (surfMaterial.hasSpecularReflection())
+        if (payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            const float alpha = roughness * roughness;
-            const float nDotV = dot(hitNor_WS, -ray.Direction);
-            specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.specularColor, alpha, nDotV);
+            const Material surfMaterial = materials[payload.materialIdx];
+            if (surfMaterial.hasDiffuse())
+            {
+                diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
+            }
+
+            if (surfMaterial.hasSpecularReflection())
+            {
+                const float alpha = roughness * roughness;
+                const float nDotV = dot(hitNor_WS, -ray.Direction);
+                specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.specularColor, alpha, nDotV);
+            }
         }
     }
     else
