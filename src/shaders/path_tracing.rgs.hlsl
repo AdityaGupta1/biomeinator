@@ -36,7 +36,7 @@ float powerHeuristic(const float pdfA, const float pdfB)
 {
     const float pdfA2 = pdfA * pdfA;
     const float pdfB2 = pdfB * pdfB;
-    return pdfA2 / (pdfA2 + pdfB2);
+    return (debugParams.debugBool0 == 0) ? pdfA2 / (pdfA2 + pdfB2) : 0.5f;
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
