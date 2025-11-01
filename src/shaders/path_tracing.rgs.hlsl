@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "restir.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
@@ -98,7 +99,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         {
             if (!surfMaterial.isOnlySpecular())
             {
-                const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
+                const DirectLightingSample lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
                 if (lightSample.didHitLight)
                 {
                     // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()

@@ -32,9 +32,9 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(PT_REGISTER_PER_TRI_D
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(PT_REGISTER_AREA_LIGHTS, PT_REGISTER_SPACE);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, PT_REGISTER_SPACE);
 
-AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
+AreaLight pickLightUniform(inout RandomSampler rng, out float pdf, out uint lightIdx)
 {
-    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
+    lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     pdf = 1.f / sceneParams.numAreaLights;
     return areaLights[lightIdx];
 }
@@ -58,13 +58,14 @@ struct DirectLightingSample
     float pdf;
 };
 
-DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
 
     float lightPickPdf;
-    const AreaLight light = pickLightUniform(rng, lightPickPdf);
+    uint lightIdxUnused;
+    const AreaLight light = pickLightUniform(rng, lightPickPdf, lightIdxUnused);
 
     float lightSamplePdf;
     const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
