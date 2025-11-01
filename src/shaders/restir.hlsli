@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 float risTargetFunction(const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
     // TODO: include light emission somehow?
+    // TODO: include Fresnel term for materials that need it?
     const float cosThetaSurf = absCosTheta(normalize(pointOnLight_WS - surfPos_WS), surfNor_WS);
     return cosThetaSurf;
 }
