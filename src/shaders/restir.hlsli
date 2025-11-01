@@ -24,14 +24,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //#define RIS_NUM_CANDIDATES 32
 #define RIS_NUM_CANDIDATES 16
 
-float risTargetFunction(const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
+float risTargetFunction(const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
     // TODO: include light emission somehow?
-    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-    const float cosThetaLight = absCosTheta(-wi_WS, lightNor_WS);
-    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS);
-    return cosThetaLight * cosThetaSurf / r2;
+    const float cosThetaSurf = absCosTheta(normalize(pointOnLight_WS - surfPos_WS), surfNor_WS);
+    return cosThetaSurf;
 }
 
 DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
@@ -54,7 +51,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
 
         const float m_i = 1.f / RIS_NUM_CANDIDATES;
-        const float p_hat = risTargetFunction(surfPos_WS, surfNor_WS, pointOnLight_WS, light.normal_WS);
+        const float p_hat = risTargetFunction(surfPos_WS, surfNor_WS, pointOnLight_WS);
         const float r2 = distance2(surfPos_WS, pointOnLight_WS);
         lightSamplePdf *= r2 / absCosTheta(normalize(surfPos_WS - pointOnLight_WS), light.normal_WS);
         const float p_i = lightPickPdf * lightSamplePdf;

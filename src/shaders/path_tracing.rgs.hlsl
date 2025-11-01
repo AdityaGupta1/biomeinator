@@ -186,7 +186,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                         if (renderParams.enableRis == 1)
                         {
-                            bsdfSampleLightPdf = risTargetFunction(surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS, light.normal_WS);
+                            bsdfSampleLightPdf = risTargetFunction(surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS);
                         }
                         else
                         {
