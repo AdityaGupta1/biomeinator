@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "util/color.hlsli"
 
 RWStructuredBuffer<GbufferData> gbuffer : REGISTER_U(GBUFFER_REGISTER_GBUFFER, GBUFFER_REGISTER_SPACE);
 
@@ -44,12 +45,12 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
 
-    float3 diffuseAlbedo = 0.5f;
+    float3 diffuseAlbedo = 0.f;
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
     float roughness = 0.f;
-    float3 specularAlbedo = 0.5f;
+    float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -66,6 +67,13 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
             if (surfMaterial.hasDiffuse())
             {
                 diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
+            }
+
+            if (surfMaterial.hasEmission())
+            {
+                const float3 emissionColor = surfMaterial.getEmissiveColor();
+                const float3 tonemappedEmission = applyReinhard(emissionColor);
+                diffuseAlbedo += tonemappedEmission;
             }
 
             if (surfMaterial.hasSpecularReflection())
