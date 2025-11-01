@@ -32,21 +32,24 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(PT_REGISTER_PER_TRI_D
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(PT_REGISTER_AREA_LIGHTS, PT_REGISTER_SPACE);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, PT_REGISTER_SPACE);
 
-AreaLight pickLightUniform(inout RandomSampler rng, out float pdf, out uint lightIdx)
+AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
 {
     lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
-    pdf = 1.f / sceneParams.numAreaLights;
-    return areaLights[lightIdx];
-}
+    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
+    const AreaLight light = areaLights[lightIdx];
 
-float3 samplePointOnLight(const AreaLight light, inout RandomSampler rng, out float pdf)
-{
     const float2 rndSample = rng.nextFloat2();
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
-    const float3 pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
-    pdf = light.rcpArea;
-    return pointOnLight_WS;
+    pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+    float lightSamplePdf = light.rcpArea;
+
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
+    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
+    lightSamplePdf *= r2 / absCosTheta(-wi_WS, light.normal_WS);
+    lightPdf = lightPickPdf * lightSamplePdf;
+
+    return light;
 }
 
 struct DirectLightingSample
@@ -67,17 +70,12 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     DirectLightingSample result;
     result.didHitLight = false;
 
-    float lightPickPdf;
+    float3 pointOnLight_WS;
+    float lightPdf;
     uint lightIdxUnused;
-    const AreaLight light = pickLightUniform(rng, lightPickPdf, lightIdxUnused);
-
-    float lightSamplePdf;
-    const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
+    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdxUnused);
 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-
-    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
 
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
@@ -97,7 +95,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     result.didHitLight = true;
     const Material material = materials[lightPayload.materialIdx];
     result.Le = material.getEmissiveColor();
-    result.pdf = lightPickPdf * lightSamplePdf;
+    result.pdf = lightPdf;
 
     return result;
 }

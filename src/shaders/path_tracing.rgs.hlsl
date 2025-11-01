@@ -34,7 +34,7 @@ RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TR
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
-    return debugParams.debugBool0 == 0 ? (pdfA / (pdfA + pdfB)) : 0.5f;
+    return pdfA / (pdfA + pdfB);
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)

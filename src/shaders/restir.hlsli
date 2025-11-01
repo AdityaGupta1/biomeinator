@@ -48,18 +48,14 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
 
     for (int risCandidateIdx = 0; risCandidateIdx < RIS_NUM_CANDIDATES; ++risCandidateIdx)
     {
-        float lightPickPdf;
+        float3 pointOnLight_WS;
+        float lightPdf;
         uint lightIdx;
-        const AreaLight light = pickLightUniform(rng, lightPickPdf, lightIdx);
-
-        float lightSamplePdf;
-        const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
+        const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
 
         const float m_i = 1.f / RIS_NUM_CANDIDATES;
         const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS);
-        const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-        lightSamplePdf *= r2 / absCosTheta(normalize(surfPos_WS - pointOnLight_WS), light.normal_WS);
-        const float p_i = lightPickPdf * lightSamplePdf;
+        const float p_i = lightPdf;
         const float W_X_i = 1.f / p_i;
 
         const float w_i = m_i * p_hat * W_X_i;
