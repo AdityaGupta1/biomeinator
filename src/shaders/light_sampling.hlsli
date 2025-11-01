@@ -65,6 +65,28 @@ struct DirectLightingSample
     float p_hat;
 };
 
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)
+{
+    RayDesc ray;
+    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
+    ray.Direction = wi_WS;
+    ray.TMin = 0.f;
+    ray.TMax = 10000.f;
+
+    Payload lightPayload;
+    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+
+    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    {
+        return false;
+    }
+
+    const Material material = materials[lightPayload.materialIdx];
+    Le = material.getEmissiveColor();
+    return true;
+}
+
 DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
@@ -77,24 +99,14 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    RayDesc ray;
-    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
-    ray.Direction = result.wi_WS;
-    ray.TMin = 0.f;
-    ray.TMax = 10000.f;
-
-    Payload lightPayload;
-    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
-
-    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    float3 Le;
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
     {
         return result;
     }
 
     result.didHitLight = true;
-    const Material material = materials[lightPayload.materialIdx];
-    result.Le = material.getEmissiveColor();
+    result.Le = Le;
     result.pdf = lightPdf;
 
     return result;

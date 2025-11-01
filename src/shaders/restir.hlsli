@@ -78,25 +78,14 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
 
     result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
 
-    // TODO: deduplicate code shared with sampleDirectLightingUniform
-    RayDesc ray;
-    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
-    ray.Direction = result.wi_WS;
-    ray.TMin = 0.f;
-    ray.TMax = 10000.f;
-
-    Payload lightPayload;
-    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
-
-    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    float3 Le;
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
     {
         return result;
     }
 
     result.didHitLight = true;
-    const Material material = materials[lightPayload.materialIdx];
-    result.Le = material.getEmissiveColor();
+    result.Le = Le;
     result.W_Y = w_sum / Y_p_hat; // unbiased contribution weight
     result.p_hat = Y_p_hat;
 
