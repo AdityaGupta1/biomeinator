@@ -34,7 +34,7 @@ RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TR
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
-    return pdfA / (pdfA + pdfB);
+    return debugParams.debugBool0 == 0 ? (pdfA / (pdfA + pdfB)) : 0.5f;
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
@@ -184,7 +184,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                         if (renderParams.enableRis == 1)
                         {
-                            bsdfSampleLightPdf = risTargetFunction(surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS);
+                            bsdfSampleLightPdf = risTargetFunction(light, surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS);
                         }
                         else
                         {

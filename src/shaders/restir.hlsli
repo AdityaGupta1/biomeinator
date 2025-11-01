@@ -19,17 +19,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "light_sampling.hlsli"
+#include "util/color.hlsli"
 
 // TODO: make this into a setting
 //#define RIS_NUM_CANDIDATES 32
 #define RIS_NUM_CANDIDATES 16
 
-float risTargetFunction(const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
+float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
-    // TODO: include light emission somehow? and multiply it by material color as well?
     // TODO: include Fresnel term for materials that need it?
     const float cosThetaSurf = absCosTheta(normalize(pointOnLight_WS - surfPos_WS), surfNor_WS);
-    return cosThetaSurf;
+
+    const InstanceData instanceData = instanceDatas[light.instanceId];
+    const Material material = materials[instanceData.materialIdx];
+
+    return cosThetaSurf * luminance(material.getEmissiveColor());
 }
 
 DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
@@ -52,7 +56,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
 
         const float m_i = 1.f / RIS_NUM_CANDIDATES;
-        const float p_hat = risTargetFunction(surfPos_WS, surfNor_WS, pointOnLight_WS);
+        const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS);
         const float r2 = distance2(surfPos_WS, pointOnLight_WS);
         lightSamplePdf *= r2 / absCosTheta(normalize(surfPos_WS - pointOnLight_WS), light.normal_WS);
         const float p_i = lightPickPdf * lightSamplePdf;
