@@ -70,7 +70,9 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     }
 
     const AreaLight light = areaLights[Y_lightIdx];
-    const float W_Y = w_sum / Y_p_hat;
+    const float W_Y = w_sum / Y_p_hat; // unbiased contribution weight
+
+    result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
 
     // TODO: deduplicate code shared with sampleDirectLightingUniform
     RayDesc ray;
@@ -91,7 +93,8 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     result.didHitLight = true;
     const Material material = materials[lightPayload.materialIdx];
     result.Le = material.getEmissiveColor();
-    result.pdf = 1.f / W_Y; // not really a "pdf" per se but close enough
+    result.W_Y = W_Y;
+    result.p_hat = Y_p_hat;
 
     return result;
 }

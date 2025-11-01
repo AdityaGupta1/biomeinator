@@ -1142,6 +1142,7 @@ static void imguiEndFrame(bool& needsResize)
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
+    SettingsGuiHelpers::Checkbox("Enable RIS", "enableRis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
@@ -1301,6 +1302,7 @@ void render()
     renderParams->renderSize = { renderWidth, renderHeight };
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
+    renderParams->enableRis = SettingsManager::getAsBool("enableRis") ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

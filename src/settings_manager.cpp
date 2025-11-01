@@ -50,6 +50,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
     optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
+    optionAdder("enableRis", "Enable RIS", cxxopts::value<bool>()->default_value("false"));
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
@@ -93,6 +94,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("enableDlss", bool);
     COPY_SETTING("dlssMode", uint32_t);
     COPY_SETTING("enablePathSplitting", bool);
+    COPY_SETTING("enableRis", bool);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
