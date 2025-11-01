@@ -36,7 +36,7 @@ float powerHeuristic(const float pdfA, const float pdfB)
 {
     const float pdfA2 = pdfA * pdfA;
     const float pdfB2 = pdfB * pdfB;
-    return (debugParams.debugBool0 == 0) ? pdfA2 / (pdfA2 + pdfB2) : 0.5f;
+    return (debugParams.debugBool0 == 0) ? pdfA2 / (pdfA2 + pdfB2) : 0.5f; // TODO: remove debug check
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
@@ -186,7 +186,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                         if (renderParams.enableRis == 1)
                         {
-                            bsdfSampleLightPdf = risTargetFunction(surfPos_WS, payload.hitInfo.hitPos_WS, light.normal_WS);
+                            bsdfSampleLightPdf = risTargetFunction(surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS, light.normal_WS);
                         }
                         else
                         {
