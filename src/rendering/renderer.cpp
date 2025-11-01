@@ -273,6 +273,12 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
+    ComPtr<ID3D12Debug1> debug1;
+    if (SUCCEEDED(debug.As(&debug1)))
+    {
+        debug1->SetEnableGPUBasedValidation(true);
+    }
+
 #define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #else
 #define DXGI_FACTORY_FLAGS 0
@@ -316,9 +322,9 @@ static void initDevice()
     D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
-    device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue));
+    CHECK_HRESULT(device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue)));
 
-    device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+    CHECK_HRESULT(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
 }
 
 static ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
@@ -358,8 +364,8 @@ static void initSwapChain()
         .Flags = swapChainFlags,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
-    factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1);
-    swapChain1.As(&swapChain);
+    CHECK_HRESULT(factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
+    CHECK_HRESULT(swapChain1.As(&swapChain));
 
     factory.Reset();
 }
@@ -472,7 +478,7 @@ void resize()
 
     flush();
 
-    swapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, swapChainFlags);
+    CHECK_HRESULT(swapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, swapChainFlags));
     swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
     frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
 
@@ -495,7 +501,7 @@ void resize()
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
         ComPtr<ID3D12Resource> backBuffer;
-        swapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer));
+        CHECK_HRESULT(swapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer)));
         D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[frameIdx];
         cpuHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
         cpuHandle.ptr += frameIdx * rtvIncrementSize;
@@ -1014,7 +1020,7 @@ static void captureQueuedScreenshot()
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
     ComPtr<ID3D12Resource> backBuffer;
-    swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer));
+    CHECK_HRESULT(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer)));
 
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
         .pResource = backBuffer.Get(),
@@ -1457,7 +1463,7 @@ void render()
 
     ComPtr<ID3D12Resource> backBuffer;
     const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
-    swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer));
+    CHECK_HRESULT(swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -1500,7 +1506,7 @@ void render()
     submitCmd();
 
     const uint64_t fenceValue = nextFenceValue++;
-    cmdQueue->Signal(fence.Get(), fenceValue);
+    CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
     swapChain->Present(1, 0);
@@ -1520,7 +1526,7 @@ static void waitForFence(const uint64_t fenceValue)
 {
     if (fence->GetCompletedValue() < fenceValue)
     {
-        fence->SetEventOnCompletion(fenceValue, fenceEvent);
+        CHECK_HRESULT(fence->SetEventOnCompletion(fenceValue, fenceEvent));
         WaitForSingleObject(fenceEvent, INFINITE);
     }
 }
@@ -1533,20 +1539,20 @@ static void beginFrame()
     waitForFence(frame.fenceValue);
 
     frame.toFreeList.freeAll();
-    frame.cmdAlloc->Reset();
-    cmdList->Reset(frame.cmdAlloc.Get(), nullptr);
+    CHECK_HRESULT(frame.cmdAlloc->Reset());
+    CHECK_HRESULT(cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
 }
 
 static void submitCmd()
 {
-    cmdList->Close();
+    CHECK_HRESULT(cmdList->Close());
     cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 }
 
 void flush()
 {
     const uint64_t fenceValue = nextFenceValue++;
-    cmdQueue->Signal(fence.Get(), fenceValue);
+    CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
 
     waitForFence(fenceValue);
 
