@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 float risTargetFunction(const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
-    // TODO: include light emission somehow?
+    // TODO: include light emission somehow? and multiply it by material color as well?
     // TODO: include Fresnel term for materials that need it?
     const float cosThetaSurf = absCosTheta(normalize(pointOnLight_WS - surfPos_WS), surfNor_WS);
     return cosThetaSurf;
@@ -75,7 +75,6 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     }
 
     const AreaLight light = areaLights[Y_lightIdx];
-    const float W_Y = w_sum / Y_p_hat; // unbiased contribution weight
 
     result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
 
@@ -98,7 +97,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     result.didHitLight = true;
     const Material material = materials[lightPayload.materialIdx];
     result.Le = material.getEmissiveColor();
-    result.W_Y = W_Y;
+    result.W_Y = w_sum / Y_p_hat; // unbiased contribution weight
     result.p_hat = Y_p_hat;
 
     return result;
