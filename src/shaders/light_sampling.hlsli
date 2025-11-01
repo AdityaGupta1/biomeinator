@@ -102,10 +102,19 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     return result;
 }
 
-float lightPdfUniform(const AreaLight light, const float3 surfPos_WS, const float3 hitPos_WS, const float3 wi_WS)
+float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
 {
+    const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
+    if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
+    {
+        return 0.f;
+    }
+
+    const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
+    const AreaLight light = areaLights[areaLightIdx];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
-    const float r2 = distance2(surfPos_WS, hitPos_WS);
+    const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
     return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
 }
 

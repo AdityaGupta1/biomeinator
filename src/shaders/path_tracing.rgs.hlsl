@@ -40,6 +40,7 @@ float balanceHeuristic(const float pdfA, const float pdfB)
 void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
     const uint pathSplitIdx = getPathSplitIdx();
+    const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -49,12 +50,15 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         return;
     }
 
+    bool previousWasSpecular = false;
+
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = materials[payload.materialIdx];
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
-        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
+        if ((samplingMode != SamplingMode::RIS || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
@@ -93,12 +97,12 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-        if (renderParams.enableMis == 1)
+        if (samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS)
         {
             if (!surfMaterial.isOnlySpecular())
             {
                 DirectLightingSample lightSample;
-                if (renderParams.enableRis == 1)
+                if (samplingMode == SamplingMode::RIS)
                 {
                     lightSample = sampleDirectLightingRis(surfPos_WS, surfNor_WS, payload.rng);
                 }
@@ -116,10 +120,9 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                     float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
-                    if (renderParams.enableRis)
+                    if (samplingMode == SamplingMode::RIS)
                     {
-                        const float misWeight = balanceHeuristic(lightSample.p_hat, lightSampleBsdfPdf);
-                        contribution *= misWeight * lightSample.W_Y;
+                        contribution *= lightSample.W_Y;
                     }
                     else
                     {
@@ -163,41 +166,19 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
             normalsAndRoughnessTarget[payload.pixelIdx].xyz = secondBounceNor_WS;
         }
 
-        if (renderParams.enableMis == 1)
+        if (samplingMode == SamplingMode::MIS)
         {
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                float bsdfSampleLightPdf; // not a pdf if using ReSTIR
-                // TODO: extract this block into a function getBsdfSampleLightPdf()
-                {
-                    const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-                    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-                    if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
-                    {
-                        bsdfSampleLightPdf = 0.f;
-                    }
-                    else
-                    {
-                        const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
-                        const AreaLight light = areaLights[areaLightIdx];
-
-                        if (renderParams.enableRis == 1)
-                        {
-                            bsdfSampleLightPdf = risTargetFunction(light, surfPos_WS, surfNor_WS, payload.hitInfo.hitPos_WS);
-                        }
-                        else
-                        {
-                            bsdfSampleLightPdf = lightPdfUniform(light, surfPos_WS, payload.hitInfo.hitPos_WS, ray.Direction);
-                        }
-                    }
-                }
-
+                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float misWeight = balanceHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
                 payload.pathWeight *= misWeight;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
         }
+
+        previousWasSpecular = surfBsdfSample.wasSpecular;
     }
 }
 

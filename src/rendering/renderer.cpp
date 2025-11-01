@@ -1109,6 +1109,11 @@ static void finalizeQueuedScreenshot()
     screenshotRequest = ScreenshotRequest();
 }
 
+static const std::vector<const char*> samplingModeComboOptions = {
+    "naive",
+    "MIS",
+    "RIS",
+};
 static const std::vector<const char*> tonemappingComboOptions = {
     "none",
     "standard",
@@ -1147,8 +1152,7 @@ static void imguiEndFrame(bool& needsResize)
 
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-    SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
-    SettingsGuiHelpers::Checkbox("Enable RIS", "enableRis");
+    SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
@@ -1302,13 +1306,12 @@ void render()
     renderParams->frameNumber = frameNumber;
     renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
-    renderParams->enableMis = SettingsManager::getAsBool("enableMis") ? 1 : 0;
+    renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
     renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
     renderParams->renderSize = { renderWidth, renderHeight };
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
-    renderParams->enableRis = SettingsManager::getAsBool("enableRis") ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

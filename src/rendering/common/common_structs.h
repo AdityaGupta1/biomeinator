@@ -268,21 +268,30 @@ enum class Tonemapping : uint
     COUNT
 };
 
+enum class SamplingMode : uint
+{
+    NAIVE,
+    MIS,
+    RIS,
+
+    COUNT
+};
+
 struct RenderParams
 {
     uint frameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
-    uint enableMis;
+    uint samplingMode;
 
     uint tonemapping;
     uint preTonemappedColorSrvIdx;
     uint2 renderSize;
 
     uint enablePathSplitting;
-    uint enableRis;
     uint pad0;
     uint pad1;
+    uint pad2;
 };
 
 struct DebugParams
