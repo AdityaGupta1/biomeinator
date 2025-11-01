@@ -40,6 +40,16 @@ float3 linearToSrgb(float3 linearColor) {
     return select(linearColor < 0.0031308f, lower, higher);
 }
 
+float3 applyReinhard(const float3 color)
+{
+    const float lum = luminance(color);
+    if (lum <= 0.f)
+    {
+        return color;
+    }
+    return color / (1.f + lum);
+}
+
 float3 applyTonemapping(float3 color)
 {
     float3 tonemappedColor;
