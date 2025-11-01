@@ -84,12 +84,12 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         // russian roulette
         if (pathDepth >= 2)
         {
-             const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-             if (payload.rng.nextFloat() >= survivalProbability)
-             {
-                 return;
-             }
-             payload.pathWeight /= survivalProbability;
+            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+            if (payload.rng.nextFloat() >= survivalProbability)
+            {
+                return;
+            }
+            payload.pathWeight /= survivalProbability;
         }
 
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
