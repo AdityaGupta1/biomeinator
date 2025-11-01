@@ -21,6 +21,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include "buffer/buffer_helper.h"
 
+static_assert(sizeof(HeapIndices) % 16 == 0, "HeapIndices size must be a multiple of 16 bytes");
+static_assert(sizeof(ConstantParams) % 16 == 0, "ConstantParams size must be a multiple of 16 bytes");
+static_assert(sizeof(CameraParams) % 16 == 0, "CameraParams size must be a multiple of 16 bytes");
+static_assert(sizeof(SceneParams) % 16 == 0, "SceneParams size must be a multiple of 16 bytes");
+static_assert(sizeof(RenderParams) % 16 == 0, "RenderParams size must be a multiple of 16 bytes");
+static_assert(sizeof(DebugParams) % 16 == 0, "DebugParams size must be a multiple of 16 bytes");
+
 void ParamBlockManager::init()
 {
     constexpr uint32_t bufferSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
