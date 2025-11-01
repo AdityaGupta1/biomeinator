@@ -32,11 +32,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
 RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
-float powerHeuristic(const float pdfA, const float pdfB)
+float balanceHeuristic(const float pdfA, const float pdfB)
 {
-    const float pdfA2 = pdfA * pdfA;
-    const float pdfB2 = pdfB * pdfB;
-    return (debugParams.debugBool0 == 0) ? pdfA2 / (pdfA2 + pdfB2) : 0.5f; // TODO: remove debug check
+    return pdfA / (pdfA + pdfB);
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
@@ -120,12 +118,12 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                     if (renderParams.enableRis)
                     {
-                        const float misWeight = powerHeuristic(lightSample.p_hat, lightSampleBsdfPdf);
+                        const float misWeight = balanceHeuristic(lightSample.p_hat, lightSampleBsdfPdf);
                         contribution *= misWeight * lightSample.W_Y;
                     }
                     else
                     {
-                        const float misWeight = powerHeuristic(lightSample.pdf, lightSampleBsdfPdf);
+                        const float misWeight = balanceHeuristic(lightSample.pdf, lightSampleBsdfPdf);
                         contribution *= misWeight / lightSample.pdf;
                     }
 
@@ -195,7 +193,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
                     }
                 }
 
-                const float misWeight = powerHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
+                const float misWeight = balanceHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
                 payload.pathWeight *= misWeight;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
