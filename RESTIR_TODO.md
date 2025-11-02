@@ -5,3 +5,4 @@
 
 2. Maybe consider less candidates after the first ReSTIR bounce (the one that will eventually have spatial reuse)
 
+3. Maybe sample lights (but not points on lights) by distance so that closer lights get sampled more?
