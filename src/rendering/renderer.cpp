@@ -273,11 +273,11 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
-    ComPtr<ID3D12Debug1> debug1;
-    if (SUCCEEDED(debug.As(&debug1)))
-    {
-        debug1->SetEnableGPUBasedValidation(true);
-    }
+    //ComPtr<ID3D12Debug1> debug1;
+    //if (SUCCEEDED(debug.As(&debug1)))
+    //{
+    //    debug1->SetEnableGPUBasedValidation(true);
+    //}
 
 #define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #else
