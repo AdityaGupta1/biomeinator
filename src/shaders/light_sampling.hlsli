@@ -65,6 +65,7 @@ struct DirectLightingSample
     float p_hat;
 };
 
+// TODO: take in point on light for setting tmax
 bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)
 {
     RayDesc ray;
