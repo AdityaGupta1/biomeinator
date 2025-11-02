@@ -104,7 +104,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
                 DirectLightingSample lightSample;
                 if (samplingMode == SamplingMode::RIS)
                 {
-                    lightSample = sampleDirectLightingRis(surfPos_WS, surfNor_WS, payload.rng);
+                    lightSample = sampleDirectLightingRis(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, payload.rng);
                 }
                 else
                 {

@@ -25,18 +25,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //#define RIS_NUM_CANDIDATES 32
 #define RIS_NUM_CANDIDATES 16
 
-float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
+float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 {
-    // TODO: include Fresnel term for materials that need it?
-    const float cosThetaSurf = absCosTheta(normalize(pointOnLight_WS - surfPos_WS), surfNor_WS);
+    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     const InstanceData instanceData = instanceDatas[light.instanceId];
-    const Material material = materials[instanceData.materialIdx];
+    const Material lightMaterial = materials[instanceData.materialIdx];
 
-    return cosThetaSurf * luminance(material.getEmissiveColor());
+    const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
+
+    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS);
+
+    return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf / distance2(surfPos_WS, pointOnLight_WS);
 }
 
-DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
@@ -54,7 +57,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
 
         const float m_i = 1.f / RIS_NUM_CANDIDATES;
-        const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS);
+        const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS, material, uv, wo_WS);
         const float p_i = lightPdf;
         const float W_X_i = 1.f / p_i;
 
