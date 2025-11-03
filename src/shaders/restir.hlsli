@@ -22,8 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 
 // TODO: make this into a setting
-//#define RIS_NUM_CANDIDATES 32
-#define RIS_NUM_CANDIDATES 16
+#define RIS_NUM_CANDIDATES 64
 
 float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 {
@@ -36,7 +35,8 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS);
 
-    return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf / distance2(surfPos_WS, pointOnLight_WS);
+    //return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf / distance2(surfPos_WS, pointOnLight_WS);
+    return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
 }
 
 DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, inout RandomSampler rng)
@@ -82,7 +82,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, Y_pointOnLight_WS, light, Le))
     {
         return result;
     }

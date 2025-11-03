@@ -65,25 +65,25 @@ struct DirectLightingSample
     float p_hat;
 };
 
-// TODO: take in point on light for setting tmax
-bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, out float3 Le)
 {
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
     ray.Direction = wi_WS;
     ray.TMin = 0.f;
-    ray.TMax = 10000.f;
+    ray.TMax = length(pointOnLight_WS - surfPos_WS) - (2.f * RAY_ORIGIN_OFFSET_EPSILON);
 
     Payload lightPayload;
-    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
+    lightPayload.flags = 0;
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
-    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    if (bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         return false;
     }
 
-    const Material material = materials[lightPayload.materialIdx];
+    const InstanceData instanceData = instanceDatas[light.instanceId];
+    const Material material = materials[instanceData.materialIdx];
     Le = material.getEmissiveColor();
     return true;
 }
@@ -101,7 +101,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, Le))
     {
         return result;
     }
@@ -132,9 +132,5 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
 [shader("closesthit")]
 void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    const InstanceData instanceData = instanceDatas[InstanceID()];
-    payload.materialIdx = instanceData.materialIdx;
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }
