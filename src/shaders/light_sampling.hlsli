@@ -71,7 +71,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
     ray.Direction = wi_WS;
     ray.TMin = 0.f;
-    ray.TMax = length(pointOnLight_WS - surfPos_WS) - (2.f * RAY_ORIGIN_OFFSET_EPSILON);
+    ray.TMax = max(0.f, distance(pointOnLight_WS, surfPos_WS) - (2.f * RAY_ORIGIN_OFFSET_EPSILON));
 
     Payload lightPayload;
     lightPayload.flags = 0;
@@ -133,4 +133,19 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
 void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
+
+    // TODO: add payload flag that determines whether to calculate all this stuff (e.g. not necessary for direct lighting shadow rays, but is necessary for RIS BSDF sample)
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
+
+    const InstanceData instanceData = instanceDatas[InstanceID()];
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float4x3 objectToWorldMat = ObjectToWorld4x3();
+    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
 }
