@@ -147,8 +147,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
 
     result.didHitLight = true;
     result.Le = Le;
-    result.W_Y = w_sum / Y_p_hat; // unbiased contribution weight
-    result.p_hat = Y_p_hat;
+    result.pdf = w_sum / Y_p_hat; // unbiased contribution weight
 
     return result;
 }

@@ -122,7 +122,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                     if (samplingMode == SamplingMode::RIS)
                     {
-                        contribution *= lightSample.W_Y;
+                        contribution *= lightSample.pdf; // this is actually W_Y (unbiased contribution weight)
                     }
                     else
                     {

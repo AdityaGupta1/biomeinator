@@ -57,12 +57,7 @@ struct DirectLightingSample
     bool didHitLight;
     float3 wi_WS;
     float3 Le;
-    float pdf;
-
-    // for use with RIS
-    // TODO: overlap these with pdf somehow?
-    float W_Y;
-    float p_hat;
+    float pdf; // or W_Y (unbiased contribution weight) for RIS
 };
 
 bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)

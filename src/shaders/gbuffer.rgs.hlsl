@@ -115,8 +115,6 @@ void RayGeneration()
     const uint2 pixelIdx = DispatchRaysIndex().xy;
     const uint linearPixelIdx = pixelIdx.y * DispatchRaysDimensions().x + pixelIdx.x;
 
-    debugTexture()[pixelIdx] = float4(0, 0, 0, 1); // TODO: remove
-
     RayDesc ray;
     ray.Origin = cameraParams.pos_WS;
     ray.Direction = getPrimaryRayDirection(pixelIdx);
