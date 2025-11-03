@@ -65,25 +65,24 @@ struct DirectLightingSample
     float p_hat;
 };
 
-bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, out float3 Le)
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)
 {
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
     ray.Direction = wi_WS;
     ray.TMin = 0.f;
-    ray.TMax = max(0.f, distance(pointOnLight_WS, surfPos_WS) - (2.f * RAY_ORIGIN_OFFSET_EPSILON));
+    ray.TMax = 10000.f;
 
     Payload lightPayload;
     lightPayload.flags = 0;
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
-    if (bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT))
+    if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {
         return false;
     }
 
-    const InstanceData instanceData = instanceDatas[light.instanceId];
-    const Material material = materials[instanceData.materialIdx];
+    const Material material = materials[lightPayload.materialIdx];
     Le = material.getEmissiveColor();
     return true;
 }
@@ -101,7 +100,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
     {
         return result;
     }
@@ -134,11 +133,13 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
 {
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 
-    // TODO: add payload flag that determines whether to calculate all this stuff (e.g. not necessary for direct lighting shadow rays, but is necessary for RIS BSDF sample)
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     const InstanceData instanceData = instanceDatas[InstanceID()];
+    payload.materialIdx = instanceData.materialIdx;
+
+    // TODO: add flag to payload that determines whether to calculate all this stuff (e.g. not necessary for direct lighting shadow rays, but is necessary for RIS BSDF sample)
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
 
