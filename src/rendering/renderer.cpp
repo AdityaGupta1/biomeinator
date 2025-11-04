@@ -469,6 +469,8 @@ void resize()
         dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
         dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
         CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
+
+        dlssNeedsReset = true;
     }
     else
     {
@@ -1149,16 +1151,17 @@ static void imguiEndFrame(bool& needsResize)
     SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     SettingsGuiHelpers::Checkbox("Enable MIS", "enableMis");
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
+
+    SettingsGuiHelpers::SectionTitle("DLSS");
+    needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
+    needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
 
     SettingsGuiHelpers::VerticalSpacing();
 
     if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        SettingsGuiHelpers::SectionTitle("DLSS");
-        needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
-        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
-
         SettingsGuiHelpers::VerticalSpacing();
 
         SettingsGuiHelpers::SectionTitle("Debug view");
