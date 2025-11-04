@@ -6,7 +6,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "two_triangles/golden.png",
@@ -18,7 +18,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "occluded_light/golden.png",
@@ -30,7 +30,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "emissive_cube/golden.png",
@@ -42,7 +42,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
@@ -55,7 +55,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_monkeys/golden.png",
@@ -67,7 +67,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_faces_emitter/golden.png",
@@ -79,7 +79,7 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "textured_cube/golden.png",
@@ -91,7 +91,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "penguin_gallery/golden.png",
@@ -103,7 +103,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
@@ -116,7 +116,7 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "cornell_box/golden.png",
@@ -128,7 +128,7 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "fancy_cornell_box/golden.png",
@@ -140,7 +140,7 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
@@ -153,7 +153,7 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "evil_room/golden.png",
@@ -165,7 +165,7 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
