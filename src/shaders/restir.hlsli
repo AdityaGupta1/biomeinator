@@ -18,12 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "util/color.hlsli"
 
-// TODO: do less samples for later bounces (like maybe 8 light samples and 0 bsdf samples on and after the second non-delta bounce)
-#define RIS_NUM_LIGHT_CANDIDATES 32
-#define RIS_NUM_BSDF_CANDIDATES 1
+#define RIS_MAX_NUM_LIGHT_CANDIDATES 32
+#define RIS_MAX_NUM_BSDF_CANDIDATES 1
 
 float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 {
@@ -38,8 +38,12 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
     return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
 }
 
-DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
 {
+    const uint adjustedBounceCount = uint(max(0, numPrevNonDeltaBounces - 1));
+    const uint numLightCandidates = max(4u, uint(RIS_MAX_NUM_LIGHT_CANDIDATES) >> adjustedBounceCount);
+    const uint numBsdfCandidates = max(1u, uint(RIS_MAX_NUM_BSDF_CANDIDATES) >> adjustedBounceCount);
+
     DirectLightingSample result;
     result.didHitLight = false;
 
@@ -48,7 +52,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     float3 Y_pointOnLight_WS = 0.f;
     float w_sum = 0.f;
 
-    for (int risLightCandidateIdx = 0; risLightCandidateIdx < RIS_NUM_LIGHT_CANDIDATES; ++risLightCandidateIdx)
+    for (uint risLightCandidateIdx = 0; risLightCandidateIdx < numLightCandidates; ++risLightCandidateIdx)
     {
         float3 pointOnLight_WS;
         float lightPdf;
@@ -56,7 +60,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
 
         const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-        const float misDenominator = RIS_NUM_LIGHT_CANDIDATES * lightPdf + RIS_NUM_BSDF_CANDIDATES * bsdfPdf(material, wo_WS, wi_WS, surfNor_WS);
+        const float misDenominator = numLightCandidates * lightPdf + numBsdfCandidates * bsdfPdf(material, wo_WS, wi_WS, surfNor_WS);
         // const float m_i = lightPdf / misDenominator;
         // const float W_X_i = 1.f / lightPdf;
 
@@ -74,7 +78,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         }
     }
 
-    for (int risBsdfCandidateIdx = 0; risBsdfCandidateIdx < RIS_NUM_BSDF_CANDIDATES; ++risBsdfCandidateIdx)
+    for (uint risBsdfCandidateIdx = 0; risBsdfCandidateIdx < numBsdfCandidates; ++risBsdfCandidateIdx)
     {
         const BsdfSample bsdfSample = sampleBsdf(material, uv, wo_WS, surfNor_WS, rng);
 
@@ -109,7 +113,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         const AreaLight light = areaLights[areaLightIdx];
         const float3 pointOnLight_WS = lightPayload.hitInfo.hitPos_WS;
 
-        const float misDenominator = RIS_NUM_LIGHT_CANDIDATES * lightPdfUniform(lightPayload.hitInfo, surfPos_WS, bsdfSample.wi_WS) + RIS_NUM_BSDF_CANDIDATES * bsdfSample.pdf;
+        const float misDenominator = numLightCandidates * lightPdfUniform(lightPayload.hitInfo, surfPos_WS, bsdfSample.wi_WS) + numBsdfCandidates * bsdfSample.pdf;
         // const float m_i = bsdfSample.pdf / misDenominator
         // const float W_X_i = 1.f / bsdfSample.pdf;
 
