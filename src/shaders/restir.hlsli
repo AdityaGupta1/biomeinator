@@ -140,7 +140,7 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
     //debugTexture()[DispatchRaysIndex().xy] = float4(light.normal_WS, 1);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, Y_pointOnLight_WS, light, Le))
     {
         return result;
     }

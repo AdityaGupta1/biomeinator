@@ -60,13 +60,13 @@ struct DirectLightingSample
     float pdf; // or W_Y (unbiased contribution weight) for RIS
 };
 
-bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const AreaLight light, out float3 Le)
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, out float3 Le)
 {
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
     ray.Direction = wi_WS;
     ray.TMin = 0.f;
-    ray.TMax = 10000.f;
+    ray.TMax = distance(surfPos_WS, pointOnLight_WS) + 2 * RAY_ORIGIN_OFFSET_EPSILON;
 
     Payload lightPayload;
     lightPayload.flags = 0;
@@ -77,7 +77,8 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
         return false;
     }
 
-    const Material material = materials[lightPayload.materialIdx];
+    const InstanceData instanceData = instanceDatas[light.instanceId];
+    const Material material = materials[instanceData.materialIdx];
     Le = material.getEmissiveColor();
     return true;
 }
@@ -95,7 +96,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, Le))
     {
         return result;
     }
@@ -131,10 +132,13 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
-    const InstanceData instanceData = instanceDatas[InstanceID()];
-    payload.materialIdx = instanceData.materialIdx;
+    if (bool(payload.flags & PAYLOAD_FLAG_LIGHTS_VISIBILITY_ONLY))
+    {
+        return;
+    }
 
-    // TODO: add flag to payload that determines whether to calculate all this stuff (e.g. not necessary for direct lighting shadow rays, but is necessary for RIS BSDF sample)
+    const InstanceData instanceData = instanceDatas[InstanceID()];
+
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
 
