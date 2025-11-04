@@ -77,8 +77,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
         return false;
     }
 
-    const InstanceData instanceData = instanceDatas[light.instanceId];
-    const Material material = materials[instanceData.materialIdx];
+    const Material material = materials[light.materialIdx];
     Le = material.getEmissiveColor();
     return true;
 }

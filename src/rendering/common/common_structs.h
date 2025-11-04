@@ -168,7 +168,7 @@ struct AreaLight
     float rcpArea;
 
     float3 normal_WS;
-    uint pad0;
+    uint materialIdx;
 };
 
 #define LIGHT_ID_INVALID ~0u

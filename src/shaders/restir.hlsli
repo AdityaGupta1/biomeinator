@@ -29,8 +29,7 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 {
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    const InstanceData instanceData = instanceDatas[light.instanceId];
-    const Material lightMaterial = materials[instanceData.materialIdx];
+    const Material lightMaterial = materials[light.materialIdx];
 
     const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
 
