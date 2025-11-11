@@ -127,8 +127,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
                     else
                     {
                         const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                        const float misWeight = balanceHeuristic(lightSample.pdfOrW_Y, lightSampleBsdfPdf);
-                        contribution *= misWeight / lightSample.pdfOrW_Y;
+                        contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
                     }
 
                     payload.pathColor += contribution;
@@ -138,13 +137,12 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
         const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
-        float3 adjustedBsdfValue = surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
+        payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
         if (!surfBsdfSample.wasSpecular)
         {
-            adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
+            payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             ++numPrevNonDeltaBounces;
         }
-        payload.pathWeight *= adjustedBsdfValue;
 
         ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
         ray.Direction = surfBsdfSample.wi_WS;
@@ -174,8 +172,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
-                const float misWeight = balanceHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
-                payload.pathWeight *= misWeight;
+                payload.pathWeight *= (surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf)); // balance heuristic
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
         }
