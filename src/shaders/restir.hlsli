@@ -38,14 +38,11 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
     return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
 }
 
-DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
+RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
 {
     const uint adjustedBounceCount = uint(max(0, numPrevNonDeltaBounces - 1));
     const uint numLightCandidates = max(4u, uint(RIS_MAX_NUM_LIGHT_CANDIDATES) >> adjustedBounceCount);
     const uint numBsdfCandidates = max(1u, uint(RIS_MAX_NUM_BSDF_CANDIDATES) >> adjustedBounceCount);
-
-    DirectLightingSample result;
-    result.didHitLight = false;
 
     uint Y_lightIdx = ~0u;
     float Y_p_hat = 0.f;
@@ -131,22 +128,35 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         }
     }
 
-    if (Y_lightIdx == ~0u)
+    RisSample risSample;
+    risSample.lightIdx = Y_lightIdx;
+    risSample.pointOnLight_WS = Y_pointOnLight_WS;
+    risSample.W = w_sum / Y_p_hat;
+    return risSample;
+}
+
+DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
+{
+    DirectLightingSample result;
+    result.didHitLight = false;
+
+    RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, material, uv, wo_WS, numPrevNonDeltaBounces, rng);
+
+    if (risSample.lightIdx == ~0u)
     {
         return result;
     }
 
-    result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
+    result.wi_WS = normalize(risSample.pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, Y_pointOnLight_WS, areaLights[Y_lightIdx], Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, risSample.pointOnLight_WS, areaLights[risSample.lightIdx], Le))
     {
         return result;
     }
 
     result.didHitLight = true;
     result.Le = Le;
-    result.pdfOrW_Y = w_sum / Y_p_hat;
-
+    result.pdfOrW_Y = risSample.W;
     return result;
 }
