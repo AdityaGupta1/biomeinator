@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_enums.h"
 #include "common/common_hitgroups.h"
 #include "common/common_registers.h"
 #include "common/common_settings.h"
@@ -445,7 +446,9 @@ void resize()
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
 
-    if (SettingsManager::getAsBool("enableDlss"))
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    if (antialiasingMode == AntialiasingMode::DLSS)
     {
         slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
@@ -1116,6 +1119,11 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "MIS",
     "RIS",
 };
+static const std::vector<const char*> antialiasingModeComboOptions = {
+    "none",
+    "accumulate",
+    "DLSS",
+};
 static const std::vector<const char*> tonemappingComboOptions = {
     "none",
     "standard",
@@ -1159,9 +1167,15 @@ static void imguiEndFrame(bool& needsResize)
 
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
-    SettingsGuiHelpers::SectionTitle("DLSS");
-    needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
-    needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+    SettingsGuiHelpers::SectionTitle("Antialiasing");
+    needsResize |=
+        SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    if (antialiasingMode == AntialiasingMode::DLSS)
+    {
+        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+    }
 
     SettingsGuiHelpers::VerticalSpacing();
 
@@ -1227,11 +1241,13 @@ void render()
 
     beginFrame();
 
-    const bool enableDlss = SettingsManager::getAsBool("enableDlss");
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    const bool useDlss = antialiasingMode == AntialiasingMode::DLSS;
 
     sl::FrameToken* frameToken;
     sl::Constants slConstants;
-    if (enableDlss)
+    if (useDlss)
     {
         CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
 
@@ -1292,7 +1308,7 @@ void render()
     }
     camera.update(deltaTime, playerInput);
 
-    if (enableDlss)
+    if (useDlss)
     {
         camera.copySlConstantsTo(&slConstants);
         CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
@@ -1311,10 +1327,11 @@ void render()
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
-    renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
+    renderParams->preTonemappedColorSrvIdx = useDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
     renderParams->renderSize = { renderWidth, renderHeight };
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
+    renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1447,7 +1464,7 @@ void render()
         // DLSS
         // ===================================
 
-        if (enableDlss)
+        if (useDlss)
         {
             const sl::BaseStructure* inputs[] = { &slViewportHandle };
             CHECK_SL_RESULT(

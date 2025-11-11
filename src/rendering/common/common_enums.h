@@ -34,6 +34,15 @@ enum class Tonemapping : uint
     COUNT
 };
 
+enum class AntialiasingMode : uint
+{
+    NONE,
+    ACCUMULATE,
+    DLSS,
+
+    COUNT
+};
+
 enum class SamplingMode : uint
 {
     NAIVE,
