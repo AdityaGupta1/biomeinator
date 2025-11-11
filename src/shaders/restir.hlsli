@@ -136,21 +136,17 @@ DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const floa
         return result;
     }
 
-    const AreaLight light = areaLights[Y_lightIdx];
-
     result.wi_WS = normalize(Y_pointOnLight_WS - surfPos_WS);
 
-    //debugTexture()[DispatchRaysIndex().xy] = float4(light.normal_WS, 1);
-
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, Y_pointOnLight_WS, light, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, Y_pointOnLight_WS, areaLights[Y_lightIdx], Le))
     {
         return result;
     }
 
     result.didHitLight = true;
     result.Le = Le;
-    result.pdf = w_sum / Y_p_hat; // unbiased contribution weight
+    result.pdf = w_sum / Y_p_hat;
 
     return result;
 }

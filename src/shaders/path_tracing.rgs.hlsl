@@ -117,16 +117,16 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
                     // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
                     const float3 bsdfVal = evaluateBsdf(
                         surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
-                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
 
                     float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                     if (samplingMode == SamplingMode::RIS)
                     {
-                        contribution *= lightSample.pdf; // this is actually W_Y (unbiased contribution weight)
+                        contribution *= lightSample.pdf;
                     }
                     else
                     {
+                        const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
                         const float misWeight = balanceHeuristic(lightSample.pdf, lightSampleBsdfPdf);
                         contribution *= misWeight / lightSample.pdf;
                     }
@@ -142,7 +142,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         if (!surfBsdfSample.wasSpecular)
         {
             adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
-            numPrevNonDeltaBounces++;
+            ++numPrevNonDeltaBounces;
         }
         payload.pathWeight *= adjustedBsdfValue;
 
