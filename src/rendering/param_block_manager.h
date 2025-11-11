@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "dxr_includes.h"
-#include "common/common_structs.h"
+#include "common/common_params.h"
 
 class ParamBlockManager
 {

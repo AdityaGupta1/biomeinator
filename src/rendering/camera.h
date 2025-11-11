@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
+#include "rendering/common/common_params.h"
 #include "rendering/common/common_structs.h"
 #include "util/halton.h"
 
