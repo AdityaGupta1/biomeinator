@@ -20,9 +20,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "dxr_includes.h"
 
+#include <DirectXMath.h>
+
 #include <string>
 
-struct RtTarget
+class RtTarget
 {
 private:
     const std::wstring name;
@@ -35,6 +37,8 @@ private:
     {
         uint32_t idx{ ~0u };
         D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle{};
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle{};
     } uav;
 
     struct
@@ -64,6 +68,7 @@ public:
     void reset();
 
     void transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
+    void clear(ID3D12GraphicsCommandList* cmdList, const DirectX::XMFLOAT4& value);
 
     ID3D12Resource* getTarget() const;
 

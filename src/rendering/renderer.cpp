@@ -1371,6 +1371,12 @@ void render()
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
+        if (antialiasingMode != AntialiasingMode::ACCUMULATE)
+        {
+            pathTracingTarget.clear(cmdList.Get(), { 0, 0, 0, 1 });
+            BufferHelper::uavBarrier(cmdList.Get(), pathTracingTarget.getTarget());
+        }
+
         // ===================================
         // GBUFFER
         // ===================================
