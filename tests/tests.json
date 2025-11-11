@@ -123,6 +123,32 @@
             "threshold": 0.02
         },
         {
+            "name": "cornell_box_naive",
+            "scene": "cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--spp=8192",
+                "--maxPathDepth=12",
+                "--samplingMode=0"
+            ],
+            "golden": "cornell_box/golden.png",
+            "threshold": 0.02
+        },
+        {
+            "name": "cornell_box_MIS",
+            "scene": "cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--spp=4096",
+                "--maxPathDepth=12",
+                "--samplingMode=1"
+            ],
+            "golden": "cornell_box/golden.png",
+            "threshold": 0.02
+        },
+        {
             "name": "fancy_cornell_box",
             "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
             "args": [
