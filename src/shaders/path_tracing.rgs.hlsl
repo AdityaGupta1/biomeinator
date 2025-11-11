@@ -122,13 +122,13 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
                     if (samplingMode == SamplingMode::RIS)
                     {
-                        contribution *= lightSample.pdf;
+                        contribution *= lightSample.pdfOrW_Y;
                     }
                     else
                     {
                         const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                        const float misWeight = balanceHeuristic(lightSample.pdf, lightSampleBsdfPdf);
-                        contribution *= misWeight / lightSample.pdf;
+                        const float misWeight = balanceHeuristic(lightSample.pdfOrW_Y, lightSampleBsdfPdf);
+                        contribution *= misWeight / lightSample.pdfOrW_Y;
                     }
 
                     payload.pathColor += contribution;
