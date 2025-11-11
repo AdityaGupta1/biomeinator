@@ -45,7 +45,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
-    optionAdder("enableMis", "Enable MIS", cxxopts::value<bool>()->default_value("true"));
+    optionAdder("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS)", cxxopts::value<uint32_t>()->default_value("2"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
@@ -88,7 +88,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
-    COPY_SETTING("enableMis", bool);
+    COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("enableDlss", bool);
     COPY_SETTING("dlssMode", uint32_t);
@@ -110,6 +110,12 @@ void parseArgs(const int argc, const char* const* argv)
     if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
     {
         std::cerr << "Invalid tonemapping option" << std::endl;
+        exit(-1);
+    }
+
+    if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
+    {
+        std::cerr << "Invalid samplingMode option" << std::endl;
         exit(-1);
     }
 }

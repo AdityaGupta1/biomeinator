@@ -32,72 +32,82 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(PT_REGISTER_PER_TRI_D
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(PT_REGISTER_AREA_LIGHTS, PT_REGISTER_SPACE);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, PT_REGISTER_SPACE);
 
-AreaLight pickLightUniform(inout RandomSampler rng, out float pdf)
+AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
 {
-    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
-    pdf = 1.f / sceneParams.numAreaLights;
-    return areaLights[lightIdx];
-}
+    lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
+    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
+    const AreaLight light = areaLights[lightIdx];
 
-float3 samplePointOnLight(const AreaLight light, inout RandomSampler rng, out float pdf)
-{
     const float2 rndSample = rng.nextFloat2();
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
-    const float3 pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
-    pdf = light.rcpArea;
-    return pointOnLight_WS;
+    pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+    float lightSamplePdf = light.rcpArea;
+
+    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
+    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
+    lightSamplePdf *= r2 / absCosTheta(-wi_WS, light.normal_WS);
+    lightPdf = lightPickPdf * lightSamplePdf;
+
+    return light;
 }
 
 struct DirectLightingSample
 {
     bool didHitLight;
     float3 wi_WS;
-
     float3 Le;
-    float pdf;
+    float pdfOrW_Y;
 };
 
-DirectLightingSample sampleDirectLighting(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, out float3 Le)
+{
+    RayDesc ray;
+    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
+    ray.Direction = wi_WS;
+    ray.TMin = 0.f;
+    ray.TMax = distance(surfPos_WS, pointOnLight_WS) + 2 * RAY_ORIGIN_OFFSET_EPSILON;
+
+    Payload lightPayload;
+    lightPayload.flags = 0;
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+
+    if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    {
+        return false;
+    }
+
+    const Material material = materials[light.materialIdx];
+    Le = material.getEmissiveColor();
+    return true;
+}
+
+DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
 
-    float lightPickPdf;
-    const AreaLight light = pickLightUniform(rng, lightPickPdf);
-
-    float lightSamplePdf;
-    const float3 pointOnLight_WS = samplePointOnLight(light, rng, lightSamplePdf);
+    float3 pointOnLight_WS;
+    float lightPdf;
+    uint lightIdxUnused;
+    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdxUnused);
 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    lightSamplePdf *= r2 / absCosTheta(-result.wi_WS, light.normal_WS);
-
-    RayDesc ray;
-    ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
-    ray.Direction = result.wi_WS;
-    ray.TMin = 0.f;
-    ray.TMax = 10000.f;
-
-    Payload lightPayload;
-    lightPayload.materialIdx = MATERIAL_IDX_INVALID;
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
-
-    if (lightPayload.materialIdx == MATERIAL_IDX_INVALID || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
+    float3 Le;
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, Le))
     {
         return result;
     }
 
     result.didHitLight = true;
-    const Material material = materials[lightPayload.materialIdx];
-    result.Le = material.getEmissiveColor();
-    result.pdf = lightPickPdf * lightSamplePdf;
+    result.Le = Le;
+    result.pdfOrW_Y = lightPdf;
 
     return result;
 }
 
-float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
+float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
@@ -116,9 +126,25 @@ float lightPdf(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_W
 [shader("closesthit")]
 void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
+
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
+    if (bool(payload.flags & PAYLOAD_FLAG_LIGHTS_VISIBILITY_ONLY))
+    {
+        return;
+    }
+
     const InstanceData instanceData = instanceDatas[InstanceID()];
-    payload.materialIdx = instanceData.materialIdx;
+
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float4x3 objectToWorldMat = ObjectToWorld4x3();
+    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
 }

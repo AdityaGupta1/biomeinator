@@ -168,7 +168,7 @@ struct AreaLight
     float rcpArea;
 
     float3 normal_WS;
-    uint pad0;
+    uint materialIdx;
 };
 
 #define LIGHT_ID_INVALID ~0u
@@ -268,12 +268,21 @@ enum class Tonemapping : uint
     COUNT
 };
 
+enum class SamplingMode : uint
+{
+    NAIVE,
+    MIS,
+    RIS,
+
+    COUNT
+};
+
 struct RenderParams
 {
     uint frameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
-    uint enableMis;
+    uint samplingMode;
 
     uint tonemapping;
     uint preTonemappedColorSrvIdx;

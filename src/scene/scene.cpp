@@ -89,6 +89,8 @@ uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
     const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
     light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
 
+    light.materialIdx = this->materialIdx;
+
     return localAreaLightIdx;
 }
 

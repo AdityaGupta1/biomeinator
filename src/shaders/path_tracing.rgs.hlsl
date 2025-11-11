@@ -25,22 +25,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "restir.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
 RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
-float powerHeuristic(const float pdfA, const float pdfB)
+float balanceHeuristic(const float pdfA, const float pdfB)
 {
-    const float pdfA2 = pdfA * pdfA;
-    const float pdfB2 = pdfB * pdfB;
-    return pdfA2 / (pdfA2 + pdfB2);
+    return pdfA / (pdfA + pdfB);
 }
 
 void pathTraceRay(inout Payload payload, bool isFirstSample)
 {
     const uint pathSplitIdx = getPathSplitIdx();
+    const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -50,12 +50,16 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
         return;
     }
 
+    bool previousWasSpecular = false;
+    int numPrevNonDeltaBounces = 0;
+
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = materials[payload.materialIdx];
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
-        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
+        if ((samplingMode != SamplingMode::RIS || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
@@ -94,32 +98,51 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
 
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-        if (renderParams.enableMis == 1)
+        if (samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS)
         {
             if (!surfMaterial.isOnlySpecular())
             {
-                const DirectLightingSample lightSample = sampleDirectLighting(surfPos_WS, surfNor_WS, payload.rng);
+                DirectLightingSample lightSample;
+                if (samplingMode == SamplingMode::RIS)
+                {
+                    lightSample = sampleDirectLightingRis(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, numPrevNonDeltaBounces, payload.rng);
+                }
+                else
+                {
+                    lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+                }
+
                 if (lightSample.didHitLight)
                 {
                     // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
                     const float3 bsdfVal = evaluateBsdf(
                         surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
-                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    const float misWeight = powerHeuristic(lightSample.pdf, lightSampleBsdfPdf);
-                    payload.pathColor += payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * misWeight
-                        * lightSample.Le / lightSample.pdf;
+
+                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+
+                    if (samplingMode == SamplingMode::RIS)
+                    {
+                        contribution *= lightSample.pdfOrW_Y;
+                    }
+                    else
+                    {
+                        const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                        contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
+                    }
+
+                    payload.pathColor += contribution;
                 }
             }
         }
 
         const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
-        float3 adjustedBsdfValue = surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
+        payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
         if (!surfBsdfSample.wasSpecular)
         {
-            adjustedBsdfValue *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
+            payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
+            ++numPrevNonDeltaBounces;
         }
-        payload.pathWeight *= adjustedBsdfValue;
 
         ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
         ray.Direction = surfBsdfSample.wi_WS;
@@ -143,17 +166,18 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
             normalsAndRoughnessTarget[payload.pixelIdx].xyz = secondBounceNor_WS;
         }
 
-        if (renderParams.enableMis == 1)
+        if (samplingMode == SamplingMode::MIS)
         {
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                const float bsdfSampleLightPdf = lightPdf(payload.hitInfo, surfPos_WS, ray.Direction);
-                const float misWeight = powerHeuristic(surfBsdfSample.pdf, bsdfSampleLightPdf);
-                payload.pathWeight *= misWeight;
+                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                payload.pathWeight *= (surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf)); // balance heuristic
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
         }
+
+        previousWasSpecular = surfBsdfSample.wasSpecular;
     }
 }
 

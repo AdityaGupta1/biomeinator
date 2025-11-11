@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define PAYLOAD_FLAG_PATH_FINISHED (1 << 0)
 #define PAYLOAD_FLAG_DID_HIT (1 << 1)
+#define PAYLOAD_FLAG_LIGHTS_VISIBILITY_ONLY (1 << 2)
 
 struct Payload
 {

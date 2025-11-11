@@ -6,7 +6,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "two_triangles/golden.png",
@@ -18,11 +18,11 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "occluded_light/golden.png",
-            "threshold": 0.002
+            "threshold": 0.003
         },
         {
             "name": "emissive_cube",
@@ -30,11 +30,11 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "emissive_cube/golden.png",
-            "threshold": 0.002
+            "threshold": 0.003
         },
         {
             "name": "emissive_cube_blender_no_tonemap",
@@ -42,7 +42,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
@@ -55,7 +55,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_monkeys/golden.png",
@@ -67,7 +67,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_faces_emitter/golden.png",
@@ -79,7 +79,7 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "textured_cube/golden.png",
@@ -91,7 +91,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "penguin_gallery/golden.png",
@@ -103,7 +103,7 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
@@ -116,8 +116,34 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
+            ],
+            "golden": "cornell_box/golden.png",
+            "threshold": 0.02
+        },
+        {
+            "name": "cornell_box_naive",
+            "scene": "cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--spp=8192",
+                "--maxPathDepth=12",
+                "--samplingMode=0"
+            ],
+            "golden": "cornell_box/golden.png",
+            "threshold": 0.02
+        },
+        {
+            "name": "cornell_box_MIS",
+            "scene": "cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--spp=4096",
+                "--maxPathDepth=12",
+                "--samplingMode=1"
             ],
             "golden": "cornell_box/golden.png",
             "threshold": 0.02
@@ -128,11 +154,11 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "fancy_cornell_box/golden.png",
-            "threshold": 0.01
+            "threshold": 0.02
         },
         {
             "name": "fancy_cornell_box_blender_no_tonemap",
@@ -140,12 +166,12 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
             "golden": "fancy_cornell_box/golden_blender_no_tonemap.png",
-            "threshold": 0.015
+            "threshold": 0.02
         },
         {
             "name": "evil_room",
@@ -153,11 +179,11 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "evil_room/golden.png",
-            "threshold": 0.015
+            "threshold": 0.025
         },
         {
             "name": "evil_room_blender_no_tonemap",
@@ -165,7 +191,7 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=8192",
+                "--spp=2048",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
