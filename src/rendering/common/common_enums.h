@@ -18,27 +18,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_params.h"
+#ifdef __cplusplus
+#include <stdint.h>
 
-class ParamBlockManager
+#define uint uint32_t
+#endif
+
+enum class Tonemapping : uint
 {
-private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
+    NONE,
+    STANDARD,
+    AGX,
+    KHRONOS_PBR_NEUTRAL,
 
-public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
-    DebugParams* debugParams{ nullptr };
-
-    void init();
-    void reset();
-
-    ID3D12Resource* getDevBuffer() const;
-
-    void setName(const std::wstring& name);
+    COUNT
 };
+
+enum class SamplingMode : uint
+{
+    NAIVE,
+    MIS,
+    RIS,
+
+    COUNT
+};
+
+#ifdef __cplusplus
+#undef uint
+#endif

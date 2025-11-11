@@ -101,7 +101,6 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 ${DXC_ENTRY}
                 /Fh ${FXH_OUT}
                 /Vn ${NAME_SAFE}_shaderBytecode
-                /I ${SHADER_DIR}
                 /HV 2021
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"

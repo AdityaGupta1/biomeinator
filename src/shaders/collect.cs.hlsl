@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "../rendering/common/common_params.h"
 #include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_settings.h"
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"

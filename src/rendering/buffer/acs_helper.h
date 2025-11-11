@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "rendering/dxr_common.h"
+#include "rendering/common/common_structs.h"
 
 #include <vector>
 

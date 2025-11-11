@@ -18,10 +18,134 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-// =============================================
-// COLLECT
-// =============================================
+#include "common_enums.h"
 
-#define COLLECT_WORKGROUP_SIZE_X 16
-#define COLLECT_WORKGROUP_SIZE_Y 16
+#ifdef __cplusplus
+#include <DirectXMath.h>
+
+#define uint uint32_t
+#define uint2 DirectX::XMUINT2
+
+#define float2 DirectX::XMFLOAT2
+#define float3 DirectX::XMFLOAT3
+
+#define float4x4 DirectX::XMFLOAT4X4
+#endif
+
+struct HeapIndices
+{
+    struct
+    {
+        uint pathTracingTargetIdx;
+        uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
+        uint linearDepthTargetIdx;
+
+        uint normalsAndRoughnessTargetIdx;
+        uint motionTargetIdx;
+        uint specularHitDistanceTargetIdx;
+        uint debugTargetIdx;
+    } uav;
+
+    struct
+    {
+        uint pathTracingTargetIdx;
+        uint diffuseAlbedoTargetIdx;
+        uint specularAlbedoTargetIdx;
+        uint linearDepthTargetIdx;
+
+        uint normalsAndRoughnessTargetIdx;
+        uint motionTargetIdx;
+        uint specularHitDistanceTargetIdx;
+        uint dlssOutputTargetIdx;
+
+        uint debugTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
+    } srv;
+};
+
+struct ConstantParams
+{
+    uint rngSeed;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+struct CameraParams
+{
+    float4x4 worldToClipMat;
+    float4x4 worldToPrevClipMat;
+
+    float2 jitter;
+    uint pad0;
+    uint pad1;
+
+    float3 pos_WS;
+    float nearPlane;
+
+    float3 forward_WS;
+    float farPlane;
+
+    float3 right_WS;
+    uint pad2;
+
+    float3 up_WS;
+    float tanHalfFovY;
+};
+
+struct SceneParams
+{
+    uint numAreaLights;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+struct RenderParams
+{
+    uint frameNumber;
+    uint numSamplesPerPixel;
+    uint maxPathDepth;
+    uint samplingMode;
+
+    uint tonemapping;
+    uint preTonemappedColorSrvIdx;
+    uint2 renderSize;
+
+    uint enablePathSplitting;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+struct DebugParams
+{
+    uint debugOutputSrvIdx;
+    uint debugOutputNumChannels;
+    float debugOutputScale;
+    uint pad0;
+
+    uint debugBool0;
+    uint debugBool1;
+    uint debugBool2;
+    uint debugBool3;
+
+    float debugFloat0;
+    float debugFloat1;
+    float debugFloat2;
+    float debugFloat3;
+};
+
+#ifdef __cplusplus
+#undef uint
+#undef uint2
+
+#undef float2
+#undef float3
+
+#undef float4x4
+#endif
 

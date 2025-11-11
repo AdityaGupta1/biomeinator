@@ -18,27 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_params.h"
+// =============================================
+// COLLECT
+// =============================================
 
-class ParamBlockManager
-{
-private:
-    ComPtr<ID3D12Resource> dev_paramBuffer{ nullptr };
-    void* host_paramBuffer{ nullptr };
+#define COLLECT_WORKGROUP_SIZE_X 16
+#define COLLECT_WORKGROUP_SIZE_Y 16
 
-public:
-    HeapIndices* heapIndices{ nullptr };
-    ConstantParams* constantParams{ nullptr };
-    CameraParams* cameraParams{ nullptr };
-    SceneParams* sceneParams{ nullptr };
-    RenderParams* renderParams{ nullptr };
-    DebugParams* debugParams{ nullptr };
-
-    void init();
-    void reset();
-
-    ID3D12Resource* getDevBuffer() const;
-
-    void setName(const std::wstring& name);
-};

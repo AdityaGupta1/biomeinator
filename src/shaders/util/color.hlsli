@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "../rendering/common/common_enums.h"
+
 #include "tonemapping/agx.hlsli"
 #include "tonemapping/khronos_pbr_neutral.hlsli"
 
