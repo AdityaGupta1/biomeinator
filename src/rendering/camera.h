@@ -70,7 +70,7 @@ public:
 
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
-    void update(double deltaTime, const PlayerInput& input);
+    bool update(double deltaTime, const PlayerInput& input);
     void setAspectRatio(float aspectRatio);
 
     void copySlConstantsTo(sl::Constants* constants);

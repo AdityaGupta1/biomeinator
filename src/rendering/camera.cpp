@@ -128,7 +128,7 @@ constexpr float mouseSensitivity = 0.0016f;
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
 
-void Camera::update(double deltaTime, const PlayerInput& input)
+bool Camera::update(double deltaTime, const PlayerInput& input)
 {
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {
@@ -165,6 +165,7 @@ void Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
+    const bool didChange = this->areMatricesDirty;
     this->params.worldToPrevClipMat = this->params.worldToClipMat; // this has to happen regardless of if matrices are dirty
     if (this->areMatricesDirty)
     {
@@ -173,6 +174,8 @@ void Camera::update(double deltaTime, const PlayerInput& input)
     }
 
     this->params.jitter = this->jitterHalton.next();
+
+    return didChange;
 }
 
 void Camera::setAspectRatio(float aspectRatio)

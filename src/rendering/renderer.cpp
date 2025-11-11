@@ -1154,6 +1154,8 @@ static void imguiBeginFrame()
     ImGui::NewFrame();
 }
 
+static bool didJustEnableAccumulateMode{ false };
+
 static void imguiEndFrame(bool& needsResize)
 {
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
@@ -1168,10 +1170,21 @@ static void imguiEndFrame(bool& needsResize)
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
     SettingsGuiHelpers::SectionTitle("Antialiasing");
-    needsResize |=
+    const bool antialiasingDidChange =
         SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+    needsResize |= antialiasingDidChange;
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+
+    if (didJustEnableAccumulateMode)
+    {
+        didJustEnableAccumulateMode = false;
+    }
+    if (antialiasingDidChange)
+    {
+        didJustEnableAccumulateMode = (antialiasingMode == AntialiasingMode::ACCUMULATE);
+    }
+
     if (antialiasingMode == AntialiasingMode::DLSS)
     {
         needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
@@ -1306,7 +1319,7 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    camera.update(deltaTime, playerInput);
+    const bool cameraDidChange = camera.update(deltaTime, playerInput);
 
     if (useDlss)
     {
@@ -1371,7 +1384,7 @@ void render()
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
-        if (antialiasingMode != AntialiasingMode::ACCUMULATE)
+        if (antialiasingMode != AntialiasingMode::ACCUMULATE || didJustEnableAccumulateMode || cameraDidChange)
         {
             pathTracingTarget.clear(cmdList.Get(), { 0, 0, 0, 1 });
             BufferHelper::uavBarrier(cmdList.Get(), pathTracingTarget.getTarget());
