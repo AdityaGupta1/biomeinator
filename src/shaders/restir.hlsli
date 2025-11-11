@@ -135,12 +135,10 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
     return risSample;
 }
 
-DirectLightingSample sampleDirectLightingRis(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
+DirectLightingSample sampleDirectLightingRis(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     DirectLightingSample result;
     result.didHitLight = false;
-
-    RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, material, uv, wo_WS, numPrevNonDeltaBounces, rng);
 
     if (risSample.lightIdx == ~0u)
     {
