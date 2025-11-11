@@ -258,25 +258,6 @@ struct SceneParams
     uint pad2;
 };
 
-enum class Tonemapping : uint
-{
-    NONE,
-    STANDARD,
-    AGX,
-    KHRONOS_PBR_NEUTRAL,
-
-    COUNT
-};
-
-enum class SamplingMode : uint
-{
-    NAIVE,
-    MIS,
-    RIS,
-
-    COUNT
-};
-
 struct RenderParams
 {
     uint frameNumber;

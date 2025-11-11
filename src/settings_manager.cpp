@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <variant>
 #include <unordered_map>
 
-#include "rendering/common/common_structs.h"
+#include "rendering/common/common_enums.h"
 
 namespace SettingsManager
 {
