@@ -1155,7 +1155,8 @@ static void imguiBeginFrame()
     ImGui::NewFrame();
 }
 
-static bool didJustEnableAccumulateMode{ false };
+static bool needsResize = false;
+static bool didJustEnableAccumulateMode = false;
 
 static void imguiEndFrame()
 {
@@ -1237,8 +1238,6 @@ static inline sl::Resource makeSlResource(RtTarget* target)
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     };
 }
-
-static bool needsResize = false;
 
 void render()
 {
