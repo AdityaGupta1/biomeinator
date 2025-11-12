@@ -122,11 +122,11 @@ public:
         return host_buffer[idx];
     }
 
-    void copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
+    bool copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
     {
         if (!this->getIsDirty())
         {
-            return;
+            return false;
         }
 
         const uint32_t startBytes = sizeof(T) * this->dirtyBeginIdx;
@@ -143,6 +143,7 @@ public:
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
         this->setNotDirty();
+        return true;
     }
 
     void resize(ToFreeList& toFreeList, uint32_t newSize)

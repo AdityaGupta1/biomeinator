@@ -232,24 +232,26 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
-    this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
-    this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
+    bool didChange = false;
 
-    this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
+
+    didChange |= this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
 
     if (!this->pendingTextures.empty())
     {
+        didChange = true;
         this->uploadPendingTextures(cmdList, toFreeList);
     }
 
-    bool didChange = false;
     if (this->isTlasDirty)
     {
         didChange = true;
         this->makeTlas(cmdList, toFreeList);
     }
 
-    this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
 
     return didChange;
 }

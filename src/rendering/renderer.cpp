@@ -1175,7 +1175,7 @@ static void imguiEndFrame()
     SettingsGuiHelpers::SectionTitle("Antialiasing");
     const bool didAntialiasingChange =
         SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
-    needsResize |= didAntialiasingChange;
+    needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
     didPathTracingSettingsChange |= didAntialiasingChange;
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
@@ -1183,7 +1183,6 @@ static void imguiEndFrame()
     if (antialiasingMode == AntialiasingMode::ACCUMULATE)
     {
         ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
-        // TODO: set didPathTracingSettingsChange = true only if new value < old value
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
     }
     else if (antialiasingMode == AntialiasingMode::DLSS)
@@ -1567,7 +1566,7 @@ void render()
     CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
-    const uint32_t syncInterval = testMode ? 0 : 1;
+    const uint32_t syncInterval = testMode ? 0 : 1; // use 0 in test mode to render as fast as possible
     swapChain->Present(syncInterval, 0);
 
     ++frameNumber;
