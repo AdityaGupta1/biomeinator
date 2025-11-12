@@ -149,6 +149,7 @@ static HANDLE fenceEvent;
 static HANDLE frameLatencyWaitable;
 
 static uint32_t frameNumber = 0;
+static uint32_t accumulatedFrameNumber = 0;
 
 static constexpr float defaultFovYDegrees = 35;
 static Camera camera;
@@ -1185,7 +1186,11 @@ static void imguiEndFrame(bool& needsResize)
         didJustEnableAccumulateMode = (antialiasingMode == AntialiasingMode::ACCUMULATE);
     }
 
-    if (antialiasingMode == AntialiasingMode::DLSS)
+    if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+    {
+        ImGui::Text("accumulated frames: %u", accumulatedFrameNumber + 1);
+    }
+    else if (antialiasingMode == AntialiasingMode::DLSS)
     {
         needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
     }
@@ -1334,8 +1339,19 @@ void render()
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
+    const bool resetAccumulation = didJustEnableAccumulateMode || cameraDidChange;
+
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;
+    if (antialiasingMode != AntialiasingMode::ACCUMULATE || resetAccumulation)
+    {
+        accumulatedFrameNumber = 0;
+    }
+    else
+    {
+        ++accumulatedFrameNumber;
+    }
+    renderParams->accumulatedFrameNumber = accumulatedFrameNumber;
     renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
@@ -1383,12 +1399,6 @@ void render()
     if (scene.hasTlas())
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
-
-        if (antialiasingMode != AntialiasingMode::ACCUMULATE || didJustEnableAccumulateMode || cameraDidChange)
-        {
-            pathTracingTarget.clear(cmdList.Get(), { 0, 0, 0, 1 });
-            BufferHelper::uavBarrier(cmdList.Get(), pathTracingTarget.getTarget());
-        }
 
         // ===================================
         // GBUFFER

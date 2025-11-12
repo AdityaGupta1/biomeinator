@@ -150,7 +150,7 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
     const float targetFov = input.isZoomHeld ? this->defaultFovYRadians * zoomFovRatio : this->defaultFovYRadians;
     const float deltaFov = targetFov - this->currentFovYRadians;
     const float maxStep = fovTransitionSpeed * fabsf(deltaFov) * static_cast<float>(deltaTime);
-    if (fabsf(deltaFov) > 0.f)
+    if (fabsf(deltaFov) > 0.0001f)
     {
         if (fabsf(deltaFov) <= maxStep)
         {

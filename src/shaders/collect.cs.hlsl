@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "../rendering/common/common_enums.h"
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_settings.h"
 #include "../rendering/common/common_structs.h"
@@ -47,6 +48,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     else
     {
         color = pathTracingRawBuffer[linearPixelIdx];
+    }
+
+    if ((AntialiasingMode) renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE)
+    {
+        color.rgb /= (renderParams.accumulatedFrameNumber + 1.f);
     }
 
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];

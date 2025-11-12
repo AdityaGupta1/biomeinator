@@ -93,12 +93,9 @@ void RtTarget::init()
 
     if (this->hasUav)
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE uavCpuHandle{};
-        D3D12_GPU_DESCRIPTOR_HANDLE uavGpuHandle{};
-        this->uav.idx = Renderer::sharedDescHeapAlloc.alloc(&uavCpuHandle, &uavGpuHandle);
-        this->uav.cpuHandle = uavCpuHandle;
-        this->uav.gpuHandle = uavGpuHandle;
-        Renderer::device->CreateUnorderedAccessView(this->target.Get(), nullptr, &this->uav.desc, uavCpuHandle);
+        D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
+        this->uav.idx = Renderer::sharedDescHeapAlloc.alloc(&uavHandle);
+        Renderer::device->CreateUnorderedAccessView(this->target.Get(), nullptr, &this->uav.desc, uavHandle);
     }
 
     if (this->hasSrv)
@@ -116,8 +113,6 @@ void RtTarget::reset()
     {
         Renderer::sharedDescHeapAlloc.free(this->uav.idx);
         this->uav.idx = ~0u;
-        this->uav.cpuHandle = {};
-        this->uav.gpuHandle = {};
     }
 
     if (this->srv.idx != ~0u)
@@ -139,23 +134,6 @@ void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOU
         BufferHelper::stateTransitionResourceBarrier(cmdList, this->target.Get(), this->targetResourceState, newState);
         this->targetResourceState = newState;
     }
-}
-
-void RtTarget::clear(ID3D12GraphicsCommandList* cmdList, const DirectX::XMFLOAT4& value)
-{
-    ASSERT(this->hasUav);
-    ASSERT(this->target);
-    ASSERT(this->uav.idx != ~0u);
-
-    transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-    const float clearValues[4] = { value.x, value.y, value.z, value.w };
-    cmdList->ClearUnorderedAccessViewFloat(this->uav.gpuHandle,
-                                           this->uav.cpuHandle,
-                                           this->target.Get(),
-                                           clearValues,
-                                           0,
-                                           nullptr);
 }
 
 ID3D12Resource* RtTarget::getTarget() const

@@ -107,18 +107,18 @@ struct SceneParams
 struct RenderParams
 {
     uint frameNumber;
+    uint accumulatedFrameNumber;
     uint numSamplesPerPixel;
     uint maxPathDepth;
-    uint samplingMode;
 
+    uint samplingMode;
     uint tonemapping;
     uint preTonemappedColorSrvIdx;
-    uint2 renderSize;
-
     uint enablePathSplitting;
+
+    uint2 renderSize;
     uint antialiasingMode;
     uint pad0;
-    uint pad1;
 };
 
 struct DebugParams

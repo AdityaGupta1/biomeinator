@@ -199,6 +199,7 @@ void RayGeneration()
 
     const uint pathSplitIdx = getPathSplitIdx();
 
+
     float3 accumulatedColor = float3(0, 0, 0);
     for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
     {
@@ -212,10 +213,8 @@ void RayGeneration()
     }
 
     const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
-
     const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
-    const AntialiasingMode antialiasingMode = (AntialiasingMode)renderParams.antialiasingMode;
-    if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+    if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
         pathTracingRawBuffer[writePixelIdx].xyz += colorPreTonemap;
     }
