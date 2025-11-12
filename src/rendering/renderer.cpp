@@ -1345,18 +1345,11 @@ void render()
         accumulatedFrameNumber = 0;
         stopAccumulating = false;
     }
-    else
+    else if (!stopAccumulating)
     {
-        if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+        if (++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {
-            if (!stopAccumulating && ++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
-            {
-                stopAccumulating = true;
-            }
-        }
-        else
-        {
-            ++accumulatedFrameNumber;
+            stopAccumulating = true;
         }
     }
 
@@ -1404,7 +1397,7 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
-    if (scene.hasTlas() && !stopAccumulating)
+    if (scene.hasTlas() && (!stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
