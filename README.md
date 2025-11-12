@@ -2,9 +2,9 @@
 
 Real-time path traced voxel engine
 
-![](img/evil_room.png)
+https://github.com/user-attachments/assets/f11fb26e-f6b5-47eb-b903-684f72c198c3
 
-(this is just a test scene, I will put actual voxel terrain here once it exists lol)
+(this is a test scene, not procedurally generated yet)
 
 ## Building
 
