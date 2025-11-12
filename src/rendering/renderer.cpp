@@ -1157,7 +1157,7 @@ static void imguiBeginFrame()
 
 static bool didJustEnableAccumulateMode{ false };
 
-static void imguiEndFrame(bool& needsResize)
+static void imguiEndFrame()
 {
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
@@ -1549,7 +1549,7 @@ void render()
 
     if (!testMode)
     {
-        imguiEndFrame(needsResize);
+        imguiEndFrame();
     }
 
     BufferHelper::stateTransitionResourceBarrier(
