@@ -1156,7 +1156,6 @@ static void imguiBeginFrame()
 }
 
 static bool needsResize = false;
-static bool didJustEnableAccumulateMode = false;
 static bool didPathTracingSettingsChange = false;
 
 static void imguiEndFrame()
@@ -1174,20 +1173,12 @@ static void imguiEndFrame()
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
     SettingsGuiHelpers::SectionTitle("Antialiasing");
-    const bool antialiasingDidChange =
+    const bool didAntialiasingChange =
         SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
-    needsResize |= antialiasingDidChange;
+    needsResize |= didAntialiasingChange;
+    didPathTracingSettingsChange |= didAntialiasingChange;
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
-
-    if (didJustEnableAccumulateMode)
-    {
-        didJustEnableAccumulateMode = false;
-    }
-    if (antialiasingDidChange)
-    {
-        didJustEnableAccumulateMode = (antialiasingMode == AntialiasingMode::ACCUMULATE);
-    }
 
     if (antialiasingMode == AntialiasingMode::ACCUMULATE)
     {
@@ -1344,22 +1335,28 @@ void render()
 
     const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    const bool resetAccumulation =
-        didCameraChange || didSceneChange || didJustEnableAccumulateMode || didPathTracingSettingsChange;
+    const bool resetAccumulation = didCameraChange || didSceneChange || didPathTracingSettingsChange;
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;
 
-    if (antialiasingMode != AntialiasingMode::ACCUMULATE || resetAccumulation)
+    if (resetAccumulation)
     {
         accumulatedFrameNumber = 0;
         stopAccumulating = false;
     }
-    else if (antialiasingMode == AntialiasingMode::ACCUMULATE && !stopAccumulating)
+    else
     {
-        if (++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
+        if (antialiasingMode == AntialiasingMode::ACCUMULATE)
         {
-            stopAccumulating = true;
+            if (!stopAccumulating && ++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
+            {
+                stopAccumulating = true;
+            }
+        }
+        else
+        {
+            ++accumulatedFrameNumber;
         }
     }
 
