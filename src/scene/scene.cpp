@@ -241,14 +241,14 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 
     if (!this->pendingTextures.empty())
     {
-        didChange = true;
         this->uploadPendingTextures(cmdList, toFreeList);
+        didChange = true;
     }
 
     if (this->isTlasDirty)
     {
-        didChange = true;
         this->makeTlas(cmdList, toFreeList);
+        didChange = true;
     }
 
     didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
