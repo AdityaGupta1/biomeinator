@@ -1157,16 +1157,19 @@ static void imguiBeginFrame()
 
 static bool needsResize = false;
 static bool didJustEnableAccumulateMode = false;
+static bool didPathTracingSettingsChange = false;
 
 static void imguiEndFrame()
 {
+    didPathTracingSettingsChange = false;
+
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
 
     SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
-    SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-    SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+    didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+    didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
@@ -1203,20 +1206,20 @@ static void imguiEndFrame()
         SettingsGuiHelpers::VerticalSpacing();
 
         SettingsGuiHelpers::SectionTitle("Debug view");
-        SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-        SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
 
         SettingsGuiHelpers::VerticalSpacing();
 
         SettingsGuiHelpers::SectionTitle("Debug parameters");
-        SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-        SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
-        SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
-        SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
-        SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
     }
 
     ImGui::End();
@@ -1338,7 +1341,7 @@ void render()
 
     scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    const bool resetAccumulation = didJustEnableAccumulateMode || cameraDidChange;
+    const bool resetAccumulation = didJustEnableAccumulateMode || cameraDidChange || didPathTracingSettingsChange;
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;

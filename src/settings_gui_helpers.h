@@ -58,40 +58,46 @@ inline bool Checkbox(const char* label, const char* settingName)
     return didChange;
 }
 
-inline void InputInt(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
+inline bool InputInt(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
 {
     ScopedItemWidth width(inputWidth);
 
     int value = SettingsManager::getAsInt(settingName);
-    if (ImGui::InputInt(label, &value, step))
+    const bool didChange = ImGui::InputInt(label, &value, step);
+    if (didChange)
     {
         value = std::clamp(value, minVal, maxVal);
         SettingsManager::setAsInt(settingName, value);
     }
+    return didChange;
 }
 
-inline void SliderInt(const char* label, const char* settingName, int minVal, int maxVal)
+inline bool SliderInt(const char* label, const char* settingName, int minVal, int maxVal)
 {
     ScopedItemWidth width(sliderWidth);
 
     int value = SettingsManager::getAsInt(settingName);
-    if (ImGui::SliderInt(label, &value, minVal, maxVal))
+    const bool didChange = ImGui::SliderInt(label, &value, minVal, maxVal);
+    if (didChange)
     {
         value = std::clamp(value, minVal, maxVal);
         SettingsManager::setAsInt(settingName, value);
     }
+    return didChange;
 }
 
-inline void InputUint(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
+inline bool InputUint(const char* label, const char* settingName, int minVal, int maxVal, int step = 1)
 {
     ScopedItemWidth width(inputWidth);
 
     int value = static_cast<int>(SettingsManager::getAsUint(settingName));
-    if (ImGui::InputInt(label, &value, step))
+    const bool didChange = ImGui::InputInt(label, &value, step);
+    if (didChange)
     {
         value = std::clamp(std::max(value, 0), minVal, maxVal);
         SettingsManager::setAsUint(settingName, static_cast<uint32_t>(value));
     }
+    return didChange;
 }
 
 inline void SliderUint(const char* label, const char* settingName, int minVal, int maxVal)
@@ -99,11 +105,13 @@ inline void SliderUint(const char* label, const char* settingName, int minVal, i
     ScopedItemWidth width(sliderWidth);
 
     int value = static_cast<int>(SettingsManager::getAsUint(settingName));
-    if (ImGui::SliderInt(label, &value, minVal, maxVal))
+    const bool didChange = ImGui::SliderInt(label, &value, minVal, maxVal);
+    if (didChange)
     {
         value = std::clamp(std::max(value, 0), minVal, maxVal);
         SettingsManager::setAsUint(settingName, static_cast<uint32_t>(value));
     }
+    return didChange;
 }
 
 inline bool ComboUint(const char* label, const char* settingName, const std::vector<const char*>& items)
@@ -120,19 +128,21 @@ inline bool ComboUint(const char* label, const char* settingName, const std::vec
     return didChange;
 }
 
-inline void SliderFloat(const char* label, const char* settingName, float minVal, float maxVal)
+inline bool SliderFloat(const char* label, const char* settingName, float minVal, float maxVal)
 {
     ScopedItemWidth width(sliderWidth);
 
     float value = SettingsManager::getAsFloat(settingName);
-    if (ImGui::SliderFloat(label, &value, minVal, maxVal))
+    const bool didChange = ImGui::SliderFloat(label, &value, minVal, maxVal);
+    if (didChange)
     {
         value = std::clamp(value, minVal, maxVal);
         SettingsManager::setAsFloat(settingName, value);
     }
+    return didChange;
 }
 
-inline void ComboString(const char* label, const char* settingName, const std::vector<const char*>& items)
+inline bool ComboString(const char* label, const char* settingName, const std::vector<const char*>& items)
 {
     ScopedItemWidth width(comboWidth);
 
@@ -147,10 +157,12 @@ inline void ComboString(const char* label, const char* settingName, const std::v
         }
     }
 
-    if (ImGui::Combo(label, &value, items.data(), static_cast<int>(items.size())))
+    const bool didChange = ImGui::Combo(label, &value, items.data(), static_cast<int>(items.size()));
+    if (didChange)
     {
         SettingsManager::setAsString(settingName, items[value]);
     }
+    return didChange;
 }
 
 inline void SectionTitle(const char* settingName)
