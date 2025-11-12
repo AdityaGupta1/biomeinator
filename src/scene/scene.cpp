@@ -228,26 +228,32 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t
     return texId;
 }
 
-void Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
-    this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
-    this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
+    bool didChange = false;
 
-    this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
+
+    didChange |= this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
 
     if (!this->pendingTextures.empty())
     {
         this->uploadPendingTextures(cmdList, toFreeList);
+        didChange = true;
     }
 
     if (this->isTlasDirty)
     {
         this->makeTlas(cmdList, toFreeList);
+        didChange = true;
     }
 
-    this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+
+    return didChange;
 }
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

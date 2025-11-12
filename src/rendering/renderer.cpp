@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "buffer/buffer_helper.h"
 #include "buffer/managed_buffer.h"
 #include "buffer/to_free_list.h"
+#include "common/common_enums.h"
 #include "common/common_hitgroups.h"
 #include "common/common_registers.h"
 #include "common/common_settings.h"
@@ -148,6 +149,7 @@ static HANDLE fenceEvent;
 static HANDLE frameLatencyWaitable;
 
 static uint32_t frameNumber = 0;
+static uint32_t accumulatedFrameNumber = 0;
 
 static constexpr float defaultFovYDegrees = 35;
 static Camera camera;
@@ -445,7 +447,9 @@ void resize()
     viewport = { 0, 0, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight) };
     scissor = { 0, 0, static_cast<long>(viewportWidth), static_cast<long>(viewportHeight) };
 
-    if (SettingsManager::getAsBool("enableDlss"))
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    if (antialiasingMode == AntialiasingMode::DLSS)
     {
         slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
@@ -1116,6 +1120,11 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "MIS",
     "RIS",
 };
+static const std::vector<const char*> antialiasingModeComboOptions = {
+    "none",
+    "accumulate",
+    "DLSS",
+};
 static const std::vector<const char*> tonemappingComboOptions = {
     "none",
     "standard",
@@ -1146,22 +1155,40 @@ static void imguiBeginFrame()
     ImGui::NewFrame();
 }
 
-static void imguiEndFrame(bool& needsResize)
+static bool needsResize = false;
+static bool didPathTracingSettingsChange = false;
+
+static void imguiEndFrame()
 {
+    didPathTracingSettingsChange = false;
+
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
 
-    SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
-    SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-    SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+    didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+    didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
 
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
-    SettingsGuiHelpers::SectionTitle("DLSS");
-    needsResize |= SettingsGuiHelpers::Checkbox("Enable DLSS", "enableDlss");
-    needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+    SettingsGuiHelpers::SectionTitle("Antialiasing");
+    const bool didAntialiasingChange =
+        SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+    needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
+    didPathTracingSettingsChange |= didAntialiasingChange;
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+
+    if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+    {
+        ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
+    }
+    else if (antialiasingMode == AntialiasingMode::DLSS)
+    {
+        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+    }
 
     SettingsGuiHelpers::VerticalSpacing();
 
@@ -1170,20 +1197,20 @@ static void imguiEndFrame(bool& needsResize)
         SettingsGuiHelpers::VerticalSpacing();
 
         SettingsGuiHelpers::SectionTitle("Debug view");
-        SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-        SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
 
         SettingsGuiHelpers::VerticalSpacing();
 
         SettingsGuiHelpers::SectionTitle("Debug parameters");
-        SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-        SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
-        SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
-        SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
-        SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
-        SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
     }
 
     ImGui::End();
@@ -1206,7 +1233,7 @@ static inline sl::Resource makeSlResource(RtTarget* target)
     };
 }
 
-static bool needsResize = false;
+static bool stopAccumulating = false;
 
 void render()
 {
@@ -1227,11 +1254,13 @@ void render()
 
     beginFrame();
 
-    const bool enableDlss = SettingsManager::getAsBool("enableDlss");
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    const bool useDlss = antialiasingMode == AntialiasingMode::DLSS;
 
     sl::FrameToken* frameToken;
     sl::Constants slConstants;
-    if (enableDlss)
+    if (useDlss)
     {
         CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
 
@@ -1290,9 +1319,9 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    camera.update(deltaTime, playerInput);
+    const bool didCameraChange = camera.update(deltaTime, playerInput);
 
-    if (enableDlss)
+    if (useDlss)
     {
         camera.copySlConstantsTo(&slConstants);
         CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
@@ -1303,18 +1332,40 @@ void render()
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
+    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
+
+    const bool resetAccumulation = didCameraChange || didSceneChange || didPathTracingSettingsChange;
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;
-    renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
+
+    if (resetAccumulation)
+    {
+        accumulatedFrameNumber = 0;
+        stopAccumulating = false;
+    }
+    else if (!stopAccumulating)
+    {
+        if (++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
+        {
+            stopAccumulating = true;
+
+            if (testMode)
+            {
+                queueScreenshot(true /*useTestOutputPath*/);
+            }
+        }
+    }
+
+    renderParams->accumulatedFrameNumber = accumulatedFrameNumber;
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
-    renderParams->preTonemappedColorSrvIdx = enableDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
+    renderParams->preTonemappedColorSrvIdx = useDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
     renderParams->renderSize = { renderWidth, renderHeight };
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
+    renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1350,7 +1401,7 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
-    if (scene.hasTlas())
+    if (scene.hasTlas() && (!stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
@@ -1447,7 +1498,7 @@ void render()
         // DLSS
         // ===================================
 
-        if (enableDlss)
+        if (useDlss)
         {
             const sl::BaseStructure* inputs[] = { &slViewportHandle };
             CHECK_SL_RESULT(
@@ -1503,7 +1554,7 @@ void render()
 
     if (!testMode)
     {
-        imguiEndFrame(needsResize);
+        imguiEndFrame();
     }
 
     BufferHelper::stateTransitionResourceBarrier(
@@ -1515,7 +1566,8 @@ void render()
     CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
-    swapChain->Present(1, 0);
+    const uint32_t syncInterval = testMode ? 0 : 1; // use 0 in test mode to render as fast as possible
+    swapChain->Present(syncInterval, 0);
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -1525,6 +1577,11 @@ void render()
     if (screenshotRequest.active)
     {
         finalizeQueuedScreenshot();
+
+        if (testMode)
+        {
+            exit(0);
+        }
     }
 }
 

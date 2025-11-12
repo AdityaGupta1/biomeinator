@@ -37,7 +37,7 @@ float balanceHeuristic(const float pdfA, const float pdfB)
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload, bool isFirstSample)
+void pathTraceRay(inout Payload payload)
 {
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
@@ -157,7 +157,7 @@ void pathTraceRay(inout Payload payload, bool isFirstSample)
             return;
         }
 
-        if (isFirstSample && pathDepth == 0 && surfBsdfSample.wasSpecular)
+        if (pathDepth == 0 && surfBsdfSample.wasSpecular)
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[payload.pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
@@ -199,20 +199,19 @@ void RayGeneration()
 
     const uint pathSplitIdx = getPathSplitIdx();
 
-    float3 accumulatedColor = float3(0, 0, 0);
-    for (uint sampleIdx = 0; sampleIdx < renderParams.numSamplesPerPixel; ++sampleIdx)
-    {
-        Payload payload = gbufferPayload;
-        payload.rng = initRandomSampler4(uint4(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, sampleIdx, renderParams.frameNumber));
+    Payload payload = gbufferPayload;
+    payload.rng = initRandomSampler3(uint3(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, renderParams.frameNumber));
 
-        const bool isFirstSample = (sampleIdx == 0);
-        pathTraceRay(payload, isFirstSample);
+    pathTraceRay(payload);
 
-        accumulatedColor += payload.pathColor;
-    }
-
-    const float3 colorPreTonemap = accumulatedColor / renderParams.numSamplesPerPixel;
-
+    const float3 colorPreTonemap = payload.pathColor;
     const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
-    pathTracingRawBuffer[writePixelIdx] = float4(colorPreTonemap, 1);
+    if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
+    {
+        pathTracingRawBuffer[writePixelIdx].xyz += colorPreTonemap;
+    }
+    else
+    {
+        pathTracingRawBuffer[writePixelIdx].xyz = colorPreTonemap;
+    }
 }

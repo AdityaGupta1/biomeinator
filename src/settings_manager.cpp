@@ -41,13 +41,13 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("h,help", "Print this message");
     optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));
     optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
-    optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("1"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS)", cxxopts::value<uint32_t>()->default_value("2"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
-    optionAdder("enableDlss", "Enable DLSS", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", cxxopts::value<uint32_t>()->default_value("0"));
+    optionAdder("maxAccumulatedFrames", "Max accumulated frames", cxxopts::value<uint32_t>()->default_value("256"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
     optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
 
@@ -84,13 +84,13 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("width", uint32_t);
     COPY_SETTING("height", uint32_t);
-    COPY_SETTING("spp", uint32_t);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
-    COPY_SETTING("enableDlss", bool);
+    COPY_SETTING("antialiasingMode", uint32_t);
+    COPY_SETTING("maxAccumulatedFrames", uint32_t);
     COPY_SETTING("dlssMode", uint32_t);
     COPY_SETTING("enablePathSplitting", bool);
 
@@ -107,15 +107,21 @@ void parseArgs(const int argc, const char* const* argv)
 
 #undef COPY_SETTING
 
-    if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
-    {
-        std::cerr << "Invalid tonemapping option" << std::endl;
-        exit(-1);
-    }
-
     if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {
         std::cerr << "Invalid samplingMode option" << std::endl;
+        exit(-1);
+    }
+
+    if (getAsUint("antialiasingMode") >= static_cast<uint32_t>(AntialiasingMode::COUNT))
+    {
+        std::cerr << "Invalid antialiasingMode option" << std::endl;
+        exit(-1);
+    }
+
+    if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
+    {
+        std::cerr << "Invalid tonemapping option" << std::endl;
         exit(-1);
     }
 }

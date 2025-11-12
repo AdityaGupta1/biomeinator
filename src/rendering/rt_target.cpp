@@ -112,11 +112,13 @@ void RtTarget::reset()
     if (this->uav.idx != ~0u)
     {
         Renderer::sharedDescHeapAlloc.free(this->uav.idx);
+        this->uav.idx = ~0u;
     }
 
     if (this->srv.idx != ~0u)
     {
         Renderer::sharedDescHeapAlloc.free(this->srv.idx);
+        this->srv.idx = ~0u;
     }
 
     if (this->target)
