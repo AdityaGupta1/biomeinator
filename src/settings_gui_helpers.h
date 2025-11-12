@@ -100,7 +100,7 @@ inline bool InputUint(const char* label, const char* settingName, int minVal, in
     return didChange;
 }
 
-inline void SliderUint(const char* label, const char* settingName, int minVal, int maxVal)
+inline bool SliderUint(const char* label, const char* settingName, int minVal, int maxVal)
 {
     ScopedItemWidth width(sliderWidth);
 

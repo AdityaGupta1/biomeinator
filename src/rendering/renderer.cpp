@@ -1167,7 +1167,6 @@ static void imguiEndFrame()
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
 
-    SettingsGuiHelpers::InputUint("Samples per pixel", "spp", 1, 256);
     didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
@@ -1354,7 +1353,6 @@ void render()
         ++accumulatedFrameNumber;
     }
     renderParams->accumulatedFrameNumber = accumulatedFrameNumber;
-    renderParams->numSamplesPerPixel = SettingsManager::getAsUint("spp");
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");

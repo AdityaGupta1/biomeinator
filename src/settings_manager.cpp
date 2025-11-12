@@ -41,7 +41,6 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("h,help", "Print this message");
     optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));
     optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
-    optionAdder("spp", "Samples per pixel", cxxopts::value<uint32_t>()->default_value("1"));
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
@@ -84,7 +83,6 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("width", uint32_t);
     COPY_SETTING("height", uint32_t);
-    COPY_SETTING("spp", uint32_t);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
