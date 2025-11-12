@@ -154,7 +154,7 @@ public:
 
     void reset();
 
-    void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

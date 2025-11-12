@@ -1191,7 +1191,9 @@ static void imguiEndFrame()
 
     if (antialiasingMode == AntialiasingMode::ACCUMULATE)
     {
-        ImGui::Text("accumulated frames: %u", accumulatedFrameNumber + 1);
+        ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
+        // TODO: set didPathTracingSettingsChange = true only if new value < old value
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
     }
     else if (antialiasingMode == AntialiasingMode::DLSS)
     {
@@ -1240,6 +1242,8 @@ static inline sl::Resource makeSlResource(RtTarget* target)
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     };
 }
+
+static bool stopAccumulating = false;
 
 void render()
 {
@@ -1325,7 +1329,7 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    const bool cameraDidChange = camera.update(deltaTime, playerInput);
+    const bool didCameraChange = camera.update(deltaTime, playerInput);
 
     if (useDlss)
     {
@@ -1338,20 +1342,27 @@ void render()
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    scene.update(cmdList.Get(), frameCtx.toFreeList);
+    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    const bool resetAccumulation = didJustEnableAccumulateMode || cameraDidChange || didPathTracingSettingsChange;
+    const bool resetAccumulation =
+        didCameraChange || didSceneChange || didJustEnableAccumulateMode || didPathTracingSettingsChange;
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = frameNumber;
+
     if (antialiasingMode != AntialiasingMode::ACCUMULATE || resetAccumulation)
     {
         accumulatedFrameNumber = 0;
+        stopAccumulating = false;
     }
-    else
+    else if (antialiasingMode == AntialiasingMode::ACCUMULATE && !stopAccumulating)
     {
-        ++accumulatedFrameNumber;
+        if (++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
+        {
+            stopAccumulating = true;
+        }
     }
+
     renderParams->accumulatedFrameNumber = accumulatedFrameNumber;
     renderParams->maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
     renderParams->samplingMode = SettingsManager::getAsUint("samplingMode");
@@ -1396,7 +1407,7 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 
-    if (scene.hasTlas())
+    if (scene.hasTlas() && !stopAccumulating)
     {
         cmdList->SetDescriptorHeaps(1, descHeaps);
 
