@@ -1350,6 +1350,11 @@ void render()
         if (++accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {
             stopAccumulating = true;
+
+            if (testMode)
+            {
+                queueScreenshot(true /*useTestOutputPath*/);
+            }
         }
     }
 
@@ -1562,7 +1567,8 @@ void render()
     CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
-    swapChain->Present(1, 0);
+    const uint32_t syncInterval = testMode ? 0 : 1;
+    swapChain->Present(syncInterval, 0);
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -1572,6 +1578,11 @@ void render()
     if (screenshotRequest.active)
     {
         finalizeQueuedScreenshot();
+
+        if (testMode)
+        {
+            exit(0);
+        }
     }
 }
 

@@ -6,7 +6,8 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "two_triangles/golden.png",
@@ -18,11 +19,12 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "occluded_light/golden.png",
-            "threshold": 0.003
+            "threshold": 0.004
         },
         {
             "name": "emissive_cube",
@@ -30,7 +32,8 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "emissive_cube/golden.png",
@@ -42,12 +45,13 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
             "golden": "emissive_cube/golden_blender_no_tonemap.png",
-            "threshold": 0.016
+            "threshold": 0.005
         },
         {
             "name": "many_monkeys",
@@ -55,7 +59,8 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_monkeys/golden.png",
@@ -67,11 +72,12 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "many_faces_emitter/golden.png",
-            "threshold": 0.005
+            "threshold": 0.002
         },
         {
             "name": "textured_cube",
@@ -79,11 +85,12 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "textured_cube/golden.png",
-            "threshold": 0.016
+            "threshold": 0.008
         },
         {
             "name": "penguin_gallery",
@@ -91,11 +98,12 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
             "golden": "penguin_gallery/golden.png",
-            "threshold": 0.002
+            "threshold": 0.001
         },
         {
             "name": "penguin_gallery_blender_no_tonemap",
@@ -103,12 +111,13 @@
             "args": [
                 "--width=960",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
             "golden": "penguin_gallery/golden_blender_no_tonemap.png",
-            "threshold": 0.03
+            "threshold": 0.01
         },
         {
             "name": "cornell_box",
@@ -116,24 +125,12 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "cornell_box/golden.png",
-            "threshold": 0.02
-        },
-        {
-            "name": "cornell_box_naive",
-            "scene": "cornell_box/cornell_box.gltf",
-            "args": [
-                "--width=540",
-                "--height=540",
-                "--spp=8192",
-                "--maxPathDepth=12",
-                "--samplingMode=0"
-            ],
-            "golden": "cornell_box/golden.png",
-            "threshold": 0.02
+            "threshold": 0.015
         },
         {
             "name": "cornell_box_MIS",
@@ -141,9 +138,24 @@
             "args": [
                 "--width=540",
                 "--height=540",
-                "--spp=4096",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12",
                 "--samplingMode=1"
+            ],
+            "golden": "cornell_box/golden.png",
+            "threshold": 0.015
+        },
+        {
+            "name": "cornell_box_naive",
+            "scene": "cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=16384",
+                "--maxPathDepth=12",
+                "--samplingMode=0"
             ],
             "golden": "cornell_box/golden.png",
             "threshold": 0.02
@@ -154,7 +166,8 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "fancy_cornell_box/golden.png",
@@ -166,12 +179,13 @@
             "args": [
                 "--width=270",
                 "--height=270",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
             "golden": "fancy_cornell_box/golden_blender_no_tonemap.png",
-            "threshold": 0.02
+            "threshold": 0.012
         },
         {
             "name": "evil_room",
@@ -179,11 +193,12 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
             ],
             "golden": "evil_room/golden.png",
-            "threshold": 0.025
+            "threshold": 0.02
         },
         {
             "name": "evil_room_blender_no_tonemap",
@@ -191,12 +206,13 @@
             "args": [
                 "--width=480",
                 "--height=270",
-                "--spp=2048",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
             "golden": "evil_room/golden_blender_no_tonemap.png",
-            "threshold": 0.04
+            "threshold": 0.03
         }
     ]
 }

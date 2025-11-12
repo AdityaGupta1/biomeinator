@@ -35,15 +35,6 @@ int main(int argc, char** argv)
     WindowManager::init();
     Renderer::init();
 
-    if (SettingsManager::getAsString("testOutput") != "")
-    {
-        const std::string path = SettingsManager::getAsString("testOutput");
-        Renderer::queueScreenshot(true /*useTestOutputPath*/);
-        Renderer::render();
-        Renderer::flush();
-        return 0;
-    }
-
     for (MSG msg;;)
     {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
