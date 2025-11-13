@@ -233,13 +233,13 @@ static void initStreamline()
     sl::Preferences prefs = {};
     prefs.showConsole = false;
     prefs.logLevel = sl::LogLevel::eDefault;
-#ifdef _DEBUG
-    if (!testMode)
-    {
-        prefs.showConsole = true;
-        prefs.logLevel = sl::LogLevel::eVerbose;
-    }
-#endif
+//#ifdef _DEBUG
+//    if (!testMode)
+//    {
+//        prefs.showConsole = true;
+//        prefs.logLevel = sl::LogLevel::eVerbose;
+//    }
+//#endif
 
     const sl::Feature features[] = { sl::kFeatureDLSS_RR };
     prefs.featuresToLoad = features;
@@ -378,20 +378,20 @@ static void initSwapChain()
 }
 
 // clang-format off
-RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
-RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+static RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+static RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 // should really be 4 debug channels but it would be mostly transparent then
-RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
-RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
-RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
-RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 // clang-format on
 
-std::vector<RtTarget*> rtTargets;
+static std::vector<RtTarget*> rtTargets;
 
 static void initRtTargets()
 {
@@ -637,6 +637,8 @@ enum class PtParam
 
     PATH_TRACING_RAW_BUFFER,
 
+    SER_FAKE_UAV,
+
     COUNT
 };
 
@@ -732,6 +734,11 @@ static void initRootSignature()
     // PATH TRACING
     // ===================================
     {
+        if (useSer)
+        {
+            NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        }
+
         std::array<D3D12_ROOT_PARAMETER1, PT_PARAM_IDX(COUNT)> ptParams;
 
         ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
@@ -748,6 +755,22 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
+
+        const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+            .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
+            .OffsetInDescriptorsFromTableStart = 0,
+        };
+        ptParams[PT_PARAM_IDX(SER_FAKE_UAV)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = 1,
+                .pDescriptorRanges = &serDescriptorRange,
+            },
+        };
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -1408,7 +1431,7 @@ void render()
 
     if (scene.hasTlas() && (!stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
-        cmdList->SetDescriptorHeaps(1, descHeaps);
+        cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
         // ===================================
         // GBUFFER
@@ -1515,7 +1538,7 @@ void render()
     // POSTPROCESSING
     // ===================================
 
-    cmdList->SetDescriptorHeaps(1, descHeaps);
+    cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
