@@ -109,8 +109,9 @@ void pathTraceRay(inout Payload payload)
                 DirectLightingSample lightSample;
                 if (samplingMode == SamplingMode::RIS)
                 {
-                    const bool isFirstNonDeltaSurface = isNonDeltaSurface && !hasEncounteredNonDeltaSurface;
+                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
 
+                    // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
                     NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
 
                     RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
@@ -162,16 +163,7 @@ void pathTraceRay(inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        if (samplingMode != SamplingMode::RIS)
-        {
-            NvHitObject hitObject = NvTraceRayHitObject(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-            NvReorderThread(hitObject, 0, 0);
-            NvInvokeHitObject(raytracingAcs, hitObject, payload);
-        }
-        else
-        {
-            TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-        }
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
