@@ -233,16 +233,15 @@ static void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = sl::LogLevel::eDefault;
+    prefs.logLevel = testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
-    // TODO: have this happen based on some new "verbose logging" setting instead of all the time in debug mode
-//#ifdef _DEBUG
-//    if (!testMode)
-//    {
-//        prefs.showConsole = true;
-//        prefs.logLevel = sl::LogLevel::eVerbose;
-//    }
-//#endif
+#ifdef _DEBUG
+    if (SettingsManager::getAsBool("verboseLogging"))
+    {
+        prefs.showConsole = true;
+        prefs.logLevel = sl::LogLevel::eVerbose;
+    }
+#endif
 
     const sl::Feature features[] = { sl::kFeatureDLSS_RR };
     prefs.featuresToLoad = features;
@@ -283,11 +282,14 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
-    //ComPtr<ID3D12Debug1> debug1;
-    //if (SUCCEEDED(debug.As(&debug1)))
-    //{
-    //    debug1->SetEnableGPUBasedValidation(true);
-    //}
+    if (SettingsManager::getAsBool("verboseLogging"))
+    {
+        ComPtr<ID3D12Debug1> debug1;
+        if (SUCCEEDED(debug.As(&debug1)))
+        {
+            debug1->SetEnableGPUBasedValidation(true);
+        }
+    }
 
 #define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #else
@@ -374,12 +376,12 @@ void initNvapi()
     {
         useSer = true;
         NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
-        Logger::log("SER enabled\n");
+        Logger::log("SER enabled");
     }
     else
     {
         useSer = false;
-        Logger::log("SER not supported\n");
+        Logger::log("SER not supported");
     }
 }
 
