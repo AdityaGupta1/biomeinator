@@ -121,6 +121,7 @@ namespace Renderer
 static void initStreamline();
 static void initDevice();
 static void initDescriptorHeaps();
+static void initNvapi();
 static void initSwapChain();
 static void initRtTargets();
 static void initCommand();
@@ -163,8 +164,6 @@ static Scene scene;
 
 static bool testMode = false;
 
-static bool useSer = false;
-
 void init()
 {
     testMode = (SettingsManager::getAsString("testOutput") != "");
@@ -173,6 +172,8 @@ void init()
 
     initDevice();
     initDescriptorHeaps();
+
+    initNvapi();
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -233,6 +234,8 @@ static void initStreamline()
     sl::Preferences prefs = {};
     prefs.showConsole = false;
     prefs.logLevel = sl::LogLevel::eDefault;
+
+    // TODO: have this happen based on some new "verbose logging" setting instead of all the time in debug mode
 //#ifdef _DEBUG
 //    if (!testMode)
 //    {
@@ -356,6 +359,27 @@ static void initDescriptorHeaps()
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
     };
     CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
+}
+
+static bool useSer = false;
+
+void initNvapi()
+{
+    NvAPI_Initialize();
+    NvAPI_Unload();
+
+    bool serSupported = false;
+    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    if (serSupported)
+    {
+        Logger::log("SER enabled\n");
+        useSer = true;
+    }
+    else
+    {
+        Logger::log("SER not supported\n");
+        useSer = false;
+    }
 }
 
 static ComPtr<IDXGISwapChain3> swapChain;
