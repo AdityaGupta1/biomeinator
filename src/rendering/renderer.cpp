@@ -780,6 +780,7 @@ static void initRootSignature()
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
 
+        // TODO: do this only if using SER (maybe make ptParams into a vector and append this if necessary; remove SER_FAKE_UAV enum value in this case)
         const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
             .NumDescriptors = 1,
