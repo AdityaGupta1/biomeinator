@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
+#include "nvapi_includes.hlsli"
+
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "materials.hlsli"
@@ -108,6 +110,9 @@ void pathTraceRay(inout Payload payload)
                 if (samplingMode == SamplingMode::RIS)
                 {
                     const bool isFirstNonDeltaSurface = isNonDeltaSurface && !hasEncounteredNonDeltaSurface;
+
+                    NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
+
                     RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                     lightSample = sampleDirectLightingRis(risSample, surfPos_WS, surfNor_WS);
                 }
@@ -157,7 +162,16 @@ void pathTraceRay(inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+        if (samplingMode != SamplingMode::RIS)
+        {
+            NvHitObject hitObject = NvTraceRayHitObject(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+            NvReorderThread(hitObject, 0, 0);
+            NvInvokeHitObject(raytracingAcs, hitObject, payload);
+        }
+        else
+        {
+            TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+        }
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {

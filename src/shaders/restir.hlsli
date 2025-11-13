@@ -18,8 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "nvapi_includes.hlsli"
-
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "util/color.hlsli"
@@ -46,8 +44,6 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
 {
     const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;
     const uint numBsdfCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_BSDF_CANDIDATES : RIS_MIN_NUM_BSDF_CANDIDATES;
-
-    NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
 
     uint Y_lightIdx = ~0u;
     float Y_p_hat = 0.f;
