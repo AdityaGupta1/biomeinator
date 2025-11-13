@@ -70,6 +70,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sl_dlss_d.h>
 #include <sl_security.h>
 
+#include <nvapi.h>
+#include <nvShaderExtnEnums.h>
+
 #ifdef _DEBUG
 static void printSlResultError(sl::Result result)
 {
@@ -159,6 +162,8 @@ static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 static Scene scene;
 
 static bool testMode = false;
+
+static bool useSer = false;
 
 void init()
 {

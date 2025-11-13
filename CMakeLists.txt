@@ -168,11 +168,11 @@ target_include_directories(Biomeinator PRIVATE
 
 target_link_directories(Biomeinator PRIVATE
     "${EXT}/dxc/lib"
-    #"${EXT}/nvapi/amd64"
+    "${EXT}/nvapi/amd64"
     "${EXT}/streamline/lib/x64"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
