@@ -29,8 +29,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-#include "../../external/nvapi/nvHLSLExtns.h"
-
 StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
 RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
@@ -152,16 +150,7 @@ void pathTraceRay(inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = 10000.f;
 
-        if (debugParams.debugBool0 == 1)
-        {
-            NvHitObject hitObject = NvTraceRayHitObject(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-            NvReorderThread(hitObject, 0, 0);
-            NvInvokeHitObject(raytracingAcs, hitObject, payload);
-        }
-        else
-        {
-            TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-        }
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
