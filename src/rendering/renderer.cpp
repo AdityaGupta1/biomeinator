@@ -70,6 +70,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sl_dlss_d.h>
 #include <sl_security.h>
 
+#include <nvapi.h>
+#include <nvShaderExtnEnums.h>
+
 #ifdef _DEBUG
 static void printSlResultError(sl::Result result)
 {
@@ -118,6 +121,7 @@ namespace Renderer
 static void initStreamline();
 static void initDevice();
 static void initDescriptorHeaps();
+static void initNvapi();
 static void initSwapChain();
 static void initRtTargets();
 static void initCommand();
@@ -168,6 +172,8 @@ void init()
 
     initDevice();
     initDescriptorHeaps();
+
+    initNvapi();
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -227,9 +233,10 @@ static void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = sl::LogLevel::eDefault;
+    prefs.logLevel = testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
+
 #ifdef _DEBUG
-    if (!testMode)
+    if (SettingsManager::getAsBool("verboseLogging"))
     {
         prefs.showConsole = true;
         prefs.logLevel = sl::LogLevel::eVerbose;
@@ -275,11 +282,14 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
-    //ComPtr<ID3D12Debug1> debug1;
-    //if (SUCCEEDED(debug.As(&debug1)))
-    //{
-    //    debug1->SetEnableGPUBasedValidation(true);
-    //}
+    if (SettingsManager::getAsBool("verboseLogging"))
+    {
+        ComPtr<ID3D12Debug1> debug1;
+        if (SUCCEEDED(debug.As(&debug1)))
+        {
+            debug1->SetEnableGPUBasedValidation(true);
+        }
+    }
 
 #define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #else
@@ -353,6 +363,28 @@ static void initDescriptorHeaps()
     CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
 }
 
+static bool useSer = false;
+
+void initNvapi()
+{
+    NvAPI_Initialize();
+    NvAPI_Unload();
+
+    bool serSupported = false;
+    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    if (serSupported)
+    {
+        useSer = true;
+        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        Logger::log("SER enabled");
+    }
+    else
+    {
+        useSer = false;
+        Logger::log("SER not supported");
+    }
+}
+
 static ComPtr<IDXGISwapChain3> swapChain;
 static constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
@@ -373,20 +405,20 @@ static void initSwapChain()
 }
 
 // clang-format off
-RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
-RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+static RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+static RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 // should really be 4 debug channels but it would be mostly transparent then
-RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
-RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
-RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
-RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 // clang-format on
 
-std::vector<RtTarget*> rtTargets;
+static std::vector<RtTarget*> rtTargets;
 
 static void initRtTargets()
 {
@@ -727,7 +759,8 @@ static void initRootSignature()
     // PATH TRACING
     // ===================================
     {
-        std::array<D3D12_ROOT_PARAMETER1, PT_PARAM_IDX(COUNT)> ptParams;
+        std::vector<D3D12_ROOT_PARAMETER1> ptParams;
+        ptParams.resize(PT_PARAM_IDX(COUNT));
 
         ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
@@ -743,6 +776,25 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
+
+        if (useSer)
+        {
+            const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
+                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+                .NumDescriptors = 1,
+                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+                .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
+                .OffsetInDescriptorsFromTableStart = 0,
+            };
+            ptParams.push_back({
+                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                .DescriptorTable = {
+                    .NumDescriptorRanges = 1,
+                    .pDescriptorRanges = &serDescriptorRange,
+                },
+            });
+        }
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -1403,7 +1455,7 @@ void render()
 
     if (scene.hasTlas() && (!stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
-        cmdList->SetDescriptorHeaps(1, descHeaps);
+        cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
         // ===================================
         // GBUFFER
@@ -1510,7 +1562,7 @@ void render()
     // POSTPROCESSING
     // ===================================
 
-    cmdList->SetDescriptorHeaps(1, descHeaps);
+    cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());

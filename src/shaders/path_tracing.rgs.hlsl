@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
+#include "nvapi_includes.hlsli"
+
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "materials.hlsli"
@@ -51,7 +53,7 @@ void pathTraceRay(inout Payload payload)
     }
 
     bool previousWasSpecular = false;
-    int numPrevNonDeltaBounces = 0;
+    bool hasEncounteredNonDeltaSurface = false;
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
@@ -98,14 +100,21 @@ void pathTraceRay(inout Payload payload)
 
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
+        const bool isNonDeltaSurface = !surfMaterial.isOnlySpecular();
+
         if (samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS)
         {
-            if (!surfMaterial.isOnlySpecular())
+            if (isNonDeltaSurface)
             {
                 DirectLightingSample lightSample;
                 if (samplingMode == SamplingMode::RIS)
                 {
-                    RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, numPrevNonDeltaBounces, payload.rng);
+                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+
+                    // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
+                    NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
+
+                    RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                     lightSample = sampleDirectLightingRis(risSample, surfPos_WS, surfNor_WS);
                 }
                 else
@@ -136,13 +145,17 @@ void pathTraceRay(inout Payload payload)
             }
         }
 
+        if (isNonDeltaSurface)
+        {
+            hasEncounteredNonDeltaSurface = true;
+        }
+
         const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
         payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
         if (!surfBsdfSample.wasSpecular)
         {
             payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
-            ++numPrevNonDeltaBounces;
         }
 
         ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
