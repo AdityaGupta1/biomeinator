@@ -24,8 +24,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "light_sampling.hlsli"
 #include "util/color.hlsli"
 
-#define RIS_MAX_NUM_LIGHT_CANDIDATES 32
-#define RIS_MAX_NUM_BSDF_CANDIDATES 1
+#define RIS_MAX_NUM_LIGHT_CANDIDATES 32u
+#define RIS_MAX_NUM_BSDF_CANDIDATES 1u
+#define RIS_MIN_NUM_LIGHT_CANDIDATES 8u
+#define RIS_MIN_NUM_BSDF_CANDIDATES 1u
 
 float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 {
@@ -40,13 +42,12 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
     return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
 }
 
-RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const int numPrevNonDeltaBounces, inout RandomSampler rng)
+RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
 {
-    const uint adjustedBounceCount = uint(max(0, numPrevNonDeltaBounces - 1));
-    const uint numLightCandidates = max(4u, uint(RIS_MAX_NUM_LIGHT_CANDIDATES) >> adjustedBounceCount);
-    const uint numBsdfCandidates = max(1u, uint(RIS_MAX_NUM_BSDF_CANDIDATES) >> adjustedBounceCount);
+    const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;
+    const uint numBsdfCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_BSDF_CANDIDATES : RIS_MIN_NUM_BSDF_CANDIDATES;
 
-    NvReorderThread(numLightCandidates >> 2, 4);
+    NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
 
     uint Y_lightIdx = ~0u;
     float Y_p_hat = 0.f;

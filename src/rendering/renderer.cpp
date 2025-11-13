@@ -372,13 +372,14 @@ void initNvapi()
     NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
     if (serSupported)
     {
-        Logger::log("SER enabled\n");
         useSer = true;
+        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        Logger::log("SER enabled\n");
     }
     else
     {
-        Logger::log("SER not supported\n");
         useSer = false;
+        Logger::log("SER not supported\n");
     }
 }
 
@@ -661,8 +662,6 @@ enum class PtParam
 
     PATH_TRACING_RAW_BUFFER,
 
-    SER_FAKE_UAV,
-
     COUNT
 };
 
@@ -758,12 +757,8 @@ static void initRootSignature()
     // PATH TRACING
     // ===================================
     {
-        if (useSer)
-        {
-            NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
-        }
-
-        std::array<D3D12_ROOT_PARAMETER1, PT_PARAM_IDX(COUNT)> ptParams;
+        std::vector<D3D12_ROOT_PARAMETER1> ptParams;
+        ptParams.resize(PT_PARAM_IDX(COUNT));
 
         ptParams[PT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
@@ -780,22 +775,24 @@ static void initRootSignature()
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
 
-        // TODO: do this only if using SER (maybe make ptParams into a vector and append this if necessary; remove SER_FAKE_UAV enum value in this case)
-        const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
-            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-            .NumDescriptors = 1,
-            .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-            .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
-            .OffsetInDescriptorsFromTableStart = 0,
-        };
-        ptParams[PT_PARAM_IDX(SER_FAKE_UAV)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-            .DescriptorTable = {
-                .NumDescriptorRanges = 1,
-                .pDescriptorRanges = &serDescriptorRange,
-            },
-        };
+        if (useSer)
+        {
+            const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
+                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+                .NumDescriptors = 1,
+                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+                .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
+                .OffsetInDescriptorsFromTableStart = 0,
+            };
+            ptParams.push_back({
+                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                .DescriptorTable = {
+                    .NumDescriptorRanges = 1,
+                    .pDescriptorRanges = &serDescriptorRange,
+                },
+            });
+        }
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
