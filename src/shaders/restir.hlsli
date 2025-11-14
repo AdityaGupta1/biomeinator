@@ -33,11 +33,12 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     const Material lightMaterial = materials[light.materialIdx];
 
-    const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
+    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
 
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: specify if light is single or double sided and use cosTheta or absCosTheta accordingly
 
-    return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
+    // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
+    return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
 }
 
 RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
