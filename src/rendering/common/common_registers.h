@@ -45,6 +45,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // u#
 #define GBUFFER_REGISTER_GBUFFER 0
+#define GBUFFER_REGISTER_RIS_SAMPLES_OUT 1
 
 // =============================================
 #define PT_REGISTER_SPACE 2

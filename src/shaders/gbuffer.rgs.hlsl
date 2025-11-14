@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 
 RWStructuredBuffer<GbufferData> gbuffer : REGISTER_U(GBUFFER_REGISTER_GBUFFER, GBUFFER_REGISTER_SPACE);
+RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER_REGISTER_RIS_SAMPLES_OUT, GBUFFER_REGISTER_SPACE);
 
 float2 calculateMotionFromPos(const float3 pos_WS)
 {

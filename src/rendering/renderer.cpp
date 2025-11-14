@@ -439,6 +439,11 @@ static void initRtTargets()
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
+static ComPtr<ID3D12Resource> dev_risSamples1;
+static ComPtr<ID3D12Resource> dev_risSamples2;
+static ID3D12Resource* dev_risSamplesIn;
+static ID3D12Resource* dev_risSamplesOut;
+
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
@@ -525,6 +530,20 @@ void resize()
                                                   &DEFAULT_HEAP,
                                                   { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_gbuffer->SetName(L"dev_gbuffer");
+
+    dev_risSamples1.Reset();
+    dev_risSamples1 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples1->SetName(L"dev_risSamples1");
+    dev_risSamplesIn = dev_risSamples1.Get();
+
+    dev_risSamples2.Reset();
+    dev_risSamples2 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples2->SetName(L"dev_risSamples2");
+    dev_risSamplesOut = dev_risSamples2.Get();
 
     dev_pathTracingRawBuffer.Reset();
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
@@ -643,6 +662,7 @@ enum class GbufferParam
     MATERIALS,
 
     GBUFFER,
+    RIS_SAMPLES_OUT,
 
     COUNT
 };
@@ -736,6 +756,7 @@ static void initRootSignature()
         gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
         gbufferParams[GBUFFER_PARAM_IDX(GBUFFER)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER);
+        gbufferParams[GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, GBUFFER, RIS_SAMPLES_OUT);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -1474,6 +1495,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
         // clang-format on
 
         // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
@@ -1491,6 +1513,8 @@ void render()
         gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
         gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&gbufferDispatchDesc);
+
+        std::swap(dev_risSamplesIn, dev_risSamplesOut);
 
         // ===================================
         // PATH TRACING
@@ -1703,6 +1727,11 @@ void destroy()
 
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
+
+    dev_risSamples1.Reset();
+    dev_risSamples2.Reset();
+    dev_risSamplesIn = nullptr;
+    dev_risSamplesOut = nullptr;
 
     screenshotRequest.readbackBuffer.Reset();
 
