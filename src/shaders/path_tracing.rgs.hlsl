@@ -100,7 +100,7 @@ void pathTraceRay(inout Payload payload)
 
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-        const bool isNonDeltaSurface = !surfMaterial.isOnlySpecular();
+        const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
         if (samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS)
         {
