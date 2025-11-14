@@ -678,6 +678,7 @@ enum class PtParam
     MATERIALS,
 
     GBUFFER,
+    RIS_SAMPLES_IN,
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
@@ -792,6 +793,7 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
         ptParams[PT_PARAM_IDX(GBUFFER)] = MAKE_PARAM(SRV, PT, GBUFFER);
+        ptParams[PT_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, PT, RIS_SAMPLES_IN);
         ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
         ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
@@ -1526,6 +1528,11 @@ void render()
                                                      dev_gbuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        // dev_risSamplesIn (after swap) was written to in gbuffer pass, transition to read-only for path tracing
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_risSamplesIn,
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
         cmdList->SetPipelineState1(ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
@@ -1540,6 +1547,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
 
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());

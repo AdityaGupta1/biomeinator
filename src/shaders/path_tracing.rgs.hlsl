@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
+StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT_REGISTER_RIS_SAMPLES_IN, PT_REGISTER_SPACE);
 RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
