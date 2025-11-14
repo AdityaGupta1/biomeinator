@@ -35,7 +35,7 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
 
-    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS);
+    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: specify if light is single or double sided and use cosTheta or absCosTheta accordingly
 
     return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
 }
