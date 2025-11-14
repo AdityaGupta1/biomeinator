@@ -282,7 +282,7 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
-    if (SettingsManager::getAsBool("verboseLogging"))
+    if (SettingsManager::getAsBool("gpuValidation"))
     {
         ComPtr<ID3D12Debug1> debug1;
         if (SUCCEEDED(debug.As(&debug1)))
