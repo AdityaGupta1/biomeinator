@@ -103,7 +103,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
 
         const InstanceData instanceData = instanceDatas[lightPayload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + lightPayload.hitInfo.triangleIdx];
-        if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
+        if (perTriData.localAreaLightIdx == LIGHT_IDX_INVALID)
         {
             continue;
         }
@@ -137,12 +137,12 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
     return risSample;
 }
 
-DirectLightingSample sampleDirectLightingRis(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
+DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     DirectLightingSample result;
     result.didHitLight = false;
 
-    if (risSample.lightIdx == ~0u)
+    if (risSample.lightIdx == LIGHT_IDX_INVALID)
     {
         return result;
     }

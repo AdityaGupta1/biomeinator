@@ -24,9 +24,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "restir.hlsli"
 #include "util/color.hlsli"
+#include "util/rng.hlsli"
 
-RWStructuredBuffer<GbufferData> gbuffer : REGISTER_U(GBUFFER_REGISTER_GBUFFER, GBUFFER_REGISTER_SPACE);
+RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U( GBUFFER_REGISTER_GBUFFER_OUT, GBUFFER_REGISTER_SPACE);
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER_REGISTER_RIS_SAMPLES_OUT, GBUFFER_REGISTER_SPACE);
 
 float2 calculateMotionFromPos(const float3 pos_WS)
@@ -114,13 +116,13 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 void RayGeneration()
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
-    const uint linearPixelIdx = pixelIdx.y * DispatchRaysDimensions().x + pixelIdx.x;
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     RayDesc ray;
     ray.Origin = cameraParams.pos_WS;
     ray.Direction = getPrimaryRayDirection(pixelIdx);
-    ray.TMin = 0.001;
-    ray.TMax = 1000;
+    ray.TMin = 0.001f;
+    ray.TMax = 10000.f;
 
     Payload payload;
     payload.materialIdx = MATERIAL_IDX_INVALID;
@@ -135,5 +137,29 @@ void RayGeneration()
     outGbufferData.materialIdx = payload.materialIdx;
     outGbufferData.payloadFlags = payload.flags;
     outGbufferData.pad0 = outGbufferData.pad1 = 0;
-    gbuffer[linearPixelIdx] = outGbufferData;
+    gbufferOut[linearPixelIdx] = outGbufferData;
+
+    const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
+
+    if (samplingMode == SamplingMode::RIS && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+    {
+        RisSample risSample;
+        risSample.lightIdx = LIGHT_IDX_INVALID;
+        risSample.pointOnLight_WS = 0.f;
+        risSample.W = 0.f;
+        risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
+
+        const Material surfMaterial = materials[payload.materialIdx];
+        if (surfMaterial.canScatter() && !surfMaterial.isDelta())
+        {
+            const float3 wo_WS = -ray.Direction;
+            const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+            const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+
+            RandomSampler rng = initRandomSampler4(uint4(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber));
+            risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+        }
+
+        risSamplesOut[linearPixelIdx] = risSample; // TODO: different light sample per path split index?
+    }
 }

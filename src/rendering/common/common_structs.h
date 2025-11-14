@@ -171,7 +171,7 @@ struct AreaLight
     uint materialIdx;
 };
 
-#define LIGHT_ID_INVALID ~0u
+#define LIGHT_IDX_INVALID ~0u
 
 struct PerTriangleData
 {

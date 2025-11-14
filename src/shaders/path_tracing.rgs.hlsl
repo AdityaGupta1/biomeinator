@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<GbufferData> gbuffer : REGISTER_T(PT_REGISTER_GBUFFER, PT_REGISTER_SPACE);
+StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT_REGISTER_GBUFFER_IN, PT_REGISTER_SPACE);
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT_REGISTER_RIS_SAMPLES_IN, PT_REGISTER_SPACE);
 RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
 
@@ -110,13 +110,22 @@ void pathTraceRay(inout Payload payload)
                 DirectLightingSample lightSample;
                 if (samplingMode == SamplingMode::RIS)
                 {
-                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                    RisSample risSample;
+                    if (pathDepth == 0)
+                    {
+                        risSample = risSamplesIn[payload.pixelIdx.y * renderParams.renderSize.x + payload.pixelIdx.x];
+                    }
+                    else
+                    {
+                        const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
 
-                    // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
-                    NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
+                        // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
+                        NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
 
-                    RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
-                    lightSample = sampleDirectLightingRis(risSample, surfPos_WS, surfNor_WS);
+                        risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
+                    }
+
+                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
                 }
                 else
                 {
@@ -202,7 +211,7 @@ void RayGeneration()
     const uint2 pixelIdx = getPixelIdx();
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
-    const GbufferData gbufferData = gbuffer[linearPixelIdx];
+    const GbufferData gbufferData = gbufferIn[linearPixelIdx];
     Payload gbufferPayload;
     gbufferPayload.hitInfo = gbufferData.hitInfo;
     gbufferPayload.materialIdx = gbufferData.materialIdx;
