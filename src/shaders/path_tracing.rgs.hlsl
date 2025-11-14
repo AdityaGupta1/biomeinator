@@ -103,6 +103,12 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
+        if (samplingMode == SamplingMode::RIS)
+        {
+            const uint coherenceHint = (isNonDeltaSurface ? (1 << 0) : 0) | (surfMaterial.canScatter() ? (1 << 1) : 0) | (pathDepth == 0 ? (1 << 2) : 0);
+            NvReorderThread(coherenceHint, 3);
+        }
+
         if ((samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS) && surfMaterial.canScatter())
         {
             if (isNonDeltaSurface)
@@ -118,10 +124,6 @@ void pathTraceRay(inout Payload payload)
                     else
                     {
                         const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-
-                        // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
-                        NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
-
                         risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                     }
 
