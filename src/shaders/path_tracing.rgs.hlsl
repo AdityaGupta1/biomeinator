@@ -122,7 +122,7 @@ void pathTraceRay(inout Payload payload)
                         // it might be kind of sus that this is under the conditional isNonDeltaSurface, but it seems to work well for now
                         NvReorderThread(isFirstNonDeltaSurface ? 0 : 1, 1);
 
-                        risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
+                        risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                     }
 
                     lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID

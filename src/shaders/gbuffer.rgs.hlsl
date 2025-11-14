@@ -159,7 +159,7 @@ void RayGeneration()
                 const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
                 RandomSampler rng = initRandomSampler4(uint4(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber));
-                risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+                risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
             }
         }
 

@@ -41,7 +41,7 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
     return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
 }
 
-RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
+RisSample generateDirectLightingRisSample(const uint hitGroup, const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
 {
     const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;
     const uint numBsdfCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_BSDF_CANDIDATES : RIS_MIN_NUM_BSDF_CANDIDATES;
@@ -94,7 +94,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
 
         Payload lightPayload;
         lightPayload.flags = 0;
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, hitGroup, 0, 0, ray, lightPayload);
 
         if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT))
         {

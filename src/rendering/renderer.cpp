@@ -943,11 +943,16 @@ static void initPipeline()
         gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
 
-        gbufferPipelineInputs.hitGroups.resize(1);
+        gbufferPipelineInputs.hitGroups.resize(2);
         gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"HitGroup",
+            .HitGroupExport = L"gbuffer_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"gbuffer_HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
 
         makeRtPipeline(gbufferPipelineInputs);
@@ -972,12 +977,12 @@ static void initPipeline()
 
         ptPipelineInputs.hitGroups.resize(2);
         ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"HitGroup_Primary",
+            .HitGroupExport = L"pt_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
         ptPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"HitGroup_Lights",
+            .HitGroupExport = L"pt_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
