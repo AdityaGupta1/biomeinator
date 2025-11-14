@@ -141,7 +141,7 @@ void RayGeneration()
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
 
-    if (samplingMode == SamplingMode::RIS && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+    if (samplingMode == SamplingMode::RIS)
     {
         RisSample risSample;
         risSample.lightIdx = LIGHT_IDX_INVALID;
@@ -149,15 +149,18 @@ void RayGeneration()
         risSample.W = 0.f;
         risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
 
-        const Material surfMaterial = materials[payload.materialIdx];
-        if (surfMaterial.canScatter() && !surfMaterial.isDelta())
+        if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            const float3 wo_WS = -ray.Direction;
-            const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
-            const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+            const Material surfMaterial = materials[payload.materialIdx];
+            if (surfMaterial.canScatter() && !surfMaterial.isDelta())
+            {
+                const float3 wo_WS = -ray.Direction;
+                const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+                const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-            RandomSampler rng = initRandomSampler4(uint4(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber));
-            risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+                RandomSampler rng = initRandomSampler4(uint4(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber));
+                risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+            }
         }
 
         risSamplesOut[linearPixelIdx] = risSample; // TODO: different light sample per path split index?
