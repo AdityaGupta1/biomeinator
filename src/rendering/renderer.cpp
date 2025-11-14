@@ -1321,6 +1321,22 @@ static inline sl::Resource makeSlResource(RtTarget* target)
     };
 }
 
+static inline void swapRisBuffers()
+{
+    std::swap(dev_risSamplesIn, dev_risSamplesOut);
+
+    // TODO: this probably doesn't need to transition both resources in all cases (e.g. the first and last times they are used in a frame)
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 dev_risSamplesIn,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 dev_risSamplesOut,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
 static bool stopAccumulating = false;
 
 void render()
@@ -1533,7 +1549,7 @@ void render()
         gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&gbufferDispatchDesc);
 
-        std::swap(dev_risSamplesIn, dev_risSamplesOut); // TODO: make this into a function that also does the appopriate state transitions for one or both resources
+        swapRisBuffers();
 
         // ===================================
         // PATH TRACING
@@ -1543,11 +1559,6 @@ void render()
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_gbuffer.Get(),
-                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        // dev_risSamplesIn (after swap) was written to in gbuffer pass, transition to read-only for path tracing
-        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                     dev_risSamplesIn,
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
