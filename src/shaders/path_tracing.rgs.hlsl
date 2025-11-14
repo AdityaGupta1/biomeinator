@@ -103,7 +103,7 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
-        if (samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS)
+        if ((samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS) && surfMaterial.canScatter())
         {
             if (isNonDeltaSurface)
             {
