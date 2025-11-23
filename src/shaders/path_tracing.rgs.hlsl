@@ -33,7 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT_REGISTER_GBUFFER_IN, PT_REGISTER_SPACE);
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT_REGISTER_RIS_SAMPLES_IN, PT_REGISTER_SPACE);
-RWStructuredBuffer<float4> pathTracingRawBuffer : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER, PT_REGISTER_SPACE);
+RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT, PT_REGISTER_SPACE);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
@@ -105,8 +105,8 @@ void pathTraceRay(inout Payload payload)
 
         if (samplingMode == SamplingMode::RIS)
         {
-            const uint coherenceHint = (isNonDeltaSurface ? (1 << 0) : 0) | (surfMaterial.canScatter() ? (1 << 1) : 0) | (pathDepth == 0 ? (1 << 2) : 0);
-            NvReorderThread(coherenceHint, 3);
+            const uint coherenceHint = ((isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0) | (pathDepth == 0 ? (1 << 1) : 0);
+            NvReorderThread(coherenceHint, 2);
         }
 
         if ((samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS) && surfMaterial.canScatter())
@@ -233,10 +233,10 @@ void RayGeneration()
     const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
-        pathTracingRawBuffer[writePixelIdx].xyz += colorPreTonemap;
+        pathTracingRawBufferOut[writePixelIdx].xyz += colorPreTonemap;
     }
     else
     {
-        pathTracingRawBuffer[writePixelIdx].xyz = colorPreTonemap;
+        pathTracingRawBufferOut[writePixelIdx].xyz = colorPreTonemap;
     }
 }

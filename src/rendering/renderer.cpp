@@ -687,7 +687,7 @@ enum class PtParam
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
-    PATH_TRACING_RAW_BUFFER,
+    PATH_TRACING_RAW_BUFFER_OUT,
 
     COUNT
 };
@@ -703,7 +703,7 @@ enum class CollectParam
 {
     GLOBAL_PARAMS,
 
-    PATH_TRACING_RAW_BUFFER,
+    PATH_TRACING_RAW_BUFFER_IN,
 
     COUNT
 };
@@ -806,7 +806,7 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
-        ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
+        ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
         if (useSer)
         {
@@ -852,7 +852,7 @@ static void initRootSignature()
         std::array<D3D12_ROOT_PARAMETER1, COLLECT_PARAM_IDX(COUNT)> collectParams;
 
         collectParams[COLLECT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
-        collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER);
+        collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER_IN);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC collectRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -1580,7 +1580,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
 
-        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
@@ -1600,7 +1600,7 @@ void render()
         cmdList->SetComputeRootSignature(collectRootSig.Get());
 
         cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
 
         const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
         const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
