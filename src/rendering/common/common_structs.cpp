@@ -29,5 +29,5 @@ Material::Material()
 {}
 
 PerTriangleData::PerTriangleData()
-    : localAreaLightIdx(LIGHT_ID_INVALID)
+    : localAreaLightIdx(LIGHT_IDX_INVALID)
 {}

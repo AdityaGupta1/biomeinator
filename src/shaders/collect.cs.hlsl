@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "global_params.hlsli"
 
-StructuredBuffer<float4> pathTracingRawBuffer : REGISTER_T(COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER, COLLECT_REGISTER_SPACE);
+StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER_IN, COLLECT_REGISTER_SPACE);
 
 [shader("compute")]
 [numthreads(COLLECT_WORKGROUP_SIZE_X, COLLECT_WORKGROUP_SIZE_Y, 1)]
@@ -41,13 +41,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     float4 color;
     if (renderParams.enablePathSplitting)
     {
-        const float4 color0 = pathTracingRawBuffer[linearPixelIdx * 2];
-        const float4 color1 = pathTracingRawBuffer[linearPixelIdx * 2 + 1];
+        const float4 color0 = pathTracingRawBufferIn[linearPixelIdx * 2];
+        const float4 color1 = pathTracingRawBufferIn[linearPixelIdx * 2 + 1];
         color = color0 + color1;
     }
     else
     {
-        color = pathTracingRawBuffer[linearPixelIdx];
+        color = pathTracingRawBufferIn[linearPixelIdx];
     }
 
     if ((AntialiasingMode) renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE)

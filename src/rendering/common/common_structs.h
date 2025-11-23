@@ -118,7 +118,7 @@ public:
         return emissiveStrength > 0.f;
     }
 
-    bool isOnlySpecular()
+    bool isDelta()
     {
         return (flags == MATERIAL_FLAG_HAS_SPECULAR);
     }
@@ -171,7 +171,7 @@ struct AreaLight
     uint materialIdx;
 };
 
-#define LIGHT_ID_INVALID ~0u
+#define LIGHT_IDX_INVALID ~0u
 
 struct PerTriangleData
 {

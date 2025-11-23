@@ -44,27 +44,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // =============================================
 
 // u#
-#define GBUFFER_REGISTER_GBUFFER 0
+#define GBUFFER_REGISTER_GBUFFER_OUT 0
+#define GBUFFER_REGISTER_RIS_SAMPLES_OUT 1
 
 // =============================================
 #define PT_REGISTER_SPACE 2
 // =============================================
 
 // t#
-#define PT_REGISTER_GBUFFER 0
-#define PT_REGISTER_PER_TRI_DATAS 1
-#define PT_REGISTER_AREA_LIGHTS 2
-#define PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 3
+#define PT_REGISTER_GBUFFER_IN 0
+#define PT_REGISTER_RIS_SAMPLES_IN 1
+#define PT_REGISTER_PER_TRI_DATAS 2
+#define PT_REGISTER_AREA_LIGHTS 3
+#define PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 4
 
 // u#
-#define PT_REGISTER_PATH_TRACING_RAW_BUFFER 0
+#define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
 
 // =============================================
 #define COLLECT_REGISTER_SPACE 2
 // =============================================
 
 // t#
-#define COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER 0
+#define COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER_IN 0
 
 // =============================================
 #define POSTPROCESS_REGISTER_SPACE 3

@@ -33,14 +33,15 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     const Material lightMaterial = materials[light.materialIdx];
 
-    const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
+    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
 
-    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS);
+    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: specify if light is single or double sided and use cosTheta or absCosTheta accordingly
 
-    return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
+    // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
+    return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
 }
 
-RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
+RisSample generateDirectLightingRisSample(const uint hitGroup, const float3 surfPos_WS, const float3 surfNor_WS, const Material material, const float2 uv, const float3 wo_WS, const bool isFirstNonDeltaSurface, inout RandomSampler rng)
 {
     const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;
     const uint numBsdfCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_BSDF_CANDIDATES : RIS_MIN_NUM_BSDF_CANDIDATES;
@@ -93,7 +94,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
 
         Payload lightPayload;
         lightPayload.flags = 0;
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, hitGroup, 0, 0, ray, lightPayload);
 
         if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT))
         {
@@ -102,7 +103,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
 
         const InstanceData instanceData = instanceDatas[lightPayload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + lightPayload.hitInfo.triangleIdx];
-        if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
+        if (perTriData.localAreaLightIdx == LIGHT_IDX_INVALID)
         {
             continue;
         }
@@ -136,12 +137,12 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS, const float3 
     return risSample;
 }
 
-DirectLightingSample sampleDirectLightingRis(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
+DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     DirectLightingSample result;
     result.didHitLight = false;
 
-    if (risSample.lightIdx == ~0u)
+    if (risSample.lightIdx == LIGHT_IDX_INVALID)
     {
         return result;
     }

@@ -111,7 +111,7 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
-    if (perTriData.localAreaLightIdx == LIGHT_ID_INVALID)
+    if (perTriData.localAreaLightIdx == LIGHT_IDX_INVALID)
     {
         return 0.f;
     }

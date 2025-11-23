@@ -282,7 +282,7 @@ static void initDevice()
     Logger::log("Enabled debug layer");
     debug->EnableDebugLayer();
 
-    if (SettingsManager::getAsBool("verboseLogging"))
+    if (SettingsManager::getAsBool("gpuValidation"))
     {
         ComPtr<ID3D12Debug1> debug1;
         if (SUCCEEDED(debug.As(&debug1)))
@@ -439,6 +439,11 @@ static void initRtTargets()
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
+static ComPtr<ID3D12Resource> dev_risSamples1;
+static ComPtr<ID3D12Resource> dev_risSamples2;
+static ID3D12Resource* dev_risSamplesIn;
+static ID3D12Resource* dev_risSamplesOut;
+
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
@@ -525,6 +530,20 @@ void resize()
                                                   &DEFAULT_HEAP,
                                                   { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_gbuffer->SetName(L"dev_gbuffer");
+
+    dev_risSamples1.Reset();
+    dev_risSamples1 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples1->SetName(L"dev_risSamples1");
+    dev_risSamplesIn = dev_risSamples1.Get();
+
+    dev_risSamples2.Reset();
+    dev_risSamples2 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples2->SetName(L"dev_risSamples2");
+    dev_risSamplesOut = dev_risSamples2.Get();
 
     dev_pathTracingRawBuffer.Reset();
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
@@ -642,7 +661,12 @@ enum class GbufferParam
     INSTANCE_DATAS,
     MATERIALS,
 
-    GBUFFER,
+    PER_TRI_DATAS,
+    AREA_LIGHTS,
+    AREA_LIGHT_SAMPLING_STRUCTURE,
+
+    GBUFFER_OUT,
+    RIS_SAMPLES_OUT,
 
     COUNT
 };
@@ -657,12 +681,13 @@ enum class PtParam
     INSTANCE_DATAS,
     MATERIALS,
 
-    GBUFFER,
+    GBUFFER_IN,
+    RIS_SAMPLES_IN,
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
-    PATH_TRACING_RAW_BUFFER,
+    PATH_TRACING_RAW_BUFFER_OUT,
 
     COUNT
 };
@@ -678,7 +703,7 @@ enum class CollectParam
 {
     GLOBAL_PARAMS,
 
-    PATH_TRACING_RAW_BUFFER,
+    PATH_TRACING_RAW_BUFFER_IN,
 
     COUNT
 };
@@ -735,7 +760,12 @@ static void initRootSignature()
         gbufferParams[GBUFFER_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
         gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
-        gbufferParams[GBUFFER_PARAM_IDX(GBUFFER)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER);
+        gbufferParams[GBUFFER_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
+        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
+        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
+
+        gbufferParams[GBUFFER_PARAM_IDX(GBUFFER_OUT)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER_OUT);
+        gbufferParams[GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, GBUFFER, RIS_SAMPLES_OUT);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -770,12 +800,13 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
         ptParams[PT_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
 
-        ptParams[PT_PARAM_IDX(GBUFFER)] = MAKE_PARAM(SRV, PT, GBUFFER);
+        ptParams[PT_PARAM_IDX(GBUFFER_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_IN);
+        ptParams[PT_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, PT, RIS_SAMPLES_IN);
         ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
         ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
-        ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER);
+        ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
         if (useSer)
         {
@@ -821,7 +852,7 @@ static void initRootSignature()
         std::array<D3D12_ROOT_PARAMETER1, COLLECT_PARAM_IDX(COUNT)> collectParams;
 
         collectParams[COLLECT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
-        collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER);
+        collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER_IN);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC collectRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -912,11 +943,16 @@ static void initPipeline()
         gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
 
-        gbufferPipelineInputs.hitGroups.resize(1);
+        gbufferPipelineInputs.hitGroups.resize(2);
         gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"HitGroup",
+            .HitGroupExport = L"gbuffer_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"gbuffer_HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
 
         makeRtPipeline(gbufferPipelineInputs);
@@ -941,12 +977,12 @@ static void initPipeline()
 
         ptPipelineInputs.hitGroups.resize(2);
         ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"HitGroup_Primary",
+            .HitGroupExport = L"pt_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
         ptPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"HitGroup_Lights",
+            .HitGroupExport = L"pt_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
@@ -1285,6 +1321,22 @@ static inline sl::Resource makeSlResource(RtTarget* target)
     };
 }
 
+static inline void swapRisBuffers()
+{
+    std::swap(dev_risSamplesIn, dev_risSamplesOut);
+
+    // TODO: this probably doesn't need to transition both resources in all cases (e.g. the first and last times they are used in a frame)
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 dev_risSamplesIn,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                 dev_risSamplesOut,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
 static bool stopAccumulating = false;
 
 void render()
@@ -1473,7 +1525,12 @@ void render()
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
 
-        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
         // clang-format on
 
         // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
@@ -1491,6 +1548,8 @@ void render()
         gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
         gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&gbufferDispatchDesc);
+
+        swapRisBuffers();
 
         // ===================================
         // PATH TRACING
@@ -1515,12 +1574,13 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
 
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
 
-        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
@@ -1540,7 +1600,7 @@ void render()
         cmdList->SetComputeRootSignature(collectRootSig.Get());
 
         cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
 
         const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
         const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
@@ -1628,7 +1688,7 @@ void render()
 
     if (screenshotRequest.active)
     {
-        finalizeQueuedScreenshot();
+        finalizeQueuedScreenshot(); // this calls flush()
 
         if (testMode)
         {
@@ -1703,6 +1763,11 @@ void destroy()
 
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
+
+    dev_risSamples1.Reset();
+    dev_risSamples2.Reset();
+    dev_risSamplesIn = nullptr;
+    dev_risSamplesOut = nullptr;
 
     screenshotRequest.readbackBuffer.Reset();
 

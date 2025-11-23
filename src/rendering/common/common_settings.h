@@ -24,4 +24,3 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define COLLECT_WORKGROUP_SIZE_X 16
 #define COLLECT_WORKGROUP_SIZE_Y 16
-
