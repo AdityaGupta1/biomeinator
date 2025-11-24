@@ -19,6 +19,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 // =============================================
+// SPATIAL REUSE
+// =============================================
+
+#define SPATIAL_REUSE_WORKGROUP_SIZE_X 16
+#define SPATIAL_REUSE_WORKGROUP_SIZE_Y 16
+
+// =============================================
 // COLLECT
 // =============================================
 

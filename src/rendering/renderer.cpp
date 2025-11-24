@@ -54,6 +54,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "gbuffer.rgs.fxh"
+#include "spatial_reuse.cs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "collect.cs.fxh"
 #include "postprocess.vs.fxh"
@@ -671,6 +672,16 @@ enum class GbufferParam
     COUNT
 };
 
+enum class SpatialReuseParam
+{
+    GLOBAL_PARAMS,
+
+    RIS_SAMPLES_IN,
+    RIS_SAMPLES_OUT,
+
+    COUNT
+};
+
 enum class PtParam
 {
     GLOBAL_PARAMS,
@@ -709,6 +720,7 @@ enum class CollectParam
 };
 
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
+#define SPATIAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(SpatialReuseParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
@@ -730,6 +742,7 @@ static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
 static ComPtr<ID3D12RootSignature> gbufferRootSig;
+static ComPtr<ID3D12RootSignature> spatialReuseRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
 static ComPtr<ID3D12RootSignature> postprocessRootSig;
@@ -783,6 +796,34 @@ static void initRootSignature()
                                       errorBlob);
         CHECK_HRESULT(device->CreateRootSignature(
             0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&gbufferRootSig)));
+    }
+
+    // ===================================
+    // SPATIAL REUSE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, SPATIAL_REUSE_PARAM_IDX(COUNT)> spatialReuseParams;
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, SPATIAL_REUSE, RIS_SAMPLES_IN);
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, SPATIAL_REUSE, RIS_SAMPLES_OUT);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC spatialReuseRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(spatialReuseParams.size()),
+                .pParameters = spatialReuseParams.data(),
+                .NumStaticSamplers = 0,
+                .pStaticSamplers = nullptr,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&spatialReuseRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&spatialReuseRootSig)));
     }
 
     // ===================================
@@ -914,6 +955,8 @@ static ComPtr<ID3D12StateObject> gbufferPso;
 static ComPtr<ID3D12Resource> dev_gbufferShaderIds;
 static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
 
+static ComPtr<ID3D12PipelineState> spatialReusePso;
+
 static ComPtr<ID3D12StateObject> ptPso;
 static ComPtr<ID3D12Resource> dev_ptShaderIds;
 static D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
@@ -956,6 +999,17 @@ static void initPipeline()
         };
 
         makeRtPipeline(gbufferPipelineInputs);
+    }
+
+    // ===================================
+    // SPATIAL REUSE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = spatialReuseRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(spatial_reuse_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&spatialReusePso)));
+        spatialReusePso->SetName(L"spatialReusePso");
     }
 
     // ===================================
@@ -1553,6 +1607,27 @@ void render()
         swapRisBuffers();
 
         // ===================================
+        // SPATIAL REUSE
+        // ===================================
+
+        const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
+        if (samplingMode == SamplingMode::ReSTIR)
+        {
+            cmdList->SetPipelineState(spatialReusePso.Get());
+            cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
+
+            cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+            cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+
+            const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, SPATIAL_REUSE_WORKGROUP_SIZE_X);
+            const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, SPATIAL_REUSE_WORKGROUP_SIZE_Y);
+            cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+
+            swapRisBuffers();
+        }
+
+        // ===================================
         // PATH TRACING
         // ===================================
 
@@ -1773,11 +1848,13 @@ void destroy()
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
+    spatialReusePso.Reset();
     ptPso.Reset();
     collectPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
+    spatialReuseRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();
     postprocessRootSig.Reset();
