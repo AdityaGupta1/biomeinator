@@ -1207,6 +1207,7 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "naive",
     "MIS",
     "RIS",
+    "ReSTIR",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",

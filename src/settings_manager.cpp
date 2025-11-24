@@ -44,7 +44,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
     optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
     optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
-    optionAdder("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS)", cxxopts::value<uint32_t>()->default_value("2"));
+    optionAdder("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS, 3=ReSTIR)", cxxopts::value<uint32_t>()->default_value("2"));
     optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
     optionAdder("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", cxxopts::value<uint32_t>()->default_value("0"));
     optionAdder("maxAccumulatedFrames", "Max accumulated frames", cxxopts::value<uint32_t>()->default_value("256"));

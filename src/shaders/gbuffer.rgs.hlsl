@@ -141,7 +141,7 @@ void RayGeneration()
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
 
-    if (samplingMode == SamplingMode::RIS)
+    if (samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::ReSTIR)
     {
         RisSample risSample;
         risSample.lightIdx = LIGHT_IDX_INVALID;

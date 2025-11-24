@@ -44,6 +44,7 @@ void pathTraceRay(inout Payload payload)
 {
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
+    const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::ReSTIR;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -62,7 +63,7 @@ void pathTraceRay(inout Payload payload)
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
-        if ((samplingMode != SamplingMode::RIS || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        if ((!useRis || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
@@ -103,18 +104,18 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
-        if (samplingMode == SamplingMode::RIS)
+        if (useRis)
         {
             const uint coherenceHint = ((isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0) | (pathDepth == 0 ? (1 << 1) : 0);
             NvReorderThread(coherenceHint, 2);
         }
 
-        if ((samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS) && surfMaterial.canScatter())
+        if ((samplingMode == SamplingMode::MIS || useRis) && surfMaterial.canScatter())
         {
             if (isNonDeltaSurface)
             {
                 DirectLightingSample lightSample;
-                if (samplingMode == SamplingMode::RIS)
+                if (useRis)
                 {
                     RisSample risSample;
                     if (pathDepth == 0)
@@ -142,7 +143,7 @@ void pathTraceRay(inout Payload payload)
 
                     float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
-                    if (samplingMode == SamplingMode::RIS)
+                    if (useRis)
                     {
                         contribution *= lightSample.pdfOrW_Y;
                     }
