@@ -110,51 +110,48 @@ void pathTraceRay(inout Payload payload)
             NvReorderThread(coherenceHint, 2);
         }
 
-        if ((samplingMode == SamplingMode::MIS || useRis) && surfMaterial.canScatter())
+        if ((samplingMode == SamplingMode::MIS || useRis) && surfMaterial.canScatter() && isNonDeltaSurface)
         {
-            if (isNonDeltaSurface)
+            DirectLightingSample lightSample;
+            if (useRis)
             {
-                DirectLightingSample lightSample;
-                if (useRis)
+                RisSample risSample;
+                if (pathDepth == 0)
                 {
-                    RisSample risSample;
-                    if (pathDepth == 0)
-                    {
-                        risSample = risSamplesIn[payload.pixelIdx.y * renderParams.renderSize.x + payload.pixelIdx.x];
-                    }
-                    else
-                    {
-                        const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                        risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
-                    }
-
-                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    risSample = risSamplesIn[payload.pixelIdx.y * renderParams.renderSize.x + payload.pixelIdx.x];
                 }
                 else
                 {
-                    lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                    risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                 }
 
-                if (lightSample.didHitLight)
+                lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+            }
+            else
+            {
+                lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+            }
+
+            if (lightSample.didHitLight)
+            {
+                // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
+                const float3 bsdfVal = evaluateBsdf(
+                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
+
+                float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+
+                if (useRis)
                 {
-                    // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
-                    const float3 bsdfVal = evaluateBsdf(
-                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
-
-                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
-
-                    if (useRis)
-                    {
-                        contribution *= lightSample.pdfOrW_Y;
-                    }
-                    else
-                    {
-                        const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                        contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
-                    }
-
-                    payload.pathColor += contribution;
+                    contribution *= lightSample.pdfOrW_Y;
                 }
+                else
+                {
+                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                    contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
+                }
+
+                payload.pathColor += contribution;
             }
         }
 
@@ -226,7 +223,7 @@ void RayGeneration()
     const uint pathSplitIdx = getPathSplitIdx();
 
     Payload payload = gbufferPayload;
-    payload.rng = initRandomSampler3(uint3(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, renderParams.frameNumber));
+    payload.rng = initRandomSampler(constantParams.rngSeed, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
     pathTraceRay(payload);
 

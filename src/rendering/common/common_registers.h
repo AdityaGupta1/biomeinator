@@ -35,6 +35,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RT_REGISTER_IDXS 2
 #define RT_REGISTER_INSTANCE_DATAS 3
 #define RT_REGISTER_MATERIALS 4
+#define RT_REGISTER_PER_TRI_DATAS 5
+#define RT_REGISTER_AREA_LIGHTS 6
+#define RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
 
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0
@@ -64,9 +67,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
 #define PT_REGISTER_RIS_SAMPLES_IN 1
-#define PT_REGISTER_PER_TRI_DATAS 2
-#define PT_REGISTER_AREA_LIGHTS 3
-#define PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 4
 
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0

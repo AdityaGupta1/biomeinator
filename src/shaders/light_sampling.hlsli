@@ -27,10 +27,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "payload.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(PT_REGISTER_PER_TRI_DATAS, PT_REGISTER_SPACE);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT_REGISTER_PER_TRI_DATAS, RT_REGISTER_SPACE);
 
-StructuredBuffer<AreaLight> areaLights : REGISTER_T(PT_REGISTER_AREA_LIGHTS, PT_REGISTER_SPACE);
-StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(PT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, PT_REGISTER_SPACE);
+StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT_REGISTER_AREA_LIGHTS, RT_REGISTER_SPACE);
+StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE, RT_REGISTER_SPACE);
 
 AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
 {

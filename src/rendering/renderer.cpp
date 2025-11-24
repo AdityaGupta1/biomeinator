@@ -353,6 +353,7 @@ static void initDescriptorHeaps()
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
     CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
+    sharedDescriptorHeap->SetName(L"sharedDescriptorHeap");
 
     sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
 
@@ -661,7 +662,6 @@ enum class GbufferParam
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
-
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
@@ -676,7 +676,11 @@ enum class SpatialReuseParam
 {
     GLOBAL_PARAMS,
 
+    MATERIALS,
+    AREA_LIGHTS,
+
     RIS_SAMPLES_IN,
+
     RIS_SAMPLES_OUT,
 
     COUNT
@@ -691,12 +695,12 @@ enum class PtParam
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
-
-    GBUFFER_IN,
-    RIS_SAMPLES_IN,
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
+
+    GBUFFER_IN,
+    RIS_SAMPLES_IN,
 
     PATH_TRACING_RAW_BUFFER_OUT,
 
@@ -772,10 +776,9 @@ static void initRootSignature()
         gbufferParams[GBUFFER_PARAM_IDX(IDXS)] = MAKE_PARAM(SRV, RT, IDXS);
         gbufferParams[GBUFFER_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
         gbufferParams[GBUFFER_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
-
-        gbufferParams[GBUFFER_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
-        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
-        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
+        gbufferParams[GBUFFER_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, RT, PER_TRI_DATAS);
+        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+        gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         gbufferParams[GBUFFER_PARAM_IDX(GBUFFER_OUT)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER_OUT);
         gbufferParams[GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, GBUFFER, RIS_SAMPLES_OUT);
@@ -805,7 +808,12 @@ static void initRootSignature()
         std::array<D3D12_ROOT_PARAMETER1, SPATIAL_REUSE_PARAM_IDX(COUNT)> spatialReuseParams;
 
         spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+
         spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, SPATIAL_REUSE, RIS_SAMPLES_IN);
+
         spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, SPATIAL_REUSE, RIS_SAMPLES_OUT);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC spatialReuseRootSigDesc = {
@@ -813,8 +821,8 @@ static void initRootSignature()
             .Desc_1_1 = {
                 .NumParameters = static_cast<uint32_t>(spatialReuseParams.size()),
                 .pParameters = spatialReuseParams.data(),
-                .NumStaticSamplers = 0,
-                .pStaticSamplers = nullptr,
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
+                .pStaticSamplers = rtStaticSamplers.data(),
                 .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
             },
         };
@@ -840,12 +848,12 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(IDXS)] = MAKE_PARAM(SRV, RT, IDXS);
         ptParams[PT_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
         ptParams[PT_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, RT, PER_TRI_DATAS);
+        ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+        ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         ptParams[PT_PARAM_IDX(GBUFFER_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_IN);
         ptParams[PT_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, PT, RIS_SAMPLES_IN);
-        ptParams[PT_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, PT, PER_TRI_DATAS);
-        ptParams[PT_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, PT, AREA_LIGHTS);
-        ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, PT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
@@ -1307,7 +1315,9 @@ static void imguiEndFrame()
 
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
 
-    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize);
+    const ImGuiWindowFlags windowFlags =
+        ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize;
+    ImGui::Begin("Settings", nullptr, windowFlags);
 
     didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
     didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
@@ -1367,12 +1377,13 @@ static void imguiEndFrame()
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
 
-static inline sl::Resource makeSlResource(RtTarget* target)
+static inline sl::Resource makeSlResource(RtTarget* target,
+                                          D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 {
     return {
         sl::ResourceType::eTex2d,
         target->getTarget(),
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        static_cast<uint32_t>(state),
     };
 }
 
@@ -1427,11 +1438,11 @@ void render()
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
-            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
+            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             sl::Resource motionResource = makeSlResource(&motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
-            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
+            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             sl::Resource specularHitDistanceResource = makeSlResource(&specularHitDistanceTarget);
 
             sl::ResourceTag resourceTags[] = {
@@ -1571,23 +1582,6 @@ void render()
         cmdList->SetPipelineState1(gbufferPso.Get());
         cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
-        // clang-format off
-        cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
-
-        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
-        // clang-format on
-
         // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
         // the before state doesn't match reality)
@@ -1598,6 +1592,22 @@ void render()
                 rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
         }
+
+        // clang-format off
+        cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+        // clang-format on
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -1613,18 +1623,32 @@ void render()
         const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
         if (samplingMode == SamplingMode::ReSTIR)
         {
-            cmdList->SetPipelineState(spatialReusePso.Get());
-            cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
+            static constexpr uint32_t numSpatialReusePasses = 1;
+            for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)
+            {
+                cmdList->SetPipelineState(spatialReusePso.Get());
+                cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
 
-            cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-            cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+                linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-            const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, SPATIAL_REUSE_WORKGROUP_SIZE_X);
-            const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, SPATIAL_REUSE_WORKGROUP_SIZE_Y);
-            cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+                // clang-format off
+                cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
 
-            swapRisBuffers();
+                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+
+                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
+
+                cmdList->SetComputeRootUnorderedAccessView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+                // clang-format on
+
+                const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, SPATIAL_REUSE_WORKGROUP_SIZE_X);
+                const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, SPATIAL_REUSE_WORKGROUP_SIZE_Y);
+                cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+
+                swapRisBuffers();
+            }
         }
 
         // ===================================
@@ -1649,12 +1673,12 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
@@ -1703,9 +1727,6 @@ void render()
     cmdList->SetPipelineState(postprocessPso.Get());
     cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
 
-    cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
-                                               paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-
     ComPtr<ID3D12Resource> backBuffer;
     const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
     CHECK_HRESULT(swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
@@ -1720,6 +1741,9 @@ void render()
             rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         }
     }
+
+    cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
+                                               paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
 
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);
