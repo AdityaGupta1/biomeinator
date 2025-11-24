@@ -34,9 +34,10 @@ struct Payload
     float3 pathColor;
     uint materialIdx;
 
-    uint2 pixelIdx;
     RandomSampler rng;
     uint pad0;
+    uint pad1;
+    uint pad2;
 
     HitInfo hitInfo;
 };

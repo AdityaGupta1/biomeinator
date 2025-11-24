@@ -38,7 +38,7 @@ float2 calculateMotionFromPos(const float3 pos_WS)
     float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1));
     prevNdc /= prevNdc.w;
 
-    float2 motion = (prevNdc.xy - currNdc.xy) / 2;
+    float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;
     motion.y = -motion.y;
     //motion *= DispatchRaysDimensions().xy;
     return motion;
