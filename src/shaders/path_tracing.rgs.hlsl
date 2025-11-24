@@ -42,12 +42,14 @@ float balanceHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(inout Payload payload)
 {
+    const uint2 pixelIdx = getPixelIdx();
+
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::ReSTIR;
 
     RayDesc ray;
-    ray.Direction = getPrimaryRayDirection(payload.pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
+    ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
@@ -118,7 +120,7 @@ void pathTraceRay(inout Payload payload)
                 RisSample risSample;
                 if (pathDepth == 0)
                 {
-                    risSample = risSamplesIn[payload.pixelIdx.y * renderParams.renderSize.x + payload.pixelIdx.x];
+                    risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
                 }
                 else
                 {
@@ -183,11 +185,11 @@ void pathTraceRay(inout Payload payload)
         if (pathDepth == 0 && surfBsdfSample.wasSpecular)
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
-            specularHitDistanceTarget[payload.pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+            specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
 
             const float3 secondBounceNor_WS = faceforward(payload.hitInfo.hitNor_WS, -ray.Direction);
             RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-            normalsAndRoughnessTarget[payload.pixelIdx].xyz = secondBounceNor_WS;
+            normalsAndRoughnessTarget[pixelIdx].xyz = secondBounceNor_WS;
         }
 
         if (samplingMode == SamplingMode::MIS)
@@ -218,7 +220,6 @@ void RayGeneration()
     gbufferPayload.flags = gbufferData.payloadFlags;
     gbufferPayload.pathWeight = float3(1, 1, 1);
     gbufferPayload.pathColor = float3(0, 0, 0);
-    gbufferPayload.pixelIdx = pixelIdx;
 
     const uint pathSplitIdx = getPathSplitIdx();
 
