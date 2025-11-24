@@ -1621,7 +1621,7 @@ void render()
         // ===================================
 
         const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
-        if (samplingMode == SamplingMode::ReSTIR)
+        if (samplingMode == SamplingMode::RESTIR)
         {
             static constexpr uint32_t numSpatialReusePasses = 1;
             for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)

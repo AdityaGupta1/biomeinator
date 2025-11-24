@@ -46,7 +46,7 @@ void pathTraceRay(inout Payload payload)
 
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::ReSTIR;
+    const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
