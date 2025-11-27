@@ -80,7 +80,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
 
         const float3 other_surfNor_WS = normalsAndRoughnessTarget[spatialSamplePixelIdx].xyz;
-        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.9f)
+        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.9f) // TODO: use same check as temporal reuse (compare pos_WS and normal) and turn it into a function in restir.hlsli that takes in this pos/nor and other pos/nor and returns similarity score
         {
             continue;
         }
