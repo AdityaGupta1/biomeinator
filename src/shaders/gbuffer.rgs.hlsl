@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER_REGISTER_GBUFFER_OUT, GBUFFER_REGISTER_SPACE);
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER_REGISTER_RIS_SAMPLES_OUT, GBUFFER_REGISTER_SPACE);
 
+// motion is in uv space, not pixel space
 float2 calculateMotionFromPos(const float3 pos_WS)
 {
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
