@@ -62,7 +62,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     // TODO: temporal reuse
 
-    // reprojected pixel calculation: current pixel pos + current jitter + motion vector - previous jitter
+    Texture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
+    const float2 motion = motionTarget[pixelIdx] * renderParams.renderSize;
+    const float2 reprojectedPixelIdx = float2(pixelIdx) + cameraParams.jitter + motion - cameraParams.prevJitter;
+
     // then, find nearest 4 pixels and check each one's pos/normal, and pick the one that's closest to the current pos/normal (if there is one that's close)
     // also need to add confidence weights (cap at 20 probably)
 

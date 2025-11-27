@@ -1738,8 +1738,8 @@ void render()
             // ===================================
             if (frameNumber > 0)
             {
-                prevDepthAndNormalTarget.transitionToState(cmdList.Get(),
-                                                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                motionTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
                 cmdList->SetPipelineState(temporalReusePso.Get());
                 cmdList->SetComputeRootSignature(temporalReuseRootSig.Get());
