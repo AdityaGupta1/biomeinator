@@ -128,7 +128,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     uint2 reprojectedPixelIdx;
     const ReprojectionResult reprojResult = reproject(pixelIdx);
 
-    if (reprojResult.score == 0.f)
+    if (reprojResult.score < 0.01f)
     {
         risSamplesOut[linearPixelIdx] = risSampleIn;
         return;
