@@ -481,6 +481,8 @@ void resize()
         return;
     }
 
+    frameNumber = 0;
+
     RECT rect;
     GetClientRect(hwnd, &rect);
     const uint32_t viewportWidth = std::max<uint32_t>(rect.right - rect.left, 1);
