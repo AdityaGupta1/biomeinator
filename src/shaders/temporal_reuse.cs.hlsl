@@ -62,6 +62,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     // TODO: temporal reuse
 
+    // reprojected pixel calculation: current pixel pos + current jitter + motion vector - previous jitter
+    // then, find nearest 4 pixels and check each one's pos/normal, and pick the one that's closest to the current pos/normal (if there is one that's close)
+    // also need to add confidence weights (cap at 20 probably)
+
     RisSample risSampleOut;
     risSampleOut = risSamplesIn[linearPixelIdx]; // TODO: fill out risSampleOut
     //risSampleOut.pad0 = risSampleOut.pad1 = risSampleOut.pad2 = 0;

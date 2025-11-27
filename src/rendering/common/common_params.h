@@ -85,8 +85,7 @@ struct CameraParams
     float4x4 worldToPrevClipMat;
 
     float2 jitter;
-    uint pad0;
-    uint pad1;
+    float2 prevJitter;
 
     float3 pos_WS;
     float nearPlane;

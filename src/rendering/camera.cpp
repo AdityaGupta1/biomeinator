@@ -165,8 +165,11 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
+    // these have to happen regardless of if matrices are dirty
+    this->params.worldToPrevClipMat = this->params.worldToClipMat;
+    this->params.prevJitter = this->params.jitter;
+
     const bool didChange = this->areMatricesDirty;
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // this has to happen regardless of if matrices are dirty
     if (this->areMatricesDirty)
     {
         this->setMatrices();
