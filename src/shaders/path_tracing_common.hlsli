@@ -76,9 +76,32 @@ float3 getPrimaryRayDirection(const uint2 pixelIdx)
     return normalize(targetPos_WS - cameraParams.pos_WS);
 }
 
+float3 getPrevPrimaryRayDirection(const uint2 pixelIdx)
+{
+    const float2 size = float2(renderParams.renderSize);
+
+    const float2 uv = (pixelIdx + cameraParams.prevJitter) / size;
+    const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
+
+    const float aspect = size.x / size.y;
+    const float yScale = cameraParams.tanHalfFovY;
+    const float xScale = yScale * aspect;
+
+    const float3 targetPos_WS = cameraParams.prevPos_WS
+        + cameraParams.prevRight_WS * ndc.x * xScale
+        + cameraParams.prevUp_WS * ndc.y * yScale
+        + cameraParams.prevForward_WS;
+    return normalize(targetPos_WS - cameraParams.prevPos_WS);
+}
+
 float3 evalRayPos(const RayDesc ray, const float t)
 {
     return mad(ray.Direction, t, ray.Origin);
+}
+
+bool isPixelOutOfBounds(int2 pixelIdx)
+{
+    return any(pixelIdx < int2(0, 0)) || any(pixelIdx >= renderParams.renderSize);
 }
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)

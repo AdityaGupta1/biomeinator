@@ -130,6 +130,13 @@ constexpr float zoomFovRatio = 0.3f;
 
 bool Camera::update(double deltaTime, const PlayerInput& input)
 {
+    this->params.worldToPrevClipMat = this->params.worldToClipMat;
+    this->params.prevJitter = this->params.jitter;
+    this->params.prevPos_WS = this->params.pos_WS;
+    this->params.prevForward_WS = this->params.forward_WS;
+    this->params.prevRight_WS = this->params.right_WS;
+    this->params.prevUp_WS = this->params.up_WS;
+
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {
         XMVECTOR linearSpeed = XMLoadFloat3(&playerLinearSpeed);
@@ -164,10 +171,6 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
         this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
         this->areMatricesDirty = true;
     }
-
-    // these have to happen regardless of if matrices are dirty
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
-    this->params.prevJitter = this->params.jitter;
 
     const bool didChange = this->areMatricesDirty;
     if (this->areMatricesDirty)

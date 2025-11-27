@@ -32,6 +32,72 @@ StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE_REGISTER_
 
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_OUT, TEMPORAL_REUSE_REGISTER_SPACE);
 
+struct ReprojectionResult
+{
+    float score;
+    uint2 pixelIdx;
+};
+
+ReprojectionResult reproject(uint2 pixelIdx)
+{
+    ReprojectionResult result;
+    result.score = 0.f;
+
+    Texture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
+    const float2 motionPixels = motionTarget[pixelIdx] * renderParams.renderSize;
+    //const float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // want to find the closest pixel to the fractional pixel pos where this world pos was last frame
+    const float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // want to find the closest pixel to the fractional pixel pos where this world pos was last frame
+
+    const int2 cornerPixelIdx1 = int2(floor(reprojectedPixelPos));
+    const int2 cornerPixelIdx2 = cornerPixelIdx1 + (int2(round(frac(reprojectedPixelPos))) * 2 - 1);
+    if (isPixelOutOfBounds(cornerPixelIdx1) && isPixelOutOfBounds(cornerPixelIdx2))
+    {
+        return result;
+    }
+
+    Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
+    const float3 primaryRayDirection = getPrimaryRayDirection(pixelIdx);
+    const float3 this_surfPos_WS = cameraParams.pos_WS + primaryRayDirection * linearDepthTarget[pixelIdx];
+
+    Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
+    const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
+
+    const int2 minCornerPixelIdx = min(cornerPixelIdx1, cornerPixelIdx2);
+    const int2 maxCornerPixelIdx = max(cornerPixelIdx1, cornerPixelIdx2);
+    Texture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.srv.prevDepthAndNormalTargetIdx];
+    for (int y = minCornerPixelIdx.y; y <= maxCornerPixelIdx.y; ++y)
+    {
+        for (int x = minCornerPixelIdx.x; x <= maxCornerPixelIdx.x; ++x)
+        {
+            const int2 reprojectCandidatePixelIdx = int2(x, y);
+            if (isPixelOutOfBounds(reprojectCandidatePixelIdx))
+            {
+                continue;
+            }
+
+            const uint2 packedReprojDepthAndNormal = prevDepthAndNormalTarget[reprojectCandidatePixelIdx];
+            const float reproj_depth = asfloat(packedReprojDepthAndNormal.x);
+            const float3 reproj_surfNor_WS = octDecode(packedReprojDepthAndNormal.y);
+
+            const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojectCandidatePixelIdx) * reproj_depth;
+            const float dist = distance(this_surfPos_WS, reproj_surfPos_WS);
+
+            const float positionReprojectionScore = max(0.2f - dist, 0.f) / 0.2f;
+            const float normalReprojectionScore = max((dot(this_surfNor_WS, reproj_surfNor_WS) - 0.9f), 0.f) / 0.1f;
+
+            const float candidateReprojectionScore = positionReprojectionScore * normalReprojectionScore;
+            if (candidateReprojectionScore > result.score)
+            {
+                result.score = candidateReprojectionScore;
+                result.pixelIdx = reprojectCandidatePixelIdx;
+                // TODO: set other stuff in result
+            }
+        }
+    }
+
+    return result;
+}
+
 [shader("compute")]
 [numthreads(TEMPORAL_REUSE_WORKGROUP_SIZE_X, TEMPORAL_REUSE_WORKGROUP_SIZE_Y, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -43,12 +109,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    //Texture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.uav.prevDepthAndNormalTargetIdx];
-    //const uint2 packedPrevDepthAndNormal = prevDepthAndNormalTarget[pixelIdx];
-    //const float prevDepth = asfloat(packedPrevDepthAndNormal.x);
-    //const float3 prevNormal = unpackNormalXYToNormal(unpackUintToFloat2(packedPrevDepthAndNormal.y));
-    //debugTexture()[pixelIdx] = float4(debugParams.debugBool0 == 1 ? prevNormal : prevDepth.xxx, 1);
-
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     const RisSample thisRisSample = risSamplesIn[linearPixelIdx];
@@ -58,19 +118,24 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 44721359, linearPixelIdx, renderParams.frameNumber);
+    const RisSample risSampleIn = risSamplesIn[linearPixelIdx];
 
     // TODO: temporal reuse
 
-    Texture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
-    const float2 motionPixels = motionTarget[pixelIdx] * renderParams.renderSize;
-    const float2 reprojectedPixelIdx = float2(pixelIdx) + cameraParams.jitter + motionPixels - cameraParams.prevJitter;
+    uint2 reprojectedPixelIdx;
+    const ReprojectionResult reprojResult = reproject(pixelIdx);
 
-    // then, find nearest 4 pixels and check each one's pos/normal, and pick the one that's closest to the current pos/normal (if there is one that's close)
-    // also need to add confidence weights (cap at 20 probably)
+    if (reprojResult.score == 0.f)
+    {
+        risSamplesOut[linearPixelIdx] = risSampleIn;
+        return;
+    }
+
+    RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 44721359, linearPixelIdx, renderParams.frameNumber);
+
+    // need to add confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
 
     RisSample risSampleOut;
-    risSampleOut = risSamplesIn[linearPixelIdx]; // TODO: fill out risSampleOut
-    //risSampleOut.pad0 = risSampleOut.pad1 = risSampleOut.pad2 = 0;
+    risSampleOut = risSampleIn; // TODO: fill out risSampleOut
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }

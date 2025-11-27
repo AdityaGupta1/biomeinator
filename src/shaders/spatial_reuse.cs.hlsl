@@ -80,7 +80,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
 
         const float3 other_surfNor_WS = normalsAndRoughnessTarget[spatialSamplePixelIdx].xyz;
-        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.8f)
+        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.9f)
         {
             continue;
         }

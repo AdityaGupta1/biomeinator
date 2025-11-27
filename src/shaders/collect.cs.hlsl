@@ -35,7 +35,7 @@ void storePrevDepthAndNormal(const uint2 pixelIdx)
     const float3 normal = normalize(normalsAndRoughnessTarget[pixelIdx].xyz);
 
     RWTexture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.uav.prevDepthAndNormalTargetIdx];
-    prevDepthAndNormalTarget[pixelIdx] = uint2(asuint(depth), packFloat2toUint(normal.xy));
+    prevDepthAndNormalTarget[pixelIdx] = uint2(asuint(depth), octEncode(normal));
 }
 
 [shader("compute")]
