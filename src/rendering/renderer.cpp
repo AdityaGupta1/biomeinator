@@ -1632,13 +1632,12 @@ void render()
 
         swapRisBuffers();
 
-        // ===================================
-        // SPATIAL REUSE
-        // ===================================
-
         const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
         if (samplingMode == SamplingMode::RESTIR)
         {
+            // ===================================
+            // SPATIAL REUSE
+            // ===================================
             static constexpr uint32_t numSpatialReusePasses = 1;
             for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)
             {
