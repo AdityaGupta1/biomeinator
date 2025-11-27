@@ -94,16 +94,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const AreaLight other_light = areaLights[spatialRisSample.lightIdx];
 
-        const float3 this_wi_WS = normalize(spatialRisSample.pointOnLight_WS - this_surfPos_WS);
-        const float this_r2 = distance2(this_surfPos_WS, spatialRisSample.pointOnLight_WS);
-        const float this_geomTerm = absCosTheta(-this_wi_WS, other_light.normal_WS) / this_r2;
-
         const float3 other_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(spatialSamplePixelIdx) * linearDepthTarget[spatialSamplePixelIdx];
-        const float3 other_wi_WS = normalize(spatialRisSample.pointOnLight_WS - other_surfPos_WS);
-        const float other_r2 = distance2(other_surfPos_WS, spatialRisSample.pointOnLight_WS);
-        const float other_geomTerm = absCosTheta(-other_wi_WS, other_light.normal_WS) / other_r2;
-
-        const float geomTermJacobian = (this_geomTerm / max(other_geomTerm, 0.01f)); // TODO: better way to clamp fireflies?
+        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, spatialRisSample.pointOnLight_WS, other_light.normal_WS);
 
         const float W = spatialRisSample.W * geomTermJacobian;
 

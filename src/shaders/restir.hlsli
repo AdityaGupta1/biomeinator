@@ -42,6 +42,20 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
     return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
 }
 
+float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surfPos_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
+{
+    const float3 this_wi_WS = normalize(pointOnLight_WS - this_surfPos_WS);
+    const float this_r2 = distance2(this_surfPos_WS, pointOnLight_WS);
+    const float this_geomTerm = absCosTheta(-this_wi_WS, lightNor_WS) / this_r2;
+
+    const float3 other_wi_WS = normalize(pointOnLight_WS - other_surfPos_WS);
+    const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
+    const float other_geomTerm = absCosTheta(-other_wi_WS, lightNor_WS) / other_r2;
+
+    const float geomTermJacobian = this_geomTerm / max(other_geomTerm, 0.01f); // TODO: better way to clamp fireflies?
+    return geomTermJacobian;
+}
+
 RisSample generateDirectLightingRisSample(const uint hitGroup,
                                           const float3 surfPos_WS,
                                           const float3 surfNor_WS,
