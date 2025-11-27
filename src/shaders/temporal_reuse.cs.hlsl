@@ -45,12 +45,11 @@ ReprojectionResult reproject(uint2 pixelIdx)
 
     Texture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
     const float2 motionPixels = motionTarget[pixelIdx] * renderParams.renderSize;
-    //const float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // want to find the closest pixel to the fractional pixel pos where this world pos was last frame
     const float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // want to find the closest pixel to the fractional pixel pos where this world pos was last frame
 
-    const int2 cornerPixelIdx1 = int2(floor(reprojectedPixelPos));
-    const int2 cornerPixelIdx2 = cornerPixelIdx1 + (int2(round(frac(reprojectedPixelPos))) * 2 - 1);
-    if (isPixelOutOfBounds(cornerPixelIdx1) && isPixelOutOfBounds(cornerPixelIdx2))
+    const int2 minCornerPixelIdx = int2(floor(reprojectedPixelPos)) - 1;
+    const int2 maxCornerPixelIdx = minCornerPixelIdx + 2;
+    if (isPixelOutOfBounds(minCornerPixelIdx) && isPixelOutOfBounds(maxCornerPixelIdx))
     {
         return result;
     }
@@ -62,8 +61,6 @@ ReprojectionResult reproject(uint2 pixelIdx)
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
 
-    const int2 minCornerPixelIdx = min(cornerPixelIdx1, cornerPixelIdx2);
-    const int2 maxCornerPixelIdx = max(cornerPixelIdx1, cornerPixelIdx2);
     Texture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.srv.prevDepthAndNormalTargetIdx];
     for (int y = minCornerPixelIdx.y; y <= maxCornerPixelIdx.y; ++y)
     {
@@ -108,6 +105,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         return;
     }
+
+    //{
+    //    uint2 reprojectedPixelIdx;
+    //    const ReprojectionResult reprojResult = reproject(pixelIdx);
+    //    debugTexture()[pixelIdx] = float4(reprojResult.score.xxx, 1);
+    //}
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
