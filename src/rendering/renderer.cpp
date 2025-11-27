@@ -1377,6 +1377,7 @@ static void imguiEndFrame()
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList.Get());
 }
 
+// state = state the resource should be in when SL (DLSS) is invoked
 static inline sl::Resource makeSlResource(RtTarget* target,
                                           D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 {
