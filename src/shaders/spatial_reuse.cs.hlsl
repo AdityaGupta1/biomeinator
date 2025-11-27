@@ -72,7 +72,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     uint numValidSpatialSamples = 0;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
     {
-        const uint2 spatialSamplePixelIdx = uint2(pixelIdx + int2((rng.nextFloat2() - 0.5f) * 2 * SPATIAL_SAMPLE_MAX_RADIUS));
+        const float2 spatialSamplePixelOffset = float2((rng.nextFloat2() - 0.5f) * 2 * SPATIAL_SAMPLE_MAX_RADIUS);
+        const uint2 spatialSamplePixelIdx = uint2(pixelIdx + int2(round(spatialSamplePixelOffset)));
         if (any(spatialSamplePixelIdx >= renderParams.renderSize)) // this might be kind of sus since it relies on underflow?
         {
             continue;

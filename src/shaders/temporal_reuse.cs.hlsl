@@ -27,7 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.hlsli"
 
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_IN, TEMPORAL_REUSE_REGISTER_SPACE);
-StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_IN, TEMPORAL_REUSE_REGISTER_SPACE);
+StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_PREV, TEMPORAL_REUSE_REGISTER_SPACE);
 
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_OUT, TEMPORAL_REUSE_REGISTER_SPACE);
 
@@ -56,7 +56,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     // TODO: temporal reuse
 
     RisSample risSampleOut;
-    // TODO: fill out risSampleOut
-    risSampleOut.pad0 = risSampleOut.pad1 = risSampleOut.pad2 = 0;
+    risSampleOut = risSamplesIn[linearPixelIdx]; // TODO: fill out risSampleOut
+    //risSampleOut.pad0 = risSampleOut.pad1 = risSampleOut.pad2 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }
