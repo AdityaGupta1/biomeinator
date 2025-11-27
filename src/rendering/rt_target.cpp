@@ -127,7 +127,7 @@ void RtTarget::reset()
     }
 }
 
-// not sure how this works over frame boundaries but I assume it's fine because of auto-promotion and decay?
+// not sure how this works over frame boundaries but I assume it's fine because of promotion and decay?
 void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState)
 {
     if (newState != this->targetResourceState)

@@ -443,8 +443,10 @@ static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
 static ComPtr<ID3D12Resource> dev_risSamples1;
 static ComPtr<ID3D12Resource> dev_risSamples2;
+static ComPtr<ID3D12Resource> dev_risSamples3;
 static ID3D12Resource* dev_risSamplesIn;
 static ID3D12Resource* dev_risSamplesOut;
+static ID3D12Resource* dev_risSamplesPrev;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
@@ -546,6 +548,13 @@ void resize()
                                                       { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_risSamples2->SetName(L"dev_risSamples2");
     dev_risSamplesOut = dev_risSamples2.Get();
+
+    dev_risSamples3.Reset();
+    dev_risSamples3 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples3->SetName(L"dev_risSamples3");
+    dev_risSamplesPrev = dev_risSamples3.Get();
 
     dev_pathTracingRawBuffer.Reset();
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
@@ -1404,6 +1413,12 @@ static inline void swapRisBuffers()
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+static inline void storePrevRisBuffer()
+{
+    // Both of these should be in D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE at this point (or promotable to that)
+    std::swap(dev_risSamplesIn, dev_risSamplesPrev);
+}
+
 static bool stopAccumulating = false;
 
 void render()
@@ -1583,7 +1598,7 @@ void render()
         cmdList->SetPipelineState1(gbufferPso.Get());
         cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
-        // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
+        // this isn't strictly necessary as the RtTargets should be promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
         // the before state doesn't match reality)
         for (RtTarget* rtTarget : rtTargets)
@@ -1656,7 +1671,7 @@ void render()
         // PATH TRACING
         // ===================================
 
-        // dev_gbuffer should be auto-promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
+        // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_gbuffer.Get(),
@@ -1687,6 +1702,8 @@ void render()
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
+
+        storePrevRisBuffer();
 
         // ===================================
         // COLLECT
@@ -1867,8 +1884,10 @@ void destroy()
 
     dev_risSamples1.Reset();
     dev_risSamples2.Reset();
+    dev_risSamples3.Reset();
     dev_risSamplesIn = nullptr;
     dev_risSamplesOut = nullptr;
+    dev_risSamplesPrev = nullptr;
 
     screenshotRequest.readbackBuffer.Reset();
 
