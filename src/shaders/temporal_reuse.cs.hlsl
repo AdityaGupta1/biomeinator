@@ -121,7 +121,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const RisSample risSampleIn = risSamplesIn[linearPixelIdx];
+    const RisSample this_risSample = risSamplesIn[linearPixelIdx];
 
     // TODO: temporal reuse
 
@@ -130,7 +130,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     if (reprojResult.score < 0.01f)
     {
-        risSamplesOut[linearPixelIdx] = risSampleIn;
+        risSamplesOut[linearPixelIdx] = this_risSample;
         return;
     }
 
@@ -139,6 +139,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     // need to add confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
 
     RisSample risSampleOut;
-    risSampleOut = risSampleIn; // TODO: fill out risSampleOut
+    risSampleOut = this_risSample; // TODO: fill out risSampleOut
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }

@@ -46,10 +46,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
-    const RisSample thisRisSample = risSamplesIn[linearPixelIdx];
-    if (thisRisSample.lightIdx == LIGHT_IDX_INVALID)
+    const RisSample this_risSample = risSamplesIn[linearPixelIdx];
+    if (this_risSample.lightIdx == LIGHT_IDX_INVALID)
     {
-        risSamplesOut[linearPixelIdx] = thisRisSample;
+        risSamplesOut[linearPixelIdx] = this_risSample;
         return;
     }
 
@@ -62,12 +62,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
 
-    uint Y_lightIdx = thisRisSample.lightIdx;
-    float3 Y_pointOnLight_WS = thisRisSample.pointOnLight_WS;
+    uint Y_lightIdx = this_risSample.lightIdx;
+    float3 Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
     float Y_p_hat = risTargetFunction(areaLights[Y_lightIdx], this_surfPos_WS, this_surfNor_WS, Y_pointOnLight_WS);
 
     const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise?)
-    float w_sum = this_m * Y_p_hat * thisRisSample.W; // = this_w
+    float w_sum = this_m * Y_p_hat * this_risSample.W; // = this_w
 
     uint numValidSpatialSamples = 0;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
