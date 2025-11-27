@@ -417,7 +417,10 @@ static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FO
 static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
+static RtTarget prevDepthAndNormal{ L"prevDepthAndNormal", DXGI_FORMAT_R32G32_UINT };
+
 static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+
 static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 // clang-format on
 
@@ -433,7 +436,10 @@ static void initRtTargets()
     rtTargets.push_back(&motionTarget);
     rtTargets.push_back(&specularHitDistanceTarget);
 
+    rtTargets.push_back(&prevDepthAndNormal);
+
     rtTargets.push_back(&dlssOutputTarget);
+
     rtTargets.push_back(&debugTarget);
 
     resize();
@@ -1635,8 +1641,19 @@ void render()
     }
     else
     {
-        debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
-        debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
+#ifdef _DEBUG
+        if (debugOutputTarget->debugOutputNumChannels == 0)
+        {
+            Logger::logError("Cannot set debug view to an RtTarget with 0 debug channels");
+            debugOutputTarget = nullptr;
+            debugParams->debugOutputSrvIdx = ~0u;
+        }
+        else
+#endif
+        {
+            debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
+            debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
+        }
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
