@@ -82,13 +82,15 @@ static void onKeyDown(WPARAM wparam)
         return;
     }
 
+    const bool ctrlHeld = GetKeyState(VK_CONTROL) & 0x8000;
+
     switch (wparam)
     {
         case VK_ESCAPE:
             PostMessage(hwnd, WM_CLOSE, 0, 0);
             break;
         case 'O':
-            if (GetKeyState(VK_CONTROL) & 0x8000)
+            if (ctrlHeld)
             {
                 OPENFILENAMEW ofn{};
                 wchar_t filePath[MAX_PATH] = L"";
@@ -262,7 +264,7 @@ PlayerInput getPlayerInput()
 {
     PlayerInput input;
 
-    if (GetForegroundWindow() != WindowManager::hwnd || isInCursorMode)
+    if (isInCursorMode || GetForegroundWindow() != WindowManager::hwnd)
     {
         return input;
     }

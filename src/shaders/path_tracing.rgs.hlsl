@@ -46,6 +46,7 @@ void pathTraceRay(inout Payload payload)
 
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
+    const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -64,7 +65,7 @@ void pathTraceRay(inout Payload payload)
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
-        if ((samplingMode != SamplingMode::RIS || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        if ((!useRis || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
@@ -105,57 +106,54 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
-        if (samplingMode == SamplingMode::RIS)
+        if (useRis)
         {
             const uint coherenceHint = ((isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0) | (pathDepth == 0 ? (1 << 1) : 0);
             NvReorderThread(coherenceHint, 2);
         }
 
-        if ((samplingMode == SamplingMode::MIS || samplingMode == SamplingMode::RIS) && surfMaterial.canScatter())
+        if ((samplingMode == SamplingMode::MIS || useRis) && surfMaterial.canScatter() && isNonDeltaSurface)
         {
-            if (isNonDeltaSurface)
+            DirectLightingSample lightSample;
+            if (useRis)
             {
-                DirectLightingSample lightSample;
-                if (samplingMode == SamplingMode::RIS)
+                RisSample risSample;
+                if (pathDepth == 0)
                 {
-                    RisSample risSample;
-                    if (pathDepth == 0)
-                    {
-                        risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
-                    }
-                    else
-                    {
-                        const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                        risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
-                    }
-
-                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
                 }
                 else
                 {
-                    lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                    risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng);
                 }
 
-                if (lightSample.didHitLight)
+                lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+            }
+            else
+            {
+                lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+            }
+
+            if (lightSample.didHitLight)
+            {
+                // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
+                const float3 bsdfVal = evaluateBsdf(
+                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
+
+                float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+
+                if (useRis)
                 {
-                    // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
-                    const float3 bsdfVal = evaluateBsdf(
-                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
-
-                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
-
-                    if (samplingMode == SamplingMode::RIS)
-                    {
-                        contribution *= lightSample.pdfOrW_Y;
-                    }
-                    else
-                    {
-                        const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                        contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
-                    }
-
-                    payload.pathColor += contribution;
+                    contribution *= lightSample.pdfOrW_Y;
                 }
+                else
+                {
+                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                    contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
+                }
+
+                payload.pathColor += contribution;
             }
         }
 
@@ -226,7 +224,7 @@ void RayGeneration()
     const uint pathSplitIdx = getPathSplitIdx();
 
     Payload payload = gbufferPayload;
-    payload.rng = initRandomSampler3(uint3(constantParams.rngSeed + pathSplitIdx, linearPixelIdx, renderParams.frameNumber));
+    payload.rng = initRandomSampler(constantParams.rngSeed, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
     pathTraceRay(payload);
 

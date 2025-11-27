@@ -141,13 +141,15 @@ void RayGeneration()
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
 
-    if (samplingMode == SamplingMode::RIS)
+    if (samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR)
     {
         RisSample risSample;
         risSample.lightIdx = LIGHT_IDX_INVALID;
         risSample.pointOnLight_WS = 0.f;
         risSample.W = 0.f;
         risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
+
+        // tried reordering here by whether or not it generates an RIS sample and it was slower (75 fps after vs 79 fps before)
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
@@ -158,7 +160,7 @@ void RayGeneration()
                 const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
                 const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-                RandomSampler rng = initRandomSampler4(uint4(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber));
+                RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 6831107, linearPixelIdx, renderParams.frameNumber);
                 risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
             }
         }

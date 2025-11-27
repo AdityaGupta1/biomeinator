@@ -88,5 +88,10 @@ float4 psMain(PsIn psIn) : SV_Target
         finalColor = getDebugOutputColor(psIn.uv);
     }
 
+    if (any(isnan(finalColor)))
+    {
+        finalColor = float4(100000, 0, 100000, 1);
+    }
+
     return finalColor;
 }

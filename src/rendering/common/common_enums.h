@@ -48,6 +48,7 @@ enum class SamplingMode : uint
     NAIVE,
     MIS,
     RIS,
+    RESTIR,
 
     COUNT
 };

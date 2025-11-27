@@ -59,17 +59,17 @@ RandomSampler initRandomSampler(uint seed)
     return randomSampler;
 }
 
-RandomSampler initRandomSampler2(uint2 seed)
+RandomSampler initRandomSampler(uint seed1, uint seed2)
 {
-    return initRandomSampler(seed.x ^ hash(seed.y));
+    return initRandomSampler(seed1 ^ hash(seed2));
 }
 
-RandomSampler initRandomSampler3(uint3 seed)
+RandomSampler initRandomSampler(uint seed1, uint seed2, uint seed3)
 {
-    return initRandomSampler(seed.x ^ hash(seed.y ^ hash(seed.z)));
+    return initRandomSampler(seed1 ^ hash(seed2 ^ hash(seed3)));
 }
 
-RandomSampler initRandomSampler4(uint4 seed)
+RandomSampler initRandomSampler(uint seed1, uint seed2, uint seed3, uint seed4)
 {
-    return initRandomSampler(seed.x ^ hash(seed.y ^ hash(seed.z ^ hash(seed.w))));
+    return initRandomSampler(seed1 ^ hash(seed2 ^ hash(seed3 ^ hash(seed4))));
 }
