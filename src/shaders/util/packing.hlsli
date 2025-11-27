@@ -9,3 +9,8 @@ float2 unpackUintToFloat2(uint v)
 {
     return float2(f16tof32(v >> 16), f16tof32(v));
 }
+
+float3 unpackNormalXYToNormal(float2 normalXY)
+{
+    return normalize(float3(normalXY, 1.f - sqrt(dot(normalXY, normalXY))));
+}

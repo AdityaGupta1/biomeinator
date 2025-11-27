@@ -417,30 +417,36 @@ static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FO
 static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
-static RtTarget prevDepthAndNormal{ L"prevDepthAndNormal", DXGI_FORMAT_R32G32_UINT };
+static RtTarget prevDepthAndNormalTarget{ L"prevDepthAndNormalTarget", DXGI_FORMAT_R32G32_UINT };
 
 static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
 static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 // clang-format on
 
-static std::vector<RtTarget*> rtTargets;
+static std::vector<RtTarget*> allRtTargets;
+static std::vector<RtTarget*> autoTransitionRtTargets;
 
 static void initRtTargets()
 {
-    rtTargets.push_back(&pathTracingTarget);
-    rtTargets.push_back(&diffuseAlbedoTarget);
-    rtTargets.push_back(&specularAlbedoTarget);
-    rtTargets.push_back(&linearDepthTarget);
-    rtTargets.push_back(&normalsAndRoughnessTarget);
-    rtTargets.push_back(&motionTarget);
-    rtTargets.push_back(&specularHitDistanceTarget);
+    autoTransitionRtTargets.push_back(&pathTracingTarget);
+    autoTransitionRtTargets.push_back(&diffuseAlbedoTarget);
+    autoTransitionRtTargets.push_back(&specularAlbedoTarget);
+    autoTransitionRtTargets.push_back(&linearDepthTarget);
+    autoTransitionRtTargets.push_back(&normalsAndRoughnessTarget);
+    autoTransitionRtTargets.push_back(&motionTarget);
+    autoTransitionRtTargets.push_back(&specularHitDistanceTarget);
 
-    rtTargets.push_back(&prevDepthAndNormal);
+    allRtTargets.push_back(&prevDepthAndNormalTarget);
 
-    rtTargets.push_back(&dlssOutputTarget);
+    autoTransitionRtTargets.push_back(&dlssOutputTarget);
 
-    rtTargets.push_back(&debugTarget);
+    autoTransitionRtTargets.push_back(&debugTarget);
+
+    for (RtTarget* rtTarget : autoTransitionRtTargets)
+    {
+        allRtTargets.push_back(rtTarget);
+    }
 
     resize();
 }
@@ -587,7 +593,7 @@ void resize()
         backBuffer->SetName(backBufferName.c_str());
     }
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : allRtTargets)
     {
         rtTarget->reset();
         if (rtTarget->isFullSize)
@@ -612,6 +618,8 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getUavIdx(),
+            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getUavIdx(),
+
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -624,8 +632,9 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getSrvIdx(),
-            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
+            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getSrvIdx(),
 
+            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -1680,19 +1689,19 @@ void render()
         // GBUFFER
         // ===================================
 
-        cmdList->SetPipelineState1(gbufferPso.Get());
-        cmdList->SetComputeRootSignature(gbufferRootSig.Get());
-
         // this isn't strictly necessary as the RtTargets should be promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
         // the before state doesn't match reality)
-        for (RtTarget* rtTarget : rtTargets)
+        for (RtTarget* rtTarget : autoTransitionRtTargets)
         {
             if (rtTarget->hasUav)
             {
                 rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
         }
+
+        cmdList->SetPipelineState1(gbufferPso.Get());
+        cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
         // clang-format off
         cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1717,6 +1726,10 @@ void render()
 
         swapRisBuffers();
 
+        // these state transitions are needed for ReSTIR and for storing prevDepthAndNormal in collect pass
+        linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
         const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
         if (samplingMode == SamplingMode::RESTIR)
         {
@@ -1725,6 +1738,9 @@ void render()
             // ===================================
             if (frameNumber > 0)
             {
+                prevDepthAndNormalTarget.transitionToState(cmdList.Get(),
+                                                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
                 cmdList->SetPipelineState(temporalReusePso.Get());
                 cmdList->SetComputeRootSignature(temporalReuseRootSig.Get());
 
@@ -1750,14 +1766,11 @@ void render()
             // ===================================
             // SPATIAL REUSE
             // ===================================
-            static constexpr uint32_t numSpatialReusePasses = 1;
+            static constexpr uint32_t numSpatialReusePasses = 1; // TODO: use different random seed for each pass if doing multiple passes
             for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)
             {
                 cmdList->SetPipelineState(spatialReusePso.Get());
                 cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
-
-                linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
                 // clang-format off
                 cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1825,6 +1838,8 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+        prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
 
@@ -1853,9 +1868,6 @@ void render()
 
     cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
-    cmdList->SetPipelineState(postprocessPso.Get());
-    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
-
     ComPtr<ID3D12Resource> backBuffer;
     const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
     CHECK_HRESULT(swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
@@ -1863,13 +1875,16 @@ void render()
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : autoTransitionRtTargets)
     {
         if (rtTarget->hasSrv)
         {
             rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         }
     }
+
+    cmdList->SetPipelineState(postprocessPso.Get());
+    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
 
     cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
                                                paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1985,7 +2000,7 @@ void destroy()
     scene.reset();
     AcsHelper::reset();
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : allRtTargets)
     {
         rtTarget->reset();
     }

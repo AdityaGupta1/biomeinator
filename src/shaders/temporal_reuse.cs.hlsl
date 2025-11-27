@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "path_tracing_common.hlsli"
 #include "restir.hlsli"
+#include "util/packing.hlsli"
 #include "util/rng.hlsli"
 
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_IN, TEMPORAL_REUSE_REGISTER_SPACE);
@@ -41,6 +42,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         return;
     }
+
+    //Texture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.uav.prevDepthAndNormalTargetIdx];
+    //const uint2 packedPrevDepthAndNormal = prevDepthAndNormalTarget[pixelIdx];
+    //const float prevDepth = asfloat(packedPrevDepthAndNormal.x);
+    //const float3 prevNormal = unpackNormalXYToNormal(unpackUintToFloat2(packedPrevDepthAndNormal.y));
+    //debugTexture()[pixelIdx] = float4(debugParams.debugBool0 == 1 ? prevNormal : prevDepth.xxx, 1);
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
