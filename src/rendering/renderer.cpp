@@ -54,6 +54,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "gbuffer.rgs.fxh"
+#include "temporal_reuse.cs.fxh"
 #include "spatial_reuse.cs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "collect.cs.fxh"
@@ -681,6 +682,21 @@ enum class GbufferParam
     COUNT
 };
 
+enum class TemporalReuseParam
+{
+    GLOBAL_PARAMS,
+
+    MATERIALS,
+    AREA_LIGHTS,
+
+    RIS_SAMPLES_IN,
+    RIS_SAMPLES_PREV,
+
+    RIS_SAMPLES_OUT,
+
+    COUNT
+};
+
 enum class SpatialReuseParam
 {
     GLOBAL_PARAMS,
@@ -733,6 +749,7 @@ enum class CollectParam
 };
 
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
+#define TEMPORAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(TemporalReuseParam::param)
 #define SPATIAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(SpatialReuseParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
@@ -755,6 +772,7 @@ static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
 static ComPtr<ID3D12RootSignature> gbufferRootSig;
+static ComPtr<ID3D12RootSignature> temporalReuseRootSig;
 static ComPtr<ID3D12RootSignature> spatialReuseRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
@@ -808,6 +826,41 @@ static void initRootSignature()
                                       errorBlob);
         CHECK_HRESULT(device->CreateRootSignature(
             0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&gbufferRootSig)));
+    }
+
+    // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, TEMPORAL_REUSE_PARAM_IDX(COUNT)> temporalReuseParams;
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        // TODO: do we need materials and area lights here if not doing visibility-aware MIS?
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_IN);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_PREV);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, TEMPORAL_REUSE, RIS_SAMPLES_OUT);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC temporalReuseRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(temporalReuseParams.size()),
+                .pParameters = temporalReuseParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()), // TODO: do we need static samplers here?
+                .pStaticSamplers = rtStaticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&temporalReuseRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&temporalReuseRootSig)));
     }
 
     // ===================================
@@ -972,6 +1025,8 @@ static ComPtr<ID3D12StateObject> gbufferPso;
 static ComPtr<ID3D12Resource> dev_gbufferShaderIds;
 static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
 
+static ComPtr<ID3D12PipelineState> temporalReusePso;
+
 static ComPtr<ID3D12PipelineState> spatialReusePso;
 
 static ComPtr<ID3D12StateObject> ptPso;
@@ -1016,6 +1071,17 @@ static void initPipeline()
         };
 
         makeRtPipeline(gbufferPipelineInputs);
+    }
+
+    // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = temporalReuseRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(temporal_reuse_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&temporalReusePso)));
+        temporalReusePso->SetName(L"temporalReusePso");
     }
 
     // ===================================
@@ -1636,6 +1702,33 @@ void render()
         if (samplingMode == SamplingMode::RESTIR)
         {
             // ===================================
+            // TEMPORAL REUSE
+            // ===================================
+            if (frameNumber > 0)
+            {
+                cmdList->SetPipelineState(temporalReusePso.Get());
+                cmdList->SetComputeRootSignature(temporalReuseRootSig.Get());
+
+                // clang-format off
+                cmdList->SetComputeRootConstantBufferView(TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV), dev_risSamplesPrev->GetGPUVirtualAddress());
+
+                cmdList->SetComputeRootUnorderedAccessView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+                // clang-format on
+
+                const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, TEMPORAL_REUSE_WORKGROUP_SIZE_X);
+                const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, TEMPORAL_REUSE_WORKGROUP_SIZE_Y);
+                cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+
+                swapRisBuffers();
+            }
+
+            // ===================================
             // SPATIAL REUSE
             // ===================================
             static constexpr uint32_t numSpatialReusePasses = 1;
@@ -1891,12 +1984,14 @@ void destroy()
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
+    temporalReusePso.Reset();
     spatialReusePso.Reset();
     ptPso.Reset();
     collectPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
+    temporalReuseRootSig.Reset();
     spatialReuseRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();
