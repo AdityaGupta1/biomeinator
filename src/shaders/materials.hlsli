@@ -203,9 +203,14 @@ float bsdfPdf(
     const bool hasGlossyReflection = material.hasGlossyReflection();
     const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
 
-    if (!hasDiffuseOrTransmission)
+    if (!hasDiffuseOrTransmission) // TODO: update this after adding microfacet reflection
     {
-        return 0.f; // TODO: update this after adding microfacet reflection
+        return 0.f;
+    }
+
+    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding microfacet refraction
+    {
+        return 0.f;
     }
 
     float pdf = absCosTheta(wi_WS, surfNor_WS) * M_INV_PI;
