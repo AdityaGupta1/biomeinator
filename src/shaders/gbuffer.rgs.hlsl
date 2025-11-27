@@ -149,6 +149,8 @@ void RayGeneration()
         risSample.W = 0.f;
         risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
 
+        // tried reordering here by whether or not it generates an RIS sample and it was slower (75 fps after vs 79 fps before)
+
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
             const Material surfMaterial = materials[payload.materialIdx];
