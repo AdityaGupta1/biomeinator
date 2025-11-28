@@ -115,12 +115,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    //{
-    //    uint2 reprojectedPixelIdx;
-    //    const ReprojectionResult reprojResult = reproject(pixelIdx);
-    //    debugTexture()[pixelIdx] = float4(reprojResult.score.xxx, 1);
-    //}
-
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     const RisSample this_risSample = risSamplesIn[linearPixelIdx];
