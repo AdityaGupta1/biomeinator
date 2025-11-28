@@ -22,10 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "light_sampling.hlsli"
 #include "util/color.hlsli"
 
-#define RIS_MAX_NUM_LIGHT_CANDIDATES 32u
-#define RIS_MAX_NUM_BSDF_CANDIDATES 1u
-#define RIS_MIN_NUM_LIGHT_CANDIDATES 8u
-#define RIS_MIN_NUM_BSDF_CANDIDATES 1u
+#define RIS_MAX_NUM_LIGHT_CANDIDATES 32
+#define RIS_MAX_NUM_BSDF_CANDIDATES 1
+#define RIS_MIN_NUM_LIGHT_CANDIDATES 8
+#define RIS_MIN_NUM_BSDF_CANDIDATES 1
 
 #define RESTIR_MAX_CONFIDENCE 10
 
