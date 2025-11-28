@@ -61,13 +61,16 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
 
-    uint Y_lightIdx = this_risSample.lightIdx;
-    float3 Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
-    float Y_p_hat = this_risSample.p_hat;
+    uint Y_lightIdx = LIGHT_IDX_INVALID;
+    float Y_p_hat = 0.f;
+    float3 Y_pointOnLight_WS = 0.f;
 
-    const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
-    float w_sum = this_m * Y_p_hat * this_risSample.W; // = this_w
+    const AreaLight this_light = areaLights[this_risSample.lightIdx];
+    const float this_p_hat = this_risSample.p_hat;
+    float this_m = 0.f; // TODO: add confidence weights to this_m and other_m? seems like it would require a preliminary pass to sum confidence weights for all spatial samples
 
+    float w_sum = 0.f;
+    const uint totalNumSamples = NUM_SPATIAL_SAMPLES + 1;
     uint numValidSpatialSamples = 0;
     uint sumConfidence = this_risSample.confidence;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
@@ -97,24 +100,37 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float3 other_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(spatialSamplePixelIdx) * linearDepthTarget[spatialSamplePixelIdx];
         const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_light.normal_WS);
 
-        const float W = other_risSample.W * geomTermJacobian;
+        const float other_W = other_risSample.W * geomTermJacobian;
+        const float other_p_hat = other_risSample.p_hat;
+        const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
+        const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1
+        const float other_w = other_m * other_p_hat_this * other_W;
 
-        const float m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
-        const float p_hat = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS);
-        const float w = m * p_hat * W;
+        const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS); // this_p_hat from other_pos
+        this_m += this_p_hat / (NUM_SPATIAL_SAMPLES * (this_p_hat_other + this_p_hat / NUM_SPATIAL_SAMPLES));
 
-        w_sum += w;
-        if (rng.nextFloat() < w / w_sum)
+        w_sum += other_w;
+        if (rng.nextFloat() < other_w / w_sum)
         {
             Y_lightIdx = other_risSample.lightIdx;
-            Y_p_hat = p_hat;
+            Y_p_hat = other_p_hat_this;
             Y_pointOnLight_WS = other_risSample.pointOnLight_WS;
         }
         ++numValidSpatialSamples;
         sumConfidence += other_risSample.confidence;
     }
 
-    const float validSpatialSamplesCorrectionFactor = ((NUM_SPATIAL_SAMPLES + 1) / float(numValidSpatialSamples + 1));
+    this_m = (1.f + this_m) / totalNumSamples;
+    const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
+    w_sum += this_w;
+    if (rng.nextFloat() < this_w / w_sum)
+    {
+        Y_lightIdx = this_risSample.lightIdx;
+        Y_p_hat = this_p_hat;
+        Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
+    }
+
+    const float validSpatialSamplesCorrectionFactor = totalNumSamples / float(numValidSpatialSamples + 1);
 
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
