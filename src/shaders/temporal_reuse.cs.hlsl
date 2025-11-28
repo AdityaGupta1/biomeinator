@@ -38,6 +38,8 @@ struct ReprojectionResult
     uint2 pixelIdx;
 
     float3 this_surfPos_WS;
+    float3 this_surfNor_WS;
+
     float3 reproj_surfPos_WS;
 };
 
@@ -52,6 +54,8 @@ ReprojectionResult reproject(uint2 pixelIdx)
 
     const int2 minCornerPixelIdx = int2(floor(reprojectedPixelPos)) - 1;
     const int2 maxCornerPixelIdx = minCornerPixelIdx + 2;
+    //const int2 minCornerPixelIdx = pixelIdx;
+    //const int2 maxCornerPixelIdx = pixelIdx;
     if (isPixelOutOfBounds(minCornerPixelIdx) && isPixelOutOfBounds(maxCornerPixelIdx))
     {
         return result;
@@ -90,7 +94,10 @@ ReprojectionResult reproject(uint2 pixelIdx)
             {
                 result.score = candidateReprojectionScore;
                 result.pixelIdx = reprojectCandidatePixelIdx;
+
                 result.this_surfPos_WS = this_surfPos_WS;
+                result.this_surfNor_WS = this_surfNor_WS;
+
                 result.reproj_surfPos_WS = reproj_surfPos_WS;
             }
         }
@@ -118,18 +125,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
-    const RisSample thisRisSample = risSamplesIn[linearPixelIdx];
-    if (thisRisSample.lightIdx == LIGHT_IDX_INVALID)
+    const RisSample this_risSample = risSamplesIn[linearPixelIdx];
+    if (this_risSample.lightIdx == LIGHT_IDX_INVALID)
     {
-        risSamplesOut[linearPixelIdx] = thisRisSample;
+        risSamplesOut[linearPixelIdx] = this_risSample;
         return;
     }
 
-    const RisSample this_risSample = risSamplesIn[linearPixelIdx];
-
-    // TODO: temporal reuse
-
-    uint2 reprojectedPixelIdx;
     const ReprojectionResult reprojResult = reproject(pixelIdx);
 
     if (reprojResult.score < 0.01f)
@@ -138,14 +140,47 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    RandomSampler rng = initRandomSampler(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
-
-    const uint reproj_linearPixelIdx = reprojResult.pixelIdx.x * renderParams.renderSize.x + reprojResult.pixelIdx.y;
+    const uint reproj_linearPixelIdx = reprojResult.pixelIdx.y * renderParams.renderSize.x + reprojResult.pixelIdx.x;
     const RisSample reproj_risSample = risSamplesPrev[reproj_linearPixelIdx];
 
-    // need to add confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
+    if (reproj_risSample.lightIdx == LIGHT_IDX_INVALID)
+    {
+        risSamplesOut[linearPixelIdx] = this_risSample;
+        return;
+    }
+
+    // TODO: MIS with confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
+    const float this_m = 0.5f;
+    const float reproj_m = 0.5f;
+
+    const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
+    const float reproj_p_hat = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS);
+    const float geomTermJacobian = calcGeomTermJacobian(reprojResult.this_surfPos_WS, reprojResult.reproj_surfPos_WS, reproj_risSample.pointOnLight_WS, reproj_light.normal_WS);
+    const float reproj_W = reproj_risSample.W * geomTermJacobian;
+
+    const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
+    const float reproj_w = reproj_m * reproj_p_hat * reproj_W;
+    const float w_sum = this_w + reproj_w;
+
+    RandomSampler rng = initRandomSampler(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
 
     RisSample risSampleOut;
-    risSampleOut = this_risSample; // TODO: fill out risSampleOut
+    float Y_p_hat;
+    const bool chooseThis = (rng.nextFloat() < this_w / w_sum);
+    if (chooseThis)
+    {
+        risSampleOut.lightIdx = this_risSample.lightIdx;
+        risSampleOut.pointOnLight_WS = this_risSample.pointOnLight_WS;
+        Y_p_hat = this_risSample.p_hat;
+    }
+    else
+    {
+        risSampleOut.lightIdx = reproj_risSample.lightIdx;
+        risSampleOut.pointOnLight_WS = reproj_risSample.pointOnLight_WS;
+        Y_p_hat = reproj_p_hat;
+    }
+    risSampleOut.W = w_sum / Y_p_hat;
+    risSampleOut.p_hat = Y_p_hat;
+    risSampleOut.pad0 = risSampleOut.pad1 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }

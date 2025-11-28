@@ -79,35 +79,35 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
 
         const float3 other_surfNor_WS = normalsAndRoughnessTarget[spatialSamplePixelIdx].xyz;
-        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.9f) // TODO: use same check as temporal reuse (compare pos_WS and normal) and turn it into a function in restir.hlsli that takes in this pos/nor and other pos/nor and returns similarity score
+        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.9f)
         {
             continue;
         }
 
-        const uint spatialSampleLinearPixelIdx = spatialSamplePixelIdx.x + renderParams.renderSize.x * spatialSamplePixelIdx.y;
-        const RisSample spatialRisSample = risSamplesIn[spatialSampleLinearPixelIdx];
-        if (spatialRisSample.lightIdx == LIGHT_IDX_INVALID)
+        const uint spatialSampleLinearPixelIdx = spatialSamplePixelIdx.y * renderParams.renderSize.x + spatialSamplePixelIdx.x;
+        const RisSample other_risSample = risSamplesIn[spatialSampleLinearPixelIdx];
+        if (other_risSample.lightIdx == LIGHT_IDX_INVALID)
         {
             continue;
         }
 
-        const AreaLight other_light = areaLights[spatialRisSample.lightIdx];
+        const AreaLight other_light = areaLights[other_risSample.lightIdx];
 
         const float3 other_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(spatialSamplePixelIdx) * linearDepthTarget[spatialSamplePixelIdx];
-        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, spatialRisSample.pointOnLight_WS, other_light.normal_WS);
+        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_light.normal_WS);
 
-        const float W = spatialRisSample.W * geomTermJacobian;
+        const float W = other_risSample.W * geomTermJacobian;
 
         const float m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise?)
-        const float p_hat = risTargetFunction(other_light, this_surfPos_WS, this_surfNor_WS, spatialRisSample.pointOnLight_WS);
+        const float p_hat = risTargetFunction(other_light, this_surfPos_WS, this_surfNor_WS, other_risSample.pointOnLight_WS);
         const float w = m * p_hat * W;
 
         w_sum += w;
         if (rng.nextFloat() < w / w_sum)
         {
-            Y_lightIdx = spatialRisSample.lightIdx;
+            Y_lightIdx = other_risSample.lightIdx;
             Y_p_hat = p_hat;
-            Y_pointOnLight_WS = spatialRisSample.pointOnLight_WS;
+            Y_pointOnLight_WS = other_risSample.pointOnLight_WS;
         }
         ++numValidSpatialSamples;
     }
