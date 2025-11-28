@@ -164,6 +164,17 @@ void RayGeneration()
 
                 RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
                 risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+
+#if 0
+                if (debugParams.debugBool0 == 1) {
+                    // TODO: don't do this if this was a bsdf sample because visibility was already tested in that case
+                    const DirectLightingSample lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS);
+                    if (!lightSample.didHitLight)
+                    {
+                        risSample.W = 0.f;
+                    }
+                }
+#endif
             }
         }
 
