@@ -853,7 +853,6 @@ static void initRootSignature()
 
         temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
-        // TODO: do we need materials and area lights here if not doing visibility-aware MIS?
         temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
         temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
 
@@ -867,7 +866,7 @@ static void initRootSignature()
             .Desc_1_1 = {
                 .NumParameters = static_cast<uint32_t>(temporalReuseParams.size()),
                 .pParameters = temporalReuseParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()), // TODO: do we need static samplers here?
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
                 .pStaticSamplers = rtStaticSamplers.data(),
                 .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
             },
@@ -1726,7 +1725,7 @@ void render()
 
         swapRisBuffers();
 
-        // these state transitions are needed for ReSTIR and for storing prevDepthAndNormal in collect pass
+        // these state transitions are needed for ReSTIR and for storing prevDepthAndNormal in the collect pass
         linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 

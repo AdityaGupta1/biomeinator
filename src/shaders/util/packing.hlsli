@@ -22,6 +22,7 @@ float2 unpackUintToSnorm2(uint u)
     return clamp(i / 32767.f, -1.f, 1.f);
 }
 
+// octahedron normal encoding code from https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
 float2 octWrap(float2 v)
 {
     return (1.f - abs(v.yx)) * select(v.xy >= 0.f, 1.f, -1.f);

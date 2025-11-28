@@ -61,8 +61,7 @@ ReprojectionResult reproject(uint2 pixelIdx)
     }
 
     Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
-    const float3 primaryRayDirection = getPrimaryRayDirection(pixelIdx);
-    const float3 this_surfPos_WS = cameraParams.pos_WS + primaryRayDirection * linearDepthTarget[pixelIdx];
+    const float3 this_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(pixelIdx) * linearDepthTarget[pixelIdx];
 
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
@@ -72,29 +71,29 @@ ReprojectionResult reproject(uint2 pixelIdx)
     {
         for (int x = minCornerPixelIdx.x; x <= maxCornerPixelIdx.x; ++x)
         {
-            const int2 reprojectCandidatePixelIdx = int2(x, y);
-            if (isPixelOutOfBounds(reprojectCandidatePixelIdx))
+            const int2 reprojCandidatePixelIdx = int2(x, y);
+            if (isPixelOutOfBounds(reprojCandidatePixelIdx))
             {
                 continue;
             }
 
-            const uint2 packedReprojDepthAndNormal = prevDepthAndNormalTarget[reprojectCandidatePixelIdx];
+            const uint2 packedReprojDepthAndNormal = prevDepthAndNormalTarget[reprojCandidatePixelIdx];
             const float reproj_depth = asfloat(packedReprojDepthAndNormal.x);
             const float3 reproj_surfNor_WS = octDecode(packedReprojDepthAndNormal.y);
 
-            const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojectCandidatePixelIdx) * reproj_depth;
+            const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojCandidatePixelIdx) * reproj_depth;
             const float dist = distance(this_surfPos_WS, reproj_surfPos_WS);
 
-            const float maxDist = 0.2f;
+            const float maxDist = 0.2f; // TODO: set this based on depth? (i.e. higher max dist at higher depth)
             const float positionReprojectionScore = max(maxDist - dist, 0.f) / maxDist;
-            const float maxNormalDiff = 0.1f;
+            const float maxNormalDiff = 0.05f;
             const float normalReprojectionScore = max((dot(this_surfNor_WS, reproj_surfNor_WS) - (1.f - maxNormalDiff)), 0.f) / maxNormalDiff;
 
             const float candidateReprojectionScore = positionReprojectionScore * normalReprojectionScore;
             if (candidateReprojectionScore > result.score)
             {
                 result.score = candidateReprojectionScore;
-                result.pixelIdx = reprojectCandidatePixelIdx;
+                result.pixelIdx = reprojCandidatePixelIdx;
 
                 result.this_surfPos_WS = this_surfPos_WS;
                 result.this_surfNor_WS = this_surfNor_WS;
@@ -145,13 +144,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    if (!isfinite(reproj_risSample.W)) // TODO: figure out why W is becoming infinite and fix the root issue
+    if (!isfinite(reproj_risSample.W)) // TODO: figure out why W is becoming infinite and fix the root issue (see #193)
     {
         risSamplesOut[linearPixelIdx] = this_risSample;
         return;
     }
-
-    // TODO: use target functions in MIS weights
 
     const float this_confidence = this_risSample.confidence;
     const float reproj_confidence = reproj_risSample.confidence * reprojResult.score;
@@ -178,12 +175,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     RisSample risSampleOut;
     float Y_p_hat;
-    const bool chooseThis = (rng.nextFloat() < this_w / w_sum);
-    if (chooseThis)
+    if (rng.nextFloat() < this_w / w_sum)
     {
         risSampleOut.lightIdx = this_risSample.lightIdx;
         risSampleOut.pointOnLight_WS = this_risSample.pointOnLight_WS;
-        Y_p_hat = this_risSample.p_hat;
+        Y_p_hat = this_p_hat;
     }
     else
     {
