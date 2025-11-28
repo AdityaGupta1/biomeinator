@@ -165,10 +165,9 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float reproj_m = (reproj_p_hat * reproj_confidence) / ((reproj_p_hat * reproj_confidence) + (reproj_p_hat_this * this_confidence));
 
     const float geomTermJacobian = calcGeomTermJacobian(reprojResult.this_surfPos_WS, reprojResult.reproj_surfPos_WS, reproj_risSample.pointOnLight_WS, reproj_light.normal_WS);
-    const float reproj_W = reproj_risSample.W * geomTermJacobian;
 
     const float this_w = this_m * this_p_hat * this_risSample.W;
-    const float reproj_w = reproj_m * reproj_p_hat_this * reproj_W;
+    const float reproj_w = reproj_m * reproj_p_hat_this * reproj_risSample.W * geomTermJacobian;
     const float w_sum = this_w + reproj_w;
 
     RandomSampler rng = initRandomSampler(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
