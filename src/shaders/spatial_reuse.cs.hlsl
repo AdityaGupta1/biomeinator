@@ -56,8 +56,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     RandomSampler rng = initRandomSampler(constantParams.rngSeed, 1908061, linearPixelIdx, renderParams.frameNumber);
 
     Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
-    const float3 primaryRayDirection = getPrimaryRayDirection(pixelIdx);
-    const float3 this_surfPos_WS = cameraParams.pos_WS + primaryRayDirection * linearDepthTarget[pixelIdx];
+    const float3 this_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(pixelIdx) * linearDepthTarget[pixelIdx];
 
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;

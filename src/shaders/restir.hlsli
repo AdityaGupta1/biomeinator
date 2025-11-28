@@ -46,13 +46,11 @@ float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surf
 {
     const float3 this_wi_WS = normalize(pointOnLight_WS - this_surfPos_WS);
     const float this_r2 = distance2(this_surfPos_WS, pointOnLight_WS);
-    const float this_geomTerm = absCosTheta(-this_wi_WS, lightNor_WS) / this_r2;
 
     const float3 other_wi_WS = normalize(pointOnLight_WS - other_surfPos_WS);
     const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
-    const float other_geomTerm = absCosTheta(-other_wi_WS, lightNor_WS) / other_r2;
 
-    const float geomTermJacobian = this_geomTerm / max(other_geomTerm, 0.01f); // TODO: better way to clamp fireflies?
+    const float geomTermJacobian = (absCosTheta(-this_wi_WS, lightNor_WS) * other_r2) / (absCosTheta(-other_wi_WS, lightNor_WS) * this_r2); // TODO: clamp fireflies?
     return geomTermJacobian;
 }
 
