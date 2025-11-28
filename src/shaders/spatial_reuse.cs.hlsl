@@ -101,13 +101,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_light.normal_WS);
 
         const float other_W = other_risSample.W * geomTermJacobian;
-
         const float other_p_hat = other_risSample.p_hat;
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
         const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1
         const float other_w = other_m * other_p_hat_this * other_W;
 
-        const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS);
+        const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS); // this_p_hat from other_pos
         this_m += this_p_hat / (NUM_SPATIAL_SAMPLES * (this_p_hat_other + this_p_hat / NUM_SPATIAL_SAMPLES));
 
         w_sum += other_w;
@@ -127,7 +126,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (rng.nextFloat() < this_w / w_sum)
     {
         Y_lightIdx = this_risSample.lightIdx;
-        Y_p_hat = this_risSample.p_hat;
+        Y_p_hat = this_p_hat;
         Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
     }
 
