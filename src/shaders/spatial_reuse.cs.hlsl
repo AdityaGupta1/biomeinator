@@ -61,9 +61,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
 
-    uint Y_lightIdx = this_risSample.lightIdx;
-    float3 Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
-    float Y_p_hat = this_risSample.p_hat;
+    uint Y_lightIdx = LIGHT_IDX_INVALID;
+    float Y_p_hat = 0.f;
+    float3 Y_pointOnLight_WS = 0.f;
+
+    const AreaLight this_light = areaLights[this_risSample.lightIdx];
+    const float this_p_hat = this_risSample.p_hat;
+    float this_m = 0.f;
 
     float w_sum = 0.f;
     const uint totalNumSamples = NUM_SPATIAL_SAMPLES + 1;
@@ -98,9 +102,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float other_W = other_risSample.W * geomTermJacobian;
 
-        const float other_m = 1.f / totalNumSamples; // TODO: use better MIS weights (pairwise? use confidence weights?)
+        const float other_p_hat = other_risSample.p_hat;
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
+        const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1 (= M - 1)
         const float other_w = other_m * other_p_hat_this * other_W;
+
+        const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS);
+        this_m += this_p_hat / (NUM_SPATIAL_SAMPLES * (this_p_hat_other + this_p_hat / NUM_SPATIAL_SAMPLES));
 
         w_sum += other_w;
         if (rng.nextFloat() < other_w / w_sum)
@@ -113,7 +121,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         sumConfidence += other_risSample.confidence;
     }
 
-    const float this_m = 1.f / totalNumSamples; // TODO: use better MIS weights (pairwise? use confidence weights?)
+    this_m = (1.f + this_m) / totalNumSamples;
     const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
     w_sum += this_w;
     if (rng.nextFloat() < this_w / w_sum)
