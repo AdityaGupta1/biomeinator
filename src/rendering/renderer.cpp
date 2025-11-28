@@ -54,6 +54,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "gbuffer.rgs.fxh"
+#include "temporal_reuse.cs.fxh"
 #include "spatial_reuse.cs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "collect.cs.fxh"
@@ -416,24 +417,36 @@ static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FO
 static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
+static RtTarget prevDepthAndNormalTarget{ L"prevDepthAndNormalTarget", DXGI_FORMAT_R32G32_UINT };
+
 static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+
 static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 // clang-format on
 
-static std::vector<RtTarget*> rtTargets;
+static std::vector<RtTarget*> allRtTargets;
+static std::vector<RtTarget*> autoTransitionRtTargets;
 
 static void initRtTargets()
 {
-    rtTargets.push_back(&pathTracingTarget);
-    rtTargets.push_back(&diffuseAlbedoTarget);
-    rtTargets.push_back(&specularAlbedoTarget);
-    rtTargets.push_back(&linearDepthTarget);
-    rtTargets.push_back(&normalsAndRoughnessTarget);
-    rtTargets.push_back(&motionTarget);
-    rtTargets.push_back(&specularHitDistanceTarget);
+    autoTransitionRtTargets.push_back(&pathTracingTarget);
+    autoTransitionRtTargets.push_back(&diffuseAlbedoTarget);
+    autoTransitionRtTargets.push_back(&specularAlbedoTarget);
+    autoTransitionRtTargets.push_back(&linearDepthTarget);
+    autoTransitionRtTargets.push_back(&normalsAndRoughnessTarget);
+    autoTransitionRtTargets.push_back(&motionTarget);
+    autoTransitionRtTargets.push_back(&specularHitDistanceTarget);
 
-    rtTargets.push_back(&dlssOutputTarget);
-    rtTargets.push_back(&debugTarget);
+    allRtTargets.push_back(&prevDepthAndNormalTarget);
+
+    autoTransitionRtTargets.push_back(&dlssOutputTarget);
+
+    autoTransitionRtTargets.push_back(&debugTarget);
+
+    for (RtTarget* rtTarget : autoTransitionRtTargets)
+    {
+        allRtTargets.push_back(rtTarget);
+    }
 
     resize();
 }
@@ -443,8 +456,10 @@ static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
 static ComPtr<ID3D12Resource> dev_risSamples1;
 static ComPtr<ID3D12Resource> dev_risSamples2;
+static ComPtr<ID3D12Resource> dev_risSamples3;
 static ID3D12Resource* dev_risSamplesIn;
 static ID3D12Resource* dev_risSamplesOut;
+static ID3D12Resource* dev_risSamplesPrev;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
@@ -477,6 +492,8 @@ void resize()
     {
         return;
     }
+
+    frameNumber = 0;
 
     RECT rect;
     GetClientRect(hwnd, &rect);
@@ -547,6 +564,13 @@ void resize()
     dev_risSamples2->SetName(L"dev_risSamples2");
     dev_risSamplesOut = dev_risSamples2.Get();
 
+    dev_risSamples3.Reset();
+    dev_risSamples3 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
+                                                      &DEFAULT_HEAP,
+                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_risSamples3->SetName(L"dev_risSamples3");
+    dev_risSamplesPrev = dev_risSamples3.Get();
+
     dev_pathTracingRawBuffer.Reset();
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
     const uint32_t pathTracingRawBufferSizeBytes =
@@ -569,7 +593,7 @@ void resize()
         backBuffer->SetName(backBufferName.c_str());
     }
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : allRtTargets)
     {
         rtTarget->reset();
         if (rtTarget->isFullSize)
@@ -594,6 +618,8 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getUavIdx(),
+            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getUavIdx(),
+
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -606,8 +632,9 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getSrvIdx(),
-            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
+            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getSrvIdx(),
 
+            .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -672,6 +699,21 @@ enum class GbufferParam
     COUNT
 };
 
+enum class TemporalReuseParam
+{
+    GLOBAL_PARAMS,
+
+    MATERIALS,
+    AREA_LIGHTS,
+
+    RIS_SAMPLES_IN,
+    RIS_SAMPLES_PREV,
+
+    RIS_SAMPLES_OUT,
+
+    COUNT
+};
+
 enum class SpatialReuseParam
 {
     GLOBAL_PARAMS,
@@ -724,6 +766,7 @@ enum class CollectParam
 };
 
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
+#define TEMPORAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(TemporalReuseParam::param)
 #define SPATIAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(SpatialReuseParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
@@ -746,6 +789,7 @@ static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
 static ComPtr<ID3D12RootSignature> gbufferRootSig;
+static ComPtr<ID3D12RootSignature> temporalReuseRootSig;
 static ComPtr<ID3D12RootSignature> spatialReuseRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
@@ -799,6 +843,40 @@ static void initRootSignature()
                                       errorBlob);
         CHECK_HRESULT(device->CreateRootSignature(
             0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&gbufferRootSig)));
+    }
+
+    // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, TEMPORAL_REUSE_PARAM_IDX(COUNT)> temporalReuseParams;
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_IN);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_PREV);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, TEMPORAL_REUSE, RIS_SAMPLES_OUT);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC temporalReuseRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(temporalReuseParams.size()),
+                .pParameters = temporalReuseParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
+                .pStaticSamplers = rtStaticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&temporalReuseRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&temporalReuseRootSig)));
     }
 
     // ===================================
@@ -963,6 +1041,8 @@ static ComPtr<ID3D12StateObject> gbufferPso;
 static ComPtr<ID3D12Resource> dev_gbufferShaderIds;
 static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
 
+static ComPtr<ID3D12PipelineState> temporalReusePso;
+
 static ComPtr<ID3D12PipelineState> spatialReusePso;
 
 static ComPtr<ID3D12StateObject> ptPso;
@@ -1007,6 +1087,17 @@ static void initPipeline()
         };
 
         makeRtPipeline(gbufferPipelineInputs);
+    }
+
+    // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = temporalReuseRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(temporal_reuse_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&temporalReusePso)));
+        temporalReusePso->SetName(L"temporalReusePso");
     }
 
     // ===================================
@@ -1404,6 +1495,12 @@ static inline void swapRisBuffers()
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+static inline void storePrevRisBuffer()
+{
+    // Both of these should be in D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE at this point (or promotable to that)
+    std::swap(dev_risSamplesIn, dev_risSamplesPrev);
+}
+
 static bool stopAccumulating = false;
 
 void render()
@@ -1552,8 +1649,19 @@ void render()
     }
     else
     {
-        debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
-        debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
+#ifdef _DEBUG
+        if (debugOutputTarget->debugOutputNumChannels == 0)
+        {
+            Logger::logError("Cannot set debug view to an RtTarget with 0 debug channels");
+            debugOutputTarget = nullptr;
+            debugParams->debugOutputSrvIdx = ~0u;
+        }
+        else
+#endif
+        {
+            debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
+            debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
+        }
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
@@ -1580,19 +1688,19 @@ void render()
         // GBUFFER
         // ===================================
 
-        cmdList->SetPipelineState1(gbufferPso.Get());
-        cmdList->SetComputeRootSignature(gbufferRootSig.Get());
-
-        // this isn't strictly necessary as the RtTargets should be auto-promoted to UNORDERED_ACCESS on first access,
+        // this isn't strictly necessary as the RtTargets should be promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
         // the before state doesn't match reality)
-        for (RtTarget* rtTarget : rtTargets)
+        for (RtTarget* rtTarget : autoTransitionRtTargets)
         {
             if (rtTarget->hasUav)
             {
                 rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
         }
+
+        cmdList->SetPipelineState1(gbufferPso.Get());
+        cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
         // clang-format off
         cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1617,21 +1725,51 @@ void render()
 
         swapRisBuffers();
 
-        // ===================================
-        // SPATIAL REUSE
-        // ===================================
+        // these state transitions are needed for ReSTIR and for storing prevDepthAndNormal in the collect pass
+        linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
         const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
         if (samplingMode == SamplingMode::RESTIR)
         {
-            static constexpr uint32_t numSpatialReusePasses = 1;
+            // ===================================
+            // TEMPORAL REUSE
+            // ===================================
+            if (frameNumber > 0)
+            {
+                motionTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+                cmdList->SetPipelineState(temporalReusePso.Get());
+                cmdList->SetComputeRootSignature(temporalReuseRootSig.Get());
+
+                // clang-format off
+                cmdList->SetComputeRootConstantBufferView(TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
+                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV), dev_risSamplesPrev->GetGPUVirtualAddress());
+
+                cmdList->SetComputeRootUnorderedAccessView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
+                // clang-format on
+
+                const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, TEMPORAL_REUSE_WORKGROUP_SIZE_X);
+                const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, TEMPORAL_REUSE_WORKGROUP_SIZE_Y);
+                cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+
+                swapRisBuffers();
+            }
+
+            // ===================================
+            // SPATIAL REUSE
+            // ===================================
+            static constexpr uint32_t numSpatialReusePasses = 1; // TODO: use different random seed for each pass if doing multiple passes
             for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)
             {
                 cmdList->SetPipelineState(spatialReusePso.Get());
                 cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
-
-                linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
                 // clang-format off
                 cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1656,7 +1794,7 @@ void render()
         // PATH TRACING
         // ===================================
 
-        // dev_gbuffer should be auto-promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
+        // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_gbuffer.Get(),
@@ -1688,6 +1826,8 @@ void render()
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
 
+        storePrevRisBuffer();
+
         // ===================================
         // COLLECT
         // ===================================
@@ -1696,6 +1836,8 @@ void render()
                                                      dev_pathTracingRawBuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
@@ -1725,9 +1867,6 @@ void render()
 
     cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
-    cmdList->SetPipelineState(postprocessPso.Get());
-    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
-
     ComPtr<ID3D12Resource> backBuffer;
     const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
     CHECK_HRESULT(swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
@@ -1735,13 +1874,16 @@ void render()
     BufferHelper::stateTransitionResourceBarrier(
         cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : autoTransitionRtTargets)
     {
         if (rtTarget->hasSrv)
         {
             rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         }
     }
+
+    cmdList->SetPipelineState(postprocessPso.Get());
+    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
 
     cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
                                                paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
@@ -1857,7 +1999,7 @@ void destroy()
     scene.reset();
     AcsHelper::reset();
 
-    for (RtTarget* rtTarget : rtTargets)
+    for (RtTarget* rtTarget : allRtTargets)
     {
         rtTarget->reset();
     }
@@ -1867,18 +2009,22 @@ void destroy()
 
     dev_risSamples1.Reset();
     dev_risSamples2.Reset();
+    dev_risSamples3.Reset();
     dev_risSamplesIn = nullptr;
     dev_risSamplesOut = nullptr;
+    dev_risSamplesPrev = nullptr;
 
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
+    temporalReusePso.Reset();
     spatialReusePso.Reset();
     ptPso.Reset();
     collectPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
+    temporalReuseRootSig.Reset();
     spatialReuseRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();

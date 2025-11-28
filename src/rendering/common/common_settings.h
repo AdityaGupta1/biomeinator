@@ -19,6 +19,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 // =============================================
+// TEMPORAL REUSE
+// =============================================
+
+#define TEMPORAL_REUSE_WORKGROUP_SIZE_X 16
+#define TEMPORAL_REUSE_WORKGROUP_SIZE_Y 16
+
+// =============================================
 // SPATIAL REUSE
 // =============================================
 

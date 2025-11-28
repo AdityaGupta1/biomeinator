@@ -44,7 +44,12 @@ struct HeapIndices
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
         uint specularHitDistanceTargetIdx;
+        uint prevDepthAndNormalTargetIdx;
+
         uint debugTargetIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
     } uav;
 
     struct
@@ -57,12 +62,12 @@ struct HeapIndices
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
         uint specularHitDistanceTargetIdx;
-        uint dlssOutputTargetIdx;
+        uint prevDepthAndNormalTargetIdx;
 
+        uint dlssOutputTargetIdx;
         uint debugTargetIdx;
         uint pad0;
         uint pad1;
-        uint pad2;
     } srv;
 };
 
@@ -80,8 +85,7 @@ struct CameraParams
     float4x4 worldToPrevClipMat;
 
     float2 jitter;
-    uint pad0;
-    uint pad1;
+    float2 prevJitter;
 
     float3 pos_WS;
     float nearPlane;
@@ -90,10 +94,22 @@ struct CameraParams
     float farPlane;
 
     float3 right_WS;
-    uint pad2;
+    float tanHalfFovY;
 
     float3 up_WS;
-    float tanHalfFovY;
+    float prevTanHalfFovY;
+
+    float3 prevPos_WS;
+    uint pad0;
+
+    float3 prevForward_WS;
+    uint pad1;
+
+    float3 prevRight_WS;
+    uint pad2;
+
+    float3 prevUp_WS;
+    uint pad3;
 };
 
 struct SceneParams

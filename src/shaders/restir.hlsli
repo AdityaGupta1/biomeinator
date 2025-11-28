@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RIS_MIN_NUM_LIGHT_CANDIDATES 8u
 #define RIS_MIN_NUM_BSDF_CANDIDATES 1u
 
+#define RESTIR_MAX_CONFIDENCE 10
+
 // float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
@@ -40,6 +42,18 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
     return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
+}
+
+float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surfPos_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
+{
+    const float3 this_wi_WS = normalize(pointOnLight_WS - this_surfPos_WS);
+    const float this_r2 = distance2(this_surfPos_WS, pointOnLight_WS);
+
+    const float3 other_wi_WS = normalize(pointOnLight_WS - other_surfPos_WS);
+    const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
+
+    const float geomTermJacobian = (absCosTheta(-this_wi_WS, lightNor_WS) * other_r2) / (absCosTheta(-other_wi_WS, lightNor_WS) * this_r2); // TODO: clamp fireflies?
+    return geomTermJacobian;
 }
 
 RisSample generateDirectLightingRisSample(const uint hitGroup,
@@ -144,6 +158,8 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = w_sum / Y_p_hat;
+    risSampleOut.p_hat = Y_p_hat;
+    risSampleOut.confidence = 1;
     return risSampleOut;
 }
 

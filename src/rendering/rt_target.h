@@ -53,7 +53,7 @@ public:
 
     RtTarget(const std::wstring& name,
              DXGI_FORMAT format,
-             uint32_t debugOutputNumChannels,
+             uint32_t debugOutputNumChannels = 0,
              bool isFullSize = false,
              bool hasUav = true,
              bool hasSrv = true);

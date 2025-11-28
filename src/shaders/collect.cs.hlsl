@@ -22,8 +22,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"
+#include "util/packing.hlsli"
 
 StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER_IN, COLLECT_REGISTER_SPACE);
+
+void storePrevDepthAndNormal(const uint2 pixelIdx)
+{
+    Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
+    Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
+
+    const float depth = linearDepthTarget[pixelIdx];
+    const float3 normal = normalize(normalsAndRoughnessTarget[pixelIdx].xyz);
+
+    RWTexture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.uav.prevDepthAndNormalTargetIdx];
+    prevDepthAndNormalTarget[pixelIdx] = uint2(asuint(depth), octEncode(normal));
+}
 
 [shader("compute")]
 [numthreads(COLLECT_WORKGROUP_SIZE_X, COLLECT_WORKGROUP_SIZE_Y, 1)]
@@ -35,6 +48,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         return;
     }
+
+    storePrevDepthAndNormal(pixelIdx);
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 

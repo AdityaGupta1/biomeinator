@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER_REGISTER_GBUFFER_OUT, GBUFFER_REGISTER_SPACE);
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER_REGISTER_RIS_SAMPLES_OUT, GBUFFER_REGISTER_SPACE);
 
+// motion is in uv space, not pixel space
 float2 calculateMotionFromPos(const float3 pos_WS)
 {
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
@@ -147,7 +148,8 @@ void RayGeneration()
         risSample.lightIdx = LIGHT_IDX_INVALID;
         risSample.pointOnLight_WS = 0.f;
         risSample.W = 0.f;
-        risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
+        risSample.confidence = 0;
+        risSample.pad0 = 0;
 
         // tried reordering here by whether or not it generates an RIS sample and it was slower (75 fps after vs 79 fps before)
 
@@ -160,8 +162,19 @@ void RayGeneration()
                 const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
                 const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
-                RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 6831107, linearPixelIdx, renderParams.frameNumber);
+                RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
                 risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+
+#if 0 // TODO: enable this after improving other parts of ReSTIR implementation (see #192)
+                if (debugParams.debugBool0 == 1) {
+                    // TODO: don't do this if this was a bsdf sample because visibility was already tested in that case
+                    const DirectLightingSample lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS);
+                    if (!lightSample.didHitLight)
+                    {
+                        risSample.W = 0.f;
+                    }
+                }
+#endif
             }
         }
 

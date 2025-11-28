@@ -56,8 +56,8 @@ struct GbufferData
 struct Vertex
 {
     float3 pos;
-    float3 nor; // TODO: pack into one? uint
-    float2 uv; // TODO: pack into one uint
+    float3 nor; // TODO: pack into one uint using octEncode
+    float2 uv; // TODO: pack into one uint?
 };
 
 struct InstanceData
@@ -192,9 +192,9 @@ struct RisSample
     float3 pointOnLight_WS; // TODO: optimize by storing the uv coords of the point instead, to make the struct 16 bytes?
 
     float W;
+    float p_hat;
+    uint confidence;
     uint pad0;
-    uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus
