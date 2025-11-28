@@ -149,6 +149,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    if (!isfinite(reproj_risSample.W)) // TODO: figure out why W is becoming infinite and fix the root issue
+    {
+        risSamplesOut[linearPixelIdx] = this_risSample;
+        return;
+    }
+
     // TODO: MIS with confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
     const float this_m = 0.5f;
     const float reproj_m = 0.5f;
