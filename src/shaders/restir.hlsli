@@ -158,6 +158,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = w_sum / Y_p_hat;
+    risSampleOut.p_hat = Y_p_hat;
     return risSampleOut;
 }
 

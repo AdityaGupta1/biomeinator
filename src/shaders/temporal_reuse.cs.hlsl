@@ -36,6 +36,9 @@ struct ReprojectionResult
 {
     float score;
     uint2 pixelIdx;
+
+    float3 this_surfPos_WS;
+    float3 reproj_surfPos_WS;
 };
 
 ReprojectionResult reproject(uint2 pixelIdx)
@@ -87,7 +90,8 @@ ReprojectionResult reproject(uint2 pixelIdx)
             {
                 result.score = candidateReprojectionScore;
                 result.pixelIdx = reprojectCandidatePixelIdx;
-                // TODO: set other stuff in result
+                result.this_surfPos_WS = this_surfPos_WS;
+                result.reproj_surfPos_WS = reproj_surfPos_WS;
             }
         }
     }
@@ -135,6 +139,9 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 44721359, linearPixelIdx, renderParams.frameNumber);
+
+    const uint reproj_linearPixelIdx = reprojResult.pixelIdx.x * renderParams.renderSize.x + reprojResult.pixelIdx.y;
+    const RisSample reproj_risSample = risSamplesPrev[reproj_linearPixelIdx];
 
     // need to add confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
 

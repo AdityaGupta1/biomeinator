@@ -148,7 +148,7 @@ void RayGeneration()
         risSample.lightIdx = LIGHT_IDX_INVALID;
         risSample.pointOnLight_WS = 0.f;
         risSample.W = 0.f;
-        risSample.pad0 = risSample.pad1 = risSample.pad2 = 0;
+        risSample.pad0 = risSample.pad1 = 0;
 
         // tried reordering here by whether or not it generates an RIS sample and it was slower (75 fps after vs 79 fps before)
 

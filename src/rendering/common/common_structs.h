@@ -192,9 +192,9 @@ struct RisSample
     float3 pointOnLight_WS; // TODO: optimize by storing the uv coords of the point instead, to make the struct 16 bytes?
 
     float W;
+    float p_hat;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus

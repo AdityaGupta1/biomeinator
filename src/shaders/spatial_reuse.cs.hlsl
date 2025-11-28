@@ -64,7 +64,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     uint Y_lightIdx = this_risSample.lightIdx;
     float3 Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
-    float Y_p_hat = risTargetFunction(areaLights[Y_lightIdx], this_surfPos_WS, this_surfNor_WS, Y_pointOnLight_WS);
+    float Y_p_hat = this_risSample.p_hat;
 
     const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise?)
     float w_sum = this_m * Y_p_hat * this_risSample.W; // = this_w
@@ -119,6 +119,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = (w_sum / Y_p_hat) * validSpatialSamplesCorrectionFactor;
-    risSampleOut.pad0 = risSampleOut.pad1 = risSampleOut.pad2 = 0;
+    risSampleOut.p_hat = Y_p_hat;
+    risSampleOut.pad0 = risSampleOut.pad1 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }
