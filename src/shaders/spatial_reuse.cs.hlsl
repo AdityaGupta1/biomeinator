@@ -66,6 +66,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     float Y_p_hat = this_risSample.p_hat;
 
     float w_sum = 0.f;
+    const uint totalNumSamples = NUM_SPATIAL_SAMPLES + 1;
     uint numValidSpatialSamples = 0;
     uint sumConfidence = this_risSample.confidence;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
@@ -97,7 +98,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float other_W = other_risSample.W * geomTermJacobian;
 
-        const float other_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
+        const float other_m = 1.f / totalNumSamples; // TODO: use better MIS weights (pairwise? use confidence weights?)
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
         const float other_w = other_m * other_p_hat_this * other_W;
 
@@ -112,7 +113,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         sumConfidence += other_risSample.confidence;
     }
 
-    const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
+    const float this_m = 1.f / totalNumSamples; // TODO: use better MIS weights (pairwise? use confidence weights?)
     const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
     w_sum += this_w;
     if (rng.nextFloat() < this_w / w_sum)
@@ -122,7 +123,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
     }
 
-    const float validSpatialSamplesCorrectionFactor = ((NUM_SPATIAL_SAMPLES + 1) / float(numValidSpatialSamples + 1));
+    const float validSpatialSamplesCorrectionFactor = totalNumSamples / float(numValidSpatialSamples + 1);
 
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
