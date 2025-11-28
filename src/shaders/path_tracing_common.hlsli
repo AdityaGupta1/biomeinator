@@ -84,7 +84,7 @@ float3 getPrevPrimaryRayDirection(const uint2 pixelIdx)
     const float2 ndc = float2(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f);
 
     const float aspect = size.x / size.y;
-    const float yScale = cameraParams.tanHalfFovY;
+    const float yScale = cameraParams.prevTanHalfFovY;
     const float xScale = yScale * aspect;
 
     const float3 targetPos_WS = cameraParams.prevPos_WS

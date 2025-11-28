@@ -136,6 +136,7 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
     this->params.prevForward_WS = this->params.forward_WS;
     this->params.prevRight_WS = this->params.right_WS;
     this->params.prevUp_WS = this->params.up_WS;
+    this->params.prevTanHalfFovY = this->params.tanHalfFovY;
 
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {

@@ -94,22 +94,22 @@ struct CameraParams
     float farPlane;
 
     float3 right_WS;
-    uint pad0;
-
-    float3 up_WS;
     float tanHalfFovY;
 
+    float3 up_WS;
+    float prevTanHalfFovY;
+
     float3 prevPos_WS;
-    uint pad1;
+    uint pad0;
 
     float3 prevForward_WS;
-    uint pad2;
+    uint pad1;
 
     float3 prevRight_WS;
-    uint pad3;
+    uint pad2;
 
     float3 prevUp_WS;
-    uint pad4;
+    uint pad3;
 };
 
 struct SceneParams
