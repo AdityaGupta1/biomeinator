@@ -193,7 +193,7 @@ struct RisSample
 
     float W;
     float p_hat;
-    uint confidence;
+    uint pad0;
     uint pad1;
 };
 
