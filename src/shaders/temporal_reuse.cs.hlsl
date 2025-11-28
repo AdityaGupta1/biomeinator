@@ -41,6 +41,7 @@ struct ReprojectionResult
     float3 this_surfNor_WS;
 
     float3 reproj_surfPos_WS;
+    float3 reproj_surfNor_WS;
 };
 
 ReprojectionResult reproject(uint2 pixelIdx)
@@ -84,8 +85,10 @@ ReprojectionResult reproject(uint2 pixelIdx)
             const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojectCandidatePixelIdx) * reproj_depth;
             const float dist = distance(this_surfPos_WS, reproj_surfPos_WS);
 
-            const float positionReprojectionScore = max(0.2f - dist, 0.f) / 0.2f;
-            const float normalReprojectionScore = max((dot(this_surfNor_WS, reproj_surfNor_WS) - 0.9f), 0.f) / 0.1f;
+            const float maxDist = 0.2f;
+            const float positionReprojectionScore = max(maxDist - dist, 0.f) / maxDist;
+            const float maxNormalDiff = 0.1f;
+            const float normalReprojectionScore = max((dot(this_surfNor_WS, reproj_surfNor_WS) - (1.f - maxNormalDiff)), 0.f) / maxNormalDiff;
 
             const float candidateReprojectionScore = positionReprojectionScore * normalReprojectionScore;
             if (candidateReprojectionScore > result.score)
@@ -97,6 +100,7 @@ ReprojectionResult reproject(uint2 pixelIdx)
                 result.this_surfNor_WS = this_surfNor_WS;
 
                 result.reproj_surfPos_WS = reproj_surfPos_WS;
+                result.reproj_surfNor_WS = reproj_surfNor_WS;
             }
         }
     }
@@ -148,18 +152,26 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     // TODO: use target functions in MIS weights
-    const float reprojConfidence = reproj_risSample.confidence * reprojResult.score;
-    const float sumConfidence = this_risSample.confidence + reprojConfidence;
-    const float this_m = this_risSample.confidence / sumConfidence;
-    const float reproj_m = reprojConfidence / sumConfidence;
 
+    const float this_confidence = this_risSample.confidence;
+    const float reproj_confidence = reproj_risSample.confidence * reprojResult.score;
+
+    const AreaLight this_light = areaLights[this_risSample.lightIdx];
     const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
-    const float reproj_p_hat = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS);
+
+    const float this_p_hat = this_risSample.p_hat;
+    const float this_p_hat_reproj = risTargetFunction(this_light, reprojResult.reproj_surfPos_WS, reprojResult.reproj_surfNor_WS, this_risSample.pointOnLight_WS); // this_p_hat from reproj_pos
+    const float this_m = (this_p_hat * this_confidence) / ((this_p_hat * this_confidence) + (this_p_hat_reproj * reproj_confidence));
+
+    const float reproj_p_hat = reproj_risSample.p_hat;
+    const float reproj_p_hat_this = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS); // reproj_p_hat from this_pos
+    const float reproj_m = (reproj_p_hat * reproj_confidence) / ((reproj_p_hat * reproj_confidence) + (reproj_p_hat_this * this_confidence));
+
     const float geomTermJacobian = calcGeomTermJacobian(reprojResult.this_surfPos_WS, reprojResult.reproj_surfPos_WS, reproj_risSample.pointOnLight_WS, reproj_light.normal_WS);
     const float reproj_W = reproj_risSample.W * geomTermJacobian;
 
-    const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
-    const float reproj_w = reproj_m * reproj_p_hat * reproj_W;
+    const float this_w = this_m * this_p_hat * this_risSample.W;
+    const float reproj_w = reproj_m * reproj_p_hat_this * reproj_W;
     const float w_sum = this_w + reproj_w;
 
     RandomSampler rng = initRandomSampler(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
@@ -177,11 +189,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         risSampleOut.lightIdx = reproj_risSample.lightIdx;
         risSampleOut.pointOnLight_WS = reproj_risSample.pointOnLight_WS;
-        Y_p_hat = reproj_p_hat;
+        Y_p_hat = reproj_p_hat_this;
     }
     risSampleOut.W = w_sum / Y_p_hat;
     risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.confidence = min(uint(sumConfidence), RESTIR_MAX_CONFIDENCE);
+    risSampleOut.confidence = min(uint(this_confidence + reproj_confidence), RESTIR_MAX_CONFIDENCE);
     risSampleOut.pad0 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }
