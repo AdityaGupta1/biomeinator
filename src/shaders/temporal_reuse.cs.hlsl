@@ -27,10 +27,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/packing.hlsli"
 #include "util/rng.hlsli"
 
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_IN, TEMPORAL_REUSE_REGISTER_SPACE);
-StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_PREV, TEMPORAL_REUSE_REGISTER_SPACE);
+StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(TEMPORAL_REUSE, RIS_SAMPLES_IN);
+StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE, RIS_SAMPLES_PREV);
 
-RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_OUT, TEMPORAL_REUSE_REGISTER_SPACE);
+RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(TEMPORAL_REUSE, RIS_SAMPLES_OUT);
 
 struct ReprojectionResult
 {

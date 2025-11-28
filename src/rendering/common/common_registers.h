@@ -113,9 +113,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // =============================================
 
 #ifndef __cplusplus
-#define _REGISTER_IMPL(type, reg, spc) register(type##reg, space##spc)
-#define REGISTER_U(reg, spc) _REGISTER_IMPL(u, reg, spc)
-#define REGISTER_T(reg, spc) _REGISTER_IMPL(t, reg, spc)
-#define REGISTER_B(reg, spc) _REGISTER_IMPL(b, reg, spc)
-#define REGISTER_S(reg, spc) _REGISTER_IMPL(s, reg, spc)
+// these macros are wacky but they make it much easier to define resources in shaders
+#define _REGISTER_CONCAT(a, b) a##b
+#define _REGISTER_EXPAND(x) x
+#define _REGISTER_IMPL_STEP3(type, regVal, spcVal) register(_REGISTER_CONCAT(type, regVal), _REGISTER_CONCAT(space, spcVal))
+#define _REGISTER_IMPL_STEP2(type, regName, spcName) _REGISTER_IMPL_STEP3(type, _REGISTER_EXPAND(regName), _REGISTER_EXPAND(spcName))
+#define _REGISTER_IMPL_STEP1(type, prefix, param) _REGISTER_IMPL_STEP2(type, prefix##_REGISTER_##param, prefix##_REGISTER_SPACE)
+#define REGISTER_U(prefix, param) _REGISTER_IMPL_STEP1(u, prefix, param)
+#define REGISTER_T(prefix, param) _REGISTER_IMPL_STEP1(t, prefix, param)
+#define REGISTER_B(prefix, param) _REGISTER_IMPL_STEP1(b, prefix, param)
+#define REGISTER_S(prefix, param) _REGISTER_IMPL_STEP1(s, prefix, param)
 #endif

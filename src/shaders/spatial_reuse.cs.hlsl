@@ -29,9 +29,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define NUM_SPATIAL_SAMPLES 4
 #define SPATIAL_SAMPLE_MAX_RADIUS 10
 
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(SPATIAL_REUSE_REGISTER_RIS_SAMPLES_IN, SPATIAL_REUSE_REGISTER_SPACE);
+StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(SPATIAL_REUSE, RIS_SAMPLES_IN);
 
-RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(SPATIAL_REUSE_REGISTER_RIS_SAMPLES_OUT, SPATIAL_REUSE_REGISTER_SPACE);
+RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(SPATIAL_REUSE, RIS_SAMPLES_OUT);
 
 [shader("compute")]
 [numthreads(SPATIAL_REUSE_WORKGROUP_SIZE_X, SPATIAL_REUSE_WORKGROUP_SIZE_Y, 1)]

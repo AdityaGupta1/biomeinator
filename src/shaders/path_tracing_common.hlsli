@@ -26,12 +26,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
 
-RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT_REGISTER_RAYTRACING_ACS, RT_REGISTER_SPACE);
+RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
-StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT_REGISTER_INSTANCE_DATAS, RT_REGISTER_SPACE);
+StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
 
-StructuredBuffer<Vertex> verts : REGISTER_T(RT_REGISTER_VERTS, RT_REGISTER_SPACE);
-ByteAddressBuffer idxs : REGISTER_T(RT_REGISTER_IDXS, RT_REGISTER_SPACE);
+StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
+ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {

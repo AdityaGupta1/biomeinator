@@ -24,9 +24,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 
-StructuredBuffer<Material> materials : REGISTER_T(RT_REGISTER_MATERIALS, RT_REGISTER_SPACE);
+StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
 
-SamplerState texSampler : REGISTER_S(RT_REGISTER_TEX_SAMPLER, RT_REGISTER_SPACE);
+SamplerState texSampler : REGISTER_S(RT, TEX_SAMPLER);
 
 float3 sampleHemisphereCosineWeighted(const float3 normal_WS, inout RandomSampler rng)
 {

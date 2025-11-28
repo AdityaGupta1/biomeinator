@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "util/packing.hlsli"
 
-StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER_IN, COLLECT_REGISTER_SPACE);
+StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT, PATH_TRACING_RAW_BUFFER_IN);
 
 void storePrevDepthAndNormal(const uint2 pixelIdx)
 {

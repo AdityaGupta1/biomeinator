@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_params.h"
 #include "../rendering/common/common_registers.h"
 
-cbuffer GlobalParams : REGISTER_B(COMMON_REGISTER_GLOBAL_PARAMS, COMMON_REGISTER_SPACE)
+cbuffer GlobalParams : REGISTER_B(COMMON, GLOBAL_PARAMS)
 {
     HeapIndices heapIndices;
     ConstantParams constantParams;

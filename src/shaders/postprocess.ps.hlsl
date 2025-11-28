@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "util/color.hlsli"
 
-SamplerState texSampler : REGISTER_S(POSTPROCESS_REGISTER_TEX_SAMPLER, POSTPROCESS_REGISTER_SPACE);
+SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
 
 struct PsIn
 {

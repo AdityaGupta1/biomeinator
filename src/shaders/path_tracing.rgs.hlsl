@@ -31,9 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT_REGISTER_GBUFFER_IN, PT_REGISTER_SPACE);
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT_REGISTER_RIS_SAMPLES_IN, PT_REGISTER_SPACE);
-RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT, PT_REGISTER_SPACE);
+StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
+StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT, RIS_SAMPLES_IN);
+RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
