@@ -67,7 +67,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const AreaLight this_light = areaLights[this_risSample.lightIdx];
     const float this_p_hat = this_risSample.p_hat;
-    float this_m = 0.f;
+    float this_m = 0.f; // TODO: add confidence weights to this_m and other_m? seems like it would require a preliminary pass to sum confidence weights for all spatial samples
 
     float w_sum = 0.f;
     const uint totalNumSamples = NUM_SPATIAL_SAMPLES + 1;
@@ -104,7 +104,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float other_p_hat = other_risSample.p_hat;
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
-        const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1 (= M - 1)
+        const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1
         const float other_w = other_m * other_p_hat_this * other_W;
 
         const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS);
