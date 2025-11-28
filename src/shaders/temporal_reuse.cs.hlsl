@@ -138,7 +138,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 44721359, linearPixelIdx, renderParams.frameNumber);
+    RandomSampler rng = initRandomSampler(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
 
     const uint reproj_linearPixelIdx = reprojResult.pixelIdx.x * renderParams.renderSize.x + reprojResult.pixelIdx.y;
     const RisSample reproj_risSample = risSamplesPrev[reproj_linearPixelIdx];

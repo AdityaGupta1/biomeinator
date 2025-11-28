@@ -53,7 +53,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    RandomSampler rng = initRandomSampler(constantParams.rngSeed ^ 1908061, linearPixelIdx, renderParams.frameNumber);
+    RandomSampler rng = initRandomSampler(constantParams.rngSeed, 1908061, linearPixelIdx, renderParams.frameNumber);
 
     Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
     const float3 primaryRayDirection = getPrimaryRayDirection(pixelIdx);
@@ -73,8 +73,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
     {
         const float2 spatialSamplePixelOffset = float2((rng.nextFloat2() - 0.5f) * 2 * SPATIAL_SAMPLE_MAX_RADIUS);
-        const uint2 spatialSamplePixelIdx = uint2(pixelIdx + int2(round(spatialSamplePixelOffset)));
-        if (any(spatialSamplePixelIdx >= renderParams.renderSize)) // this might be kind of sus since it relies on underflow?
+        const int2 spatialSamplePixelIdx = int2(pixelIdx) + int2(round(spatialSamplePixelOffset));
+        if (isPixelOutOfBounds(spatialSamplePixelIdx))
         {
             continue;
         }

@@ -224,7 +224,7 @@ void RayGeneration()
     const uint pathSplitIdx = getPathSplitIdx();
 
     Payload payload = gbufferPayload;
-    payload.rng = initRandomSampler(constantParams.rngSeed, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
+    payload.rng = initRandomSampler(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
     pathTraceRay(payload);
 
