@@ -29,8 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RESTIR_MAX_CONFIDENCE 10
 
-// float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
-float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
+float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
@@ -38,7 +37,7 @@ float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const fl
 
     // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
 
-    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: specify if light is single or double sided and use cosTheta or absCosTheta accordingly
+    const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: replace with cosTheta for non-transmissive materials?
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
     return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
@@ -85,8 +84,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
         // const float m_i = lightPdf / misDenominator;
         // const float W_X_i = 1.f / lightPdf;
 
-        // const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS, material, uv, wo_WS);
-        const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS);
+        const float p_hat = risTargetFunction(light, pointOnLight_WS, surfPos_WS, surfNor_WS);
 
         const float w_i = p_hat / misDenominator;
         // const float w_i = m_i * p_hat * W_X_i;
@@ -139,8 +137,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
         // const float m_i = bsdfSample.pdf / misDenominator
         // const float W_X_i = 1.f / bsdfSample.pdf;
 
-        // const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS, material, uv, wo_WS);
-        const float p_hat = risTargetFunction(light, surfPos_WS, surfNor_WS, pointOnLight_WS);
+        const float p_hat = risTargetFunction(light, pointOnLight_WS, surfPos_WS, surfNor_WS);
 
         const float w_i = p_hat / misDenominator;
         // const float w_i = m_i * p_hat * W_X_i;

@@ -100,7 +100,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float W = other_risSample.W * geomTermJacobian;
 
         const float m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
-        const float p_hat = risTargetFunction(other_light, this_surfPos_WS, this_surfNor_WS, other_risSample.pointOnLight_WS);
+        const float p_hat = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS);
         const float w = m * p_hat * W;
 
         w_sum += w;

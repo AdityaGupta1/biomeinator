@@ -157,11 +157,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
 
     const float this_p_hat = this_risSample.p_hat;
-    const float this_p_hat_reproj = risTargetFunction(this_light, reprojResult.reproj_surfPos_WS, reprojResult.reproj_surfNor_WS, this_risSample.pointOnLight_WS); // this_p_hat from reproj_pos
+    const float this_p_hat_reproj = risTargetFunction(this_light, this_risSample.pointOnLight_WS, reprojResult.reproj_surfPos_WS, reprojResult.reproj_surfNor_WS); // this_p_hat from reproj_pos
     const float this_m = (this_p_hat * this_confidence) / ((this_p_hat * this_confidence) + (this_p_hat_reproj * reproj_confidence));
 
     const float reproj_p_hat = reproj_risSample.p_hat;
-    const float reproj_p_hat_this = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS); // reproj_p_hat from this_pos
+    const float reproj_p_hat_this = risTargetFunction(reproj_light, reproj_risSample.pointOnLight_WS, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS); // reproj_p_hat from this_pos
     const float reproj_m = (reproj_p_hat * reproj_confidence) / ((reproj_p_hat * reproj_confidence) + (reproj_p_hat_this * this_confidence));
 
     const float geomTermJacobian = calcGeomTermJacobian(reprojResult.this_surfPos_WS, reprojResult.reproj_surfPos_WS, reproj_risSample.pointOnLight_WS, reproj_light.normal_WS);
