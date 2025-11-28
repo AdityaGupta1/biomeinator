@@ -154,10 +154,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     // TODO: use target functions in MIS weights
-    // TODO: multiply reproj confidence by reproj score
-    const uint sumConfidence = this_risSample.confidence + reproj_risSample.confidence;
-    const float this_m = this_risSample.confidence / float(sumConfidence);
-    const float reproj_m = reproj_risSample.confidence / float(sumConfidence);
+    const float reprojConfidence = reproj_risSample.confidence * reprojResult.score;
+    const float sumConfidence = this_risSample.confidence + reprojConfidence;
+    const float this_m = this_risSample.confidence / sumConfidence;
+    const float reproj_m = reprojConfidence / sumConfidence;
 
     const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
     const float reproj_p_hat = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS);
@@ -187,7 +187,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
     risSampleOut.W = w_sum / Y_p_hat;
     risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.confidence = min(sumConfidence, RESTIR_MAX_CONFIDENCE);
+    risSampleOut.confidence = min(uint(sumConfidence), RESTIR_MAX_CONFIDENCE);
     risSampleOut.pad0 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }
