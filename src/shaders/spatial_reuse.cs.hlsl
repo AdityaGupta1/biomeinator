@@ -65,10 +65,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
     float Y_p_hat = this_risSample.p_hat;
 
-    const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise?)
+    const float this_m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
     float w_sum = this_m * Y_p_hat * this_risSample.W; // = this_w
 
     uint numValidSpatialSamples = 0;
+    uint sumConfidence = this_risSample.confidence;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
     {
         const float2 spatialSamplePixelOffset = float2((rng.nextFloat2() - 0.5f) * 2 * SPATIAL_SAMPLE_MAX_RADIUS);
@@ -98,7 +99,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float W = other_risSample.W * geomTermJacobian;
 
-        const float m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise?)
+        const float m = 1.f / (NUM_SPATIAL_SAMPLES + 1); // TODO: use better MIS weights (pairwise? use confidence weights?)
         const float p_hat = risTargetFunction(other_light, this_surfPos_WS, this_surfNor_WS, other_risSample.pointOnLight_WS);
         const float w = m * p_hat * W;
 
@@ -110,6 +111,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             Y_pointOnLight_WS = other_risSample.pointOnLight_WS;
         }
         ++numValidSpatialSamples;
+        sumConfidence += other_risSample.confidence;
     }
 
     const float validSpatialSamplesCorrectionFactor = ((NUM_SPATIAL_SAMPLES + 1) / float(numValidSpatialSamples + 1));
@@ -119,6 +121,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = (w_sum / Y_p_hat) * validSpatialSamplesCorrectionFactor;
     risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.pad0 = risSampleOut.pad1 = 0;
+    risSampleOut.confidence = min(sumConfidence, RESTIR_MAX_CONFIDENCE);
+    risSampleOut.pad0 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }

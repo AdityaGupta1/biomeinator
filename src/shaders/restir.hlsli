@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RIS_MIN_NUM_LIGHT_CANDIDATES 8u
 #define RIS_MIN_NUM_BSDF_CANDIDATES 1u
 
+#define RESTIR_MAX_CONFIDENCE 10
+
 // float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS, const Material material, const float2 uv, const float3 wo_WS)
 float risTargetFunction(const AreaLight light, const float3 surfPos_WS, const float3 surfNor_WS, const float3 pointOnLight_WS)
 {
@@ -157,6 +159,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = w_sum / Y_p_hat;
     risSampleOut.p_hat = Y_p_hat;
+    risSampleOut.confidence = 1;
     return risSampleOut;
 }
 

@@ -54,8 +54,6 @@ ReprojectionResult reproject(uint2 pixelIdx)
 
     const int2 minCornerPixelIdx = int2(floor(reprojectedPixelPos)) - 1;
     const int2 maxCornerPixelIdx = minCornerPixelIdx + 2;
-    //const int2 minCornerPixelIdx = pixelIdx;
-    //const int2 maxCornerPixelIdx = pixelIdx;
     if (isPixelOutOfBounds(minCornerPixelIdx) && isPixelOutOfBounds(maxCornerPixelIdx))
     {
         return result;
@@ -155,9 +153,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    // TODO: MIS with confidence weights (cap at 20 probably, and maybe multiply by reprojectionScore?)
-    const float this_m = 0.5f;
-    const float reproj_m = 0.5f;
+    // TODO: use target functions in MIS weights
+    // TODO: multiply reproj confidence by reproj score
+    const uint sumConfidence = this_risSample.confidence + reproj_risSample.confidence;
+    const float this_m = this_risSample.confidence / float(sumConfidence);
+    const float reproj_m = reproj_risSample.confidence / float(sumConfidence);
 
     const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
     const float reproj_p_hat = risTargetFunction(reproj_light, reprojResult.this_surfPos_WS, reprojResult.this_surfNor_WS, reproj_risSample.pointOnLight_WS);
@@ -187,6 +187,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
     risSampleOut.W = w_sum / Y_p_hat;
     risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.pad0 = risSampleOut.pad1 = 0;
+    risSampleOut.confidence = min(sumConfidence, RESTIR_MAX_CONFIDENCE);
+    risSampleOut.pad0 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }
