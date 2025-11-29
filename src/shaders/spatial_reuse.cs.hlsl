@@ -26,8 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "restir.hlsli"
 #include "util/rng.hlsli"
 
-#define NUM_SPATIAL_SAMPLES 4
-#define SPATIAL_SAMPLE_MAX_RADIUS 10
+#define NUM_SPATIAL_SAMPLES 5
+#define SPATIAL_SAMPLE_MAX_RADIUS 8
 
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(SPATIAL_REUSE, RIS_SAMPLES_IN);
 
@@ -82,8 +82,9 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             continue;
         }
 
+        const float3 other_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(spatialSamplePixelIdx) * linearDepthTarget[spatialSamplePixelIdx];
         const float3 other_surfNor_WS = normalsAndRoughnessTarget[spatialSamplePixelIdx].xyz;
-        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.95f)
+        if (dot(this_surfNor_WS, other_surfNor_WS) < 0.95f || distance(this_surfPos_WS, other_surfPos_WS) > 0.4f)
         {
             continue;
         }
@@ -97,7 +98,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const AreaLight other_light = areaLights[other_risSample.lightIdx];
 
-        const float3 other_surfPos_WS = cameraParams.pos_WS + getPrimaryRayDirection(spatialSamplePixelIdx) * linearDepthTarget[spatialSamplePixelIdx];
         const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_light.normal_WS);
 
         const float other_p_hat = other_risSample.p_hat;
