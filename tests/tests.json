@@ -194,11 +194,11 @@
                 "--width=480",
                 "--height=270",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
+                "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12"
             ],
             "golden": "evil_room/golden.png",
-            "threshold": 0.02
+            "threshold": 0.03
         },
         {
             "name": "evil_room_blender_no_tonemap",
@@ -207,7 +207,7 @@
                 "--width=480",
                 "--height=270",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
+                "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],

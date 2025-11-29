@@ -190,7 +190,11 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             }
             else
             {
-                setIsInCursorMode(false);
+                const bool didClickOnGui = ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+                if (!didClickOnGui)
+                {
+                    setIsInCursorMode(false);
+                }
             }
             break;
         case WM_LBUTTONDOWN:
