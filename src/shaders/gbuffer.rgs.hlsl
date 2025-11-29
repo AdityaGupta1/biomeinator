@@ -168,6 +168,7 @@ void RayGeneration()
                 if (debugParams.debugBool0 == 1) // TODO: enable this permanently after improving other parts of ReSTIR implementation (see #192)
                 {
                     // TODO: don't do this if this was a bsdf sample because visibility was already tested in that case
+                    //       maybe store a bool in RisSample struct called "visibilityTested" so we can skip this check when that is true
                     const DirectLightingSample lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS);
                     if (!lightSample.didHitLight)
                     {

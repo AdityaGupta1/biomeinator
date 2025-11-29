@@ -147,18 +147,20 @@ void pathTraceRay(inout Payload payload)
                 const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
                 if (useRis)
                 {
-                    contribution *= lightSample.pdfOrW_Y;
+                    const float W = lightSample.pdfOrW_Y;
 
                     const AreaLight light = areaLights[lightSample.lightIdx];
                     const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
                     const float lightPdfProxy = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS); // approximation of reciprocal of solid angle, I think
-
                     const float balanceHeuristicWeight = lightPdfProxy / (lightPdfProxy + lightSampleBsdfPdf);
-                    contribution *= balanceHeuristicWeight;
+
+                    contribution *= W * balanceHeuristicWeight;
                 }
                 else
                 {
-                    const float balanceHeuristicDenominator = lightSample.pdfOrW_Y + lightSampleBsdfPdf;
+                    const float lightPdf = lightSample.pdfOrW_Y;
+                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
+
                     contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                 }
 
