@@ -47,6 +47,7 @@ void pathTraceRay(inout Payload payload)
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR;
+    const bool doMis = samplingMode == SamplingMode::MIS || useRis;
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -65,7 +66,7 @@ void pathTraceRay(inout Payload payload)
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
-        if ((!useRis || pathDepth == 0 || previousWasSpecular) && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
         }
@@ -112,7 +113,7 @@ void pathTraceRay(inout Payload payload)
             NvReorderThread(coherenceHint, 2);
         }
 
-        if ((samplingMode == SamplingMode::MIS || useRis) && surfMaterial.canScatter() && isNonDeltaSurface)
+        if (doMis && surfMaterial.canScatter() && isNonDeltaSurface)
         {
             DirectLightingSample lightSample;
             if (useRis)
@@ -143,14 +144,22 @@ void pathTraceRay(inout Payload payload)
 
                 float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
+                const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
                 if (useRis)
                 {
                     contribution *= lightSample.pdfOrW_Y;
+
+                    const AreaLight light = areaLights[lightSample.lightIdx];
+                    const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
+                    const float lightPdfProxy = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS); // approximation of reciprocal of solid angle, I think
+
+                    const float balanceHeuristicWeight = lightPdfProxy / (lightPdfProxy + lightSampleBsdfPdf);
+                    contribution *= balanceHeuristicWeight;
                 }
                 else
                 {
-                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    contribution /= (lightSample.pdfOrW_Y + lightSampleBsdfPdf); // balance heuristic (light pdf cancels out)
+                    const float balanceHeuristicDenominator = lightSample.pdfOrW_Y + lightSampleBsdfPdf;
+                    contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                 }
 
                 payload.pathColor += contribution;
@@ -192,13 +201,19 @@ void pathTraceRay(inout Payload payload)
             normalsAndRoughnessTarget[pixelIdx].xyz = secondBounceNor_WS;
         }
 
-        if (samplingMode == SamplingMode::MIS)
+        if (doMis)
         {
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
-                payload.pathWeight *= (surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf)); // balance heuristic
+                float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                if (useRis)
+                {
+                    bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for RIS direct illumination (will have to change this if no longer using uniform light sampling)
+                }
+
+                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
+                payload.pathWeight *= balanceHeuristicWeight;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
         }

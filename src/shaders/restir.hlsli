@@ -23,11 +23,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/color.hlsli"
 
 #define RIS_MAX_NUM_LIGHT_CANDIDATES 32
-#define RIS_MAX_NUM_BSDF_CANDIDATES 1
 #define RIS_MIN_NUM_LIGHT_CANDIDATES 8
-#define RIS_MIN_NUM_BSDF_CANDIDATES 1
 
-#define RESTIR_MAX_CONFIDENCE 10
+#define RIS_MAX_NUM_BSDF_CANDIDATES 0
+#define RIS_MIN_NUM_BSDF_CANDIDATES 0
+
+#define RESTIR_MAX_CONFIDENCE 8
 
 float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, const float3 surfPos_WS, const float3 surfNor_WS)
 {
@@ -98,6 +99,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
         }
     }
 
+#if RIS_MIN_NUM_BSDF_CANDIDATES > 0 && RIS_MAX_NUM_BSDF_CANDIDATES > 0
     for (uint risBsdfCandidateIdx = 0; risBsdfCandidateIdx < numBsdfCandidates; ++risBsdfCandidateIdx)
     {
         const BsdfSample bsdfSample = sampleBsdf(material, uv, wo_WS, surfNor_WS, rng);
@@ -150,6 +152,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
             Y_pointOnLight_WS = pointOnLight_WS;
         }
     }
+#endif
 
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
@@ -163,13 +166,15 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
 DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     DirectLightingSample result;
+    result.lightIdx = risSample.lightIdx;
     result.didHitLight = false;
 
-    if (risSample.lightIdx == LIGHT_IDX_INVALID)
+    if (result.lightIdx == LIGHT_IDX_INVALID)
     {
         return result;
     }
 
+    result.pointOnLight_WS = risSample.pointOnLight_WS;
     result.wi_WS = normalize(risSample.pointOnLight_WS - surfPos_WS);
 
     float3 Le;
