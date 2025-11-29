@@ -105,15 +105,14 @@ float3 evaluateBsdf(
     const float2 uv,
     const float3 wo_WS,
     const float3 wi_WS,
-    const float3 surfNor_WS,
-    bool calculateFresnelReflectance,
-    float fresnelReflectance = 0.f)
+    const float3 surfNor_WS)
 {
     if (material.hasDiffuse())
     {
         const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
 
-        if (calculateFresnelReflectance && material.hasSpecularReflection())
+        float fresnelReflectance = 0.f;
+        if (material.hasSpecularReflection())
         {
             fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         }
@@ -182,7 +181,7 @@ BsdfSample sampleBsdf(
         const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
         result.wi_WS = wi_WS;
         result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
-        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, false /*calculateFresnelReflectance*/, fresnelReflectance);
+        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS);
         result.bsdfValue = bsdfValue;
     }
 

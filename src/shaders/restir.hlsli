@@ -36,7 +36,7 @@ float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, con
 
     const Material lightMaterial = materials[light.materialIdx];
 
-    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/); // TODO: should this be included here, or just a proxy to save performance?
+    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS); // TODO: should this be included here, or just a proxy to save performance?
 
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: replace with cosTheta for non-transmissive materials? (will require more complex MIS weights for RIS sample generation)
 

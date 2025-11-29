@@ -138,9 +138,8 @@ void pathTraceRay(inout Payload payload)
 
             if (lightSample.didHitLight)
             {
-                // TODO: reuse fresnel reflectance from evaluateBsdf() in bsdfPdf()
                 const float3 bsdfVal = evaluateBsdf(
-                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, true /*calculateFresnelReflectance*/);
+                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
 
                 float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
