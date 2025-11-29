@@ -82,7 +82,16 @@ int main(int argc, char** argv)
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
         const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
-        std::string command = (exePath.generic_string() + " --testOutput=" + generatedImagePath.generic_string());
+        const std::vector<std::string> constantArgs = {
+            "--testOutput=" + generatedImagePath.generic_string(),
+            "--useVsync=false",
+            "--lockCamera=true"
+        };
+        std::string command = exePath.generic_string();
+        for (const std::string& arg : constantArgs)
+        {
+            command += " " + arg;
+        }
         for (const std::string& arg : test.args)
         {
             command += " " + arg;

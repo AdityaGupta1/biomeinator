@@ -1583,7 +1583,7 @@ void render()
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
     PlayerInput playerInput = {};
-    if (!testMode)
+    if (!SettingsManager::getAsBool("lockCamera"))
     {
         playerInput = WindowManager::getPlayerInput();
     }
@@ -1921,7 +1921,7 @@ void render()
     CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
-    const uint32_t syncInterval = testMode ? 0 : 1; // use 0 in test mode to render as fast as possible
+    const uint32_t syncInterval = SettingsManager::getAsBool("useVsync") ? 1 : 0;
     swapChain->Present(syncInterval, 0);
 
     ++frameNumber;
