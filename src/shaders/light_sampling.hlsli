@@ -54,7 +54,9 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, o
 
 struct DirectLightingSample
 {
+    uint lightIdx;
     bool didHitLight;
+    float3 pointOnLight_WS;
     float3 wi_WS;
     float3 Le;
     float pdfOrW_Y;
@@ -89,9 +91,10 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
 
     float3 pointOnLight_WS;
     float lightPdf;
-    uint lightIdxUnused;
-    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdxUnused);
+    uint lightIdx;
+    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
 
+    result.pointOnLight_WS = pointOnLight_WS;
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
@@ -100,6 +103,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
         return result;
     }
 
+    result.lightIdx = lightIdx;
     result.didHitLight = true;
     result.Le = Le;
     result.pdfOrW_Y = lightPdf;
