@@ -52,7 +52,7 @@ float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surf
     const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
 
     const float geomTermJacobian = (absCosTheta(-this_wi_WS, lightNor_WS) * other_r2) / (absCosTheta(-other_wi_WS, lightNor_WS) * this_r2); // TODO: clamp fireflies?
-    return geomTermJacobian;
+    return isinf(geomTermJacobian) ? 0.f : geomTermJacobian;
 }
 
 RisSample generateDirectLightingRisSample(const uint hitGroup,
