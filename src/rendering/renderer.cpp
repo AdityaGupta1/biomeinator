@@ -377,14 +377,14 @@ void initNvapi()
     NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
     if (serSupported)
     {
+        Logger::log("SER API supported");
         useSer = true;
         NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
-        Logger::log("SER enabled");
     }
     else
     {
+        Logger::logWarning("SER API not supported");
         useSer = false;
-        Logger::log("SER not supported");
     }
 }
 
