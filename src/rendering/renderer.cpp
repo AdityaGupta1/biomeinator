@@ -1411,11 +1411,21 @@ static void imguiEndFrame()
     ImGui::Begin("Settings", nullptr, windowFlags);
 
     didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-    didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
     SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
-
     needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
+    SettingsGuiHelpers::VerticalSpacing();
+    SettingsGuiHelpers::SectionTitle("Sampling");
+    didPathTracingSettingsChange |=
+        SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+    const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
+    if (samplingMode == SamplingMode::RESTIR)
+    {
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
+        SettingsGuiHelpers::Tooltip("Adds visibility to the RIS target function, giving much better sample reuse and signal quality in exchange for some darkening bias");
+    }
+
+    SettingsGuiHelpers::VerticalSpacing();
     SettingsGuiHelpers::SectionTitle("Antialiasing");
     const bool didAntialiasingChange =
         SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
@@ -1438,14 +1448,11 @@ static void imguiEndFrame()
 
     if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        SettingsGuiHelpers::VerticalSpacing();
-
         SettingsGuiHelpers::SectionTitle("Debug view");
         didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
 
         SettingsGuiHelpers::VerticalSpacing();
-
         SettingsGuiHelpers::SectionTitle("Debug parameters");
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
@@ -1635,6 +1642,12 @@ void render()
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
 
+    const SamplingMode samplingMode = static_cast<SamplingMode>(renderParams->samplingMode);
+    if (samplingMode == SamplingMode::RESTIR)
+    {
+        renderParams->restirDoVisibilityCheck = SettingsManager::getAsBool("restirDoVisibilityCheck") ? 1 : 0;
+    }
+
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (debugViewComboMap.contains(debugViewSettingStr))
@@ -1729,7 +1742,6 @@ void render()
         linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
         if (samplingMode == SamplingMode::RESTIR)
         {
             // ===================================

@@ -133,8 +133,8 @@ struct RenderParams
 
     uint enablePathSplitting;
     uint antialiasingMode;
+    uint restirDoVisibilityCheck;
     uint pad0;
-    uint pad1;
 };
 
 struct DebugParams

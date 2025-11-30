@@ -176,4 +176,16 @@ inline void VerticalSpacing()
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 }
 
+inline void Tooltip(const char* tooltip)
+{
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(400.f);
+        ImGui::TextUnformatted(tooltip);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 }
