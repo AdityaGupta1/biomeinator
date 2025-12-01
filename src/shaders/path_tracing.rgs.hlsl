@@ -153,7 +153,13 @@ void pathTraceRay(inout Payload payload)
 
                     const AreaLight light = areaLights[lightSample.lightIdx];
                     const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                    const float lightPdfProxy = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS); // approximation of reciprocal of solid angle, I think
+                    float lightPdfProxy = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS);
+
+                    if (samplingMode == SamplingMode::RIS || pathDepth > 0)
+                    {
+                        lightPdfProxy /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI
+                    }
+
                     const float balanceHeuristicWeight = lightPdfProxy / (lightPdfProxy + lightSampleBsdfPdf);
 
                     contribution *= W * balanceHeuristicWeight;
@@ -211,9 +217,9 @@ void pathTraceRay(inout Payload payload)
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
-                if (useRis)
+                if (samplingMode == SamplingMode::RESTIR && pathDepth == 0)
                 {
-                    bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for RIS direct illumination (will have to change this if no longer using uniform light sampling)
+                    bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for ReSTIR DI
                 }
 
                 const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
