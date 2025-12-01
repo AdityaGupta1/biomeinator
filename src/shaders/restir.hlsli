@@ -58,8 +58,8 @@ float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surf
     return isinf(geomTermJacobian) ? 0.f : geomTermJacobian;
 }
 
-RisSample generateDirectLightingRisSample(const uint hitGroup,
-                                          const float3 surfPos_WS,
+#ifdef HITGROUP_LIGHTS
+RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
                                           const float3 surfNor_WS,
                                           const Material material,
                                           const float2 uv,
@@ -126,7 +126,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
 
         Payload lightPayload;
         lightPayload.flags = 0;
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, hitGroup, 0, 0, ray, lightPayload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
         if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT))
         {
@@ -198,3 +198,4 @@ DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 s
     result.pdfOrW_Y = risSample.W;
     return result;
 }
+#endif

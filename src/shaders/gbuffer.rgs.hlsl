@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
+#define HITGROUP_LIGHTS GBUFFER_HITGROUP_LIGHTS
+
 #include "global_params.hlsli"
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
@@ -164,7 +166,7 @@ void RayGeneration()
 
                 RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
                 bool isBsdfSample;
-                risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng, isBsdfSample);
+                risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng, isBsdfSample);
 
                 if (samplingMode == SamplingMode::RESTIR && renderParams.restirDoVisibilityCheck == 1 && !isBsdfSample)
                 {

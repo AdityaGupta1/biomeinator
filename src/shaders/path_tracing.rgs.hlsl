@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
+#define HITGROUP_LIGHTS PT_HITGROUP_LIGHTS
+
 #include "nvapi_includes.hlsli"
 
 #include "global_params.hlsli"
@@ -127,7 +129,7 @@ void pathTraceRay(inout Payload payload)
                 {
                     const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                     bool isBsdfSampleUnused;
-                    risSample = generateDirectLightingRisSample(PT_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
+                    risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
                 }
 
                 lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
