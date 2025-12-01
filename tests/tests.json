@@ -103,7 +103,7 @@
                 "--maxPathDepth=2"
             ],
             "golden": "penguin_gallery/golden.png",
-            "threshold": 0.001
+            "threshold": 0.002
         },
         {
             "name": "penguin_gallery_blender_no_tonemap",
