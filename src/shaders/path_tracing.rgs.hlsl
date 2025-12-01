@@ -153,15 +153,13 @@ void pathTraceRay(inout Payload payload)
 
                     const AreaLight light = areaLights[lightSample.lightIdx];
                     const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                    float lightPdfProxy = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS);
-
+                    float lightPdf = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS);
                     if (samplingMode == SamplingMode::RIS || pathDepth > 0)
                     {
-                        lightPdfProxy /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI
+                        lightPdf /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI
                     }
 
-                    const float balanceHeuristicWeight = lightPdfProxy / (lightPdfProxy + lightSampleBsdfPdf);
-
+                    const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
                     contribution *= W * balanceHeuristicWeight;
                 }
                 else
