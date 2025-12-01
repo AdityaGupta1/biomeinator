@@ -163,13 +163,11 @@ void RayGeneration()
                 const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
 
                 RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
-                risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng);
+                bool isBsdfSample;
+                risSample = generateDirectLightingRisSample(GBUFFER_HITGROUP_LIGHTS, surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng, isBsdfSample);
 
-                if (samplingMode == SamplingMode::RESTIR && renderParams.restirDoVisibilityCheck == 1)
+                if (samplingMode == SamplingMode::RESTIR && renderParams.restirDoVisibilityCheck == 1 && !isBsdfSample)
                 {
-                    // TODO: don't do this if this was a bsdf sample because visibility was already tested in that case
-                    //       maybe store a bool in RisSample struct called "visibilityTested" so we can skip this check when that is true
-                    //       also can skip visibility check in main path tracing loop since visibility was already tested here
                     const DirectLightingSample lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS);
                     if (!lightSample.didHitLight)
                     {

@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RIS_MAX_NUM_BSDF_CANDIDATES 0
 #define RIS_MIN_NUM_BSDF_CANDIDATES 0
+#define DO_BSDF_SAMPLES (RIS_MIN_NUM_BSDF_CANDIDATES > 0 || RIS_MAX_NUM_BSDF_CANDIDATES > 0)
 
 #define RESTIR_MAX_CONFIDENCE 8
 
@@ -63,16 +64,18 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
                                           const float2 uv,
                                           const float3 wo_WS,
                                           const bool isFirstNonDeltaSurface,
-                                          inout RandomSampler rng)
+                                          inout RandomSampler rng,
+                                          out bool isBsdfSample)
 {
     const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;
     const uint numBsdfCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_BSDF_CANDIDATES : RIS_MIN_NUM_BSDF_CANDIDATES;
+
+    isBsdfSample = false;
 
     uint Y_lightIdx = LIGHT_IDX_INVALID;
     float Y_p_hat = 0.f;
     float3 Y_pointOnLight_WS = 0.f;
     float w_sum = 0.f;
-
     for (uint risLightCandidateIdx = 0; risLightCandidateIdx < numLightCandidates; ++risLightCandidateIdx)
     {
         float3 pointOnLight_WS;
@@ -81,14 +84,19 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
         const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
 
         const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
+#if DO_BSDF_SAMPLES
         const float misDenominator = numLightCandidates * lightPdf + numBsdfCandidates * bsdfPdf(material, wo_WS, wi_WS, surfNor_WS);
+#else
+        const float misDenominator = numLightCandidates * lightPdf;
+#endif
         // const float m_i = lightPdf / misDenominator;
         // const float W_X_i = 1.f / lightPdf;
+        // misDenominator = 1.f / (m_i * W_X_i)
 
         const float p_hat = risTargetFunction(light, pointOnLight_WS, surfPos_WS, surfNor_WS);
 
         const float w_i = p_hat / misDenominator;
-        // const float w_i = m_i * p_hat * W_X_i;
+        //              = m_i * p_hat * W_X_i
 
         w_sum += w_i;
         if (rng.nextFloat() < w_i / w_sum)
@@ -99,7 +107,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
         }
     }
 
-#if RIS_MIN_NUM_BSDF_CANDIDATES > 0 && RIS_MAX_NUM_BSDF_CANDIDATES > 0
+#if DO_BSDF_SAMPLES
     for (uint risBsdfCandidateIdx = 0; risBsdfCandidateIdx < numBsdfCandidates; ++risBsdfCandidateIdx)
     {
         const BsdfSample bsdfSample = sampleBsdf(material, uv, wo_WS, surfNor_WS, rng);
@@ -150,6 +158,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
             Y_lightIdx = areaLightIdx;
             Y_p_hat = p_hat;
             Y_pointOnLight_WS = pointOnLight_WS;
+            isBsdfSample = true;
         }
     }
 #endif

@@ -52,7 +52,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
     optionAdder("useVsync", "Enable VSync", cxxopts::value<bool>()->default_value("true"));
     optionAdder("lockCamera", "Lock camera (disable player input)", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("restirDoVisibilityCheck", "ReSTIR do visibility check", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("restirDoVisibilityCheck", "ReSTIR do visibility check", cxxopts::value<bool>()->default_value("true"));
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
