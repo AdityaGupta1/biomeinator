@@ -54,3 +54,8 @@ float distance2(const float3 a, const float3 b)
     const float3 aToB = a - b;
     return dot(aToB, aToB);
 }
+
+float sanitizeFloat(float v, float backup)
+{
+    return (isinf(v) || isnan(v)) ? backup : v;
+}

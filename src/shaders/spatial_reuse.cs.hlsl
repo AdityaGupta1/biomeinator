@@ -134,7 +134,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
-    risSampleOut.W = (w_sum / Y_p_hat) * validSpatialSamplesCorrectionFactor;
+    risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f) * validSpatialSamplesCorrectionFactor;
     risSampleOut.p_hat = Y_p_hat;
     risSampleOut.confidence = min(sumConfidence, RESTIR_MAX_CONFIDENCE);
     risSampleOut.pad0 = 0;

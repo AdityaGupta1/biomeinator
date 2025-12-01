@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "util/color.hlsli"
+#include "util/math.hlsli"
 
 #define RIS_MAX_NUM_LIGHT_CANDIDATES 32
 #define RIS_MIN_NUM_LIGHT_CANDIDATES 8
@@ -166,7 +167,7 @@ RisSample generateDirectLightingRisSample(const uint hitGroup,
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
-    risSampleOut.W = w_sum / Y_p_hat;
+    risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f);
     risSampleOut.p_hat = Y_p_hat;
     risSampleOut.confidence = 1;
     return risSampleOut;

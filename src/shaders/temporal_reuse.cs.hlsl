@@ -144,11 +144,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    if (!isfinite(reproj_risSample.W)) // TODO: figure out why W is becoming infinite and fix the root issue (see #193)
-    {
-        risSamplesOut[linearPixelIdx] = this_risSample;
-        return;
-    }
+    //if (!isfinite(reproj_risSample.W)) // re-enable this if NaNs start spreading across the screen again (see #193)
+    //{
+    //    risSamplesOut[linearPixelIdx] = this_risSample;
+    //    return;
+    //}
 
     const float this_confidence = this_risSample.confidence;
     const float reproj_confidence = reproj_risSample.confidence * reprojResult.score;
@@ -186,7 +186,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         risSampleOut.pointOnLight_WS = reproj_risSample.pointOnLight_WS;
         Y_p_hat = reproj_p_hat_this;
     }
-    risSampleOut.W = w_sum / Y_p_hat;
+    risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f);
     risSampleOut.p_hat = Y_p_hat;
     risSampleOut.confidence = min(uint(this_confidence + reproj_confidence), RESTIR_MAX_CONFIDENCE);
     risSampleOut.pad0 = 0;
