@@ -200,7 +200,7 @@
                 "--maxPathDepth=12"
             ],
             "golden": "fancy_cornell_box/golden.png",
-            "threshold": 0.02
+            "threshold": 0.015
         },
         {
             "name": "fancy_cornell_box_blender_no_tonemap",
@@ -215,6 +215,20 @@
             ],
             "golden": "fancy_cornell_box/golden_blender_no_tonemap.png",
             "threshold": 0.012
+        },
+        {
+            "name": "missing_materials_blender_no_tonemap",
+            "scene": "missing_materials/missing_materials.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "missing_materials/golden_blender_no_tonemap.png",
+            "threshold": 0.005
         },
         {
             "name": "evil_room",
