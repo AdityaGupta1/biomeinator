@@ -15,6 +15,9 @@
 #include <iostream>
 #include <regex>
 #include <vector>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 #define TEST_ASSERT(cond)                                                                                              \
     do                                                                                                                 \
@@ -28,9 +31,24 @@
         }                                                                                                              \
     } while (0)
 
+std::string formatElapsedTime(std::chrono::seconds totalSeconds)
+{
+    const int hours = static_cast<int>(totalSeconds.count() / 3600);
+    const int minutes = static_cast<int>((totalSeconds.count() % 3600) / 60);
+    const int seconds = static_cast<int>(totalSeconds.count() % 60);
+
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(2) << hours << ":"
+        << std::setfill('0') << std::setw(2) << minutes << ":"
+        << std::setfill('0') << std::setw(2) << seconds;
+    return oss.str();
+}
+
 int main(int argc, char** argv)
 {
     using namespace cxxopts;
+
+    const auto startTime = std::chrono::steady_clock::now();
 
     Options options("BiomeinatorTests", "Tests for Biomeinator");
     OptionAdder optionAdder = options.add_options();
@@ -158,6 +176,10 @@ int main(int argc, char** argv)
         printf("=============================================\n\n");
     }
 
+    const auto endTime = std::chrono::steady_clock::now();
+    const auto elapsedDuration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime);
+    const std::string elapsedTimeStr = formatElapsedTime(elapsedDuration);
+
     const int numFailedTests = failedTestNames.size();
     const bool didFail = (numFailedTests > 0);
     printf(didFail ? "\033[31m" : "\033[32m");
@@ -174,6 +196,7 @@ int main(int argc, char** argv)
             printf("- %s\n", testName.c_str());
         }
     }
+    printf("Total elapsed time: %s\n", elapsedTimeStr.c_str());
     printf("=============================================\n\n");
     printf("\033[0m");
 
