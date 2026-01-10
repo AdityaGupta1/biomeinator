@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <cstdint>
 
-#include <DirectXMath.h>
+#include <glm/vec2.hpp>
 
 using BlockId = uint16_t;
 
@@ -35,7 +35,7 @@ enum class Block : BlockId
 
 struct BlockData
 {
-    DirectX::XMUINT2 texCoords{ 0, 0 };
+    glm::uvec2 texCoords{ 0, 0 };
     bool emitsLight{ false };
 };
 

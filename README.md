@@ -38,6 +38,7 @@ This project uses various third-party libraries:
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
 - [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT
+- [GLM](https://github.com/g-truc/glm/tree/master) - MIT
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
 
