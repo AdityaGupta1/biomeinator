@@ -1544,7 +1544,7 @@ void render()
             sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
             sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            sl::Resource motionResource = makeSlResource(&motionTarget);
+            sl::Resource motionResource = makeSlResource(&motionTarget, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
             sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
