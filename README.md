@@ -40,3 +40,5 @@ This project uses various third-party libraries:
 - [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
+
+Block textures come from the [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) texture pack by Acaitart.
