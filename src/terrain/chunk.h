@@ -19,8 +19,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
+#include "scene/scene.h"
 
 #include <array>
+#include <glm/glm.hpp>
 
 #define CHUNK_SIZE_X 16
 #define CHUNK_SIZE_Y 16
@@ -28,5 +30,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 class Chunk
 {
-    std::array<Block, CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z> blocks;
+private:
+    const glm::ivec2 chunkPos{ 0, 0 };
+
+    std::array<Block, CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z> blocks{};
+
+    Instance* instance;
+
+public:
+    Chunk(glm::ivec2 chunkPos);
+
+    void generateBlocks();
+
+    void createInstance(Scene* scene);
+
+    static glm::uint blockPosToIdx(glm::uvec3 blockPos);
 };

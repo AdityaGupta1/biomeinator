@@ -35,14 +35,6 @@ class ToFreeList;
 
 class Scene;
 
-struct AreaLightInputs
-{
-    DirectX::XMFLOAT3 pos0;
-    DirectX::XMFLOAT3 pos1;
-    DirectX::XMFLOAT3 pos2;
-    uint32_t triangleIdx;
-};
-
 class Instance
 {
     friend class ::Scene;
@@ -73,9 +65,11 @@ public:
     DirectX::XMFLOAT3X4 transform{};
 
     // `transform` must be set before calling this function
-    uint32_t addAreaLight(const AreaLightInputs& lightInputs);
+    void addAreaLight(uint32_t triangleIdx);
 
     uint32_t getId() const;
+
+    uint32_t getTriCount() const;
 
     void setMaterialIdx(uint32_t id);
 };

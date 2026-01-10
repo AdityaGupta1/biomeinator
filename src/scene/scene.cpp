@@ -49,7 +49,7 @@ void Instance::reset(bool alsoFreeFromScene)
     }
 }
 
-uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
+void Instance::addAreaLight(uint32_t triangleIdx)
 {
 #if _DEBUG
     static constexpr DirectX::XMFLOAT3X4 zero{};
@@ -59,19 +59,29 @@ uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
     }
 #endif
 
+    uint32_t i0 = triangleIdx * 3;
+    uint32_t i1 = i0 + 1;
+    uint32_t i2 = i0 + 2;
+    if (!this->host_idxs.empty())
+    {
+        i0 = this->host_idxs[i0];
+        i1 = this->host_idxs[i1];
+        i2 = this->host_idxs[i2];
+    }
+
     this->host_areaLights.emplace_back();
     const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
     AreaLight& light = this->host_areaLights.back();
 
     light.instanceId = this->id;
-    light.triangleIdx = lightInputs.triangleIdx;
+    light.triangleIdx = triangleIdx;
 
     // TODO: store this matrix instead of reconstructing it each time?
     const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
-    XMVECTOR p0 = XMLoadFloat3(&lightInputs.pos0);
-    XMVECTOR p1 = XMLoadFloat3(&lightInputs.pos1);
-    XMVECTOR p2 = XMLoadFloat3(&lightInputs.pos2);
+    XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
+    XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
+    XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
 
     p0 = DirectX::XMVector3Transform(p0, objectToWorld);
     p1 = DirectX::XMVector3Transform(p1, objectToWorld);
@@ -91,12 +101,17 @@ uint32_t Instance::addAreaLight(const AreaLightInputs& lightInputs)
 
     light.materialIdx = this->materialIdx;
 
-    return localAreaLightIdx;
+    this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
 }
 
 uint32_t Instance::getId() const
 {
     return this->id;
+}
+
+uint32_t Instance::getTriCount() const
+{
+    return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
 }
 
 void Instance::setMaterialIdx(uint32_t id)

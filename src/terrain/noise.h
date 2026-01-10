@@ -18,31 +18,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <cstdint>
 #include <glm/glm.hpp>
 
-using BlockId = uint16_t;
-
-enum class Block : BlockId
+// https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
+inline glm::uint hash(glm::uint seed)
 {
-	AIR = 0,
-	STONE,
-	LAMP,
+    glm::uint state = seed * 747796405u + 2891336453u;
+    glm::uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
 
-	COUNT
-};
-
-struct BlockData
+inline float rand1(glm::uint seed)
 {
-    glm::uvec2 texCoords{ 0, 0 };
-    bool emitsLight{ false };
-};
+    return (hash(seed) & 0x00FFFFFF) / 16777216.f;
+}
 
-namespace Blocks
+inline float rand1(glm::uvec2 seed)
 {
-
-void init();
-
-const BlockData& getBlockData(Block block);
-
-} // namespace Blocks
+    return rand1(seed.x ^ hash(seed.y));
+}
