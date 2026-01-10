@@ -165,6 +165,7 @@ static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 static Scene scene;
 
+static bool voxelMode = true;
 static bool testMode = false;
 
 void init()
@@ -203,11 +204,11 @@ void init()
     if (!defaultScene.empty())
     {
         loadScene(defaultScene);
+        voxelMode = false; // TODO: allow opening scene when in voxel mode, which will clear terrain and disable voxel mode before loading the scene
     }
     else
     {
         Terrain::init(&scene);
-        // TODO: set some flag that says we are in voxel mode (which will cause different behavior for Ctrl + O)
     }
 
     if (!testMode)
@@ -1612,6 +1613,11 @@ void render()
     }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
+
+    if (voxelMode)
+    {
+        Terrain::update();
+    }
 
     const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 

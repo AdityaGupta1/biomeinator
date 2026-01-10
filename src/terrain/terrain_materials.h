@@ -18,33 +18,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "block.h"
-#include "scene/scene.h"
+#define DEFAULT_TEX_SIZE_X 512
+#define DEFAULT_TEX_SIZE_Y 512
 
-#include <array>
-#include <glm/glm.hpp>
+class Scene;
 
-#define CHUNK_SIZE_X 16
-#define CHUNK_SIZE_Y 16
-#define CHUNK_SIZE_Z 256
-
-class Chunk
+namespace TerrainMaterials
 {
-private:
-    const glm::ivec2 chunkPos{ 0, 0 };
 
-    std::array<Block, CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z> blocks{};
+void init(Scene* scene);
 
-    Instance* instance{ nullptr };
+uint32_t getDefaultMaterialIdx();
 
-public:
-    Chunk(glm::ivec2 chunkPos);
-
-    void generateBlocks();
-
-    void createInstance(Scene* scene);
-
-    Instance* getInstance() const;
-
-    static glm::uint blockPosToIdx(glm::uvec3 blockPos);
-};
+} // namespace TerrainMaterials

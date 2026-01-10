@@ -56,6 +56,11 @@ void Chunk::createInstance(Scene* scene)
 
 }
 
+Instance* Chunk::getInstance() const
+{
+    return instance;
+}
+
 uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
 {
     return blockPos.z

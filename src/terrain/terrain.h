@@ -25,4 +25,6 @@ namespace Terrain
 
 void init(Scene* scene);
 
+void update();
+
 } // namespace Terrain
