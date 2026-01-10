@@ -38,6 +38,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "common/common_settings.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
+#include "terrain/terrain.h"
 #include "util/util.h"
 
 #include <chrono>
@@ -202,6 +203,11 @@ void init()
     if (!defaultScene.empty())
     {
         loadScene(defaultScene);
+    }
+    else
+    {
+        Terrain::init(&scene);
+        // TODO: set some flag that says we are in voxel mode (which will cause different behavior for Ctrl + O)
     }
 
     if (!testMode)

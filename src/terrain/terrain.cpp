@@ -18,12 +18,28 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "terrain.h"
 
+#include "chunk.h"
+#include "scene/scene.h"
+
 namespace Terrain
 {
 
-void init()
+static Scene* scene;
+
+static void createMaterials();
+
+void init(Scene* scene)
 {
     Blocks::init();
+
+    Terrain::scene = scene;
+
+    createMaterials();
+}
+
+static void createMaterials()
+{
+    // TODO: create materials
 }
 
 } // namespace Terrain
