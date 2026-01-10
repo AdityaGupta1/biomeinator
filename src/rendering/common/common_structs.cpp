@@ -25,7 +25,8 @@ Material::Material()
       specularColor{ 1, 1, 1 },
       ior(1.5f),
       emissiveStrength(0),
-      emissiveColor{ 1, 1, 1 }
+      emissiveColor{ 1, 1, 1 },
+      emissiveColorTextureId(TEXTURE_ID_INVALID)
 {}
 
 PerTriangleData::PerTriangleData()

@@ -73,6 +73,17 @@ float3 getMaterialDiffuseAlbedo(const Material material, const float2 uv)
     return diffuseAlbedo;
 }
 
+float3 getMaterialEmissiveColor(const Material material, const float2 uv)
+{
+    float3 emissiveColor = material.emissiveColor;
+    if (material.emissiveColorTextureId != TEXTURE_ID_INVALID)
+    {
+        Texture2D<float4> tex = ResourceDescriptorHeap[material.emissiveColorTextureId];
+        emissiveColor = tex.SampleLevel(texSampler, uv, 0).rgb;
+    }
+    return emissiveColor * material.emissiveStrength;
+}
+
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
 // alpha = roughness^2
 float3 calculateDlssSpecularAlbedo(const float3 specularColor, const float alpha, float nDotV)
@@ -233,13 +244,6 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
     const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
 
     Material splitMaterial;
-    splitMaterial.flags = 0;
-    splitMaterial.baseColor = float3(0, 0, 0);
-    splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-    splitMaterial.specularColor = float3(0, 0, 0);
-    splitMaterial.ior = 1.f;
-    splitMaterial.emissiveStrength = 0.f;
-    splitMaterial.emissiveColor = float3(0, 0, 0);
 
     if (pathSplitIdx == 0)
     {
@@ -247,16 +251,24 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION;
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
+        splitMaterial.specularColor = float3(0, 0, 0);
+        splitMaterial.ior = 1.f;
         splitMaterial.emissiveStrength = material.emissiveStrength;
         splitMaterial.emissiveColor = material.emissiveColor;
+        splitMaterial.emissiveColorTextureId = material.emissiveColorTextureId;
         pathWeight *= (1.f - fresnelReflectance);
     }
     else
     {
         // Glossy reflection lobes
         splitMaterial.flags = material.flags & MATERIAL_FLAGS_GLOSSY_REFLECTION;
+        splitMaterial.baseColor = float3(0, 0, 0);
+        splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
         splitMaterial.specularColor = material.specularColor;
         splitMaterial.ior = material.ior;
+        splitMaterial.emissiveStrength = 0.f;
+        splitMaterial.emissiveColor = float3(0, 0, 0);
+        splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
         pathWeight *= fresnelReflectance;
     }
 

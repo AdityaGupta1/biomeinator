@@ -81,7 +81,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     }
 
     const Material material = materials[light.materialIdx];
-    Le = material.getEmissiveColor();
+    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv);
     return true;
 }
 
@@ -153,4 +153,6 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     const float4x3 objectToWorldMat = ObjectToWorld4x3();
     const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
+
+    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 }

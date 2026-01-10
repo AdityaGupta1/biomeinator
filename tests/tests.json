@@ -297,6 +297,19 @@
             ],
             "golden": "cave/golden_restir.png",
             "threshold": 0.015
+        },
+        {
+            "name": "emissive_texture",
+            "scene": "emissive_texture/emissive_texture.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=2"
+            ],
+            "golden": "emissive_texture/golden.png",
+            "threshold": 0.004
         }
     ]
 }

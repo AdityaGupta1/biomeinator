@@ -77,7 +77,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
             if (surfMaterial.hasEmission())
             {
-                const float3 emissionColor = surfMaterial.getEmissiveColor();
+                const float3 emissionColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
                 const float3 tonemappedEmission = applyReinhard(emissionColor);
                 diffuseAlbedo += tonemappedEmission;
             }
