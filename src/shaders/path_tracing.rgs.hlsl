@@ -70,7 +70,7 @@ void pathTraceRay(inout Payload payload)
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            payload.pathColor += payload.pathWeight * surfMaterial.getEmissiveColor();
+            payload.pathColor += payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
         }
 
         const float3 wo_WS = -ray.Direction;

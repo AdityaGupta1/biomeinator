@@ -43,7 +43,7 @@ float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, con
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: replace with cosTheta for non-transmissive materials? (will require more complex MIS weights for RIS sample generation)
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
-    return luminance(lightMaterial.getEmissiveColor()) * cosThetaSurf;
+    return lightMaterial.emissiveStrength * cosThetaSurf;
 }
 
 float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surfPos_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
