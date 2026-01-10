@@ -118,6 +118,21 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             material.emissiveStrength = 1.f;
         }
 
+        if (gltfMat.emissiveTexture.index >= 0)
+        {
+            const int texIdx = gltfMat.emissiveTexture.index;
+
+            if (texIdx < model.textures.size())
+            {
+                const int imgIdx = model.textures[texIdx].source;
+
+                if (imgIdx >= 0 && imgIdx < textureIds.size())
+                {
+                    material.emissiveColorTextureId = textureIds[imgIdx];
+                }
+            }
+        }
+
         const bool hasEmission = material.emissiveStrength > 0;
 
         bool hasDiffuse, hasSpecularReflection;
