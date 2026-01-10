@@ -1,0 +1,24 @@
+---
+name: traceray-analysis
+description: When reading TraceRay calls, analyze corresponding closesthit/miss/anyhit shaders based on hitgroup to understand payload modifications
+---
+
+# TraceRay Call Analysis
+
+When an agent reads a `TraceRay` call in any shader file, it MUST:
+
+1. **Identify the hitgroup parameter** - The hitgroup is specified as one of the parameters in the TraceRay call (e.g., `PT_HITGROUP_PRIMARY`, `PT_HITGROUP_LIGHTS`, `GBUFFER_HITGROUP_PRIMARY`, `HITGROUP_LIGHTS`).
+
+2. **Locate corresponding shader functions** - Based on the hitgroup constant used, find and examine the corresponding shader functions:
+   - **ClosestHit shader**: Look for functions with `[shader("closesthit")]` attribute that match the hitgroup (e.g., `ClosestHit_Primary`, `ClosestHit_Lights`)
+   - **Miss shader**: Look for functions with `[shader("miss")]` attribute (typically named `Miss`)
+   - **AnyHit shader** (if present): Look for functions with `[shader("anyhit")]` attribute
+
+3. **Analyze payload modifications** - Read the identified closesthit/miss/anyhit shaders to understand:
+   - How the payload structure is modified (what fields are read/written)
+   - The flow of data from the TraceRay call through the hit/miss shaders
+   - Any conditions under which payload values are set or modified
+
+4. **Cross-reference hitgroup definitions** - Check `src/rendering/common/common_hitgroups.h` to understand the hitgroup constant values and their mapping to shader functions.
+
+This is critical for understanding the complete ray tracing pipeline, as payload values are set in the closesthit/miss shaders and then read back after the TraceRay call completes.
