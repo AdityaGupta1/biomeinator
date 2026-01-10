@@ -49,15 +49,23 @@ void Instance::reset(bool alsoFreeFromScene)
     }
 }
 
+void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
+                           std::vector<Vertex>&& verts,
+                           std::vector<uint32_t>&& idxs)
+{
+    this->transform = transform;
+    this->host_verts = std::move(verts);
+    this->host_idxs = std::move(idxs);
+
+    const uint32_t triCount = this->getTriCount();
+    this->host_perTriDatas.resize(triCount);
+
+    this->isGeometrySet = true;
+}
+
 void Instance::addAreaLight(uint32_t triangleIdx)
 {
-#if _DEBUG
-    static constexpr DirectX::XMFLOAT3X4 zero{};
-    if (std::memcmp(&this->transform, &zero, sizeof(this->transform)) == 0)
-    {
-        throw std::runtime_error("Attempting to add AreaLight to Instance with no transform");
-    }
-#endif
+    ASSERT(this->isGeometrySet);
 
     uint32_t i0 = triangleIdx * 3;
     uint32_t i1 = i0 + 1;
@@ -287,7 +295,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
-        assert(instance->host_verts.size() > 0);
+        ASSERT(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
         blasInputs.dev_verts = &this->managedVertsBuffer;
 

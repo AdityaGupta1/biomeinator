@@ -57,14 +57,20 @@ private:
 
     void reset(bool alsoFreeFromScene = true);
 
-public:
     std::vector<Vertex> host_verts;
     std::vector<uint32_t> host_idxs;
     std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{};
 
-    // `transform` must be set before calling this function
+    bool isGeometrySet{ false };
+
+public:
+    void setGeometry(const DirectX::XMFLOAT3X4& transform,
+                     std::vector<Vertex>&& verts,
+                     std::vector<uint32_t>&& idxs = {});
+
+    // `setGeometry()` must be called before calling this function
     void addAreaLight(uint32_t triangleIdx);
 
     uint32_t getId() const;

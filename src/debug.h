@@ -19,19 +19,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #ifdef _DEBUG
-#include <iostream>
+#include "logger.h"
 
 #define ASSERT_IMPL(cond, msg)                                                                                         \
     do                                                                                                                 \
     {                                                                                                                  \
         if (!(cond))                                                                                                   \
         {                                                                                                              \
-            std::cerr << "Assertion failed: (" << #cond << ")\n";                                                      \
+            Logger::logError("Assertion failed: %s", #cond);                                                           \
             if constexpr (sizeof(msg) > 1)                                                                             \
             {                                                                                                          \
-                std::cerr << "Message: " << msg << "\n";                                                               \
+                Logger::logError("Message: %s", msg);                                                                  \
             }                                                                                                          \
-            std::cerr << "File: " << __FILE__ << ", line: " << __LINE__ << std::endl;                                  \
+            Logger::logError("File: %s, line: %d", __FILE__, __LINE__);                                                \
             __debugbreak();                                                                                            \
             assert(false);                                                                                             \
         }                                                                                                              \
