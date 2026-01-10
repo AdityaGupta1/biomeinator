@@ -153,31 +153,45 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
             if (hasPbr)
             {
-                if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+                // Use metallicFactor to determine if material is metallic (specular-only) or dielectric (can have diffuse)
+                // metallicFactor == 1.0 (default) = metallic/specular only
+                // metallicFactor == 0 = dielectric, can have diffuse
+                const bool isMetallic = pbr.metallicFactor >= 1.0;
+
+                if (isMetallic)
                 {
-                    const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
-
-                    if (texIdx < model.textures.size())
-                    {
-                        const int imgIdx = model.textures[texIdx].source;
-
-                        if (imgIdx >= 0 && imgIdx < textureIds.size())
-
-                        {
-                            material.baseColorTextureId = textureIds[imgIdx];
-                            hasDiffuse = true;
-                        }
-                    }
+                    // Metallic material: specular only, no diffuse
+                    hasDiffuse = false;
                 }
                 else
                 {
-                    material.baseColor = {
-                        static_cast<float>(pbr.baseColorFactor[0]),
-                        static_cast<float>(pbr.baseColorFactor[1]),
-                        static_cast<float>(pbr.baseColorFactor[2]),
-                    };
+                    // Dielectric material: can have diffuse
+                    if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+                    {
+                        const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
 
-                    hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+                        if (texIdx < model.textures.size())
+                        {
+                            const int imgIdx = model.textures[texIdx].source;
+
+                            if (imgIdx >= 0 && imgIdx < textureIds.size())
+
+                            {
+                                material.baseColorTextureId = textureIds[imgIdx];
+                                hasDiffuse = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        material.baseColor = {
+                            static_cast<float>(pbr.baseColorFactor[0]),
+                            static_cast<float>(pbr.baseColorFactor[1]),
+                            static_cast<float>(pbr.baseColorFactor[2]),
+                        };
+
+                        hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+                    }
                 }
             }
 
@@ -192,7 +206,20 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         const tinygltf::Value& val = ext.Get("specularFactor");
                         if (val.IsNumber())
                         {
-                            hasSpecularReflection = val.GetNumberAsDouble() != 0.0;
+                            const double specularFactor = val.GetNumberAsDouble();
+                            // For metallic materials (specular-only), always allow specular reflection
+                            // even if specularFactor is 0 (it might just mean no specular color tint)
+                            // For dielectric materials, respect specularFactor
+                            if (!hasDiffuse)
+                            {
+                                // Metallic/specular-only material: keep specular enabled
+                                hasSpecularReflection = true;
+                            }
+                            else
+                            {
+                                // Dielectric material with diffuse: respect specularFactor
+                                hasSpecularReflection = specularFactor != 0.0;
+                            }
                         }
                     }
 
