@@ -63,7 +63,11 @@ ILog* getInterface()
 }
 }
 
+#if defined(SL_PRODUCTION)
 #define ENABLE_DISALLOW_NEWER_PLUGINS_WAR 1
+#else
+#define ENABLE_DISALLOW_NEWER_PLUGINS_WAR 0
+#endif
 
 namespace plugin
 {

@@ -196,7 +196,7 @@ struct APIContext
     uint32_t frameHandleIndex = 0;
     FrameHandleImplementation frameHandles[MAX_FRAMES_IN_FLIGHT];
 
-    std::map<Feature, std::pair<size_t, BufferType*>> requiredTags;
+    std::map<Feature, std::vector<BufferType>> requiredTags;
     std::map<Feature, std::pair<size_t, char**>> vkInstanceExtensions;
     std::map<Feature, std::pair<size_t, char**>> vkDeviceExtensions;
     std::map<Feature, std::pair<size_t, char**>> vkFeatures12;
@@ -760,15 +760,17 @@ Result slIsFeatureSupported(sl::Feature feature, const sl::AdapterInfo& adapterI
         //! 
         SL_CHECK(slValidateState());
 
-        auto ctx = plugin_manager::getInterface()->getFeatureContext(feature);
         std::string jsonConfig{};
-        if (!ctx || !plugin_manager::getInterface()->getExternalFeatureConfig(feature, jsonConfig))
+        if (!plugin_manager::getInterface()->getExternalFeatureConfig(feature, jsonConfig))
         {
             return Result::eErrorFeatureMissing;
         }
 
+        // Obtain feature context only when needed. If not available, try to derive
+        // the most informative error from the parsed configuration.
+        auto ctx = plugin_manager::getInterface()->getFeatureContext(feature);
         // Check if the feature is supported on any available adapters
-        if (!ctx->supportedAdapters)
+        if (ctx && !ctx->supportedAdapters)
         {
             return Result::eErrorNoSupportedAdapterFound;
         }
@@ -778,6 +780,31 @@ Result slIsFeatureSupported(sl::Feature feature, const sl::AdapterInfo& adapterI
         nlohmann::json cfg;
         stream >> cfg;
 
+        // Check adapter support first before checking HWS requirements
+        // This works even when ctx is nullptr (plugin failed to load)
+        if (cfg.contains("adapters"))
+        {
+            bool anyAdapterSupported = false;
+            
+            // Check if any adapter supports the feature
+            // Default assumption: adapters support the feature unless explicitly marked as unsupported
+            for (auto& [adapterName, adapterConfig] : cfg["adapters"].items())
+            {
+                if (!adapterConfig.contains("supported") || adapterConfig["supported"].get<bool>())
+                {
+                    anyAdapterSupported = true;
+                    break; // At least one adapter supports it
+                }
+            }
+            
+            // If no adapters support the feature, return early - don't bother checking HWS
+            if (!anyAdapterSupported)
+            {
+                return Result::eErrorNoSupportedAdapterFound;
+            }
+        }
+
+        // Now check HWS requirements only if adapter architecture is supported
         if (cfg.contains("hws"))
         {
             bool required = cfg["hws"]["required"];
@@ -832,6 +859,17 @@ Result slIsFeatureSupported(sl::Feature feature, const sl::AdapterInfo& adapterI
             default:
                 SL_LOG_ERROR("Unexpected renderAPI value passed to slInit!");
                 return Result::eErrorInvalidParameter;
+        }
+
+        // If feature context is missing we can still infer support status from JSON
+        if (!ctx)
+        {
+            // If config explicitly marks feature unsupported for platform/plugin-specific reasons
+            if (cfg.contains("/feature/supported"_json_pointer) && !cfg["feature"]["supported"]) 
+            {
+                return Result::eErrorFeatureNotSupported;
+            }
+            return Result::eErrorFeatureMissing;
         }
 
         // Not having 'isSupported' function indicates that plugin is supported on all adapters by design.
@@ -966,16 +1004,11 @@ Result slGetFeatureRequirements(sl::Feature feature, sl::FeatureRequirements& re
             if (it == s_ctx.requiredTags.end())
             {
                 std::vector<uint32_t> tags = cfg["feature"]["tags"];
-                auto list = new BufferType[tags.size()];
-                for (size_t i = 0; i < tags.size(); i++)
-                {
-                    list[i] = (BufferType)tags[i];
-                }
-                s_ctx.requiredTags[feature] = { tags.size(), list };
+                s_ctx.requiredTags[feature] = tags;
             }
             auto& data = s_ctx.requiredTags[feature];
-            requirements.requiredTags = data.second;
-            requirements.numRequiredTags = (uint32_t)data.first;
+            requirements.requiredTags = data.data();
+            requirements.numRequiredTags = (uint32_t)data.size();
         }
 
         // VK bits

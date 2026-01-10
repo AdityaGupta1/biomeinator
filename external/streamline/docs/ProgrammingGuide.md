@@ -2,7 +2,7 @@
 Streamline - SL
 =======================
 
-Version 2.9.0
+Version 2.10.0
 =======
 
 1 SETTING UP
@@ -371,6 +371,19 @@ using PFun_ResourceReleaseCallback = void(Resource* resource, void* device);
 
 > **NOTE:**
 > Memory management done by the host is an optional feature and it is NOT required for the SL to work properly. If used, proper care needs to be taken to avoid releasing resources which are still used by the GPU.
+
+> **IMPORTANT:**
+> Streamline defers destruction of internal GPU resources by a few frames for safety. These resources are actually released when Streamline performs garbage collection each frame.
+>
+> - In the default integration path, Streamline’s common plugin calls `presentCommon()` once per frame (and also collects from internal pools). If `presentCommon()` is not invoked, garbage collection will not run and memory can grow across events such as swapchain resize.
+> - If you use manual hooking or otherwise bypass the default interposer, you must ensure the common plugin’s `presentCommon()` function is called every frame. This is required for internal bookkeeping and garbage collection.
+> - Debug tip: set a breakpoint in the common plugin’s `presentCommon()` function. Verify it is hit each frame during normal rendering and around swapchain resize.
+
+> **If `presentCommon()` is not called:**
+> - Ensure Streamline is initialized early in process startup and not disabled by configuration.
+> - If you are using manual hooking or a custom integration, wire your frame presentation path so that Streamline’s common plugin executes `presentCommon()` exactly once per rendered frame (typically at the end of the frame). The recommended way is to upgrade your frame presentation interface using `slUpgradeInterface` immediately after creation (e.g., the swapchain on DirectX), as described in the Manual Hooking guide, so Streamline can invoke `presentCommon()`.
+> - If your engine has multiple presentation paths (e.g., different backends or windowing modes), make sure all active paths invoke `presentCommon()`.
+> - After changes, re-run with a breakpoint in `presentCommon()` to confirm it executes every frame and around window resizes.
 
 #### 2.2.3 INITIALIZATION
 

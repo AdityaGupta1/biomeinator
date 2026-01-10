@@ -22,7 +22,7 @@
 #pragma once
 
 #define SL_VERSION_MAJOR 2
-#define SL_VERSION_MINOR 9
+#define SL_VERSION_MINOR 10
 #define SL_VERSION_PATCH 0
 
 #include <cstdint>

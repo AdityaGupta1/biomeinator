@@ -559,17 +559,25 @@ sl::Result slNISGetState(const sl::ViewportHandle& viewport, sl::NISState& state
     return Result::eOk;
 }
 
-sl::Result slFreeResources()
+sl::Result slFreeResources(Feature feature, const sl::ViewportHandle& viewport)
 {
     auto& ctx = (*nis::getContext());
-    if (!ctx.compute) return Result::eErrorInvalidState;
-
+    if (!ctx.compute)
+    {
+        return Result::eErrorInvalidState;
+    }
     // clear resourceData cache only. Resources that the plugin created will be destroyed at shutdown.
     // This needs to be called from the app when the previously bound resources are destroyed.
     // resourceData cache is hashed by API resource assuming it's unique, but the assumption is not always true 
     // since API resource can be recycled, so the resourceData can have stale data of a previously used resource.
     ctx.compute->clearCache();
-    return Result::eOk;
+    auto it = ctx.viewports.find(viewport);
+    if (it != ctx.viewports.end())
+    {
+        ctx.viewports.erase(it);
+        return Result::eOk;
+    }
+    return Result::eErrorInvalidParameter;
 }
 
 SL_EXPORT void *slGetPluginFunction(const char *functionName)

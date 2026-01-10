@@ -253,11 +253,12 @@ void updateEmbeddedJSON(json& config)
         }
     }
 
-    std::unordered_set<std::string> deviceExtensions
+    std::unordered_set<std::string> deviceExtensions;
+    if (ctx.lowLatencyAvailable)
     {
-        "VK_NV_low_latency"
-    };
-
+        // Only require the Vk extension if Reflex is actually supported
+        deviceExtensions.emplace("VK_NV_low_latency");
+    }
     config["external"]["vk"]["device"]["extensions"] = deviceExtensions;
     config["external"]["reflex"]["lowLatencyAvailable"] = ctx.lowLatencyAvailable;
     config["external"]["reflex"]["flashIndicatorDriverControlled"] = ctx.flashIndicatorDriverControlled;

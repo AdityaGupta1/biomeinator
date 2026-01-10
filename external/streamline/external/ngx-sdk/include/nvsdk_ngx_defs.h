@@ -75,14 +75,14 @@ typedef enum NVSDK_NGX_DLSS_Hint_Render_Preset
                                                                 // NVSDK_NGX_DLSS_Hint_Render_Preset_C removed, use preset J or K
                                                                 // NVSDK_NGX_DLSS_Hint_Render_Preset_D removed, use preset J or K
                                                                 // NVSDK_NGX_DLSS_Hint_Render_Preset_E removed, use preset J or K
-    NVSDK_NGX_DLSS_Hint_Render_Preset_F = 6,                    // Intended for Ultra Perf/DLAA modes. The default preset for Ultra Perf
+    NVSDK_NGX_DLSS_Hint_Render_Preset_F = 6,                    // Deprecated
     NVSDK_NGX_DLSS_Hint_Render_Preset_G = 7,                    // Do not use, reverts to default behavior
     NVSDK_NGX_DLSS_Hint_Render_Preset_H_Reserved = 8,           // Do not use, reverts to default behavior
     NVSDK_NGX_DLSS_Hint_Render_Preset_I_Reserved = 9,           // Do not use, reverts to default behavior
     NVSDK_NGX_DLSS_Hint_Render_Preset_J = 10,                   // Similar to preset K. Preset J might exhibit slightly less ghosting at the cost of extra flickering. Preset K is generally recommended over preset J
-    NVSDK_NGX_DLSS_Hint_Render_Preset_K = 11,                   // Default preset for DLAA/Perf/Balanced/Quality modes that is transformer based. Best image quality preset at a higher performance cost
-    NVSDK_NGX_DLSS_Hint_Render_Preset_L = 12,                   // Do not use, reverts to default behavior
-    NVSDK_NGX_DLSS_Hint_Render_Preset_M = 13,                   // Do not use, reverts to default behavior
+    NVSDK_NGX_DLSS_Hint_Render_Preset_K = 11,                   // Default preset for DLAA/Balanced/Quality modes that is transformer based. Best image quality preset at a higher performance cost
+    NVSDK_NGX_DLSS_Hint_Render_Preset_L = 12,                   // Default for Ultra Perf mode
+    NVSDK_NGX_DLSS_Hint_Render_Preset_M = 13,                   // Default for Perf mode
     NVSDK_NGX_DLSS_Hint_Render_Preset_N = 14,                   // Do not use, reverts to default behavior
     NVSDK_NGX_DLSS_Hint_Render_Preset_O = 15,                   // Do not use, reverts to default behavior
 } NVSDK_NGX_DLSS_Hint_Render_Preset;
@@ -275,24 +275,6 @@ typedef enum NVSDK_NGX_DLSS_Mode
 } NVSDK_NGX_DLSS_Mode;
 
 typedef struct NVSDK_NGX_Handle { unsigned int Id; } NVSDK_NGX_Handle;
-
-typedef enum NVSDK_NGX_GPU_Arch
-{
-    NVSDK_NGX_GPU_Arch_NotSupported = 0,
-
-    // Match NvAPI's NV_GPU_ARCHITECTURE_ID values for GV100 and TU100 for
-    // backwards compatibility with snippets built against NvAPI
-    NVSDK_NGX_GPU_Arch_Volta        = 0x0140,
-    NVSDK_NGX_GPU_Arch_Turing       = 0x0160,
-    NVSDK_NGX_GPU_Arch_Ampere       = 0x0170,
-    NVSDK_NGX_GPU_Arch_Ada          = 0x0190,
-    NVSDK_NGX_GPU_Arch_Hopper       = 0x0180,
-    NVSDK_NGX_GPU_Arch_Blackwell    = 0x01A0,
-    NVSDK_NGX_GPU_Arch_Blackwell2   = 0x01B0,
-
-    // Presumably something newer
-    NVSDK_NGX_GPU_Arch_Unknown      = 0x7FFFFFF
-} NVSDK_NGX_GPU_Arch;
 
 typedef enum NVSDK_NGX_DLSS_Feature_Flags
 {

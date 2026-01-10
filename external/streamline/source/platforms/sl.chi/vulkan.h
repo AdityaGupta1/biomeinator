@@ -99,7 +99,9 @@ enum class DescriptorType
     eStorageBuffer,      // RWByteAddressBuffer, RWStructuredBuffer, AppendStructuredBuffer, ConsumeStructuredBuffer
     eStorageTypedBuffer, // RWBuffer
     eAccelStruct,        // RaytracingAccelerationStructure
-    eResource            // 'bindless' indexing.
+    eResource,           // 'bindless' indexing.
+
+    eCount
 };
 
 struct BindingSlot

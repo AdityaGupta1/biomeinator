@@ -6,7 +6,7 @@ Streamline - DLSS
 >The focus of this guide is on using Streamline to integrate DLSS into an application.  For more information about DLSS itself, please visit the [NVIDIA Developer DLSS Page](https://developer.nvidia.com/rtx/dlss)
 >For information on user interface considerations when using the DLSS plugin, please see the ["RTX UI Developer Guidelines.pdf"](<RTX UI Developer Guidelines.pdf>) document included with this SDK.
 
-Version 2.9.0
+Version 2.10.0
 =======
 
 ### 1.0 INITIALIZE AND SHUTDOWN
@@ -187,7 +187,7 @@ if(SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions)))
 ```
 
 > **NOTE:**
-> `sl::DLSSPreset::ePresetA` to `sl::DLSSPreset::ePresetE` are deprecated and should not be used. They will no longer be available in subsequent SDKs. `sl::DLSSPreset::ePresetG` to `sl::DLSSPreset::ePresetI` are reserved and should also not be used.
+> `sl::DLSSPreset::ePresetA` to `sl::DLSSPreset::ePresetE` are no longer available. `sl::DLSSPreset::ePresetG` to `sl::DLSSPreset::ePresetI` are reserved and should also not be used.
 
 > **NOTE:**
 > To turn off DLSS set `sl::DLSSOptions.mode` to `sl::DLSSMode::eOff`, note that this does NOT release any resources, for that please use `slFreeResources`

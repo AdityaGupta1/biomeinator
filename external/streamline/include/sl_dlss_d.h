@@ -54,6 +54,8 @@ enum class DLSSDNormalRoughnessMode : uint32_t
 {
     eUnpacked,  // App needs to provide Normal resource and Roughness resource separately.
     ePacked,    // App needs to write Roughness to w channel of Normal resource.
+
+    eCount
 };
 
 // {0AD87504-774E-4BF3-9633-A44D1F7F9CB8}

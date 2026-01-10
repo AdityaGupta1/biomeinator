@@ -301,6 +301,9 @@ copy "%src%\docs\DLSS-FG Programming Guide.pdf" %dest%\docs
 copy "%src%\docs\DLSS-RR Integration Guide.pdf" %dest%\docs
 copy "%src%\docs\DLSS Programming Guide.pdf" %dest%\docs
 
+:: Changelog
+copy %src%\docs\changelog.txt %dest% /Y
+
 :: README AND LICENSES
 copy %src%\README.md             %dest% /Y
 copy %src%\license.txt           %dest% /Y

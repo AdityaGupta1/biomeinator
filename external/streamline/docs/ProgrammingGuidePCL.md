@@ -5,7 +5,7 @@ Streamline - PCL Stats
 
 >The focus of this guide is on using Streamline to integrate PCL (PC Latency) Stats into an application.
 
-Version 2.9.0
+Version 2.10.0
 =======
 
 The application should not explicitly check for GPU HW, vendor, and driver version.

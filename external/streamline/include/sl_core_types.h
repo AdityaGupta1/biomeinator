@@ -517,6 +517,9 @@ enum class PreferenceFlags : uint64_t
     //! Optional - allow tagging of resources for frame. This helps distinguish whether slEvaluateFeature needs to do frame-based tagging
     //! of resources which wasn't the case earlier.
     eUseFrameBasedResourceTagging = 1 << 7,
+
+    //! All preference flags.  This isn't expected to be used directly by integrations, but may be useful for e.g. writing helpers.
+    eAll = eDisableCLStateTracking | eDisableDebugText | eUseManualHooking | eAllowOTA | eBypassOSVersionCheck | eUseDXGIFactoryProxy | eLoadDownloadedPlugins | eUseFrameBasedResourceTagging
 };
 
 SL_ENUM_OPERATORS_64(PreferenceFlags)
@@ -598,7 +601,10 @@ enum class FeatureRequirementFlags : uint32_t
     //! If set V-Sync must be disabled when feature is active
     eVSyncOffRequired = 1 << 3,
     //! If set GPU hardware scheduling OS feature must be turned on
-    eHardwareSchedulingRequired = 1 << 4
+    eHardwareSchedulingRequired = 1 << 4,
+
+    //! All feature requirement flags.  This isn't expected to be used directly by integrations, but may be useful for e.g. writing helpers.
+    eAll = eD3D11Supported | eD3D12Supported | eVulkanSupported | eVSyncOffRequired | eHardwareSchedulingRequired
 };
 
 SL_ENUM_OPERATORS_32(FeatureRequirementFlags);

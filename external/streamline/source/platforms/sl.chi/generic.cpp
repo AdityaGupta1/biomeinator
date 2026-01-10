@@ -1240,13 +1240,42 @@ ComputeStatus Generic::getSleepStatus(ReflexState& settings)
     return ComputeStatus::eOk;
 }
 
+//TODO: Remove this binary compatible struct once we update the NVAPI headers.
+typedef struct
+{
+    NvU32  version;
+    struct FrameReport {
+        NvU64 frameID;
+        NvU64 inputSampleTime;
+        NvU64 simStartTime;
+        NvU64 simEndTime;
+        NvU64 renderSubmitStartTime;
+        NvU64 renderSubmitEndTime;
+        NvU64 presentStartTime;
+        NvU64 presentEndTime;
+        NvU64 driverStartTime;
+        NvU64 driverEndTime;
+        NvU64 osRenderQueueStartTime;
+        NvU64 osRenderQueueEndTime;
+        NvU64 gpuRenderStartTime;
+        NvU64 gpuRenderEndTime;
+        NvU32 gpuActiveRenderTimeUs;
+        NvU32 gpuFrameTimeUs;
+        NvU64 cameraConstructedTime;    // New
+        NvU32 crossAdapterCopyTimeUs;   // New
+        NvU8  rsvd[108];                // [120]->[108]
+    } frameReport[64];
+    NvU8  rsvd[32];
+} NV_LATENCY_RESULT_PARAMS_V1_BFM_36495674;
+
 ComputeStatus Generic::getLatencyReport(ReflexState& settings)
 {
-    NV_LATENCY_RESULT_PARAMS params = {};
+    NV_LATENCY_RESULT_PARAMS_V1_BFM_36495674 params = {};
+    compile_time_assert(sizeof(NV_LATENCY_RESULT_PARAMS_V1_BFM_36495674) == sizeof(NV_LATENCY_RESULT_PARAMS_V1));
     params.version = NV_LATENCY_RESULT_PARAMS_VER1;
-    NVAPI_CHECK(NvAPI_D3D_GetLatency((IUnknown*)m_typelessDevice, &params));
+    NVAPI_CHECK(NvAPI_D3D_GetLatency((IUnknown*)m_typelessDevice, (NV_LATENCY_RESULT_PARAMS*)&params));
 
-    for (auto i = 0; i < 64; i++)
+    for (auto i = 0; i < kReflexFrameReportCount; i++)
     {
         settings.frameReport[i].frameID = params.frameReport[i].frameID;
         settings.frameReport[i].inputSampleTime = params.frameReport[i].inputSampleTime;
@@ -1264,6 +1293,12 @@ ComputeStatus Generic::getLatencyReport(ReflexState& settings)
         settings.frameReport[i].gpuRenderEndTime = params.frameReport[i].gpuRenderEndTime;
         settings.frameReport[i].gpuActiveRenderTimeUs = params.frameReport[i].gpuActiveRenderTimeUs;
         settings.frameReport[i].gpuFrameTimeUs = params.frameReport[i].gpuFrameTimeUs;
+
+        if (settings.structVersion >= kStructVersion2)
+        {
+            settings.frameReport2[i].cameraConstructedTime = params.frameReport[i].cameraConstructedTime;
+            settings.frameReport2[i].crossAdapterCopyTimeUs = params.frameReport[i].crossAdapterCopyTimeUs;
+        }
     }
 
     return ComputeStatus::eOk;

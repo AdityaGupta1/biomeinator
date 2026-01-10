@@ -148,7 +148,9 @@ enum class CommandQueueType
     eGraphics,
     eCompute,
     eCopy,
-    eOpticalFlow
+    eOpticalFlow,
+
+    eCount
 };
 
 enum class ResourceState : uint32_t
@@ -391,6 +393,8 @@ enum class WaitStatus
     eNoTimeout,
     eTimeout,
     eError,
+    
+    eCount
 };
 
 struct DebugInfo

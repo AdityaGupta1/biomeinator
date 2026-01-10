@@ -25,6 +25,8 @@ enum class GraphFlags : uint32_t
 {
     eNone = 0,
     eShaded = 1 << 0,
+
+    eAll = eShaded
 };
 
 struct GraphValues
@@ -559,6 +561,8 @@ enum class Condition
     eOnce = 1 << 1, ///! Set the variable once per runtime session (ownly the first call with succeed)
     eFirstUseEver = 1 << 2, ///! Set the variable if the object/window has no persistently saved data (no entry in .ini file)
     eAppearing = 1 << 3, ///! Set the variable if the object/window is appearing after being hidden/inactive (or the first time)
+
+    eAll = eOnce | eFirstUseEver | eAppearing
 };
 
 

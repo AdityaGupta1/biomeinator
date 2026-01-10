@@ -79,7 +79,9 @@ enum class NISHDRMode : uint32_t
 {
     None = 0,
     Linear = 1,
-    PQ = 2
+    PQ = 2,
+
+    eCount
 };
 
 enum class NISGPUArchitecture : uint32_t
@@ -87,7 +89,9 @@ enum class NISGPUArchitecture : uint32_t
     NVIDIA_Generic = 0,
     AMD_Generic = 1,
     Intel_Generic = 2,
-    NVIDIA_Generic_fp16 = 3
+    NVIDIA_Generic_fp16 = 3,
+
+    eCount
 };
 
 struct NISOptimizer

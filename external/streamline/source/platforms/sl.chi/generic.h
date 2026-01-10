@@ -98,7 +98,9 @@ struct TimestampedLambda
 enum class VRAMOperation
 {
     eAlloc,
-    eFree
+    eFree,
+
+    eCount
 };
 
 class Generic : public ICompute

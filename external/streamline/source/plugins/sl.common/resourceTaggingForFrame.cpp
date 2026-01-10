@@ -279,7 +279,11 @@ void common::ResourceTaggingForFrame::getTag(BufferType tagType,
         auto frameAccess = this->findFrameForReading(frameId);
         if (!frameAccess)
         {
-            SL_LOG_INFO("SL resource tags for frame %d not set yet!", frameId);
+            if (!optional)
+            {
+                SL_LOG_INFO("SL resource tags for frame %d not set yet!", frameId);
+            }
+
             return;
         }
         const auto& frameTags = frameAccess->m_container.resourceTagContainer;

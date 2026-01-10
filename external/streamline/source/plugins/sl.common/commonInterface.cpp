@@ -52,6 +52,7 @@
 #include "_artifacts/gitVersion.h"
 #include "nvapi.h"
 #include "external/json/include/nlohmann/json.hpp"
+#include <atomic>
 using json = nlohmann::json;
 
 namespace sl
@@ -69,6 +70,9 @@ struct CommonInterfaceContext
     sl::chi::ICapture* capture{};
 #endif
     uint64_t currentFrame{};
+
+    // Present hook health tracking
+    std::atomic<uint32_t> evalSinceLastPresent{ 0 };
 
     IDXGIAdapter3* adapter{};
 
@@ -529,6 +533,20 @@ sl::Result slEvaluateFeatureInternal(sl::Feature feature, const sl::FrameToken& 
     // Pop the state (d3d11 only, nop otherwise)
     CHI_CHECK_RR(ctx.compute->popState(cmdList));
 
+    // Detect missing Present hook: trigger when many evaluates occur without any Present
+    {
+        // Increment evaluates since last Present
+        uint32_t evals = ++ctx.evalSinceLastPresent;
+
+        // Conservative threshold (frames) to avoid false positives on loading screens
+        constexpr uint32_t kEvalThreshold = 60;
+
+        if (evals > kEvalThreshold)
+        {
+            SL_LOG_ERROR_ONCE("Streamline presentCommon() was not observed. Ensure the common plugin's presentCommon() function is invoked every frame. Without presentCommon(), internal bookkeeping and garbage collection will not run.");
+        }
+    }
+
     // Moving to host being responsible for this but still supporting legacy apps as much as possible
     if (slProxy && (ctx.flags & PreferenceFlags::eUseManualHooking) == 0 && ctx.interposerEnabled)
     {
@@ -568,6 +586,9 @@ void presentCommon(UINT Flags)
 
     if (ctx.compute)
     {
+        // Reset evaluates counter when Present is observed
+        ctx.evalSinceLastPresent.store(0);
+
         if (ctx.manageVRAMBudget)
         {
             if (ctx.emulateLowVRAMScenario)

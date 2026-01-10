@@ -2,7 +2,7 @@
 Streamline - Manual Hooking
 =======================
 
-Version 2.9.0
+Version 2.10.0
 =======
 
 The automated global hooking is a great way to quickly enable SL features in any application. However, this can lead to unnecessary overhead caused by the entire API redirection through SL proxies and problems with tools and 3rd party libraries which do not expect to receive SL proxies as inputs.
@@ -74,6 +74,18 @@ enum class FunctionHookID : uint32_t
     eMaxNum
 };
 ```
+
+> **WARNING:** Present invocation requirement in manual hooking
+>
+> When `PreferenceFlag::eUseManualHooking` is set, you must ensure the common plugin’s `presentCommon()` function is called every frame. Failing to invoke `presentCommon()` will lead to incorrect behavior and memory growth (especially across swapchain resizes).
+>
+> - Verification: set a breakpoint in the common plugin’s `presentCommon()` function. It should be hit consistently every frame. During window resize, confirm that it executes around the transition.
+
+> **If `presentCommon()` is not called:**
+> - Verify Streamline is initialized and enabled before any rendering begins.
+> - Route your frame presentation path to invoke the common plugin’s `presentCommon()` exactly once per frame. In manual hooking, the recommended approach is to call `slUpgradeInterface` immediately after creating the frame presentation interface (e.g., the swapchain on DirectX), so Streamline can integrate with your presentation path and invoke `presentCommon()`.
+> - If you have multiple presentation code paths (alternate backends/window modes), unify or fan-in so all active paths invoke `presentCommon()`.
+> - Re-run with a breakpoint in `presentCommon()` to confirm it executes every frame and around window resizes.
 
 ### 3.0 INITIALIZATION AND SHUTDOWN
 

@@ -38,7 +38,7 @@
 #include "source/core/sl.log/log.h"
 #include "source/core/sl.file/file.h"
 #include "source/core/sl.param/parameters.h"
-#include "source/core/sl.plugin-manager/ota.h"
+#include "source/core/sl.plugin-manager/iota.h"
 #include "source/core/sl.plugin-manager/pluginManager.h"
 #include "source/core/sl.security/secureLoadLibrary.h"
 #include "source/core/sl.interposer/versions.h"
@@ -913,6 +913,9 @@ Result PluginManager::loadPlugins()
     // Only load plugins from OTA on production builds.
     if (m_pref.flags & PreferenceFlags::eLoadDownloadedPlugins)
     {
+        std::vector<fs::path> otaPluginList;
+        bool foundAllRequestedFeatures = true;
+
         SL_LOG_INFO("Searching for OTA'd plugins...");
         for (Feature f : m_featuresToLoad)
         {
@@ -924,13 +927,28 @@ Result PluginManager::loadPlugins()
                 {
                     // Push kFeatureCommon OTA to front of list so sl.common is
                     // loaded first+foremost
-                    pluginList.insert(pluginList.begin(), pluginPath);
+                    otaPluginList.insert(otaPluginList.begin(), pluginPath);
                 }
                 else
                 {
-                    pluginList.push_back(pluginPath);
+                    otaPluginList.push_back(pluginPath);
                 }
             }
+            else
+            {
+                foundAllRequestedFeatures = false;
+            }
+        }
+
+        // Only if we were able to find all of the requested features, should we
+        // actually paths from OTA to be loaded.
+        if (foundAllRequestedFeatures)
+        {
+            pluginList.insert(pluginList.begin(), otaPluginList.begin(), otaPluginList.end());
+        }
+        else
+        {
+            SL_LOG_INFO("Unable to find all requested plugins in OTA cache, OTA'd plugins will not be loaded!");
         }
     }
     else

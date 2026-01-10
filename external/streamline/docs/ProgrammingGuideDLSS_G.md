@@ -5,7 +5,7 @@ Streamline - DLSS-G
 
 NVIDIA DLSS Frame Generation (“DLSS-FG” or “DLSS-G”) is an AI based technology that infers frames based on rendered frames coming from a game engine or rendering pipeline. This document explains how to integrate DLSS-G into a renderer.
 
-Version 2.9.0
+Version 2.10.0
 =======
 
 ### 0.0 Integration checklist
@@ -30,6 +30,7 @@ In-game UI for enabling/disabling DLSS-G is implemented | [RTX UI Guidelines](<R
 Only full production non-watermarked libraries are packaged in the release build | N/A |
 No errors or unexpected warnings in Streamline and DLSS-G log files while running the feature | N/A |
 Ensure extent resolution or resource size, whichever is in use, for `Hudless` and `UI Color and Alpha` buffers exactly match that of backbuffer. | N/A |
+Execute the DLSS-G In-Game Enhanced Debug Visualization Tests | [Section 23.0](#230-enhanced-in-game-debug-visualization) |
 
 ### 1.0 REQUIREMENTS
 
@@ -985,3 +986,7 @@ Dynamic Frame Generation leverages stochastic control to automatically trigger D
 Dynamic Frame Generation is enabled when DLSS-G is in auto mode. To activate Dynamic Frame Generation, set `mode` to `sl::DLSSGMode::eAuto`.
 
 When using non-production (development) builds of `sl.dlss_g.dll`, the status of Dynamic Frame Generation and the current state of DLSS-G is displayed on the DLSS-G status window.
+
+### 23.0 Enhanced In-Game Debug visualization
+
+The developer FG NGX feature contains an in-game debug visualization feature that can be used to accurately validate GPU and CPU input resources are correct. Consult the **Troubleshooting and Optional Features** section of the  [DLSS-FG Programming Guide.pdf](<DLSS-FG Programming Guide.pdf>) for more details.
