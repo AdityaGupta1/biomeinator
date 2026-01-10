@@ -90,7 +90,7 @@ public:
 #endif
 
     uint flags;
-    uint pad1;
+    float emissiveStrength;
     uint pad2;
     uint pad3;
 
@@ -100,8 +100,8 @@ public:
     float3 specularColor;
     float ior;
 
-    float emissiveStrength;
     float3 emissiveColor;
+    uint emissiveColorTextureId;
 
     bool hasDiffuse()
     {
@@ -147,11 +147,6 @@ public:
     void setHasSpecularReflection(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_HAS_SPECULAR) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_SPECULAR);
-    }
-#else
-    float3 getEmissiveColor()
-    {
-        return emissiveColor * emissiveStrength;
     }
 #endif
 };
