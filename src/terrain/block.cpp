@@ -15,3 +15,30 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
+#include "block.h"
+
+#include <array>
+
+using namespace DirectX;
+
+namespace Blocks
+{
+
+std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
+
+#define BLOCK_DATA(block) blockDatas[static_cast<size_t>(block)]
+#define BLOCK_DATA_BY_NAME(blockName) blockDatas[static_cast<size_t>(Block::blockName)]
+
+void init()
+{
+    BLOCK_DATA_BY_NAME(STONE) = { { 0, 0 } };
+    BLOCK_DATA_BY_NAME(LAMP) = { { 1, 0 }, true };
+}
+
+const BlockData& getBlockData(Block block)
+{
+    return BLOCK_DATA(block);
+}
+
+} // namespace Blocks

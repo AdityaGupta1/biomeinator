@@ -17,3 +17,33 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #pragma once
+
+#include <cstdint>
+
+#include <DirectXMath.h>
+
+using BlockId = uint16_t;
+
+enum class Block : BlockId
+{
+	AIR = 0,
+	STONE,
+	LAMP,
+
+	COUNT
+};
+
+struct BlockData
+{
+    DirectX::XMUINT2 texCoords{ 0, 0 };
+    bool emitsLight{ false };
+};
+
+namespace Blocks
+{
+
+void init();
+
+const BlockData& getBlockData(Block block);
+
+} // namespace Blocks
