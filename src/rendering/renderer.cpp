@@ -165,7 +165,6 @@ static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 static Scene scene;
 
-static bool voxelMode = true; // TODO: control this with a setting instead?
 static bool testMode = false;
 
 void init()
@@ -201,14 +200,15 @@ void init()
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
-    if (!defaultScene.empty())
-    {
-        loadScene(defaultScene);
-        voxelMode = false; // TODO: allow opening scene when in voxel mode, which will clear terrain and disable voxel mode before loading the scene
+    if (SettingsManager::getAsBool("voxelMode")) {
+        Terrain::init(&scene);
     }
     else
     {
-        Terrain::init(&scene);
+        if (!defaultScene.empty())
+        {
+            loadScene(defaultScene);
+        }
     }
 
     if (!testMode)
@@ -806,7 +806,7 @@ static void initRootSignature()
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
     rtStaticSamplers.push_back({
-        .Filter = voxelMode ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .Filter = SettingsManager::getAsBool("voxelMode") ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -1614,7 +1614,7 @@ void render()
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    if (voxelMode)
+    if (SettingsManager::getAsBool("voxelMode"))
     {
         Terrain::update();
     }
