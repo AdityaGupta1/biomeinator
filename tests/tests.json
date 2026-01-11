@@ -241,7 +241,7 @@
                 "--maxPathDepth=12"
             ],
             "golden": "evil_room/golden.png",
-            "threshold": 0.03
+            "threshold": 0.02
         },
         {
             "name": "evil_room_restir",
@@ -255,7 +255,7 @@
                 "--samplingMode=3"
             ],
             "golden": "evil_room/golden_restir.png",
-            "threshold": 0.03
+            "threshold": 0.015
         },
         {
             "name": "evil_room_blender_no_tonemap",
@@ -269,7 +269,7 @@
                 "--tonemapping=0"
             ],
             "golden": "evil_room/golden_blender_no_tonemap.png",
-            "threshold": 0.03
+            "threshold": 0.025
         },
         {
             "name": "cave",
