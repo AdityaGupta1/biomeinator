@@ -30,6 +30,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 using namespace glm;
 using namespace DirectX;
 
+#define DEFAULT_TEX_NUM_BLOCKS_X 32
+#define DEFAULT_TEX_NUM_BLOCKS_Y 32
+
 Chunk::Chunk(ivec2 chunkPos)
 	: chunkPos(chunkPos)
 {}
@@ -147,7 +150,7 @@ void Chunk::createInstance(Scene* scene)
                         ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
                         ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0)  // -z
                     };
-                    const ivec3* faceVerts = &allFaceVerts[faceIdx * 4];
+                    const ivec3* faceVerts = allFaceVerts + (faceIdx * 4);
 
                     static constexpr uvec2 uvOffsets[4] = {
                         uvec2(1, 0),
@@ -159,8 +162,8 @@ void Chunk::createInstance(Scene* scene)
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                     for (uint i = 0; i < 4; ++i)
                     {
-                        const vec2 uv =
-                            (vec2(blockData.texCoords + uvOffsets[i])) / vec2(DEFAULT_TEX_SIZE_X, DEFAULT_TEX_SIZE_Y);
+                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) /
+                                        vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
                         const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + faceVerts[i]);
                         verts.push_back({
                             vec3ToDirectX(vertPos_CS),

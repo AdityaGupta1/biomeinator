@@ -20,10 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <cstdint>
 
-// TODO: rename these to reflect that they are size in number of blocks and not in number of pixels
-#define DEFAULT_TEX_SIZE_X 32
-#define DEFAULT_TEX_SIZE_Y 32
-
 class Scene;
 
 namespace TerrainMaterials
