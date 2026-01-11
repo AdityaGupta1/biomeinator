@@ -24,16 +24,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <array>
 #include <glm/glm.hpp>
 
-#define CHUNK_SIZE_X 16
+#define CHUNK_SIZE_XZ 16
 #define CHUNK_SIZE_Y 256
-#define CHUNK_SIZE_Z 16
 
 class Chunk
 {
 private:
     const glm::ivec2 chunkPos{ 0, 0 };
 
-    std::array<Block, CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z> blocks{};
+    std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
 
     Instance* instance{ nullptr };
 

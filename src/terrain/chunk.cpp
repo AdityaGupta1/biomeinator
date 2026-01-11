@@ -38,9 +38,9 @@ void Chunk::generateBlocks()
 {
     const ivec2 chunkBlockPos_WS = chunkPos * 16;
 
-    for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
+    for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
     {
-        for (uint x = 0; x < CHUNK_SIZE_X; ++x)
+        for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
         {
             const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
@@ -102,9 +102,9 @@ void Chunk::createInstance(Scene* scene)
 
     // TODO: extract this to a helper function
     auto isBlockAir = [&](ivec3 pos_CS) -> bool {
-        if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_X) ||
+        if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
             pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
-            pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_Z))
+            pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
         {
             // TODO: account for blocks in neighboring chunks
             return true;
@@ -112,9 +112,9 @@ void Chunk::createInstance(Scene* scene)
         return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
     };
 
-    for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
+    for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
     {
-        for (uint x = 0; x < CHUNK_SIZE_X; ++x)
+        for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
         {
             for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
             {
@@ -220,5 +220,5 @@ uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
 {
     return blockPos.y
 		 + blockPos.x * CHUNK_SIZE_Y
-		 + blockPos.z * CHUNK_SIZE_X * CHUNK_SIZE_Y;
+		 + blockPos.z * CHUNK_SIZE_XZ * CHUNK_SIZE_Y;
 }
