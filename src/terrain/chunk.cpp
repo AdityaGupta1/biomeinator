@@ -70,6 +70,7 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
+// TODO: figure out what causese artifacts/light leaking when rendering with direct light sampling
 void Chunk::createInstance(Scene* scene)
 {
     ToFreeList toFreeList{};
