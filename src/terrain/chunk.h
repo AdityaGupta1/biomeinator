@@ -25,8 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <glm/glm.hpp>
 
 #define CHUNK_SIZE_X 16
-#define CHUNK_SIZE_Y 16
-#define CHUNK_SIZE_Z 256
+#define CHUNK_SIZE_Y 256
+#define CHUNK_SIZE_Z 16
 
 class Chunk
 {

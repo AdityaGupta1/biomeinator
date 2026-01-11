@@ -38,23 +38,23 @@ void Chunk::generateBlocks()
 {
     const ivec2 chunkBlockPos_WS = chunkPos * 16;
 
-    for (uint y = 0; y < 16; ++y)
+    for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
     {
-        for (uint x = 0; x < 16; ++x)
+        for (uint x = 0; x < CHUNK_SIZE_X; ++x)
         {
-            const ivec2 blockPosXY_WS = chunkBlockPos_WS + ivec2(x, y);
-            const uint height = uint(64.f + 10.f * (sinf(blockPosXY_WS.x * 0.1f) * cosf(blockPosXY_WS.y * 0.1f)));
+            const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
+            const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
 
-            for (uint z = 0; z < height; ++z)
+            for (uint y = 0; y < height && y < CHUNK_SIZE_Y; ++y)
             {
                 const ivec3 blockPos_CS = ivec3(x, y, z);
-                const ivec3 blockPos_WS = ivec3(blockPosXY_WS, 0) + blockPos_CS;
+                const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                 this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.1f ? Block::LAMP : Block::STONE;
             }
 
-            if (rand1(uvec2(blockPosXY_WS)) < 0.05f)
+            if (rand1(uvec2(blockPosXZ_WS)) < 0.05f && height < CHUNK_SIZE_Y)
             {
-                this->blocks[blockPosToIdx(ivec3(x, y, height))] = Block::LAMP;
+                this->blocks[blockPosToIdx(ivec3(x, height, z))] = Block::LAMP;
             }
         }
     }
@@ -81,17 +81,15 @@ void Chunk::createInstance(Scene* scene)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIndices;
 
-    // TODO: build chunk with z-up and use transform matrix to rotate it to y-up
     constexpr vec3 faceNormals[6] = {
         vec3(1.0f, 0.0f, 0.0f),   // +x
         vec3(-1.0f, 0.0f, 0.0f),  // -x
-        vec3(0.0f, 0.0f, 1.0f),   // +y (chunk) -> +z (world)
-        vec3(0.0f, 0.0f, -1.0f),  // -y (chunk) -> -z (world)
-        vec3(0.0f, 1.0f, 0.0f),   // +z (chunk) -> +y (world)
-        vec3(0.0f, -1.0f, 0.0f),  // -z (chunk) -> -y (world)
+        vec3(0.0f, 1.0f, 0.0f),   // +y
+        vec3(0.0f, -1.0f, 0.0f),  // -y
+        vec3(0.0f, 0.0f, 1.0f),   // +z
+        vec3(0.0f, 0.0f, -1.0f),  // -z
     };
 
-    // TODO: build chunk with z-up and use transform matrix to rotate it to y-up
     constexpr ivec3 faceOffsets[6] = {
         ivec3(1, 0, 0),   // +x
         ivec3(-1, 0, 0),  // -x
@@ -101,7 +99,7 @@ void Chunk::createInstance(Scene* scene)
         ivec3(0, 0, -1),  // -z
     };
 
-    // TODO: extract this to helper function
+    // TODO: extract this to a helper function
     auto isBlockAir = [&](int x, int y, int z) -> bool {
         if (x < 0 || x >= static_cast<int>(CHUNK_SIZE_X) ||
             y < 0 || y >= static_cast<int>(CHUNK_SIZE_Y) ||
@@ -116,11 +114,11 @@ void Chunk::createInstance(Scene* scene)
     const float texSizeX = static_cast<float>(DEFAULT_TEX_SIZE_X);
     const float texSizeY = static_cast<float>(DEFAULT_TEX_SIZE_Y);
 
-    for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
+    for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
     {
         for (uint x = 0; x < CHUNK_SIZE_X; ++x)
         {
-            for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
+            for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
             {
                 const uvec3 blockPos_CS(x, y, z);
                 const Block block = blocks[blockPosToIdx(blockPos_CS)];
@@ -146,12 +144,11 @@ void Chunk::createInstance(Scene* scene)
                     }
 
                     const vec3 normal = faceNormals[faceIdx];
-                    const vec3 basePos(static_cast<float>(x), static_cast<float>(z), static_cast<float>(y));
+                    const vec3 basePos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
 
                     vec3 faceVerts[4];
                     switch (faceIdx)
                     {
-                        // TODO: build chunk with z-up and use transform matrix to rotate it to y-up
                         // TODO: use an array instead of a switch statement
                         case 0: // +x
                             faceVerts[0] = basePos + vec3(1.0f, 0.0f, 0.0f);
@@ -165,28 +162,28 @@ void Chunk::createInstance(Scene* scene)
                             faceVerts[2] = basePos + vec3(0.0f, 1.0f, 1.0f);
                             faceVerts[3] = basePos + vec3(0.0f, 1.0f, 0.0f);
                             break;
-                        case 2: // +y (chunk space) -> +z (world space)
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                        case 2: // +y
+                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 0.0f);
                             faceVerts[1] = basePos + vec3(0.0f, 1.0f, 1.0f);
                             faceVerts[2] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[3] = basePos + vec3(1.0f, 1.0f, 0.0f);
                             break;
-                        case 3: // -y (chunk space) -> -z (world space)
+                        case 3: // -y
                             faceVerts[0] = basePos + vec3(0.0f, 0.0f, 0.0f);
                             faceVerts[1] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 1.0f, 0.0f);
+                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 1.0f);
                             break;
-                        case 4: // +z (chunk space) -> +y (world space)
-                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
+                        case 4: // +z
+                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(1.0f, 0.0f, 1.0f);
                             faceVerts[2] = basePos + vec3(1.0f, 1.0f, 1.0f);
                             faceVerts[3] = basePos + vec3(0.0f, 1.0f, 1.0f);
                             break;
-                        case 5: // -z (chunk space) -> -y (world space)
+                        case 5: // -z
                             faceVerts[0] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 0.0f);
+                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 0.0f);
                             faceVerts[3] = basePos + vec3(1.0f, 0.0f, 0.0f);
                             break;
                     }
@@ -249,19 +246,19 @@ Instance* Chunk::getInstance() const
     return instance;
 }
 
-// z changes fastest, then x, then y
+// y changes fastest, then x, then z
 //
 // for loops should be written like this:
-// for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
+// for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
 // {
 //     for (uint x = 0; x < CHUNK_SIZE_X; ++x)
 //     {
-//         for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
+//         for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
 //         {
 //             // ...
 uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
 {
-    return blockPos.z
-		 + blockPos.x * CHUNK_SIZE_Z
-		 + blockPos.y * CHUNK_SIZE_X * CHUNK_SIZE_Z;
+    return blockPos.y
+		 + blockPos.x * CHUNK_SIZE_Y
+		 + blockPos.z * CHUNK_SIZE_X * CHUNK_SIZE_Y;
 }
