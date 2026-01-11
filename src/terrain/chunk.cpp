@@ -68,12 +68,11 @@ void Chunk::createInstance(Scene* scene)
     // could potentially be a case where the instances array is resized while some instances are still being worked on, so their data would be lost
     this->instance = scene->requestNewInstance(toFreeList);
 
-
     const ivec2 chunkBlockPos_WS = chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
-        static_cast<float>(chunkBlockPos_WS.y),
-        0.0f);
+        0.f,
+        static_cast<float>(chunkBlockPos_WS.y));
     XMFLOAT3X4 instanceTransform;
     XMStoreFloat3x4(&instanceTransform, transform);
 

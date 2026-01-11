@@ -35,18 +35,25 @@ void init(Scene* scene)
     Blocks::init();
 }
 
-static bool didAddChunk = false;
-static std::unique_ptr<Chunk> chunk;
+static bool didAddChunks = false;
+static std::vector<std::unique_ptr<Chunk>> chunks;
 
 void update()
 {
-    if (!didAddChunk)
+    if (!didAddChunks)
     {
-        chunk = std::make_unique<Chunk>(glm::ivec2(0, 0));
-        chunk->generateBlocks();
-        chunk->createInstance(scene);
+        for (int chunkX = -1; chunkX <= 3; ++chunkX)
+        {
+            for (int chunkY = -1; chunkY <= 3; ++chunkY)
+            {
+                std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>(glm::ivec2(chunkX, chunkY));
+                chunk->generateBlocks();
+                chunk->createInstance(scene);
+                chunks.push_back(std::move(chunk));
+            }
+        }
 
-        didAddChunk = true;
+        didAddChunks = true;
     }
 
     // TODO
