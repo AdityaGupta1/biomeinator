@@ -21,7 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include <d3dcompiler.h>
 
-#include "camera.h"
 #include "param_block_manager.h"
 #include "pipeline_builder.h"
 #include "rt_target.h"
@@ -1616,7 +1615,7 @@ void render()
 
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        Terrain::update();
+        Terrain::update(frameCtx.toFreeList);
     }
 
     const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
@@ -2085,6 +2084,11 @@ void destroy()
 #endif
 
     device.Reset();
+}
+
+const Camera& getCamera()
+{
+    return camera;
 }
 
 } // namespace Renderer

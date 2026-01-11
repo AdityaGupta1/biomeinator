@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "dxr_includes.h"
 
+#include "camera.h"
 #include "buffer/descriptor_heap_allocator.h"
 
 #include <string>
@@ -44,5 +45,7 @@ void destroy();
 extern ComPtr<ID3D12Device5> device;
 
 extern DescriptorHeapAllocator sharedDescHeapAlloc;
+
+const Camera& getCamera();
 
 } // namespace Renderer

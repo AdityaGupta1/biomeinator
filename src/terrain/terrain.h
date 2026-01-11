@@ -18,15 +18,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "chunk.h"
-
 class Scene;
+class ToFreeList;
 
 namespace Terrain
 {
 
 void init(Scene* scene);
 
-void update();
+void update(ToFreeList& toFreeList);
 
 } // namespace Terrain

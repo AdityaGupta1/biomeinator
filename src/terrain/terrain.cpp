@@ -19,7 +19,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "terrain.h"
 
 #include "block.h"
+#include "chunk.h"
 #include "terrain_materials.h"
+#include "rendering/buffer/to_free_list.h"
+#include "rendering/camera.h"
+
+#include <unordered_map>
+
+#define RENDER_DISTANCE 5
 
 namespace Terrain
 {
@@ -35,28 +42,56 @@ void init(Scene* scene)
     Blocks::init();
 }
 
-static bool didAddChunks = false;
-static std::vector<std::unique_ptr<Chunk>> chunks;
-
-void update()
+struct IVec2Hash
 {
-    if (!didAddChunks)
+    size_t operator()(const glm::ivec2& v) const noexcept
     {
-        for (int chunkX = -5; chunkX <= 5; ++chunkX)
+        const uint64_t x = static_cast<uint32_t>(v.x);
+        const uint64_t y = static_cast<uint32_t>(v.y);
+        return (x << 32) | y;
+    }
+};
+
+std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
+
+static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
+
+void update(ToFreeList& toFreeList)
+{
+    const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
+    const glm::ivec2 currentChunkPos = glm::ivec2(glm::floor(glm::vec2(cameraPos_WS.x, cameraPos_WS.z) / 16.f));
+
+    if (currentChunkPos != lastChunkPos)
+    {
+        // TODO: replace with spiral
+        for (int dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; ++dx)
         {
-            for (int chunkY = -5; chunkY <= 5; ++chunkY)
+            for (int dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; ++dy)
             {
-                std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>(glm::ivec2(chunkX, chunkY));
-                chunk->generateBlocks();
-                chunk->createInstance(scene);
-                chunks.push_back(std::move(chunk));
+                const glm::ivec2 newChunkPos = currentChunkPos + glm::ivec2(dx, dy);
+                if (chunks.find(newChunkPos) == chunks.end())
+                {
+                    std::unique_ptr<Chunk> newChunk = std::make_unique<Chunk>(newChunkPos);
+                    newChunk->generateBlocks();
+                    newChunk->createInstance(scene);
+                    chunks[newChunkPos] = std::move(newChunk);
+                }
+
+                const glm::ivec2 oldChunkPos = lastChunkPos + glm::ivec2(dx, dy);
+                if (std::max(abs(oldChunkPos.x - currentChunkPos.x), abs(oldChunkPos.y - currentChunkPos.y)) > RENDER_DISTANCE)
+                {
+                    auto it = chunks.find(oldChunkPos);
+                    if (it != chunks.end())
+                    {
+                        toFreeList.pushInstance(it->second->getInstance());
+                        chunks.erase(it);
+                    }
+                }
             }
         }
-
-        didAddChunks = true;
     }
 
-    // TODO
+    lastChunkPos = currentChunkPos;
 }
 
 } // namespace Terrain

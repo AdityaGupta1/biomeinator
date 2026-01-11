@@ -76,4 +76,6 @@ public:
     void copySlConstantsTo(sl::Constants* constants);
     void copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::float4x4* cameraViewToWorld);
     void copyParamsTo(CameraParams* dest) const;
+
+    DirectX::XMFLOAT3 getPos_WS() const;
 };

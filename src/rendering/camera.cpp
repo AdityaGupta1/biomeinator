@@ -245,3 +245,8 @@ void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
 }
+
+DirectX::XMFLOAT3 Camera::getPos_WS() const
+{
+    return this->params.pos_WS;
+}
