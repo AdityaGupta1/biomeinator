@@ -73,7 +73,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
 
     Payload lightPayload;
     lightPayload.flags = 0;
-    TraceRay(raytracingAcs, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
     if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {
