@@ -32,11 +32,6 @@ void init()
 {
     BLOCK_DATA_BY_NAME(STONE) = { { 0, 0 } };
     BLOCK_DATA_BY_NAME(LAMP) = { { 1, 0 }, true };
-
-    for (BlockData& blockData : blockDatas)
-    {
-        // TODO: divide UVs by texture size
-    }
 }
 
 const BlockData& getBlockData(Block block)
