@@ -213,15 +213,29 @@ add_custom_command(TARGET Biomeinator POST_BUILD
             $<TARGET_FILE_DIR:Biomeinator>/D3D12
 )
 
-add_custom_command(
-    TARGET Biomeinator
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:Biomeinator>/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/assets
-            $<TARGET_FILE_DIR:Biomeinator>/assets
+set(ASSETS_SRC_DIR "${CMAKE_SOURCE_DIR}/assets")
+set(ASSETS_DST_DIR "$<TARGET_FILE_DIR:Biomeinator>/assets")
+
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS
+    "${ASSETS_SRC_DIR}/*"
 )
+
+add_custom_command(TARGET Biomeinator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ASSETS_DST_DIR}"
+    VERBATIM
+)
+
+foreach(src IN LISTS ASSET_FILES)
+    file(RELATIVE_PATH rel "${ASSETS_SRC_DIR}" "${src}")
+    set(dst "${ASSETS_DST_DIR}/${rel}")
+    get_filename_component(dst_dir "${dst}" DIRECTORY)
+
+    add_custom_command(TARGET Biomeinator POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${dst_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${src}" "${dst}"
+        VERBATIM
+    )
+endforeach()
 
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"

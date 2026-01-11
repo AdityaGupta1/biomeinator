@@ -150,50 +150,50 @@ void Chunk::createInstance(Scene* scene)
                     {
                         // TODO: use an array instead of a switch statement
                         case 0: // +x
-                            faceVerts[0] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 0.0f);
+                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 0.0f);
+                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 1.0f);
                             break;
                         case 1: // -x
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[2] = basePos + vec3(0.0f, 1.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 1.0f, 0.0f);
+                            faceVerts[2] = basePos + vec3(0.0f, 0.0f, 0.0f);
+                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 0.0f);
                             break;
                         case 2: // +y
-                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 1.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 1.0f, 0.0f);
+                            faceVerts[2] = basePos + vec3(0.0f, 1.0f, 0.0f);
+                            faceVerts[3] = basePos + vec3(0.0f, 1.0f, 1.0f);
+                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
                             break;
                         case 3: // -y
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 0.0f);
+                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(0.0f, 0.0f, 0.0f);
                             break;
                         case 4: // +z
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 0.0f, 1.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 1.0f, 1.0f);
+                            faceVerts[2] = basePos + vec3(0.0f, 0.0f, 1.0f);
+                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
+                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 1.0f);
+                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 1.0f);
                             break;
                         case 5: // -z
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            faceVerts[2] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 0.0f);
+                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 0.0f);
+                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 0.0f);
+                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 0.0f);
+                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
                             break;
                     }
 
                     const uvec2 baseTexCoords = blockData.texCoords;
                     // TODO: might need to rotate these
                     const uvec2 uvOffsets[4] = {
-                        uvec2(0, 0),
                         uvec2(1, 0),
-                        uvec2(1, 1),
+                        uvec2(0, 0),
                         uvec2(0, 1),
+                        uvec2(1, 1),
                     };
 
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
