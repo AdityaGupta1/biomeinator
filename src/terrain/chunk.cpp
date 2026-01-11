@@ -45,7 +45,7 @@ void Chunk::generateBlocks()
             const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
 
-            for (uint y = 0; y < height && y < CHUNK_SIZE_Y; ++y)
+            for (uint y = 0; y < height; ++y)
             {
                 const ivec3 blockPos_CS = ivec3(x, y, z);
                 const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
