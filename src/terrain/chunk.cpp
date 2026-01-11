@@ -64,7 +64,10 @@ void Chunk::createInstance(Scene* scene)
 {
     ToFreeList toFreeList{};
 
-    this->instance = scene->requestNewInstance(toFreeList); // TODO: request these in Terrain so they can all be requested at once, and use actual toFreeList from frameCtx
+    // TODO: will have to revisit this when implementing multithreading
+    // could potentially be a case where the instances array is resized while some instances are still being worked on, so their data would be lost
+    this->instance = scene->requestNewInstance(toFreeList);
+
 
     const ivec2 chunkBlockPos_WS = chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
@@ -189,6 +192,7 @@ void Chunk::createInstance(Scene* scene)
                     }
 
                     const uvec2 baseTexCoords = blockData.texCoords;
+                    // TODO: might need to rotate these
                     const uvec2 uvOffsets[4] = {
                         uvec2(0, 0),
                         uvec2(1, 0),

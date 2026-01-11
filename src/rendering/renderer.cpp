@@ -165,7 +165,7 @@ static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 static Scene scene;
 
-static bool voxelMode = true;
+static bool voxelMode = true; // TODO: control this with a setting instead?
 static bool testMode = false;
 
 void init()
@@ -806,7 +806,7 @@ static void initRootSignature()
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
     rtStaticSamplers.push_back({
-        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .Filter = voxelMode ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
