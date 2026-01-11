@@ -60,6 +60,16 @@ void Chunk::generateBlocks()
     }
 }
 
+static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
+{
+    return { v.x, v.y };
+}
+
+static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
 void Chunk::createInstance(Scene* scene)
 {
     ToFreeList toFreeList{};
@@ -72,7 +82,8 @@ void Chunk::createInstance(Scene* scene)
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
         0.f,
-        static_cast<float>(chunkBlockPos_WS.y));
+        static_cast<float>(chunkBlockPos_WS.y)
+    );
     XMFLOAT3X4 instanceTransform;
     XMStoreFloat3x4(&instanceTransform, transform);
 
@@ -80,38 +91,26 @@ void Chunk::createInstance(Scene* scene)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIndices;
 
-    constexpr vec3 faceNormals[6] = {
-        vec3(1.0f, 0.0f, 0.0f),   // +x
-        vec3(-1.0f, 0.0f, 0.0f),  // -x
-        vec3(0.0f, 1.0f, 0.0f),   // +y
-        vec3(0.0f, -1.0f, 0.0f),  // -y
-        vec3(0.0f, 0.0f, 1.0f),   // +z
-        vec3(0.0f, 0.0f, -1.0f),  // -z
-    };
-
-    constexpr ivec3 faceOffsets[6] = {
-        ivec3(1, 0, 0),   // +x
-        ivec3(-1, 0, 0),  // -x
-        ivec3(0, 1, 0),   // +y
-        ivec3(0, -1, 0),  // -y
-        ivec3(0, 0, 1),   // +z
-        ivec3(0, 0, -1),  // -z
+    static constexpr ivec3 faceOffsets[6] = {
+        ivec3(1, 0, 0),  // +x
+        ivec3(-1, 0, 0), // -x
+        ivec3(0, 1, 0),  // +y
+        ivec3(0, -1, 0), // -y
+        ivec3(0, 0, 1),  // +z
+        ivec3(0, 0, -1), // -z
     };
 
     // TODO: extract this to a helper function
-    auto isBlockAir = [&](int x, int y, int z) -> bool {
-        if (x < 0 || x >= static_cast<int>(CHUNK_SIZE_X) ||
-            y < 0 || y >= static_cast<int>(CHUNK_SIZE_Y) ||
-            z < 0 || z >= static_cast<int>(CHUNK_SIZE_Z))
+    auto isBlockAir = [&](ivec3 pos_CS) -> bool {
+        if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_X) ||
+            pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
+            pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_Z))
         {
             // TODO: account for blocks in neighboring chunks
             return true;
         }
-        return blocks[blockPosToIdx(uvec3(x, y, z))] == Block::AIR;
+        return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
     };
-
-    const float texSizeX = static_cast<float>(DEFAULT_TEX_SIZE_X);
-    const float texSizeY = static_cast<float>(DEFAULT_TEX_SIZE_Y);
 
     for (uint z = 0; z < CHUNK_SIZE_Z; ++z)
     {
@@ -127,69 +126,30 @@ void Chunk::createInstance(Scene* scene)
                 }
 
                 const BlockData& blockData = Blocks::getBlockData(block);
-                const bool isEmissive = blockData.emitsLight;
 
                 for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                 {
                     const ivec3 neighborOffset = faceOffsets[faceIdx];
-                    const ivec3 neighborPos(
-                        static_cast<int>(x) + neighborOffset.x,
-                        static_cast<int>(y) + neighborOffset.y,
-                        static_cast<int>(z) + neighborOffset.z);
+                    const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                    if (!isBlockAir(neighborPos.x, neighborPos.y, neighborPos.z))
+                    if (!isBlockAir(neighborPos_CS))
                     {
                         continue;
                     }
 
-                    const vec3 normal = faceNormals[faceIdx];
-                    const vec3 basePos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+                    const vec3 normal = vec3(neighborOffset);
 
-                    vec3 faceVerts[4];
-                    switch (faceIdx)
-                    {
-                        // TODO: use an array instead of a switch statement
-                        case 0: // +x
-                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            break;
-                        case 1: // -x
-                            faceVerts[2] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 1.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            break;
-                        case 2: // +y
-                            faceVerts[2] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 1.0f, 1.0f);
-                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            break;
-                        case 3: // -y
-                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
-                            faceVerts[0] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            break;
-                        case 4: // +z
-                            faceVerts[2] = basePos + vec3(0.0f, 0.0f, 1.0f);
-                            faceVerts[3] = basePos + vec3(1.0f, 0.0f, 1.0f);
-                            faceVerts[0] = basePos + vec3(1.0f, 1.0f, 1.0f);
-                            faceVerts[1] = basePos + vec3(0.0f, 1.0f, 1.0f);
-                            break;
-                        case 5: // -z
-                            faceVerts[2] = basePos + vec3(1.0f, 0.0f, 0.0f);
-                            faceVerts[3] = basePos + vec3(0.0f, 0.0f, 0.0f);
-                            faceVerts[0] = basePos + vec3(0.0f, 1.0f, 0.0f);
-                            faceVerts[1] = basePos + vec3(1.0f, 1.0f, 0.0f);
-                            break;
-                    }
+                    static constexpr ivec3 allFaceVerts[24] = {
+                        ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+                        ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+                        ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
+                        ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
+                        ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
+                        ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0)  // -z
+                    };
+                    const ivec3* faceVerts = &allFaceVerts[faceIdx * 4];
 
-                    const uvec2 baseTexCoords = blockData.texCoords;
-                    // TODO: might need to rotate these
-                    const uvec2 uvOffsets[4] = {
+                    static constexpr uvec2 uvOffsets[4] = {
                         uvec2(1, 0),
                         uvec2(0, 0),
                         uvec2(0, 1),
@@ -199,12 +159,13 @@ void Chunk::createInstance(Scene* scene)
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                     for (uint i = 0; i < 4; ++i)
                     {
-                        const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) / vec2(texSizeX, texSizeY);
+                        const vec2 uv =
+                            (vec2(blockData.texCoords + uvOffsets[i])) / vec2(DEFAULT_TEX_SIZE_X, DEFAULT_TEX_SIZE_Y);
+                        const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + faceVerts[i]);
                         verts.push_back({
-                            // TODO: helper functions for converting glm to DirectX
-                            { faceVerts[i].x, faceVerts[i].y, faceVerts[i].z },
-                            { normal.x, normal.y, normal.z },
-                            { uv.x, uv.y },
+                            vec3ToDirectX(vertPos_CS),
+                            vec3ToDirectX(normal),
+                            vec2ToDirectX(uv),
                         });
                     }
 
@@ -217,7 +178,7 @@ void Chunk::createInstance(Scene* scene)
                     indices.push_back(baseVertIdx + 2);
                     indices.push_back(baseVertIdx + 3);
 
-                    if (isEmissive)
+                    if (blockData.emitsLight)
                     {
                         emissiveTriangleIndices.push_back(triangleIdx);
                         emissiveTriangleIndices.push_back(triangleIdx + 1);
@@ -254,7 +215,7 @@ Instance* Chunk::getInstance() const
 //     {
 //         for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
 //         {
-//             // ...
+//             // do stuff here
 uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
 {
     return blockPos.y
