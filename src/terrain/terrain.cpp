@@ -42,9 +42,9 @@ void update()
 {
     if (!didAddChunks)
     {
-        for (int chunkX = 0; chunkX <= 0; ++chunkX)
+        for (int chunkX = -5; chunkX <= 5; ++chunkX)
         {
-            for (int chunkY = 0; chunkY <= 0; ++chunkY)
+            for (int chunkY = -5; chunkY <= 5; ++chunkY)
             {
                 std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>(glm::ivec2(chunkX, chunkY));
                 chunk->generateBlocks();

@@ -49,10 +49,10 @@ void Chunk::generateBlocks()
             {
                 const ivec3 blockPos_CS = ivec3(x, y, z);
                 const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.1f ? Block::LAMP : Block::STONE;
+                this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
             }
 
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.05f && height < CHUNK_SIZE_Y)
+            if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < CHUNK_SIZE_Y)
             {
                 this->blocks[blockPosToIdx(ivec3(x, height, z))] = Block::LAMP;
             }
@@ -70,7 +70,6 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-// TODO: figure out what causese artifacts/light leaking when rendering with direct light sampling
 void Chunk::createInstance(Scene* scene)
 {
     ToFreeList toFreeList{};
