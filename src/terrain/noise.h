@@ -37,3 +37,8 @@ inline float rand1(glm::uvec2 seed)
 {
     return rand1(seed.x ^ hash(seed.y));
 }
+
+inline float rand1(glm::uvec3 seed)
+{
+    return rand1(seed.x ^ hash(seed.y ^ hash(seed.z)));
+}

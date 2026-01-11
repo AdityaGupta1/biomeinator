@@ -83,13 +83,15 @@ static void createMaterials(Scene* scene)
         return;
     }
 
-    Material material;
+    Material material{};
     material.emissiveStrength = 3.0f;
     material.baseColorTextureId = diffuseTextureId;
     material.emissiveColorTextureId = emissionTextureId;
     material.setHasDiffuse(true);
 
     defaultMaterialIdx = scene->addMaterial(toFreeList, &material);
+
+    toFreeList.freeAll();
 }
 
 uint32_t getDefaultMaterialIdx()

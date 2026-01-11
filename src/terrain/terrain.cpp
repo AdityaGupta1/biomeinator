@@ -24,15 +24,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace Terrain
 {
 
+static Scene* scene;
+
 void init(Scene* scene)
 {
+    Terrain::scene = scene;
+
     TerrainMaterials::init(scene);
 
     Blocks::init();
 }
 
+static bool didAddChunk = false;
+static std::unique_ptr<Chunk> chunk;
+
 void update()
 {
+    if (!didAddChunk)
+    {
+        chunk = std::make_unique<Chunk>(glm::ivec2(0, 0));
+        chunk->generateBlocks();
+        chunk->createInstance(scene);
+
+        didAddChunk = true;
+    }
+
     // TODO
 }
 
