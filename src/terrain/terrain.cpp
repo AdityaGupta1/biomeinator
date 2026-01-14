@@ -38,12 +38,12 @@ void init(Scene* scene)
     Terrain::scene = scene;
 
     TerrainMaterials::init(scene);
-
     Blocks::init();
 }
 
 struct IVec2Hash
 {
+    // TODO: better hash function?
     size_t operator()(const glm::ivec2& v) const noexcept
     {
         const uint64_t x = static_cast<uint32_t>(v.x);
@@ -81,7 +81,7 @@ void update(ToFreeList& toFreeList)
                 const glm::ivec2 oldChunkPos = lastChunkPos + glm::ivec2(dx, dy);
                 if (std::max(abs(oldChunkPos.x - currentChunkPos.x), abs(oldChunkPos.y - currentChunkPos.y)) > RENDER_DISTANCE)
                 {
-                    auto it = chunks.find(oldChunkPos);
+                    const auto it = chunks.find(oldChunkPos);
                     if (it != chunks.end())
                     {
                         toFreeList.pushInstance(it->second->getInstance());
@@ -90,9 +90,9 @@ void update(ToFreeList& toFreeList)
                 }
             }
         }
-    }
 
-    lastChunkPos = currentChunkPos;
+        lastChunkPos = currentChunkPos;
+    }
 }
 
 } // namespace Terrain

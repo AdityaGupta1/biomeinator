@@ -34,7 +34,7 @@ enum class Block : BlockId
 
 struct BlockData
 {
-    glm::uvec2 texCoords{ 0, 0 };
+    glm::uvec2 texCoords{ 0, 0 }; // integer position in block texture grid
     bool emitsLight{ false };
 };
 

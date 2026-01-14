@@ -78,10 +78,12 @@ void Chunk::createInstance(Scene* scene)
     ToFreeList toFreeList{};
 
     // TODO: will have to revisit this when implementing multithreading
-    // could potentially be a case where the instances array/map/whatever is resized while some instances are still being worked on, so their data would be lost
+    // - could potentially be a case where the instances array/map/whatever is resized while some instances are still being worked on, so their data would be lost
+    // - maybe need to request all instances upfront in Terrain (with appropriate mutex lock) and then distribute them to new chunks
+    //    - in this case, pass actual ToFreeList from frameCtx
     this->instance = scene->requestNewInstance(toFreeList);
 
-    const ivec2 chunkBlockPos_WS = chunkPos * 16;
+    const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
         0.f,
@@ -109,7 +111,7 @@ void Chunk::createInstance(Scene* scene)
             pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
             pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
         {
-            // TODO: account for blocks in neighboring chunks
+            // TODO: properly account for blocks in neighboring chunks
             return true;
         }
         return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
@@ -142,7 +144,7 @@ void Chunk::createInstance(Scene* scene)
 
                     const vec3 normal = vec3(neighborOffset);
 
-                    static constexpr ivec3 allFaceVerts[24] = {
+                    static constexpr ivec3 allFaceVertPositions[24] = {
                         ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
                         ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
                         ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
@@ -150,7 +152,7 @@ void Chunk::createInstance(Scene* scene)
                         ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
                         ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0)  // -z
                     };
-                    const ivec3* faceVerts = allFaceVerts + (faceIdx * 4);
+                    const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
 
                     static constexpr uvec2 uvOffsets[4] = {
                         uvec2(1, 0),
@@ -164,7 +166,7 @@ void Chunk::createInstance(Scene* scene)
                     {
                         const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) /
                                         vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
-                        const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + faceVerts[i]);
+                        const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
                         verts.push_back({
                             vec3ToDirectX(vertPos_CS),
                             vec3ToDirectX(normal),
@@ -172,19 +174,19 @@ void Chunk::createInstance(Scene* scene)
                         });
                     }
 
-                    const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3);
+                    const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
 
-                    indices.push_back(baseVertIdx + 0);
-                    indices.push_back(baseVertIdx + 1);
-                    indices.push_back(baseVertIdx + 2);
-                    indices.push_back(baseVertIdx + 0);
-                    indices.push_back(baseVertIdx + 2);
-                    indices.push_back(baseVertIdx + 3);
+                    indices.push_back(baseVertIdx + 0u);
+                    indices.push_back(baseVertIdx + 1u);
+                    indices.push_back(baseVertIdx + 2u);
+                    indices.push_back(baseVertIdx + 0u);
+                    indices.push_back(baseVertIdx + 2u);
+                    indices.push_back(baseVertIdx + 3u);
 
                     if (blockData.emitsLight)
                     {
                         emissiveTriangleIndices.push_back(triangleIdx);
-                        emissiveTriangleIndices.push_back(triangleIdx + 1);
+                        emissiveTriangleIndices.push_back(triangleIdx + 1u);
                     }
                 }
             }
