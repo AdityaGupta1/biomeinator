@@ -26,6 +26,11 @@ uint hash(uint seed)
     return (word >> 22u) ^ word;
 }
 
+uint combinedHash(uint seedA, uint seedB)
+{
+    return hash(hash(seedA) + 0x9e3779b9 + (seedB << 6) + (seedB >> 2));
+}
+
 struct RandomSampler
 {
     uint seed;
@@ -61,15 +66,15 @@ RandomSampler initRandomSampler(uint seed)
 
 RandomSampler initRandomSampler(uint seed1, uint seed2)
 {
-    return initRandomSampler(seed1 ^ hash(seed2));
+    return initRandomSampler(combinedHash(seed1, seed2));
 }
 
 RandomSampler initRandomSampler(uint seed1, uint seed2, uint seed3)
 {
-    return initRandomSampler(seed1 ^ hash(seed2 ^ hash(seed3)));
+    return initRandomSampler(combinedHash(seed1, combinedHash(seed2, seed3)));
 }
 
 RandomSampler initRandomSampler(uint seed1, uint seed2, uint seed3, uint seed4)
 {
-    return initRandomSampler(seed1 ^ hash(seed2 ^ hash(seed3 ^ hash(seed4))));
+    return initRandomSampler(combinedHash(seed1, combinedHash(seed2, combinedHash(seed3, seed4))));
 }

@@ -21,24 +21,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <glm/glm.hpp>
 
 // https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
-inline glm::uint hash(glm::uint seed)
+inline uint32_t hash(uint32_t seed)
 {
-    glm::uint state = seed * 747796405u + 2891336453u;
-    glm::uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    uint32_t state = seed * 747796405u + 2891336453u;
+    uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     return (word >> 22u) ^ word;
 }
 
-inline float rand1(glm::uint seed)
+inline uint32_t combinedHash(uint32_t seedA, uint32_t seedB)
+{
+    return hash(hash(seedA) + 0x9e3779b9 + (seedB << 6) + (seedB >> 2));
+}
+
+inline float rand1(uint32_t seed)
 {
     return (hash(seed) & 0x00FFFFFF) / 16777216.f;
 }
 
 inline float rand1(glm::uvec2 seed)
 {
-    return rand1(seed.x ^ hash(seed.y));
+    return rand1(combinedHash(seed.x, seed.y));
 }
 
 inline float rand1(glm::uvec3 seed)
 {
-    return rand1(seed.x ^ hash(seed.y ^ hash(seed.z)));
+    return rand1(combinedHash(seed.x, combinedHash(seed.y, seed.z)));
 }
