@@ -38,7 +38,7 @@ struct RandomSampler
 
     float nextFloat()
     {
-        return (nextUint() & 0x00FFFFFF) / 16777216.0;
+        return (nextUint() & 0x00FFFFFF) / 16777216.f;
     }
 
     float2 nextFloat2()

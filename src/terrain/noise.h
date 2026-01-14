@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,35 +18,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
+#include <glm/glm.hpp>
 
-#include "buffer/descriptor_heap_allocator.h"
-
-#include <string>
-
-class Camera;
-
-namespace Renderer
+// https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
+inline glm::uint hash(glm::uint seed)
 {
+    glm::uint state = seed * 747796405u + 2891336453u;
+    glm::uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
 
-void init();
+inline float rand1(glm::uint seed)
+{
+    return (hash(seed) & 0x00FFFFFF) / 16777216.f;
+}
 
-void loadScene(const std::string& filePathStr);
+inline float rand1(glm::uvec2 seed)
+{
+    return rand1(seed.x ^ hash(seed.y));
+}
 
-void resize();
-
-void render();
-
-void queueScreenshot(const bool useTestOutputPath = false);
-
-void flush();
-
-void destroy();
-
-extern ComPtr<ID3D12Device5> device;
-
-extern DescriptorHeapAllocator sharedDescHeapAlloc;
-
-const Camera& getCamera();
-
-} // namespace Renderer
+inline float rand1(glm::uvec3 seed)
+{
+    return rand1(seed.x ^ hash(seed.y ^ hash(seed.z)));
+}

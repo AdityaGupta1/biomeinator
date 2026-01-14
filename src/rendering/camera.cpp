@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "camera.h"
 
 #include "rendering/dxr_common.h"
+#include "settings_manager.h"
 
 #include <numbers>
 
@@ -26,7 +27,14 @@ using namespace DirectX;
 
 void Camera::init(float defaultFovYRadians)
 {
-    this->params.pos_WS = { 0, 1.5f, 7.f };
+    if (SettingsManager::getAsBool("voxelMode"))
+    {
+        this->params.pos_WS = { 0, 70.f, 0 };
+    }
+    else
+    {
+        this->params.pos_WS = { 0, 1.5f, 7.f };
+    }
 
     this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
     this->params.tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
@@ -236,4 +244,9 @@ void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::floa
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
+}
+
+DirectX::XMFLOAT3 Camera::getPos_WS() const
+{
+    return this->params.pos_WS;
 }

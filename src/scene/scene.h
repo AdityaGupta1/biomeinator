@@ -35,14 +35,6 @@ class ToFreeList;
 
 class Scene;
 
-struct AreaLightInputs
-{
-    DirectX::XMFLOAT3 pos0;
-    DirectX::XMFLOAT3 pos1;
-    DirectX::XMFLOAT3 pos2;
-    uint32_t triangleIdx;
-};
-
 class Instance
 {
     friend class ::Scene;
@@ -65,17 +57,25 @@ private:
 
     void reset(bool alsoFreeFromScene = true);
 
-public:
     std::vector<Vertex> host_verts;
     std::vector<uint32_t> host_idxs;
     std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{};
 
-    // `transform` must be set before calling this function
-    uint32_t addAreaLight(const AreaLightInputs& lightInputs);
+    bool isGeometrySet{ false };
+
+public:
+    void setGeometry(const DirectX::XMFLOAT3X4& transform,
+                     std::vector<Vertex>&& verts,
+                     std::vector<uint32_t>&& idxs = {});
+
+    // `setGeometry()` must be called before calling this function
+    void addAreaLight(uint32_t triangleIdx);
 
     uint32_t getId() const;
+
+    uint32_t getTriCount() const;
 
     void setMaterialIdx(uint32_t id);
 };

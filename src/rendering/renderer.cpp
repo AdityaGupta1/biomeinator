@@ -38,6 +38,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "common/common_settings.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
+#include "terrain/terrain.h"
 #include "util/util.h"
 
 #include <chrono>
@@ -199,9 +200,15 @@ void init()
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
-    if (!defaultScene.empty())
+    if (SettingsManager::getAsBool("voxelMode")) {
+        Terrain::init(&scene);
+    }
+    else
     {
-        loadScene(defaultScene);
+        if (!defaultScene.empty())
+        {
+            loadScene(defaultScene);
+        }
     }
 
     if (!testMode)
@@ -799,7 +806,7 @@ static void initRootSignature()
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
     rtStaticSamplers.push_back({
-        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .Filter = SettingsManager::getAsBool("voxelMode") ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -1607,6 +1614,11 @@ void render()
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
+    if (SettingsManager::getAsBool("voxelMode"))
+    {
+        Terrain::update(frameCtx.toFreeList);
+    }
+
     const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     const bool resetAccumulation = didCameraChange || didSceneChange || didPathTracingSettingsChange;
@@ -2073,6 +2085,11 @@ void destroy()
 #endif
 
     device.Reset();
+}
+
+const Camera& getCamera()
+{
+    return camera;
 }
 
 } // namespace Renderer

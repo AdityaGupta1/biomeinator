@@ -361,7 +361,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
 
             const size_t vertCount = posAccessor.count;
-            instance->host_verts.resize(vertCount);
+            std::vector<Vertex> host_verts;
+            host_verts.resize(vertCount);
 
             const unsigned char* posData = readAccessorData(posAccessor);
             const unsigned char* norData = readAccessorData(norAccessor);
@@ -383,15 +384,16 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     uv = { uvf[0], uvf[1] };
                 }
 
-                instance->host_verts[v] = { { p[0], p[1], p[2] }, { n[0], n[1], n[2] }, uv };
+                host_verts[v] = { { p[0], p[1], p[2] }, { n[0], n[1], n[2] }, uv };
             }
 
+            std::vector<uint32_t> host_idxs;
             if (prim.indices >= 0)
             {
                 const Accessor& idxAccessor = model.accessors[prim.indices];
                 const unsigned char* idxData = readAccessorData(idxAccessor);
                 const size_t idxCount = idxAccessor.count;
-                instance->host_idxs.resize(idxCount);
+                host_idxs.resize(idxCount);
 
                 const size_t idxStride = getStride(idxAccessor);
 
@@ -412,41 +414,24 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         default:
                             break;
                     }
-                    instance->host_idxs[i] = idx;
+                    host_idxs[i] = idx;
                 }
             }
 
-            DirectX::XMStoreFloat3x4(&instance->transform, transform);
+            DirectX::XMFLOAT3X4 instanceTransform;
+            DirectX::XMStoreFloat3x4(&instanceTransform, transform);
 
-            const uint32_t triCount =
-                instance->host_idxs.empty() ? instance->host_verts.size() / 3 : instance->host_idxs.size() / 3;
-            instance->host_perTriDatas.resize(triCount);
+            instance->setGeometry(instanceTransform, std::move(host_verts), std::move(host_idxs));
 
             const bool isEmissive = prim.material >= 0 &&
                                     static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
                                     materialIsEmissive[prim.material];
             if (isEmissive)
             {
+                const uint32_t triCount = instance->getTriCount();
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
                 {
-                    uint32_t i0 = triIdx * 3;
-                    uint32_t i1 = i0 + 1;
-                    uint32_t i2 = i0 + 2;
-                    if (!instance->host_idxs.empty())
-                    {
-                        i0 = instance->host_idxs[i0];
-                        i1 = instance->host_idxs[i1];
-                        i2 = instance->host_idxs[i2];
-                    }
-
-                    const AreaLightInputs lightInputs = {
-                        .pos0 = instance->host_verts[i0].pos,
-                        .pos1 = instance->host_verts[i1].pos,
-                        .pos2 = instance->host_verts[i2].pos,
-                        .triangleIdx = triIdx,
-                    };
-                    const uint32_t localAreaLightIdx = instance->addAreaLight(lightInputs);
-                    instance->host_perTriDatas[triIdx].localAreaLightIdx = localAreaLightIdx;
+                    instance->addAreaLight(triIdx);
                 }
             }
 

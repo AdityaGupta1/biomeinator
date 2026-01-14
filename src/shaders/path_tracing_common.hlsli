@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "payload.hlsli"
 
-#define RAY_ORIGIN_OFFSET_EPSILON 0.00001f
+#define RAY_ORIGIN_OFFSET_EPSILON 0.0001f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 

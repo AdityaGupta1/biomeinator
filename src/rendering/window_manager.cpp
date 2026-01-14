@@ -90,7 +90,7 @@ static void onKeyDown(WPARAM wparam)
             PostMessage(hwnd, WM_CLOSE, 0, 0);
             break;
         case 'O':
-            if (ctrlHeld)
+            if (ctrlHeld && !SettingsManager::getAsBool("voxelMode"))
             {
                 OPENFILENAMEW ofn{};
                 wchar_t filePath[MAX_PATH] = L"";

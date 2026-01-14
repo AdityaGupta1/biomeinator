@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,35 +18,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
+#include "block.h"
+#include "scene/scene.h"
 
-#include "buffer/descriptor_heap_allocator.h"
+#include <array>
+#include <glm/glm.hpp>
 
-#include <string>
+#define CHUNK_SIZE_XZ 16
+#define CHUNK_SIZE_Y 256
 
-class Camera;
-
-namespace Renderer
+class Chunk
 {
+private:
+    const glm::ivec2 chunkPos{ 0, 0 };
 
-void init();
+    std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
 
-void loadScene(const std::string& filePathStr);
+    Instance* instance{ nullptr };
 
-void resize();
+public:
+    Chunk(glm::ivec2 chunkPos);
 
-void render();
+    void generateBlocks();
 
-void queueScreenshot(const bool useTestOutputPath = false);
+    void createInstance(Scene* scene);
 
-void flush();
+    Instance* getInstance() const;
 
-void destroy();
-
-extern ComPtr<ID3D12Device5> device;
-
-extern DescriptorHeapAllocator sharedDescHeapAlloc;
-
-const Camera& getCamera();
-
-} // namespace Renderer
+    static glm::uint blockPosToIdx(glm::uvec3 blockPos);
+};

@@ -5,9 +5,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(FetchContent)
+
 # ==================================================
 # Biomeinator
 # ==================================================
+
+FetchContent_Declare(
+	glm
+	GIT_REPOSITORY	https://github.com/g-truc/glm.git
+	GIT_TAG 		1.0.2
+)
+
+FetchContent_MakeAvailable(glm)
 
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
@@ -172,7 +182,7 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/streamline/lib/x64"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 glm::glm-header-only)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
@@ -202,6 +212,30 @@ add_custom_command(TARGET Biomeinator POST_BUILD
             ${AGILITY_SDK_DLLS}
             $<TARGET_FILE_DIR:Biomeinator>/D3D12
 )
+
+set(ASSETS_SRC_DIR "${CMAKE_SOURCE_DIR}/assets")
+set(ASSETS_DST_DIR "$<TARGET_FILE_DIR:Biomeinator>/assets")
+
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS
+    "${ASSETS_SRC_DIR}/*"
+)
+
+add_custom_command(TARGET Biomeinator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ASSETS_DST_DIR}"
+    VERBATIM
+)
+
+foreach(src IN LISTS ASSET_FILES)
+    file(RELATIVE_PATH rel "${ASSETS_SRC_DIR}" "${src}")
+    set(dst "${ASSETS_DST_DIR}/${rel}")
+    get_filename_component(dst_dir "${dst}" DIRECTORY)
+
+    add_custom_command(TARGET Biomeinator POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${dst_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${src}" "${dst}"
+        VERBATIM
+    )
+endforeach()
 
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"

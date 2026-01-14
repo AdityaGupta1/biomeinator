@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,35 +18,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
+#include <cstdint>
+#include <glm/glm.hpp>
 
-#include "buffer/descriptor_heap_allocator.h"
+using BlockId = uint16_t;
 
-#include <string>
+enum class Block : BlockId
+{
+	AIR = 0,
+	STONE,
+	LAMP,
 
-class Camera;
+	COUNT
+};
 
-namespace Renderer
+struct BlockData
+{
+    glm::uvec2 texCoords{ 0, 0 }; // integer position in block texture grid
+    bool emitsLight{ false };
+};
+
+namespace Blocks
 {
 
 void init();
 
-void loadScene(const std::string& filePathStr);
+const BlockData& getBlockData(Block block);
 
-void resize();
-
-void render();
-
-void queueScreenshot(const bool useTestOutputPath = false);
-
-void flush();
-
-void destroy();
-
-extern ComPtr<ID3D12Device5> device;
-
-extern DescriptorHeapAllocator sharedDescHeapAlloc;
-
-const Camera& getCamera();
-
-} // namespace Renderer
+} // namespace Blocks

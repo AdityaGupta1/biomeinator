@@ -83,7 +83,7 @@ void ToFreeList::freeAll()
 
     for (Instance* instance : this->instances)
     {
-        instance->reset();
+        instance->reset(true /*alsoFreeFromScene*/);
     }
     instances.clear();
 }
