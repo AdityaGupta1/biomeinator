@@ -20,9 +20,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "block.h"
 #include "noise.h"
+#include "terrain.h"
+#include "terrain_materials.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
-#include "terrain_materials.h"
 
 #include <DirectXMath.h>
 #include <vector>
@@ -61,6 +62,8 @@ void Chunk::generateBlocks()
             }
         }
     }
+
+    Terrain::queueChunkForInstanceCreation(this);
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -73,15 +76,9 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-void Chunk::createInstance(Scene* scene)
+void Chunk::createInstance(Scene* scene, Instance* instance)
 {
-    ToFreeList toFreeList{};
-
-    // TODO: will have to revisit this when implementing multithreading
-    // - could potentially be a case where the instances array/map/whatever is resized while some instances are still being worked on, so their data would be lost
-    // - maybe need to request all instances upfront in Terrain (with appropriate mutex lock) and then distribute them to new chunks
-    //    - in this case, pass actual ToFreeList from frameCtx
-    this->instance = scene->requestNewInstance(toFreeList);
+    this->instance = instance;
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
@@ -202,8 +199,6 @@ void Chunk::createInstance(Scene* scene)
     }
 
     scene->markInstanceReadyForBlasBuild(instance);
-
-    toFreeList.freeAll();
 }
 
 Instance* Chunk::getInstance() const

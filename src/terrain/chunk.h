@@ -41,7 +41,7 @@ public:
 
     void generateBlocks();
 
-    void createInstance(Scene* scene);
+    void createInstance(Scene* scene, Instance* instance);
 
     Instance* getInstance() const;
 

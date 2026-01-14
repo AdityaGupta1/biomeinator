@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+class Chunk;
 class Scene;
 class ToFreeList;
 
@@ -25,6 +26,8 @@ namespace Terrain
 {
 
 void init(Scene* scene);
+
+void queueChunkForInstanceCreation(Chunk* chunk);
 
 void update(ToFreeList& toFreeList);
 

@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 
+//#include <mutex>
+//#include <thread>
 #include <unordered_map>
 
 #define RENDER_DISTANCE 5
@@ -50,7 +52,17 @@ struct IVec2Hash
     }
 };
 
-std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
+static std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
+
+static std::deque<Chunk*> chunksToCreateInstance;
+//static std::mutex chunksToCreateInstanceMutex;
+
+void queueChunkForInstanceCreation(Chunk* chunk)
+{
+    //chunksToCreateInstanceMutex.lock();
+    chunksToCreateInstance.push_back(chunk);
+    //chunksToCreateInstanceMutex.unlock();
+}
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
@@ -72,7 +84,6 @@ void update(ToFreeList& toFreeList)
                 {
                     std::unique_ptr<Chunk> newChunk = std::make_unique<Chunk>(newChunkPos);
                     newChunk->generateBlocks();
-                    newChunk->createInstance(scene);
                     chunks[newChunkPos] = std::move(newChunk);
                 }
 
@@ -91,6 +102,18 @@ void update(ToFreeList& toFreeList)
 
         lastChunkPos = currentChunkPos;
     }
+
+    //chunksToCreateInstanceMutex.lock();
+    while (!chunksToCreateInstance.empty())
+    {
+        Chunk* chunk = chunksToCreateInstance.front();
+
+        Instance* instance = scene->requestNewInstance(toFreeList);
+        chunk->createInstance(scene, instance);
+
+        chunksToCreateInstance.pop_front();
+    }
+    //chunksToCreateInstanceMutex.unlock();
 }
 
 } // namespace Terrain
