@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "block.h"
 #include "chunk.h"
+#include "noise.h"
 #include "terrain_materials.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
@@ -43,12 +44,9 @@ void init(Scene* scene)
 
 struct IVec2Hash
 {
-    // TODO: better hash function?
     size_t operator()(const glm::ivec2& v) const noexcept
     {
-        const uint64_t x = static_cast<uint32_t>(v.x);
-        const uint64_t y = static_cast<uint32_t>(v.y);
-        return (x << 32) | y;
+        return combinedHash(static_cast<uint32_t>(v.x), static_cast<uint32_t>(v.y));
     }
 };
 
