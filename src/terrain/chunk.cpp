@@ -94,6 +94,10 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIndices;
 
+    verts.reserve(16384);
+    indices.reserve(verts.size() * 6 / 4);
+    emissiveTriangleIndices.reserve(512);
+
     static constexpr ivec3 faceOffsets[6] = {
         ivec3(1, 0, 0),  // +x
         ivec3(-1, 0, 0), // -x
@@ -165,26 +169,26 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
                         const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) /
                                         vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
                         const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                        verts.push_back({
+                        verts.emplace_back(
                             vec3ToDirectX(vertPos_CS),
                             vec3ToDirectX(normal),
-                            vec2ToDirectX(uv),
-                        });
+                            vec2ToDirectX(uv)
+                        );
                     }
 
                     const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
 
-                    indices.push_back(baseVertIdx + 0u);
-                    indices.push_back(baseVertIdx + 1u);
-                    indices.push_back(baseVertIdx + 2u);
-                    indices.push_back(baseVertIdx + 0u);
-                    indices.push_back(baseVertIdx + 2u);
-                    indices.push_back(baseVertIdx + 3u);
+                    indices.emplace_back(baseVertIdx + 0u);
+                    indices.emplace_back(baseVertIdx + 1u);
+                    indices.emplace_back(baseVertIdx + 2u);
+                    indices.emplace_back(baseVertIdx + 0u);
+                    indices.emplace_back(baseVertIdx + 2u);
+                    indices.emplace_back(baseVertIdx + 3u);
 
                     if (blockData.emitsLight)
                     {
-                        emissiveTriangleIndices.push_back(triangleIdx);
-                        emissiveTriangleIndices.push_back(triangleIdx + 1u);
+                        emissiveTriangleIndices.emplace_back(triangleIdx);
+                        emissiveTriangleIndices.emplace_back(triangleIdx + 1u);
                     }
                 }
             }
