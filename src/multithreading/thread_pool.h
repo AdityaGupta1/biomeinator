@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "debug.h"
+
 #include <functional>
 #include <future>
 #include <mutex>
@@ -56,15 +58,11 @@ auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<std::invoke_resul
     using R = std::invoke_result_t<F, Args...>;
 
     auto task = std::make_shared<std::packaged_task<R()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-
     std::future<R> future = task->get_future();
 
     {
         std::lock_guard<std::mutex> lock(this->mutex);
-        if (this->stop)
-        {
-            throw std::runtime_error("enqueue on stopped ThreadPool");
-        }
+        ASSERT(!stop);
         this->queue.emplace([task]() { (*task)(); });
     }
 
