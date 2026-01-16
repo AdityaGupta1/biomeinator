@@ -77,6 +77,44 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
+bool Chunk::isBlockAir(ivec3 pos_CS)
+{
+    if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
+        pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
+        pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
+    {
+        // TODO: properly account for blocks in neighboring chunks
+        return true;
+    }
+    return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
+}
+
+static constexpr ivec3 faceOffsets[6] = {
+    ivec3(1, 0, 0), // +x
+    ivec3(-1, 0, 0), // -x
+    ivec3(0, 1, 0), // +y
+    ivec3(0, -1, 0), // -y
+    ivec3(0, 0, 1), // +z
+    ivec3(0, 0, -1), // -z
+};
+
+static constexpr ivec3 allFaceVertPositions[24] = {
+    ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+    ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+    ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
+    ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
+    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0) // -z
+};
+
+static constexpr uvec2 uvOffsets[4] = {
+    uvec2(1, 0),
+    uvec2(0, 0),
+    uvec2(0, 1),
+    uvec2(1, 1),
+};
+static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
+
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
     this->instance = instance;
@@ -94,39 +132,20 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIndices;
 
-    verts.reserve(16384);
+    verts.reserve(1 << 15);
     indices.reserve(verts.size() * 6 / 4);
     emissiveTriangleIndices.reserve(512);
-
-    static constexpr ivec3 faceOffsets[6] = {
-        ivec3(1, 0, 0),  // +x
-        ivec3(-1, 0, 0), // -x
-        ivec3(0, 1, 0),  // +y
-        ivec3(0, -1, 0), // -y
-        ivec3(0, 0, 1),  // +z
-        ivec3(0, 0, -1), // -z
-    };
-
-    // TODO: extract this to a helper function
-    auto isBlockAir = [&](ivec3 pos_CS) -> bool {
-        if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
-            pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
-            pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
-        {
-            // TODO: properly account for blocks in neighboring chunks
-            return true;
-        }
-        return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
-    };
 
     for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
     {
         for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
         {
+            const uint32_t baseIdx = blockPosToIdx(uvec3(x, 0, z));
+
             for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
             {
                 const uvec3 blockPos_CS(x, y, z);
-                const Block block = blocks[blockPosToIdx(blockPos_CS)];
+                const Block block = blocks[baseIdx + y];
                 if (block == Block::AIR)
                 {
                     continue;
@@ -145,29 +164,11 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
                     }
 
                     const vec3 normal = vec3(neighborOffset);
-
-                    static constexpr ivec3 allFaceVertPositions[24] = {
-                        ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
-                        ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
-                        ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
-                        ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-                        ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-                        ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0)  // -z
-                    };
                     const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-
-                    static constexpr uvec2 uvOffsets[4] = {
-                        uvec2(1, 0),
-                        uvec2(0, 0),
-                        uvec2(0, 1),
-                        uvec2(1, 1),
-                    };
-
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                     for (uint i = 0; i < 4; ++i)
                     {
-                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) /
-                                        vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
+                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
                         const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
                         verts.emplace_back(
                             vec3ToDirectX(vertPos_CS),
@@ -256,7 +257,7 @@ uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
 		 + chunkBlockPos.x * CHUNK_SIZE_Y
-		 + chunkBlockPos.z * CHUNK_SIZE_XZ * CHUNK_SIZE_Y;
+		 + chunkBlockPos.z * (CHUNK_SIZE_XZ * CHUNK_SIZE_Y);
 }
 
 Region::Region(glm::ivec2 regionPos)
