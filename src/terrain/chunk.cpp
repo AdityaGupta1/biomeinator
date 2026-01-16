@@ -132,8 +132,9 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIndices;
 
-    verts.reserve(1 << 15);
-    indices.reserve(verts.size() * 6 / 4);
+    const size_t numVertsToReserve = 1 << 15;
+    verts.reserve(numVertsToReserve);
+    indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIndices.reserve(512);
 
     for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
