@@ -64,7 +64,7 @@ void Chunk::generateBlocks()
     }
 
     this->setState(ChunkState::HAS_BLOCKS);
-    Terrain::setDirty();
+    Terrain::setDirty(); // needed to force an update in case the player is not moving
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
