@@ -164,16 +164,16 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
                         continue;
                     }
 
-                    const vec3 normal = vec3(neighborOffset);
+                    const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
                     const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                     for (uint i = 0; i < 4; ++i)
                     {
-                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
                         const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
                         verts.emplace_back(
                             vec3ToDirectX(vertPos_CS),
-                            vec3ToDirectX(normal),
+                            normal,
                             vec2ToDirectX(uv)
                         );
                     }
