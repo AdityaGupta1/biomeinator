@@ -38,13 +38,36 @@ private:
     bool stop{ false };
 
 public:
-    ThreadPool(std::size_t numWorkers = std::thread::hardware_concurrency());
+    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency());
     ~ThreadPool();
 
-    template<typename F, typename... Args> auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))>;
+    template<class F, class... Args>
+    auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(ThreadPool&&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 };
+
+template<class F, class... Args>
+auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>
+{
+    using R = std::invoke_result_t<F, Args...>;
+
+    auto task = std::make_shared<std::packaged_task<R()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+
+    std::future<R> future = task->get_future();
+
+    {
+        std::lock_guard<std::mutex> lock(this->mutex);
+        if (this->stop)
+        {
+            throw std::runtime_error("enqueue on stopped ThreadPool");
+        }
+        this->queue.emplace([task]() { (*task)(); });
+    }
+
+    this->cv.notify_one();
+    return future;
+}

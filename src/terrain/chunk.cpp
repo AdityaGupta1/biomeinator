@@ -63,7 +63,8 @@ void Chunk::generateBlocks()
         }
     }
 
-    Terrain::queueChunkForInstanceCreation(this);
+    this->setState(ChunkState::HAS_BLOCKS);
+    Terrain::setDirty();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -199,11 +200,41 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     }
 
     scene->markInstanceReadyForBlasBuild(instance);
+
+    this->setState(ChunkState::HAS_GEOMETRY);
+
+    if (this->isMarkedForDestruction)
+    {
+        Terrain::addChunkToDestroy(this);
+    }
+}
+
+void Chunk::destroyInstance(ToFreeList& toFreeList)
+{
+    toFreeList.pushInstance(this->instance);
+    this->instance = nullptr;
+    this->setState(ChunkState::HAS_BLOCKS);
+    this->isMarkedForDestruction = false;
 }
 
 Instance* Chunk::getInstance() const
 {
     return instance;
+}
+
+ChunkState Chunk::getState() const
+{
+    return this->state.load(std::memory_order_acquire);
+}
+
+void Chunk::setState(ChunkState newState)
+{
+    this->state.store(newState, std::memory_order_release);
+}
+
+void Chunk::setMarkedForDestruction(bool mark)
+{
+    this->isMarkedForDestruction = mark;
 }
 
 // y changes fastest, then x, then z
@@ -216,9 +247,42 @@ Instance* Chunk::getInstance() const
 //         for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
 //         {
 //             // do stuff here
-uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
+uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
 {
-    return blockPos.y
-		 + blockPos.x * CHUNK_SIZE_Y
-		 + blockPos.z * CHUNK_SIZE_XZ * CHUNK_SIZE_Y;
+    return chunkBlockPos.y
+		 + chunkBlockPos.x * CHUNK_SIZE_Y
+		 + chunkBlockPos.z * CHUNK_SIZE_XZ * CHUNK_SIZE_Y;
+}
+
+Region::Region(glm::ivec2 regionPos)
+    : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
+{}
+
+Chunk* Region::operator[](glm::ivec2 chunkPos)
+{
+    return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
+}
+
+Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
+{
+    const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    if (this->chunks[chunkIdx] == nullptr)
+    {
+        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos);
+    }
+    return (*this)[chunkPos];
+}
+
+// x changes fastest, then z
+//
+// for loops should be written like this:
+// for (uint z = 0; z < REGION_SIDE_LENGTH; ++z)
+// {
+//     for (uint x = 0; x < REGION_SIDE_LENGTH; ++x)
+//     {
+//         // do stuff here
+uint32_t Region::chunkPosToIdx(glm::ivec2 regionChunkPos)
+{
+    return regionChunkPos.x
+         + regionChunkPos.y /*z*/ * REGION_SIDE_LENGTH;
 }

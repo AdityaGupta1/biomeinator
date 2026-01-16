@@ -27,7 +27,9 @@ namespace Terrain
 
 void init(Scene* scene);
 
-void queueChunkForInstanceCreation(Chunk* chunk);
+void addChunkToDestroy(Chunk* chunk);
+
+void setDirty();
 
 void update(ToFreeList& toFreeList);
 

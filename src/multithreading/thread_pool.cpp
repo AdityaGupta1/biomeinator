@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "thread_pool.h"
 
-ThreadPool::ThreadPool(std::size_t numWorkers)
+ThreadPool::ThreadPool(uint32_t numWorkers)
 {
     for (int i = 0; i < numWorkers; ++i)
     {
@@ -64,21 +64,4 @@ void ThreadPool::worker()
 
         currentTask();
     }
-}
-
-template<typename F, typename... Args>
-inline auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))>
-{
-    const auto func = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
-    const auto packagedTaskPtr = std::make_shared<std::packaged_task<decltype(f(args...))()>>(func);
-
-    std::future<std::result_of_t<F(Args...)>> futureObj = packagedTaskPtr->get_future();
-    {
-        std::unique_lock<std::mutex> lock(this->mutex);
-        queue.emplace([packagedTaskPtr]() { (*packagedTaskPtr)(); });
-    }
-
-    cv.notify_one();
-
-    return futureObj;
 }

@@ -22,7 +22,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/scene.h"
 
 #include <array>
+#include <atomic>
 #include <glm/glm.hpp>
+
+enum class ChunkState : uint8_t
+{
+    NEEDS_BLOCKS,
+    GENERATING_BLOCKS,
+    HAS_BLOCKS,
+    GENERATING_GEOMETRY,
+    HAS_GEOMETRY
+};
 
 #define CHUNK_SIZE_XZ 16
 #define CHUNK_SIZE_Y 256
@@ -30,7 +40,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 class Chunk
 {
 private:
-    const glm::ivec2 chunkPos{ 0, 0 };
+    const glm::ivec2 chunkPos;
+
+    std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
+    bool isMarkedForDestruction{ false };
 
     std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
 
@@ -43,7 +56,33 @@ public:
 
     void createInstance(Scene* scene, Instance* instance);
 
+    void destroyInstance(ToFreeList& toFreeList);
+
     Instance* getInstance() const;
 
-    static glm::uint blockPosToIdx(glm::uvec3 blockPos);
+    ChunkState getState() const;
+
+    void setState(ChunkState newState);
+
+    void setMarkedForDestruction(bool mark = true);
+
+    static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
+};
+
+#define REGION_SIDE_LENGTH 16
+
+struct Region
+{
+    const glm::ivec2 regionPos;
+    const glm::ivec2 regionPosChunks;
+
+    std::array<std::unique_ptr<Chunk>, REGION_SIDE_LENGTH * REGION_SIDE_LENGTH> chunks{};
+
+    Region(glm::ivec2 regionPos);
+
+    Chunk* operator[](glm::ivec2 chunkPos);
+
+    Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+
+    static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };
