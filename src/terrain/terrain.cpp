@@ -40,8 +40,6 @@ namespace Terrain
 
 static Scene* scene;
 
-static ThreadPool threadPool{};
-
 void init(Scene* scene)
 {
     Terrain::scene = scene;
@@ -75,6 +73,8 @@ void setDirty()
 {
     dirty.store(true, std::memory_order_release);
 }
+
+static ThreadPool threadPool{};
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
@@ -147,7 +147,9 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
-                                chunk->generateBlocks(); // TODO: launch thread
+                                threadPool.enqueue([chunk] {
+                                    chunk->generateBlocks();
+                                });
                             }
                             else if (chunkState == ChunkState::HAS_BLOCKS)
                             {
