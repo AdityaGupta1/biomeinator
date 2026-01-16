@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+// https://dev.to/ish4n10/making-a-thread-pool-in-c-from-scratch-bnm
+
 #include "thread_pool.h"
 
 ThreadPool::ThreadPool(std::size_t numWorkers)
