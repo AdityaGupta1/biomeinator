@@ -33,7 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/component_wise.hpp>
 
-#define RENDER_DISTANCE 10
+#define RENDER_DISTANCE 15
 
 namespace Terrain
 {

@@ -131,13 +131,13 @@ void Scene::init()
 {
     // these resources can be dynamically resized later
     this->managedVertsBuffer.setName(L"scene verts");
-    this->managedVertsBuffer.init(512 /*bytes*/);
+    this->managedVertsBuffer.init(1 << 14 /*bytes*/);
     this->managedIdxsBuffer.setName(L"scene idxs");
-    this->managedIdxsBuffer.init(128 /*bytes*/);
+    this->managedIdxsBuffer.init(1 << 12 /*bytes*/);
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init(128 /*bytes*/);
+    this->managedPerTriDatasBuffer.init(1 << 12 /*bytes*/);
 
-    this->maxNumInstances = 1;
+    this->maxNumInstances = 1 << 8;
     this->mappedInstanceDescsArray.setName(L"scene instanceDescs");
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
@@ -148,12 +148,12 @@ void Scene::init()
     }
 
     this->mappedMaterialsArray.setName(L"scene materials");
-    this->mappedMaterialsArray.init(1 /*element*/);
+    this->mappedMaterialsArray.init(8 /*elements*/);
 
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
-    this->managedAreaLightsBuffer.init(512 /*bytes*/);
+    this->managedAreaLightsBuffer.init(1 << 14 /*bytes*/);
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
-    this->areaLightSamplingStructure.init(1 /*element*/);
+    this->areaLightSamplingStructure.init(1 << 8 /*elements*/);
 }
 
 void Scene::reset()
