@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "noise.h"
 #include "terrain_materials.h"
+#include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 
@@ -33,6 +34,8 @@ namespace Terrain
 {
 
 static Scene* scene;
+
+static ThreadPool threadPool{};
 
 void init(Scene* scene)
 {
