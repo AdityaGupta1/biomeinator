@@ -25,8 +25,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 
-//#include <mutex>
-//#include <thread>
 #include <unordered_map>
 
 #define RENDER_DISTANCE 5
@@ -55,13 +53,10 @@ struct IVec2Hash
 static std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
 
 static std::deque<Chunk*> chunksToCreateInstance;
-//static std::mutex chunksToCreateInstanceMutex;
 
 void queueChunkForInstanceCreation(Chunk* chunk)
 {
-    //chunksToCreateInstanceMutex.lock();
     chunksToCreateInstance.push_back(chunk);
-    //chunksToCreateInstanceMutex.unlock();
 }
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
@@ -103,7 +98,6 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    //chunksToCreateInstanceMutex.lock();
     while (!chunksToCreateInstance.empty())
     {
         Chunk* chunk = chunksToCreateInstance.front();
@@ -113,7 +107,6 @@ void update(ToFreeList& toFreeList)
 
         chunksToCreateInstance.pop_front();
     }
-    //chunksToCreateInstanceMutex.unlock();
 }
 
 } // namespace Terrain
