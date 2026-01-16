@@ -27,6 +27,7 @@ namespace Terrain
 
 void init(Scene* scene);
 
+void addChunkToCreateBlas(Chunk* chunk);
 void addChunkToDestroy(Chunk* chunk);
 
 void setDirty();

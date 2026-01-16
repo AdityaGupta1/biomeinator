@@ -199,13 +199,14 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
         instance->addAreaLight(triangleIdx);
     }
 
-    scene->markInstanceReadyForBlasBuild(instance);
-
     this->setState(ChunkState::HAS_GEOMETRY);
-
     if (this->isMarkedForDestruction)
     {
         Terrain::addChunkToDestroy(this);
+    }
+    else
+    {
+        Terrain::addChunkToCreateBlas(this);
     }
 }
 

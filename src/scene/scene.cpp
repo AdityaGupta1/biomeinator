@@ -381,7 +381,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        if (instance->isScheduledForDeletion)
+        if (instance->isScheduledForDeletion || instance->geoWrapper.dev_blas == nullptr)
         {
             continue;
         }

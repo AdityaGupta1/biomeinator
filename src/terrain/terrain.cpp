@@ -33,7 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/component_wise.hpp>
 
-#define RENDER_DISTANCE 5
+#define RENDER_DISTANCE 10
 
 namespace Terrain
 {
@@ -58,8 +58,16 @@ struct IVec2Hash
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
 static std::vector<Chunk*> chunksToCreateInstance;
+static std::vector<Chunk*> chunksToCreateBlas;
+static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
+
+void addChunkToCreateBlas(Chunk* chunk)
+{
+    std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
+    chunksToCreateBlas.push_back(chunk);
+}
 
 void addChunkToDestroy(Chunk* chunk)
 {
@@ -172,25 +180,39 @@ void update(ToFreeList& toFreeList)
             }
         }
 
-        std::vector<Chunk*> chunksToDestroyNow;
-        {
-            std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
-            chunksToDestroyNow = std::move(chunksToDestroy);
-        }
-        for (Chunk* chunk : chunksToDestroyNow)
-        {
-            chunk->destroyInstance(toFreeList);
-        }
-
         for (Chunk* chunk : chunksToCreateInstance)
         {
             Instance* instance = scene->requestNewInstance(toFreeList);
             chunk->setState(ChunkState::GENERATING_GEOMETRY);
-            chunk->createInstance(scene, instance); // TODO: launch thread (will need to synchronize access to Scene at the end, maybe by first collecting ready instances here)
+            threadPool.enqueue([chunk, instance] {
+                chunk->createInstance(scene, instance);
+            });
         }
         chunksToCreateInstance.clear();
 
         lastChunkPos = currentChunkPos;
+    }
+
+    std::vector<Chunk*> chunksToCreateBlasNow;
+    {
+        std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
+        chunksToCreateBlasNow = std::move(chunksToCreateBlas);
+        chunksToCreateBlas.clear();
+    }
+    for (Chunk* chunk : chunksToCreateBlasNow)
+    {
+        scene->markInstanceReadyForBlasBuild(chunk->getInstance());
+    }
+
+    std::vector<Chunk*> chunksToDestroyNow;
+    {
+        std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
+        chunksToDestroyNow = std::move(chunksToDestroy);
+        chunksToDestroy.clear();
+    }
+    for (Chunk* chunk : chunksToDestroyNow)
+    {
+        chunk->destroyInstance(toFreeList);
     }
 }
 
