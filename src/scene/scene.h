@@ -71,7 +71,7 @@ public:
                      std::vector<uint32_t>&& idxs = {});
 
     // `setGeometry()` must be called before calling this function
-    void addAreaLight(uint32_t triangleIdx);
+    void addAreaLights(const std::vector<uint32_t>& triangleIdxs);
 
     uint32_t getId() const;
 

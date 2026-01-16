@@ -63,53 +63,57 @@ void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
     this->isGeometrySet = true;
 }
 
-void Instance::addAreaLight(uint32_t triangleIdx)
+void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
     ASSERT(this->isGeometrySet);
 
-    uint32_t i0 = triangleIdx * 3;
-    uint32_t i1 = i0 + 1;
-    uint32_t i2 = i0 + 2;
-    if (!this->host_idxs.empty())
-    {
-        i0 = this->host_idxs[i0];
-        i1 = this->host_idxs[i1];
-        i2 = this->host_idxs[i2];
-    }
-
-    this->host_areaLights.emplace_back();
-    const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
-    AreaLight& light = this->host_areaLights.back();
-
-    light.instanceId = this->id;
-    light.triangleIdx = triangleIdx;
-
-    // TODO: store this matrix instead of reconstructing it each time?
     const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
-    XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
-    XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
-    XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
+    this->host_areaLights.reserve(this->host_areaLights.size() + triangleIdxs.size());
 
-    p0 = DirectX::XMVector3Transform(p0, objectToWorld);
-    p1 = DirectX::XMVector3Transform(p1, objectToWorld);
-    p2 = DirectX::XMVector3Transform(p2, objectToWorld);
+    for (const uint32_t triangleIdx : triangleIdxs)
+    {
+        uint32_t i0 = triangleIdx * 3;
+        uint32_t i1 = i0 + 1;
+        uint32_t i2 = i0 + 2;
+        if (!this->host_idxs.empty())
+        {
+            i0 = this->host_idxs[i0];
+            i1 = this->host_idxs[i1];
+            i2 = this->host_idxs[i2];
+        }
 
-    DirectX::XMStoreFloat3(&light.pos0_WS, p0);
-    DirectX::XMStoreFloat3(&light.pos1_WS, p1);
-    DirectX::XMStoreFloat3(&light.pos2_WS, p2);
+        this->host_areaLights.emplace_back();
+        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
+        AreaLight& light = this->host_areaLights.back();
 
-    const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
-    const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
-    const XMVECTOR cross = XMVector3Cross(edge1, edge2);
-    DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
+        light.instanceId = this->id;
+        light.triangleIdx = triangleIdx;
 
-    const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
-    light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
+        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
+        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
 
-    light.materialIdx = this->materialIdx;
+        p0 = DirectX::XMVector3Transform(p0, objectToWorld);
+        p1 = DirectX::XMVector3Transform(p1, objectToWorld);
+        p2 = DirectX::XMVector3Transform(p2, objectToWorld);
 
-    this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+        DirectX::XMStoreFloat3(&light.pos0_WS, p0);
+        DirectX::XMStoreFloat3(&light.pos1_WS, p1);
+        DirectX::XMStoreFloat3(&light.pos2_WS, p2);
+
+        const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
+        const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
+        const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+        DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
+
+        const float doubleArea = XMVectorGetX(XMVector3Length(cross));
+        light.rcpArea = doubleArea > 0.f ? (2.f / doubleArea) : 0.f;
+
+        light.materialIdx = this->materialIdx;
+
+        this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+    }
 }
 
 uint32_t Instance::getId() const

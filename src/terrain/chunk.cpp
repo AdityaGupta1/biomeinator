@@ -130,12 +130,12 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
 
     std::vector<Vertex> verts;
     std::vector<uint32_t> indices;
-    std::vector<uint32_t> emissiveTriangleIndices;
+    std::vector<uint32_t> emissiveTriangleIdxs;
 
     const size_t numVertsToReserve = 1 << 15;
     verts.reserve(numVertsToReserve);
     indices.reserve(numVertsToReserve * 6 / 4);
-    emissiveTriangleIndices.reserve(512);
+    emissiveTriangleIdxs.reserve(512);
 
     for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
     {
@@ -189,8 +189,8 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
 
                     if (blockData.emitsLight)
                     {
-                        emissiveTriangleIndices.emplace_back(triangleIdx);
-                        emissiveTriangleIndices.emplace_back(triangleIdx + 1u);
+                        emissiveTriangleIdxs.emplace_back(triangleIdx);
+                        emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
                     }
                 }
             }
@@ -200,10 +200,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     instance->setGeometry(instanceTransform, std::move(verts), std::move(indices));
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
 
-    for (uint32_t triangleIdx : emissiveTriangleIndices)
-    {
-        instance->addAreaLight(triangleIdx);
-    }
+    instance->addAreaLights(emissiveTriangleIdxs);
 
     this->setState(ChunkState::HAS_GEOMETRY);
     if (this->isMarkedForDestruction)
