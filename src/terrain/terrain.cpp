@@ -227,10 +227,18 @@ void update(ToFreeList& toFreeList)
     {
         Chunk* chunk = chunksToCreateInstance.front();
         chunksToCreateInstance.pop_front();
-        Instance* instance = scene->requestNewInstance(toFreeList);
-        threadPool.enqueue([chunk, instance] {
-            chunk->createInstance(scene, instance);
-        });
+
+        // By the time we get around to creating this chunk's instance, the player could have already moved even further
+        // away, so we need to double check that this chunk is still within BLAS creation distance.
+        if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= CREATE_BLAS_DISTANCE)
+        {
+            Instance* instance = scene->requestNewInstance(toFreeList);
+            threadPool.enqueue([chunk, instance] { chunk->createInstance(scene, instance); });
+        }
+        else
+        {
+            chunk->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+        }
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;

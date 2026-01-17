@@ -107,6 +107,8 @@ public:
 
     void setInstanceVisible(bool visible);
 
+    glm::ivec2 getChunkPos();
+
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
 };
 

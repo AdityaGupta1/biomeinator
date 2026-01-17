@@ -344,6 +344,11 @@ void Chunk::setInstanceVisible(bool visible)
     }
 }
 
+glm::ivec2 Chunk::getChunkPos()
+{
+    return this->chunkPos;
+}
+
 // y changes fastest, then x, then z
 //
 // for loops should be written like this:
