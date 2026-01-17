@@ -31,16 +31,32 @@ enum class ChunkState : uint8_t
     GENERATING_BLOCKS,
     HAS_BLOCKS,
     GENERATING_GEOMETRY,
-    HAS_GEOMETRY
+    HAS_GEOMETRY,
 };
+
+enum class NeighborDirection : uint8_t
+{
+    X_POS = 0,
+    Z_POS = 1,
+    X_NEG = 2,
+    Z_NEG = 3,
+};
+
+constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
+{
+    return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
+}
 
 #define CHUNK_SIZE_XZ 16
 #define CHUNK_SIZE_Y 256
+
+class Region;
 
 class Chunk
 {
 private:
     const glm::ivec2 chunkPos;
+    const Region* region;
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
@@ -52,7 +68,7 @@ private:
     bool isBlockAir(glm::ivec3 pos_CS);
 
 public:
-    Chunk(glm::ivec2 chunkPos);
+    Chunk(glm::ivec2 chunkPos, Region* region);
 
     void generateBlocks();
 
@@ -73,8 +89,12 @@ public:
 
 #define REGION_SIDE_LENGTH 16
 
-struct Region
+class Region
 {
+private:
+    std::array<Region*, 4> neighbors{};
+
+public:
     const glm::ivec2 regionPos;
     const glm::ivec2 regionPosChunks;
 
@@ -83,8 +103,9 @@ struct Region
     Region(glm::ivec2 regionPos);
 
     Chunk* operator[](glm::ivec2 chunkPos);
-
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+
+    void setNeighbor(NeighborDirection dir, Region* neighborRegion);
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

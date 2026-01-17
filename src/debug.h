@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #ifdef _DEBUG
 #include "logger.h"
+#include <cassert>
 
 #define ASSERT_IMPL(cond, msg)                                                                                         \
     do                                                                                                                 \

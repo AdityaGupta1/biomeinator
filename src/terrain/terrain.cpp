@@ -35,6 +35,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RENDER_DISTANCE 15
 
+#define DEBUG_SINGLE_THREAD 1
+
 namespace Terrain
 {
 
@@ -86,6 +88,13 @@ static ThreadPool threadPool{};
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
+static constexpr glm::ivec2 regionNeighborOffsets[4] = {
+    { 1, 0 },  // X_POS
+    { 0, 1 },  // Z_POS
+    { -1, 0 }, // X_NEG
+    { 0, -1 }, // Z_NEG
+};
+
 void update(ToFreeList& toFreeList)
 {
     const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
@@ -120,12 +129,22 @@ void update(ToFreeList& toFreeList)
             {
                 const glm::ivec2 regionPos = glm::ivec2(regionX, regionZ);
 
-                auto [it, inserted] = regions.try_emplace(regionPos, nullptr);
+                const auto [regionIter, inserted] = regions.try_emplace(regionPos, nullptr);
                 if (inserted)
                 {
-                    it->second = std::make_unique<Region>(regionPos);
+                    regionIter->second = std::make_unique<Region>(regionPos);
+
+                    for (int neighborDirIdx = 0; neighborDirIdx < 4; ++neighborDirIdx)
+                    {
+                        const glm::ivec2 neighborRegionPos = regionPos + regionNeighborOffsets[neighborDirIdx];
+                        const auto neighborIter = regions.find(neighborRegionPos);
+                        if (neighborIter != regions.end())
+                        {
+                            regionIter->second->setNeighbor(static_cast<NeighborDirection>(neighborDirIdx), neighborIter->second.get());
+                        }
+                    }
                 }
-                Region& region = *it->second.get();
+                Region& region = *regionIter->second;
 
                 const glm::ivec2 minChunkPosInRegion = glm::max(region.regionPosChunks, minChunkPos);
                 const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionPosChunks + REGION_SIDE_LENGTH - 1, maxChunkPos);
@@ -155,9 +174,13 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
+#if DEBUG_SINGLE_THREAD == 0
                                 threadPool.enqueue([chunk] {
                                     chunk->generateBlocks();
                                 });
+#else
+                                chunk->generateBlocks();
+#endif
                             }
                             else if (chunkState == ChunkState::HAS_BLOCKS)
                             {
@@ -184,9 +207,13 @@ void update(ToFreeList& toFreeList)
         {
             Instance* instance = scene->requestNewInstance(toFreeList);
             chunk->setState(ChunkState::GENERATING_GEOMETRY);
+#if DEBUG_SINGLE_THREAD == 0
             threadPool.enqueue([chunk, instance] {
                 chunk->createInstance(scene, instance);
             });
+#else
+            chunk->createInstance(scene, instance);
+#endif
         }
         chunksToCreateInstance.clear();
 

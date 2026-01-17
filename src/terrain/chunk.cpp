@@ -34,8 +34,8 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_X 32
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
-Chunk::Chunk(ivec2 chunkPos)
-	: chunkPos(chunkPos)
+Chunk::Chunk(ivec2 chunkPos, Region* region)
+	: chunkPos(chunkPos), region(region)
 {}
 
 void Chunk::generateBlocks()
@@ -104,7 +104,7 @@ static constexpr ivec3 allFaceVertPositions[24] = {
     ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
     ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
     ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0) // -z
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
 };
 
 static constexpr uvec2 uvOffsets[4] = {
@@ -272,9 +272,15 @@ Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
     const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
     if (this->chunks[chunkIdx] == nullptr)
     {
-        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos);
+        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     }
     return (*this)[chunkPos];
+}
+
+void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
+{
+    this->neighbors[static_cast<size_t>(dir)] = neighborRegion;
+    neighborRegion->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
 }
 
 // x changes fastest, then z
