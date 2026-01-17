@@ -51,6 +51,7 @@ private:
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
+    bool isVisible{ true };
     bool isScheduledForDeletion{ false };
 
     Instance(::Scene* scene, uint32_t id);
@@ -76,6 +77,8 @@ public:
     uint32_t getId() const;
 
     uint32_t getTriCount() const;
+
+    void setVisible(bool visible);
 
     void setMaterialIdx(uint32_t id);
 };

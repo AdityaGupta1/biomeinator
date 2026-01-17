@@ -126,6 +126,16 @@ uint32_t Instance::getTriCount() const
     return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
 }
 
+void Instance::setVisible(bool visible)
+{
+    // TODO: may need to revisit this and check for correctness
+    if (this->isVisible != visible && this->geoWrapper.dev_blas != nullptr)
+    {
+        this->scene->isTlasDirty = true;
+    }
+    this->isVisible = visible;
+}
+
 void Instance::setMaterialIdx(uint32_t id)
 {
     this->materialIdx = id;
@@ -232,6 +242,7 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instances.erase(instance->id);
+    this->isTlasDirty |= instance->isVisible;
 }
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
@@ -334,7 +345,8 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     BufferHelper::uavBarrier(cmdList, nullptr);
 
-    for (const auto instance : this->instancesReadyForBlasBuild)
+    bool hadVisibleInstance = false;
+    for (Instance* const instance : this->instancesReadyForBlasBuild)
     {
         InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
         instanceData.vertsBufferOffset =
@@ -366,12 +378,14 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
             instance->host_areaLights.clear();
         }
+
+        hadVisibleInstance |= instance->isVisible;
     }
 
     toFreeList.pushManagedBuffer(&uploadBuffer);
 
     this->instancesReadyForBlasBuild.clear();
-    return true;
+    return hadVisibleInstance;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -385,7 +399,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        if (instance->isScheduledForDeletion || instance->geoWrapper.dev_blas == nullptr)
+        if (!instance->isVisible || instance->isScheduledForDeletion || instance->geoWrapper.dev_blas == nullptr)
         {
             continue;
         }
