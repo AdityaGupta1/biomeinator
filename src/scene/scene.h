@@ -51,6 +51,7 @@ private:
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
+    bool isVisible{ true };
     bool isScheduledForDeletion{ false };
 
     Instance(::Scene* scene, uint32_t id);
@@ -71,11 +72,13 @@ public:
                      std::vector<uint32_t>&& idxs = {});
 
     // `setGeometry()` must be called before calling this function
-    void addAreaLight(uint32_t triangleIdx);
+    void addAreaLights(const std::vector<uint32_t>& triangleIdxs);
 
     uint32_t getId() const;
 
     uint32_t getTriCount() const;
+
+    void setVisible(bool visible);
 
     void setMaterialIdx(uint32_t id);
 };
@@ -144,7 +147,9 @@ private:
 
     void freeInstance(Instance* instance);
 
+    // returns true if TLAS is now dirty
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);

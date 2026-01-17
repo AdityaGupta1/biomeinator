@@ -18,20 +18,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-class Chunk;
-class Scene;
-class ToFreeList;
+#include <glm/glm.hpp>
 
-namespace Terrain
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/component_wise.hpp>
+
+namespace glmUtil
 {
 
-void init(Scene* scene);
+inline int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
+{
+    return glm::compMax(glm::abs(a - b));
+}
 
-void addChunkToCreateBlas(Chunk* chunk);
-void addChunkToDestroy(Chunk* chunk);
-
-void setDirty();
-
-void update(ToFreeList& toFreeList);
-
-} // namespace Terrain
+}

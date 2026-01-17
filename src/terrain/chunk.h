@@ -22,28 +22,109 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/scene.h"
 
 #include <array>
+#include <atomic>
 #include <glm/glm.hpp>
+
+enum class ChunkState : uint8_t
+{
+    NEEDS_BLOCKS,
+    GENERATING_BLOCKS,
+    HAS_BLOCKS,
+    GENERATING_GEOMETRY,
+    HAS_GEOMETRY,
+};
+
+enum class NeighborDirection : uint8_t
+{
+    X_POS = 0,
+    Z_POS = 1,
+    X_NEG = 2,
+    Z_NEG = 3,
+};
+
+constexpr glm::ivec2 neighborOffset(NeighborDirection dir)
+{
+    switch (dir)
+    {
+        case NeighborDirection::X_POS:
+            return { 1, 0 };
+        case NeighborDirection::Z_POS:
+            return { 0, 1};
+        case NeighborDirection::X_NEG:
+            return { -1, 0 };
+        case NeighborDirection::Z_NEG:
+            return { 0, -1 };
+    }
+
+    return { 0, 0 };
+}
+
+constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
+{
+    return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
+}
 
 #define CHUNK_SIZE_XZ 16
 #define CHUNK_SIZE_Y 256
 
+class Region;
+
 class Chunk
 {
 private:
-    const glm::ivec2 chunkPos{ 0, 0 };
+    const glm::ivec2 chunkPos;
+    const Region* region;
+
+    std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
+    bool isMarkedForDestruction{ false };
+    bool isInstanceVisible{ false };
 
     std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
 
     Instance* instance{ nullptr };
 
+    bool isBlockAir(glm::ivec3 pos_CS);
+
 public:
-    Chunk(glm::ivec2 chunkPos);
+    Chunk(glm::ivec2 chunkPos, Region* region);
 
     void generateBlocks();
 
-    void createInstance(Scene* scene);
+    void createInstance(Scene* scene, Instance* instance);
+
+    void destroyInstance(ToFreeList& toFreeList);
 
     Instance* getInstance() const;
 
-    static glm::uint blockPosToIdx(glm::uvec3 blockPos);
+    ChunkState getState() const;
+
+    void setState(ChunkState newState);
+
+    void setMarkedForDestruction(bool mark = true);
+
+    void setInstanceVisible(bool visible);
+
+    static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
+};
+
+#define REGION_SIDE_LENGTH 16
+
+class Region
+{
+private:
+    std::array<Region*, 4> neighbors{};
+
+public:
+    const glm::ivec2 regionPos;
+    const glm::ivec2 regionPosChunks;
+
+    std::array<std::unique_ptr<Chunk>, REGION_SIDE_LENGTH * REGION_SIDE_LENGTH> chunks{};
+
+    Region(glm::ivec2 regionPos);
+
+    Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+
+    void setNeighbor(NeighborDirection dir, Region* neighborRegion);
+
+    static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

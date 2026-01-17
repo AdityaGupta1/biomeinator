@@ -63,53 +63,57 @@ void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
     this->isGeometrySet = true;
 }
 
-void Instance::addAreaLight(uint32_t triangleIdx)
+void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
     ASSERT(this->isGeometrySet);
 
-    uint32_t i0 = triangleIdx * 3;
-    uint32_t i1 = i0 + 1;
-    uint32_t i2 = i0 + 2;
-    if (!this->host_idxs.empty())
-    {
-        i0 = this->host_idxs[i0];
-        i1 = this->host_idxs[i1];
-        i2 = this->host_idxs[i2];
-    }
+    this->host_areaLights.reserve(this->host_areaLights.size() + triangleIdxs.size());
 
-    this->host_areaLights.emplace_back();
-    const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
-    AreaLight& light = this->host_areaLights.back();
-
-    light.instanceId = this->id;
-    light.triangleIdx = triangleIdx;
-
-    // TODO: store this matrix instead of reconstructing it each time?
     const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
-    XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
-    XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
-    XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
+    for (const uint32_t triangleIdx : triangleIdxs)
+    {
+        uint32_t i0 = triangleIdx * 3;
+        uint32_t i1 = i0 + 1;
+        uint32_t i2 = i0 + 2;
+        if (!this->host_idxs.empty())
+        {
+            i0 = this->host_idxs[i0];
+            i1 = this->host_idxs[i1];
+            i2 = this->host_idxs[i2];
+        }
 
-    p0 = DirectX::XMVector3Transform(p0, objectToWorld);
-    p1 = DirectX::XMVector3Transform(p1, objectToWorld);
-    p2 = DirectX::XMVector3Transform(p2, objectToWorld);
+        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size());
+        this->host_areaLights.emplace_back();
+        AreaLight& light = this->host_areaLights.back();
 
-    DirectX::XMStoreFloat3(&light.pos0_WS, p0);
-    DirectX::XMStoreFloat3(&light.pos1_WS, p1);
-    DirectX::XMStoreFloat3(&light.pos2_WS, p2);
+        light.instanceId = this->id;
+        light.triangleIdx = triangleIdx;
 
-    const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
-    const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
-    const XMVECTOR cross = XMVector3Cross(edge1, edge2);
-    DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
+        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
+        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
+        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
 
-    const float area = 0.5f * XMVectorGetX(XMVector3Length(cross));
-    light.rcpArea = area > 0.f ? (1.f / area) : 0.f;
+        p0 = DirectX::XMVector3Transform(p0, objectToWorld);
+        p1 = DirectX::XMVector3Transform(p1, objectToWorld);
+        p2 = DirectX::XMVector3Transform(p2, objectToWorld);
 
-    light.materialIdx = this->materialIdx;
+        DirectX::XMStoreFloat3(&light.pos0_WS, p0);
+        DirectX::XMStoreFloat3(&light.pos1_WS, p1);
+        DirectX::XMStoreFloat3(&light.pos2_WS, p2);
 
-    this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+        const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
+        const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
+        const XMVECTOR cross = XMVector3Cross(edge1, edge2);
+        DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
+
+        const float doubleArea = XMVectorGetX(XMVector3Length(cross));
+        light.rcpArea = doubleArea > 0.f ? (2.f / doubleArea) : 0.f;
+
+        light.materialIdx = this->materialIdx;
+
+        this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+    }
 }
 
 uint32_t Instance::getId() const
@@ -122,6 +126,16 @@ uint32_t Instance::getTriCount() const
     return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
 }
 
+void Instance::setVisible(bool visible)
+{
+    // TODO: may need to revisit this and check for correctness
+    if (this->isVisible != visible && this->geoWrapper.dev_blas != nullptr)
+    {
+        this->scene->isTlasDirty = true;
+    }
+    this->isVisible = visible;
+}
+
 void Instance::setMaterialIdx(uint32_t id)
 {
     this->materialIdx = id;
@@ -131,13 +145,13 @@ void Scene::init()
 {
     // these resources can be dynamically resized later
     this->managedVertsBuffer.setName(L"scene verts");
-    this->managedVertsBuffer.init(512 /*bytes*/);
+    this->managedVertsBuffer.init(1 << 14 /*bytes*/);
     this->managedIdxsBuffer.setName(L"scene idxs");
-    this->managedIdxsBuffer.init(128 /*bytes*/);
+    this->managedIdxsBuffer.init(1 << 12 /*bytes*/);
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init(128 /*bytes*/);
+    this->managedPerTriDatasBuffer.init(1 << 12 /*bytes*/);
 
-    this->maxNumInstances = 1;
+    this->maxNumInstances = 1 << 8;
     this->mappedInstanceDescsArray.setName(L"scene instanceDescs");
     this->mappedInstanceDescsArray.init(this->maxNumInstances);
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
@@ -148,12 +162,12 @@ void Scene::init()
     }
 
     this->mappedMaterialsArray.setName(L"scene materials");
-    this->mappedMaterialsArray.init(1 /*element*/);
+    this->mappedMaterialsArray.init(8 /*elements*/);
 
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
-    this->managedAreaLightsBuffer.init(512 /*bytes*/);
+    this->managedAreaLightsBuffer.init(1 << 14 /*bytes*/);
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
-    this->areaLightSamplingStructure.init(1 /*element*/);
+    this->areaLightSamplingStructure.init(1 << 8 /*elements*/);
 }
 
 void Scene::reset()
@@ -228,6 +242,7 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instances.erase(instance->id);
+    this->isTlasDirty |= instance->isVisible;
 }
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
@@ -330,7 +345,8 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     BufferHelper::uavBarrier(cmdList, nullptr);
 
-    for (const auto instance : this->instancesReadyForBlasBuild)
+    bool hadVisibleInstance = false;
+    for (Instance* const instance : this->instancesReadyForBlasBuild)
     {
         InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
         instanceData.vertsBufferOffset =
@@ -362,12 +378,14 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
             instance->host_areaLights.clear();
         }
+
+        hadVisibleInstance |= instance->isVisible;
     }
 
     toFreeList.pushManagedBuffer(&uploadBuffer);
 
     this->instancesReadyForBlasBuild.clear();
-    return true;
+    return hadVisibleInstance;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -381,7 +399,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        if (instance->isScheduledForDeletion)
+        if (!instance->isVisible || instance->isScheduledForDeletion || instance->geoWrapper.dev_blas == nullptr)
         {
             continue;
         }

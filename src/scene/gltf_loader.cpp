@@ -429,10 +429,13 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             if (isEmissive)
             {
                 const uint32_t triCount = instance->getTriCount();
+                std::vector<uint32_t> triangleIdxs;
+                triangleIdxs.reserve(triCount);
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
                 {
-                    instance->addAreaLight(triIdx);
+                    triangleIdxs.push_back(triIdx);
                 }
+                instance->addAreaLights(triangleIdxs);
             }
 
             scene.markInstanceReadyForBlasBuild(instance);

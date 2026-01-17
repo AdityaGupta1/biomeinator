@@ -20,9 +20,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "block.h"
 #include "noise.h"
+#include "terrain.h"
+#include "terrain_materials.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
-#include "terrain_materials.h"
 
 #include <DirectXMath.h>
 #include <vector>
@@ -33,8 +34,8 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_X 32
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
-Chunk::Chunk(ivec2 chunkPos)
-	: chunkPos(chunkPos)
+Chunk::Chunk(ivec2 chunkPos, Region* region)
+	: chunkPos(chunkPos), region(region)
 {}
 
 void Chunk::generateBlocks()
@@ -61,6 +62,9 @@ void Chunk::generateBlocks()
             }
         }
     }
+
+    this->setState(ChunkState::HAS_BLOCKS);
+    Terrain::setDirty(); // needed to force an update in case the player is not moving
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -73,15 +77,48 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-void Chunk::createInstance(Scene* scene)
+bool Chunk::isBlockAir(ivec3 pos_CS)
 {
-    ToFreeList toFreeList{};
+    if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
+        pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
+        pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
+    {
+        // TODO: properly account for blocks in neighboring chunks
+        return true;
+    }
+    return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
+}
 
-    // TODO: will have to revisit this when implementing multithreading
-    // - could potentially be a case where the instances array/map/whatever is resized while some instances are still being worked on, so their data would be lost
-    // - maybe need to request all instances upfront in Terrain (with appropriate mutex lock) and then distribute them to new chunks
-    //    - in this case, pass actual ToFreeList from frameCtx
-    this->instance = scene->requestNewInstance(toFreeList);
+static constexpr ivec3 faceOffsets[6] = {
+    ivec3(1, 0, 0),  // +x
+    ivec3(-1, 0, 0), // -x
+    ivec3(0, 1, 0),  // +y
+    ivec3(0, -1, 0), // -y
+    ivec3(0, 0, 1),  // +z
+    ivec3(0, 0, -1), // -z
+};
+
+static constexpr ivec3 allFaceVertPositions[24] = {
+    ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+    ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+    ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
+    ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
+    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
+};
+
+static constexpr uvec2 uvOffsets[4] = {
+    uvec2(1, 0),
+    uvec2(0, 0),
+    uvec2(0, 1),
+    uvec2(1, 1),
+};
+static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
+
+void Chunk::createInstance(Scene* scene, Instance* instance)
+{
+    this->instance = instance;
+    this->instance->setVisible(this->isInstanceVisible);
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
@@ -94,37 +131,23 @@ void Chunk::createInstance(Scene* scene)
 
     std::vector<Vertex> verts;
     std::vector<uint32_t> indices;
-    std::vector<uint32_t> emissiveTriangleIndices;
+    std::vector<uint32_t> emissiveTriangleIdxs;
 
-    static constexpr ivec3 faceOffsets[6] = {
-        ivec3(1, 0, 0),  // +x
-        ivec3(-1, 0, 0), // -x
-        ivec3(0, 1, 0),  // +y
-        ivec3(0, -1, 0), // -y
-        ivec3(0, 0, 1),  // +z
-        ivec3(0, 0, -1), // -z
-    };
-
-    // TODO: extract this to a helper function
-    auto isBlockAir = [&](ivec3 pos_CS) -> bool {
-        if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
-            pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
-            pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
-        {
-            // TODO: properly account for blocks in neighboring chunks
-            return true;
-        }
-        return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
-    };
+    constexpr size_t numVertsToReserve = 1 << 15;
+    verts.reserve(numVertsToReserve);
+    indices.reserve(numVertsToReserve * 6 / 4);
+    emissiveTriangleIdxs.reserve(512);
 
     for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
     {
         for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
         {
+            const uint32_t baseIdx = blockPosToIdx(uvec3(x, 0, z));
+
             for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
             {
                 const uvec3 blockPos_CS(x, y, z);
-                const Block block = blocks[blockPosToIdx(blockPos_CS)];
+                const Block block = blocks[baseIdx + y];
                 if (block == Block::AIR)
                 {
                     continue;
@@ -142,51 +165,33 @@ void Chunk::createInstance(Scene* scene)
                         continue;
                     }
 
-                    const vec3 normal = vec3(neighborOffset);
-
-                    static constexpr ivec3 allFaceVertPositions[24] = {
-                        ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
-                        ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
-                        ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
-                        ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-                        ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-                        ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0)  // -z
-                    };
+                    const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
                     const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-
-                    static constexpr uvec2 uvOffsets[4] = {
-                        uvec2(1, 0),
-                        uvec2(0, 0),
-                        uvec2(0, 1),
-                        uvec2(1, 1),
-                    };
-
                     const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                     for (uint i = 0; i < 4; ++i)
                     {
-                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) /
-                                        vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
                         const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                        verts.push_back({
+                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
+                        verts.emplace_back(
                             vec3ToDirectX(vertPos_CS),
-                            vec3ToDirectX(normal),
-                            vec2ToDirectX(uv),
-                        });
+                            normal,
+                            vec2ToDirectX(uv)
+                        );
                     }
 
                     const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
 
-                    indices.push_back(baseVertIdx + 0u);
-                    indices.push_back(baseVertIdx + 1u);
-                    indices.push_back(baseVertIdx + 2u);
-                    indices.push_back(baseVertIdx + 0u);
-                    indices.push_back(baseVertIdx + 2u);
-                    indices.push_back(baseVertIdx + 3u);
+                    indices.emplace_back(baseVertIdx + 0u);
+                    indices.emplace_back(baseVertIdx + 1u);
+                    indices.emplace_back(baseVertIdx + 2u);
+                    indices.emplace_back(baseVertIdx + 0u);
+                    indices.emplace_back(baseVertIdx + 2u);
+                    indices.emplace_back(baseVertIdx + 3u);
 
                     if (blockData.emitsLight)
                     {
-                        emissiveTriangleIndices.push_back(triangleIdx);
-                        emissiveTriangleIndices.push_back(triangleIdx + 1u);
+                        emissiveTriangleIdxs.emplace_back(triangleIdx);
+                        emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
                     }
                 }
             }
@@ -196,19 +201,54 @@ void Chunk::createInstance(Scene* scene)
     instance->setGeometry(instanceTransform, std::move(verts), std::move(indices));
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
 
-    for (uint32_t triangleIdx : emissiveTriangleIndices)
+    instance->addAreaLights(emissiveTriangleIdxs);
+
+    this->setState(ChunkState::HAS_GEOMETRY);
+    if (this->isMarkedForDestruction)
     {
-        instance->addAreaLight(triangleIdx);
+        Terrain::addChunkToDestroy(this);
     }
+    else
+    {
+        Terrain::addChunkToCreateBlas(this);
+    }
+}
 
-    scene->markInstanceReadyForBlasBuild(instance);
-
-    toFreeList.freeAll();
+void Chunk::destroyInstance(ToFreeList& toFreeList)
+{
+    toFreeList.pushInstance(this->instance);
+    this->instance = nullptr;
+    this->setState(ChunkState::HAS_BLOCKS);
+    this->isMarkedForDestruction = false;
 }
 
 Instance* Chunk::getInstance() const
 {
     return instance;
+}
+
+ChunkState Chunk::getState() const
+{
+    return this->state.load(std::memory_order_acquire);
+}
+
+void Chunk::setState(ChunkState newState)
+{
+    this->state.store(newState, std::memory_order_release);
+}
+
+void Chunk::setMarkedForDestruction(bool mark)
+{
+    this->isMarkedForDestruction = mark;
+}
+
+void Chunk::setInstanceVisible(bool visible)
+{
+    this->isInstanceVisible = visible;
+    if (this->instance != nullptr)
+    {
+        this->instance->setVisible(this->isInstanceVisible);
+    }
 }
 
 // y changes fastest, then x, then z
@@ -221,9 +261,43 @@ Instance* Chunk::getInstance() const
 //         for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
 //         {
 //             // do stuff here
-uint32_t Chunk::blockPosToIdx(glm::uvec3 blockPos)
+uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
 {
-    return blockPos.y
-		 + blockPos.x * CHUNK_SIZE_Y
-		 + blockPos.z * CHUNK_SIZE_XZ * CHUNK_SIZE_Y;
+    return chunkBlockPos.y
+		 + chunkBlockPos.x * CHUNK_SIZE_Y
+		 + chunkBlockPos.z * (CHUNK_SIZE_XZ * CHUNK_SIZE_Y);
+}
+
+Region::Region(glm::ivec2 regionPos)
+    : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
+{}
+
+Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
+{
+    const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    if (this->chunks[chunkIdx] == nullptr)
+    {
+        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
+    }
+    return this->chunks[chunkIdx].get();
+}
+
+void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
+{
+    this->neighbors[static_cast<size_t>(dir)] = neighborRegion;
+    neighborRegion->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+}
+
+// x changes fastest, then z
+//
+// for loops should be written like this:
+// for (uint z = 0; z < REGION_SIDE_LENGTH; ++z)
+// {
+//     for (uint x = 0; x < REGION_SIDE_LENGTH; ++x)
+//     {
+//         // do stuff here
+uint32_t Region::chunkPosToIdx(glm::ivec2 regionChunkPos)
+{
+    return regionChunkPos.x
+         + regionChunkPos.y /*z*/ * REGION_SIDE_LENGTH;
 }
