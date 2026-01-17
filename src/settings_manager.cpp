@@ -54,6 +54,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("lockCamera", "Lock camera (disable player input)", cxxopts::value<bool>()->default_value("false"));
     optionAdder("restirDoVisibilityCheck", "ReSTIR do visibility check", cxxopts::value<bool>()->default_value("true"));
     optionAdder("voxelMode", "Enable voxel mode", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("movementSpeed", "Movement speed", cxxopts::value<float>()->default_value("12"));
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
@@ -103,6 +104,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("lockCamera", bool);
     COPY_SETTING("restirDoVisibilityCheck", bool);
     COPY_SETTING("voxelMode", bool);
+    COPY_SETTING("movementSpeed", float);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);

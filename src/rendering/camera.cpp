@@ -127,10 +127,6 @@ void Camera::setMatrices()
     this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
 
-constexpr float playerHorizontalSpeed = 11.0f;
-constexpr float playerVerticalSpeed = 7.0f;
-constexpr XMFLOAT3 playerLinearSpeed = XMFLOAT3(playerHorizontalSpeed, playerVerticalSpeed, playerHorizontalSpeed);
-
 constexpr float mouseSensitivity = 0.0016f;
 
 constexpr float fovTransitionSpeed = 10.f;
@@ -148,12 +144,18 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
 
     if (input.linearInput.x != 0 || input.linearInput.y != 0 || input.linearInput.z != 0)
     {
-        XMVECTOR linearSpeed = XMLoadFloat3(&playerLinearSpeed);
+        const float horizontalSpeed = SettingsManager::getAsFloat("movementSpeed");
+        const float verticalSpeed = horizontalSpeed * 0.65f;
+
+        const XMFLOAT3 linearSpeedBase(horizontalSpeed, verticalSpeed, horizontalSpeed);
+        XMVECTOR linearSpeed = XMLoadFloat3(&linearSpeedBase);
         linearSpeed = XMVectorScale(linearSpeed, static_cast<float>(deltaTime) * input.linearSpeedMultiplier);
         const XMVECTOR linearMovement = XMVectorMultiply(linearSpeed, XMLoadFloat3(&input.linearInput));
+
         XMFLOAT3 storedLinearMovement;
         XMStoreFloat3(&storedLinearMovement, linearMovement);
         this->moveLinear(storedLinearMovement);
+
         this->areMatricesDirty = true;
     }
 
