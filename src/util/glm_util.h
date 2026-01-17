@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace glmUtil
 {
 
-inline constexpr int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
+inline int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
 {
     return glm::compMax(glm::abs(a - b));
 }
