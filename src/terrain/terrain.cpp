@@ -94,13 +94,6 @@ static ThreadPool threadPool{};
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
-static constexpr glm::ivec2 regionNeighborOffsets[4] = {
-    { 1, 0 },  // X_POS
-    { 0, 1 },  // Z_POS
-    { -1, 0 }, // X_NEG
-    { 0, -1 }, // Z_NEG
-};
-
 void update(ToFreeList& toFreeList)
 {
     const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
@@ -142,11 +135,12 @@ void update(ToFreeList& toFreeList)
 
                     for (int neighborDirIdx = 0; neighborDirIdx < 4; ++neighborDirIdx)
                     {
-                        const glm::ivec2 neighborRegionPos = regionPos + regionNeighborOffsets[neighborDirIdx];
+                        const NeighborDirection neighborDir = static_cast<NeighborDirection>(neighborDirIdx);
+                        const glm::ivec2 neighborRegionPos = regionPos + neighborOffset(neighborDir);
                         const auto neighborIter = regions.find(neighborRegionPos);
                         if (neighborIter != regions.end())
                         {
-                            regionIter->second->setNeighbor(static_cast<NeighborDirection>(neighborDirIdx), neighborIter->second.get());
+                            regionIter->second->setNeighbor(neighborDir, neighborIter->second.get());
                         }
                     }
                 }

@@ -42,6 +42,21 @@ enum class NeighborDirection : uint8_t
     Z_NEG = 3,
 };
 
+constexpr glm::ivec2 neighborOffset(NeighborDirection dir)
+{
+    switch (dir)
+    {
+        case NeighborDirection::X_POS:
+            return glm::ivec2(1, 0);
+        case NeighborDirection::Z_POS:
+            return glm::ivec2(0, 1);
+        case NeighborDirection::X_NEG:
+            return glm::ivec2(-1, 0);
+        case NeighborDirection::Z_NEG:
+            return glm::ivec2(0, -1);
+    }
+}
+
 constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
 {
     return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
