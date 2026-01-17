@@ -136,21 +136,6 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-bool Chunk::isBlockAir(ivec3 pos_CS)
-{
-    if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
-    {
-        return true;
-    }
-
-    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= CHUNK_SIZE_XZ)
-    {
-        // TODO: properly account for blocks in neighboring chunks
-        return true;
-    }
-    return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
-}
-
 // first four match NeighborDirection enum
 static constexpr ivec3 faceOffsets[6] = {
     ivec3(1, 0, 0),  // +x
@@ -177,6 +162,34 @@ static constexpr uvec2 uvOffsets[4] = {
     uvec2(1, 1),
 };
 static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
+
+bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
+{
+    if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
+    {
+        return true;
+    }
+
+    Block block;
+
+    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= CHUNK_SIZE_XZ)
+    {
+        const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
+        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until state == NEIGHBORS_HAVE_BLOCKS
+        const ivec3 pos_neighborCS = {
+            (pos_CS.x + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+            pos_CS.y,
+            (pos_CS.z + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+        };
+        block = neighborChunk->blocks[Chunk::blockPosToIdx(uvec3(pos_neighborCS))];
+    }
+    else
+    {
+        block = blocks[Chunk::blockPosToIdx(uvec3(pos_CS))];
+    }
+
+    return block == Block::AIR;
+}
 
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
@@ -223,7 +236,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
                     const ivec3 neighborOffset = faceOffsets[faceIdx];
                     const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                    if (!isBlockAir(neighborPos_CS))
+                    if (!isBlockAir(neighborPos_CS, faceIdx))
                     {
                         continue;
                     }

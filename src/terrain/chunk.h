@@ -87,7 +87,7 @@ private:
 
     Instance* instance{ nullptr };
 
-    bool isBlockAir(glm::ivec3 pos_CS);
+    bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
 public:
     Chunk(glm::ivec2 chunkPos, Region* region);
