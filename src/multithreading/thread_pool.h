@@ -44,7 +44,7 @@ public:
     ~ThreadPool();
 
     template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
+    void enqueue(F&& f, Args&&... args);
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;
@@ -53,12 +53,10 @@ public:
 };
 
 template<class F, class... Args>
-auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>
+void ThreadPool::enqueue(F&& f, Args&&... args)
 {
     using R = std::invoke_result_t<F, Args...>;
-
     auto task = std::make_shared<std::packaged_task<R()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-    std::future<R> future = task->get_future();
 
     {
         std::lock_guard<std::mutex> lock(this->mutex);
@@ -67,5 +65,4 @@ auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<std::invoke_resul
     }
 
     this->cv.notify_one();
-    return future;
 }
