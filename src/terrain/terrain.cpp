@@ -33,8 +33,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include <vector>
 
-#define RENDER_DISTANCE 20
+#define RENDER_DISTANCE 10
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
+#define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
 namespace Terrain
 {
@@ -108,8 +109,8 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLAS_DISTANCE;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLAS_DISTANCE;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLOCKS_DISTANCE;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLOCKS_DISTANCE;
         const glm::ivec2 minLastChunkPos = lastChunkPos - CREATE_BLAS_DISTANCE;
         const glm::ivec2 maxLastChunkPos = lastChunkPos + CREATE_BLAS_DISTANCE;
 
@@ -159,6 +160,7 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= RENDER_DISTANCE;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= CREATE_BLAS_DISTANCE;
+                        const bool inCurrentCreateBlocksDistance = distToCurrentChunk <= CREATE_BLOCKS_DISTANCE;
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
 
@@ -170,23 +172,28 @@ void update(ToFreeList& toFreeList)
                         Chunk* chunk = region.getOrCreateChunk(chunkPos);
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentCreateBlasDistance)
+                        if (inCurrentCreateBlocksDistance)
                         {
-                            chunk->setMarkedForDestruction(false);
-                            chunk->setInstanceVisible(inCurrentRenderDistance);
-
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
                                 chunksToGenerateBlocks.push_back(chunk);
                             }
-                            else if (chunkState == ChunkState::HAS_BLOCKS)
+
+                            if (inCurrentCreateBlasDistance)
                             {
-                                chunk->setState(ChunkState::GENERATING_GEOMETRY);
-                                chunksToCreateInstance.push_back(chunk);
+                                chunk->setMarkedForDestruction(false);
+                                chunk->setInstanceVisible(inCurrentRenderDistance);
+
+                                if (chunkState == ChunkState::HAS_BLOCKS)
+                                {
+                                    chunk->setState(ChunkState::GENERATING_GEOMETRY);
+                                    chunksToCreateInstance.push_back(chunk);
+                                }
                             }
                         }
-                        else if (inLastCreateBlasDistance)
+
+                        if (!inCurrentCreateBlasDistance && inLastCreateBlasDistance)
                         {
                             chunk->setInstanceVisible(false);
 
