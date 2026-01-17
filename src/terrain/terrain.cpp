@@ -118,6 +118,8 @@ void update(ToFreeList& toFreeList)
         const glm::ivec2 minChunkPos = glm::min(currentChunkPos, lastChunkPos) - RENDER_DISTANCE;
         const glm::ivec2 maxChunkPos = glm::max(currentChunkPos, lastChunkPos) + RENDER_DISTANCE;
 
+        // this combined region logic will become a problem if I ever add teleportation logic (since the region could
+        // become huge)
         const glm::ivec2 minRegionPos =
             glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(REGION_SIDE_LENGTH)));
         const glm::ivec2 maxRegionPos =
