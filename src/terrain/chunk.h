@@ -30,6 +30,7 @@ enum class ChunkState : uint8_t
     NEEDS_BLOCKS,
     GENERATING_BLOCKS,
     HAS_BLOCKS,
+    NEIGHBORS_HAVE_BLOCKS,
     GENERATING_GEOMETRY,
     HAS_GEOMETRY,
 };
@@ -73,7 +74,11 @@ class Chunk
 {
 private:
     const glm::ivec2 chunkPos;
-    const Region* region;
+    Region* const region;
+
+    std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
+    std::array<Chunk*, 4> neighbors{};
+    std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
@@ -83,26 +88,26 @@ private:
 
     Instance* instance{ nullptr };
 
-    bool isBlockAir(glm::ivec3 pos_CS);
+    bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
 public:
     Chunk(glm::ivec2 chunkPos, Region* region);
 
     void generateBlocks();
+    void onNeighborsHaveBlocks();
 
     void createInstance(Scene* scene, Instance* instance);
-
     void destroyInstance(ToFreeList& toFreeList);
-
     Instance* getInstance() const;
 
     ChunkState getState() const;
-
     void setState(ChunkState newState);
 
     void setMarkedForDestruction(bool mark = true);
 
     void setInstanceVisible(bool visible);
+
+    glm::ivec2 getChunkPos();
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
 };
@@ -122,8 +127,10 @@ public:
 
     Region(glm::ivec2 regionPos);
 
+    Chunk* getChunk(glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
 
+    Region* getNeighbor(NeighborDirection dir) const;
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);

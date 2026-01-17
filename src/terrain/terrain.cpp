@@ -35,6 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RENDER_DISTANCE 20
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
+#define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
 namespace Terrain
 {
@@ -108,8 +109,8 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLAS_DISTANCE;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLAS_DISTANCE;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLOCKS_DISTANCE;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLOCKS_DISTANCE;
         const glm::ivec2 minLastChunkPos = lastChunkPos - CREATE_BLAS_DISTANCE;
         const glm::ivec2 maxLastChunkPos = lastChunkPos + CREATE_BLAS_DISTANCE;
 
@@ -159,10 +160,10 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= RENDER_DISTANCE;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= CREATE_BLAS_DISTANCE;
+                        const bool inCurrentCreateBlocksDistance = distToCurrentChunk <= CREATE_BLOCKS_DISTANCE;
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
-
-                        if (!inCurrentCreateBlasDistance && !inLastCreateBlasDistance)
+                        if (!inCurrentCreateBlocksDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
@@ -170,17 +171,21 @@ void update(ToFreeList& toFreeList)
                         Chunk* chunk = region.getOrCreateChunk(chunkPos);
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentCreateBlasDistance)
+                        if (inCurrentCreateBlocksDistance)
                         {
-                            chunk->setMarkedForDestruction(false);
-                            chunk->setInstanceVisible(inCurrentRenderDistance);
-
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
                                 chunksToGenerateBlocks.push_back(chunk);
                             }
-                            else if (chunkState == ChunkState::HAS_BLOCKS)
+                        }
+
+                        if (inCurrentCreateBlasDistance)
+                        {
+                            chunk->setMarkedForDestruction(false);
+                            chunk->setInstanceVisible(inCurrentRenderDistance);
+
+                            if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_GEOMETRY);
                                 chunksToCreateInstance.push_back(chunk);
@@ -222,10 +227,18 @@ void update(ToFreeList& toFreeList)
     {
         Chunk* chunk = chunksToCreateInstance.front();
         chunksToCreateInstance.pop_front();
-        Instance* instance = scene->requestNewInstance(toFreeList);
-        threadPool.enqueue([chunk, instance] {
-            chunk->createInstance(scene, instance);
-        });
+
+        // By the time we get around to creating this chunk's instance, the player could have already moved even further
+        // away, so we need to double check that this chunk is still within BLAS creation distance.
+        if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= CREATE_BLAS_DISTANCE)
+        {
+            Instance* instance = scene->requestNewInstance(toFreeList);
+            threadPool.enqueue([chunk, instance] { chunk->createInstance(scene, instance); });
+        }
+        else
+        {
+            chunk->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+        }
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;

@@ -25,6 +25,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/component_wise.hpp>
+
 #include <DirectXMath.h>
 #include <vector>
 
@@ -36,7 +39,39 @@ using namespace DirectX;
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
 	: chunkPos(chunkPos), region(region)
-{}
+{
+    const glm::ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+    {
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
+
+        Region* neighborRegion = this->region;
+        const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
+        if (glm::compMin(neighborChunkPos_region) < 0 || glm::compMax(neighborChunkPos_region) >= REGION_SIDE_LENGTH)
+        {
+            neighborRegion = neighborRegion->getNeighbor(dir);
+        }
+
+        if (neighborRegion != nullptr)
+        {
+            Chunk* neighborChunk = neighborRegion->getChunk(neighborChunkPos);
+            if (neighborChunk != nullptr)
+            {
+                this->atomicNeighbors[static_cast<size_t>(dir)].store(neighborChunk, std::memory_order_release);
+                neighborChunk->atomicNeighbors[static_cast<size_t>(oppositeNeighborDirection(dir))].store(
+                    this, std::memory_order_release);
+
+                if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+                {
+                    this->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel);
+                }
+
+                // at this point, this chunk cannot have blocks, so we don't need to update neighborChunk->numNeighborsWithBlocks
+            }
+        }
+    }
+}
 
 void Chunk::generateBlocks()
 {
@@ -64,7 +99,48 @@ void Chunk::generateBlocks()
     }
 
     this->setState(ChunkState::HAS_BLOCKS);
-    Terrain::setDirty(); // needed to force an update in case the player is not moving
+
+    bool setTerrainDirty = false;
+
+    for (std::atomic<Chunk*>& atomicNeighbor : this->atomicNeighbors)
+    {
+        Chunk* neighbor = atomicNeighbor.load(std::memory_order_acquire);
+        if (neighbor == nullptr)
+        {
+            continue;
+        }
+
+        const uint neighborNumNeighborsWithBlocks =
+            neighbor->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
+        if (neighborNumNeighborsWithBlocks == 4)
+        {
+            neighbor->onNeighborsHaveBlocks();
+            setTerrainDirty = true;
+        }
+    }
+
+    if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4)
+    {
+        this->onNeighborsHaveBlocks();
+        setTerrainDirty = true;
+    }
+
+    if (setTerrainDirty)
+    {
+        Terrain::setDirty();
+    }
+}
+
+void Chunk::onNeighborsHaveBlocks()
+{
+    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        this->neighbors[i] = this->atomicNeighbors[i].load(std::memory_order_acquire);
+    }
+
+    // TODO: build segment array
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -77,34 +153,51 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-bool Chunk::isBlockAir(ivec3 pos_CS)
-{
-    if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
-        pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
-        pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
-    {
-        // TODO: properly account for blocks in neighboring chunks
-        return true;
-    }
-    return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
-}
-
+// first four match NeighborDirection enum
 static constexpr ivec3 faceOffsets[6] = {
     ivec3(1, 0, 0),  // +x
+    ivec3(0, 0, 1),  // +z
     ivec3(-1, 0, 0), // -x
+    ivec3(0, 0, -1), // -z
     ivec3(0, 1, 0),  // +y
     ivec3(0, -1, 0), // -y
-    ivec3(0, 0, 1),  // +z
-    ivec3(0, 0, -1), // -z
 };
+
+bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
+{
+    if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
+    {
+        return true;
+    }
+
+    Block block;
+
+    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= CHUNK_SIZE_XZ)
+    {
+        const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
+        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until state == NEIGHBORS_HAVE_BLOCKS
+        const ivec3 pos_neighborCS = {
+            (pos_CS.x + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+            pos_CS.y,
+            (pos_CS.z + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+        };
+        block = neighborChunk->blocks[Chunk::blockPosToIdx(uvec3(pos_neighborCS))];
+    }
+    else
+    {
+        block = blocks[Chunk::blockPosToIdx(uvec3(pos_CS))];
+    }
+
+    return block == Block::AIR;
+}
 
 static constexpr ivec3 allFaceVertPositions[24] = {
     ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
     ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
     ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
     ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
 };
 
 static constexpr uvec2 uvOffsets[4] = {
@@ -160,7 +253,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
                     const ivec3 neighborOffset = faceOffsets[faceIdx];
                     const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                    if (!isBlockAir(neighborPos_CS))
+                    if (!isBlockAir(neighborPos_CS, faceIdx))
                     {
                         continue;
                     }
@@ -218,7 +311,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
 {
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
-    this->setState(ChunkState::HAS_BLOCKS);
+    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
     this->isMarkedForDestruction = false;
 }
 
@@ -251,6 +344,11 @@ void Chunk::setInstanceVisible(bool visible)
     }
 }
 
+glm::ivec2 Chunk::getChunkPos()
+{
+    return this->chunkPos;
+}
+
 // y changes fastest, then x, then z
 //
 // for loops should be written like this:
@@ -272,6 +370,11 @@ Region::Region(glm::ivec2 regionPos)
     : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
 {}
 
+Chunk* Region::getChunk(glm::ivec2 chunkPos)
+{
+    return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
+}
+
 Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
 {
     const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
@@ -280,6 +383,11 @@ Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
         this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     }
     return this->chunks[chunkIdx].get();
+}
+
+Region* Region::getNeighbor(NeighborDirection dir) const
+{
+    return this->neighbors[static_cast<size_t>(dir)];
 }
 
 void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
