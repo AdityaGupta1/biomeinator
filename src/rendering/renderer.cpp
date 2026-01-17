@@ -1452,6 +1452,10 @@ static void imguiEndFrame()
     }
 
     SettingsGuiHelpers::VerticalSpacing();
+    SettingsGuiHelpers::SectionTitle("World");
+    SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 50.f);
+
+    SettingsGuiHelpers::VerticalSpacing();
 
     if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
     {
