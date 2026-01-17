@@ -35,7 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RENDER_DISTANCE 15
 
-#define DEBUG_SINGLE_THREAD 1
+#define DEBUG_SINGLE_THREAD 0
 
 namespace Terrain
 {
