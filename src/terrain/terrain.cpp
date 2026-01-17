@@ -233,6 +233,7 @@ void update(ToFreeList& toFreeList)
         if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= CREATE_BLAS_DISTANCE)
         {
             Instance* instance = scene->requestNewInstance(toFreeList);
+            instance->setVisible(chunk->getIsInstanceVisible());
             threadPool.enqueue([chunk, instance] { chunk->createInstance(scene, instance); });
         }
         else

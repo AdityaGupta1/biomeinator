@@ -105,9 +105,10 @@ public:
 
     void setMarkedForDestruction(bool mark = true);
 
+    bool getIsInstanceVisible() const;
     void setInstanceVisible(bool visible);
 
-    glm::ivec2 getChunkPos();
+    glm::ivec2 getChunkPos() const;
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
 };
