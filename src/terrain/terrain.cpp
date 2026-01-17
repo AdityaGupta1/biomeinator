@@ -36,6 +36,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <glm/gtx/component_wise.hpp>
 
 #define RENDER_DISTANCE 20
+#define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 
 namespace Terrain
 {
@@ -115,8 +116,13 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minChunkPos = glm::min(currentChunkPos, lastChunkPos) - RENDER_DISTANCE;
-        const glm::ivec2 maxChunkPos = glm::max(currentChunkPos, lastChunkPos) + RENDER_DISTANCE;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLAS_DISTANCE;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLAS_DISTANCE;
+        const glm::ivec2 minLastChunkPos = lastChunkPos - CREATE_BLAS_DISTANCE;
+        const glm::ivec2 maxLastChunkPos = lastChunkPos + CREATE_BLAS_DISTANCE;
+
+        const glm::ivec2 minChunkPos = glm::min(minCurrentChunkPos, minLastChunkPos);
+        const glm::ivec2 maxChunkPos = glm::max(maxCurrentChunkPos, maxLastChunkPos);
 
         // this combined region logic will become a problem if I ever add teleportation logic (since the region could
         // become huge)
@@ -158,11 +164,13 @@ void update(ToFreeList& toFreeList)
                     {
                         const glm::ivec2 chunkPos = glm::ivec2(chunkX, chunkZ);
 
-                        const bool inCurrentRenderDistance =
-                            glm::compMax(glm::abs(chunkPos - currentChunkPos)) <= RENDER_DISTANCE;
-                        const bool inLastRenderDistance =
-                            glm::compMax(glm::abs(chunkPos - lastChunkPos)) <= RENDER_DISTANCE;
-                        if (!inCurrentRenderDistance && !inLastRenderDistance)
+                        const int distToCurrentChunk = glm::compMax(glm::abs(chunkPos - currentChunkPos));
+                        const bool inCurrentRenderDistance = distToCurrentChunk <= RENDER_DISTANCE;
+                        const bool inCurrentCreateBlasDistance = distToCurrentChunk <= CREATE_BLAS_DISTANCE;
+                        const int distToLastChunk = glm::compMax(glm::abs(chunkPos - lastChunkPos));
+                        const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
+
+                        if (!inCurrentCreateBlasDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
@@ -170,9 +178,10 @@ void update(ToFreeList& toFreeList)
                         Chunk* chunk = region.getOrCreateChunk(chunkPos);
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentRenderDistance)
+                        if (inCurrentCreateBlasDistance)
                         {
                             chunk->setMarkedForDestruction(false);
+                            chunk->setInstanceVisible(inCurrentRenderDistance);
 
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
@@ -186,8 +195,10 @@ void update(ToFreeList& toFreeList)
                                 chunksToCreateInstance.push_back(chunk);
                             }
                         }
-                        else if (inLastRenderDistance)
+                        else if (inLastCreateBlasDistance)
                         {
+                            chunk->setInstanceVisible(false);
+
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {
                                 chunk->setMarkedForDestruction();

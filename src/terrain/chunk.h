@@ -77,6 +77,7 @@ private:
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
+    bool isInstanceVisible{ false };
 
     std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
 
@@ -100,6 +101,8 @@ public:
     void setState(ChunkState newState);
 
     void setMarkedForDestruction(bool mark = true);
+
+    void setInstanceVisible(bool visible);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
 };
