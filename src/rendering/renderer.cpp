@@ -1555,7 +1555,7 @@ void render()
             sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
             sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            sl::Resource motionResource = makeSlResource(&motionTarget, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            sl::Resource motionResource = makeSlResource(&motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
             sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1782,6 +1782,8 @@ void render()
 
                 cmdList->SetComputeRootUnorderedAccessView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
                 // clang-format on
+
+                motionTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // for SL later on
 
                 const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, TEMPORAL_REUSE_WORKGROUP_SIZE_X);
                 const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, TEMPORAL_REUSE_WORKGROUP_SIZE_Y);
