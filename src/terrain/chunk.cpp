@@ -62,6 +62,13 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
             {
                 this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
                 neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+
+                if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+                {
+                    this->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel);
+                }
+
+                // at this point, this chunk cannot have blocks, so we don't need to update neighborChunk->numNeighborsWithBlocks
             }
         }
     }
@@ -94,7 +101,6 @@ void Chunk::generateBlocks()
 
     this->setState(ChunkState::HAS_BLOCKS);
 
-    uint thisNumNeighborsWithBlocks = 0;
     for (Chunk* neighbor : this->neighbors)
     {
         if (neighbor == nullptr)
@@ -102,26 +108,18 @@ void Chunk::generateBlocks()
             continue;
         }
 
-        if (neighbor->getState() >= ChunkState::HAS_BLOCKS)
-        {
-            ++thisNumNeighborsWithBlocks;
-        }
-
-        uint neighborNumNeighborsWithBlocks = neighbor->numNeighborsWithBlocks.load(std::memory_order_acquire);
-        ++neighborNumNeighborsWithBlocks;
+        const uint neighborNumNeighborsWithBlocks =
+            neighbor->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
         if (neighborNumNeighborsWithBlocks == 4)
         {
             neighbor->onNeighborsHaveBlocks();
         }
-        neighbor->numNeighborsWithBlocks.store(neighborNumNeighborsWithBlocks, std::memory_order_release);
     }
 
-    if (thisNumNeighborsWithBlocks == 4)
+    if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4)
     {
         this->onNeighborsHaveBlocks();
     }
-
-    this->numNeighborsWithBlocks.store(thisNumNeighborsWithBlocks, std::memory_order_release);
 }
 
 void Chunk::onNeighborsHaveBlocks()
