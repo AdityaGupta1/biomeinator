@@ -29,13 +29,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <algorithm>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/component_wise.hpp>
 
-#define RENDER_DISTANCE 15
-
-#define DEBUG_SINGLE_THREAD 0
+#define RENDER_DISTANCE 20
 
 namespace Terrain
 {
@@ -58,7 +57,14 @@ struct IVec2Hash
     }
 };
 
+struct ChunkWithDistance
+{
+    Chunk* chunk;
+    int distance;
+};
+
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
+static std::vector<ChunkWithDistance> chunksToGenerateBlocks;
 static std::vector<Chunk*> chunksToCreateInstance;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
@@ -174,13 +180,8 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
-#if DEBUG_SINGLE_THREAD == 0
-                                threadPool.enqueue([chunk] {
-                                    chunk->generateBlocks();
-                                });
-#else
-                                chunk->generateBlocks();
-#endif
+                                const int distance = glm::compAdd(glm::abs(chunkPos - currentChunkPos));
+                                chunksToGenerateBlocks.push_back({ chunk, distance });
                             }
                             else if (chunkState == ChunkState::HAS_BLOCKS)
                             {
@@ -203,17 +204,25 @@ void update(ToFreeList& toFreeList)
             }
         }
 
+        std::sort(chunksToGenerateBlocks.begin(), chunksToGenerateBlocks.end(),
+            [](const ChunkWithDistance& a, const ChunkWithDistance& b) {
+                return a.distance < b.distance;
+            });
+        for (const ChunkWithDistance& chunkWithDistance : chunksToGenerateBlocks)
+        {
+            threadPool.enqueue([chunk = chunkWithDistance.chunk] {
+                chunk->generateBlocks();
+            });
+        }
+        chunksToGenerateBlocks.clear();
+
         for (Chunk* chunk : chunksToCreateInstance)
         {
             Instance* instance = scene->requestNewInstance(toFreeList);
             chunk->setState(ChunkState::GENERATING_GEOMETRY);
-#if DEBUG_SINGLE_THREAD == 0
             threadPool.enqueue([chunk, instance] {
                 chunk->createInstance(scene, instance);
             });
-#else
-            chunk->createInstance(scene, instance);
-#endif
         }
         chunksToCreateInstance.clear();
 
