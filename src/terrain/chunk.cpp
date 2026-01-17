@@ -108,8 +108,12 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
 
 bool Chunk::isBlockAir(ivec3 pos_CS)
 {
-    if (glm::compMin(pos_CS) < 0 ||
-        glm::any(glm::greaterThanEqual(pos_CS, glm::ivec3(CHUNK_SIZE_XZ, CHUNK_SIZE_Y, CHUNK_SIZE_XZ))))
+    if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
+    {
+        return true;
+    }
+
+    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) > CHUNK_SIZE_XZ)
     {
         // TODO: properly account for blocks in neighboring chunks
         return true;
@@ -117,22 +121,23 @@ bool Chunk::isBlockAir(ivec3 pos_CS)
     return blocks[blockPosToIdx(uvec3(pos_CS))] == Block::AIR;
 }
 
+// first four match NeighborDirection enum
 static constexpr ivec3 faceOffsets[6] = {
     ivec3(1, 0, 0),  // +x
+    ivec3(0, 0, 1),  // +z
     ivec3(-1, 0, 0), // -x
+    ivec3(0, 0, -1), // -z
     ivec3(0, 1, 0),  // +y
     ivec3(0, -1, 0), // -y
-    ivec3(0, 0, 1),  // +z
-    ivec3(0, 0, -1), // -z
 };
 
 static constexpr ivec3 allFaceVertPositions[24] = {
     ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
     ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
     ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
     ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
 };
 
 static constexpr uvec2 uvOffsets[4] = {
