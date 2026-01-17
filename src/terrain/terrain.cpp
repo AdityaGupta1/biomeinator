@@ -228,6 +228,7 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
+    // do at most one instance build per frame to help reduce stuttering
     if (!chunksToCreateInstance.empty())
     {
         Chunk* chunk = chunksToCreateInstance.front();
