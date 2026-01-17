@@ -129,7 +129,6 @@ public:
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
 
     Region* getNeighbor(NeighborDirection dir) const;
-
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);

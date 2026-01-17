@@ -178,21 +178,20 @@ void update(ToFreeList& toFreeList)
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
                                 chunksToGenerateBlocks.push_back(chunk);
                             }
-
-                            if (inCurrentCreateBlasDistance)
-                            {
-                                chunk->setMarkedForDestruction(false);
-                                chunk->setInstanceVisible(inCurrentRenderDistance);
-
-                                if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
-                                {
-                                    chunk->setState(ChunkState::GENERATING_GEOMETRY);
-                                    chunksToCreateInstance.push_back(chunk);
-                                }
-                            }
                         }
 
-                        if (!inCurrentCreateBlasDistance && inLastCreateBlasDistance)
+                        if (inCurrentCreateBlasDistance)
+                        {
+                            chunk->setMarkedForDestruction(false);
+                            chunk->setInstanceVisible(inCurrentRenderDistance);
+
+                            if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
+                            {
+                                chunk->setState(ChunkState::GENERATING_GEOMETRY);
+                                chunksToCreateInstance.push_back(chunk);
+                            }
+                        }
+                        else if (inLastCreateBlasDistance)
                         {
                             chunk->setInstanceVisible(false);
 

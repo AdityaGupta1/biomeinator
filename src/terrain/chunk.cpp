@@ -40,8 +40,6 @@ using namespace DirectX;
 Chunk::Chunk(ivec2 chunkPos, Region* region)
 	: chunkPos(chunkPos), region(region)
 {
-    using enum NeighborDirection;
-
     const glm::ivec2 thisRegionPosChunks = this->region->regionPosChunks;
     for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
     {
@@ -165,23 +163,6 @@ static constexpr ivec3 faceOffsets[6] = {
     ivec3(0, -1, 0), // -y
 };
 
-static constexpr ivec3 allFaceVertPositions[24] = {
-    ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
-    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-    ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
-    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
-    ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
-    ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-};
-
-static constexpr uvec2 uvOffsets[4] = {
-    uvec2(1, 0),
-    uvec2(0, 0),
-    uvec2(0, 1),
-    uvec2(1, 1),
-};
-static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
-
 bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
 {
     if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
@@ -209,6 +190,23 @@ bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
 
     return block == Block::AIR;
 }
+
+static constexpr ivec3 allFaceVertPositions[24] = {
+    ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
+    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
+    ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
+    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
+    ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
+    ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
+};
+
+static constexpr uvec2 uvOffsets[4] = {
+    uvec2(1, 0),
+    uvec2(0, 0),
+    uvec2(0, 1),
+    uvec2(1, 1),
+};
+static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
