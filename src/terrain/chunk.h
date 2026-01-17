@@ -30,6 +30,7 @@ enum class ChunkState : uint8_t
     NEEDS_BLOCKS,
     GENERATING_BLOCKS,
     HAS_BLOCKS,
+    NEIGHBORS_HAVE_BLOCKS,
     GENERATING_GEOMETRY,
     HAS_GEOMETRY,
 };
@@ -76,6 +77,7 @@ private:
     Region* const region;
 
     std::array<Chunk*, 4> neighbors{};
+    std::atomic_uint32_t numNeighborsWithBlocks{ 0 };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
@@ -93,13 +95,10 @@ public:
     void generateBlocks();
 
     void createInstance(Scene* scene, Instance* instance);
-
     void destroyInstance(ToFreeList& toFreeList);
-
     Instance* getInstance() const;
 
     ChunkState getState() const;
-
     void setState(ChunkState newState);
 
     void setMarkedForDestruction(bool mark = true);

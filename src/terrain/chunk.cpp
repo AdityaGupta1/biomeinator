@@ -93,7 +93,37 @@ void Chunk::generateBlocks()
     }
 
     this->setState(ChunkState::HAS_BLOCKS);
-    Terrain::setDirty(); // needed to force an update in case the player is not moving
+
+    uint thisNumNeighborsWithBlocks = 0;
+    for (Chunk* neighbor : this->neighbors)
+    {
+        if (neighbor == nullptr)
+        {
+            continue;
+        }
+
+        if (neighbor->getState() >= ChunkState::HAS_BLOCKS)
+        {
+            ++thisNumNeighborsWithBlocks;
+        }
+
+        uint neighborNumNeighborsWithBlocks = neighbor->numNeighborsWithBlocks.load(std::memory_order_acquire);
+        ++neighborNumNeighborsWithBlocks;
+        if (neighborNumNeighborsWithBlocks == 4)
+        {
+            neighbor->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+            Terrain::setDirty();
+        }
+        neighbor->numNeighborsWithBlocks.store(neighborNumNeighborsWithBlocks, std::memory_order_release);
+    }
+
+    if (thisNumNeighborsWithBlocks == 4)
+    {
+        this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+        Terrain::setDirty();
+    }
+
+    this->numNeighborsWithBlocks.store(thisNumNeighborsWithBlocks, std::memory_order_release);
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -113,7 +143,7 @@ bool Chunk::isBlockAir(ivec3 pos_CS)
         return true;
     }
 
-    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) > CHUNK_SIZE_XZ)
+    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= CHUNK_SIZE_XZ)
     {
         // TODO: properly account for blocks in neighboring chunks
         return true;
@@ -251,7 +281,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
 {
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
-    this->setState(ChunkState::HAS_BLOCKS);
+    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
     this->isMarkedForDestruction = false;
 }
 
