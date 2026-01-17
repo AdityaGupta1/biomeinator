@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 #include <algorithm>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -65,7 +66,7 @@ struct ChunkWithDistance
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
 static std::vector<ChunkWithDistance> chunksToGenerateBlocks;
-static std::vector<Chunk*> chunksToCreateInstance;
+static std::deque<Chunk*> chunksToCreateInstance;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
@@ -179,6 +180,7 @@ void update(ToFreeList& toFreeList)
                             }
                             else if (chunkState == ChunkState::HAS_BLOCKS)
                             {
+                                chunk->setState(ChunkState::GENERATING_GEOMETRY);
                                 chunksToCreateInstance.push_back(chunk);
                             }
                         }
@@ -210,17 +212,17 @@ void update(ToFreeList& toFreeList)
         }
         chunksToGenerateBlocks.clear();
 
-        for (Chunk* chunk : chunksToCreateInstance)
-        {
-            Instance* instance = scene->requestNewInstance(toFreeList);
-            chunk->setState(ChunkState::GENERATING_GEOMETRY);
-            threadPool.enqueue([chunk, instance] {
-                chunk->createInstance(scene, instance);
-            });
-        }
-        chunksToCreateInstance.clear();
-
         lastChunkPos = currentChunkPos;
+    }
+
+    if (!chunksToCreateInstance.empty())
+    {
+        Chunk* chunk = chunksToCreateInstance.front();
+        chunksToCreateInstance.pop_front();
+        Instance* instance = scene->requestNewInstance(toFreeList);
+        threadPool.enqueue([chunk, instance] {
+            chunk->createInstance(scene, instance);
+        });
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;
