@@ -76,6 +76,7 @@ private:
     const glm::ivec2 chunkPos;
     Region* const region;
 
+    std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 

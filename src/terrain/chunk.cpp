@@ -60,8 +60,9 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
             Chunk* neighborChunk = neighborRegion->getChunk(neighborChunkPos);
             if (neighborChunk != nullptr)
             {
-                this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
-                neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+                this->atomicNeighbors[static_cast<size_t>(dir)].store(neighborChunk, std::memory_order_release);
+                neighborChunk->atomicNeighbors[static_cast<size_t>(oppositeNeighborDirection(dir))].store(
+                    this, std::memory_order_release);
 
                 if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
                 {
@@ -101,8 +102,9 @@ void Chunk::generateBlocks()
 
     this->setState(ChunkState::HAS_BLOCKS);
 
-    for (Chunk* neighbor : this->neighbors)
+    for (std::atomic<Chunk*>& atomicNeighbor : this->atomicNeighbors)
     {
+        Chunk* neighbor = atomicNeighbor.load(std::memory_order_acquire);
         if (neighbor == nullptr)
         {
             continue;
@@ -125,6 +127,11 @@ void Chunk::generateBlocks()
 void Chunk::onNeighborsHaveBlocks()
 {
     this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        this->neighbors[i] = this->atomicNeighbors[i].load(std::memory_order_acquire);
+    }
 
     // TODO: build segment array
 
