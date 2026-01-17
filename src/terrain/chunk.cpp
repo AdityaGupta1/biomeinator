@@ -90,11 +90,11 @@ bool Chunk::isBlockAir(ivec3 pos_CS)
 }
 
 static constexpr ivec3 faceOffsets[6] = {
-    ivec3(1, 0, 0), // +x
+    ivec3(1, 0, 0),  // +x
     ivec3(-1, 0, 0), // -x
-    ivec3(0, 1, 0), // +y
+    ivec3(0, 1, 0),  // +y
     ivec3(0, -1, 0), // -y
-    ivec3(0, 0, 1), // +z
+    ivec3(0, 0, 1),  // +z
     ivec3(0, 0, -1), // -z
 };
 
@@ -133,7 +133,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     std::vector<uint32_t> indices;
     std::vector<uint32_t> emissiveTriangleIdxs;
 
-    const size_t numVertsToReserve = 1 << 15;
+    constexpr size_t numVertsToReserve = 1 << 15;
     verts.reserve(numVertsToReserve);
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
@@ -272,11 +272,6 @@ Region::Region(glm::ivec2 regionPos)
     : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
 {}
 
-Chunk* Region::operator[](glm::ivec2 chunkPos)
-{
-    return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
-}
-
 Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
 {
     const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
@@ -284,7 +279,7 @@ Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
     {
         this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     }
-    return (*this)[chunkPos];
+    return this->chunks[chunkIdx].get();
 }
 
 void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)

@@ -67,9 +67,9 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
     ASSERT(this->isGeometrySet);
 
-    const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
-
     this->host_areaLights.reserve(this->host_areaLights.size() + triangleIdxs.size());
+
+    const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
     for (const uint32_t triangleIdx : triangleIdxs)
     {
@@ -83,8 +83,8 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
             i2 = this->host_idxs[i2];
         }
 
+        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size());
         this->host_areaLights.emplace_back();
-        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size() - 1);
         AreaLight& light = this->host_areaLights.back();
 
         light.instanceId = this->id;

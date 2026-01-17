@@ -147,7 +147,9 @@ private:
 
     void freeInstance(Instance* instance);
 
+    // returns true if TLAS is now dirty
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);

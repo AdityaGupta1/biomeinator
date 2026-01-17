@@ -122,7 +122,6 @@ public:
 
     Region(glm::ivec2 regionPos);
 
-    Chunk* operator[](glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
 
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);

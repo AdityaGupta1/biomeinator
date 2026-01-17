@@ -25,15 +25,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "util/glm_util.h"
 
+#include <algorithm>
+#include <deque>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
-#include <deque>
-#include <algorithm>
-
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/component_wise.hpp>
 
 #define RENDER_DISTANCE 20
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
@@ -59,14 +57,8 @@ struct IVec2Hash
     }
 };
 
-struct ChunkWithDistance
-{
-    Chunk* chunk;
-    int distance;
-};
-
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
-static std::vector<ChunkWithDistance> chunksToGenerateBlocks;
+static std::vector<Chunk*> chunksToGenerateBlocks;
 static std::deque<Chunk*> chunksToCreateInstance;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
@@ -124,7 +116,7 @@ void update(ToFreeList& toFreeList)
         const glm::ivec2 minChunkPos = glm::min(minCurrentChunkPos, minLastChunkPos);
         const glm::ivec2 maxChunkPos = glm::max(maxCurrentChunkPos, maxLastChunkPos);
 
-        // this combined region logic will become a problem if I ever add teleportation logic (since the region could
+        // this combined region logic will become a problem if I ever add teleportation (since the region could
         // become huge)
         const glm::ivec2 minRegionPos =
             glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(REGION_SIDE_LENGTH)));
@@ -164,10 +156,10 @@ void update(ToFreeList& toFreeList)
                     {
                         const glm::ivec2 chunkPos = glm::ivec2(chunkX, chunkZ);
 
-                        const int distToCurrentChunk = glm::compMax(glm::abs(chunkPos - currentChunkPos));
+                        const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= RENDER_DISTANCE;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= CREATE_BLAS_DISTANCE;
-                        const int distToLastChunk = glm::compMax(glm::abs(chunkPos - lastChunkPos));
+                        const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
 
                         if (!inCurrentCreateBlasDistance && !inLastCreateBlasDistance)
@@ -186,8 +178,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
-                                const int distance = glm::compAdd(glm::abs(chunkPos - currentChunkPos));
-                                chunksToGenerateBlocks.push_back({ chunk, distance });
+                                chunksToGenerateBlocks.push_back(chunk);
                             }
                             else if (chunkState == ChunkState::HAS_BLOCKS)
                             {
@@ -201,10 +192,12 @@ void update(ToFreeList& toFreeList)
 
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {
+                                // set this chunk to be destroyed once its geometry is generated
                                 chunk->setMarkedForDestruction();
                             }
                             else if (chunkState == ChunkState::HAS_GEOMETRY)
                             {
+                                // destroy this chunk immediately (later in this function)
                                 addChunkToDestroy(chunk);
                             }
                         }
@@ -213,13 +206,9 @@ void update(ToFreeList& toFreeList)
             }
         }
 
-        std::sort(chunksToGenerateBlocks.begin(), chunksToGenerateBlocks.end(),
-            [](const ChunkWithDistance& a, const ChunkWithDistance& b) {
-                return a.distance < b.distance;
-            });
-        for (const ChunkWithDistance& chunkWithDistance : chunksToGenerateBlocks)
+        for (Chunk* chunk : chunksToGenerateBlocks)
         {
-            threadPool.enqueue([chunk = chunkWithDistance.chunk] {
+            threadPool.enqueue([chunk] {
                 chunk->generateBlocks();
             });
         }
@@ -228,7 +217,7 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    // do at most one instance build per frame to help reduce stuttering
+    // limited to one build per frame to help reduce stuttering
     if (!chunksToCreateInstance.empty())
     {
         Chunk* chunk = chunksToCreateInstance.front();
