@@ -47,14 +47,16 @@ constexpr glm::ivec2 neighborOffset(NeighborDirection dir)
     switch (dir)
     {
         case NeighborDirection::X_POS:
-            return glm::ivec2(1, 0);
+            return { 1, 0 };
         case NeighborDirection::Z_POS:
-            return glm::ivec2(0, 1);
+            return { 0, 1};
         case NeighborDirection::X_NEG:
-            return glm::ivec2(-1, 0);
+            return { -1, 0 };
         case NeighborDirection::Z_NEG:
-            return glm::ivec2(0, -1);
+            return { 0, -1 };
     }
+
+    return { 0, 0 };
 }
 
 constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
