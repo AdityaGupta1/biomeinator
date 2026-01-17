@@ -163,8 +163,7 @@ void update(ToFreeList& toFreeList)
                         const bool inCurrentCreateBlocksDistance = distToCurrentChunk <= CREATE_BLOCKS_DISTANCE;
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
-
-                        if (!inCurrentCreateBlasDistance && !inLastCreateBlasDistance)
+                        if (!inCurrentCreateBlocksDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
