@@ -102,6 +102,8 @@ void Chunk::generateBlocks()
 
     this->setState(ChunkState::HAS_BLOCKS);
 
+    bool setTerrainDirty = false;
+
     for (std::atomic<Chunk*>& atomicNeighbor : this->atomicNeighbors)
     {
         Chunk* neighbor = atomicNeighbor.load(std::memory_order_acquire);
@@ -115,12 +117,19 @@ void Chunk::generateBlocks()
         if (neighborNumNeighborsWithBlocks == 4)
         {
             neighbor->onNeighborsHaveBlocks();
+            setTerrainDirty = true;
         }
     }
 
     if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4)
     {
         this->onNeighborsHaveBlocks();
+        setTerrainDirty = true;
+    }
+
+    if (setTerrainDirty)
+    {
+        Terrain::setDirty();
     }
 }
 
@@ -134,8 +143,6 @@ void Chunk::onNeighborsHaveBlocks()
     }
 
     // TODO: build segment array
-
-    Terrain::setDirty();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
