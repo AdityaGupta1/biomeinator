@@ -77,7 +77,7 @@ private:
     Region* const region;
 
     std::array<Chunk*, 4> neighbors{};
-    std::atomic_uint32_t numNeighborsWithBlocks{ 0 };
+    std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
@@ -93,6 +93,7 @@ public:
     Chunk(glm::ivec2 chunkPos, Region* region);
 
     void generateBlocks();
+    void onNeighborsHaveBlocks();
 
     void createInstance(Scene* scene, Instance* instance);
     void destroyInstance(ToFreeList& toFreeList);

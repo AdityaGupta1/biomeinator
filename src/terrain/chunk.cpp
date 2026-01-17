@@ -111,19 +111,26 @@ void Chunk::generateBlocks()
         ++neighborNumNeighborsWithBlocks;
         if (neighborNumNeighborsWithBlocks == 4)
         {
-            neighbor->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
-            Terrain::setDirty();
+            neighbor->onNeighborsHaveBlocks();
         }
         neighbor->numNeighborsWithBlocks.store(neighborNumNeighborsWithBlocks, std::memory_order_release);
     }
 
     if (thisNumNeighborsWithBlocks == 4)
     {
-        this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
-        Terrain::setDirty();
+        this->onNeighborsHaveBlocks();
     }
 
     this->numNeighborsWithBlocks.store(thisNumNeighborsWithBlocks, std::memory_order_release);
+}
+
+void Chunk::onNeighborsHaveBlocks()
+{
+    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+
+    // TODO: build segment array
+
+    Terrain::setDirty();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)

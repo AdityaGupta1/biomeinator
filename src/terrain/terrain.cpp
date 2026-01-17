@@ -33,7 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include <vector>
 
-#define RENDER_DISTANCE 10
+#define RENDER_DISTANCE 20
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
