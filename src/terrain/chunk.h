@@ -73,7 +73,9 @@ class Chunk
 {
 private:
     const glm::ivec2 chunkPos;
-    const Region* region;
+    Region* const region;
+
+    std::array<Chunk*, 4> neighbors{};
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     bool isMarkedForDestruction{ false };
@@ -122,7 +124,10 @@ public:
 
     Region(glm::ivec2 regionPos);
 
+    Chunk* getChunk(glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+
+    Region* getNeighbor(NeighborDirection dir) const;
 
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
 

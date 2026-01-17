@@ -25,6 +25,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/component_wise.hpp>
+
 #include <DirectXMath.h>
 #include <vector>
 
@@ -36,7 +39,33 @@ using namespace DirectX;
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
 	: chunkPos(chunkPos), region(region)
-{}
+{
+    using enum NeighborDirection;
+
+    const glm::ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+    {
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
+
+        Region* neighborRegion = this->region;
+        const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
+        if (glm::compMin(neighborChunkPos_region) < 0 || glm::compMax(neighborChunkPos_region) >= REGION_SIDE_LENGTH)
+        {
+            neighborRegion = neighborRegion->getNeighbor(dir);
+        }
+
+        if (neighborRegion != nullptr)
+        {
+            Chunk* neighborChunk = neighborRegion->getChunk(neighborChunkPos);
+            if (neighborChunk != nullptr)
+            {
+                this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
+                neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+            }
+        }
+    }
+}
 
 void Chunk::generateBlocks()
 {
@@ -79,9 +108,8 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
 
 bool Chunk::isBlockAir(ivec3 pos_CS)
 {
-    if (pos_CS.x < 0 || pos_CS.x >= static_cast<int>(CHUNK_SIZE_XZ) ||
-        pos_CS.y < 0 || pos_CS.y >= static_cast<int>(CHUNK_SIZE_Y) ||
-        pos_CS.z < 0 || pos_CS.z >= static_cast<int>(CHUNK_SIZE_XZ))
+    if (glm::compMin(pos_CS) < 0 ||
+        glm::any(glm::greaterThanEqual(pos_CS, glm::ivec3(CHUNK_SIZE_XZ, CHUNK_SIZE_Y, CHUNK_SIZE_XZ))))
     {
         // TODO: properly account for blocks in neighboring chunks
         return true;
@@ -272,6 +300,11 @@ Region::Region(glm::ivec2 regionPos)
     : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
 {}
 
+Chunk* Region::getChunk(glm::ivec2 chunkPos)
+{
+    return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
+}
+
 Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
 {
     const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
@@ -280,6 +313,11 @@ Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
         this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     }
     return this->chunks[chunkIdx].get();
+}
+
+Region* Region::getNeighbor(NeighborDirection dir) const
+{
+    return this->neighbors[static_cast<size_t>(dir)];
 }
 
 void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
