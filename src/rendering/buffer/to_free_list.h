@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 
 class ManagedBuffer;
-class ManagedBufferSection;
+struct ManagedBufferSection;
 class Instance;
 class Scene;
 

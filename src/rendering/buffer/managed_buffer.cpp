@@ -153,12 +153,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         }
     }
 
-#ifdef _DEBUG
-    if (!this->options.isResizable)
-    {
-        throw std::runtime_error("ManagedBuffer out of space");
-    }
-#endif
+    ASSERT(this->options.isResizable);
 
     // true if the backmost section of the toFreeList is empty and we can resize it to fit the new section
     bool useBackFreeSection = false;
@@ -190,7 +185,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-    ASSERT(!this->options.isMapped, "Cannot resize mapped ManagedBuffer");
+    void* host_oldBuffer = host_buffer;
 
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
@@ -199,14 +194,25 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
     this->bufferSizeBytes = newSizeBytes;
     this->setBufferName();
 
-    BufferHelper::copyBufferRegion(cmdList,
-                                   this->dev_buffer.Get(),
-                                   this->initialResourceState,
-                                   0,
-                                   dev_oldBuffer,
-                                   this->initialResourceState,
-                                   0,
-                                   oldSizeBytes);
+    if (this->options.isMapped)
+    {
+        this->map();
+
+        std::memcpy(this->host_buffer, host_oldBuffer, oldSizeBytes);
+
+        dev_oldBuffer->Unmap(0, nullptr);
+    }
+    else
+    {
+        BufferHelper::copyBufferRegion(cmdList,
+                                       this->dev_buffer.Get(),
+                                       this->initialResourceState,
+                                       0,
+                                       dev_oldBuffer,
+                                       this->initialResourceState,
+                                       0,
+                                       oldSizeBytes);
+    }
 
     const uint32_t diffSizeBytes = newSizeBytes - oldSizeBytes;
 

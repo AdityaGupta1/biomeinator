@@ -192,6 +192,8 @@ void init()
 
     camera.init(XMConvertToRadians(defaultFovYDegrees));
 
+    AcsHelper::init();
+
     scene.init();
 
     initRootSignature();

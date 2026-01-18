@@ -49,6 +49,8 @@ struct BlasBuildInputs
     GeometryWrapper* outGeoWrapper{ nullptr };
 };
 
+void init();
+
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 const std::vector<BlasBuildInputs>& allInputs);

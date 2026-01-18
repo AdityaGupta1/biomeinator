@@ -145,11 +145,11 @@ void Scene::init()
 {
     // these resources can be dynamically resized later
     this->managedVertsBuffer.setName(L"scene verts");
-    this->managedVertsBuffer.init(1 << 14 /*bytes*/);
+    this->managedVertsBuffer.init(1 << 16 /*bytes*/);
     this->managedIdxsBuffer.setName(L"scene idxs");
-    this->managedIdxsBuffer.init(1 << 12 /*bytes*/);
+    this->managedIdxsBuffer.init(1 << 14 /*bytes*/);
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init(1 << 12 /*bytes*/);
+    this->managedPerTriDatasBuffer.init(1 << 14 /*bytes*/);
 
     this->maxNumInstances = 1 << 8;
     this->mappedInstanceDescsArray.setName(L"scene instanceDescs");
