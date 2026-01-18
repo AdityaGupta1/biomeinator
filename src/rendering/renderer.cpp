@@ -39,6 +39,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
+#include "util/ring_buffer.h"
 #include "util/util.h"
 
 #include <chrono>
@@ -67,6 +68,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <imgui.h>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx12.h>
+#include <implot.h>
 
 #include <sl.h>
 #include <sl_consts.h>
@@ -495,6 +497,13 @@ static const std::vector<sl::DLSSMode> dlssModes = {
 
 static sl::DLSSDOptions dlssdOptions;
 
+struct FrameTimeMeasurement
+{
+    float frameIdx;
+    float timeMs;
+};
+static RingBuffer<FrameTimeMeasurement, 600> frameTimeBuffer{};
+
 void resize()
 {
     if (!swapChain)
@@ -659,6 +668,8 @@ void resize()
     const uint32_t jitterHaltonSequenceLength =
         static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
+
+    frameTimeBuffer.clear();
 }
 
 static void initCommand()
@@ -1192,6 +1203,7 @@ static void initImgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = NULL;
@@ -1217,7 +1229,7 @@ static void initImgui()
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
 }
 
-static int frameCount = 0;
+static uint32_t frameCount = 0;
 static double elapsedTime = 0.0;
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static int lastFps = 0;
@@ -1232,9 +1244,6 @@ static void updateFps(double deltaTime)
         lastFps = frameCount;
         frameCount = 0;
         elapsedTime = 0.0;
-
-        std::wstring title = L"Biomeinator - FPS: " + std::to_wstring(lastFps);
-        SetWindowTextW(hwnd, title.c_str());
     }
 }
 
@@ -1409,75 +1418,109 @@ static void imguiBeginFrame()
 static bool needsResize = false;
 static bool didPathTracingSettingsChange = false;
 
-static void imguiEndFrame()
+static void imguiEndFrame(double deltaTime)
 {
     didPathTracingSettingsChange = false;
 
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+    ImGui::SetNextWindowPos(ImVec2(10, 10));
 
-    const ImGuiWindowFlags windowFlags =
-        ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_AlwaysAutoResize;
-    ImGui::Begin("Settings", nullptr, windowFlags);
-
-    didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-    SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
-    needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
-
-    SettingsGuiHelpers::VerticalSpacing();
-    SettingsGuiHelpers::SectionTitle("Sampling");
-    didPathTracingSettingsChange |=
-        SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
-    const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
-    if (samplingMode == SamplingMode::RESTIR)
+    constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus;
+    if (ImGui::Begin("Settings", nullptr, windowFlags | ImGuiWindowFlags_AlwaysAutoResize))
     {
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
-        SettingsGuiHelpers::Tooltip("Adds visibility to the RIS target function, giving much better sample reuse and signal quality in exchange for some darkening bias");
-    }
-
-    SettingsGuiHelpers::VerticalSpacing();
-    SettingsGuiHelpers::SectionTitle("Antialiasing");
-    const bool didAntialiasingChange =
-        SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
-    needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
-    didPathTracingSettingsChange |= didAntialiasingChange;
-    const AntialiasingMode antialiasingMode =
-        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
-
-    if (antialiasingMode == AntialiasingMode::ACCUMULATE)
-    {
-        ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
-    }
-    else if (antialiasingMode == AntialiasingMode::DLSS)
-    {
-        needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
-    }
-
-    SettingsGuiHelpers::VerticalSpacing();
-    SettingsGuiHelpers::SectionTitle("World");
-    SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 50.f);
-
-    SettingsGuiHelpers::VerticalSpacing();
-
-    if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        SettingsGuiHelpers::SectionTitle("Debug view");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+        SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+        needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
 
         SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Debug parameters");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+        SettingsGuiHelpers::SectionTitle("Sampling");
+        didPathTracingSettingsChange |=
+            SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+        const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
+        if (samplingMode == SamplingMode::RESTIR)
+        {
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
+            SettingsGuiHelpers::Tooltip("Adds visibility to the RIS target function, giving much better sample reuse and signal quality in exchange for some darkening bias");
+        }
+
+        SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("Antialiasing");
+        const bool didAntialiasingChange =
+            SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+        needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
+        didPathTracingSettingsChange |= didAntialiasingChange;
+        const AntialiasingMode antialiasingMode =
+            static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+
+        if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+        {
+            ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
+        }
+        else if (antialiasingMode == AntialiasingMode::DLSS)
+        {
+            needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+        }
+
+        SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("World");
+        SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 50.f);
+
+        SettingsGuiHelpers::VerticalSpacing();
+
+        if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            SettingsGuiHelpers::SectionTitle("Debug view");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+
+            SettingsGuiHelpers::VerticalSpacing();
+            SettingsGuiHelpers::SectionTitle("Debug parameters");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+        }
+
+        ImGui::End();
     }
 
-    ImGui::End();
+    constexpr int performanceWindowHeight = 240;
+    ImGui::SetNextWindowPos(ImVec2(10, viewport.Height - 10 - performanceWindowHeight));
+    ImGui::SetNextWindowSize(ImVec2(800, performanceWindowHeight));
+
+    if (ImGui::Begin("Performance", nullptr, windowFlags))
+    {
+        ImGui::Text("FPS: %d", lastFps);
+
+        SettingsGuiHelpers::VerticalSpacing();
+        frameTimeBuffer.push({ static_cast<float>(frameNumber), static_cast<float>(deltaTime) * 1000.f });
+        if (ImPlot::BeginPlot("Frame time", ImVec2(-1, -1)))
+        {
+            static constexpr ImPlotAxisFlags axisFlags = 0;
+            ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);
+            ImPlot::SetupAxisLimits(ImAxis_X1,
+                                    static_cast<int>(frameNumber) - static_cast<int>(frameTimeBuffer.getMaxSize()),
+                                    frameNumber,
+                                    ImGuiCond_Always);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 20);
+            ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+            ImPlot::PlotShaded("Frame time",
+                               &frameTimeBuffer.getData()[0].frameIdx,
+                               &frameTimeBuffer.getData()[0].timeMs,
+                               static_cast<int>(frameTimeBuffer.getSize()),
+                               -INFINITY,
+                               ImPlotItemFlags_NoLegend,
+                               frameTimeBuffer.getOffset(),
+                               sizeof(FrameTimeMeasurement));
+            ImPlot::EndPlot();
+        }
+
+        ImGui::End();
+    }
 
     if (frameNumber == 0)
     {
@@ -1941,7 +1984,7 @@ void render()
 
     if (!testMode)
     {
-        imguiEndFrame();
+        imguiEndFrame(deltaTime);
     }
 
     BufferHelper::stateTransitionResourceBarrier(
@@ -2026,6 +2069,7 @@ void destroy()
 
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     scene.reset();
