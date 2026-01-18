@@ -31,6 +31,7 @@ This project uses various third-party libraries:
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
 - [Dear ImGui](https://github.com/ocornut/imgui) - MIT
+- [ImPlot](https://github.com/epezent/implot) - MIT
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
 - [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) - MIT
 - [Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/) - Microsoft Software License

@@ -143,6 +143,8 @@ set(EXT "${CMAKE_SOURCE_DIR}/external")
 file(GLOB IMGUI_SRC
     "${EXT}/imgui/*.cpp"
     "${EXT}/imgui/*.h"
+    "${EXT}/implot/*.cpp"
+    "${EXT}/implot/*.h"
 )
 
 list(APPEND IMGUI_SRC
@@ -169,6 +171,7 @@ target_include_directories(Biomeinator PRIVATE
     "${EXT}/DirectX-Headers/include/directx"
     "${EXT}/imgui"
     "${EXT}/imgui/backends"
+    "${EXT}/implot"
     "${EXT}/json/include"
     "${EXT}/nvapi"
     "${EXT}/stb/include"
