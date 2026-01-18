@@ -1201,6 +1201,7 @@ static void initImgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = NULL;
@@ -1224,9 +1225,6 @@ static void initImgui()
     { sharedDescHeapAlloc.free(cpuHandle, gpuHandle); };
 
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
-
-    ImGui::CreateContext();
-    ImPlot::CreateContext();
 }
 
 static uint32_t frameCount = 0;
@@ -2067,9 +2065,9 @@ void destroy()
 
     CHECK_SL_RESULT(slShutdown());
 
-    ImPlot::DestroyContext();
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     scene.reset();
