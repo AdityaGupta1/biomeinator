@@ -65,3 +65,14 @@ void ThreadPool::worker()
         currentTask();
     }
 }
+
+void ThreadPool::enqueue(std::function<void()>&& task)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        ASSERT(!stop);
+        queue.emplace(std::move(task));
+    }
+
+    cv.notify_one();
+}

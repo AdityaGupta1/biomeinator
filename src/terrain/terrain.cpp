@@ -59,12 +59,13 @@ struct IVec2Hash
 };
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
-static std::vector<Chunk*> chunksToGenerateBlocks;
 static std::deque<Chunk*> chunksToCreateInstance;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
+
+static std::vector<std::function<void()>> tasksToEnqueue;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
@@ -176,7 +177,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->setState(ChunkState::GENERATING_BLOCKS);
-                                chunksToGenerateBlocks.push_back(chunk);
+                                tasksToEnqueue.push_back([chunk] { chunk->generateBlocks(); });
                             }
                         }
 
@@ -211,14 +212,6 @@ void update(ToFreeList& toFreeList)
             }
         }
 
-        for (Chunk* chunk : chunksToGenerateBlocks)
-        {
-            threadPool.enqueue([chunk] {
-                chunk->generateBlocks();
-            });
-        }
-        chunksToGenerateBlocks.clear();
-
         lastChunkPos = currentChunkPos;
     }
 
@@ -234,12 +227,18 @@ void update(ToFreeList& toFreeList)
         {
             Instance* instance = scene->requestNewInstance(toFreeList);
             instance->setVisible(chunk->getIsInstanceVisible());
-            threadPool.enqueue([chunk, instance] { chunk->createInstance(scene, instance); });
+            tasksToEnqueue.push_back([chunk, instance] { chunk->createInstance(scene, instance); });
         }
         else
         {
             chunk->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
         }
+    }
+
+    if (!tasksToEnqueue.empty())
+    {
+        threadPool.bulkEnqueue(tasksToEnqueue.begin(), tasksToEnqueue.end());
+        tasksToEnqueue.clear();
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;

@@ -43,8 +43,9 @@ public:
     ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency());
     ~ThreadPool();
 
-    template<class F, class... Args>
-    void enqueue(F&& f, Args&&... args);
+    void enqueue(std::function<void()>&& task);
+    template<class It>
+    void bulkEnqueue(It first, It last);
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;
@@ -52,17 +53,24 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
-template<class F, class... Args>
-void ThreadPool::enqueue(F&& f, Args&&... args)
+template<class It>
+void ThreadPool::bulkEnqueue(It first, It last)
 {
-    using R = std::invoke_result_t<F, Args...>;
-    auto task = std::make_shared<std::packaged_task<R()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-
+    bool wasEmpty;
     {
-        std::lock_guard<std::mutex> lock(this->mutex);
+        std::lock_guard<std::mutex> lock(mutex);
         ASSERT(!stop);
-        this->queue.emplace([task]() { (*task)(); });
+
+        wasEmpty = queue.empty();
+        for (; first != last; ++first)
+        {
+            queue.emplace(std::move(*first));
+        }
     }
 
-    this->cv.notify_one();
+    // if queue was not empty, all workers are currently busy
+    if (wasEmpty)
+    {
+        cv.notify_all();
+    }
 }
