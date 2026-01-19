@@ -98,7 +98,10 @@ void Chunk::generateBlocks()
         }
     }
 
-    this->setState(ChunkState::HAS_BLOCKS);
+    ChunkState s = this->getState();
+    while (s < ChunkState::HAS_BLOCKS &&
+           !this->state.compare_exchange_weak(s, ChunkState::HAS_BLOCKS, std::memory_order_acq_rel))
+    {}
 
     bool setTerrainDirty = false;
 
@@ -133,6 +136,11 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
+    if (this->onNeighborsHaveBlocksOnceFlag.exchange(true, std::memory_order_acq_rel))
+    {
+        return; // this function has already been run
+    }
+
     this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
 
     for (int i = 0; i < 4; ++i)
@@ -210,6 +218,7 @@ static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAUL
 
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
+    ASSERT(this->instance == nullptr);
     this->instance = instance;
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;

@@ -228,12 +228,6 @@ void update(ToFreeList& toFreeList)
     if (!tasksToEnqueue.empty())
     {
         threadPool.bulkEnqueue(tasksToEnqueue.begin(), tasksToEnqueue.end());
-
-        //for (auto& task : tasksToEnqueue)
-        //{
-        //    threadPool.enqueue(std::move(task));
-        //}
-
         tasksToEnqueue.clear();
     }
 
