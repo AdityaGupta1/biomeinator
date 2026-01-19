@@ -190,23 +190,32 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
                            uint32_t newSizeBytes,
                            bool useBackFreeSection)
 {
-    ASSERT(!this->options.isMapped, "Cannot resize mapped ManagedBuffer");
+    void* host_oldBuffer = host_buffer;
 
-    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
+    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
     this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties);
     this->bufferSizeBytes = newSizeBytes;
     this->setBufferName();
 
-    BufferHelper::copyBufferRegion(cmdList,
-                                   this->dev_buffer.Get(),
-                                   this->initialResourceState,
-                                   0,
-                                   dev_oldBuffer,
-                                   this->initialResourceState,
-                                   0,
-                                   oldSizeBytes);
+    if (this->options.isMapped)
+    {
+        this->map(); // dev_oldBuffer will be unmapped by toFreeList
+
+        std::memcpy(this->host_buffer, host_oldBuffer, oldSizeBytes);
+    }
+    else
+    {
+        BufferHelper::copyBufferRegion(cmdList,
+                                       this->dev_buffer.Get(),
+                                       this->initialResourceState,
+                                       0,
+                                       dev_oldBuffer,
+                                       this->initialResourceState,
+                                       0,
+                                       oldSizeBytes);
+    }
 
     const uint32_t diffSizeBytes = newSizeBytes - oldSizeBytes;
 

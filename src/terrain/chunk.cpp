@@ -211,7 +211,6 @@ static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAUL
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
     this->instance = instance;
-    this->instance->setVisible(this->isInstanceVisible);
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
@@ -335,6 +334,11 @@ void Chunk::setMarkedForDestruction(bool mark)
     this->isMarkedForDestruction = mark;
 }
 
+bool Chunk::getIsInstanceVisible() const
+{
+    return this->isInstanceVisible;
+}
+
 void Chunk::setInstanceVisible(bool visible)
 {
     this->isInstanceVisible = visible;
@@ -344,7 +348,7 @@ void Chunk::setInstanceVisible(bool visible)
     }
 }
 
-glm::ivec2 Chunk::getChunkPos()
+glm::ivec2 Chunk::getChunkPos() const
 {
     return this->chunkPos;
 }

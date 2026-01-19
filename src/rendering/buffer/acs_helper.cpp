@@ -126,25 +126,36 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
     buildInfo->outAcs = outBlas;
 }
 
+static ManagedBuffer sharedVertsUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    {
+        .isResizable = true,
+        .isMapped = true,
+    },
+};
+static ManagedBuffer sharedIdxsUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    {
+        .isResizable = true,
+        .isMapped = true,
+    },
+};
+
+void init()
+{
+    sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
+    sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
+
+    sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
+    sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+}
+
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 const std::vector<BlasBuildInputs>& allInputs)
 {
-    ManagedBuffer vertsUploadBuffer{
-        &UPLOAD_HEAP,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        {
-            .isMapped = true,
-        },
-    };
-    ManagedBuffer idxsUploadBuffer{
-        &UPLOAD_HEAP,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        {
-            .isMapped = true,
-        },
-    };
-
     uint32_t vertBufferTotalSizeBytes = 0;
     uint32_t idxBufferTotalSizeBytes = 0;
     for (const auto& inputs : allInputs)
@@ -156,37 +167,34 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         }
     }
 
-    vertsUploadBuffer.init(vertBufferTotalSizeBytes);
-    const bool anyHasIdxs = (idxBufferTotalSizeBytes > 0);
-    if (anyHasIdxs)
-    {
-        idxsUploadBuffer.init(idxBufferTotalSizeBytes);
-    }
-
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
     for (const auto& inputs : allInputs)
     {
         const ManagedBufferSection vertsUploadBufferSection =
-            vertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
+            sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
         if (inputs.dev_verts)
         {
             inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-                cmdList, toFreeList, vertsUploadBuffer, vertsUploadBufferSection);
+                cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
         }
+
+        toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
         ManagedBufferSection idxsUploadBufferSection = {};
         if (inputs.host_idxs)
         {
-            idxsUploadBufferSection = idxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
+            idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
             if (inputs.dev_idxs)
             {
                 inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                    cmdList, toFreeList, idxsUploadBuffer, idxsUploadBufferSection);
+                    cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
             }
+
+            toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
         }
 
         buildInfos.emplace_back();
@@ -197,12 +205,6 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     }
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
-
-    toFreeList.pushManagedBuffer(&vertsUploadBuffer);
-    if (anyHasIdxs)
-    {
-        toFreeList.pushManagedBuffer(&idxsUploadBuffer);
-    }
 }
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs)
@@ -234,6 +236,9 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
 
 void reset()
 {
+    sharedVertsUploadBuffer.reset();
+    sharedIdxsUploadBuffer.reset();
+
     sharedAcsScratchBuffer.Reset();
 }
 
