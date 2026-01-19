@@ -44,25 +44,33 @@ ThreadPool::~ThreadPool()
 
 void ThreadPool::worker()
 {
+    static constexpr int maxNumLocalTasks = 4;
+    std::function<void()> localTasks[maxNumLocalTasks];
+
     while (true)
     {
-        std::function<void()> currentTask;
+        int numLocalTasks = 0;
+
         {
             std::unique_lock<std::mutex> lock(this->mutex);
             cv.wait(lock, [this]() { return this->stop || !this->queue.empty(); });
 
-            if (!this->queue.empty())
-            {
-                currentTask = this->queue.front();
-                this->queue.pop();
-            }
-            else if (this->stop)
+            if (this->stop && this->queue.empty())
             {
                 break;
             }
+
+            while (numLocalTasks < maxNumLocalTasks && !this->queue.empty())
+            {
+                localTasks[numLocalTasks++] = std::move(this->queue.front());
+                this->queue.pop();
+            }
         }
 
-        currentTask();
+        for (int i = 0; i < numLocalTasks; ++i)
+        {
+            localTasks[i]();
+        }
     }
 }
 
