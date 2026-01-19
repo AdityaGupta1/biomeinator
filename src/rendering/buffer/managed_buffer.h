@@ -80,10 +80,6 @@ private:
 
     void createBuffer(uint32_t sizeBytes);
 
-    ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
-                                         ToFreeList& toFreeList,
-                                         uint32_t sizeBytes);
-
     // resize() works only for non-mapped buffers
     void resize(ID3D12GraphicsCommandList* cmdList,
                 ToFreeList& toFreeList,
@@ -105,6 +101,10 @@ public:
     void unmap();
 
     void reset();
+
+    ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
+                                         ToFreeList& toFreeList,
+                                         uint32_t sizeBytes);
 
     ManagedBufferSection copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
                                             ToFreeList& toFreeList,

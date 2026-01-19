@@ -110,6 +110,7 @@ void ManagedBuffer::reset()
     ASSERT(!isBufferOccupied);
 
     this->dev_buffer.Reset();
+    this->bufferSizeBytes = 0;
 }
 
 void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
@@ -159,12 +160,10 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         }
     }
 
-#ifdef _DEBUG
     if (!this->options.isResizable)
     {
-        throw std::runtime_error("ManagedBuffer out of space");
+        return ManagedBufferSection();
     }
-#endif
 
     // true if the backmost section of the toFreeList is empty and we can resize it to fit the new section
     bool useBackFreeSection = false;
