@@ -134,8 +134,6 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
     Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
 }
 
-// TODO: keep a persistent rotating pointer into freeSectionList to avoid biasing towards beginning of list for new
-// uploads? (issue #12)
 ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                                     ToFreeList& toFreeList,
                                                     uint32_t sizeBytes)
