@@ -532,12 +532,12 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevInstanceDatasAddress() const
 {
-    return this->mappedInstanceDatasArray.getBufferGpuAddress();
+    return this->mappedInstanceDatasArray.getBufferGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
 {
-    return this->mappedMaterialsArray.getBufferGpuAddress();
+    return this->mappedMaterialsArray.getBufferGpuVirtualAddress();
 }
 
 bool Scene::hasTlas() const
@@ -552,17 +552,17 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 {
-    return this->managedVertsBuffer.getBufferGpuAddress();
+    return this->managedVertsBuffer.getBufferGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
 {
-    return this->managedIdxsBuffer.getBufferGpuAddress();
+    return this->managedIdxsBuffer.getBufferGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
 {
-    return this->managedPerTriDatasBuffer.getBufferGpuAddress();
+    return this->managedPerTriDatasBuffer.getBufferGpuVirtualAddress();
 }
 
 uint32_t Scene::getNumAreaLights() const
@@ -572,10 +572,10 @@ uint32_t Scene::getNumAreaLights() const
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightsBufferAddress() const
 {
-    return this->managedAreaLightsBuffer.getBufferGpuAddress();
+    return this->managedAreaLightsBuffer.getBufferGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightSamplingStructureAddress() const
 {
-    return this->areaLightSamplingStructure.getBufferGpuAddress();
+    return this->areaLightSamplingStructure.getBufferGpuVirtualAddress();
 }

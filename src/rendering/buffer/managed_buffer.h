@@ -146,7 +146,7 @@ public:
                                                ManagedBufferSection srcBufferSection);
 
     ID3D12Resource* getBuffer() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuVirtualAddress() const;
     bool hasValidSrvDescriptor() const;
     uint32_t getSrvDescriptorIdx() const;
     uint32_t getSizeBytes() const;
