@@ -41,6 +41,12 @@ public:
     ManagedBufferSection();
 
     ManagedBuffer* getBuffer() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const;
+
+    inline bool isValid() const
+    {
+        return this->sizeBytes > 0;
+    }
 
     void free() const;
 };
@@ -117,7 +123,7 @@ public:
     void reset();
 
     ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
-                                         ToFreeList& toFreeList,
+                                         ToFreeList* toFreeList,
                                          uint32_t sizeBytes);
 
     ManagedBufferSection copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,

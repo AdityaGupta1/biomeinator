@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/renderer.h"
 #include "util/util.h"
 
+#include <array>
+
 namespace AcsHelper
 {
 
@@ -35,8 +37,85 @@ struct AcsBuildInfo
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc; // optional, used only for BLAS
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-    ComPtr<ID3D12Resource>* outAcs;
+
+    ManagedBufferSection* outAcs;
 };
+
+static std::array<std::unique_ptr<ManagedBuffer>, 16> sharedAcsBuffers;
+static uint32_t sharedAcsBuffersHead = sharedAcsBuffers.size();
+
+static void allocateNewSharedAcsBuffer()
+{
+    uint32_t newSizeBytes;
+    if (sharedAcsBuffersHead == sharedAcsBuffers.size())
+    {
+        newSizeBytes = 1 << 20;
+    }
+    else
+    {
+        newSizeBytes = sharedAcsBuffers[sharedAcsBuffersHead]->getSizeBytes() * 2;
+    }
+
+    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
+        &DEFAULT_HEAP,
+        D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+        ManagedBufferOptions{
+            .bufferCreationFlags = {
+                .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            },
+        }
+    );
+
+    ManagedBuffer* newBuffer = sharedAcsBuffers[sharedAcsBuffersHead].get();
+    newBuffer->init(newSizeBytes);
+}
+
+static ManagedBufferSection findFreeSharedAcsSection(uint32_t sizeBytes)
+{
+    sizeBytes = (sizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
+                ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
+
+    for (uint32_t bufferIdx = sharedAcsBuffersHead; bufferIdx < sharedAcsBuffers.size(); ++bufferIdx)
+    {
+        ManagedBufferSection freeSection = sharedAcsBuffers[bufferIdx]->findFreeSection(nullptr, nullptr, sizeBytes);
+        if (freeSection.isValid())
+        {
+            return freeSection;
+        }
+    }
+
+    allocateNewSharedAcsBuffer();
+
+    return findFreeSharedAcsSection(sizeBytes);
+}
+
+static ManagedBuffer sharedVertsUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    {
+        .isResizable = true,
+        .isMapped = true,
+    },
+};
+static ManagedBuffer sharedIdxsUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    {
+        .isResizable = true,
+        .isMapped = true,
+    },
+};
+
+void init()
+{
+    allocateNewSharedAcsBuffer();
+
+    sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
+    sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
+
+    sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
+    sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+}
 
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
                                        ToFreeList& toFreeList,
@@ -65,15 +144,10 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         const auto& buildInfo = buildInfos[i];
 
-        *buildInfo.outAcs =
-            BufferHelper::createBasicBuffer(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
-                                            &DEFAULT_HEAP,
-                                            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-                                            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-        (*buildInfo.outAcs)->SetName(L"buildInfo.outAcs");
+        *buildInfo.outAcs = findFreeSharedAcsSection(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-            .DestAccelerationStructureData = (*buildInfo.outAcs)->GetGPUVirtualAddress(),
+            .DestAccelerationStructureData = buildInfo.outAcs->getGpuVirtualAddress(),
             .Inputs = buildInfo.inputs,
             .ScratchAccelerationStructureData = sharedAcsScratchBuffer->GetGPUVirtualAddress()
         };
@@ -89,7 +163,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 }
 
 static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
-                              ComPtr<ID3D12Resource>* outBlas,
+                              ManagedBufferSection* outAcs,
                               ManagedBufferSection vertsBufferSection,
                               ManagedBufferSection idxsBufferSection)
 {
@@ -123,33 +197,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
-    buildInfo->outAcs = outBlas;
-}
-
-static ManagedBuffer sharedVertsUploadBuffer{
-    &UPLOAD_HEAP,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
-    {
-        .isResizable = true,
-        .isMapped = true,
-    },
-};
-static ManagedBuffer sharedIdxsUploadBuffer{
-    &UPLOAD_HEAP,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
-    {
-        .isResizable = true,
-        .isMapped = true,
-    },
-};
-
-void init()
-{
-    sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
-    sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
-
-    sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
-    sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+    buildInfo->outAcs = outAcs;
 }
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
@@ -199,7 +247,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(),
-                          &inputs.outGeoWrapper->dev_blas,
+                          &inputs.outGeoWrapper->blasBufferSection,
                           vertsUploadBufferSection,
                           idxsUploadBufferSection);
     }
@@ -226,7 +274,7 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
 
     if (inputs.updateScratchSizePtr != nullptr)
     {
-        *inputs.updateScratchSizePtr = buildInfo.prebuildInfo.UpdateScratchDataSizeInBytes;
+        *inputs.updateScratchSizePtr = buildInfo.prebuildInfo.UpdateScratchDataSizeInBytes; // TODO: this isn't actually used anywhere yet lol
     }
 
     buildInfo.outAcs = inputs.outTlas;

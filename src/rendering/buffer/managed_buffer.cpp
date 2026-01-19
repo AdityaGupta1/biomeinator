@@ -40,6 +40,11 @@ ManagedBuffer* ManagedBufferSection::getBuffer() const
     return this->buffer;
 }
 
+D3D12_GPU_VIRTUAL_ADDRESS ManagedBufferSection::getGpuVirtualAddress() const
+{
+    return this->getBuffer()->getGpuVirtualAddress() + this->offsetBytes;
+}
+
 void ManagedBufferSection::free() const
 {
     if (this->sizeBytes > 0)
@@ -152,7 +157,7 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
 }
 
 ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* cmdList,
-                                                    ToFreeList& toFreeList,
+                                                    ToFreeList* toFreeList,
                                                     uint32_t sizeBytes)
 {
     const auto sizeIter = this->freeBySize.lower_bound(sizeBytes);
@@ -179,6 +184,9 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         return ManagedBufferSection();
     }
 
+    ASSERT(cmdList != nullptr);
+    ASSERT(toFreeList != nullptr);
+
     // true if the backmost section of the toFreeList is empty and we can resize it to fit the new section
     bool useBackFreeSection = false;
     uint32_t backSizeBytes = 0;
@@ -201,7 +209,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         newSizeBytes *= 2;
     }
 
-    this->resize(cmdList, toFreeList, newSizeBytes, useBackFreeSection);
+    this->resize(cmdList, *toFreeList, newSizeBytes, useBackFreeSection);
 
     return findFreeSection(cmdList, toFreeList, sizeBytes);
 }
@@ -266,7 +274,7 @@ ManagedBufferSection ManagedBuffer::copyFromHostBuffer(ID3D12GraphicsCommandList
 {
     ASSERT(this->options.isMapped, "Cannot copy from host buffer to unmapped ManagedBuffer");
 
-    const auto& freeSection = this->findFreeSection(cmdList, toFreeList, sizeBytes);
+    const auto& freeSection = this->findFreeSection(cmdList, &toFreeList, sizeBytes);
 
     memcpy((uint8_t*)this->host_buffer + freeSection.offsetBytes, host_srcBuffer, sizeBytes);
 
@@ -279,7 +287,7 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
                                                          uint32_t srcSizeBytes,
                                                          uint32_t srcOffsetBytes)
 {
-    const auto& freeSection = this->findFreeSection(cmdList, toFreeList, srcSizeBytes);
+    const auto& freeSection = this->findFreeSection(cmdList, &toFreeList, srcSizeBytes);
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
