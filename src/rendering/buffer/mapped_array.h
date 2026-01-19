@@ -190,7 +190,7 @@ public:
         return this->dev_buffer.Get();
     }
 
-    inline D3D12_GPU_VIRTUAL_ADDRESS getBufferGpuVirtualAddress() const
+    inline D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const
     {
         return this->dev_buffer->GetGPUVirtualAddress();
     }

@@ -341,7 +341,7 @@ ID3D12Resource* ManagedBuffer::getBuffer() const
     return this->dev_buffer.Get();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getBufferGpuVirtualAddress() const
+D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getGpuVirtualAddress() const
 {
     return this->dev_buffer->GetGPUVirtualAddress();
 }
