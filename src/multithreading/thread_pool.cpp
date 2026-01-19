@@ -45,7 +45,7 @@ ThreadPool::~ThreadPool()
 void ThreadPool::worker()
 {
     static constexpr int maxNumLocalTasks = 4;
-    std::function<void()> localTasks[maxNumLocalTasks];
+    Task localTasks[maxNumLocalTasks];
 
     while (true)
     {
@@ -62,19 +62,19 @@ void ThreadPool::worker()
 
             while (numLocalTasks < maxNumLocalTasks && !this->queue.empty())
             {
-                localTasks[numLocalTasks++] = std::move(this->queue.front());
+                localTasks[numLocalTasks++] = this->queue.front();
                 this->queue.pop();
             }
         }
 
         for (int i = 0; i < numLocalTasks; ++i)
         {
-            localTasks[i]();
+            localTasks[i].fn(localTasks[i].chunkPtr);
         }
     }
 }
 
-void ThreadPool::enqueue(std::function<void()>&& task)
+void ThreadPool::enqueue(Task task)
 {
     bool wasEmpty;
     {
@@ -83,7 +83,7 @@ void ThreadPool::enqueue(std::function<void()>&& task)
         ASSERT(!stop);
 
         wasEmpty = queue.empty();
-        queue.emplace(std::move(task));
+        queue.push(task);
     }
 
     // if queue was not empty, all workers are currently busy

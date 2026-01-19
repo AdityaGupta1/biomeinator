@@ -22,12 +22,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "debug.h"
 
-#include <functional>
-#include <future>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <vector>
+
+class Chunk;
+
+struct Task
+{
+    void (*fn)(Chunk*);
+    Chunk* chunkPtr;
+};
 
 class ThreadPool
 {
@@ -35,15 +41,15 @@ private:
     std::vector<std::thread> workers;
     std::mutex mutex;
     std::condition_variable cv;
-    std::queue<std::function<void()>> queue;
+    std::queue<Task> queue;
     void worker();
     bool stop{ false };
 
 public:
-    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency());
+    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
     ~ThreadPool();
 
-    void enqueue(std::function<void()>&& task);
+    void enqueue(Task task);
     template<class It>
     void bulkEnqueue(It first, It last);
 
@@ -66,7 +72,7 @@ void ThreadPool::bulkEnqueue(It first, It last)
         wasEmpty = queue.empty();
         for (; first != last; ++first)
         {
-            queue.emplace(std::move(*first));
+            queue.push(*first);
             ++numTasksEnqueued;
         }
     }

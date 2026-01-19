@@ -42,7 +42,17 @@ namespace Terrain
 
 static Scene* scene;
 
-static std::vector<std::function<void()>> tasksToEnqueue;
+static void task_generateBlocks(Chunk* chunk)
+{
+    chunk->generateBlocks();
+}
+
+static void task_createInstance(Chunk* chunk)
+{
+    chunk->createInstance(scene);
+}
+
+static std::vector<Task> tasksToEnqueue;
 
 void init(Scene* scene)
 {
@@ -179,7 +189,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_BLOCKS);
-                                tasksToEnqueue.push_back([chunk] { chunk->generateBlocks(); });
+                                tasksToEnqueue.push_back({ task_generateBlocks, chunk });
                             }
                         }
 
@@ -224,7 +234,7 @@ void update(ToFreeList& toFreeList)
 
         Instance* instance = scene->requestNewInstance(toFreeList);
         chunk->setInstance(instance);
-        tasksToEnqueue.push_back([chunk] { chunk->createInstance(scene); });
+        tasksToEnqueue.push_back({ task_createInstance, chunk });
     }
 
     if (!tasksToEnqueue.empty())
