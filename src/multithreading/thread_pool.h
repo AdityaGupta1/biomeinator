@@ -49,8 +49,8 @@ public:
     ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
 
     void enqueue(Task task);
-    template<class It>
-    void bulkEnqueue(It first, It last);
+    template<class Iter>
+    void bulkEnqueue(Iter first, Iter last);
 
     void shutdown();
 
@@ -60,8 +60,8 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
-template<class It>
-void ThreadPool::bulkEnqueue(It first, It last)
+template<class Iter>
+void ThreadPool::bulkEnqueue(Iter first, Iter last)
 {
     bool wasEmpty;
     uint32_t numTasksEnqueued = 0;

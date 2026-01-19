@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "thread_pool.h"
 
+#define MAX_NUM_LOCAL_TASKS 4
+
 ThreadPool::ThreadPool(uint32_t numWorkers)
 {
     for (int i = 0; i < numWorkers; ++i)
@@ -30,8 +32,7 @@ ThreadPool::ThreadPool(uint32_t numWorkers)
 
 void ThreadPool::worker()
 {
-    static constexpr int maxNumLocalTasks = 4;
-    Task localTasks[maxNumLocalTasks];
+    Task localTasks[MAX_NUM_LOCAL_TASKS];
 
     while (true)
     {
@@ -46,7 +47,7 @@ void ThreadPool::worker()
                 break;
             }
 
-            while (numLocalTasks < maxNumLocalTasks && !this->queue.empty())
+            while (numLocalTasks < MAX_NUM_LOCAL_TASKS && !this->queue.empty())
             {
                 localTasks[numLocalTasks++] = this->queue.front();
                 this->queue.pop();
