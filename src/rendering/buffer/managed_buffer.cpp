@@ -187,7 +187,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
 {
     void* host_oldBuffer = host_buffer;
 
-    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, false);
+    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
     this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties);
@@ -200,7 +200,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
 
         std::memcpy(this->host_buffer, host_oldBuffer, oldSizeBytes);
 
-        dev_oldBuffer->Unmap(0, nullptr);
+        // dev_oldBuffer will be unmapped by toFreeList
     }
     else
     {
