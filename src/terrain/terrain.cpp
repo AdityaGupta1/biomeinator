@@ -176,19 +176,19 @@ void update(ToFreeList& toFreeList)
                         {
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
-                                chunk->setState(ChunkState::GENERATING_BLOCKS);
+                                chunk->advanceState(ChunkState::GENERATING_BLOCKS);
                                 tasksToEnqueue.push_back([chunk] { chunk->generateBlocks(); });
                             }
                         }
 
                         if (inCurrentCreateBlasDistance)
                         {
-                            chunk->setMarkedForDestruction(false);
+                            chunk->setIsMarkedForDestruction(false);
                             chunk->setInstanceVisible(inCurrentRenderDistance);
 
                             if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
                             {
-                                chunk->setState(ChunkState::GENERATING_GEOMETRY);
+                                chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
                                 chunksToCreateInstance.push_back(chunk);
                             }
                         }
@@ -199,7 +199,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {
                                 // set this chunk to be destroyed once its geometry is generated
-                                chunk->setMarkedForDestruction();
+                                chunk->setIsMarkedForDestruction();
                             }
                             else if (chunkState == ChunkState::HAS_GEOMETRY)
                             {
@@ -239,6 +239,7 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToCreateBlasNow)
     {
+        ASSERT(chunk->getInstance()->getIsGeometrySet());
         scene->markInstanceReadyForBlasBuild(chunk->getInstance());
     }
 

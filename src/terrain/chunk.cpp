@@ -98,7 +98,7 @@ void Chunk::generateBlocks()
         }
     }
 
-    this->setState(ChunkState::HAS_BLOCKS);
+    this->advanceState(ChunkState::HAS_BLOCKS);
 
     bool setTerrainDirty = false;
 
@@ -133,7 +133,12 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
-    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+    if (this->onNeighborsHaveBlocksOnceFlag.exchange(true, std::memory_order_acq_rel))
+    {
+        return; // this function has already been run
+    }
+
+    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -210,6 +215,7 @@ static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAUL
 
 void Chunk::createInstance(Scene* scene, Instance* instance)
 {
+    ASSERT(this->instance == nullptr);
     this->instance = instance;
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
@@ -295,8 +301,8 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
 
     instance->addAreaLights(emissiveTriangleIdxs);
 
-    this->setState(ChunkState::HAS_GEOMETRY);
-    if (this->isMarkedForDestruction)
+    this->advanceState(ChunkState::HAS_GEOMETRY);
+    if (this->getIsMarkedForDestruction())
     {
         Terrain::addChunkToDestroy(this);
     }
@@ -311,7 +317,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
     this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
-    this->isMarkedForDestruction = false;
+    this->setIsMarkedForDestruction(false);
 }
 
 Instance* Chunk::getInstance() const
@@ -329,9 +335,21 @@ void Chunk::setState(ChunkState newState)
     this->state.store(newState, std::memory_order_release);
 }
 
-void Chunk::setMarkedForDestruction(bool mark)
+void Chunk::advanceState(ChunkState newState)
 {
-    this->isMarkedForDestruction = mark;
+    ChunkState state = this->getState();
+    while (state < newState && !this->state.compare_exchange_weak(state, newState, std::memory_order_acq_rel))
+    {}
+}
+
+bool Chunk::getIsMarkedForDestruction()
+{
+    return this->isMarkedForDestruction.load(std::memory_order_acquire);
+}
+
+void Chunk::setIsMarkedForDestruction(bool marked)
+{
+    this->isMarkedForDestruction.store(marked, std::memory_order_release);
 }
 
 bool Chunk::getIsInstanceVisible() const
