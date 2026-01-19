@@ -245,6 +245,7 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToCreateBlasNow)
     {
+        ASSERT(chunk->getInstance()->getIsGeometrySet());
         scene->markInstanceReadyForBlasBuild(chunk->getInstance());
     }
 

@@ -78,6 +78,8 @@ public:
 
     uint32_t getTriCount() const;
 
+    bool getIsGeometrySet() const;
+
     void setVisible(bool visible);
 
     void setMaterialIdx(uint32_t id);
