@@ -37,6 +37,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
+#define MAX_TASKS_PER_FRAME 10
+
 namespace Terrain
 {
 
@@ -52,7 +54,7 @@ static void task_createInstance(Chunk* chunk)
     chunk->createInstance(scene);
 }
 
-static std::vector<Task> tasksToEnqueue;
+static std::deque<Task> tasksToEnqueue;
 
 void init(Scene* scene)
 {
@@ -60,8 +62,6 @@ void init(Scene* scene)
 
     TerrainMaterials::init(scene);
     Blocks::init();
-
-    tasksToEnqueue.reserve(512);
 }
 
 struct IVec2Hash
@@ -239,8 +239,16 @@ void update(ToFreeList& toFreeList)
 
     if (!tasksToEnqueue.empty())
     {
-        threadPool.bulkEnqueue(tasksToEnqueue.begin(), tasksToEnqueue.end());
-        tasksToEnqueue.clear();
+        std::vector<Task> thisFrameTasks;
+        thisFrameTasks.reserve(MAX_TASKS_PER_FRAME);
+
+        for (uint32_t i = 0; i < MAX_TASKS_PER_FRAME && !tasksToEnqueue.empty(); ++i)
+        {
+            thisFrameTasks.push_back(tasksToEnqueue.front());
+            tasksToEnqueue.pop_front();
+        }
+
+        threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;
