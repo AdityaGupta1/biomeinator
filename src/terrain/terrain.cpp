@@ -176,7 +176,7 @@ void update(ToFreeList& toFreeList)
                         {
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
-                                chunk->setState(ChunkState::GENERATING_BLOCKS);
+                                chunk->advanceState(ChunkState::GENERATING_BLOCKS);
                                 tasksToEnqueue.push_back([chunk] { chunk->generateBlocks(); });
                             }
                         }
@@ -188,7 +188,7 @@ void update(ToFreeList& toFreeList)
 
                             if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
                             {
-                                chunk->setState(ChunkState::GENERATING_GEOMETRY);
+                                chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
                                 chunksToCreateInstance.push_back(chunk);
                             }
                         }

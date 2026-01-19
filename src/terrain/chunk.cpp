@@ -98,10 +98,7 @@ void Chunk::generateBlocks()
         }
     }
 
-    ChunkState s = this->getState();
-    while (s < ChunkState::HAS_BLOCKS &&
-           !this->state.compare_exchange_weak(s, ChunkState::HAS_BLOCKS, std::memory_order_acq_rel))
-    {}
+    this->advanceState(ChunkState::HAS_BLOCKS);
 
     bool setTerrainDirty = false;
 
@@ -141,7 +138,7 @@ void Chunk::onNeighborsHaveBlocks()
         return; // this function has already been run
     }
 
-    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -304,7 +301,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
 
     instance->addAreaLights(emissiveTriangleIdxs);
 
-    this->setState(ChunkState::HAS_GEOMETRY);
+    this->advanceState(ChunkState::HAS_GEOMETRY);
     if (this->getIsMarkedForDestruction())
     {
         Terrain::addChunkToDestroy(this);
@@ -336,6 +333,13 @@ ChunkState Chunk::getState() const
 void Chunk::setState(ChunkState newState)
 {
     this->state.store(newState, std::memory_order_release);
+}
+
+void Chunk::advanceState(ChunkState newState)
+{
+    ChunkState state = this->getState();
+    while (state < newState && !this->state.compare_exchange_weak(state, newState, std::memory_order_acq_rel))
+    {}
 }
 
 bool Chunk::getIsMarkedForDestruction()

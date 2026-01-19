@@ -103,6 +103,7 @@ public:
 
     ChunkState getState() const;
     void setState(ChunkState newState);
+    void advanceState(ChunkState newState);
 
     bool getIsMarkedForDestruction();
     void setIsMarkedForDestruction(bool marked = true);
