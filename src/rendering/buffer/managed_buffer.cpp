@@ -153,7 +153,12 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         }
     }
 
-    ASSERT(this->options.isResizable);
+#ifdef _DEBUG
+    if (!this->options.isResizable)
+    {
+        throw std::runtime_error("ManagedBuffer out of space");
+    }
+#endif
 
     // true if the backmost section of the toFreeList is empty and we can resize it to fit the new section
     bool useBackFreeSection = false;
