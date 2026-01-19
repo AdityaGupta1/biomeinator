@@ -215,24 +215,14 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    // limited to one build per frame to help reduce stuttering
-    if (!chunksToCreateInstance.empty())
+    while (!chunksToCreateInstance.empty())
     {
         Chunk* chunk = chunksToCreateInstance.front();
         chunksToCreateInstance.pop_front();
 
-        // By the time we get around to creating this chunk's instance, the player could have already moved even further
-        // away, so we need to double check that this chunk is still within BLAS creation distance.
-        if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= CREATE_BLAS_DISTANCE)
-        {
-            Instance* instance = scene->requestNewInstance(toFreeList);
-            instance->setVisible(chunk->getIsInstanceVisible());
-            tasksToEnqueue.push_back([chunk, instance] { chunk->createInstance(scene, instance); });
-        }
-        else
-        {
-            chunk->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
-        }
+        Instance* instance = scene->requestNewInstance(toFreeList);
+        instance->setVisible(chunk->getIsInstanceVisible());
+        tasksToEnqueue.push_back([chunk, instance] { chunk->createInstance(scene, instance); });
     }
 
     if (!tasksToEnqueue.empty())
