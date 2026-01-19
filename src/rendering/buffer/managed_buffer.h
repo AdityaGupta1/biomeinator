@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "rendering/dxr_includes.h"
+#include "rendering/buffer/buffer_helper.h"
 #include "util/util.h"
 
 #include <list>
@@ -50,6 +51,7 @@ struct ManagedBufferOptions
     bool isMapped{ false };
     bool hasSrvDescriptor{ false };
     uint32_t srvElementByteSize{ 0 };
+    BufferHelper::BufferCreationFlags bufferCreationFlags{};
 };
 
 class ManagedBuffer
@@ -75,6 +77,8 @@ private:
     std::list<ManagedBufferSection> freeSectionList;
 
     void allocSrvDescriptor(ToFreeList* toFreeList);
+
+    void createBuffer(uint32_t sizeBytes);
 
     ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                          ToFreeList& toFreeList,

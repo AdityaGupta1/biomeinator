@@ -57,9 +57,7 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 {
     ASSERT(sizeBytes > 0);
 
-    this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties);
-    this->bufferSizeBytes = sizeBytes;
-    this->setBufferName();
+    this->createBuffer(sizeBytes);
 
     this->freeSectionList.clear();
     this->freeSectionList.push_back({ this, 0, this->bufferSizeBytes });
@@ -73,6 +71,14 @@ void ManagedBuffer::init(uint32_t sizeBytes)
     {
         this->allocSrvDescriptor(nullptr);
     }
+}
+
+void ManagedBuffer::createBuffer(uint32_t sizeBytes)
+{
+    this->dev_buffer =
+        BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->options.bufferCreationFlags);
+    this->bufferSizeBytes = sizeBytes;
+    this->setBufferName();
 }
 
 void ManagedBuffer::map()
@@ -195,9 +201,7 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
     const uint32_t oldSizeBytes = this->bufferSizeBytes;
 
-    this->dev_buffer = BufferHelper::createBasicBuffer(newSizeBytes, this->heapProperties);
-    this->bufferSizeBytes = newSizeBytes;
-    this->setBufferName();
+    this->createBuffer(newSizeBytes);
 
     if (this->options.isMapped)
     {
