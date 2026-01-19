@@ -296,7 +296,7 @@ void Chunk::createInstance(Scene* scene, Instance* instance)
     instance->addAreaLights(emissiveTriangleIdxs);
 
     this->setState(ChunkState::HAS_GEOMETRY);
-    if (this->isMarkedForDestruction)
+    if (this->getIsMarkedForDestruction())
     {
         Terrain::addChunkToDestroy(this);
     }
@@ -311,7 +311,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
     this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
-    this->isMarkedForDestruction = false;
+    this->setIsMarkedForDestruction(false);
 }
 
 Instance* Chunk::getInstance() const
@@ -329,9 +329,14 @@ void Chunk::setState(ChunkState newState)
     this->state.store(newState, std::memory_order_release);
 }
 
-void Chunk::setMarkedForDestruction(bool mark)
+bool Chunk::getIsMarkedForDestruction()
 {
-    this->isMarkedForDestruction = mark;
+    return this->isMarkedForDestruction.load(std::memory_order_acquire);
+}
+
+void Chunk::setIsMarkedForDestruction(bool marked)
+{
+    this->isMarkedForDestruction.store(marked, std::memory_order_release);
 }
 
 bool Chunk::getIsInstanceVisible() const

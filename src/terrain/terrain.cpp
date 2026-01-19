@@ -183,7 +183,7 @@ void update(ToFreeList& toFreeList)
 
                         if (inCurrentCreateBlasDistance)
                         {
-                            chunk->setMarkedForDestruction(false);
+                            chunk->setIsMarkedForDestruction(false);
                             chunk->setInstanceVisible(inCurrentRenderDistance);
 
                             if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
@@ -199,7 +199,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {
                                 // set this chunk to be destroyed once its geometry is generated
-                                chunk->setMarkedForDestruction();
+                                chunk->setIsMarkedForDestruction();
                             }
                             else if (chunkState == ChunkState::HAS_GEOMETRY)
                             {
@@ -228,6 +228,12 @@ void update(ToFreeList& toFreeList)
     if (!tasksToEnqueue.empty())
     {
         threadPool.bulkEnqueue(tasksToEnqueue.begin(), tasksToEnqueue.end());
+
+        //for (auto& task : tasksToEnqueue)
+        //{
+        //    threadPool.enqueue(std::move(task));
+        //}
+
         tasksToEnqueue.clear();
     }
 

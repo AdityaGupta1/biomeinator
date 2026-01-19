@@ -81,7 +81,7 @@ private:
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
-    bool isMarkedForDestruction{ false };
+    std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
     std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
@@ -103,7 +103,8 @@ public:
     ChunkState getState() const;
     void setState(ChunkState newState);
 
-    void setMarkedForDestruction(bool mark = true);
+    bool getIsMarkedForDestruction();
+    void setIsMarkedForDestruction(bool marked = true);
 
     bool getIsInstanceVisible() const;
     void setInstanceVisible(bool visible);
