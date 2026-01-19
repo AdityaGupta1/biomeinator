@@ -57,6 +57,7 @@ template<class It>
 void ThreadPool::bulkEnqueue(It first, It last)
 {
     bool wasEmpty;
+    uint32_t numTasksEnqueued = 0;
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -66,12 +67,20 @@ void ThreadPool::bulkEnqueue(It first, It last)
         for (; first != last; ++first)
         {
             queue.emplace(std::move(*first));
+            ++numTasksEnqueued;
         }
     }
 
     // if queue was not empty, all workers are currently busy
     if (wasEmpty)
     {
-        cv.notify_all();
+        if (numTasksEnqueued == 1)
+        {
+            cv.notify_one();
+        }
+        else
+        {
+            cv.notify_all();
+        }
     }
 }
