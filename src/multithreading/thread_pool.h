@@ -47,11 +47,12 @@ private:
 
 public:
     ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
-    ~ThreadPool();
 
     void enqueue(Task task);
     template<class It>
     void bulkEnqueue(It first, It last);
+
+    void shutdown();
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;

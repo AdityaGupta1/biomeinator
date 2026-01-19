@@ -28,20 +28,6 @@ ThreadPool::ThreadPool(uint32_t numWorkers)
     }
 }
 
-ThreadPool::~ThreadPool()
-{
-    {
-        std::unique_lock<std::mutex> lock(this->mutex);
-        this->stop = true;
-    }
-
-    cv.notify_all();
-    for (std::thread& worker : this->workers)
-    {
-        worker.join();
-    }
-}
-
 void ThreadPool::worker()
 {
     static constexpr int maxNumLocalTasks = 4;
@@ -90,5 +76,19 @@ void ThreadPool::enqueue(Task task)
     if (wasEmpty)
     {
         cv.notify_one();
+    }
+}
+
+void ThreadPool::shutdown()
+{
+    {
+        std::unique_lock<std::mutex> lock(this->mutex);
+        this->stop = true;
+    }
+
+    cv.notify_all();
+    for (std::thread& worker : this->workers)
+    {
+        worker.join();
     }
 }

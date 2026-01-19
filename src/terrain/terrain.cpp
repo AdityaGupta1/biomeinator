@@ -275,4 +275,9 @@ void update(ToFreeList& toFreeList)
     }
 }
 
+void shutdown()
+{
+    threadPool.shutdown();
+}
+
 } // namespace Terrain
