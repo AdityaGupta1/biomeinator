@@ -2072,6 +2072,8 @@ void destroy()
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
+    Terrain::shutdown();
+
     scene.reset();
     AcsHelper::reset();
 

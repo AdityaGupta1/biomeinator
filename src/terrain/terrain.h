@@ -34,4 +34,6 @@ void setDirty();
 
 void update(ToFreeList& toFreeList);
 
+void shutdown();
+
 } // namespace Terrain

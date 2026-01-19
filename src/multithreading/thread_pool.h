@@ -22,12 +22,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "debug.h"
 
-#include <functional>
-#include <future>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <vector>
+
+class Chunk;
+
+struct Task
+{
+    void (*fn)(Chunk*);
+    Chunk* chunkPtr;
+};
 
 class ThreadPool
 {
@@ -35,17 +41,18 @@ private:
     std::vector<std::thread> workers;
     std::mutex mutex;
     std::condition_variable cv;
-    std::queue<std::function<void()>> queue;
+    std::queue<Task> queue;
     void worker();
     bool stop{ false };
 
 public:
-    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency());
-    ~ThreadPool();
+    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
 
-    void enqueue(std::function<void()>&& task);
-    template<class It>
-    void bulkEnqueue(It first, It last);
+    void enqueue(Task task);
+    template<class Iter>
+    void bulkEnqueue(Iter first, Iter last);
+
+    void shutdown();
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;
@@ -53,10 +60,11 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
-template<class It>
-void ThreadPool::bulkEnqueue(It first, It last)
+template<class Iter>
+void ThreadPool::bulkEnqueue(Iter first, Iter last)
 {
     bool wasEmpty;
+    uint32_t numTasksEnqueued = 0;
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -65,13 +73,21 @@ void ThreadPool::bulkEnqueue(It first, It last)
         wasEmpty = queue.empty();
         for (; first != last; ++first)
         {
-            queue.emplace(std::move(*first));
+            queue.push(*first);
+            ++numTasksEnqueued;
         }
     }
 
     // if queue was not empty, all workers are currently busy
     if (wasEmpty)
     {
-        cv.notify_all();
+        if (numTasksEnqueued == 1)
+        {
+            cv.notify_one();
+        }
+        else
+        {
+            cv.notify_all();
+        }
     }
 }
