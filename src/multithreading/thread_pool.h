@@ -59,6 +59,7 @@ void ThreadPool::bulkEnqueue(It first, It last)
     bool wasEmpty;
     {
         std::lock_guard<std::mutex> lock(mutex);
+
         ASSERT(!stop);
 
         wasEmpty = queue.empty();

@@ -68,11 +68,19 @@ void ThreadPool::worker()
 
 void ThreadPool::enqueue(std::function<void()>&& task)
 {
+    bool wasEmpty;
     {
         std::lock_guard<std::mutex> lock(mutex);
+
         ASSERT(!stop);
+
+        wasEmpty = queue.empty();
         queue.emplace(std::move(task));
     }
 
-    cv.notify_one();
+    // if queue was not empty, all workers are currently busy
+    if (wasEmpty)
+    {
+        cv.notify_one();
+    }
 }

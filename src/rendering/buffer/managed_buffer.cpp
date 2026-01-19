@@ -201,11 +201,9 @@ void ManagedBuffer::resize(ID3D12GraphicsCommandList* cmdList,
 
     if (this->options.isMapped)
     {
-        this->map();
+        this->map(); // dev_oldBuffer will be unmapped by toFreeList
 
         std::memcpy(this->host_buffer, host_oldBuffer, oldSizeBytes);
-
-        // dev_oldBuffer will be unmapped by toFreeList
     }
     else
     {
