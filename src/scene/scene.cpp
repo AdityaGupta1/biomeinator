@@ -47,6 +47,11 @@ void Instance::reset(bool alsoFreeFromScene)
     {
         this->scene->freeInstance(this);
     }
+
+    this->host_verts.clear();
+    this->host_idxs.clear();
+    this->host_perTriDatas.clear();
+    this->isGeometrySet = false;
 }
 
 void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
@@ -124,6 +129,11 @@ uint32_t Instance::getId() const
 uint32_t Instance::getTriCount() const
 {
     return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
+}
+
+bool Instance::getIsGeometrySet() const
+{
+    return this->isGeometrySet;
 }
 
 void Instance::setVisible(bool visible)
