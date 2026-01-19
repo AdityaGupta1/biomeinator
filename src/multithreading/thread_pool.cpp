@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "thread_pool.h"
 
+#define MAX_NUM_LOCAL_TASKS 4
+
 ThreadPool::ThreadPool(uint32_t numWorkers)
 {
     for (int i = 0; i < numWorkers; ++i)
@@ -28,7 +30,57 @@ ThreadPool::ThreadPool(uint32_t numWorkers)
     }
 }
 
-ThreadPool::~ThreadPool()
+void ThreadPool::worker()
+{
+    Task localTasks[MAX_NUM_LOCAL_TASKS];
+
+    while (true)
+    {
+        int numLocalTasks = 0;
+
+        {
+            std::unique_lock<std::mutex> lock(this->mutex);
+            cv.wait(lock, [this]() { return this->stop || !this->queue.empty(); });
+
+            if (this->stop && this->queue.empty())
+            {
+                break;
+            }
+
+            while (numLocalTasks < MAX_NUM_LOCAL_TASKS && !this->queue.empty())
+            {
+                localTasks[numLocalTasks++] = this->queue.front();
+                this->queue.pop();
+            }
+        }
+
+        for (int i = 0; i < numLocalTasks; ++i)
+        {
+            localTasks[i].fn(localTasks[i].chunkPtr);
+        }
+    }
+}
+
+void ThreadPool::enqueue(Task task)
+{
+    bool wasEmpty;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        ASSERT(!stop);
+
+        wasEmpty = queue.empty();
+        queue.push(task);
+    }
+
+    // if queue was not empty, all workers are currently busy
+    if (wasEmpty)
+    {
+        cv.notify_one();
+    }
+}
+
+void ThreadPool::shutdown()
 {
     {
         std::unique_lock<std::mutex> lock(this->mutex);
@@ -39,48 +91,5 @@ ThreadPool::~ThreadPool()
     for (std::thread& worker : this->workers)
     {
         worker.join();
-    }
-}
-
-void ThreadPool::worker()
-{
-    while (true)
-    {
-        std::function<void()> currentTask;
-        {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            cv.wait(lock, [this]() { return this->stop || !this->queue.empty(); });
-
-            if (!this->queue.empty())
-            {
-                currentTask = this->queue.front();
-                this->queue.pop();
-            }
-            else if (this->stop)
-            {
-                break;
-            }
-        }
-
-        currentTask();
-    }
-}
-
-void ThreadPool::enqueue(std::function<void()>&& task)
-{
-    bool wasEmpty;
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-
-        ASSERT(!stop);
-
-        wasEmpty = queue.empty();
-        queue.emplace(std::move(task));
-    }
-
-    // if queue was not empty, all workers are currently busy
-    if (wasEmpty)
-    {
-        cv.notify_one();
     }
 }

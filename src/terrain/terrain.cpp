@@ -37,10 +37,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
+#define MAX_TASKS_PER_FRAME 10
+
 namespace Terrain
 {
 
 static Scene* scene;
+
+static void task_generateBlocks(Chunk* chunk)
+{
+    chunk->generateBlocks();
+}
+
+static void task_createInstance(Chunk* chunk)
+{
+    chunk->createInstance(scene);
+}
+
+static std::deque<Task> tasksToEnqueue;
 
 void init(Scene* scene)
 {
@@ -64,8 +78,6 @@ static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
-
-static std::vector<std::function<void()>> tasksToEnqueue;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
@@ -177,7 +189,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_BLOCKS);
-                                tasksToEnqueue.push_back([chunk] { chunk->generateBlocks(); });
+                                tasksToEnqueue.push_back({ task_generateBlocks, chunk });
                             }
                         }
 
@@ -221,14 +233,22 @@ void update(ToFreeList& toFreeList)
         chunksToCreateInstance.pop_front();
 
         Instance* instance = scene->requestNewInstance(toFreeList);
-        instance->setVisible(chunk->getIsInstanceVisible());
-        tasksToEnqueue.push_back([chunk, instance] { chunk->createInstance(scene, instance); });
+        chunk->setInstance(instance);
+        tasksToEnqueue.push_back({ task_createInstance, chunk });
     }
 
     if (!tasksToEnqueue.empty())
     {
-        threadPool.bulkEnqueue(tasksToEnqueue.begin(), tasksToEnqueue.end());
-        tasksToEnqueue.clear();
+        std::vector<Task> thisFrameTasks;
+        thisFrameTasks.reserve(MAX_TASKS_PER_FRAME);
+
+        for (uint32_t i = 0; i < MAX_TASKS_PER_FRAME && !tasksToEnqueue.empty(); ++i)
+        {
+            thisFrameTasks.push_back(tasksToEnqueue.front());
+            tasksToEnqueue.pop_front();
+        }
+
+        threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;
@@ -253,6 +273,11 @@ void update(ToFreeList& toFreeList)
     {
         chunk->destroyInstance(toFreeList);
     }
+}
+
+void shutdown()
+{
+    threadPool.shutdown();
 }
 
 } // namespace Terrain

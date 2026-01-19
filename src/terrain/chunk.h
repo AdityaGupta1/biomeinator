@@ -97,7 +97,8 @@ public:
     void generateBlocks();
     void onNeighborsHaveBlocks();
 
-    void createInstance(Scene* scene, Instance* instance);
+    void setInstance(Instance* instance);
+    void createInstance(Scene* scene);
     void destroyInstance(ToFreeList& toFreeList);
     Instance* getInstance() const;
 
