@@ -42,12 +42,16 @@ namespace Terrain
 
 static Scene* scene;
 
+static std::vector<std::function<void()>> tasksToEnqueue;
+
 void init(Scene* scene)
 {
     Terrain::scene = scene;
 
     TerrainMaterials::init(scene);
     Blocks::init();
+
+    tasksToEnqueue.reserve(512);
 }
 
 struct IVec2Hash
@@ -64,8 +68,6 @@ static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
-
-static std::vector<std::function<void()>> tasksToEnqueue;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
@@ -221,8 +223,8 @@ void update(ToFreeList& toFreeList)
         chunksToCreateInstance.pop_front();
 
         Instance* instance = scene->requestNewInstance(toFreeList);
-        instance->setVisible(chunk->getIsInstanceVisible());
-        tasksToEnqueue.push_back([chunk, instance] { chunk->createInstance(scene, instance); });
+        chunk->setInstance(instance);
+        tasksToEnqueue.push_back([chunk] { chunk->createInstance(scene); });
     }
 
     if (!tasksToEnqueue.empty())

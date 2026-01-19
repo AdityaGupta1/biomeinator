@@ -213,11 +213,14 @@ static constexpr uvec2 uvOffsets[4] = {
 };
 static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
-void Chunk::createInstance(Scene* scene, Instance* instance)
+void Chunk::setInstance(Instance* instance)
 {
-    ASSERT(this->instance == nullptr);
     this->instance = instance;
+    this->instance->setVisible(this->getIsInstanceVisible());
+}
 
+void Chunk::createInstance(Scene* scene)
+{
     const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
