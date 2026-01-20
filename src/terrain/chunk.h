@@ -30,7 +30,9 @@ enum class ChunkState : uint8_t
     NEEDS_BLOCKS,
     GENERATING_BLOCKS,
     HAS_BLOCKS,
-    NEIGHBORS_HAVE_BLOCKS,
+    NEEDS_SEGMENTS,
+    GENERATING_SEGMENTS,
+    NEIGHBORS_HAVE_BLOCKS, // TODO: rename to NEEDS_GEOMETRY or something
     GENERATING_GEOMETRY,
     HAS_GEOMETRY,
 };
@@ -113,11 +115,12 @@ private:
     bool isSegmentAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
 
+    void onNeighborsHaveBlocks();
+
 public:
     Chunk(glm::ivec2 chunkPos, Region* region);
 
     void generateBlocks();
-    void onNeighborsHaveBlocks();
     void generateSegments();
 
     void setInstance(Instance* instance);

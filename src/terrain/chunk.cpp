@@ -114,7 +114,7 @@ void Chunk::generateBlocks()
 
         const uint neighborNumNeighborsWithBlocks =
             neighbor->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4)
+        if (neighborNumNeighborsWithBlocks == 4 && neighbor->getState() == ChunkState::HAS_BLOCKS)
         {
             neighbor->onNeighborsHaveBlocks();
             setTerrainDirty = true;
@@ -135,12 +135,13 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
+    // TODO: remove this check?
     if (this->onNeighborsHaveBlocksOnceFlag.exchange(true, std::memory_order_acq_rel))
     {
         return; // this function has already been run
     }
 
-    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+    this->advanceState(ChunkState::GENERATING_SEGMENTS);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -148,6 +149,8 @@ void Chunk::onNeighborsHaveBlocks()
     }
 
     this->generateSegments();
+
+    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
 }
 
 // endPos is exclusive
@@ -173,8 +176,9 @@ bool Chunk::isSegmentAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool i
     return true;
 }
 
+// TODO: reduce arithmetic in index calculations
 // endPos is exclusive
-bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos, const uvec3 chunkSegmentPos) // TODO: reduce arithmetic in index calculations
+bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos, const uvec3 chunkSegmentPos)
 {
     // these two cases should be skipped by generateSegments()
     ASSERT(chunkSegmentPos.y != 0);
@@ -342,17 +346,17 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
             }
         }
     }
+
+    return true;
 }
 
 void Chunk::generateSegments()
 {
-    uint32_t segmentIdx = 0;
+    uint segmentIdx = 0;
     for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
     {
         for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
         {
-            uint segmentIdx = Chunk::segmentPosXZToIdx(uvec2(segmentX, segmentZ));
-
             for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
             {
                 const uvec3 segmentBasePos(
@@ -479,64 +483,90 @@ void Chunk::createInstance(Scene* scene)
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
-    uint32_t blockIdx = 0;
-    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
+    uint segmentPos = 0;
+    for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
     {
-        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
+        for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
         {
-            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
+            for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
             {
-                const uvec3 blockPos_CS(blockX, blockY, blockZ);
-                const Block block = blocks[blockIdx++];
-                if (block == Block::AIR)
+                const ChunkSegment segment = this->segments[segmentPos++];
+                if (segment != ChunkSegment::MIXED)
                 {
                     continue;
                 }
 
-                const BlockData& blockData = Blocks::getBlockData(block);
+                // TODO: make this into a helper function
+                const uvec3 segmentBasePos(
+                    segmentX * chunkSegmentSizeXZ, segmentY * chunkSegmentSizeY, segmentZ * chunkSegmentSizeXZ);
+                const uvec3 maxPos = segmentBasePos + uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
 
-                for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                for (uint blockZ = segmentBasePos.z; blockZ < maxPos.z; ++blockZ)
                 {
-                    const ivec3 neighborOffset = faceOffsets[faceIdx];
-                    const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
-
-                    if (!isBlockAir(neighborPos_CS, faceIdx))
+                    for (uint blockX = segmentBasePos.x; blockX < maxPos.x; ++blockX)
                     {
-                        continue;
-                    }
+                        const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
 
-                    const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
-                    const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-                    const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
-                    for (uint i = 0; i < 4; ++i)
-                    {
-                        const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
-                        verts.emplace_back(
-                            vec3ToDirectX(vertPos_CS),
-                            normal,
-                            vec2ToDirectX(uv)
-                        );
-                    }
+                        for (uint blockY = segmentBasePos.y; blockY < maxPos.y; ++blockY)
+                        {
+                            const uvec3 blockPos_CS(blockX, blockY, blockZ);
+                            const uint blockIdx = baseBlockIdx + blockY;
+                            const Block block = blocks[blockIdx];
+                            if (block == Block::AIR)
+                            {
+                                continue;
+                            }
 
-                    const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
+                            const BlockData& blockData = Blocks::getBlockData(block);
 
-                    indices.emplace_back(baseVertIdx + 0u);
-                    indices.emplace_back(baseVertIdx + 1u);
-                    indices.emplace_back(baseVertIdx + 2u);
-                    indices.emplace_back(baseVertIdx + 0u);
-                    indices.emplace_back(baseVertIdx + 2u);
-                    indices.emplace_back(baseVertIdx + 3u);
+                            for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                            {
+                                const ivec3 neighborOffset = faceOffsets[faceIdx];
+                                const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                    if (blockData.emitsLight)
-                    {
-                        emissiveTriangleIdxs.emplace_back(triangleIdx);
-                        emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                                if (!isBlockAir(neighborPos_CS, faceIdx))
+                                {
+                                    continue;
+                                }
+
+                                const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                                const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
+                                const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
+                                for (uint i = 0; i < 4; ++i)
+                                {
+                                    const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+                                    const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
+                                    verts.emplace_back(
+                                        vec3ToDirectX(vertPos_CS),
+                                        normal,
+                                        vec2ToDirectX(uv)
+                                    );
+                                }
+
+                                const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
+
+                                indices.emplace_back(baseVertIdx + 0u);
+                                indices.emplace_back(baseVertIdx + 1u);
+                                indices.emplace_back(baseVertIdx + 2u);
+                                indices.emplace_back(baseVertIdx + 0u);
+                                indices.emplace_back(baseVertIdx + 2u);
+                                indices.emplace_back(baseVertIdx + 3u);
+
+                                if (blockData.emitsLight)
+                                {
+                                    emissiveTriangleIdxs.emplace_back(triangleIdx);
+                                    emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    ASSERT(verts.size() > 0);
+    ASSERT(indices.size() > 0);
 
     instance->setGeometry(instanceTransform, std::move(verts), std::move(indices));
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());

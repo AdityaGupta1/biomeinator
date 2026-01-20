@@ -62,6 +62,7 @@ void init(Scene* scene)
     Blocks::init();
 
     threadPool.init();
+    //threadPool.init(1);
 }
 
 struct IVec2Hash
