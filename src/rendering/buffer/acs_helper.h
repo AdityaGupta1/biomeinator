@@ -32,7 +32,7 @@ namespace AcsHelper
 
 struct GeometryWrapper
 {
-    ComPtr<ID3D12Resource> dev_blas{ nullptr };
+    ManagedBufferSection blasBufferSection{};
 
     ManagedBufferSection vertsBufferSection{};
     ManagedBufferSection idxsBufferSection{};
@@ -61,7 +61,7 @@ struct TlasBuildInputs
     uint32_t numInstances{ 0 };
     uint32_t* updateScratchSizePtr{ nullptr };
 
-    ComPtr<ID3D12Resource>* outTlas{ nullptr };
+    ManagedBufferSection* outTlas{ nullptr };
 };
 
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs);

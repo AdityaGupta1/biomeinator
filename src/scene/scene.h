@@ -121,7 +121,7 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::vector<Instance*> instancesReadyForBlasBuild{};
 
-    ComPtr<ID3D12Resource> dev_tlas{ nullptr };
+    ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
 
     uint32_t nextMaterialIdx{ 0 };

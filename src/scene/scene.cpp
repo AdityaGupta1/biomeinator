@@ -36,7 +36,7 @@ Instance::Instance(Scene* scene, uint32_t id)
 
 void Instance::reset(bool alsoFreeFromScene)
 {
-    this->geoWrapper.dev_blas.Reset();
+    this->geoWrapper.blasBufferSection.free();
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
     this->perTriDatasBufferSection.free();
@@ -139,7 +139,7 @@ bool Instance::getIsGeometrySet() const
 void Instance::setVisible(bool visible)
 {
     // TODO: may need to revisit this and check for correctness
-    if (this->isVisible != visible && this->geoWrapper.dev_blas != nullptr)
+    if (this->isVisible != visible && this->geoWrapper.blasBufferSection.isValid())
     {
         this->scene->isTlasDirty = true;
     }
@@ -200,7 +200,7 @@ void Scene::reset()
     this->nextMaterialIdx = 0;
 
     this->isTlasDirty = false;
-    this->dev_tlas.Reset();
+    this->tlasBufferSection.free();
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
     {
@@ -400,16 +400,17 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    if (this->dev_tlas)
+    if (this->hasTlas())
     {
-        toFreeList.pushResource(this->dev_tlas, false);
+        toFreeList.pushManagedBufferSection(tlasBufferSection);
     }
 
     uint32_t nextInstanceDescIdx = 0;
     uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
-        if (!instance->isVisible || instance->isScheduledForDeletion || instance->geoWrapper.dev_blas == nullptr)
+        if (!instance->isVisible || instance->isScheduledForDeletion ||
+            !instance->geoWrapper.blasBufferSection.isValid())
         {
             continue;
         }
@@ -418,7 +419,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
-        instanceDesc.AccelerationStructure = instance->geoWrapper.dev_blas->GetGPUVirtualAddress();
+        instanceDesc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
 
         if (instance->areaLightsBufferSection.sizeBytes > 0)
         {
@@ -441,12 +442,12 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = this->mappedInstanceDescsArray.getUploadBuffer(); // TODO: test if this crashes with default heap buffer
     inputs.numInstances = nextInstanceDescIdx;
-    inputs.outTlas = &this->dev_tlas;
+    inputs.outTlas = &this->tlasBufferSection;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
     this->isTlasDirty = false;
 
-    BufferHelper::uavBarrier(cmdList, this->dev_tlas.Get());
+    BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
 }
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -542,12 +543,12 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
 
 bool Scene::hasTlas() const
 {
-    return this->dev_tlas != nullptr;
+    return this->tlasBufferSection.sizeBytes > 0;
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
 {
-    return this->dev_tlas.Get()->GetGPUVirtualAddress();
+    return this->tlasBufferSection.getGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
