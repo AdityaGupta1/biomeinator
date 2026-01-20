@@ -40,7 +40,8 @@ using namespace DirectX;
 Chunk::Chunk(ivec2 chunkPos, Region* region)
 	: chunkPos(chunkPos), region(region)
 {
-    const glm::ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    const ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    uint numNeighborsWithBlocks = 0;
     for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
     {
         const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
@@ -64,13 +65,15 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
 
                 if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
                 {
-                    this->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel);
+                    ++numNeighborsWithBlocks;
                 }
 
                 // at this point, this chunk cannot have blocks, so we don't need to update neighborChunk->numNeighborsWithBlocks
             }
         }
     }
+
+    this->numNeighborsWithBlocks.fetch_add(numNeighborsWithBlocks, std::memory_order_acq_rel);
 }
 
 void Chunk::generateBlocks()
