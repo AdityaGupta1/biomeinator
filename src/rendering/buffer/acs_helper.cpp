@@ -41,7 +41,7 @@ struct AcsBuildInfo
     ManagedBufferSection* outAcs;
 };
 
-static std::array<std::unique_ptr<ManagedBuffer>, 16> sharedAcsBuffers;
+static std::array<std::unique_ptr<ManagedBuffer>, 10> sharedAcsBuffers;
 static uint32_t sharedAcsBuffersHead = sharedAcsBuffers.size();
 
 static void allocateNewSharedAcsBuffer()
@@ -163,7 +163,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 }
 
 static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
-                              ManagedBufferSection* outAcs,
+                              ManagedBufferSection* outBlas,
                               ManagedBufferSection vertsBufferSection,
                               ManagedBufferSection idxsBufferSection)
 {
@@ -197,7 +197,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
-    buildInfo->outAcs = outAcs;
+    buildInfo->outAcs = outBlas;
 }
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
