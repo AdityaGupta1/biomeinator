@@ -102,7 +102,6 @@ private:
     std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
-    std::atomic<bool> onNeighborsHaveBlocksOnceFlag{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     std::atomic<bool> isMarkedForDestruction{ false };

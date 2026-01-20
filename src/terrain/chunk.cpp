@@ -135,12 +135,6 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
-    // TODO: remove this check?
-    if (this->onNeighborsHaveBlocksOnceFlag.exchange(true, std::memory_order_acq_rel))
-    {
-        return; // this function has already been run
-    }
-
     this->advanceState(ChunkState::GENERATING_SEGMENTS);
 
     for (int i = 0; i < 4; ++i)
