@@ -356,20 +356,19 @@ void Chunk::generateSegments()
         {
             for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
             {
-                const uvec3 segmentBasePos(
-                    segmentX * chunkSegmentSizeXZ, segmentY * chunkSegmentSizeY, segmentZ * chunkSegmentSizeXZ);
-                const uvec3 maxPos = segmentBasePos + uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
+                uvec3 segmentStartPos, segmentEndPos;
+                Chunk::segmentPosToBounds(uvec3(segmentX, segmentY, segmentZ), segmentStartPos, segmentEndPos);
 
                 ChunkSegment segment = ChunkSegment::MIXED;
 
-                const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentBasePos)];
+                const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentStartPos)];
                 const bool isAirPredicate = blockAtBasePos == Block::AIR;
                 if (!isAirPredicate && (segmentY == 0 || segmentY == numChunkSegmentsY - 1))
                 {
                     // this segment has blocks and cannot be surrounded because it's at the top or bottom of the chunk
                     segment = ChunkSegment::MIXED;
                 }
-                else if (this->isSegmentAirOrSolid(segmentBasePos, maxPos, isAirPredicate))
+                else if (this->isSegmentAirOrSolid(segmentStartPos, segmentEndPos, isAirPredicate))
                 {
                     if (isAirPredicate)
                     {
@@ -378,7 +377,7 @@ void Chunk::generateSegments()
                     else
                     {
                         const uvec3 chunkSegmentPos(segmentX, segmentY, segmentZ);
-                        const bool isSurrounded = isSegmentSurroundedBySolid(segmentBasePos, maxPos, chunkSegmentPos);
+                        const bool isSurrounded = isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos);
                         segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
                     }
                 }
@@ -493,18 +492,16 @@ void Chunk::createInstance(Scene* scene)
                     continue;
                 }
 
-                // TODO: make this into a helper function
-                const uvec3 segmentBasePos(
-                    segmentX * chunkSegmentSizeXZ, segmentY * chunkSegmentSizeY, segmentZ * chunkSegmentSizeXZ);
-                const uvec3 maxPos = segmentBasePos + uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
+                uvec3 segmentStartPos, segmentEndPos;
+                Chunk::segmentPosToBounds(uvec3(segmentX, segmentY, segmentZ), segmentStartPos, segmentEndPos);
 
-                for (uint blockZ = segmentBasePos.z; blockZ < maxPos.z; ++blockZ)
+                for (uint blockZ = segmentStartPos.z; blockZ < segmentEndPos.z; ++blockZ)
                 {
-                    for (uint blockX = segmentBasePos.x; blockX < maxPos.x; ++blockX)
+                    for (uint blockX = segmentStartPos.x; blockX < segmentEndPos.x; ++blockX)
                     {
                         const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
 
-                        for (uint blockY = segmentBasePos.y; blockY < maxPos.y; ++blockY)
+                        for (uint blockY = segmentStartPos.y; blockY < segmentEndPos.y; ++blockY)
                         {
                             const uvec3 blockPos_CS(blockX, blockY, blockZ);
                             const uint blockIdx = baseBlockIdx + blockY;
@@ -650,42 +647,48 @@ glm::ivec2 Chunk::getChunkPos() const
 //         for (uint y = 0; y < chunkSizeY; ++y)
 //         {
 //             // do stuff here
-uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
+uint32_t Chunk::blockPosToIdx(uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
 		 + chunkBlockPos.x * chunkSizeY
 		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
 }
 
-uint32_t Chunk::blockPosXZToIdx(glm::uvec2 chunkBlockPos)
+uint32_t Chunk::blockPosXZToIdx(uvec2 chunkBlockPos)
 {
     return chunkBlockPos.x * chunkSizeY
          + chunkBlockPos.y /*z*/ * (chunkSizeXZ * chunkSizeY);
 }
 
-uint32_t Chunk::segmentPosToIdx(glm::uvec3 chunkSegmentPos)
+uint32_t Chunk::segmentPosToIdx(uvec3 chunkSegmentPos)
 {
     return chunkSegmentPos.y
          + chunkSegmentPos.x * numChunkSegmentsY
          + chunkSegmentPos.z * (numChunkSegmentsXZ * numChunkSegmentsY);
 }
 
-uint32_t Chunk::segmentPosXZToIdx(glm::uvec2 chunkSegmentPos)
+uint32_t Chunk::segmentPosXZToIdx(uvec2 chunkSegmentPos)
 {
     return chunkSegmentPos.x * numChunkSegmentsY
          + chunkSegmentPos.y /*z*/ * (numChunkSegmentsXZ * numChunkSegmentsY);
+}
+
+void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos, uvec3& outSegmentEndPos)
+{
+    outSegmentStartPos = chunkSegmentPos * uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
+    outSegmentEndPos = outSegmentStartPos + uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
 }
 
 Region::Region(glm::ivec2 regionPos)
     : regionPos(regionPos), regionPosChunks(regionPos * static_cast<int>(regionSideLength))
 {}
 
-Chunk* Region::getChunk(glm::ivec2 chunkPos)
+Chunk* Region::getChunk(ivec2 chunkPos)
 {
     return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
 }
 
-Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
+Chunk* Region::getOrCreateChunk(ivec2 chunkPos)
 {
     const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
     if (this->chunks[chunkIdx] == nullptr)
@@ -714,7 +717,7 @@ void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
 //     for (uint x = 0; x < REGION_SIDE_LENGTH; ++x)
 //     {
 //         // do stuff here
-uint32_t Region::chunkPosToIdx(glm::ivec2 regionChunkPos)
+uint32_t Region::chunkPosToIdx(ivec2 regionChunkPos)
 {
     return regionChunkPos.x
          + regionChunkPos.y /*z*/ * regionSideLength;
