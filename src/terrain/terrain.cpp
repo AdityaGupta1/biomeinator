@@ -107,7 +107,7 @@ void update(ToFreeList& toFreeList)
 {
     const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
     const glm::ivec2 currentChunkPos =
-        glm::ivec2(glm::floor(glm::vec2(cameraPos_WS.x, cameraPos_WS.z) / static_cast<float>(CHUNK_SIZE_XZ)));
+        glm::ivec2(glm::floor(glm::vec2(cameraPos_WS.x, cameraPos_WS.z) / static_cast<float>(chunkSizeXZ)));
 
     bool updateTerrain = currentChunkPos != lastChunkPos;
     if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))

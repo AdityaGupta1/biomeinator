@@ -65,8 +65,8 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
     return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
 }
 
-#define CHUNK_SIZE_XZ 16
-#define CHUNK_SIZE_Y 256
+inline constexpr uint32_t chunkSizeXZ = 16;
+inline constexpr uint32_t chunkSizeY = 256;
 
 class Region;
 
@@ -85,7 +85,7 @@ private:
     std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
-    std::array<Block, CHUNK_SIZE_XZ * CHUNK_SIZE_Y * CHUNK_SIZE_XZ> blocks{};
+    std::array<Block, chunkSizeXZ * chunkSizeY * chunkSizeXZ> blocks{};
 
     Instance* instance{ nullptr };
 

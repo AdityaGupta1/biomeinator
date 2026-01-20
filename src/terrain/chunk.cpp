@@ -77,9 +77,9 @@ void Chunk::generateBlocks()
 {
     const ivec2 chunkBlockPos_WS = chunkPos * 16;
 
-    for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
+    for (uint z = 0; z < chunkSizeXZ; ++z)
     {
-        for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
+        for (uint x = 0; x < chunkSizeXZ; ++x)
         {
             const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
@@ -91,7 +91,7 @@ void Chunk::generateBlocks()
                 this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
             }
 
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < CHUNK_SIZE_Y)
+            if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < chunkSizeY)
             {
                 this->blocks[blockPosToIdx(ivec3(x, height, z))] = Block::LAMP;
             }
@@ -170,21 +170,21 @@ static constexpr ivec3 faceOffsets[6] = {
 
 bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
 {
-    if (pos_CS.y < 0 || pos_CS.y >= CHUNK_SIZE_Y)
+    if (pos_CS.y < 0 || pos_CS.y >= chunkSizeY)
     {
         return true;
     }
 
     Block block;
 
-    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= CHUNK_SIZE_XZ)
+    if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= chunkSizeXZ)
     {
         const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
         ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until state == NEIGHBORS_HAVE_BLOCKS
         const ivec3 pos_neighborCS = {
-            (pos_CS.x + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+            (pos_CS.x + chunkSizeXZ) % chunkSizeXZ,
             pos_CS.y,
-            (pos_CS.z + CHUNK_SIZE_XZ) % CHUNK_SIZE_XZ,
+            (pos_CS.z + chunkSizeXZ) % chunkSizeXZ,
         };
         block = neighborChunk->blocks[Chunk::blockPosToIdx(uvec3(pos_neighborCS))];
     }
@@ -239,13 +239,13 @@ void Chunk::createInstance(Scene* scene)
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
-    for (uint z = 0; z < CHUNK_SIZE_XZ; ++z)
+    for (uint z = 0; z < chunkSizeXZ; ++z)
     {
-        for (uint x = 0; x < CHUNK_SIZE_XZ; ++x)
+        for (uint x = 0; x < chunkSizeXZ; ++x)
         {
             const uint32_t baseIdx = blockPosToIdx(uvec3(x, 0, z));
 
-            for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
+            for (uint y = 0; y < chunkSizeY; ++y)
             {
                 const uvec3 blockPos_CS(x, y, z);
                 const Block block = blocks[baseIdx + y];
@@ -381,14 +381,14 @@ glm::ivec2 Chunk::getChunkPos() const
 // {
 //     for (uint x = 0; x < CHUNK_SIZE_X; ++x)
 //     {
-//         for (uint y = 0; y < CHUNK_SIZE_Y; ++y)
+//         for (uint y = 0; y < chunkSizeY; ++y)
 //         {
 //             // do stuff here
 uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
-		 + chunkBlockPos.x * CHUNK_SIZE_Y
-		 + chunkBlockPos.z * (CHUNK_SIZE_XZ * CHUNK_SIZE_Y);
+		 + chunkBlockPos.x * chunkSizeY
+		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
 }
 
 Region::Region(glm::ivec2 regionPos)
