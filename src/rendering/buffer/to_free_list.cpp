@@ -47,7 +47,7 @@ void ToFreeList::pushInstance(Instance* instance)
 {
     instances.push_back(instance);
     instance->isScheduledForDeletion = true;
-    instance->scene->isTlasDirty = true;
+    instance->setVisible(false);
 }
 
 void ToFreeList::pushDescriptor(const uint32_t idx)

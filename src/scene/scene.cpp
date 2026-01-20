@@ -43,15 +43,15 @@ void Instance::reset(bool alsoFreeFromScene)
 
     this->areaLightsBufferSection.free();
 
-    if (alsoFreeFromScene)
-    {
-        this->scene->freeInstance(this);
-    }
-
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
     this->isGeometrySet = false;
+
+    if (alsoFreeFromScene)
+    {
+        this->scene->freeInstance(this);
+    }
 }
 
 void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
@@ -245,14 +245,15 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 
 void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 {
-    this->instancesReadyForBlasBuild.push_back(instance);
+    this->instancesReadyForBlasBuild.insert(instance);
 }
 
 void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instances.erase(instance->id);
-    this->isTlasDirty |= instance->isVisible;
+    this->instancesReadyForBlasBuild.erase(instance);
+    this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
 }
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)

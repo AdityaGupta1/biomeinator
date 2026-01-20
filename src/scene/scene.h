@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <memory>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class ToFreeList;
@@ -119,7 +120,7 @@ private:
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
-    std::vector<Instance*> instancesReadyForBlasBuild{};
+    std::unordered_set<Instance*> instancesReadyForBlasBuild{};
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
