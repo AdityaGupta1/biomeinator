@@ -145,7 +145,12 @@ void Chunk::onNeighborsHaveBlocks()
         this->neighbors[i] = this->atomicNeighbors[i].load(std::memory_order_acquire);
     }
 
-    // TODO: build segment array
+    this->generateSegments();
+}
+
+void Chunk::generateSegments()
+{
+
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -240,13 +245,13 @@ void Chunk::createInstance(Scene* scene)
     emissiveTriangleIdxs.reserve(512);
 
     uint32_t blockIdx = 0;
-    for (uint z = 0; z < chunkSizeXZ; ++z)
+    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
-        for (uint x = 0; x < chunkSizeXZ; ++x)
+        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
-            for (uint y = 0; y < chunkSizeY; ++y)
+            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
-                const uvec3 blockPos_CS(x, y, z);
+                const uvec3 blockPos_CS(blockX, blockY, blockZ);
                 const Block block = blocks[blockIdx++];
                 if (block == Block::AIR)
                 {

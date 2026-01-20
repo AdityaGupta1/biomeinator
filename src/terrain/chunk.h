@@ -106,6 +106,7 @@ public:
 
     void generateBlocks();
     void onNeighborsHaveBlocks();
+    void generateSegments();
 
     void setInstance(Instance* instance);
     void createInstance(Scene* scene);
