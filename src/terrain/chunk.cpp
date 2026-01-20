@@ -84,11 +84,13 @@ void Chunk::generateBlocks()
             const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
 
+            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
+
             for (uint y = 0; y < height; ++y)
             {
                 const ivec3 blockPos_CS = ivec3(x, y, z);
                 const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
+                this->blocks[blockIdx++] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
             }
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < chunkSizeY)
@@ -148,9 +150,242 @@ void Chunk::onNeighborsHaveBlocks()
     this->generateSegments();
 }
 
+// endPos is exclusive
+bool Chunk::isSegmentAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool isAirPredicate)
+{
+    for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
+    {
+        for (uint blockX = startPos.x; blockX < endPos.x; ++blockX)
+        {
+            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+
+            for (uint blockY = startPos.y; blockY < endPos.y; ++blockY)
+            {
+                const Block block = this->blocks[blockIdx++];
+                if ((block == Block::AIR) != isAirPredicate)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+// endPos is exclusive
+bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos, const uvec3 chunkSegmentPos) // TODO: reduce arithmetic in index calculations
+{
+    // these two cases should be skipped by generateSegments()
+    ASSERT(chunkSegmentPos.y != 0);
+    ASSERT(chunkSegmentPos.y != numChunkSegmentsY - 1);
+
+    const uint thisSegmentIdx = Chunk::segmentPosToIdx(chunkSegmentPos);
+
+    // -x
+    {
+        Block* blocks;
+        uint blockX;
+        bool check = true;
+        if (chunkSegmentPos.x == 0)
+        {
+            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_NEG)];
+            ASSERT(neighbor != nullptr);
+            blocks = neighbor->blocks.data();
+            blockX = chunkSizeXZ - 1;
+        }
+        else
+        {
+            blocks = this->blocks.data();
+            blockX = startPos.x - 1;
+            check = (this->segments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
+        }
+
+        if (check)
+        {
+            for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
+            {
+                for (uint blockY = startPos.y; blockY < endPos.y; ++blockY)
+                {
+                    const Block block = blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                    if (block == Block::AIR)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    // -y
+    if (this->segments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
+    {
+        const uint blockY = startPos.y - 1;
+        for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
+        {
+            for (uint blockX = startPos.x; blockX < endPos.x; ++blockX)
+            {
+                const Block block = this->blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                if (block == Block::AIR)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // -z
+    {
+        Block* blocks;
+        uint blockZ;
+        bool check = true;
+        if (chunkSegmentPos.z == 0)
+        {
+            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_NEG)];
+            ASSERT(neighbor != nullptr);
+            blocks = neighbor->blocks.data();
+            blockZ = chunkSizeXZ - 1;
+        }
+        else
+        {
+            blocks = this->blocks.data();
+            blockZ = startPos.z - 1;
+            check = (this->segments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
+        }
+
+        if (check)
+        {
+            for (uint blockX = startPos.x; blockX < endPos.x; ++blockX)
+            {
+                for (uint blockY = startPos.y; blockY < endPos.y; ++blockY)
+                {
+                    const Block block = blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                    if (block == Block::AIR)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    { // +x
+        Block* blocks;
+        uint blockX;
+        if (chunkSegmentPos.x == numChunkSegmentsXZ - 1)
+        {
+            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_POS)];
+            ASSERT(neighbor != nullptr);
+            blocks = neighbor->blocks.data();
+            blockX = 0;
+        }
+        else
+        {
+            blocks = this->blocks.data();
+            blockX = endPos.x;
+        }
+
+        for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
+        {
+            for (uint blockY = startPos.y; blockY < endPos.y; ++blockY)
+            {
+                const Block block = blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                if (block == Block::AIR)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // +y
+    {
+        const uint blockY = endPos.y;
+        for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
+        {
+            for (uint blockX = startPos.x; blockX < endPos.x; ++blockX)
+            {
+                const Block block = this->blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                if (block == Block::AIR)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    { // +z
+        Block* blocks;
+        uint blockZ;
+        if (chunkSegmentPos.z == numChunkSegmentsXZ - 1)
+        {
+            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_POS)];
+            ASSERT(neighbor != nullptr);
+            blocks = neighbor->blocks.data();
+            blockZ = 0;
+        }
+        else
+        {
+            blocks = this->blocks.data();
+            blockZ = endPos.z;
+        }
+
+        for (uint blockX = startPos.x; blockX < endPos.x; ++blockX)
+        {
+            for (uint blockY = startPos.y; blockY < endPos.y; ++blockY)
+            {
+                const Block block = blocks[Chunk::blockPosToIdx(uvec3(blockX, blockY, blockZ))];
+                if (block == Block::AIR)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
 void Chunk::generateSegments()
 {
+    uint32_t segmentIdx = 0;
+    for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
+    {
+        for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
+        {
+            uint segmentIdx = Chunk::segmentPosXZToIdx(uvec2(segmentX, segmentZ));
 
+            for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
+            {
+                const uvec3 segmentBasePos(
+                    segmentX * chunkSegmentSizeXZ, segmentY * chunkSegmentSizeY, segmentZ * chunkSegmentSizeXZ);
+                const uvec3 maxPos = segmentBasePos + uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
+
+                ChunkSegment segment = ChunkSegment::MIXED;
+
+                const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentBasePos)];
+                const bool isAirPredicate = blockAtBasePos == Block::AIR;
+                if (!isAirPredicate && (segmentY == 0 || segmentY == numChunkSegmentsY - 1))
+                {
+                    // this segment has blocks and cannot be surrounded because it's at the top or bottom of the chunk
+                    segment = ChunkSegment::MIXED;
+                }
+                else if (this->isSegmentAirOrSolid(segmentBasePos, maxPos, isAirPredicate))
+                {
+                    if (isAirPredicate)
+                    {
+                        segment = ChunkSegment::AIR;
+                    }
+                    else
+                    {
+                        const uvec3 chunkSegmentPos(segmentX, segmentY, segmentZ);
+                        const bool isSurrounded = isSegmentSurroundedBySolid(segmentBasePos, maxPos, chunkSegmentPos);
+                        segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
+                    }
+                }
+
+                this->segments[segmentIdx++] = segment;
+            }
+        }
+    }
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -393,6 +628,25 @@ uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
     return chunkBlockPos.y
 		 + chunkBlockPos.x * chunkSizeY
 		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
+}
+
+uint32_t Chunk::blockPosXZToIdx(glm::uvec2 chunkBlockPos)
+{
+    return chunkBlockPos.x * chunkSizeY
+         + chunkBlockPos.y /*z*/ * (chunkSizeXZ * chunkSizeY);
+}
+
+uint32_t Chunk::segmentPosToIdx(glm::uvec3 chunkSegmentPos)
+{
+    return chunkSegmentPos.y
+         + chunkSegmentPos.x * numChunkSegmentsY
+         + chunkSegmentPos.z * (numChunkSegmentsXZ * numChunkSegmentsY);
+}
+
+uint32_t Chunk::segmentPosXZToIdx(glm::uvec2 chunkSegmentPos)
+{
+    return chunkSegmentPos.x * numChunkSegmentsY
+         + chunkSegmentPos.y /*z*/ * (numChunkSegmentsXZ * numChunkSegmentsY);
 }
 
 Region::Region(glm::ivec2 regionPos)

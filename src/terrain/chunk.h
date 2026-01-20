@@ -65,8 +65,16 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
     return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
 }
 
+enum class ChunkSegment : uint8_t
+{
+    AIR,
+    BLOCKS_SURROUNDED,
+    MIXED,
+};
+
 inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeY = 256;
+inline constexpr uint32_t numChunkBlocks = chunkSizeXZ * chunkSizeY * chunkSizeXZ;
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
@@ -86,6 +94,9 @@ private:
     const glm::ivec2 chunkPos;
     Region* const region;
 
+    std::array<Block, numChunkBlocks> blocks{};
+    std::array<ChunkSegment, numChunkSegments> segments{};
+
     std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
@@ -95,11 +106,12 @@ private:
     std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
-    std::array<Block, chunkSizeXZ * chunkSizeY * chunkSizeXZ> blocks{};
-
     Instance* instance{ nullptr };
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
+
+    bool isSegmentAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
+    bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
 
 public:
     Chunk(glm::ivec2 chunkPos, Region* region);
@@ -126,6 +138,10 @@ public:
     glm::ivec2 getChunkPos() const;
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
+    static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
+
+    static uint32_t segmentPosToIdx(glm::uvec3 chunkSegmentPos);
+    static uint32_t segmentPosXZToIdx(glm::uvec2 chunkSegmentPos);
 };
 
 #define REGION_SIDE_LENGTH 16
