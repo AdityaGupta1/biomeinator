@@ -122,6 +122,16 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
 
+    // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
+    ManagedBuffer sharedBlasUploadBuffer{
+        &UPLOAD_HEAP,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        {
+            .isResizable = true,
+            .isMapped = true,
+        },
+    };
+
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };

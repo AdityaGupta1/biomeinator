@@ -171,6 +171,9 @@ void Scene::init()
         availableInstanceIds.push(instanceIdx);
     }
 
+    this->sharedBlasUploadBuffer.setName(L"scene sharedBlasUpload");
+    this->sharedBlasUploadBuffer.init(1 << 16 /*bytes*/);
+
     this->mappedMaterialsArray.setName(L"scene materials");
     this->mappedMaterialsArray.init(8 /*elements*/);
 
@@ -368,18 +371,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         numAreaLights += instance->host_areaLights.size();
     }
 
-    // TODO: make this persistent rather than allocated every frame
-    // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
-    ManagedBuffer uploadBuffer{
-        &UPLOAD_HEAP,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        {
-            .isMapped = true,
-        },
-    };
-    const uint32_t uploadBufferSize = (numPerTriDatas * sizeof(PerTriangleData) + (numAreaLights * sizeof(AreaLight)));
-    uploadBuffer.init(uploadBufferSize);
-
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
 
     BufferHelper::uavBarrier(cmdList, nullptr);
@@ -398,24 +389,26 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instance->host_idxs.clear();
 
         const ManagedBufferSection perTriDatasUploadBufferSection =
-            uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
+            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
         instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
-            cmdList, toFreeList, uploadBuffer, perTriDatasUploadBufferSection);
+            cmdList, toFreeList, sharedBlasUploadBuffer, perTriDatasUploadBufferSection);
         instanceData.perTriDatasBufferOffset =
             Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
 
         instance->host_perTriDatas.clear();
+        toFreeList.pushManagedBufferSection(perTriDatasUploadBufferSection);
 
         if (!instance->host_areaLights.empty())
         {
             const ManagedBufferSection areaLightsUploadBufferSection =
-                uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
+                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
-                cmdList, toFreeList, uploadBuffer, areaLightsUploadBufferSection);
+                cmdList, toFreeList, sharedBlasUploadBuffer, areaLightsUploadBufferSection);
             instanceData.areaLightsBufferOffset =
                 Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
             instance->host_areaLights.clear();
+            toFreeList.pushManagedBufferSection(areaLightsUploadBufferSection);
         }
 
         if (instance->isVisible)
@@ -423,8 +416,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             ++numVisibleBlasesWaitingForTlas;
         }
     }
-
-    toFreeList.pushManagedBuffer(&uploadBuffer);
 
     return false;
 }
