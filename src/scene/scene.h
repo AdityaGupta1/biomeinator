@@ -124,6 +124,7 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
+    uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{ {} };
