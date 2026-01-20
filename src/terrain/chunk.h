@@ -116,6 +116,8 @@ private:
 
     void onNeighborsHaveBlocks();
 
+    void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
+
 public:
     Chunk(glm::ivec2 chunkPos, Region* region, bool createNeighbors);
 

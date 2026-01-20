@@ -41,43 +41,52 @@ Chunk::Chunk(ivec2 chunkPos, Region* region, bool createNeighbors)
     uint numNeighborsWithBlocks = 0;
     for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
     {
-        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
-        const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
-
-        Region* neighborRegion = this->region;
-        const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
-        if (min(neighborChunkPos_region.x, neighborChunkPos_region.y) < 0 ||
-            max(neighborChunkPos_region.x, neighborChunkPos_region.y) >= regionSideLength)
+        Chunk* neighborChunk = this->neighbors[dirIdx];
+        if (neighborChunk == nullptr)
         {
-            neighborRegion = neighborRegion->getNeighbor(dir);
-        }
+            const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+            const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
 
-        if (neighborRegion != nullptr)
-        {
-            Chunk* neighborChunk = neighborRegion->getChunk(neighborChunkPos);
-
-            if (createNeighbors && neighborChunk == nullptr)
+            Region* neighborRegion = this->region;
+            const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
+            if (glm::min(neighborChunkPos_region.x, neighborChunkPos_region.y) < 0 ||
+                glm::max(neighborChunkPos_region.x, neighborChunkPos_region.y) >= regionSideLength)
             {
-                neighborChunk = neighborRegion->createChunkWithoutNeighbors(neighborChunkPos);
+                neighborRegion = neighborRegion->getNeighbor(dir);
             }
 
-            if (neighborChunk != nullptr)
+            if (neighborRegion != nullptr)
             {
-                this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
-                neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+                neighborChunk = neighborRegion->getChunk(neighborChunkPos);
 
-                if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+                if (createNeighbors && neighborChunk == nullptr)
                 {
-                    ++numNeighborsWithBlocks;
+                    neighborChunk = neighborRegion->createChunkWithoutNeighbors(neighborChunkPos);
                 }
 
-                // at this point, this chunk cannot have blocks, so we don't need to update
-                // neighborChunk->numNeighborsWithBlocks
+                if (neighborChunk != nullptr)
+                {
+                    this->setNeighbor(dir, neighborChunk);
+
+                    // at this point, this chunk cannot have blocks, so we don't need to update
+                    // neighborChunk->numNeighborsWithBlocks
+                }
             }
+        }
+
+        if (neighborChunk != nullptr && neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+        {
+            ++numNeighborsWithBlocks;
         }
     }
 
     this->numNeighborsWithBlocks.fetch_add(numNeighborsWithBlocks, std::memory_order_acq_rel);
+}
+
+void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
+{
+    this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
+    neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
 }
 
 void Chunk::generateBlocks()
