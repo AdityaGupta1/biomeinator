@@ -204,6 +204,7 @@ void Scene::reset()
 
     this->isTlasDirty = false;
     this->tlasBufferSection.free();
+    this->numVisibleBlasesWaitingForTlas = 0;
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
     {
