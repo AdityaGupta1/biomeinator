@@ -22,7 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define MAX_NUM_LOCAL_TASKS 4
 
-ThreadPool::ThreadPool(uint32_t numWorkers)
+ThreadPool::ThreadPool()
+{}
+
+void ThreadPool::init(uint32_t numWorkers)
 {
     for (int i = 0; i < numWorkers; ++i)
     {

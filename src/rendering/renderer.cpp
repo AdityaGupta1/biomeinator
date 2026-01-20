@@ -2010,6 +2010,7 @@ void render()
 
         if (testMode)
         {
+            Renderer::destroy();
             exit(0);
         }
     }

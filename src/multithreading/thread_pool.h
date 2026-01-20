@@ -46,7 +46,9 @@ private:
     bool stop{ false };
 
 public:
-    ThreadPool(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
+    ThreadPool();
+
+    void init(uint32_t numWorkers = std::thread::hardware_concurrency() - 1);
 
     void enqueue(Task task);
     template<class Iter>

@@ -54,6 +54,7 @@ static void task_createInstance(Chunk* chunk)
     chunk->createInstance(scene);
 }
 
+static ThreadPool threadPool;
 static std::deque<Task> tasksToEnqueue;
 
 void init(Scene* scene)
@@ -62,6 +63,8 @@ void init(Scene* scene)
 
     TerrainMaterials::init(scene);
     Blocks::init();
+
+    threadPool.init();
 }
 
 struct IVec2Hash
@@ -97,8 +100,6 @@ void setDirty()
 {
     dirty.store(true, std::memory_order_release);
 }
-
-static ThreadPool threadPool{};
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
