@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "rendering/dxr_includes.h"
 
+#include <deque>
 #include <vector>
 
 class ManagedBuffer;
@@ -35,7 +36,7 @@ private:
 
     std::vector<ManagedBufferSection> managedBufferSections;
 
-    std::vector<Instance*> instances;
+    std::deque<Instance*> instances;
 
     std::vector<uint32_t> descriptorIdxs;
 
@@ -51,5 +52,5 @@ public:
 
     void pushDescriptor(const uint32_t idx);
 
-    void freeAll();
+    void freeAll(bool amortize = false);
 };

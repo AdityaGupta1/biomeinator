@@ -55,7 +55,9 @@ void ToFreeList::pushDescriptor(const uint32_t idx)
     this->descriptorIdxs.push_back(idx);
 }
 
-void ToFreeList::freeAll()
+static constexpr uint32_t amortizedMaxInstancesToFreePerFrame = 1;
+
+void ToFreeList::freeAll(bool amortize)
 {
     for (auto& descriptorIdx : this->descriptorIdxs)
     {
@@ -81,9 +83,22 @@ void ToFreeList::freeAll()
     }
     managedBufferSections.clear();
 
-    for (Instance* instance : this->instances)
+    if (amortize)
     {
-        instance->reset(true /*alsoFreeFromScene*/);
+        for (int i = 0; i < amortizedMaxInstancesToFreePerFrame && !this->instances.empty(); ++i)
+        {
+            Instance* instance = this->instances.front();
+            this->instances.pop_front();
+
+            instance->reset(true /*alsoFreeFromScene*/);
+        }
     }
-    instances.clear();
+    else
+    {
+        for (Instance* instance : this->instances)
+        {
+            instance->reset(true /*alsoFreeFromScene*/);
+        }
+        instances.clear();
+    }
 }
