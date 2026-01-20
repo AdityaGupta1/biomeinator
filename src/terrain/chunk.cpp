@@ -141,7 +141,11 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
-    this->advanceState(ChunkState::GENERATING_SEGMENTS);
+    // not quite sure why this can be called twice simultaneously but this fixes the issue for now
+    if (!this->advanceState(ChunkState::GENERATING_SEGMENTS))
+    {
+        return;
+    }
 
     this->generateSegments();
 
@@ -197,7 +201,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         {
             blocks = this->blocks.data();
             blockX = startPos.x - 1;
-            check = (this->segments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (this->allSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
         }
 
         if (check)
@@ -217,7 +221,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
     }
 
     // -y
-    if (this->segments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
+    if (this->allSegments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
     {
         const uint blockY = startPos.y - 1;
         for (uint blockZ = startPos.z; blockZ < endPos.z; ++blockZ)
@@ -249,7 +253,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         {
             blocks = this->blocks.data();
             blockZ = startPos.z - 1;
-            check = (this->segments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (this->allSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
         }
 
         if (check)
@@ -347,13 +351,17 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
 
 void Chunk::generateSegments()
 {
-    uint segmentIdx = 0;
+    this->allSegments.reserve(numChunkSegments);
+    // reserve space for at least bottom layer and top surface layer
+    this->segmentsToGenerate.reserve(numChunkSegmentsXZ * numChunkSegmentsXZ * 2);
+
     for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
     {
         for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
         {
             for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
             {
+                const uvec3 segmentPos(segmentX, segmentY, segmentZ);
                 uvec3 segmentStartPos, segmentEndPos;
                 Chunk::segmentPosToBounds(uvec3(segmentX, segmentY, segmentZ), segmentStartPos, segmentEndPos);
 
@@ -380,10 +388,13 @@ void Chunk::generateSegments()
                     }
                 }
 
-                this->segments[segmentIdx++] = segment;
+                this->allSegments.push_back(segment); // used for easier condition checking for future segments in this function
+                this->segmentsToGenerate.push_back(segmentPos);
             }
         }
     }
+
+    this->allSegments.clear();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -477,79 +488,66 @@ void Chunk::createInstance(Scene* scene)
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
-    uint segmentPos = 0;
-    for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
+    for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
-        for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
+        uvec3 segmentStartPos, segmentEndPos;
+        Chunk::segmentPosToBounds(segmentPos, segmentStartPos, segmentEndPos);
+
+        for (uint blockZ = segmentStartPos.z; blockZ < segmentEndPos.z; ++blockZ)
         {
-            for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
+            for (uint blockX = segmentStartPos.x; blockX < segmentEndPos.x; ++blockX)
             {
-                const ChunkSegment segment = this->segments[segmentPos++];
-                if (segment != ChunkSegment::MIXED)
-                {
-                    continue;
-                }
+                const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
 
-                uvec3 segmentStartPos, segmentEndPos;
-                Chunk::segmentPosToBounds(uvec3(segmentX, segmentY, segmentZ), segmentStartPos, segmentEndPos);
-
-                for (uint blockZ = segmentStartPos.z; blockZ < segmentEndPos.z; ++blockZ)
+                for (uint blockY = segmentStartPos.y; blockY < segmentEndPos.y; ++blockY)
                 {
-                    for (uint blockX = segmentStartPos.x; blockX < segmentEndPos.x; ++blockX)
+                    const uvec3 blockPos_CS(blockX, blockY, blockZ);
+                    const uint blockIdx = baseBlockIdx + blockY;
+                    const Block block = blocks[blockIdx];
+                    if (block == Block::AIR)
                     {
-                        const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+                        continue;
+                    }
 
-                        for (uint blockY = segmentStartPos.y; blockY < segmentEndPos.y; ++blockY)
+                    const BlockData& blockData = Blocks::getBlockData(block);
+
+                    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                    {
+                        const ivec3 neighborOffset = faceOffsets[faceIdx];
+                        const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+
+                        if (!isBlockAir(neighborPos_CS, faceIdx))
                         {
-                            const uvec3 blockPos_CS(blockX, blockY, blockZ);
-                            const uint blockIdx = baseBlockIdx + blockY;
-                            const Block block = blocks[blockIdx];
-                            if (block == Block::AIR)
-                            {
-                                continue;
-                            }
+                            continue;
+                        }
 
-                            const BlockData& blockData = Blocks::getBlockData(block);
+                        const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                        const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
+                        const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
+                        for (uint i = 0; i < 4; ++i)
+                        {
+                            const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+                            const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
+                            verts.emplace_back(
+                                vec3ToDirectX(vertPos_CS),
+                                normal,
+                                vec2ToDirectX(uv)
+                            );
+                        }
 
-                            for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
-                            {
-                                const ivec3 neighborOffset = faceOffsets[faceIdx];
-                                const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+                        const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
 
-                                if (!isBlockAir(neighborPos_CS, faceIdx))
-                                {
-                                    continue;
-                                }
+                        indices.emplace_back(baseVertIdx + 0u);
+                        indices.emplace_back(baseVertIdx + 1u);
+                        indices.emplace_back(baseVertIdx + 2u);
+                        indices.emplace_back(baseVertIdx + 0u);
+                        indices.emplace_back(baseVertIdx + 2u);
+                        indices.emplace_back(baseVertIdx + 3u);
 
-                                const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
-                                const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-                                const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
-                                for (uint i = 0; i < 4; ++i)
-                                {
-                                    const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                                    const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
-                                    verts.emplace_back(
-                                        vec3ToDirectX(vertPos_CS),
-                                        normal,
-                                        vec2ToDirectX(uv)
-                                    );
-                                }
-
-                                const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
-
-                                indices.emplace_back(baseVertIdx + 0u);
-                                indices.emplace_back(baseVertIdx + 1u);
-                                indices.emplace_back(baseVertIdx + 2u);
-                                indices.emplace_back(baseVertIdx + 0u);
-                                indices.emplace_back(baseVertIdx + 2u);
-                                indices.emplace_back(baseVertIdx + 3u);
-
-                                if (blockData.emitsLight)
-                                {
-                                    emissiveTriangleIdxs.emplace_back(triangleIdx);
-                                    emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
-                                }
-                            }
+                        if (blockData.emitsLight)
+                        {
+                            emissiveTriangleIdxs.emplace_back(triangleIdx);
+                            emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
                         }
                     }
                 }
@@ -599,11 +597,20 @@ void Chunk::setState(ChunkState newState)
     this->state.store(newState, std::memory_order_release);
 }
 
-void Chunk::advanceState(ChunkState newState)
+bool Chunk::advanceState(ChunkState newState)
 {
-    ChunkState state = this->getState();
-    while (state < newState && !this->state.compare_exchange_weak(state, newState, std::memory_order_acq_rel))
-    {}
+    ChunkState expected = this->state.load(std::memory_order_acquire);
+
+    while (expected < newState)
+    {
+        if (this->state.compare_exchange_weak(expected, newState, std::memory_order_acq_rel, std::memory_order_acquire))
+        {
+            return true; // this thread advanced the state
+        }
+        // on failure, expected is updated; loop continues if still < newState
+    }
+
+    return false; // already >= newState, or another thread advanced it
 }
 
 bool Chunk::getIsMarkedForDestruction()

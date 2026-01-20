@@ -97,7 +97,8 @@ private:
     Region* const region;
 
     std::array<Block, numChunkBlocks> blocks{};
-    std::array<ChunkSegment, numChunkSegments> segments{};
+    std::vector<ChunkSegment> allSegments{};
+    std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
@@ -128,7 +129,7 @@ public:
 
     ChunkState getState() const;
     void setState(ChunkState newState);
-    void advanceState(ChunkState newState);
+    bool advanceState(ChunkState newState);
 
     bool getIsMarkedForDestruction();
     void setIsMarkedForDestruction(bool marked = true);
