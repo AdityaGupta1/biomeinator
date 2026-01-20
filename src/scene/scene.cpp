@@ -43,15 +43,15 @@ void Instance::reset(bool alsoFreeFromScene)
 
     this->areaLightsBufferSection.free();
 
-    if (alsoFreeFromScene)
-    {
-        this->scene->freeInstance(this);
-    }
-
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
     this->isGeometrySet = false;
+
+    if (alsoFreeFromScene)
+    {
+        this->scene->freeInstance(this);
+    }
 }
 
 void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
@@ -171,6 +171,9 @@ void Scene::init()
         availableInstanceIds.push(instanceIdx);
     }
 
+    this->sharedBlasUploadBuffer.setName(L"scene sharedBlasUpload");
+    this->sharedBlasUploadBuffer.init(1 << 16 /*bytes*/);
+
     this->mappedMaterialsArray.setName(L"scene materials");
     this->mappedMaterialsArray.init(8 /*elements*/);
 
@@ -201,6 +204,7 @@ void Scene::reset()
 
     this->isTlasDirty = false;
     this->tlasBufferSection.free();
+    this->numVisibleBlasesWaitingForTlas = 0;
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
     {
@@ -245,14 +249,15 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
 
 void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 {
-    this->instancesReadyForBlasBuild.push_back(instance);
+    this->instancesReadyForBlasBuild.insert(instance);
 }
 
 void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instances.erase(instance->id);
-    this->isTlasDirty |= instance->isVisible;
+    this->instancesReadyForBlasBuild.erase(instance);
+    this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
 }
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
@@ -304,11 +309,38 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     return didChange;
 }
 
+static constexpr uint32_t maxBlasBuildsPerFrame = 2;
+static constexpr uint32_t maxBlasesWaitingForTlas = 32;
+
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
+    if (this->numVisibleBlasesWaitingForTlas > maxBlasesWaitingForTlas)
+    {
+        return true;
+    }
+
     if (this->instancesReadyForBlasBuild.empty())
     {
-        return false;
+        return numVisibleBlasesWaitingForTlas > 0;
+    }
+
+    std::vector<Instance*> instancesToBuildThisFrame;
+    const uint32_t maxInstancesThisFrame =
+        std::min(maxBlasBuildsPerFrame, static_cast<uint32_t>(this->instancesReadyForBlasBuild.size()));
+    instancesToBuildThisFrame.reserve(maxInstancesThisFrame);
+    for (Instance* const instance : this->instancesReadyForBlasBuild)
+    {
+        if (instancesToBuildThisFrame.size() >= maxInstancesThisFrame)
+        {
+            break;
+        }
+
+        instancesToBuildThisFrame.push_back(instance);
+    }
+
+    for (Instance* const instance : instancesToBuildThisFrame)
+    {
+        this->instancesReadyForBlasBuild.erase(instance);
     }
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
@@ -316,7 +348,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     uint32_t numPerTriDatas = 0;
     uint32_t numAreaLights = 0;
 
-    for (Instance* const instance : instancesReadyForBlasBuild)
+    for (Instance* const instance : instancesToBuildThisFrame)
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
@@ -340,23 +372,12 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         numAreaLights += instance->host_areaLights.size();
     }
 
-    // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
-    ManagedBuffer uploadBuffer{
-        &UPLOAD_HEAP,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        {
-            .isMapped = true,
-        },
-    };
-    const uint32_t uploadBufferSize = (numPerTriDatas * sizeof(PerTriangleData) + (numAreaLights * sizeof(AreaLight)));
-    uploadBuffer.init(uploadBufferSize);
-
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
 
     BufferHelper::uavBarrier(cmdList, nullptr);
 
     bool hadVisibleInstance = false;
-    for (Instance* const instance : this->instancesReadyForBlasBuild)
+    for (Instance* const instance : instancesToBuildThisFrame)
     {
         InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
         instanceData.vertsBufferOffset =
@@ -369,33 +390,35 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instance->host_idxs.clear();
 
         const ManagedBufferSection perTriDatasUploadBufferSection =
-            uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
+            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
         instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
-            cmdList, toFreeList, uploadBuffer, perTriDatasUploadBufferSection);
+            cmdList, toFreeList, sharedBlasUploadBuffer, perTriDatasUploadBufferSection);
         instanceData.perTriDatasBufferOffset =
             Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
 
         instance->host_perTriDatas.clear();
+        toFreeList.pushManagedBufferSection(perTriDatasUploadBufferSection);
 
         if (!instance->host_areaLights.empty())
         {
             const ManagedBufferSection areaLightsUploadBufferSection =
-                uploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
+                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
-                cmdList, toFreeList, uploadBuffer, areaLightsUploadBufferSection);
+                cmdList, toFreeList, sharedBlasUploadBuffer, areaLightsUploadBufferSection);
             instanceData.areaLightsBufferOffset =
                 Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
             instance->host_areaLights.clear();
+            toFreeList.pushManagedBufferSection(areaLightsUploadBufferSection);
         }
 
-        hadVisibleInstance |= instance->isVisible;
+        if (instance->isVisible)
+        {
+            ++numVisibleBlasesWaitingForTlas;
+        }
     }
 
-    toFreeList.pushManagedBuffer(&uploadBuffer);
-
-    this->instancesReadyForBlasBuild.clear();
-    return hadVisibleInstance;
+    return false;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -448,6 +471,8 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     this->isTlasDirty = false;
 
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
+
+    this->numVisibleBlasesWaitingForTlas = 0;
 }
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

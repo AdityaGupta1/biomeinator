@@ -37,8 +37,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
-#define MAX_TASKS_PER_FRAME 10
-
 namespace Terrain
 {
 
@@ -55,7 +53,6 @@ static void task_createInstance(Chunk* chunk)
 }
 
 static ThreadPool threadPool;
-static std::deque<Task> tasksToEnqueue;
 
 void init(Scene* scene)
 {
@@ -81,6 +78,9 @@ static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
+
+static std::deque<Task> tasksToEnqueue;
+std::vector<Task> thisFrameTasks;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
@@ -238,18 +238,20 @@ void update(ToFreeList& toFreeList)
         tasksToEnqueue.push_back({ task_createInstance, chunk });
     }
 
+    static constexpr uint32_t maxTasksPerFrame = 32;
+
     if (!tasksToEnqueue.empty())
     {
-        std::vector<Task> thisFrameTasks;
-        thisFrameTasks.reserve(MAX_TASKS_PER_FRAME);
+        thisFrameTasks.reserve(maxTasksPerFrame);
 
-        for (uint32_t i = 0; i < MAX_TASKS_PER_FRAME && !tasksToEnqueue.empty(); ++i)
+        for (uint32_t i = 0; i < maxTasksPerFrame && !tasksToEnqueue.empty(); ++i)
         {
             thisFrameTasks.push_back(tasksToEnqueue.front());
             tasksToEnqueue.pop_front();
         }
 
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+        thisFrameTasks.clear();
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;
