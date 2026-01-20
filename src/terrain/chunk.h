@@ -68,6 +68,16 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
 inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeY = 256;
 
+inline constexpr uint32_t chunkSegmentSizeXZ = 4;
+inline constexpr uint32_t chunkSegmentSizeY = 8;
+
+static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0);
+static_assert(chunkSizeY % chunkSegmentSizeY == 0);
+
+inline constexpr uint32_t numChunkSegmentsXZ = chunkSizeXZ / chunkSegmentSizeXZ;
+inline constexpr uint32_t numChunkSegmentsY = chunkSizeY / chunkSegmentSizeY;
+inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmentsY * numChunkSegmentsXZ;
+
 class Region;
 
 class Chunk
