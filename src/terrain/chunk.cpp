@@ -48,7 +48,7 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
 
         Region* neighborRegion = this->region;
         const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
-        if (glm::compMin(neighborChunkPos_region) < 0 || glm::compMax(neighborChunkPos_region) >= REGION_SIDE_LENGTH)
+        if (glm::compMin(neighborChunkPos_region) < 0 || glm::compMax(neighborChunkPos_region) >= regionSideLength)
         {
             neighborRegion = neighborRegion->getNeighbor(dir);
         }
@@ -75,7 +75,7 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
 
 void Chunk::generateBlocks()
 {
-    const ivec2 chunkBlockPos_WS = chunkPos * 16;
+    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
@@ -459,7 +459,7 @@ void Chunk::setInstance(Instance* instance)
 
 void Chunk::createInstance(Scene* scene)
 {
-    const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
+    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
         0.f,
@@ -674,7 +674,7 @@ uint32_t Chunk::segmentPosXZToIdx(glm::uvec2 chunkSegmentPos)
 }
 
 Region::Region(glm::ivec2 regionPos)
-    : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
+    : regionPos(regionPos), regionPosChunks(regionPos * static_cast<int>(regionSideLength))
 {}
 
 Chunk* Region::getChunk(glm::ivec2 chunkPos)
@@ -714,5 +714,5 @@ void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
 uint32_t Region::chunkPosToIdx(glm::ivec2 regionChunkPos)
 {
     return regionChunkPos.x
-         + regionChunkPos.y /*z*/ * REGION_SIDE_LENGTH;
+         + regionChunkPos.y /*z*/ * regionSideLength;
 }

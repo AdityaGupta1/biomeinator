@@ -134,9 +134,9 @@ void update(ToFreeList& toFreeList)
         // this combined region logic will become a problem if I ever add teleportation (since the region could
         // become huge)
         const glm::ivec2 minRegionPos =
-            glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(REGION_SIDE_LENGTH)));
+            glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(regionSideLength)));
         const glm::ivec2 maxRegionPos =
-            glm::ivec2(glm::floor(glm::vec2(maxChunkPos) / static_cast<float>(REGION_SIDE_LENGTH)));
+            glm::ivec2(glm::floor(glm::vec2(maxChunkPos) / static_cast<float>(regionSideLength)));
 
         for (int regionZ = minRegionPos.y; regionZ <= maxRegionPos.y; ++regionZ)
         {
@@ -163,7 +163,7 @@ void update(ToFreeList& toFreeList)
                 Region& region = *regionIter->second;
 
                 const glm::ivec2 minChunkPosInRegion = glm::max(region.regionPosChunks, minChunkPos);
-                const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionPosChunks + REGION_SIDE_LENGTH - 1, maxChunkPos);
+                const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionPosChunks + static_cast<int>(regionSideLength) - 1, maxChunkPos);
 
                 for (int chunkZ = minChunkPosInRegion.y; chunkZ <= maxChunkPosInRegion.y; ++chunkZ)
                 {

@@ -146,7 +146,7 @@ public:
     static uint32_t segmentPosXZToIdx(glm::uvec2 chunkSegmentPos);
 };
 
-#define REGION_SIDE_LENGTH 16
+inline constexpr uint32_t regionSideLength = 64;
 
 class Region
 {
@@ -157,7 +157,7 @@ public:
     const glm::ivec2 regionPos;
     const glm::ivec2 regionPosChunks;
 
-    std::array<std::unique_ptr<Chunk>, REGION_SIDE_LENGTH * REGION_SIDE_LENGTH> chunks{};
+    std::array<std::unique_ptr<Chunk>, regionSideLength * regionSideLength> chunks{};
 
     Region(glm::ivec2 regionPos);
 
