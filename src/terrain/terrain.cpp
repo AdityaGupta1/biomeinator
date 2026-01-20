@@ -53,7 +53,6 @@ static void task_createInstance(Chunk* chunk)
 }
 
 static ThreadPool threadPool;
-static std::deque<Task> tasksToEnqueue;
 
 void init(Scene* scene)
 {
@@ -79,6 +78,9 @@ static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
+
+static std::deque<Task> tasksToEnqueue;
+std::vector<Task> thisFrameTasks;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
@@ -240,7 +242,6 @@ void update(ToFreeList& toFreeList)
 
     if (!tasksToEnqueue.empty())
     {
-        std::vector<Task> thisFrameTasks;
         thisFrameTasks.reserve(maxTasksPerFrame);
 
         for (uint32_t i = 0; i < maxTasksPerFrame && !tasksToEnqueue.empty(); ++i)
@@ -250,6 +251,7 @@ void update(ToFreeList& toFreeList)
         }
 
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+        thisFrameTasks.clear();
     }
 
     std::vector<Chunk*> chunksToCreateBlasNow;
