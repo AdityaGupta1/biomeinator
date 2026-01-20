@@ -239,16 +239,15 @@ void Chunk::createInstance(Scene* scene)
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
+    uint32_t blockIdx = 0;
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
-            const uint32_t baseIdx = blockPosToIdx(uvec3(x, 0, z));
-
             for (uint y = 0; y < chunkSizeY; ++y)
             {
                 const uvec3 blockPos_CS(x, y, z);
-                const Block block = blocks[baseIdx + y];
+                const Block block = blocks[blockIdx++];
                 if (block == Block::AIR)
                 {
                     continue;
