@@ -37,7 +37,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
-#define MAX_TASKS_PER_FRAME 10
+#define MAX_TASKS_PER_FRAME 10 // TODO: revisit this once BLAS builds are spread out
 
 namespace Terrain
 {

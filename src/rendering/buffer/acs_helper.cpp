@@ -189,7 +189,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE, // TODO: sacrifice some tracing perf for better building perf?
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
