@@ -99,7 +99,6 @@ private:
     std::array<Block, numChunkBlocks> blocks{};
     std::array<ChunkSegment, numChunkSegments> segments{};
 
-    std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
@@ -117,7 +116,7 @@ private:
     void onNeighborsHaveBlocks();
 
 public:
-    Chunk(glm::ivec2 chunkPos, Region* region);
+    Chunk(glm::ivec2 chunkPos, Region* region, bool createNeighbors);
 
     void generateBlocks();
     void generateSegments();
@@ -154,6 +153,7 @@ class Region
 {
 private:
     std::array<Region*, 4> neighbors{};
+    uint32_t numNeighborsSet{ 0 };
 
 public:
     const glm::ivec2 regionPos;
@@ -165,9 +165,11 @@ public:
 
     Chunk* getChunk(glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+    Chunk* createChunkWithoutNeighbors(glm::ivec2 chunkPos);
 
     Region* getNeighbor(NeighborDirection dir) const;
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
+    uint32_t getNumNeighborsSet() const;
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

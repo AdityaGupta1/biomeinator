@@ -145,22 +145,32 @@ void update(ToFreeList& toFreeList)
                 const glm::ivec2 regionPos = glm::ivec2(regionX, regionZ);
 
                 const auto [regionIter, inserted] = regions.try_emplace(regionPos, nullptr);
+                std::unique_ptr<Region>& regionPtr = regionIter->second;
                 if (inserted)
                 {
-                    regionIter->second = std::make_unique<Region>(regionPos);
+                    regionPtr = std::make_unique<Region>(regionPos);
+                }
 
+                if (regionPtr->getNumNeighborsSet() < 4)
+                {
                     for (int neighborDirIdx = 0; neighborDirIdx < 4; ++neighborDirIdx)
                     {
                         const NeighborDirection neighborDir = static_cast<NeighborDirection>(neighborDirIdx);
                         const glm::ivec2 neighborRegionPos = regionPos + neighborOffset(neighborDir);
-                        const auto neighborIter = regions.find(neighborRegionPos);
-                        if (neighborIter != regions.end())
+
+                        const auto [neighborRegionIter, neighborInserted] =
+                            regions.try_emplace(neighborRegionPos, nullptr);
+                        std::unique_ptr<Region>& neighborRegionPtr = neighborRegionIter->second;
+                        if (neighborInserted)
                         {
-                            regionIter->second->setNeighbor(neighborDir, neighborIter->second.get());
+                            neighborRegionPtr = std::make_unique<Region>(neighborRegionPos);
                         }
+
+                        regionPtr->setNeighbor(neighborDir, neighborRegionPtr.get()); // also sets opposite direction
                     }
                 }
-                Region& region = *regionIter->second;
+
+                Region& region = *regionPtr;
 
                 const glm::ivec2 minChunkPosInRegion = glm::max(region.regionPosChunks, minChunkPos);
                 const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionPosChunks + static_cast<int>(regionSideLength) - 1, maxChunkPos);
