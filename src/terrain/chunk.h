@@ -111,7 +111,7 @@ private:
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
-    bool isSegmentAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
+    bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
 
     void onNeighborsHaveBlocks();
