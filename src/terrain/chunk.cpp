@@ -91,6 +91,10 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateBlocks()
 {
+    // for real terrain generation, it would be better to fill AIR only for blocks that are actually air (i.e. above the
+    // max height solid block)
+    this->blocks.fill(Block::AIR);
+
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
