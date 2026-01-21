@@ -32,7 +32,7 @@ enum class ChunkState : uint8_t
     HAS_BLOCKS,
     NEEDS_SEGMENTS,
     GENERATING_SEGMENTS,
-    NEIGHBORS_HAVE_BLOCKS, // TODO: rename to NEEDS_GEOMETRY or something
+    NEEDS_GEOMETRY,
     GENERATING_GEOMETRY,
     HAS_GEOMETRY,
 };

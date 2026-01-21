@@ -158,7 +158,7 @@ void Chunk::onNeighborsHaveBlocks()
 
     this->generateSegments();
 
-    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+    this->advanceState(ChunkState::NEEDS_GEOMETRY);
 }
 
 bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool isAirPredicate)
@@ -399,7 +399,7 @@ bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
     if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= chunkSizeXZ)
     {
         const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
-        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until state == NEIGHBORS_HAVE_BLOCKS
+        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until all neighbors have blocks
         const ivec3 pos_neighborCS = {
             (pos_CS.x + chunkSizeXZ) % chunkSizeXZ,
             pos_CS.y,
@@ -548,7 +548,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
 {
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
-    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
+    this->setState(ChunkState::NEEDS_GEOMETRY);
     this->setIsMarkedForDestruction(false);
 }
 

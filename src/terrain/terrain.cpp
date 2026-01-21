@@ -209,7 +209,7 @@ void update(ToFreeList& toFreeList)
                             chunk->setIsMarkedForDestruction(false);
                             chunk->setInstanceVisible(inCurrentRenderDistance);
 
-                            if (chunkState == ChunkState::NEIGHBORS_HAVE_BLOCKS)
+                            if (chunkState == ChunkState::NEEDS_GEOMETRY)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
                                 chunksToCreateInstance.push_back(chunk);
