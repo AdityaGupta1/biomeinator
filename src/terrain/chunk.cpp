@@ -66,7 +66,7 @@ Chunk::Chunk(ivec2 chunkPos, Region* region, bool createNeighbors)
 
                 if (neighborChunk != nullptr)
                 {
-                    this->setNeighbor(dir, neighborChunk);
+                    this->setNeighbor(dir, neighborChunk); // also sets opposite direction
 
                     // at this point, this chunk cannot have blocks, so we don't need to update
                     // neighborChunk->numNeighborsWithBlocks
@@ -93,15 +93,15 @@ void Chunk::generateBlocks()
 {
     // for real terrain generation, it would be better to fill AIR only for blocks that are actually air (i.e. above the
     // max height solid block)
-    this->blocks.fill(Block::AIR);
+    this->blocks = {};
 
-    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
-            const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
+            const ivec2 blockPosXZ_WS = chunkBlockPosXZ_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
 
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
