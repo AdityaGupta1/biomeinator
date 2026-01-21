@@ -154,7 +154,7 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
-    // not quite sure why this can be called twice simultaneously but this fixes the issue for now
+    // not quite sure why this function can be called twice simultaneously but this check fixes the issue for now
     if (!this->advanceState(ChunkState::GENERATING_SEGMENTS))
     {
         return;
