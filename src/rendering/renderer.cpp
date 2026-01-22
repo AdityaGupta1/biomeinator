@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "dxr_common.h"
 #include <d3dcompiler.h>
+#include <dxgi1_5.h>
 
 #include "camera.h"
 #include "param_block_manager.h"
@@ -270,18 +271,19 @@ static void initStreamline()
 
 ComPtr<ID3D12Device5> device;
 
-static ComPtr<IDXGIFactory4> factory;
+static ComPtr<IDXGIFactory5> factory;
 static ComPtr<ID3D12CommandQueue> cmdQueue;
 static ComPtr<ID3D12Fence> fence;
+
 static void initDevice()
 {
     const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
     const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
 
-    typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
-    typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
+    //typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
+    //typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory2)(UINT, REFIID, void**);
-    typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
+    //typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
     typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
 
     //const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
@@ -310,10 +312,9 @@ static void initDevice()
 #define DXGI_FACTORY_FLAGS 0
 #endif
 
-    if (SUCCEEDED(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory))))
-    {
-        Logger::log("Created factory");
-    }
+    static ComPtr<IDXGIFactory2> factory2;
+    CHECK_HRESULT(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory2)));
+    CHECK_HRESULT(factory2.As(&factory));
 
 #undef DXGI_FACTORY_FLAGS
 
@@ -403,6 +404,8 @@ void initNvapi()
 static ComPtr<IDXGISwapChain3> swapChain;
 static constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
+static bool supportsTearing = false;
+
 static void initSwapChain()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -415,6 +418,8 @@ static void initSwapChain()
     ComPtr<IDXGISwapChain1> swapChain1;
     CHECK_HRESULT(factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
     CHECK_HRESULT(swapChain1.As(&swapChain));
+
+    CHECK_HRESULT(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
 
     factory.Reset();
 }
@@ -1998,7 +2003,7 @@ void render()
     frameCtx.fenceValue = fenceValue;
 
     const uint32_t syncInterval = SettingsManager::getAsBool("useVsync") ? 1 : 0;
-    swapChain->Present(syncInterval, 0);
+    CHECK_HRESULT(swapChain->Present(syncInterval, 0));
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
