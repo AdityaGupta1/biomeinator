@@ -309,7 +309,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     return didChange;
 }
 
-static constexpr uint32_t maxBlasBuildsPerFrame = 2;
+static constexpr uint32_t maxBlasBuildsPerFrame = 4;
 static constexpr uint32_t maxBlasesWaitingForTlas = 32;
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
