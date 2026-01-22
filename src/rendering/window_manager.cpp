@@ -75,10 +75,11 @@ static void setIsInCursorMode(bool newIsInCursorMode)
     setCursorVisibility(isInCursorMode);
 }
 
-static WINDOWPLACEMENT prevWindowPlacement{ sizeof(prevWindowPlacement) };
+static WINDOWPLACEMENT prevWindowPlacement;
 
 void enterFullscreen()
 {
+    prevWindowPlacement.length = sizeof(prevWindowPlacement);
     GetWindowPlacement(hwnd, &prevWindowPlacement);
 
     MONITORINFO mi = { sizeof(mi) };
@@ -107,10 +108,9 @@ void exitFullscreen()
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 }
 
-bool isFullscreen{ false };
-
 void toggleFullscreen()
 {
+    const bool isFullscreen = SettingsManager::getAsBool("fullscreen");
     if (isFullscreen)
     {
         exitFullscreen();
@@ -120,7 +120,7 @@ void toggleFullscreen()
         enterFullscreen();
     }
 
-    isFullscreen = !isFullscreen;
+    SettingsManager::setAsBool("fullscreen", !isFullscreen);
 }
 
 static void onKeyDown(WPARAM wparam, LPARAM lparam)
@@ -326,6 +326,12 @@ void init()
     }
 
     isInitialized = true;
+
+    if (SettingsManager::getAsBool("fullscreen"))
+    {
+        prevWindowPlacement = { sizeof(prevWindowPlacement) };
+        enterFullscreen();
+    }
 }
 
 PlayerInput getPlayerInput()
