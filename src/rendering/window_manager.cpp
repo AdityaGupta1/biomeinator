@@ -111,6 +111,7 @@ void exitFullscreen()
 void toggleFullscreen()
 {
     const bool isFullscreen = SettingsManager::getAsBool("fullscreen");
+
     if (isFullscreen)
     {
         exitFullscreen();
