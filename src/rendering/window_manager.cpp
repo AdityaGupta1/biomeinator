@@ -75,14 +75,69 @@ static void setIsInCursorMode(bool newIsInCursorMode)
     setCursorVisibility(isInCursorMode);
 }
 
-static void onKeyDown(WPARAM wparam)
+static WINDOWPLACEMENT prevWindowPlacement{ sizeof(prevWindowPlacement) };
+
+void enterFullscreen()
 {
+    GetWindowPlacement(hwnd, &prevWindowPlacement);
+
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+
+    LONG style = GetWindowLong(hwnd, GWL_STYLE);
+    style &= ~(WS_OVERLAPPEDWINDOW);
+    SetWindowLong(hwnd, GWL_STYLE, style);
+
+    SetWindowPos(hwnd,
+                 HWND_TOP,
+                 mi.rcMonitor.left,
+                 mi.rcMonitor.top,
+                 mi.rcMonitor.right - mi.rcMonitor.left,
+                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+}
+
+void exitFullscreen()
+{
+    LONG style = GetWindowLong(hwnd, GWL_STYLE);
+    style |= WS_OVERLAPPEDWINDOW;
+    SetWindowLong(hwnd, GWL_STYLE, style);
+
+    SetWindowPlacement(hwnd, &prevWindowPlacement);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+bool isFullscreen{ false };
+
+void toggleFullscreen()
+{
+    if (isFullscreen)
+    {
+        exitFullscreen();
+    }
+    else
+    {
+        enterFullscreen();
+    }
+
+    isFullscreen = !isFullscreen;
+}
+
+static void onKeyDown(WPARAM wparam, LPARAM lparam)
+{
+    const bool isRepeat = (lparam & (1u << 30)) != 0;
+    if (isRepeat)
+    {
+        return;
+    }
+
     if (ImGui::GetIO().WantCaptureKeyboard && wparam != VK_ESCAPE)
     {
         return;
     }
 
-    const bool ctrlHeld = GetKeyState(VK_CONTROL) & 0x8000;
+    const bool ctrlHeld = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    const bool altHeld = (GetKeyState(VK_MENU) & 0x8000) != 0;
 
     switch (wparam)
     {
@@ -118,6 +173,15 @@ static void onKeyDown(WPARAM wparam)
             break;
         case 'Z':
             setIsInCursorMode(!isInCursorMode);
+            break;
+        case VK_RETURN:
+            if (!altHeld)
+            {
+                break;
+            }
+            [[fallthrough]];
+        case VK_F11:
+            toggleFullscreen();
             break;
         default:
             break;
@@ -172,16 +236,16 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             }
             break;
         case WM_KEYDOWN:
-            onKeyDown(wparam);
-            break;
+            onKeyDown(wparam, lparam);
+            return 0;
         case WM_SYSKEYDOWN: // = alt key pressed
-            if (wparam == VK_F4) // allow alt + f4
+            if (wparam == VK_F4)
             {
                 break;
             }
-            [[fallthrough]];
-        case WM_SYSKEYUP:
-        case WM_SYSCHAR: // = key pressed while alt is also pressed
+            onKeyDown(wparam, lparam);
+            return 0;
+        case WM_SYSCHAR: // = default Windows alt menus, etc.
             return 0;
         case WM_ACTIVATE:
             if (wparam == WA_INACTIVE)
