@@ -2073,7 +2073,7 @@ static void beginFrame()
     WaitForSingleObject(frameLatencyWaitable, INFINITE);
     waitForFence(frame.fenceValue);
 
-    frame.toFreeList.freeAll(true /*amortize*/);
+    frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
 }

@@ -52,5 +52,5 @@ public:
 
     void pushDescriptor(const uint32_t idx);
 
-    void freeAll(bool amortize = false);
+    void freeAll();
 };
