@@ -404,8 +404,6 @@ void initNvapi()
 static ComPtr<IDXGISwapChain3> swapChain;
 static constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
-static bool supportsTearing = false;
-
 static void initSwapChain()
 {
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
