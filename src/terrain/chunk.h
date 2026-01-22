@@ -30,7 +30,9 @@ enum class ChunkState : uint8_t
     NEEDS_BLOCKS,
     GENERATING_BLOCKS,
     HAS_BLOCKS,
-    NEIGHBORS_HAVE_BLOCKS,
+    NEEDS_SEGMENTS,
+    GENERATING_SEGMENTS,
+    NEEDS_GEOMETRY,
     GENERATING_GEOMETRY,
     HAS_GEOMETRY,
 };
@@ -65,8 +67,26 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
     return static_cast<NeighborDirection>((static_cast<uint8_t>(dir) + 2) & 0x3);
 }
 
+enum class ChunkSegment : uint8_t
+{
+    AIR,
+    BLOCKS_SURROUNDED,
+    MIXED,
+};
+
 inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeY = 256;
+inline constexpr uint32_t numChunkBlocks = chunkSizeXZ * chunkSizeY * chunkSizeXZ;
+
+inline constexpr uint32_t chunkSegmentSizeXZ = 4;
+inline constexpr uint32_t chunkSegmentSizeY = 8;
+
+static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0);
+static_assert(chunkSizeY % chunkSegmentSizeY == 0);
+
+inline constexpr uint32_t numChunkSegmentsXZ = chunkSizeXZ / chunkSegmentSizeXZ;
+inline constexpr uint32_t numChunkSegmentsY = chunkSizeY / chunkSegmentSizeY;
+inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmentsY * numChunkSegmentsXZ;
 
 class Region;
 
@@ -76,26 +96,33 @@ private:
     const glm::ivec2 chunkPos;
     Region* const region;
 
-    std::array<std::atomic<Chunk*>, 4> atomicNeighbors{};
+    std::array<Block, numChunkBlocks> blocks;
+    std::vector<ChunkSegment> allSegments{};
+    std::vector<glm::uvec3> segmentsToGenerate{};
+
     std::array<Chunk*, 4> neighbors{};
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
-    std::atomic<bool> onNeighborsHaveBlocksOnceFlag{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
     std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
-    std::array<Block, chunkSizeXZ * chunkSizeY * chunkSizeXZ> blocks{};
-
     Instance* instance{ nullptr };
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
+    bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
+    bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
+
+    void onNeighborsHaveBlocks();
+
+    void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
+
 public:
-    Chunk(glm::ivec2 chunkPos, Region* region);
+    Chunk(glm::ivec2 chunkPos, Region* region, bool createNeighbors);
 
     void generateBlocks();
-    void onNeighborsHaveBlocks();
+    void generateSegments();
 
     void setInstance(Instance* instance);
     void createInstance(Scene* scene);
@@ -104,7 +131,7 @@ public:
 
     ChunkState getState() const;
     void setState(ChunkState newState);
-    void advanceState(ChunkState newState);
+    bool advanceState(ChunkState newState);
 
     bool getIsMarkedForDestruction();
     void setIsMarkedForDestruction(bool marked = true);
@@ -115,28 +142,36 @@ public:
     glm::ivec2 getChunkPos() const;
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
+    static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
+
+    static uint32_t segmentPosToIdx(glm::uvec3 chunkSegmentPos);
+
+    static void segmentPosToBounds(glm::uvec3 chunkSegmentPos, glm::uvec3& outSegmentStartPos, glm::uvec3& outSegmentEndPos);
 };
 
-#define REGION_SIDE_LENGTH 16
+inline constexpr uint32_t regionSideLength = 32;
 
 class Region
 {
 private:
     std::array<Region*, 4> neighbors{};
+    uint32_t numNeighborsSet{ 0 };
 
 public:
     const glm::ivec2 regionPos;
     const glm::ivec2 regionPosChunks;
 
-    std::array<std::unique_ptr<Chunk>, REGION_SIDE_LENGTH * REGION_SIDE_LENGTH> chunks{};
+    std::array<std::unique_ptr<Chunk>, regionSideLength * regionSideLength> chunks{};
 
     Region(glm::ivec2 regionPos);
 
     Chunk* getChunk(glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
+    Chunk* createChunkWithoutNeighbors(glm::ivec2 chunkPos);
 
     Region* getNeighbor(NeighborDirection dir) const;
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
+    uint32_t getNumNeighborsSet() const;
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

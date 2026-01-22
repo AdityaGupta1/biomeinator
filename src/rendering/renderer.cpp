@@ -1464,7 +1464,7 @@ static void imguiEndFrame(double deltaTime)
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("World");
-        SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 50.f);
+        SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 100.f);
 
         SettingsGuiHelpers::VerticalSpacing();
 

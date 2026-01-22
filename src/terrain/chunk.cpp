@@ -25,9 +25,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/component_wise.hpp>
-
 #include <DirectXMath.h>
 #include <vector>
 
@@ -37,58 +34,83 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_X 32
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
-Chunk::Chunk(ivec2 chunkPos, Region* region)
+Chunk::Chunk(ivec2 chunkPos, Region* region, bool createNeighbors)
 	: chunkPos(chunkPos), region(region)
 {
-    const glm::ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    const ivec2 thisRegionPosChunks = this->region->regionPosChunks;
+    uint numNeighborsWithBlocks = 0;
     for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
     {
-        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
-        const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
-
-        Region* neighborRegion = this->region;
-        const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
-        if (glm::compMin(neighborChunkPos_region) < 0 || glm::compMax(neighborChunkPos_region) >= REGION_SIDE_LENGTH)
+        Chunk* neighborChunk = this->neighbors[dirIdx];
+        if (neighborChunk == nullptr)
         {
-            neighborRegion = neighborRegion->getNeighbor(dir);
-        }
+            const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+            const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
 
-        if (neighborRegion != nullptr)
-        {
-            Chunk* neighborChunk = neighborRegion->getChunk(neighborChunkPos);
-            if (neighborChunk != nullptr)
+            Region* neighborRegion = this->region;
+            const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
+            if (glm::min(neighborChunkPos_region.x, neighborChunkPos_region.y) < 0 ||
+                glm::max(neighborChunkPos_region.x, neighborChunkPos_region.y) >= regionSideLength)
             {
-                this->atomicNeighbors[static_cast<size_t>(dir)].store(neighborChunk, std::memory_order_release);
-                neighborChunk->atomicNeighbors[static_cast<size_t>(oppositeNeighborDirection(dir))].store(
-                    this, std::memory_order_release);
+                neighborRegion = neighborRegion->getNeighbor(dir);
+            }
 
-                if (neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+            if (neighborRegion != nullptr)
+            {
+                neighborChunk = neighborRegion->getChunk(neighborChunkPos);
+
+                if (createNeighbors && neighborChunk == nullptr)
                 {
-                    this->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel);
+                    neighborChunk = neighborRegion->createChunkWithoutNeighbors(neighborChunkPos);
                 }
 
-                // at this point, this chunk cannot have blocks, so we don't need to update neighborChunk->numNeighborsWithBlocks
+                if (neighborChunk != nullptr)
+                {
+                    this->setNeighbor(dir, neighborChunk); // also sets opposite direction
+
+                    // at this point, this chunk cannot have blocks, so we don't need to update
+                    // neighborChunk->numNeighborsWithBlocks
+                }
             }
         }
+
+        if (neighborChunk != nullptr && neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+        {
+            ++numNeighborsWithBlocks;
+        }
     }
+
+    this->numNeighborsWithBlocks.fetch_add(numNeighborsWithBlocks, std::memory_order_acq_rel);
+}
+
+void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
+{
+    this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
+    neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
 }
 
 void Chunk::generateBlocks()
 {
-    const ivec2 chunkBlockPos_WS = chunkPos * 16;
+    // for real terrain generation, it would be better to fill AIR only for blocks that are actually air (i.e. above the
+    // max height solid block)
+    this->blocks = {};
+
+    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
-            const ivec2 blockPosXZ_WS = chunkBlockPos_WS + ivec2(x, z);
+            const ivec2 blockPosXZ_WS = chunkBlockPosXZ_WS + ivec2(x, z);
             const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
+
+            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
 
             for (uint y = 0; y < height; ++y)
             {
                 const ivec3 blockPos_CS = ivec3(x, y, z);
                 const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                this->blocks[blockPosToIdx(blockPos_CS)] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
+                this->blocks[blockIdx++] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
             }
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < chunkSizeY)
@@ -102,19 +124,18 @@ void Chunk::generateBlocks()
 
     bool setTerrainDirty = false;
 
-    for (std::atomic<Chunk*>& atomicNeighbor : this->atomicNeighbors)
+    for (Chunk* neighborChunk : this->neighbors)
     {
-        Chunk* neighbor = atomicNeighbor.load(std::memory_order_acquire);
-        if (neighbor == nullptr)
+        if (neighborChunk == nullptr)
         {
             continue;
         }
 
         const uint neighborNumNeighborsWithBlocks =
-            neighbor->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4)
+            neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
+        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_BLOCKS)
         {
-            neighbor->onNeighborsHaveBlocks();
+            neighborChunk->onNeighborsHaveBlocks();
             setTerrainDirty = true;
         }
     }
@@ -133,19 +154,216 @@ void Chunk::generateBlocks()
 
 void Chunk::onNeighborsHaveBlocks()
 {
-    if (this->onNeighborsHaveBlocksOnceFlag.exchange(true, std::memory_order_acq_rel))
+    // not quite sure why this function can be called twice simultaneously but this check fixes the issue for now
+    if (!this->advanceState(ChunkState::GENERATING_SEGMENTS))
     {
-        return; // this function has already been run
+        return;
     }
 
-    this->advanceState(ChunkState::NEIGHBORS_HAVE_BLOCKS);
+    this->generateSegments();
 
-    for (int i = 0; i < 4; ++i)
+    this->advanceState(ChunkState::NEEDS_GEOMETRY);
+}
+
+bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool isAirPredicate)
+{
+    for (uint blockZ = startPos.z; blockZ <= endPos.z; ++blockZ)
     {
-        this->neighbors[i] = this->atomicNeighbors[i].load(std::memory_order_acquire);
+        for (uint blockX = startPos.x; blockX <= endPos.x; ++blockX)
+        {
+            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+
+            for (uint blockY = startPos.y; blockY <= endPos.y; ++blockY)
+            {
+                const Block block = this->blocks[blockIdx++];
+                if ((block == Block::AIR) != isAirPredicate)
+                {
+                    return false;
+                }
+            }
+        }
     }
 
-    // TODO: build segment array
+    return true;
+}
+
+bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos, const uvec3 chunkSegmentPos)
+{
+    // these two cases should be skipped by generateSegments()
+    ASSERT(chunkSegmentPos.y != 0);
+    ASSERT(chunkSegmentPos.y != numChunkSegmentsY - 1);
+
+    const uint thisSegmentIdx = Chunk::segmentPosToIdx(chunkSegmentPos);
+
+    // -x
+    {
+        Chunk* chunk;
+        uint blockX;
+        bool check = true;
+        if (chunkSegmentPos.x == 0)
+        {
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_NEG)];
+            ASSERT(chunk != nullptr);
+            blockX = chunkSizeXZ - 1;
+        }
+        else
+        {
+            chunk = this;
+            blockX = startPos.x - 1;
+            check = (this->allSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
+        }
+
+        if (check)
+        {
+            if (!chunk->isRegionAirOrSolid(
+                    uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), false /*isAirPredicate*/))
+            {
+                return false;
+            }
+        }
+    }
+
+    // -y
+    if (this->allSegments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
+    {
+        const uint blockY = startPos.y - 1;
+        if (!this->isRegionAirOrSolid(
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), false /*isAirPredicate*/))
+        {
+            return false;
+        }
+    }
+
+    // -z
+    {
+        Chunk* chunk;
+        uint blockZ;
+        bool check = true;
+        if (chunkSegmentPos.z == 0)
+        {
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_NEG)];
+            ASSERT(chunk != nullptr);
+            blockZ = chunkSizeXZ - 1;
+        }
+        else
+        {
+            chunk = this;
+            blockZ = startPos.z - 1;
+            check = (this->allSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
+        }
+
+        if (check)
+        {
+            if (!chunk->isRegionAirOrSolid(
+                    uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), false /*isAirPredicate*/))
+            {
+                return false;
+            }
+        }
+    }
+
+    { // +x
+        Chunk* chunk;
+        uint blockX;
+        if (chunkSegmentPos.x == numChunkSegmentsXZ - 1)
+        {
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_POS)];
+            ASSERT(chunk != nullptr);
+            blockX = 0;
+        }
+        else
+        {
+            chunk = this;
+            blockX = endPos.x;
+        }
+
+        if (!chunk->isRegionAirOrSolid(
+            uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), false /*isAirPredicate*/))
+        {
+            return false;
+        }
+    }
+
+    // +y
+    {
+        const uint blockY = endPos.y + 1;
+        if (!this->isRegionAirOrSolid(
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), false /*isAirPredicate*/))
+        {
+            return false;
+        }
+    }
+
+    { // +z
+        Chunk* chunk;
+        uint blockZ;
+        if (chunkSegmentPos.z == numChunkSegmentsXZ - 1)
+        {
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_POS)];
+            ASSERT(chunk != nullptr);
+            blockZ = 0;
+        }
+        else
+        {
+            chunk = this;
+            blockZ = endPos.z;
+        }
+
+        if (!chunk->isRegionAirOrSolid(
+            uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), false /*isAirPredicate*/))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void Chunk::generateSegments()
+{
+    this->allSegments.reserve(numChunkSegments);
+    // reserve space for at least bottom layer and top surface layer
+    this->segmentsToGenerate.reserve(numChunkSegmentsXZ * numChunkSegmentsXZ * 2);
+
+    for (uint segmentZ = 0; segmentZ < numChunkSegmentsXZ; ++segmentZ)
+    {
+        for (uint segmentX = 0; segmentX < numChunkSegmentsXZ; ++segmentX)
+        {
+            for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
+            {
+                const uvec3 chunkSegmentPos(segmentX, segmentY, segmentZ);
+                uvec3 segmentStartPos, segmentEndPos;
+                Chunk::segmentPosToBounds(chunkSegmentPos, segmentStartPos, segmentEndPos);
+
+                ChunkSegment segment = ChunkSegment::MIXED;
+
+                const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentStartPos)];
+                const bool isAirPredicate = blockAtBasePos == Block::AIR;
+                if (!isAirPredicate && (segmentY == 0 || segmentY == numChunkSegmentsY - 1))
+                {
+                    // this segment has blocks and cannot be surrounded because it's at the top or bottom of the chunk
+                    segment = ChunkSegment::MIXED;
+                }
+                else if (this->isRegionAirOrSolid(segmentStartPos, segmentEndPos, isAirPredicate))
+                {
+                    if (isAirPredicate)
+                    {
+                        segment = ChunkSegment::AIR;
+                    }
+                    else
+                    {
+                        const bool isSurrounded = isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos);
+                        segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
+                    }
+                }
+
+                this->allSegments.push_back(segment); // used for easier condition checking for future segments in this function
+                this->segmentsToGenerate.push_back(chunkSegmentPos);
+            }
+        }
+    }
+
+    this->allSegments.clear();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
@@ -180,7 +398,7 @@ bool Chunk::isBlockAir(ivec3 pos_CS, int faceIdx)
     if (min(pos_CS.x, pos_CS.z) < 0 || max(pos_CS.x, pos_CS.z) >= chunkSizeXZ)
     {
         const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
-        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until state == NEIGHBORS_HAVE_BLOCKS
+        ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until all neighbors have blocks
         const ivec3 pos_neighborCS = {
             (pos_CS.x + chunkSizeXZ) % chunkSizeXZ,
             pos_CS.y,
@@ -221,7 +439,7 @@ void Chunk::setInstance(Instance* instance)
 
 void Chunk::createInstance(Scene* scene)
 {
-    const ivec2 chunkBlockPos_WS = this->chunkPos * 16;
+    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const XMMATRIX transform = XMMatrixTranslation(
         static_cast<float>(chunkBlockPos_WS.x),
         0.f,
@@ -239,65 +457,75 @@ void Chunk::createInstance(Scene* scene)
     indices.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
-    for (uint z = 0; z < chunkSizeXZ; ++z)
+    for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
-        for (uint x = 0; x < chunkSizeXZ; ++x)
+        uvec3 segmentStartPos, segmentEndPos;
+        Chunk::segmentPosToBounds(segmentPos, segmentStartPos, segmentEndPos);
+
+        for (uint blockZ = segmentStartPos.z; blockZ <= segmentEndPos.z; ++blockZ)
         {
-            const uint32_t baseIdx = blockPosToIdx(uvec3(x, 0, z));
-
-            for (uint y = 0; y < chunkSizeY; ++y)
+            for (uint blockX = segmentStartPos.x; blockX <= segmentEndPos.x; ++blockX)
             {
-                const uvec3 blockPos_CS(x, y, z);
-                const Block block = blocks[baseIdx + y];
-                if (block == Block::AIR)
+                const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+
+                for (uint blockY = segmentStartPos.y; blockY <= segmentEndPos.y; ++blockY)
                 {
-                    continue;
-                }
-
-                const BlockData& blockData = Blocks::getBlockData(block);
-
-                for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
-                {
-                    const ivec3 neighborOffset = faceOffsets[faceIdx];
-                    const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
-
-                    if (!isBlockAir(neighborPos_CS, faceIdx))
+                    const uvec3 blockPos_CS(blockX, blockY, blockZ);
+                    const uint blockIdx = baseBlockIdx + blockY;
+                    const Block block = blocks[blockIdx];
+                    if (block == Block::AIR)
                     {
                         continue;
                     }
 
-                    const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
-                    const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-                    const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
-                    for (uint i = 0; i < 4; ++i)
+                    const BlockData& blockData = Blocks::getBlockData(block);
+
+                    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                     {
-                        const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                        const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
-                        verts.emplace_back(
-                            vec3ToDirectX(vertPos_CS),
-                            normal,
-                            vec2ToDirectX(uv)
-                        );
-                    }
+                        const ivec3 neighborOffset = faceOffsets[faceIdx];
+                        const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                    const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
+                        if (!isBlockAir(neighborPos_CS, faceIdx))
+                        {
+                            continue;
+                        }
 
-                    indices.emplace_back(baseVertIdx + 0u);
-                    indices.emplace_back(baseVertIdx + 1u);
-                    indices.emplace_back(baseVertIdx + 2u);
-                    indices.emplace_back(baseVertIdx + 0u);
-                    indices.emplace_back(baseVertIdx + 2u);
-                    indices.emplace_back(baseVertIdx + 3u);
+                        const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                        const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
+                        const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
+                        for (uint i = 0; i < 4; ++i)
+                        {
+                            const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+                            const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
+                            verts.emplace_back(
+                                vec3ToDirectX(vertPos_CS),
+                                normal,
+                                vec2ToDirectX(uv)
+                            );
+                        }
 
-                    if (blockData.emitsLight)
-                    {
-                        emissiveTriangleIdxs.emplace_back(triangleIdx);
-                        emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                        const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
+
+                        indices.emplace_back(baseVertIdx + 0u);
+                        indices.emplace_back(baseVertIdx + 1u);
+                        indices.emplace_back(baseVertIdx + 2u);
+                        indices.emplace_back(baseVertIdx + 0u);
+                        indices.emplace_back(baseVertIdx + 2u);
+                        indices.emplace_back(baseVertIdx + 3u);
+
+                        if (blockData.emitsLight)
+                        {
+                            emissiveTriangleIdxs.emplace_back(triangleIdx);
+                            emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                        }
                     }
                 }
             }
         }
     }
+
+    ASSERT(verts.size() > 0);
+    ASSERT(indices.size() > 0);
 
     instance->setGeometry(instanceTransform, std::move(verts), std::move(indices));
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
@@ -319,7 +547,7 @@ void Chunk::destroyInstance(ToFreeList& toFreeList)
 {
     toFreeList.pushInstance(this->instance);
     this->instance = nullptr;
-    this->setState(ChunkState::NEIGHBORS_HAVE_BLOCKS); // neighbors must have had blocks for this chunk to have an instance
+    this->setState(ChunkState::NEEDS_GEOMETRY);
     this->setIsMarkedForDestruction(false);
 }
 
@@ -338,11 +566,20 @@ void Chunk::setState(ChunkState newState)
     this->state.store(newState, std::memory_order_release);
 }
 
-void Chunk::advanceState(ChunkState newState)
+bool Chunk::advanceState(ChunkState newState)
 {
-    ChunkState state = this->getState();
-    while (state < newState && !this->state.compare_exchange_weak(state, newState, std::memory_order_acq_rel))
-    {}
+    ChunkState expected = this->state.load(std::memory_order_acquire);
+
+    while (expected < newState)
+    {
+        if (this->state.compare_exchange_weak(expected, newState, std::memory_order_acq_rel, std::memory_order_acquire))
+        {
+            return true; // this thread advanced the state
+        }
+        // on failure, expected is updated; loop continues if still < newState
+    }
+
+    return false; // already >= newState, or another thread advanced it
 }
 
 bool Chunk::getIsMarkedForDestruction()
@@ -384,29 +621,55 @@ glm::ivec2 Chunk::getChunkPos() const
 //         for (uint y = 0; y < chunkSizeY; ++y)
 //         {
 //             // do stuff here
-uint32_t Chunk::blockPosToIdx(glm::uvec3 chunkBlockPos)
+uint32_t Chunk::blockPosToIdx(uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
 		 + chunkBlockPos.x * chunkSizeY
 		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
 }
 
+uint32_t Chunk::blockPosXZToIdx(uvec2 chunkBlockPos)
+{
+    return chunkBlockPos.x * chunkSizeY
+         + chunkBlockPos.y /*z*/ * (chunkSizeXZ * chunkSizeY);
+}
+
+uint32_t Chunk::segmentPosToIdx(uvec3 chunkSegmentPos)
+{
+    return chunkSegmentPos.y
+         + chunkSegmentPos.x * numChunkSegmentsY
+         + chunkSegmentPos.z * (numChunkSegmentsXZ * numChunkSegmentsY);
+}
+
+void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos, uvec3& outSegmentEndPos)
+{
+    outSegmentStartPos = chunkSegmentPos * uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
+    outSegmentEndPos = outSegmentStartPos + uvec3(chunkSegmentSizeXZ - 1, chunkSegmentSizeY - 1, chunkSegmentSizeXZ - 1);
+}
+
 Region::Region(glm::ivec2 regionPos)
-    : regionPos(regionPos), regionPosChunks(regionPos * REGION_SIDE_LENGTH)
+    : regionPos(regionPos), regionPosChunks(regionPos * static_cast<int>(regionSideLength))
 {}
 
-Chunk* Region::getChunk(glm::ivec2 chunkPos)
+Chunk* Region::getChunk(ivec2 chunkPos)
 {
     return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
 }
 
-Chunk* Region::getOrCreateChunk(glm::ivec2 chunkPos)
+Chunk* Region::getOrCreateChunk(ivec2 chunkPos)
 {
-    const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
     if (this->chunks[chunkIdx] == nullptr)
     {
-        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
+        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this, true /*createNeighbors*/);
     }
+    return this->chunks[chunkIdx].get();
+}
+
+Chunk* Region::createChunkWithoutNeighbors(ivec2 chunkPos)
+{
+    const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this, false /*createNeighbors*/);
     return this->chunks[chunkIdx].get();
 }
 
@@ -418,7 +681,14 @@ Region* Region::getNeighbor(NeighborDirection dir) const
 void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
 {
     this->neighbors[static_cast<size_t>(dir)] = neighborRegion;
+    ++this->numNeighborsSet;
     neighborRegion->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
+    ++neighborRegion->numNeighborsSet;
+}
+
+uint32_t Region::getNumNeighborsSet() const
+{
+    return this->numNeighborsSet;
 }
 
 // x changes fastest, then z
@@ -429,8 +699,8 @@ void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
 //     for (uint x = 0; x < REGION_SIDE_LENGTH; ++x)
 //     {
 //         // do stuff here
-uint32_t Region::chunkPosToIdx(glm::ivec2 regionChunkPos)
+uint32_t Region::chunkPosToIdx(ivec2 regionChunkPos)
 {
     return regionChunkPos.x
-         + regionChunkPos.y /*z*/ * REGION_SIDE_LENGTH;
+         + regionChunkPos.y /*z*/ * regionSideLength;
 }
