@@ -202,9 +202,8 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         bool check = true;
         if (chunkSegmentPos.x == 0)
         {
-            Chunk* neighborChunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_NEG)];
-            ASSERT(neighborChunk != nullptr);
-            chunk = neighborChunk;
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_NEG)];
+            ASSERT(chunk != nullptr);
             blockX = chunkSizeXZ - 1;
         }
         else
@@ -242,9 +241,8 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         bool check = true;
         if (chunkSegmentPos.z == 0)
         {
-            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_NEG)];
-            ASSERT(neighbor != nullptr);
-            chunk = neighbor;
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_NEG)];
+            ASSERT(chunk != nullptr);
             blockZ = chunkSizeXZ - 1;
         }
         else
@@ -269,9 +267,8 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         uint blockX;
         if (chunkSegmentPos.x == numChunkSegmentsXZ - 1)
         {
-            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_POS)];
-            ASSERT(neighbor != nullptr);
-            chunk = neighbor;
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::X_POS)];
+            ASSERT(chunk != nullptr);
             blockX = 0;
         }
         else
@@ -302,9 +299,8 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         uint blockZ;
         if (chunkSegmentPos.z == numChunkSegmentsXZ - 1)
         {
-            Chunk* neighbor = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_POS)];
-            ASSERT(neighbor != nullptr);
-            chunk = neighbor;
+            chunk = this->neighbors[static_cast<uint8_t>(NeighborDirection::Z_POS)];
+            ASSERT(chunk != nullptr);
             blockZ = 0;
         }
         else
@@ -335,9 +331,9 @@ void Chunk::generateSegments()
         {
             for (uint segmentY = 0; segmentY < numChunkSegmentsY; ++segmentY)
             {
-                const uvec3 segmentPos(segmentX, segmentY, segmentZ);
+                const uvec3 chunkSegmentPos(segmentX, segmentY, segmentZ);
                 uvec3 segmentStartPos, segmentEndPos;
-                Chunk::segmentPosToBounds(uvec3(segmentX, segmentY, segmentZ), segmentStartPos, segmentEndPos);
+                Chunk::segmentPosToBounds(chunkSegmentPos, segmentStartPos, segmentEndPos);
 
                 ChunkSegment segment = ChunkSegment::MIXED;
 
@@ -356,14 +352,13 @@ void Chunk::generateSegments()
                     }
                     else
                     {
-                        const uvec3 chunkSegmentPos(segmentX, segmentY, segmentZ);
                         const bool isSurrounded = isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos);
                         segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
                     }
                 }
 
                 this->allSegments.push_back(segment); // used for easier condition checking for future segments in this function
-                this->segmentsToGenerate.push_back(segmentPos);
+                this->segmentsToGenerate.push_back(chunkSegmentPos);
             }
         }
     }
@@ -644,12 +639,6 @@ uint32_t Chunk::segmentPosToIdx(uvec3 chunkSegmentPos)
     return chunkSegmentPos.y
          + chunkSegmentPos.x * numChunkSegmentsY
          + chunkSegmentPos.z * (numChunkSegmentsXZ * numChunkSegmentsY);
-}
-
-uint32_t Chunk::segmentPosXZToIdx(uvec2 chunkSegmentPos)
-{
-    return chunkSegmentPos.x * numChunkSegmentsY
-         + chunkSegmentPos.y /*z*/ * (numChunkSegmentsXZ * numChunkSegmentsY);
 }
 
 void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos, uvec3& outSegmentEndPos)

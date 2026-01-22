@@ -146,7 +146,7 @@ void update(ToFreeList& toFreeList)
 
                 const auto [regionIter, inserted] = regions.try_emplace(regionPos, nullptr);
                 std::unique_ptr<Region>& regionPtr = regionIter->second;
-                if (inserted)
+                if (inserted) // region does not exist
                 {
                     regionPtr = std::make_unique<Region>(regionPos);
                 }
@@ -156,12 +156,18 @@ void update(ToFreeList& toFreeList)
                     for (int neighborDirIdx = 0; neighborDirIdx < 4; ++neighborDirIdx)
                     {
                         const NeighborDirection neighborDir = static_cast<NeighborDirection>(neighborDirIdx);
+
+                        if (regionPtr->getNeighbor(neighborDir) != nullptr)
+                        {
+                            continue;
+                        }
+
                         const glm::ivec2 neighborRegionPos = regionPos + neighborOffset(neighborDir);
 
                         const auto [neighborRegionIter, neighborInserted] =
                             regions.try_emplace(neighborRegionPos, nullptr);
                         std::unique_ptr<Region>& neighborRegionPtr = neighborRegionIter->second;
-                        if (neighborInserted)
+                        if (neighborInserted) // neighbor region does not exist
                         {
                             neighborRegionPtr = std::make_unique<Region>(neighborRegionPos);
                         }

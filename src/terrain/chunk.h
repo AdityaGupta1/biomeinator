@@ -145,12 +145,11 @@ public:
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
 
     static uint32_t segmentPosToIdx(glm::uvec3 chunkSegmentPos);
-    static uint32_t segmentPosXZToIdx(glm::uvec2 chunkSegmentPos);
 
     static void segmentPosToBounds(glm::uvec3 chunkSegmentPos, glm::uvec3& outSegmentStartPos, glm::uvec3& outSegmentEndPos);
 };
 
-inline constexpr uint32_t regionSideLength = 64;
+inline constexpr uint32_t regionSideLength = 32;
 
 class Region
 {
