@@ -82,8 +82,18 @@ void ManagedBuffer::init(uint32_t sizeBytes)
 
 void ManagedBuffer::createBuffer(uint32_t sizeBytes)
 {
-    this->dev_buffer =
-        BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->options.bufferCreationFlags);
+    // this is a goofy fix but it works and I'm lazy
+    if (this->initialResourceState == D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
+    {
+        this->dev_buffer = BufferHelper::createBasicBuffer(
+            sizeBytes, this->heapProperties, this->initialResourceState, this->options.bufferCreationFlags);
+    }
+    else
+    {
+        this->dev_buffer =
+            BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->options.bufferCreationFlags);
+    }
+
     this->bufferSizeBytes = sizeBytes;
     this->setBufferName();
 }
