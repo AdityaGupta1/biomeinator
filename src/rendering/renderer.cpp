@@ -402,10 +402,34 @@ void initNvapi()
 }
 
 static ComPtr<IDXGISwapChain3> swapChain;
-static constexpr uint32_t swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+static UINT swapChainFlags;
+
+static bool useVsync = false;
+static bool allowTearing = false;
 
 static void initSwapChain()
 {
+    BOOL _allowTearing = FALSE;
+    {
+        CHECK_HRESULT(
+            factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &_allowTearing, sizeof(_allowTearing)));
+    }
+    allowTearing = bool(_allowTearing);
+
+    useVsync = SettingsManager::getAsBool("useVsync");
+
+    Logger::log("Use VSync: %s", useVsync ? "true" : "false");
+    if (!useVsync)
+    {
+        Logger::log("Allow tearing: %s", allowTearing ? "true" : "false");
+    }
+
+    swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    if (allowTearing)
+    {
+        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    }
+
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .SampleDesc = SAMPLE_DESC_NO_AA,
@@ -2000,8 +2024,21 @@ void render()
     CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
     frameCtx.fenceValue = fenceValue;
 
-    const uint32_t syncInterval = SettingsManager::getAsBool("useVsync") ? 1 : 0;
-    CHECK_HRESULT(swapChain->Present(syncInterval, 0));
+    UINT syncInterval;
+    UINT presentFlags;
+    if (useVsync)
+    {
+        syncInterval = 1;
+        presentFlags = 0;
+    }
+    else
+    {
+        syncInterval = 0;
+        const bool isFullscreen = SettingsManager::getAsBool("fullscreen");
+        presentFlags = (allowTearing && isFullscreen) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+    }
+
+    CHECK_HRESULT(swapChain->Present(syncInterval, presentFlags));
 
     ++frameNumber;
     frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
