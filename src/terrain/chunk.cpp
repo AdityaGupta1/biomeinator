@@ -137,14 +137,14 @@ void Chunk::generateBlocks()
             neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
         if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_BLOCKS)
         {
-            neighborChunk->onNeighborsHaveBlocks();
+            neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS);
             setTerrainDirty = true;
         }
     }
 
     if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4)
     {
-        this->onNeighborsHaveBlocks();
+        this->advanceState(ChunkState::NEEDS_SEGMENTS);
         setTerrainDirty = true;
     }
 
@@ -152,19 +152,6 @@ void Chunk::generateBlocks()
     {
         Terrain::setDirty();
     }
-}
-
-void Chunk::onNeighborsHaveBlocks()
-{
-    // not quite sure why this function can be called twice simultaneously but this check fixes the issue for now
-    if (!this->advanceState(ChunkState::GENERATING_SEGMENTS))
-    {
-        return;
-    }
-
-    this->generateSegments();
-
-    this->advanceState(ChunkState::NEEDS_GEOMETRY);
 }
 
 bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool isAirPredicate)
@@ -366,6 +353,9 @@ void Chunk::generateSegments()
     }
 
     this->allSegments.clear();
+
+    this->advanceState(ChunkState::NEEDS_GEOMETRY);
+    Terrain::setDirty();
 }
 
 static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)

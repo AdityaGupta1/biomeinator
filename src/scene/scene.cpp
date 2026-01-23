@@ -316,7 +316,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 {
     if (this->numVisibleBlasesWaitingForTlas > maxBlasesWaitingForTlas)
     {
-        return true;
+        return true; // force update TLAS since many BLASes are waiting
     }
 
     if (this->instancesReadyForBlasBuild.empty())

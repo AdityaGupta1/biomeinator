@@ -47,6 +47,11 @@ static void task_generateBlocks(Chunk* chunk)
     chunk->generateBlocks();
 }
 
+static void task_generateSegments(Chunk* chunk)
+{
+    chunk->generateSegments();
+}
+
 static void task_createInstance(Chunk* chunk)
 {
     chunk->createInstance(scene);
@@ -102,6 +107,8 @@ void setDirty()
 }
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
+
+inline constexpr uint32_t maxTasksPerFrame = 48;
 
 void update(ToFreeList& toFreeList)
 {
@@ -213,6 +220,11 @@ void update(ToFreeList& toFreeList)
                                 chunk->advanceState(ChunkState::GENERATING_BLOCKS);
                                 tasksToEnqueue.push_back({ task_generateBlocks, chunk });
                             }
+                            else if (chunkState == ChunkState::NEEDS_SEGMENTS)
+                            {
+                                chunk->advanceState(ChunkState::GENERATING_SEGMENTS);
+                                tasksToEnqueue.push_back({ task_generateSegments, chunk });
+                            }
                         }
 
                         if (inCurrentCreateBlasDistance)
@@ -258,8 +270,6 @@ void update(ToFreeList& toFreeList)
         chunk->setInstance(instance);
         tasksToEnqueue.push_back({ task_createInstance, chunk });
     }
-
-    static constexpr uint32_t maxTasksPerFrame = 32;
 
     if (!tasksToEnqueue.empty())
     {
