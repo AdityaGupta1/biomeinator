@@ -96,7 +96,7 @@ private:
     const glm::ivec2 chunkPos;
     Region* const region;
 
-    std::array<Block, numChunkBlocks> blocks;
+    std::vector<Block> blocks{};
     std::vector<ChunkSegment> allSegments{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
@@ -119,7 +119,9 @@ private:
     void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
 
 public:
-    Chunk(glm::ivec2 chunkPos, Region* region, bool createNeighbors);
+    Chunk(glm::ivec2 chunkPos, Region* region);
+
+    void setNeighbors(bool createNeighbors);
 
     void generateBlocks();
     void generateSegments();
@@ -166,8 +168,8 @@ public:
     Region(glm::ivec2 regionPos);
 
     Chunk* getChunk(glm::ivec2 chunkPos);
+    Chunk* createChunk(glm::ivec2 chunkPos);
     Chunk* getOrCreateChunk(glm::ivec2 chunkPos);
-    Chunk* createChunkWithoutNeighbors(glm::ivec2 chunkPos);
 
     Region* getNeighbor(NeighborDirection dir) const;
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
