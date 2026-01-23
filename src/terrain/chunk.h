@@ -96,7 +96,7 @@ private:
     const glm::ivec2 chunkPos;
     Region* const region;
 
-    std::array<Block, numChunkBlocks> blocks;
+    std::vector<Block> blocks{};
     std::vector<ChunkSegment> allSegments{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
