@@ -199,7 +199,11 @@ void update(ToFreeList& toFreeList)
                         }
 
                         Chunk* chunk = region.getOrCreateChunk(chunkPos);
-                        chunk->setNeighbors(true /*createNeighbors*/);
+                        if (chunk->getNumNeighborsSet() < 4)
+                        {
+                            chunk->setNeighbors(true /*createNeighbors*/);
+                        }
+
                         const ChunkState chunkState = chunk->getState();
 
                         if (inCurrentCreateBlocksDistance)

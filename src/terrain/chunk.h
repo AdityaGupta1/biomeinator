@@ -101,6 +101,7 @@ private:
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::array<Chunk*, 4> neighbors{};
+    uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
@@ -142,6 +143,8 @@ public:
     void setInstanceVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
+
+    uint32_t getNumNeighborsSet() const;
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
