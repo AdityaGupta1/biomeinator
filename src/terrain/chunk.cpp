@@ -85,6 +85,8 @@ void Chunk::setNeighbors(bool createNeighbors)
 
 void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 {
+    ASSERT(this->neighbors[static_cast<size_t>(dir)] == nullptr);
+
     this->neighbors[static_cast<size_t>(dir)] = neighborChunk;
     neighborChunk->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = this;
 }
