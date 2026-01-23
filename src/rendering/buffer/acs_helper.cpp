@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "acs_helper.h"
 
 #include "buffer_helper.h"
+#include "debug.h"
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
@@ -56,7 +57,9 @@ static void allocateNewSharedAcsBuffer()
         newSizeBytes = sharedAcsBuffers[sharedAcsBuffersHead]->getSizeBytes() * 2;
     }
 
-    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
+    --sharedAcsBuffersHead;
+    ASSERT(sharedAcsBuffersHead >= 0);
+    sharedAcsBuffers[sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
         ManagedBufferOptions{
