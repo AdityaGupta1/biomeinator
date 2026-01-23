@@ -34,53 +34,51 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_X 32
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
-Chunk::Chunk(ivec2 chunkPos, Region* region, bool createNeighbors)
+Chunk::Chunk(ivec2 chunkPos, Region* region)
 	: chunkPos(chunkPos), region(region)
+{}
+
+void Chunk::setNeighbors(bool createNeighbors)
 {
     const ivec2 thisRegionPosChunks = this->region->regionPosChunks;
-    uint numNeighborsWithBlocks = 0;
     for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
     {
         Chunk* neighborChunk = this->neighbors[dirIdx];
-        if (neighborChunk == nullptr)
+        if (neighborChunk != nullptr)
         {
-            const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
-            const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
-
-            Region* neighborRegion = this->region;
-            const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
-            if (glm::min(neighborChunkPos_region.x, neighborChunkPos_region.y) < 0 ||
-                glm::max(neighborChunkPos_region.x, neighborChunkPos_region.y) >= regionSideLength)
-            {
-                neighborRegion = neighborRegion->getNeighbor(dir);
-            }
-
-            if (neighborRegion != nullptr)
-            {
-                neighborChunk = neighborRegion->getChunk(neighborChunkPos);
-
-                if (createNeighbors && neighborChunk == nullptr)
-                {
-                    neighborChunk = neighborRegion->createChunkWithoutNeighbors(neighborChunkPos);
-                }
-
-                if (neighborChunk != nullptr)
-                {
-                    this->setNeighbor(dir, neighborChunk); // also sets opposite direction
-
-                    // at this point, this chunk cannot have blocks, so we don't need to update
-                    // neighborChunk->numNeighborsWithBlocks
-                }
-            }
+            continue;
         }
 
-        if (neighborChunk != nullptr && neighborChunk->getState() >= ChunkState::HAS_BLOCKS)
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        const glm::ivec2 neighborChunkPos = this->chunkPos + neighborOffset(dir);
+
+        Region* neighborRegion = this->region;
+        const glm::ivec2 neighborChunkPos_region = neighborChunkPos - thisRegionPosChunks;
+        if (glm::min(neighborChunkPos_region.x, neighborChunkPos_region.y) < 0 ||
+            glm::max(neighborChunkPos_region.x, neighborChunkPos_region.y) >= regionSideLength)
         {
-            ++numNeighborsWithBlocks;
+            neighborRegion = neighborRegion->getNeighbor(dir);
+        }
+
+        if (neighborRegion != nullptr)
+        {
+            neighborChunk = neighborRegion->getChunk(neighborChunkPos);
+
+            if (createNeighbors && neighborChunk == nullptr)
+            {
+                neighborChunk = neighborRegion->createChunk(neighborChunkPos);
+                neighborChunk->setNeighbors(false /*createNeighbors*/);
+            }
+
+            if (neighborChunk != nullptr)
+            {
+                this->setNeighbor(dir, neighborChunk); // also sets opposite direction
+
+                // at this point, this chunk cannot have blocks, so we don't need to update
+                // neighborChunk->numNeighborsWithBlocks
+            }
         }
     }
-
-    this->numNeighborsWithBlocks.fetch_add(numNeighborsWithBlocks, std::memory_order_acq_rel);
 }
 
 void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
@@ -656,20 +654,20 @@ Chunk* Region::getChunk(ivec2 chunkPos)
     return this->chunks[chunkPosToIdx(chunkPos - this->regionPosChunks)].get();
 }
 
+Chunk* Region::createChunk(ivec2 chunkPos)
+{
+    const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
+    return this->chunks[chunkIdx].get();
+}
+
 Chunk* Region::getOrCreateChunk(ivec2 chunkPos)
 {
     const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
     if (this->chunks[chunkIdx] == nullptr)
     {
-        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this, true /*createNeighbors*/);
+        this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     }
-    return this->chunks[chunkIdx].get();
-}
-
-Chunk* Region::createChunkWithoutNeighbors(ivec2 chunkPos)
-{
-    const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
-    this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this, false /*createNeighbors*/);
     return this->chunks[chunkIdx].get();
 }
 
