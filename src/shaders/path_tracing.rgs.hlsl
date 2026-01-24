@@ -125,7 +125,9 @@ void pathTraceRay(inout Payload payload)
 
         if (doMis && surfMaterial.canScatter() && isNonDeltaSurface)
         {
+            // ------------------------------
             // sample area lights
+            // ------------------------------
 
             DirectLightingSample lightSample;
             if (useRis)
@@ -151,6 +153,8 @@ void pathTraceRay(inout Payload payload)
 
             if (lightSample.didHitLight)
             {
+                // no need to consider dome light pdf because dome light sampling can't hit area lights
+
                 const float3 bsdfVal = evaluateBsdf(
                     surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
 
@@ -183,20 +187,24 @@ void pathTraceRay(inout Payload payload)
                 payload.pathColor += contribution;
             }
 
+            // ------------------------------
             // sample dome light
+            // ------------------------------
 
             if (sceneParams.voxelMode == 1)
             {
                 DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rng);
                 if (domeLightSample.didReachDomeLight)
                 {
+                    // no need to consider area light pdf because area light sampling can't hit dome light
+
                     const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS);
 
                     float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
 
                     const float domeLightPdf = domeLightSample.pdf;
                     const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
-                    const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf; // no area light pdf because area light sampling can't hit the dome light
+                    const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
 
                     contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
 
@@ -254,7 +262,7 @@ void pathTraceRay(inout Payload payload)
 
         if (doMis)
         {
-            float otherMethodsPdfSum = 0.f;
+            // no need to consider dome light pdf here because dome light sampling can't hit area lights
 
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
@@ -265,18 +273,11 @@ void pathTraceRay(inout Payload payload)
                     bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for ReSTIR DI
                 }
 
-                otherMethodsPdfSum += bsdfSampleLightPdf;
-            }
-            // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
-
-            //const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
-            //otherMethodsPdfSum += bsdfSampleDomeLightPdf;
-
-            if (otherMethodsPdfSum > 0.f)
-            {
-                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + otherMethodsPdfSum);
+                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
             }
+
+            // if BSDF sampling didn't hit a light, lightPdf = 0 so misWeight = 1
         }
 
         previousWasSpecular = surfBsdfSample.wasSpecular;
