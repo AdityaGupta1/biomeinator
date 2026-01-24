@@ -21,6 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "rng.h"
 
+#include <array>
+
+#include <FastNoise/FastNoise.h>
+
 using namespace glm;
 
 namespace ChunkGenerator
@@ -28,12 +32,30 @@ namespace ChunkGenerator
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
+    std::array<float, chunkSizeXZ * chunkSizeXZ> simplexOutput;
+
+    auto fnSimplex = FastNoise::New<FastNoise::Simplex>();
+    auto fnFractal = FastNoise::New<FastNoise::FractalFBm>();
+
+    fnFractal->SetSource(fnSimplex);
+    fnFractal->SetOctaveCount(4);
+
+    fnFractal->GenUniformGrid2D(simplexOutput.data(),
+                                chunkPosBlocksXZ_WS.x,
+                                chunkPosBlocksXZ_WS.y,
+                                chunkSizeXZ,
+                                chunkSizeXZ,
+                                1.f,
+                                1.f,
+                                91231205);
+
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(x, z);
-            const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
+            const float simplex = simplexOutput[z * chunkSizeXZ + x];
+            const uint height = 64.f + 10.f * simplex;
 
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
 

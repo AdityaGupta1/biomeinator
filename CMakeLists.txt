@@ -174,6 +174,7 @@ target_include_directories(Biomeinator PRIVATE
     ${GENERATED_SHADER_HEADERS_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/DirectX-Headers/include/directx"
+    "${EXT}/FastNoise2/include"
     "${EXT}/imgui"
     "${EXT}/imgui/backends"
     "${EXT}/implot"
