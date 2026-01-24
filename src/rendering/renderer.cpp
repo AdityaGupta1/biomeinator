@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "dxr_common.h"
 #include <d3dcompiler.h>
 #include <dxgi1_5.h>
+#include <shlobj.h>
 
 #include "camera.h"
 #include "param_block_manager.h"
@@ -43,15 +44,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/ring_buffer.h"
 #include "util/util.h"
 
+#include <algorithm>
 #include <chrono>
-#include <random>
 #include <deque>
 #include <filesystem>
 #include <fstream>
-#include <algorithm>
+#include <random>
+#include <thread>
 #include <unordered_map>
 #include <vector>
-#include <shlobj.h>
 
 #include "logger.h"
 
@@ -1482,7 +1483,7 @@ static void imguiEndFrame(double deltaTime)
         if (antialiasingMode == AntialiasingMode::ACCUMULATE)
         {
             ImGui::Text("accumulated frames: %u", accumulatedFrameNumber);
-            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 1024);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 2048);
         }
         else if (antialiasingMode == AntialiasingMode::DLSS)
         {
@@ -1960,6 +1961,10 @@ void render()
             CHECK_SL_RESULT(
                 slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), cmdList.Get()));
         }
+    }
+    else
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(3)); // prevent insanely high frame rate if not doing any meaningful work
     }
 
     // ===================================
