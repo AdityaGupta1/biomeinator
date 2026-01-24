@@ -30,12 +30,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
-#include "restir.hlsli"
+#include "ris.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT, RIS_SAMPLES_IN);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
@@ -49,8 +48,8 @@ void pathTraceRay(inout Payload payload)
 
     const uint pathSplitIdx = getPathSplitIdx();
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    const bool useRis = samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR;
-    const bool doMis = samplingMode == SamplingMode::MIS || useRis;
+    const bool useRis = (samplingMode == SamplingMode::RIS);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRis);
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -134,18 +133,9 @@ void pathTraceRay(inout Payload payload)
             DirectLightingSample lightSample;
             if (useRis)
             {
-                RisSample risSample;
-                if (pathDepth == 0)
-                {
-                    risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
-                }
-                else
-                {
-                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                    bool isBsdfSampleUnused;
-                    risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                }
-
+                const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                bool isBsdfSampleUnused;
+                const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
                 lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
             }
             else
@@ -173,12 +163,9 @@ void pathTraceRay(inout Payload payload)
                     float lightArea;
                     getLightNormalAndArea(light, lightNor_WS, lightArea);
 
+                    // TODO: use lightPdfUniform function?
                     const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                    float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea);
-                    if (samplingMode == SamplingMode::RIS || pathDepth > 0)
-                    {
-                        lightPdf /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI
-                    }
+                    const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
 
                     const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
                     contribution *= W * balanceHeuristicWeight;
@@ -274,11 +261,7 @@ void pathTraceRay(inout Payload payload)
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
-                float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
-                if (samplingMode == SamplingMode::RESTIR && pathDepth == 0)
-                {
-                    bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for ReSTIR DI
-                }
+                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
 
                 const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
