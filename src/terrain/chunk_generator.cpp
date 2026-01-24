@@ -32,30 +32,42 @@ namespace ChunkGenerator
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::array<float, chunkSizeXZ * chunkSizeXZ> noiseOutput;
-
     auto fnSimplex = FastNoise::New<FastNoise::Simplex>();
+    fnSimplex->SetScale(200.f);
     auto fnFractal = FastNoise::New<FastNoise::FractalFBm>();
-
     fnFractal->SetSource(fnSimplex);
     fnFractal->SetOctaveCount(4);
+    auto fnMul = FastNoise::New<FastNoise::Multiply>();
+    fnMul->SetLHS(fnFractal);
+    fnMul->SetRHS(24.f);
+    auto fnAdd = FastNoise::New<FastNoise::Add>();
+    fnAdd->SetLHS(fnMul);
+    fnAdd->SetRHS(80.f);
 
-    fnFractal->GenUniformGrid2D(
-        noiseOutput.data(), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 91231205);
+    std::array<float, chunkSizeXZ * chunkSizeXZ> heightfield;
+    fnAdd->GenUniformGrid2D(
+        heightfield.data(), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 91231205);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(x, z);
-            const uint height = 64.f + 10.f * noiseOutput[z * chunkSizeXZ + x];
+            const uint height = heightfield[z * chunkSizeXZ + x];
 
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
 
-            for (uint y = 0; y < height; ++y)
+            blocks[blockIdx++] = Block::BEDROCK;
+            uint y = 1;
+            for (; y < height - 5; ++y)
             {
-                blocks[blockIdx++] = (y == height - 1) ? Block::GRASS : Block::DIRT;
+                blocks[blockIdx++] = Block::STONE;
             }
+            for (; y < height - 1; ++y)
+            {
+                blocks[blockIdx++] = Block::DIRT;
+            }
+            blocks[blockIdx++] = Block::GRASS;
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
             {
