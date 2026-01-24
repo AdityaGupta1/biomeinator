@@ -25,16 +25,32 @@ using BlockId = uint16_t;
 
 enum class Block : BlockId
 {
-	AIR = 0,
-	STONE,
-	LAMP,
+    AIR = 0,
+    STONE,
+    LAMP,
+    DIRT,
+    GRASS,
 
-	COUNT
+    COUNT
+};
+
+struct BlockUvs
+{
+private:
+    glm::uvec2 uvs[3]; // integer position in block texture grid
+                       // order = side, top, bottom
+
+public:
+    BlockUvs() = default;
+    BlockUvs(glm::uvec2 all);
+    BlockUvs(glm::uvec2 top, glm::uvec2 side, glm::uvec2 bottom);
+
+    const glm::uvec2& operator[](uint32_t idx) const;
 };
 
 struct BlockData
 {
-    glm::uvec2 texCoords{ 0, 0 }; // integer position in block texture grid
+    BlockUvs uvs;
     bool emitsLight{ false };
 };
 

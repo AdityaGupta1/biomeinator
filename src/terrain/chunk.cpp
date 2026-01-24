@@ -35,7 +35,7 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
-	: chunkPos(chunkPos), region(region)
+    : chunkPos(chunkPos), region(region)
 {}
 
 void Chunk::setNeighbors(bool createNeighbors)
@@ -110,7 +110,7 @@ void Chunk::generateBlocks()
 
             for (uint y = 0; y < height; ++y)
             {
-                this->blocks[blockIdx++] = Block::STONE;
+                this->blocks[blockIdx++] = (y == height - 1) ? Block::GRASS : Block::DIRT;
             }
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
@@ -486,7 +486,10 @@ void Chunk::createInstance(Scene* scene)
                         for (uint i = 0; i < 4; ++i)
                         {
                             const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                            const vec2 uv = (vec2(blockData.texCoords + uvOffsets[i])) * uvMultiplier;
+
+                            const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
+                            const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
+
                             verts.emplace_back(
                                 vec3ToDirectX(vertPos_CS),
                                 normal,
@@ -619,8 +622,8 @@ uint32_t Chunk::getNumNeighborsSet() const
 uint32_t Chunk::blockPosToIdx(uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
-		 + chunkBlockPos.x * chunkSizeY
-		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
+         + chunkBlockPos.x * chunkSizeY
+         + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
 }
 
 uint32_t Chunk::blockPosXZToIdx(uvec2 chunkBlockPos)
