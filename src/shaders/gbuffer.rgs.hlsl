@@ -54,7 +54,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
-    float roughness = 1.f;
+    float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
