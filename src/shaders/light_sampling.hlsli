@@ -54,10 +54,9 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, o
     float lightArea;
     getLightNormalAndArea(light, lightNor_WS, lightArea);
 
-    float lightSamplePdf = 1.f / lightArea;
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-    lightSamplePdf *= r2 / absCosTheta(-wi_WS, lightNor_WS);
+    const float lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
     lightPdf = lightPickPdf * lightSamplePdf;
 
     return light;
