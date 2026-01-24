@@ -56,6 +56,11 @@ void pathTraceRay(inout Payload payload)
 
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
+        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+        {
+            payload.pathColor = getDomeLightColor(ray.Direction);
+        }
+
         return;
     }
 

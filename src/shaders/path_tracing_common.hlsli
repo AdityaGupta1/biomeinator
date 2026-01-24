@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
+#include "dome_light.hlsli"
 #include "global_params.hlsli"
 #include "payload.hlsli"
 
@@ -157,5 +158,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 [shader("miss")]
 void Miss(inout Payload payload)
 {
+    payload.pathColor += payload.pathWeight * getDomeLightColor(WorldRayDirection());
+
     payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

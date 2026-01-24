@@ -182,11 +182,15 @@ void init()
 
     initNvapi();
 
+    const bool voxelMode = SettingsManager::getAsBool("voxelMode");
+
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
         FrameContext& frameCtx = frameCtxs[frameIdx];
         frameCtx.paramBlockManager.init();
         frameCtx.paramBlockManager.setName(L"paramBlockManager " + std::to_wstring(frameIdx));
+
+        frameCtx.paramBlockManager.sceneParams->voxelMode = voxelMode ? 1 : 0;
     }
 
     initSwapChain();
@@ -206,7 +210,8 @@ void init()
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
-    if (SettingsManager::getAsBool("voxelMode")) {
+    if (voxelMode)
+    {
         Terrain::init(&scene);
     }
     else
