@@ -158,5 +158,5 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+    payload.flags &= ~PAYLOAD_FLAG_DID_HIT;
 }

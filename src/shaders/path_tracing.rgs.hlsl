@@ -56,7 +56,7 @@ void pathTraceRay(inout Payload payload)
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     // TODO: simplify this if statement
-    if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
+    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
         {
@@ -233,10 +233,9 @@ void pathTraceRay(inout Payload payload)
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         // TODO: simplify this if statement
-        // TODO: decide whether to unset PAYLOAD_FLAG_DID_HIT on each iteration
-        if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
+        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
-            if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
+            if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
             {
                 if (doMis)
                 {
