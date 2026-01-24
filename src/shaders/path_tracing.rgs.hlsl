@@ -115,11 +115,15 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
+        uint coherenceHint = (isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0;
+        uint numCoherenceHintBits = 1;
         if (useRis)
         {
-            const uint coherenceHint = ((isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0) | (pathDepth == 0 ? (1 << 1) : 0);
-            NvReorderThread(coherenceHint, 2);
+            coherenceHint |= (pathDepth == 0 ? (1 << 1) : 0);
+            ++numCoherenceHintBits;
         }
+
+        NvReorderThread(coherenceHint, numCoherenceHintBits);
 
         if (doMis && surfMaterial.canScatter() && isNonDeltaSurface)
         {
