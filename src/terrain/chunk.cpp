@@ -110,14 +110,12 @@ void Chunk::generateBlocks()
 
             for (uint y = 0; y < height; ++y)
             {
-                const ivec3 blockPos_CS = ivec3(x, y, z);
-                const ivec3 blockPos_WS = ivec3(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                this->blocks[blockIdx++] = rand1(uvec3(blockPos_WS)) < 0.04f ? Block::LAMP : Block::STONE;
+                this->blocks[blockIdx++] = Block::STONE;
             }
 
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.02f && height < chunkSizeY)
+            if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
             {
-                this->blocks[blockPosToIdx(ivec3(x, height, z))] = Block::LAMP;
+                this->blocks[blockIdx++] = Block::LAMP;
             }
         }
     }
