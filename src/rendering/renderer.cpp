@@ -1522,9 +1522,8 @@ static void imguiEndFrame(double deltaTime)
             didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
             didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
         }
-
-        ImGui::End();
     }
+    ImGui::End();
 
     constexpr int performanceWindowHeight = 240;
     ImGui::SetNextWindowPos(ImVec2(10, viewport.Height - 10 - performanceWindowHeight));
@@ -1556,9 +1555,8 @@ static void imguiEndFrame(double deltaTime)
                                sizeof(FrameTimeMeasurement));
             ImPlot::EndPlot();
         }
-
-        ImGui::End();
     }
+    ImGui::End();
 
     if (frameNumber == 0)
     {
