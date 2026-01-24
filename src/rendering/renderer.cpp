@@ -59,8 +59,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stb_image_write.h>
 
 #include "gbuffer.rgs.fxh"
-#include "temporal_reuse.cs.fxh"
-#include "spatial_reuse.cs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "collect.cs.fxh"
 #include "postprocess.vs.fxh"
@@ -911,73 +909,6 @@ static void initRootSignature()
     }
 
     // ===================================
-    // TEMPORAL REUSE
-    // ===================================
-    {
-        std::array<D3D12_ROOT_PARAMETER1, TEMPORAL_REUSE_PARAM_IDX(COUNT)> temporalReuseParams;
-
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
-
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
-
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_IN);
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_PREV);
-
-        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, TEMPORAL_REUSE, RIS_SAMPLES_OUT);
-
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC temporalReuseRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(temporalReuseParams.size()),
-                .pParameters = temporalReuseParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
-                .pStaticSamplers = rtStaticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&temporalReuseRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&temporalReuseRootSig)));
-    }
-
-    // ===================================
-    // SPATIAL REUSE
-    // ===================================
-    {
-        std::array<D3D12_ROOT_PARAMETER1, SPATIAL_REUSE_PARAM_IDX(COUNT)> spatialReuseParams;
-
-        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
-
-        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
-        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
-
-        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, SPATIAL_REUSE, RIS_SAMPLES_IN);
-
-        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, SPATIAL_REUSE, RIS_SAMPLES_OUT);
-
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC spatialReuseRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(spatialReuseParams.size()),
-                .pParameters = spatialReuseParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
-                .pStaticSamplers = rtStaticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&spatialReuseRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&spatialReuseRootSig)));
-    }
-
-    // ===================================
     // PATH TRACING
     // ===================================
     {
@@ -1152,28 +1083,6 @@ static void initPipeline()
         };
 
         makeRtPipeline(gbufferPipelineInputs);
-    }
-
-    // ===================================
-    // TEMPORAL REUSE
-    // ===================================
-    {
-        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = temporalReuseRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(temporal_reuse_cs_shaderBytecode);
-        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&temporalReusePso)));
-        temporalReusePso->SetName(L"temporalReusePso");
-    }
-
-    // ===================================
-    // SPATIAL REUSE
-    // ===================================
-    {
-        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = spatialReuseRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(spatial_reuse_cs_shaderBytecode);
-        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&spatialReusePso)));
-        spatialReusePso->SetName(L"spatialReusePso");
     }
 
     // ===================================
@@ -1428,7 +1337,6 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "naive",
     "MIS",
     "RIS",
-    "ReSTIR",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",
@@ -1485,12 +1393,7 @@ static void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Sampling");
         didPathTracingSettingsChange |=
             SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
-        const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
-        if (samplingMode == SamplingMode::RESTIR)
-        {
-            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
-            SettingsGuiHelpers::Tooltip("Adds visibility to the RIS target function, giving much better sample reuse and signal quality in exchange for some darkening bias");
-        }
+        //const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
@@ -1647,11 +1550,11 @@ void render()
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&dlssOutputTarget);
-            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            sl::Resource linearDepthResource = makeSlResource(&linearDepthTarget);
             sl::Resource motionResource = makeSlResource(&motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&specularAlbedoTarget);
-            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            sl::Resource normalsAndRoughnessResource = makeSlResource(&normalsAndRoughnessTarget);
             sl::Resource specularHitDistanceResource = makeSlResource(&specularHitDistanceTarget);
 
             sl::ResourceTag resourceTags[] = {
@@ -1751,12 +1654,6 @@ void render()
     renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
 
-    const SamplingMode samplingMode = static_cast<SamplingMode>(renderParams->samplingMode);
-    if (samplingMode == SamplingMode::RESTIR)
-    {
-        renderParams->restirDoVisibilityCheck = SettingsManager::getAsBool("restirDoVisibilityCheck") ? 1 : 0;
-    }
-
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (debugViewComboMap.contains(debugViewSettingStr))
@@ -1846,72 +1743,6 @@ void render()
         cmdList->DispatchRays(&gbufferDispatchDesc);
 
         swapRisBuffers();
-
-        // these state transitions are needed for ReSTIR and for storing prevDepthAndNormal in the collect pass
-        linearDepthTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        normalsAndRoughnessTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-        if (samplingMode == SamplingMode::RESTIR)
-        {
-            // ===================================
-            // TEMPORAL REUSE
-            // ===================================
-            if (frameNumber > 0)
-            {
-                motionTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-                cmdList->SetPipelineState(temporalReusePso.Get());
-                cmdList->SetComputeRootSignature(temporalReuseRootSig.Get());
-
-                // clang-format off
-                cmdList->SetComputeRootConstantBufferView(TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-
-                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-
-                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
-                cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV), dev_risSamplesPrev->GetGPUVirtualAddress());
-
-                cmdList->SetComputeRootUnorderedAccessView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
-                // clang-format on
-
-                motionTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // for SL later on
-
-                const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, TEMPORAL_REUSE_WORKGROUP_SIZE_X);
-                const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, TEMPORAL_REUSE_WORKGROUP_SIZE_Y);
-                cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
-
-                swapRisBuffers();
-            }
-
-            // ===================================
-            // SPATIAL REUSE
-            // ===================================
-            static constexpr uint32_t numSpatialReusePasses = 1; // TODO: use different random seed for each pass if doing multiple passes
-            for (uint32_t spatialReusePassIdx = 0; spatialReusePassIdx < numSpatialReusePasses; ++spatialReusePassIdx)
-            {
-                cmdList->SetPipelineState(spatialReusePso.Get());
-                cmdList->SetComputeRootSignature(spatialReuseRootSig.Get());
-
-                // clang-format off
-                cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-
-                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-
-                cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
-
-                cmdList->SetComputeRootUnorderedAccessView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
-                // clang-format on
-
-                const uint32_t dispatchWidth = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, SPATIAL_REUSE_WORKGROUP_SIZE_X);
-                const uint32_t dispatchHeight = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, SPATIAL_REUSE_WORKGROUP_SIZE_Y);
-                cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
-
-                swapRisBuffers();
-            }
-        }
 
         // ===================================
         // PATH TRACING

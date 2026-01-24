@@ -30,32 +30,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RIS_MIN_NUM_BSDF_CANDIDATES 0
 #define DO_BSDF_SAMPLES (RIS_MIN_NUM_BSDF_CANDIDATES > 0 || RIS_MAX_NUM_BSDF_CANDIDATES > 0)
 
-#define RESTIR_MAX_CONFIDENCE 8
-
 float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     const Material lightMaterial = materials[light.materialIdx];
 
-    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS); // TODO: should this be included here, or just a proxy to save performance?
+    // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS); // TODO: should this be included here, or maybe a proxy to save performance?
 
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: replace with cosTheta for non-transmissive materials? (will require more complex MIS weights for RIS sample generation)
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
     return lightMaterial.emissiveStrength * cosThetaSurf;
-}
-
-float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surfPos_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
-{
-    const float3 this_wi_WS = normalize(pointOnLight_WS - this_surfPos_WS);
-    const float this_r2 = distance2(this_surfPos_WS, pointOnLight_WS);
-
-    const float3 other_wi_WS = normalize(pointOnLight_WS - other_surfPos_WS);
-    const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
-
-    const float geomTermJacobian = (absCosTheta(-this_wi_WS, lightNor_WS) * other_r2) / (absCosTheta(-other_wi_WS, lightNor_WS) * this_r2); // TODO: clamp fireflies?
-    return isinf(geomTermJacobian) ? 0.f : geomTermJacobian;
 }
 
 #ifdef HITGROUP_LIGHTS

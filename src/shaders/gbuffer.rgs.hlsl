@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
-#include "restir.hlsli"
+#include "ris.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 
@@ -55,7 +55,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
-    float roughness = 0.f;
+    float roughness = 1.f;
     float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -143,8 +143,7 @@ void RayGeneration()
     gbufferOut[linearPixelIdx] = outGbufferData;
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-
-    if (samplingMode == SamplingMode::RIS || samplingMode == SamplingMode::RESTIR)
+    if (samplingMode == SamplingMode::RIS)
     {
         RisSample risSample;
         risSample.lightIdx = LIGHT_IDX_INVALID;
@@ -167,15 +166,6 @@ void RayGeneration()
                 RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
                 bool isBsdfSample;
                 risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng, isBsdfSample);
-
-                if (samplingMode == SamplingMode::RESTIR && renderParams.restirDoVisibilityCheck == 1 && !isBsdfSample)
-                {
-                    const DirectLightingSample lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS);
-                    if (!lightSample.didHitLight)
-                    {
-                        risSample.W = 0.f;
-                    }
-                }
             }
         }
 

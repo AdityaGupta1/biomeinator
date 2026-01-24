@@ -80,20 +80,6 @@
             "threshold": 0.002
         },
         {
-            "name": "many_faces_emitter_restir",
-            "scene": "many_faces_emitter/many_faces_emitter.gltf",
-            "args": [
-                "--width=960",
-                "--height=540",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=1024",
-                "--maxPathDepth=2",
-                "--samplingMode=3"
-            ],
-            "golden": "many_faces_emitter/golden_restir.png",
-            "threshold": 0.001
-        },
-        {
             "name": "textured_cube",
             "scene": "textured_cube/textured_cube.gltf",
             "args": [
@@ -132,20 +118,6 @@
             ],
             "golden": "penguin_gallery/golden_blender_no_tonemap.png",
             "threshold": 0.01
-        },
-        {
-            "name": "cornell_box_restir",
-            "scene": "cornell_box/cornell_box.gltf",
-            "args": [
-                "--width=540",
-                "--height=540",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=1024",
-                "--maxPathDepth=12",
-                "--samplingMode=3"
-            ],
-            "golden": "cornell_box/golden_restir.png",
-            "threshold": 0.015
         },
         {
             "name": "cornell_box_ris",
@@ -244,20 +216,6 @@
             "threshold": 0.02
         },
         {
-            "name": "evil_room_restir",
-            "scene": "evil_room/evil_room.gltf",
-            "args": [
-                "--width=480",
-                "--height=270",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
-                "--maxPathDepth=12",
-                "--samplingMode=3"
-            ],
-            "golden": "evil_room/golden_restir.png",
-            "threshold": 0.015
-        },
-        {
             "name": "evil_room_blender_no_tonemap",
             "scene": "evil_room/evil_room.gltf",
             "args": [
@@ -282,20 +240,6 @@
                 "--maxPathDepth=12"
             ],
             "golden": "cave/golden.png",
-            "threshold": 0.015
-        },
-        {
-            "name": "cave_restir",
-            "scene": "cave/cave.gltf",
-            "args": [
-                "--width=960",
-                "--height=540",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
-                "--maxPathDepth=12",
-                "--samplingMode=3"
-            ],
-            "golden": "cave/golden_restir.png",
             "threshold": 0.015
         },
         {
