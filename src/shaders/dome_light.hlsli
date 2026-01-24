@@ -61,7 +61,7 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
     }
 
     float pdf = 0.f;
-    pdf += sunSampleChance * coneUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    pdf += sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
     pdf += (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
     return pdf;
 }
@@ -80,8 +80,8 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomSampler r
 
     if (rng.nextFloat() < sunSampleChance)
     {
-        wi_WS = sampleConeUniform(sunDir_WS, sunCosTheta, rng);
-        pdf = sunSampleChance * coneUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+        wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
+        pdf = sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
     }
     else
     {

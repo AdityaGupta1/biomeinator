@@ -35,7 +35,7 @@ float hemisphereCosineWeightedPdf(const float3 wi_WS, const float3 surfNor_WS)
 	return max(cosTheta(wi_WS, surfNor_WS), 0.f) * M_INV_PI;
 }
 
-float3 sampleConeUniform(const float3 coneDir_WS, const float minCosTheta, inout RandomSampler rng)
+float3 sampleSphericalCapUniform(const float3 axis_WS, const float minCosTheta, inout RandomSampler rng)
 {
     const float2 rndSample = rng.nextFloat2();
 
@@ -49,13 +49,13 @@ float3 sampleConeUniform(const float3 coneDir_WS, const float minCosTheta, inout
         cosTheta
     );
 
-    return normalize(mul(computeTBN(coneDir_WS), sampledDir_OS));
+    return normalize(mul(computeTBN(axis_WS), sampledDir_OS));
 }
 
-// returns 0 if dir_WS is outside the cone
-float coneUniformPdf(const float3 wi_WS, const float3 coneDir_WS, const float minCosTheta)
+// returns 0 if dir_WS is outside the spherical cap
+float sphericalCapUniformPdf(const float3 wi_WS, const float3 axis_WS, const float minCosTheta)
 {
-    if (dot(wi_WS, coneDir_WS) < minCosTheta)
+    if (dot(wi_WS, axis_WS) < minCosTheta)
     {
         return 0.f;
     }
