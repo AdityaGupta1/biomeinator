@@ -32,7 +32,7 @@ namespace ChunkGenerator
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::array<float, chunkSizeXZ * chunkSizeXZ> simplexOutput;
+    std::array<float, chunkSizeXZ * chunkSizeXZ> noiseOutput;
 
     auto fnSimplex = FastNoise::New<FastNoise::Simplex>();
     auto fnFractal = FastNoise::New<FastNoise::FractalFBm>();
@@ -40,22 +40,15 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
     fnFractal->SetSource(fnSimplex);
     fnFractal->SetOctaveCount(4);
 
-    fnFractal->GenUniformGrid2D(simplexOutput.data(),
-                                chunkPosBlocksXZ_WS.x,
-                                chunkPosBlocksXZ_WS.y,
-                                chunkSizeXZ,
-                                chunkSizeXZ,
-                                1.f,
-                                1.f,
-                                91231205);
+    fnFractal->GenUniformGrid2D(
+        noiseOutput.data(), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 91231205);
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
         for (uint x = 0; x < chunkSizeXZ; ++x)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(x, z);
-            const float simplex = simplexOutput[z * chunkSizeXZ + x];
-            const uint height = 64.f + 10.f * simplex;
+            const uint height = 64.f + 10.f * noiseOutput[z * chunkSizeXZ + x];
 
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
 
