@@ -23,7 +23,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
-#define PAYLOAD_FLAG_LIGHTS_VISIBILITY_ONLY (1 << 1)
 
 struct Payload
 {

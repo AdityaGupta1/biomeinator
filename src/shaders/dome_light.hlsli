@@ -51,7 +51,7 @@ float3 getDomeLightColor(float3 wi_WS)
     return skyColor;
 }
 
-static const float sunSampleChance = 0.75f;
+static const float sunSampleChance = 0.6f;
 
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 {
