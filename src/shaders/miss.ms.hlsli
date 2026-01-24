@@ -20,10 +20,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "dome_light.hlsli"
 
+// TODO: move back to path_tracing_common.hlsli
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    payload.pathColor += payload.pathWeight * getDomeLightColor(WorldRayDirection());
-
     payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

@@ -26,7 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/sampling.hlsli"
 
 static const float3 sunDir_WS = normalize(float3(2.f, 3.f, 4.f));
-static const float sunCosTheta = 0.9985f;
+//static const float sunCosTheta = 0.9985f;
+static const float sunCosTheta = 1.f;
 
 bool isInSun(float3 wi_WS)
 {
@@ -48,7 +49,8 @@ float3 getDomeLightColor(float3 wi_WS)
     return float3(0.3f, 0.7f, 0.95f);
 }
 
-static const float sunSampleChance = 0.85f;
+//static const float sunSampleChance = 0.85f;
+static const float sunSampleChance = 0.f;
 
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 {
@@ -111,7 +113,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
     DomeLightSample result;
     result.didReachDomeLight = ((domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT) == 0);
     result.wi_WS = wi_WS;
-    result.Le = result.didReachDomeLight ? domeLightPayload.pathColor : float3(0.f, 0.f, 0.f);
+    result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
     result.pdf = pdf;
     return result;
 }
