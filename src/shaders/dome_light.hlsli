@@ -119,7 +119,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
-    result.didReachDomeLight = ((domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT) == 0);
+    result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
     result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
     result.pdf = pdf;
