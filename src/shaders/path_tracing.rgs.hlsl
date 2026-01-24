@@ -275,7 +275,7 @@ void pathTraceRay(inout Payload payload)
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
-            // if BSDF sampling didn't hit a light, lightPdf = 0 so misWeight = 1
+            // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
         }
 
         previousWasSpecular = surfBsdfSample.wasSpecular;
