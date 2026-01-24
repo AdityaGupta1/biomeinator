@@ -55,14 +55,13 @@ void pathTraceRay(inout Payload payload)
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
-    // TODO: simplify this if statement
-    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || payload.materialIdx == MATERIAL_IDX_INVALID)
+    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
-        {
-            payload.pathColor = getDomeLightColor(ray.Direction);
-        }
-
+        payload.pathColor = getDomeLightColor(ray.Direction);
+        return;
+    }
+    else if (payload.materialIdx == MATERIAL_IDX_INVALID)
+    {
         return;
     }
 
@@ -232,21 +231,20 @@ void pathTraceRay(inout Payload payload)
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        // TODO: simplify this if statement
-        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || payload.materialIdx == MATERIAL_IDX_INVALID)
+        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
         {
-            if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+            if (doMis)
             {
-                if (doMis)
-                {
-                    const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
-                    const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleDomeLightPdf);
-                    payload.pathWeight *= balanceHeuristicWeight;
-                }
-
-                payload.pathColor += payload.pathWeight * getDomeLightColor(ray.Direction);
+                const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
+                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleDomeLightPdf);
+                payload.pathWeight *= balanceHeuristicWeight;
             }
 
+            payload.pathColor += payload.pathWeight * getDomeLightColor(ray.Direction);
+            return;
+        }
+        else if (payload.materialIdx == MATERIAL_IDX_INVALID)
+        {
             return;
         }
 

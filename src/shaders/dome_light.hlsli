@@ -25,7 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 
-static const float3 sunDir_WS = normalize(float3(2.f, 3.f, 4.f));
+static const float3 sunDir_WS = normalize(float3(1.f, 2.f, 4.f));
 static const float sunCosTheta = 0.9985f;
 
 static const float3 skyColor = float3(0.3f, 0.7f, 0.95f);
@@ -94,9 +94,17 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomSampler r
 
 DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
+    DomeLightSample result;
+
     float3 wi_WS;
     float pdf;
     wi_WS = generateDomeLightSampleDir(surfNor_WS, rng, pdf);
+
+    if (dot(wi_WS, surfNor_WS) < 0.f)
+    {
+        result.didReachDomeLight = false;
+        return result;
+    }
 
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
@@ -111,7 +119,6 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
-    DomeLightSample result;
     result.didReachDomeLight = ((domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT) == 0);
     result.wi_WS = wi_WS;
     result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
