@@ -22,8 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define HITGROUP_LIGHTS GBUFFER_HITGROUP_LIGHTS
 
-#include "miss.ms.hlsli"
-
 #include "global_params.hlsli"
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"

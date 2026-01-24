@@ -22,8 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define HITGROUP_LIGHTS PT_HITGROUP_LIGHTS
 
-#include "miss.ms.hlsli"
-
 #include "nvapi_includes.hlsli"
 
 #include "dome_light.hlsli"
@@ -57,6 +55,7 @@ void pathTraceRay(inout Payload payload)
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
+    // TODO: simplify this if statement
     if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -233,6 +232,8 @@ void pathTraceRay(inout Payload payload)
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
+        // TODO: simplify this if statement
+        // TODO: decide whether to unset PAYLOAD_FLAG_DID_HIT on each iteration
         if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED) || payload.materialIdx == MATERIAL_IDX_INVALID)
         {
             if (bool(payload.flags & PAYLOAD_FLAG_PATH_FINISHED))
