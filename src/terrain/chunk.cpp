@@ -110,7 +110,7 @@ void Chunk::generateBlocks()
 
             for (uint y = 0; y < height; ++y)
             {
-                this->blocks[blockIdx++] = Block::STONE;
+                this->blocks[blockIdx++] = (y == height - 1) ? Block::GRASS : Block::DIRT;
             }
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
@@ -488,10 +488,10 @@ void Chunk::createInstance(Scene* scene)
                             uvec2 baseTexCoords;
                             switch (faceIdx)
                             {
-                                case 5: // +y
+                                case 4: // +y
                                     baseTexCoords = blockData.uvs.top;
                                     break;
-                                case 6: // -y
+                                case 5: // -y
                                     baseTexCoords = blockData.uvs.bottom;
                                     break;
                                 default: // +/- x, +/- z

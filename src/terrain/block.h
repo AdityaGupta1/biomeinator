@@ -25,11 +25,13 @@ using BlockId = uint16_t;
 
 enum class Block : BlockId
 {
-	AIR = 0,
-	STONE,
-	LAMP,
+    AIR = 0,
+    STONE,
+    LAMP,
+    DIRT,
+    GRASS,
 
-	COUNT
+    COUNT
 };
 
 struct BlockUvs
