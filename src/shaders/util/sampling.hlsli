@@ -53,9 +53,9 @@ float3 sampleConeUniform(const float3 coneDir_WS, const float minCosTheta, inout
 }
 
 // returns 0 if dir_WS is outside the cone
-float coneUniformPdf(const float3 dir_WS, const float3 coneDir_WS, const float minCosTheta)
+float coneUniformPdf(const float3 wi_WS, const float3 coneDir_WS, const float minCosTheta)
 {
-    if (dot(dir_WS, coneDir_WS) < minCosTheta)
+    if (dot(wi_WS, coneDir_WS) < minCosTheta)
     {
         return 0.f;
     }
