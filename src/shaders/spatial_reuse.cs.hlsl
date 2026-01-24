@@ -98,7 +98,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const AreaLight other_light = areaLights[other_risSample.lightIdx];
 
-        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_light.normal_WS);
+        float3 other_lightNor_WS;
+        float other_lightArea_unused;
+        getLightNormalAndArea(other_light, other_lightNor_WS, other_lightArea_unused);
+
+        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_lightNor_WS);
 
         const float other_p_hat = other_risSample.p_hat;
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos

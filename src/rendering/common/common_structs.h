@@ -160,9 +160,6 @@ struct AreaLight
     uint triangleIdx;
 
     float3 pos2_WS;
-    float rcpArea;
-
-    float3 normal_WS;
     uint materialIdx;
 };
 

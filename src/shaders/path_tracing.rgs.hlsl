@@ -168,8 +168,13 @@ void pathTraceRay(inout Payload payload)
                     const float W = lightSample.pdfOrW_Y;
 
                     const AreaLight light = areaLights[lightSample.lightIdx];
+
+                    float3 lightNor_WS;
+                    float lightArea;
+                    getLightNormalAndArea(light, lightNor_WS, lightArea);
+
                     const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                    float lightPdf = light.rcpArea * r2 / absCosTheta(-lightSample.wi_WS, light.normal_WS);
+                    float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea);
                     if (samplingMode == SamplingMode::RIS || pathDepth > 0)
                     {
                         lightPdf /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI

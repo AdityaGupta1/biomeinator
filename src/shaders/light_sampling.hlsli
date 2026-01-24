@@ -32,6 +32,13 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
+void getLightNormalAndArea(const AreaLight light, out float3 lightNor_WS, out float area)
+{
+    const float3 crossVec = cross(light.pos0_WS - light.pos1_WS, light.pos2_WS - light.pos0_WS);
+    lightNor_WS = normalize(crossVec);
+    area = length(crossVec) * 0.5f;
+}
+
 AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
 {
     lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
@@ -42,11 +49,15 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, o
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
     pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
-    float lightSamplePdf = light.rcpArea;
 
+    float3 lightNor_WS;
+    float lightArea;
+    getLightNormalAndArea(light, lightNor_WS, lightArea);
+
+    float lightSamplePdf = 1.f / lightArea;
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-    lightSamplePdf *= r2 / absCosTheta(-wi_WS, light.normal_WS);
+    lightSamplePdf *= r2 / absCosTheta(-wi_WS, lightNor_WS);
     lightPdf = lightPickPdf * lightSamplePdf;
 
     return light;
@@ -124,9 +135,14 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
 
     const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
     const AreaLight light = areaLights[areaLightIdx];
+
+    float3 lightNor_WS;
+    float lightArea;
+    getLightNormalAndArea(light, lightNor_WS, lightArea);
+
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
-    return lightPickPdf * light.rcpArea * r2 / absCosTheta(-wi_WS, light.normal_WS);
+    return lightPickPdf * r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
 }
 
 [shader("closesthit")]
