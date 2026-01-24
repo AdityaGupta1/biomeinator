@@ -20,6 +20,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <array>
 
+using namespace glm;
+
+BlockUvs::BlockUvs(uvec2 all)
+    : BlockUvs(all, all, all)
+{}
+
+BlockUvs::BlockUvs(uvec2 top, uvec2 side, uvec2 bottom)
+    : top(top), side(side), bottom(bottom)
+{}
+
 namespace Blocks
 {
 
@@ -30,8 +40,8 @@ std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
 
 void init()
 {
-    BLOCK_DATA_BY_NAME(STONE) = { { 0, 0 } };
-    BLOCK_DATA_BY_NAME(LAMP) = { { 1, 0 }, true };
+    BLOCK_DATA_BY_NAME(STONE) = { BlockUvs(uvec2(0, 0)) };
+    BLOCK_DATA_BY_NAME(LAMP) = { BlockUvs(uvec2(1, 0)), true };
 }
 
 const BlockData& getBlockData(Block block)
