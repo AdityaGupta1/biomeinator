@@ -23,3 +23,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define PT_HITGROUP_PRIMARY 0
 #define PT_HITGROUP_LIGHTS 1
+#define PT_HITGROUP_DOME_LIGHT 2

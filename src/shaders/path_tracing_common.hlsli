@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "payload.hlsli"
 
+#define RAY_DEFAULT_TMAX 10000.f
 #define RAY_ORIGIN_OFFSET_EPSILON 0.0001f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
@@ -157,5 +158,5 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 [shader("miss")]
 void Miss(inout Payload payload)
 {
-    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+    payload.flags &= ~PAYLOAD_FLAG_DID_HIT;
 }

@@ -137,11 +137,6 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
-    if (bool(payload.flags & PAYLOAD_FLAG_LIGHTS_VISIBILITY_ONLY))
-    {
-        return;
-    }
-
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
     Vertex v0, v1, v2;

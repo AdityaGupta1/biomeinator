@@ -114,10 +114,10 @@ struct CameraParams
 
 struct SceneParams
 {
+    uint voxelMode;
     uint numAreaLights;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 struct RenderParams

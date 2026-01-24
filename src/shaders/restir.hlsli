@@ -122,7 +122,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
         ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
         ray.Direction = bsdfSample.wi_WS;
         ray.TMin = 0.f;
-        ray.TMax = 10000.f;
+        ray.TMax = RAY_DEFAULT_TMAX;
 
         Payload lightPayload;
         lightPayload.flags = 0;

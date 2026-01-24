@@ -18,8 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
+#include "dxr_common.h"
 
+#include "debug.h"
 #include "renderer.h"
 #include "buffer/buffer_helper.h"
 
@@ -106,6 +107,7 @@ void makeRtPipeline(const RtPipelineInputs& inputs)
     auto writeShaderId = [&](const wchar_t* name, const uint32_t incrementSizeBytes)
     {
         void* id = props->GetShaderIdentifier(name);
+        ASSERT(id != nullptr);
         memcpy(host_shaderIds, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
         host_shaderIds += incrementSizeBytes;
     };

@@ -125,7 +125,7 @@ void RayGeneration()
     ray.Origin = cameraParams.pos_WS;
     ray.Direction = getPrimaryRayDirection(pixelIdx);
     ray.TMin = 0.001f;
-    ray.TMax = 10000.f;
+    ray.TMax = RAY_DEFAULT_TMAX;
 
     Payload payload;
     payload.materialIdx = MATERIAL_IDX_INVALID;

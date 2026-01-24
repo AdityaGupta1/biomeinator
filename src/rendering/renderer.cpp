@@ -183,11 +183,15 @@ void init()
 
     initNvapi();
 
+    const bool voxelMode = SettingsManager::getAsBool("voxelMode");
+
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
         FrameContext& frameCtx = frameCtxs[frameIdx];
         frameCtx.paramBlockManager.init();
         frameCtx.paramBlockManager.setName(L"paramBlockManager " + std::to_wstring(frameIdx));
+
+        frameCtx.paramBlockManager.sceneParams->voxelMode = voxelMode ? 1 : 0;
     }
 
     initSwapChain();
@@ -207,7 +211,8 @@ void init()
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
-    if (SettingsManager::getAsBool("voxelMode")) {
+    if (voxelMode)
+    {
         Terrain::init(&scene);
     }
     else
@@ -1177,7 +1182,7 @@ static void initPipeline()
         ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         ptPipelineInputs.rootSig = ptRootSig.Get();
 
-        ptPipelineInputs.hitGroups.resize(2);
+        ptPipelineInputs.hitGroups.resize(3);
         ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"pt_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
@@ -1187,6 +1192,11 @@ static void initPipeline()
             .HitGroupExport = L"pt_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+        ptPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
+            .HitGroupExport = L"pt_HitGroup_DomeLight",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
         };
 
         makeRtPipeline(ptPipelineInputs);
