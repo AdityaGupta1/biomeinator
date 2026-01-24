@@ -35,7 +35,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT, RIS_SAMPLES_IN);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
@@ -134,18 +133,9 @@ void pathTraceRay(inout Payload payload)
             DirectLightingSample lightSample;
             if (useRis)
             {
-                RisSample risSample;
-                if (pathDepth == 0)
-                {
-                    risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
-                }
-                else
-                {
-                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                    bool isBsdfSampleUnused;
-                    risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                }
-
+                const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                bool isBsdfSampleUnused;
+                const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
                 lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
             }
             else

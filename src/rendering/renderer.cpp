@@ -505,13 +505,6 @@ static void initRtTargets()
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 
-static ComPtr<ID3D12Resource> dev_risSamples1;
-static ComPtr<ID3D12Resource> dev_risSamples2;
-static ComPtr<ID3D12Resource> dev_risSamples3;
-static ID3D12Resource* dev_risSamplesIn;
-static ID3D12Resource* dev_risSamplesOut;
-static ID3D12Resource* dev_risSamplesPrev;
-
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
@@ -610,27 +603,6 @@ void resize()
                                                   &DEFAULT_HEAP,
                                                   { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_gbuffer->SetName(L"dev_gbuffer");
-
-    dev_risSamples1.Reset();
-    dev_risSamples1 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
-                                                      &DEFAULT_HEAP,
-                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_risSamples1->SetName(L"dev_risSamples1");
-    dev_risSamplesIn = dev_risSamples1.Get();
-
-    dev_risSamples2.Reset();
-    dev_risSamples2 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
-                                                      &DEFAULT_HEAP,
-                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_risSamples2->SetName(L"dev_risSamples2");
-    dev_risSamplesOut = dev_risSamples2.Get();
-
-    dev_risSamples3.Reset();
-    dev_risSamples3 = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(RisSample),
-                                                      &DEFAULT_HEAP,
-                                                      { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_risSamples3->SetName(L"dev_risSamples3");
-    dev_risSamplesPrev = dev_risSamples3.Get();
 
     dev_pathTracingRawBuffer.Reset();
     const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
@@ -757,36 +729,6 @@ enum class GbufferParam
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     GBUFFER_OUT,
-    RIS_SAMPLES_OUT,
-
-    COUNT
-};
-
-enum class TemporalReuseParam
-{
-    GLOBAL_PARAMS,
-
-    MATERIALS,
-    AREA_LIGHTS,
-
-    RIS_SAMPLES_IN,
-    RIS_SAMPLES_PREV,
-
-    RIS_SAMPLES_OUT,
-
-    COUNT
-};
-
-enum class SpatialReuseParam
-{
-    GLOBAL_PARAMS,
-
-    MATERIALS,
-    AREA_LIGHTS,
-
-    RIS_SAMPLES_IN,
-
-    RIS_SAMPLES_OUT,
 
     COUNT
 };
@@ -805,7 +747,6 @@ enum class PtParam
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     GBUFFER_IN,
-    RIS_SAMPLES_IN,
 
     PATH_TRACING_RAW_BUFFER_OUT,
 
@@ -829,8 +770,6 @@ enum class CollectParam
 };
 
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
-#define TEMPORAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(TemporalReuseParam::param)
-#define SPATIAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(SpatialReuseParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
@@ -852,8 +791,6 @@ static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
 static ComPtr<ID3D12RootSignature> gbufferRootSig;
-static ComPtr<ID3D12RootSignature> temporalReuseRootSig;
-static ComPtr<ID3D12RootSignature> spatialReuseRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
 static ComPtr<ID3D12RootSignature> postprocessRootSig;
@@ -888,7 +825,6 @@ static void initRootSignature()
         gbufferParams[GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         gbufferParams[GBUFFER_PARAM_IDX(GBUFFER_OUT)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER_OUT);
-        gbufferParams[GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, GBUFFER, RIS_SAMPLES_OUT);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -927,7 +863,6 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
         ptParams[PT_PARAM_IDX(GBUFFER_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_IN);
-        ptParams[PT_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, PT, RIS_SAMPLES_IN);
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
@@ -1036,10 +971,6 @@ static void initRootSignature()
 static ComPtr<ID3D12StateObject> gbufferPso;
 static ComPtr<ID3D12Resource> dev_gbufferShaderIds;
 static D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
-
-static ComPtr<ID3D12PipelineState> temporalReusePso;
-
-static ComPtr<ID3D12PipelineState> spatialReusePso;
 
 static ComPtr<ID3D12StateObject> ptPso;
 static ComPtr<ID3D12Resource> dev_ptShaderIds;
@@ -1493,28 +1424,6 @@ static inline sl::Resource makeSlResource(RtTarget* target,
     };
 }
 
-static inline void swapRisBuffers()
-{
-    std::swap(dev_risSamplesIn, dev_risSamplesOut);
-
-    // TODO: this probably doesn't need to transition both resources in all cases (e.g. the first and last times they are used in a frame)
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 dev_risSamplesIn,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                 dev_risSamplesOut,
-                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-}
-
-static inline void storePrevRisBuffer()
-{
-    // Both of these should be in D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE at this point (or promotable to that)
-    std::swap(dev_risSamplesIn, dev_risSamplesPrev);
-}
-
 static bool stopAccumulating = false;
 
 void render()
@@ -1734,15 +1643,12 @@ void render()
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), dev_risSamplesOut->GetGPUVirtualAddress());
         // clang-format on
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
         gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&gbufferDispatchDesc);
-
-        swapRisBuffers();
 
         // ===================================
         // PATH TRACING
@@ -1771,7 +1677,6 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
 
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), dev_risSamplesIn->GetGPUVirtualAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
@@ -1779,8 +1684,6 @@ void render()
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
-
-        storePrevRisBuffer();
 
         // ===================================
         // COLLECT
@@ -1985,25 +1888,14 @@ void destroy()
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
 
-    dev_risSamples1.Reset();
-    dev_risSamples2.Reset();
-    dev_risSamples3.Reset();
-    dev_risSamplesIn = nullptr;
-    dev_risSamplesOut = nullptr;
-    dev_risSamplesPrev = nullptr;
-
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
-    temporalReusePso.Reset();
-    spatialReusePso.Reset();
     ptPso.Reset();
     collectPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
-    temporalReuseRootSig.Reset();
-    spatialReuseRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();
     postprocessRootSig.Reset();

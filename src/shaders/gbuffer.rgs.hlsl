@@ -31,7 +31,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.hlsli"
 
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER, GBUFFER_OUT);
-RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER, RIS_SAMPLES_OUT);
 
 // motion is in uv space, not pixel space
 float2 calculateMotionFromPos(const float3 pos_WS)
@@ -141,34 +140,4 @@ void RayGeneration()
     outGbufferData.payloadFlags = payload.flags;
     outGbufferData.pad0 = outGbufferData.pad1 = 0;
     gbufferOut[linearPixelIdx] = outGbufferData;
-
-    const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    if (samplingMode == SamplingMode::RIS)
-    {
-        RisSample risSample;
-        risSample.lightIdx = LIGHT_IDX_INVALID;
-        risSample.pointOnLight_WS = 0.f;
-        risSample.W = 0.f;
-        risSample.confidence = 0;
-        risSample.pad0 = 0;
-
-        // tried reordering here by whether or not it generates an RIS sample and it was slower (75 fps after vs 79 fps before)
-
-        if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
-        {
-            const Material surfMaterial = materials[payload.materialIdx];
-            if (surfMaterial.canScatter() && !surfMaterial.isDelta())
-            {
-                const float3 wo_WS = -ray.Direction;
-                const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
-                const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
-
-                RandomSampler rng = initRandomSampler(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
-                bool isBsdfSample;
-                risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, true, rng, isBsdfSample);
-            }
-        }
-
-        risSamplesOut[linearPixelIdx] = risSample; // TODO: different light sample per path split index?
-    }
 }
