@@ -18,9 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#define GBUFFER_HITGROUP_PRIMARY 0
-#define GBUFFER_HITGROUP_LIGHTS 1
+#include "dome_light.hlsli"
 
-#define PT_HITGROUP_PRIMARY 0
-#define PT_HITGROUP_LIGHTS 1
-#define PT_HITGROUP_DOME_LIGHT 2
+[shader("miss")]
+void Miss(inout Payload payload)
+{
+    payload.pathColor += payload.pathWeight * getDomeLightColor(WorldRayDirection());
+
+    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
+}

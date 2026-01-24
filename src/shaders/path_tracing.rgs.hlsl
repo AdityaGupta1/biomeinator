@@ -22,8 +22,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define HITGROUP_LIGHTS PT_HITGROUP_LIGHTS
 
+#include "miss.ms.hlsli"
+
 #include "nvapi_includes.hlsli"
 
+#include "dome_light.hlsli"
 #include "global_params.hlsli"
 #include "light_sampling.hlsli"
 #include "materials.hlsli"
@@ -122,6 +125,8 @@ void pathTraceRay(inout Payload payload)
 
         if (doMis && surfMaterial.canScatter() && isNonDeltaSurface)
         {
+            // sample area lights
+
             DirectLightingSample lightSample;
             if (useRis)
             {
@@ -152,6 +157,7 @@ void pathTraceRay(inout Payload payload)
                 float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                 const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                const float lightSampleDomeLightPdf = domeLightPdf(lightSample.wi_WS); // 0 if !voxelMode
                 if (useRis)
                 {
                     const float W = lightSample.pdfOrW_Y;
@@ -164,18 +170,39 @@ void pathTraceRay(inout Payload payload)
                         lightPdf /= sceneParams.numAreaLights; // use actual lightPdf in all cases except ReSTIR DI
                     }
 
-                    const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
+                    const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf + lightSampleDomeLightPdf);
                     contribution *= W * balanceHeuristicWeight;
                 }
                 else
                 {
                     const float lightPdf = lightSample.pdfOrW_Y;
-                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
+                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf + lightSampleDomeLightPdf;
 
                     contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                 }
 
                 payload.pathColor += contribution;
+            }
+
+            // sample dome light
+
+            if (sceneParams.voxelMode == 1)
+            {
+                DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rng);
+                if (domeLightSample.didReachDomeLight)
+                {
+                    const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+
+                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
+
+                    const float domeLightPdf = domeLightSample.pdf;
+                    const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+                    const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf; // no area light pdf because area light sampling can't hit the dome light
+
+                    contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
+
+                    payload.pathColor += contribution;
+                }
             }
         }
 
@@ -195,7 +222,7 @@ void pathTraceRay(inout Payload payload)
         ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
         ray.Direction = surfBsdfSample.wi_WS;
         ray.TMin = 0.f;
-        ray.TMax = 10000.f;
+        ray.TMax = RAY_DEFAULT_TMAX;
 
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
@@ -216,6 +243,8 @@ void pathTraceRay(inout Payload payload)
 
         if (doMis)
         {
+            float otherMethodsPdfSum = 0.f;
+
             const Material hitMaterial = materials[payload.materialIdx];
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
@@ -225,10 +254,18 @@ void pathTraceRay(inout Payload payload)
                     bsdfSampleLightPdf *= sceneParams.numAreaLights; // to match proxy lightPdf used for ReSTIR DI
                 }
 
-                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
-                payload.pathWeight *= balanceHeuristicWeight;
+                otherMethodsPdfSum += bsdfSampleLightPdf;
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
+
+            const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction);
+            otherMethodsPdfSum += bsdfSampleDomeLightPdf;
+
+            if (otherMethodsPdfSum > 0.f)
+            {
+                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + otherMethodsPdfSum);
+                payload.pathWeight *= balanceHeuristicWeight;
+            }
         }
 
         previousWasSpecular = surfBsdfSample.wasSpecular;
@@ -246,8 +283,8 @@ void RayGeneration()
     gbufferPayload.hitInfo = gbufferData.hitInfo;
     gbufferPayload.materialIdx = gbufferData.materialIdx;
     gbufferPayload.flags = gbufferData.payloadFlags;
-    gbufferPayload.pathWeight = float3(1, 1, 1);
-    gbufferPayload.pathColor = float3(0, 0, 0);
+    gbufferPayload.pathWeight = float3(1.f, 1.f, 1.f);
+    gbufferPayload.pathColor = float3(0.f, 0.f, 0.f);
 
     const uint pathSplitIdx = getPathSplitIdx();
 

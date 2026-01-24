@@ -21,21 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "util/math.hlsli"
-#include "util/rng.hlsli"
+#include "util/sampling.hlsli"
 
 StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
 
 SamplerState texSampler : REGISTER_S(RT, TEX_SAMPLER);
-
-float3 sampleHemisphereCosineWeighted(const float3 normal_WS, inout RandomSampler rng)
-{
-    const float2 rndSample = rng.nextFloat2();
-    const float r = sqrt(rndSample.x);
-    const float theta = M_TWO_PI * rndSample.y;
-    const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
-    return normalize(mul(computeTBN(normal_WS), sampledDir_OS));
-}
 
 // "An Inexpensive BRDF Model for Physically-based Rendering", Schlick, 1994
 float schlickFresnel(const float eta, const float cosThetaWo)
@@ -223,7 +213,7 @@ float bsdfPdf(
         return 0.f;
     }
 
-    float pdf = absCosTheta(wi_WS, surfNor_WS) * M_INV_PI;
+    float pdf = hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
 
     if (hasGlossyReflection)
     {

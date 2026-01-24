@@ -21,10 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
-#include "dome_light.hlsli"
 #include "global_params.hlsli"
 #include "payload.hlsli"
 
+#define RAY_DEFAULT_TMAX 10000.f
 #define RAY_ORIGIN_OFFSET_EPSILON 0.0001f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
@@ -153,12 +153,4 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.materialIdx = instanceData.materialIdx;
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
-}
-
-[shader("miss")]
-void Miss(inout Payload payload)
-{
-    payload.pathColor += payload.pathWeight * getDomeLightColor(WorldRayDirection());
-
-    payload.flags |= PAYLOAD_FLAG_PATH_FINISHED;
 }

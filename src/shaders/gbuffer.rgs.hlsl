@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define HITGROUP_LIGHTS GBUFFER_HITGROUP_LIGHTS
 
+#include "miss.ms.hlsli"
+
 #include "global_params.hlsli"
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
@@ -125,7 +127,7 @@ void RayGeneration()
     ray.Origin = cameraParams.pos_WS;
     ray.Direction = getPrimaryRayDirection(pixelIdx);
     ray.TMin = 0.001f;
-    ray.TMax = 10000.f;
+    ray.TMax = RAY_DEFAULT_TMAX;
 
     Payload payload;
     payload.materialIdx = MATERIAL_IDX_INVALID;

@@ -18,9 +18,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#define GBUFFER_HITGROUP_PRIMARY 0
-#define GBUFFER_HITGROUP_LIGHTS 1
+#include "math.hlsli"
+#include "rng.hlsli"
 
-#define PT_HITGROUP_PRIMARY 0
-#define PT_HITGROUP_LIGHTS 1
-#define PT_HITGROUP_DOME_LIGHT 2
+float3 sampleHemisphereCosineWeighted(const float3 surfNor_WS, inout RandomSampler rng)
+{
+	const float2 rndSample = rng.nextFloat2();
+	const float r = sqrt(rndSample.x);
+	const float theta = M_TWO_PI * rndSample.y;
+	const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
+	return normalize(mul(computeTBN(surfNor_WS), sampledDir_OS));
+}
+
+float hemisphereCosineWeightedPdf(const float3 wi_WS, const float3 surfNor_WS)
+{
+	return max(cosTheta(wi_WS, surfNor_WS), 0.f) * M_INV_PI;
+}
