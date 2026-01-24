@@ -107,14 +107,6 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         DirectX::XMStoreFloat3(&light.pos1_WS, p1);
         DirectX::XMStoreFloat3(&light.pos2_WS, p2);
 
-        const XMVECTOR edge1 = XMVectorSubtract(p1, p0);
-        const XMVECTOR edge2 = XMVectorSubtract(p2, p0);
-        const XMVECTOR cross = XMVector3Cross(edge1, edge2);
-        DirectX::XMStoreFloat3(&light.normal_WS, XMVector3Normalize(cross));
-
-        const float doubleArea = XMVectorGetX(XMVector3Length(cross));
-        light.rcpArea = doubleArea > 0.f ? (2.f / doubleArea) : 0.f;
-
         light.materialIdx = this->materialIdx;
 
         this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
