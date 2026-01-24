@@ -157,7 +157,7 @@ void pathTraceRay(inout Payload payload)
                 float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                 const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                const float lightSampleDomeLightPdf = domeLightPdf(lightSample.wi_WS); // 0 if !voxelMode
+                const float lightSampleDomeLightPdf = domeLightPdf(lightSample.wi_WS, surfNor_WS); // 0 if !voxelMode
                 if (useRis)
                 {
                     const float W = lightSample.pdfOrW_Y;
@@ -258,7 +258,7 @@ void pathTraceRay(inout Payload payload)
             }
             // if BSDF sampling didn't hit a light, lightPdf = 0 (I think) so misWeight = 1
 
-            const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction);
+            const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
             otherMethodsPdfSum += bsdfSampleDomeLightPdf;
 
             if (otherMethodsPdfSum > 0.f)

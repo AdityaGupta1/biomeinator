@@ -23,21 +23,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "path_tracing_common.hlsli"
 #include "util/rng.hlsli"
+#include "util/sampling.hlsli"
 
-bool isInSun(float3 rayDirection)
+static const float3 sunDir_WS = normalize(float3(2.f, 3.f, 4.f));
+static const float sunCosTheta = 0.9985f;
+
+bool isInSun(float3 wi_WS)
 {
-    const float3 sunDirection = normalize(float3(2.f, 3.f, 4.f));
-    return dot(rayDirection, sunDirection) > 0.998f;
+    return dot(wi_WS, sunDir_WS) >= sunCosTheta;
 }
 
-float3 getDomeLightColor(float3 rayDirection)
+float3 getDomeLightColor(float3 wi_WS)
 {
     if (sceneParams.voxelMode == 0)
     {
         return float3(0.f, 0.f, 0.f);
     }
 
-    if (isInSun(rayDirection))
+    if (isInSun(wi_WS))
     {
         return float3(1.f, 0.95f, 0.8f) * 500.f;
     }
@@ -45,9 +48,19 @@ float3 getDomeLightColor(float3 rayDirection)
     return float3(0.3f, 0.7f, 0.95f);
 }
 
-float domeLightPdf(float3 rayDirection)
+static const float sunSampleChance = 0.85f;
+
+float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 {
-    return 0.f;
+    if (sceneParams.voxelMode == 0)
+    {
+        return 0.f;
+    }
+
+    float pdf = 0.f;
+    pdf += sunSampleChance * coneUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    pdf += (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
+    return pdf;
 }
 
 struct DomeLightSample
@@ -58,10 +71,29 @@ struct DomeLightSample
     float pdf;
 };
 
+float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomSampler rng, out float pdf)
+{
+    float3 wi_WS;
+
+    if (rng.nextFloat() < sunSampleChance)
+    {
+        wi_WS = sampleConeUniform(sunDir_WS, sunCosTheta, rng);
+        pdf = sunSampleChance * coneUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    }
+    else
+    {
+        wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
+        pdf = (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
+    }
+
+    return wi_WS;
+}
+
 DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
 {
     float3 wi_WS;
-    // TODO: generate wi_WS
+    float pdf;
+    wi_WS = generateDomeLightSampleDir(surfNor_WS, rng, pdf);
 
     RayDesc ray;
     ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
@@ -77,19 +109,10 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
     DomeLightSample result;
-
-    if (domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT)
-    {
-        result.didReachDomeLight = false;
-    }
-    else
-    {
-        result.didReachDomeLight = true;
-        result.wi_WS = wi_WS;
-        result.Le = domeLightPayload.pathColor;
-        result.pdf = domeLightPdf(wi_WS);
-    }
-
+    result.didReachDomeLight = ((domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT) == 0);
+    result.wi_WS = wi_WS;
+    result.Le = result.didReachDomeLight ? domeLightPayload.pathColor : float3(0.f, 0.f, 0.f);
+    result.pdf = pdf;
     return result;
 }
 
