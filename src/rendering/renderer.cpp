@@ -158,6 +158,7 @@ static FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
 static uint32_t frameCtxIdx = 0;
 static uint64_t nextFenceValue = 1;
 static HANDLE fenceEvent;
+static bool useWaitableSwapChain = true;
 static HANDLE frameLatencyWaitable;
 
 static uint32_t frameNumber = 0;
@@ -171,6 +172,7 @@ static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 static Scene scene;
 
 static bool testMode = false;
+static bool voxelMode = false;
 
 void init()
 {
@@ -183,7 +185,7 @@ void init()
 
     initNvapi();
 
-    const bool voxelMode = SettingsManager::getAsBool("voxelMode");
+    voxelMode = SettingsManager::getAsBool("voxelMode");
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -193,6 +195,8 @@ void init()
 
         frameCtx.paramBlockManager.sceneParams->voxelMode = voxelMode ? 1 : 0;
     }
+
+    useWaitableSwapChain = SettingsManager::getAsBool("useWaitableSwapChain");
 
     initSwapChain();
     initRtTargets();
@@ -430,7 +434,11 @@ static void initSwapChain()
         Logger::log("Allow tearing: %s", allowTearing ? "true" : "false");
     }
 
-    swapChainFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    swapChainFlags = 0;
+    if (useWaitableSwapChain)
+    {
+        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    }
     if (allowTearing)
     {
         swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -593,8 +601,11 @@ void resize()
     flush();
 
     CHECK_HRESULT(swapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, swapChainFlags));
-    swapChain->SetMaximumFrameLatency(NUM_FRAMES_IN_FLIGHT - 1);
-    frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
+    if (useWaitableSwapChain)
+    {
+        CHECK_HRESULT(swapChain->SetMaximumFrameLatency(2));
+        frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
+    }
 
     dev_gbuffer.Reset();
     dev_gbuffer = BufferHelper::createBasicBuffer(renderWidth * renderHeight * sizeof(GbufferData),
@@ -853,7 +864,7 @@ static void initRootSignature()
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
     rtStaticSamplers.push_back({
-        .Filter = SettingsManager::getAsBool("voxelMode") ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .Filter = voxelMode ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
         .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -1700,7 +1711,7 @@ void render()
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    if (SettingsManager::getAsBool("voxelMode"))
+    if (voxelMode)
     {
         Terrain::update(frameCtx.toFreeList);
     }
@@ -2075,7 +2086,7 @@ static void waitForFence(const uint64_t fenceValue)
     if (fence->GetCompletedValue() < fenceValue)
     {
         CHECK_HRESULT(fence->SetEventOnCompletion(fenceValue, fenceEvent));
-        WaitForSingleObject(fenceEvent, INFINITE);
+        WaitForSingleObjectEx(fenceEvent, INFINITE, true);
     }
 }
 
@@ -2083,7 +2094,10 @@ static void beginFrame()
 {
     FrameContext& frame = frameCtxs[frameCtxIdx];
 
-    WaitForSingleObject(frameLatencyWaitable, INFINITE);
+    if (useWaitableSwapChain)
+    {
+        WaitForSingleObjectEx(frameLatencyWaitable, INFINITE, true);
+    }
     waitForFence(frame.fenceValue);
 
     frame.toFreeList.freeAll();
@@ -2180,7 +2194,10 @@ void destroy()
 
     fence.Reset();
     CloseHandle(fenceEvent);
-    CloseHandle(frameLatencyWaitable);
+    if (useWaitableSwapChain)
+    {
+        CloseHandle(frameLatencyWaitable);
+    }
 
     cmdQueue.Reset();
     factory.Reset();

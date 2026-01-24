@@ -56,6 +56,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("voxelMode", "Enable voxel mode", cxxopts::value<bool>()->default_value("false"));
     optionAdder("movementSpeed", "Movement speed", cxxopts::value<float>()->default_value("12"));
     optionAdder("fullscreen", "Start in fullscreen mode", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("useWaitableSwapChain", "Use waitable swap chain", cxxopts::value<bool>()->default_value("true"));
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
@@ -107,6 +108,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("movementSpeed", float);
     COPY_SETTING("fullscreen", bool);
+    COPY_SETTING("useWaitableSwapChain", bool);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
