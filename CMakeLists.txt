@@ -140,6 +140,11 @@ assign_source_group("generated_shaders" "${GENERATED_SHADER_HEADERS_DIR}" "${COM
 
 set(EXT "${CMAKE_SOURCE_DIR}/external")
 
+set(FASTNOISE2_TOOLS OFF CACHE BOOL "Build FastNoise2 tools (Node Editor)" FORCE)
+set(FASTNOISE2_TESTS OFF CACHE BOOL "Build FastNoise2 tests" FORCE)
+set(FASTNOISE2_UTILITY OFF CACHE BOOL "Build FastNoise2 utility tools" FORCE)
+add_subdirectory("${EXT}/FastNoise2")
+
 file(GLOB IMGUI_SRC
     "${EXT}/imgui/*.cpp"
     "${EXT}/imgui/*.h"
@@ -185,7 +190,7 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/streamline/lib/x64"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 glm::glm-header-only)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 glm::glm-header-only FastNoise)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 

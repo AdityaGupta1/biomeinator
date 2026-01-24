@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 
 #include "block.h"
-#include "noise.h"
+#include "chunk_generator.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "rendering/buffer/to_free_list.h"
@@ -97,28 +97,9 @@ void Chunk::generateBlocks()
 {
     this->blocks.resize(numChunkBlocks);
 
-    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    for (uint z = 0; z < chunkSizeXZ; ++z)
-    {
-        for (uint x = 0; x < chunkSizeXZ; ++x)
-        {
-            const ivec2 blockPosXZ_WS = chunkBlockPosXZ_WS + ivec2(x, z);
-            const uint height = uint(64.f + 10.f * (sinf(blockPosXZ_WS.x * 0.1f) * cosf(blockPosXZ_WS.y * 0.1f)));
-
-            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
-
-            for (uint y = 0; y < height; ++y)
-            {
-                this->blocks[blockIdx++] = (y == height - 1) ? Block::GRASS : Block::DIRT;
-            }
-
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
-            {
-                this->blocks[blockIdx++] = Block::LAMP;
-            }
-        }
-    }
+    ChunkGenerator::fillBlocks(chunkPosBlocksXZ_WS, this->blocks);
 
     this->advanceState(ChunkState::HAS_BLOCKS);
 
