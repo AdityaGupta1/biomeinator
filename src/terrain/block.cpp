@@ -27,8 +27,13 @@ BlockUvs::BlockUvs(uvec2 all)
 {}
 
 BlockUvs::BlockUvs(uvec2 top, uvec2 side, uvec2 bottom)
-    : top(top), side(side), bottom(bottom)
+    : uvs{ side, top, bottom }
 {}
+
+const glm::uvec2& BlockUvs::operator[](uint32_t idx) const
+{
+    return this->uvs[idx];
+}
 
 namespace Blocks
 {

@@ -485,22 +485,11 @@ void Chunk::createInstance(Scene* scene)
                         const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
                         for (uint i = 0; i < 4; ++i)
                         {
-                            uvec2 baseTexCoords;
-                            switch (faceIdx)
-                            {
-                                case 4: // +y
-                                    baseTexCoords = blockData.uvs.top;
-                                    break;
-                                case 5: // -y
-                                    baseTexCoords = blockData.uvs.bottom;
-                                    break;
-                                default: // +/- x, +/- z
-                                    baseTexCoords = blockData.uvs.side;
-                                    break;
-                            }
-
                             const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+
+                            const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                             const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
+
                             verts.emplace_back(
                                 vec3ToDirectX(vertPos_CS),
                                 normal,

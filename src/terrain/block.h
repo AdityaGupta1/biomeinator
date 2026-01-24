@@ -36,13 +36,16 @@ enum class Block : BlockId
 
 struct BlockUvs
 {
-    glm::uvec2 top{}; // integer position in block texture grid
-    glm::uvec2 side{};
-    glm::uvec2 bottom{};
+private:
+    glm::uvec2 uvs[3]; // integer position in block texture grid
+                       // order = side, top, bottom
 
+public:
     BlockUvs() = default;
     BlockUvs(glm::uvec2 all);
     BlockUvs(glm::uvec2 top, glm::uvec2 side, glm::uvec2 bottom);
+
+    const glm::uvec2& operator[](uint32_t idx) const;
 };
 
 struct BlockData
