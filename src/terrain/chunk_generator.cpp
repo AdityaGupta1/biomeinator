@@ -26,27 +26,57 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <FastNoise/FastNoise.h>
 
 using namespace glm;
+namespace FN = FastNoise;
 
 namespace ChunkGenerator
 {
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    auto fnSimplex = FastNoise::New<FastNoise::Simplex>();
-    fnSimplex->SetScale(200.f);
-    auto fnFractal = FastNoise::New<FastNoise::FractalFBm>();
-    fnFractal->SetSource(fnSimplex);
-    fnFractal->SetOctaveCount(4);
-    auto fnMul = FastNoise::New<FastNoise::Multiply>();
-    fnMul->SetLHS(fnFractal);
-    fnMul->SetRHS(24.f);
-    auto fnAdd = FastNoise::New<FastNoise::Add>();
-    fnAdd->SetLHS(fnMul);
-    fnAdd->SetRHS(80.f);
-
     std::array<float, chunkSizeXZ * chunkSizeXZ> heightfield;
-    fnAdd->GenUniformGrid2D(
-        heightfield.data(), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 91231205);
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetScale(200.f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(4);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnFractal);
+        fnMul->SetRHS(24.f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnMul);
+        fnAdd->SetRHS(80.f);
+
+        fnAdd->GenUniformGrid2D(heightfield.data(),
+                                chunkPosBlocksXZ_WS.x, // x
+                                chunkPosBlocksXZ_WS.y, // z
+                                chunkSizeXZ,
+                                chunkSizeXZ,
+                                1.f,
+                                1.f,
+                                91231205);
+    }
+
+    static constexpr uint maxCaveHeight = 96;
+    std::array<float, chunkSizeXZ * maxCaveHeight * chunkSizeXZ> caveNoise;
+    {
+        auto fnCellular = FN::New<FN::CellularDistance>();
+        fnCellular->SetDistanceIndex0(2);
+        fnCellular->SetDistanceIndex1(0);
+        fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
+
+        fnCellular->GenUniformGrid3D(caveNoise.data(),
+                                     0,                     // y
+                                     chunkPosBlocksXZ_WS.x, // x
+                                     chunkPosBlocksXZ_WS.y, // z
+                                     maxCaveHeight,
+                                     chunkSizeXZ,
+                                     chunkSizeXZ,
+                                     1.f,
+                                     1.f,
+                                     1.f,
+                                     859234912);
+    }
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
     {
@@ -58,16 +88,42 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
 
             blocks[blockIdx++] = Block::BEDROCK;
-            uint y = 1;
-            for (; y < height - 5; ++y)
+
+            for (uint y = 1; y < height; ++y)
             {
-                blocks[blockIdx++] = Block::STONE;
+                Block block = Block::AIR;
+
+                bool isCave = false;
+                if (y < maxCaveHeight)
+                {
+                    const uint caveIdx = y + (maxCaveHeight * (x + chunkSizeXZ * z)); // TODO: calculate once outside and increment within loop
+                    const float thisCaveNoise = caveNoise[caveIdx];
+                    if (thisCaveNoise < 0.5f)
+                    {
+                        isCave = true;
+                    }
+                }
+
+                if (!isCave)
+                {
+                    const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
+
+                    if (y < height - 5)
+                    {
+                        block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
+                    }
+                    else if (y < height - 1)
+                    {
+                        block = Block::DIRT;
+                    }
+                    else
+                    {
+                        block = Block::GRASS;
+                    }
+                }
+
+                blocks[blockIdx++] = block;
             }
-            for (; y < height - 1; ++y)
-            {
-                blocks[blockIdx++] = Block::DIRT;
-            }
-            blocks[blockIdx++] = Block::GRASS;
 
             if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
             {
