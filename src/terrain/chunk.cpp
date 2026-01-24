@@ -35,7 +35,7 @@ using namespace DirectX;
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
-	: chunkPos(chunkPos), region(region)
+    : chunkPos(chunkPos), region(region)
 {}
 
 void Chunk::setNeighbors(bool createNeighbors)
@@ -622,8 +622,8 @@ uint32_t Chunk::getNumNeighborsSet() const
 uint32_t Chunk::blockPosToIdx(uvec3 chunkBlockPos)
 {
     return chunkBlockPos.y
-		 + chunkBlockPos.x * chunkSizeY
-		 + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
+         + chunkBlockPos.x * chunkSizeY
+         + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
 }
 
 uint32_t Chunk::blockPosXZToIdx(uvec2 chunkBlockPos)
