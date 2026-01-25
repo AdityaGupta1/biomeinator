@@ -115,8 +115,6 @@ private:
     bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
 
-    void onNeighborsHaveBlocks();
-
     void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
 
 public:
