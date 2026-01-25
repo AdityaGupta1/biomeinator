@@ -32,7 +32,7 @@ namespace AcsHelper
 
 static ManagedBuffer sharedAcsScratchBuffer{
     &DEFAULT_HEAP,
-    D3D12_RESOURCE_STATE_COMMON,
+    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     {
         .isResizable = true,
         .bufferCreationFlags = {
@@ -140,8 +140,12 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
         *buildInfo.outAcs = findFreeSharedAcsSection(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
 
+        uint32_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
+        scratchSizeBytes = (scratchSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
+                           ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
+
         ManagedBufferSection sharedAcsScratchSection =
-            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, buildInfo.prebuildInfo.ScratchDataSizeInBytes);
+            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = buildInfo.outAcs->getGpuVirtualAddress(),
