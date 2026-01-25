@@ -234,9 +234,9 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     Instance* newInstancePtr = newInstance.get();
     this->instances.emplace(id, std::move(newInstance));
 
-    ASSERT(newInstancePtr->host_verts.size() == 0);
-    ASSERT(newInstancePtr->host_idxs.size() == 0);
-    ASSERT(newInstancePtr->host_perTriDatas.size() == 0);
+    ASSERT(newInstancePtr->host_verts.empty());
+    ASSERT(newInstancePtr->host_idxs.empty());
+    ASSERT(newInstancePtr->host_perTriDatas.empty());
 
     return newInstancePtr;
 }
