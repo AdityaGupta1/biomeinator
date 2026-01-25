@@ -30,6 +30,7 @@ enum class Block : BlockId
     LAMP,
     DIRT,
     GRASS,
+    BEDROCK,
 
     COUNT
 };

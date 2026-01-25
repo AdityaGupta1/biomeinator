@@ -1404,6 +1404,17 @@ static void imguiEndFrame(double deltaTime)
     }
     ImGui::End();
 
+    constexpr int debugWindowWidth = 300;
+    ImGui::SetNextWindowPos(ImVec2(viewport.Width - 10 - debugWindowWidth, 10));
+    ImGui::SetNextWindowSize(ImVec2(debugWindowWidth, -1));
+
+    if (ImGui::Begin("Debug", nullptr, windowFlags))
+    {
+        const DirectX::XMFLOAT3 cameraPos_WS = camera.getPos_WS();
+        ImGui::Text("Position: (%.2f, %.2f, %.2f)", cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z);
+    }
+    ImGui::End();
+
     if (frameNumber == 0)
     {
         ImGui::SetWindowFocus(NULL);

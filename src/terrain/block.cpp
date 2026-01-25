@@ -49,6 +49,7 @@ void init()
     BLOCK_DATA_BY_NAME(LAMP) = { BlockUvs(uvec2(1, 0)), true };
     BLOCK_DATA_BY_NAME(DIRT) = { BlockUvs(uvec2(4, 0)) };
     BLOCK_DATA_BY_NAME(GRASS) = { BlockUvs(uvec2(2, 0), uvec2(3, 0), uvec2(4, 0)) };
+    BLOCK_DATA_BY_NAME(BEDROCK) = { BlockUvs(uvec2(5, 0)) };
 }
 
 const BlockData& getBlockData(Block block)
