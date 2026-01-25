@@ -390,6 +390,14 @@ PlayerInput getPlayerInput()
 
 #undef KEY_DOWN
 
+    if (input.linearInput.x != 0 || input.linearInput.z != 0)
+    {
+        const float inputHorizontalLength =
+            sqrt(input.linearInput.x * input.linearInput.x + input.linearInput.z * input.linearInput.z);
+        input.linearInput.x /= inputHorizontalLength;
+        input.linearInput.z /= inputHorizontalLength;
+    }
+
     input.mouseMovement.x = mouseRawDx;
     input.mouseMovement.y = mouseRawDy;
     resetMouseRawDeltas();
