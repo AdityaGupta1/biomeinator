@@ -34,6 +34,11 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+void Instance::setId(uint32_t id)
+{
+    this->id = id;
+}
+
 void Instance::reset(bool alsoFreeFromScene)
 {
     this->geoWrapper.blasBufferSection.free();
@@ -43,10 +48,15 @@ void Instance::reset(bool alsoFreeFromScene)
 
     this->areaLightsBufferSection.free();
 
+    // TODO: free really big allocations
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
+    this->host_areaLights.clear();
     this->isGeometryFinalized = false;
+    this->isScheduledForDeletion = false;
+    this->materialIdx = MATERIAL_IDX_INVALID;
+    this->isVisible = true;
 
     if (alsoFreeFromScene)
     {
@@ -180,11 +190,17 @@ void Scene::reset()
         instance->reset(false);
     }
 
+    for (auto& instance : this->reusableInstances)
+    {
+        instance->reset(false);
+    }
+
     this->managedVertsBuffer.reset();
     this->managedIdxsBuffer.reset();
     this->managedPerTriDatasBuffer.reset();
 
     this->instances.clear();
+    this->reusableInstances.clear();
     this->instancesReadyForBlasBuild.clear();
     this->availableInstanceIds = {};
     this->mappedInstanceDescsArray.reset();
@@ -229,14 +245,36 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     const uint32_t id = this->availableInstanceIds.front();
     this->availableInstanceIds.pop();
 
-    // can't use make_unique() here since the constructor is private and accessed through friend relationship
-    std::unique_ptr<Instance> newInstance = std::unique_ptr<Instance>(new Instance(this, id));
-    Instance* newInstancePtr = newInstance.get();
-    this->instances.emplace(id, std::move(newInstance));
+    std::unique_ptr<Instance> instanceToActivate;
+    if (!this->reusableInstances.empty())
+    {
+        instanceToActivate = std::move(this->reusableInstances.front());
+        this->reusableInstances.pop_front();
+
+        instanceToActivate->reset(false);
+        instanceToActivate->setId(id);
+    }
+    else
+    {
+        // can't use make_unique() here since the constructor is private and accessed through friend relationship
+        instanceToActivate = std::unique_ptr<Instance>(new Instance(this, id));
+    }
+
+    Instance* const newInstancePtr = instanceToActivate.get();
+    this->instances.emplace(id, std::move(instanceToActivate));
 
     ASSERT(newInstancePtr->host_verts.empty());
     ASSERT(newInstancePtr->host_idxs.empty());
     ASSERT(newInstancePtr->host_perTriDatas.empty());
+    ASSERT(newInstancePtr->host_areaLights.empty());
+    ASSERT(!newInstancePtr->isGeometryFinalized);
+    ASSERT(!newInstancePtr->isScheduledForDeletion);
+    ASSERT(newInstancePtr->materialIdx == MATERIAL_IDX_INVALID);
+    ASSERT(!newInstancePtr->geoWrapper.blasBufferSection.isValid());
+    ASSERT(!newInstancePtr->geoWrapper.vertsBufferSection.isValid());
+    ASSERT(!newInstancePtr->geoWrapper.idxsBufferSection.isValid());
+    ASSERT(!newInstancePtr->perTriDatasBufferSection.isValid());
+    ASSERT(!newInstancePtr->areaLightsBufferSection.isValid());
 
     return newInstancePtr;
 }
@@ -250,7 +288,13 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
-    this->instances.erase(instance->id);
+
+    const auto it = this->instances.find(instance->id);
+    ASSERT(it != this->instances.end());
+
+    this->reusableInstances.push_back(std::move(it->second));
+    this->instances.erase(it);
+
     this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
 }
 

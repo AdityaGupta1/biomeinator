@@ -48,7 +48,7 @@ public:
         return this->sizeBytes > 0;
     }
 
-    void free() const;
+    void free();
 };
 
 struct ManagedBufferOptions

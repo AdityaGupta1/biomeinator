@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/common/common_structs.h"
 
 #include <array>
+#include <deque>
 #include <memory>
 #include <queue>
 #include <unordered_map>
@@ -43,7 +44,7 @@ class Instance
 
 private:
     ::Scene* const scene;
-    const uint32_t id;
+    uint32_t id;
     uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
@@ -56,6 +57,7 @@ private:
     bool isScheduledForDeletion{ false };
 
     Instance(::Scene* scene, uint32_t id);
+    void setId(uint32_t id);
 
     void reset(bool alsoFreeFromScene = true);
     std::vector<PerTriangleData> host_perTriDatas;
@@ -118,6 +120,7 @@ private:
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
+    std::deque<std::unique_ptr<Instance>> reusableInstances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
