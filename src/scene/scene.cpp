@@ -247,8 +247,8 @@ void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
-    this->instances.erase(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
+    this->instances.erase(instance->id);
     this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
 }
 

@@ -103,7 +103,8 @@ int main(int argc, char** argv)
         const std::vector<std::string> constantArgs = {
             "--testOutput=" + generatedImagePath.generic_string(),
             "--useVsync=false",
-            "--lockCamera=true"
+            "--lockCamera=true",
+            "--showGui=false"
         };
         std::string command = exePath.generic_string();
         for (const std::string& arg : constantArgs)

@@ -171,10 +171,13 @@ static Scene scene;
 
 static bool testMode = false;
 static bool voxelMode = false;
+static bool showGui = true;
 
 void init()
 {
     testMode = (SettingsManager::getAsString("testOutput") != "");
+    voxelMode = SettingsManager::getAsBool("voxelMode");
+    showGui = SettingsManager::getAsBool("showGui");
 
     initStreamline();
 
@@ -182,8 +185,6 @@ void init()
     initDescriptorHeaps();
 
     initNvapi();
-
-    voxelMode = SettingsManager::getAsBool("voxelMode");
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -1445,7 +1446,7 @@ void render()
         needsResize = false;
     }
 
-    if (!testMode)
+    if (showGui)
     {
         imguiBeginFrame();
     }
@@ -1779,7 +1780,7 @@ void render()
         captureQueuedScreenshot();
     }
 
-    if (!testMode)
+    if (showGui)
     {
         imguiEndFrame(deltaTime);
     }
