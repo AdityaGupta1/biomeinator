@@ -64,7 +64,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         fnCellular->SetDistanceIndex0(2);
         fnCellular->SetDistanceIndex1(0);
         fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
-        fnCellular->SetScale(120.f);
+        fnCellular->SetScale(80.f);
         auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
         fnDomainWarp->SetSource(fnCellular);
         fnDomainWarp->SetSeedOffset(302341102);
@@ -98,6 +98,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             const uint height = heightfield[z * chunkSizeXZ + x];
 
             uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
+            uint caveIdx = maxCaveHeight * (x + chunkSizeXZ * z) + 1;
 
             blocks[blockIdx++] = Block::BEDROCK;
 
@@ -108,11 +109,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                 bool isCave = false;
                 if (y < maxCaveHeight)
                 {
-                    const uint caveIdx = y + (maxCaveHeight * (x + chunkSizeXZ * z)); // TODO: calculate once outside and increment within loop
-                    const float thisCaveNoise = caveNoise[caveIdx];
+                    const float thisCaveNoise = caveNoise[caveIdx++];
 
                     const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(120, 48, y);
-                    const float caveIsoSurface = mix(0.f, 0.5f, caveIsoSurfaceMixFactor);
+                    const float caveIsoSurface = mix(0.f, 0.7f, caveIsoSurfaceMixFactor);
                     if (thisCaveNoise < caveIsoSurface)
                     {
                         isCave = true;
