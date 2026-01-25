@@ -46,7 +46,7 @@ void Instance::reset(bool alsoFreeFromScene)
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
-    this->isGeometrySet = false;
+    this->isGeometryFinalized = false;
 
     if (alsoFreeFromScene)
     {
@@ -54,23 +54,21 @@ void Instance::reset(bool alsoFreeFromScene)
     }
 }
 
-void Instance::setGeometry(const DirectX::XMFLOAT3X4& transform,
-                           std::vector<Vertex>&& verts,
-                           std::vector<uint32_t>&& idxs)
+void Instance::finalizeGeometry(const DirectX::XMFLOAT3X4& transform)
 {
+    ASSERT(this->host_verts.size() > 0);
+
     this->transform = transform;
-    this->host_verts = std::move(verts);
-    this->host_idxs = std::move(idxs);
 
     const uint32_t triCount = this->getTriCount();
     this->host_perTriDatas.resize(triCount);
 
-    this->isGeometrySet = true;
+    this->isGeometryFinalized = true;
 }
 
 void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
-    ASSERT(this->isGeometrySet);
+    ASSERT(this->isGeometryFinalized);
 
     this->host_areaLights.reserve(this->host_areaLights.size() + triangleIdxs.size());
 
@@ -123,9 +121,9 @@ uint32_t Instance::getTriCount() const
     return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
 }
 
-bool Instance::getIsGeometrySet() const
+bool Instance::getIsGeometryFinalized() const
 {
-    return this->isGeometrySet;
+    return this->isGeometryFinalized;
 }
 
 void Instance::setVisible(bool visible)
@@ -235,6 +233,10 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     std::unique_ptr<Instance> newInstance = std::unique_ptr<Instance>(new Instance(this, id));
     Instance* newInstancePtr = newInstance.get();
     this->instances.emplace(id, std::move(newInstance));
+
+    ASSERT(newInstancePtr->host_verts.size() == 0);
+    ASSERT(newInstancePtr->host_idxs.size() == 0);
+    ASSERT(newInstancePtr->host_perTriDatas.size() == 0);
 
     return newInstancePtr;
 }

@@ -58,28 +58,26 @@ private:
     Instance(::Scene* scene, uint32_t id);
 
     void reset(bool alsoFreeFromScene = true);
-
-    std::vector<Vertex> host_verts;
-    std::vector<uint32_t> host_idxs;
     std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{};
 
-    bool isGeometrySet{ false };
+    bool isGeometryFinalized{ false };
 
 public:
-    void setGeometry(const DirectX::XMFLOAT3X4& transform,
-                     std::vector<Vertex>&& verts,
-                     std::vector<uint32_t>&& idxs = {});
+    std::vector<Vertex> host_verts{};
+    std::vector<uint32_t> host_idxs{};
 
-    // `setGeometry()` must be called before calling this function
+    void finalizeGeometry(const DirectX::XMFLOAT3X4& transform);
+
+    // finalizeGeometry() must be called before calling this function
     void addAreaLights(const std::vector<uint32_t>& triangleIdxs);
 
     uint32_t getId() const;
 
     uint32_t getTriCount() const;
 
-    bool getIsGeometrySet() const;
+    bool getIsGeometryFinalized() const;
 
     void setVisible(bool visible);
 

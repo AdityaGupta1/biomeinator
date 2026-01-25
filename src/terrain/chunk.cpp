@@ -419,13 +419,13 @@ void Chunk::createInstance(Scene* scene)
     XMFLOAT3X4 instanceTransform;
     XMStoreFloat3x4(&instanceTransform, transform);
 
-    std::vector<Vertex> verts;
-    std::vector<uint32_t> indices;
+    std::vector<Vertex>& verts = this->instance->host_verts;
+    std::vector<uint32_t>& idxs = this->instance->host_idxs;
     std::vector<uint32_t> emissiveTriangleIdxs;
 
     constexpr size_t numVertsToReserve = 1 << 15;
     verts.reserve(numVertsToReserve);
-    indices.reserve(numVertsToReserve * 6 / 4);
+    idxs.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
     for (const uvec3& segmentPos : this->segmentsToGenerate)
@@ -478,14 +478,14 @@ void Chunk::createInstance(Scene* scene)
                             );
                         }
 
-                        const uint32_t triangleIdx = static_cast<uint32_t>(indices.size() / 3u);
+                        const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
 
-                        indices.emplace_back(baseVertIdx + 0u);
-                        indices.emplace_back(baseVertIdx + 1u);
-                        indices.emplace_back(baseVertIdx + 2u);
-                        indices.emplace_back(baseVertIdx + 0u);
-                        indices.emplace_back(baseVertIdx + 2u);
-                        indices.emplace_back(baseVertIdx + 3u);
+                        idxs.emplace_back(baseVertIdx + 0u);
+                        idxs.emplace_back(baseVertIdx + 1u);
+                        idxs.emplace_back(baseVertIdx + 2u);
+                        idxs.emplace_back(baseVertIdx + 0u);
+                        idxs.emplace_back(baseVertIdx + 2u);
+                        idxs.emplace_back(baseVertIdx + 3u);
 
                         if (blockData.emitsLight)
                         {
@@ -501,7 +501,7 @@ void Chunk::createInstance(Scene* scene)
     ASSERT(verts.size() > 0);
     ASSERT(indices.size() > 0);
 
-    instance->setGeometry(instanceTransform, std::move(verts), std::move(indices));
+    instance->finalizeGeometry(instanceTransform);
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
 
     instance->addAreaLights(emissiveTriangleIdxs);

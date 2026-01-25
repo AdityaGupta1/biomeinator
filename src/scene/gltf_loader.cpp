@@ -361,7 +361,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
 
             const size_t vertCount = posAccessor.count;
-            std::vector<Vertex> host_verts;
+            std::vector<Vertex>& host_verts = instance->host_verts;
             host_verts.resize(vertCount);
 
             const unsigned char* posData = readAccessorData(posAccessor);
@@ -387,7 +387,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 host_verts[v] = { { p[0], p[1], p[2] }, { n[0], n[1], n[2] }, uv };
             }
 
-            std::vector<uint32_t> host_idxs;
+            std::vector<uint32_t>& host_idxs = instance->host_idxs;
             if (prim.indices >= 0)
             {
                 const Accessor& idxAccessor = model.accessors[prim.indices];
@@ -421,7 +421,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             DirectX::XMFLOAT3X4 instanceTransform;
             DirectX::XMStoreFloat3x4(&instanceTransform, transform);
 
-            instance->setGeometry(instanceTransform, std::move(host_verts), std::move(host_idxs));
+            instance->finalizeGeometry(instanceTransform);
 
             const bool isEmissive = prim.material >= 0 &&
                                     static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
