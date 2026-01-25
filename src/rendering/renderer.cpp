@@ -323,8 +323,6 @@ static void initDevice()
     CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory2)));
     CHECK_HRESULT(factory2.As(&factory));
 
-#undef DXGI_FACTORY_FLAGS
-
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
