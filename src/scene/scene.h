@@ -57,6 +57,7 @@ private:
     bool isScheduledForDeletion{ false };
 
     Instance(::Scene* scene, uint32_t id);
+
     void setId(uint32_t id);
 
     void reset(bool alsoFreeFromScene = true);

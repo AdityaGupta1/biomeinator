@@ -263,6 +263,14 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     Instance* const newInstancePtr = instanceToActivate.get();
     this->instances.emplace(id, std::move(instanceToActivate));
 
+    // TODO: maybe simplify this somehow (e.g. make a function like Instance::isValid())
+    ASSERT(!newInstancePtr->geoWrapper.blasBufferSection.isValid());
+    ASSERT(!newInstancePtr->geoWrapper.vertsBufferSection.isValid());
+    ASSERT(!newInstancePtr->geoWrapper.idxsBufferSection.isValid());
+
+    ASSERT(!newInstancePtr->perTriDatasBufferSection.isValid());
+    ASSERT(!newInstancePtr->areaLightsBufferSection.isValid());
+
     ASSERT(newInstancePtr->host_verts.empty());
     ASSERT(newInstancePtr->host_idxs.empty());
     ASSERT(newInstancePtr->host_perTriDatas.empty());
@@ -270,11 +278,6 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     ASSERT(!newInstancePtr->isGeometryFinalized);
     ASSERT(!newInstancePtr->isScheduledForDeletion);
     ASSERT(newInstancePtr->materialIdx == MATERIAL_IDX_INVALID);
-    ASSERT(!newInstancePtr->geoWrapper.blasBufferSection.isValid());
-    ASSERT(!newInstancePtr->geoWrapper.vertsBufferSection.isValid());
-    ASSERT(!newInstancePtr->geoWrapper.idxsBufferSection.isValid());
-    ASSERT(!newInstancePtr->perTriDatasBufferSection.isValid());
-    ASSERT(!newInstancePtr->areaLightsBufferSection.isValid());
 
     return newInstancePtr;
 }
