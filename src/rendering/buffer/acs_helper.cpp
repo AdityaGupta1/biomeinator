@@ -57,9 +57,8 @@ static void allocateNewSharedAcsBuffer()
         newSizeBytes = sharedAcsBuffers[sharedAcsBuffersHead]->getSizeBytes() * 2;
     }
 
-    --sharedAcsBuffersHead;
-    ASSERT(sharedAcsBuffersHead >= 0);
-    sharedAcsBuffers[sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
+    ASSERT(sharedAcsBuffersHead > 0);
+    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
         ManagedBufferOptions{
@@ -78,7 +77,7 @@ static ManagedBufferSection findFreeSharedAcsSection(uint32_t sizeBytes)
     sizeBytes = (sizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
                 ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
 
-    for (uint32_t bufferIdx = sharedAcsBuffersHead; bufferIdx < sharedAcsBuffers.size(); ++bufferIdx)
+    for (size_t bufferIdx = sharedAcsBuffersHead; bufferIdx < sharedAcsBuffers.size(); ++bufferIdx)
     {
         ManagedBufferSection freeSection = sharedAcsBuffers[bufferIdx]->findFreeSection(nullptr, nullptr, sizeBytes);
         if (freeSection.isValid())
@@ -143,7 +142,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
         sharedAsScratchSize = maxScratchSize;
     }
 
-    for (uint32_t i = 0; i < buildInfos.size(); ++i)
+    for (size_t i = 0; i < buildInfos.size(); ++i)
     {
         const auto& buildInfo = buildInfos[i];
 
@@ -207,17 +206,6 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 const std::vector<BlasBuildInputs>& allInputs)
 {
-    uint32_t vertBufferTotalSizeBytes = 0;
-    uint32_t idxBufferTotalSizeBytes = 0;
-    for (const auto& inputs : allInputs)
-    {
-        vertBufferTotalSizeBytes += Util::getVectorSizeBytes(*inputs.host_verts);
-        if (inputs.host_idxs)
-        {
-            idxBufferTotalSizeBytes += Util::getVectorSizeBytes(*inputs.host_idxs);
-        }
-    }
-
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
@@ -226,11 +214,9 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         const ManagedBufferSection vertsUploadBufferSection =
             sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
-        if (inputs.dev_verts)
-        {
-            inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-                cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
-        }
+        ASSERT(inputs.dev_verts != nullptr);
+        inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
+            cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
@@ -239,11 +225,9 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         {
             idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
-            if (inputs.dev_idxs)
-            {
-                inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                    cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
-            }
+            ASSERT(input.dev_idxs != nullptr);
+            inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
+                cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
 
             toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
         }

@@ -71,7 +71,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         fnDomainWarp->SetWarpAmplitude(50.f);
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetScale(1200.f);
-        fnSimplex->SetOutputMin(-0.1f);
+        fnSimplex->SetOutputMin(-0.05f);
         fnSimplex->SetOutputMax(0.3f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnDomainWarp);
@@ -111,7 +111,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                 {
                     const float thisCaveNoise = caveNoise[caveIdx++];
 
-                    const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(120, 48, y);
+                    const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
                     const float caveIsoSurface = mix(0.f, 0.7f, caveIsoSurfaceMixFactor);
                     isCave = thisCaveNoise < caveIsoSurface;
                 }
