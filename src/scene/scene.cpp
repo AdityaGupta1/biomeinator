@@ -324,12 +324,17 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     instancesToBuildThisFrame.reserve(maxInstancesThisFrame);
     for (Instance* const instance : this->instancesReadyForBlasBuild)
     {
+        if (instance->isScheduledForDeletion)
+        {
+            continue;
+        }
+
+        instancesToBuildThisFrame.push_back(instance);
+
         if (instancesToBuildThisFrame.size() >= maxInstancesThisFrame)
         {
             break;
         }
-
-        instancesToBuildThisFrame.push_back(instance);
     }
 
     for (Instance* const instance : instancesToBuildThisFrame)
