@@ -113,10 +113,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
                     const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(120, 48, y);
                     const float caveIsoSurface = mix(0.f, 0.7f, caveIsoSurfaceMixFactor);
-                    if (thisCaveNoise < caveIsoSurface)
-                    {
-                        isCave = true;
-                    }
+                    isCave = thisCaveNoise < caveIsoSurface;
                 }
 
                 if (!isCave)
