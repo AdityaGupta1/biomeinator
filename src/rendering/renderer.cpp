@@ -301,28 +301,26 @@ static void initDevice()
     //const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
     const auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
 
-#ifdef _DEBUG
-    ComPtr<ID3D12Debug> debug;
-    CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
-    Logger::log("Enabled debug layer");
-    debug->EnableDebugLayer();
+    UINT dxgiFactoryFlags = 0;
 
     if (SettingsManager::getAsBool("gpuValidation"))
     {
+        ComPtr<ID3D12Debug> debug;
+        CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
+        Logger::log("Enabled debug layer");
+        debug->EnableDebugLayer();
+
         ComPtr<ID3D12Debug1> debug1;
         if (SUCCEEDED(debug.As(&debug1)))
         {
             debug1->SetEnableGPUBasedValidation(true);
         }
+
+        dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
     }
 
-#define DXGI_FACTORY_FLAGS DXGI_CREATE_FACTORY_DEBUG
-#else
-#define DXGI_FACTORY_FLAGS 0
-#endif
-
     static ComPtr<IDXGIFactory2> factory2;
-    CHECK_HRESULT(slCreateDXGIFactory2(DXGI_FACTORY_FLAGS, IID_PPV_ARGS(&factory2)));
+    CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory2)));
     CHECK_HRESULT(factory2.As(&factory));
 
 #undef DXGI_FACTORY_FLAGS
@@ -464,12 +462,10 @@ static RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A3
 static RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 static RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 static RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
-// should really be 4 debug channels but it would be mostly transparent then
+// should really be 4 debug channels but it would look funny that way
 static RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
 static RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
 static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
-
-static RtTarget prevDepthAndNormalTarget{ L"prevDepthAndNormalTarget", DXGI_FORMAT_R32G32_UINT };
 
 static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
@@ -488,8 +484,6 @@ static void initRtTargets()
     autoTransitionRtTargets.push_back(&normalsAndRoughnessTarget);
     autoTransitionRtTargets.push_back(&motionTarget);
     autoTransitionRtTargets.push_back(&specularHitDistanceTarget);
-
-    allRtTargets.push_back(&prevDepthAndNormalTarget);
 
     autoTransitionRtTargets.push_back(&dlssOutputTarget);
 
@@ -652,8 +646,6 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = motionTarget.getUavIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getUavIdx(),
-            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getUavIdx(),
-
             .debugTargetIdx = debugTarget.getUavIdx(),
         };
 
@@ -666,9 +658,8 @@ void resize()
             .normalsAndRoughnessTargetIdx = normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = motionTarget.getSrvIdx(),
             .specularHitDistanceTargetIdx = specularHitDistanceTarget.getSrvIdx(),
-            .prevDepthAndNormalTargetIdx = prevDepthAndNormalTarget.getSrvIdx(),
-
             .dlssOutputTargetIdx = dlssOutputTarget.getSrvIdx(),
+
             .debugTargetIdx = debugTarget.getSrvIdx(),
         };
     }
@@ -1705,8 +1696,6 @@ void render()
                                                      dev_pathTracingRawBuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-        prevDepthAndNormalTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
