@@ -140,7 +140,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                 blocks[blockIdx++] = block;
             }
 
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY)
+            if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY && blocks[blockIdx - 1] != Block::AIR)
             {
                 blocks[blockIdx++] = Block::LAMP;
             }
