@@ -588,6 +588,10 @@ void resize()
     if (useWaitableSwapChain)
     {
         CHECK_HRESULT(swapChain->SetMaximumFrameLatency(2));
+        if (frameLatencyWaitable)
+        {
+            CloseHandle(frameLatencyWaitable);
+        }
         frameLatencyWaitable = swapChain->GetFrameLatencyWaitableObject();
     }
 
@@ -1915,8 +1919,11 @@ void destroy()
     cmdList.Reset();
 
     fence.Reset();
-    CloseHandle(fenceEvent);
-    if (useWaitableSwapChain)
+    if (fenceEvent)
+    {
+        CloseHandle(fenceEvent);
+    }
+    if (useWaitableSwapChain && frameLatencyWaitable)
     {
         CloseHandle(frameLatencyWaitable);
     }
