@@ -1819,7 +1819,7 @@ static void waitForFence(const uint64_t fenceValue)
     if (fence->GetCompletedValue() < fenceValue)
     {
         CHECK_HRESULT(fence->SetEventOnCompletion(fenceValue, fenceEvent));
-        WaitForSingleObjectEx(fenceEvent, INFINITE, true);
+        WaitForSingleObjectEx(fenceEvent, 1000 /*ms*/, true);
     }
 }
 
@@ -1829,7 +1829,7 @@ static void beginFrame()
 
     if (useWaitableSwapChain)
     {
-        WaitForSingleObjectEx(frameLatencyWaitable, INFINITE, true);
+        WaitForSingleObjectEx(frameLatencyWaitable, 1000 /*ms*/, true);
     }
     waitForFence(frame.fenceValue);
 
