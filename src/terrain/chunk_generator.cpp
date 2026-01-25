@@ -33,7 +33,7 @@ namespace ChunkGenerator
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::array<float, chunkSizeXZ * chunkSizeXZ> heightfield;
+    std::vector<float> heightfield(chunkSizeXZ * chunkSizeXZ);
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetScale(200.f);
@@ -58,24 +58,36 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
     }
 
     static constexpr uint maxCaveHeight = 128;
-    std::array<float, chunkSizeXZ * maxCaveHeight * chunkSizeXZ> caveNoise;
+    std::vector<float> caveNoise(chunkSizeXZ * maxCaveHeight * chunkSizeXZ);
     {
         auto fnCellular = FN::New<FN::CellularDistance>();
         fnCellular->SetDistanceIndex0(2);
         fnCellular->SetDistanceIndex1(0);
         fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
+        fnCellular->SetScale(120.f);
+        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
+        fnDomainWarp->SetSource(fnCellular);
+        fnDomainWarp->SetSeedOffset(302341102);
+        fnDomainWarp->SetWarpAmplitude(50.f);
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetScale(1200.f);
+        fnSimplex->SetOutputMin(-0.1f);
+        fnSimplex->SetOutputMax(0.3f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnDomainWarp);
+        fnAdd->SetRHS(fnSimplex);
 
-        fnCellular->GenUniformGrid3D(caveNoise.data(),
-                                     0,                     // y
-                                     chunkPosBlocksXZ_WS.x, // x
-                                     chunkPosBlocksXZ_WS.y, // z
-                                     maxCaveHeight,
-                                     chunkSizeXZ,
-                                     chunkSizeXZ,
-                                     1.f,
-                                     1.f,
-                                     1.f,
-                                     859234912);
+        fnAdd->GenUniformGrid3D(caveNoise.data(),
+                                0, // y
+                                chunkPosBlocksXZ_WS.x, // x
+                                chunkPosBlocksXZ_WS.y, // z
+                                maxCaveHeight,
+                                chunkSizeXZ,
+                                chunkSizeXZ,
+                                1.f,
+                                1.f,
+                                1.f,
+                                559234912);
     }
 
     for (uint z = 0; z < chunkSizeXZ; ++z)
@@ -98,7 +110,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                 {
                     const uint caveIdx = y + (maxCaveHeight * (x + chunkSizeXZ * z)); // TODO: calculate once outside and increment within loop
                     const float thisCaveNoise = caveNoise[caveIdx];
-                    if (thisCaveNoise < 0.5f)
+
+                    const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(120, 48, y);
+                    const float caveIsoSurface = mix(0.f, 0.5f, caveIsoSurfaceMixFactor);
+                    if (thisCaveNoise < caveIsoSurface)
                     {
                         isCave = true;
                     }
