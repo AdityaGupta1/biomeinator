@@ -225,7 +225,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         {
             idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
-            ASSERT(input.dev_idxs != nullptr);
+            ASSERT(inputs.dev_idxs != nullptr);
             inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
                 cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
 

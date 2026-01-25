@@ -499,7 +499,7 @@ void Chunk::createInstance(Scene* scene)
     }
 
     ASSERT(verts.size() > 0);
-    ASSERT(indices.size() > 0);
+    ASSERT(idxs.size() > 0);
 
     instance->finalizeGeometry(instanceTransform);
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
