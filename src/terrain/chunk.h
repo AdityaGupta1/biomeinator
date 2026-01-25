@@ -75,7 +75,7 @@ enum class ChunkSegment : uint8_t
 };
 
 inline constexpr uint32_t chunkSizeXZ = 16;
-inline constexpr uint32_t chunkSizeY = 256;
+inline constexpr uint32_t chunkSizeY = 384;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZ * chunkSizeY * chunkSizeXZ;
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;

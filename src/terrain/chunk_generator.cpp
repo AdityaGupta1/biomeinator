@@ -42,10 +42,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         fnFractal->SetOctaveCount(4);
         auto fnMul = FN::New<FN::Multiply>();
         fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(24.f);
+        fnMul->SetRHS(25.f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(80.f);
+        fnAdd->SetRHS(110.f);
 
         fnAdd->GenUniformGrid2D(heightfield.data(),
                                 chunkPosBlocksXZ_WS.x, // x
@@ -57,7 +57,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                                 91231205);
     }
 
-    static constexpr uint maxCaveHeight = 96;
+    static constexpr uint maxCaveHeight = 128;
     std::array<float, chunkSizeXZ * maxCaveHeight * chunkSizeXZ> caveNoise;
     {
         auto fnCellular = FN::New<FN::CellularDistance>();
