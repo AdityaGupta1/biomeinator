@@ -140,8 +140,6 @@ static void initImgui();
 static void beginFrame();
 static void submitCmd();
 
-static constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
-
 struct FrameContext
 {
     uint64_t fenceValue{ 0 };
@@ -1860,6 +1858,11 @@ void flush()
         frame.fenceValue = 0;
         frame.toFreeList.freeAll();
     }
+}
+
+uint32_t getFrameIndex()
+{
+    return frameCtxIdx;
 }
 
 void destroy()

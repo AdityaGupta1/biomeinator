@@ -99,6 +99,10 @@ private:
     }
 
 public:
+    MappedArray()
+        : options({})
+    {}
+
     MappedArray(MappedArrayOptions options)
         : options(options)
     {}

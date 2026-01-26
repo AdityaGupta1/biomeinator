@@ -152,8 +152,11 @@ void Scene::init()
     this->managedPerTriDatasBuffer.init(1 << 14 /*bytes*/);
 
     this->maxNumInstances = 1 << 8;
-    this->mappedInstanceDescsArray.setName(L"scene instanceDescs");
-    this->mappedInstanceDescsArray.init(this->maxNumInstances);
+    for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
+    {
+        this->mappedInstanceDescsArrays[i].setName(L"scene instanceDescs frame " + std::to_wstring(i));
+        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances);
+    }
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
     for (int instanceIdx = 0; instanceIdx < this->maxNumInstances; ++instanceIdx)
@@ -187,7 +190,10 @@ void Scene::reset()
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
     this->availableInstanceIds = {};
-    this->mappedInstanceDescsArray.reset();
+    for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
+    {
+        this->mappedInstanceDescsArrays[i].reset();
+    }
     this->mappedInstanceDatasArray.reset();
 
     this->nextMaterialIdx = 0;
@@ -217,7 +223,10 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
         const uint32_t oldMaxNumInstances = this->maxNumInstances;
 
         this->maxNumInstances *= 2;
-        this->mappedInstanceDescsArray.resize(toFreeList, this->maxNumInstances);
+        for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
+        {
+            this->mappedInstanceDescsArrays[i].resize(toFreeList, this->maxNumInstances);
+        }
         this->mappedInstanceDatasArray.resize(toFreeList, this->maxNumInstances);
 
         for (int instanceIdx = oldMaxNumInstances; instanceIdx < this->maxNumInstances; ++instanceIdx)
@@ -281,7 +290,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 
     bool didChange = false;
 
-    didChange |= this->mappedInstanceDescsArray.copyFromUploadBufferIfDirty(cmdList);
+    // mappedInstanceDescsArrays don't need device buffer copy since TLAS uses upload buffer directly
     didChange |= this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
 
     didChange |= this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
@@ -427,6 +436,9 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         toFreeList.pushManagedBufferSection(tlasBufferSection);
     }
 
+    const uint32_t frameIdx = Renderer::getFrameIndex();
+    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC>& currentFrameInstanceDescs = this->mappedInstanceDescsArrays[frameIdx];
+
     uint32_t nextInstanceDescIdx = 0;
     uint32_t nextAreaLightSamplingIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
@@ -437,7 +449,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             continue;
         }
 
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = this->mappedInstanceDescsArray[nextInstanceDescIdx++];
+        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = currentFrameInstanceDescs[nextInstanceDescIdx++];
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
@@ -462,7 +474,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     this->numAreaLights = nextAreaLightSamplingIdx;
 
     AcsHelper::TlasBuildInputs inputs;
-    inputs.dev_instanceDescs = this->mappedInstanceDescsArray.getUploadBuffer(); // TODO: test if this crashes with default heap buffer
+    inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
     inputs.numInstances = nextInstanceDescIdx;
     inputs.outTlas = &this->tlasBufferSection;
 
