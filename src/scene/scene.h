@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "rendering/dxr_includes.h"
 #include "rendering/host_structs.h"
+#include "rendering/renderer.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/mapped_array.h"
 #include "rendering/common/common_registers.h"
@@ -116,8 +117,9 @@ private:
     };
 
     uint32_t maxNumInstances{ 0 };
-    MappedArray<D3D12_RAYTRACING_INSTANCE_DESC> mappedInstanceDescsArray{ {} };
-    MappedArray<InstanceData> mappedInstanceDatasArray{ {} };
+    // one instance desc array per frame to avoid CPU/GPU race conditions
+    std::array<MappedArray<D3D12_RAYTRACING_INSTANCE_DESC>, Renderer::NUM_FRAMES_IN_FLIGHT> mappedInstanceDescsArrays{};
+    MappedArray<InstanceData> mappedInstanceDatasArray{};
 
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};

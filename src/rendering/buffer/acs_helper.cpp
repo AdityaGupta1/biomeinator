@@ -30,8 +30,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace AcsHelper
 {
 
-static ComPtr<ID3D12Resource> sharedAcsScratchBuffer = nullptr;
-static uint64_t sharedAsScratchSize = 0;
+static ManagedBuffer sharedAcsScratchBuffer{
+    &DEFAULT_HEAP,
+    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    {
+        .isResizable = true,
+        .bufferCreationFlags = {
+            .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        },
+    }
+};
 
 struct AcsBuildInfo
 {
@@ -117,50 +125,39 @@ void init()
 
     sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
     sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+
+    sharedAcsScratchBuffer.setName(L"sharedAcsScratchBuffer");
+    sharedAcsScratchBuffer.init(1 << 14 /*bytes*/);
 }
 
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
                                        ToFreeList& toFreeList,
                                        const std::vector<AcsBuildInfo>& buildInfos)
 {
-    uint64_t maxScratchSize = 0;
-    for (const auto& buildInfo : buildInfos)
-    {
-        maxScratchSize = std::max(buildInfo.prebuildInfo.ScratchDataSizeInBytes, maxScratchSize);
-    }
-
-    if (maxScratchSize > sharedAsScratchSize)
-    {
-        if (sharedAcsScratchBuffer)
-        {
-            toFreeList.pushResource(sharedAcsScratchBuffer, false);
-        }
-
-        sharedAcsScratchBuffer = BufferHelper::createBasicBuffer(
-            maxScratchSize, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-        sharedAcsScratchBuffer->SetName(L"sharedAcsScratchBuffer");
-        sharedAsScratchSize = maxScratchSize;
-    }
-
     for (size_t i = 0; i < buildInfos.size(); ++i)
     {
         const auto& buildInfo = buildInfos[i];
 
         *buildInfo.outAcs = findFreeSharedAcsSection(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
 
+        uint32_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
+        scratchSizeBytes = (scratchSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
+                           ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
+
+        ManagedBufferSection sharedAcsScratchSection =
+            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
+
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = buildInfo.outAcs->getGpuVirtualAddress(),
             .Inputs = buildInfo.inputs,
-            .ScratchAccelerationStructureData = sharedAcsScratchBuffer->GetGPUVirtualAddress()
+            .ScratchAccelerationStructureData = sharedAcsScratchSection.getGpuVirtualAddress(),
         };
+
+        toFreeList.pushManagedBufferSection(sharedAcsScratchSection);
 
         cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-        // The caller is responsible for enforcing a barrier for the last build if necessary.
-        if (i < buildInfos.size() - 1)
-        {
-            BufferHelper::uavBarrier(cmdList, sharedAcsScratchBuffer.Get());
-        }
+        BufferHelper::uavBarrier(cmdList, nullptr);
     }
 }
 
@@ -225,7 +222,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         {
             idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
-            ASSERT(input.dev_idxs != nullptr);
+            ASSERT(inputs.dev_idxs != nullptr);
             inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
                 cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
 
@@ -274,7 +271,7 @@ void reset()
     sharedVertsUploadBuffer.reset();
     sharedIdxsUploadBuffer.reset();
 
-    sharedAcsScratchBuffer.Reset();
+    sharedAcsScratchBuffer.reset();
 }
 
 } // namespace AcsHelper
