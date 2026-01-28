@@ -158,8 +158,8 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-inline constexpr float farBiomeBlendWidth = 0.04f;
-inline constexpr float biomeWeightExponentMultiplier = 5.0f;
+inline constexpr float farBiomeBlendWidth = 0.005f;
+inline constexpr float biomeWeightExponentMultiplier = 0.6f;
 
 void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
 {
@@ -195,7 +195,7 @@ void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
         closestBiomes[i].weight = std::expf(-closestBiomes[i].weight * biomeWeightExponentMultiplier);
     }
 
-    const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 1].weight - closestBiomes[paddedNumClosest - 2].weight;
+    const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 2].weight - closestBiomes[paddedNumClosest - 1].weight;
     const float farBiomeWeightMultiplier = glm::smoothstep(0.f, farBiomeBlendWidth, farBiomeWeightDiff);
     closestBiomes[paddedNumClosest - 2].weight *= farBiomeWeightMultiplier;
 

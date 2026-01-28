@@ -39,6 +39,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
 
+#define DEBUG_SINGLE_THREAD 0
+
 namespace Terrain
 {
 
@@ -285,7 +287,16 @@ void update(ToFreeList& toFreeList)
             tasksToEnqueue.pop_front();
         }
 
+#if DEBUG_SINGLE_THREAD
+        for (const Task& task : thisFrameTasks)
+        {
+            task.fn(task.chunkPtr);
+        }
+#else
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+#endif
+
+
         thisFrameTasks.clear();
     }
 
