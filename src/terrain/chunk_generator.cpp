@@ -34,7 +34,7 @@ namespace ChunkGenerator
 {
 
 // TODO: move to biome.cpp
-static std::vector<FN::SmartNode<FN::Simplex>> climateNoiseFns;
+static std::vector<FN::SmartNode<FN::Generator>> climateNoiseFns;
 inline constexpr float climateNoiseScale = 1200.f;
 
 void init()
@@ -44,7 +44,14 @@ void init()
     fnTemperature->SetScale(2.5f * climateNoiseScale);
     fnTemperature->SetOutputMin(-1.0f);
     fnTemperature->SetOutputMax(1.0f);
-    climateNoiseFns.push_back(fnTemperature);
+    auto fnWarp = FN::New<FN::DomainWarpGradient>();
+    fnWarp->SetSource(fnTemperature);
+    fnWarp->SetScale(0.06f * climateNoiseScale);
+    fnWarp->SetWarpAmplitude(0.03f * climateNoiseScale);
+    auto fnFractal = FN::New<FN::FractalFBm>();
+    fnFractal->SetSource(fnWarp);
+    fnFractal->SetOctaveCount(2);
+    climateNoiseFns.push_back(fnFractal);
 
     auto fnRainfall = FN::New<FN::Simplex>();
     fnRainfall->SetSeedOffset(1023950235);
