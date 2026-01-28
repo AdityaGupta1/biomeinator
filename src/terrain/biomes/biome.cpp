@@ -239,13 +239,10 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-inline constexpr float farBiomeBlendWidth = 0.3f;
-
 void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
 {
-    constexpr size_t paddedNumClosest = numClosestBiomes + 1;
-    std::array<BiomeWeight, paddedNumClosest> closestBiomes;
-    for (size_t i = 0; i < paddedNumClosest; ++i)
+    std::array<BiomeWeight, numClosestBiomes> closestBiomes;
+    for (size_t i = 0; i < numClosestBiomes; ++i)
     {
         closestBiomes[i].biome = Biome::COUNT;
         closestBiomes[i].weight = std::numeric_limits<float>::max();
@@ -257,34 +254,27 @@ void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
         const float dist2 = climateVec.distance2(BIOME_DATA(biome).climateVec);
 
         // insert if closer than the farthest biome so far
-        if (dist2 < closestBiomes[paddedNumClosest - 1].weight)
+        if (dist2 < closestBiomes[numClosestBiomes - 1].weight)
         {
-            closestBiomes[paddedNumClosest - 1].biome = biome;
-            closestBiomes[paddedNumClosest - 1].weight = dist2;
+            closestBiomes[numClosestBiomes - 1].biome = biome;
+            closestBiomes[numClosestBiomes - 1].weight = dist2;
 
             // maintain sorted order
-            for (size_t i = paddedNumClosest - 1; i > 0 && closestBiomes[i].weight < closestBiomes[i - 1].weight; --i)
+            for (size_t i = numClosestBiomes - 1; i > 0 && closestBiomes[i].weight < closestBiomes[i - 1].weight; --i)
             {
                 std::swap(closestBiomes[i], closestBiomes[i - 1]);
             }
         }
     }
 
-    for (size_t i = 0; i < paddedNumClosest; ++i)
-    {
-        float newWeight = std::expf(-128.f * closestBiomes[i].weight);
-        closestBiomes[i].weight = newWeight;
-    }
-
-    //const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 2].weight - closestBiomes[paddedNumClosest - 1].weight;
-    //const float farBiomeWeightMultiplier = glm::smoothstep(0.f, farBiomeBlendWidth, farBiomeWeightDiff);
-    //closestBiomes[paddedNumClosest - 2].weight *= farBiomeWeightMultiplier;
-
     float totalWeight = 0.f;
     for (size_t i = 0; i < numClosestBiomes; ++i)
     {
-        totalWeight += closestBiomes[i].weight;
+        float newWeight = std::expf(-128.f * closestBiomes[i].weight);
+        closestBiomes[i].weight = newWeight;
+        totalWeight += newWeight;
     }
+
     for (size_t i = 0; i < numClosestBiomes; ++i)
     {
         closestBiomes[i].weight /= totalWeight;
