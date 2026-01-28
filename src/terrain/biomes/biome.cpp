@@ -129,15 +129,20 @@ void init()
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(509324019);
         fnSimplex->SetScale(300.0f);
+        fnSimplex->SetOutputMin(0.f);
+        fnSimplex->SetOutputMax(0.5f);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnSimplex);
         fnFractal->SetOctaveCount(4);
+        auto fnPow = FN::New<FN::PowFloat>();
+        fnPow->SetValue(fnFractal);
+        fnPow->SetPow(3.f);
         auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(50.0f);
+        fnMul->SetLHS(fnPow);
+        fnMul->SetRHS(200.0f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(200.0f);
+        fnAdd->SetRHS(150.0f);
 
         BIOME_DATA_BY_NAME(MOUNTAINS).climateVec = {
             .temperature = -0.4f,
