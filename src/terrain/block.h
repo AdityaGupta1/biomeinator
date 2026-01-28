@@ -33,6 +33,9 @@ enum class Block : BlockId
     GRASS,
     SAND,
     SANDSTONE,
+    SNOW,
+    SNOWY_GRASS,
+    ICE,
 
     COUNT
 };

@@ -27,7 +27,7 @@ inline constexpr uint32_t numClosestBiomes = 3;
 struct ClimateVector
 {
     float temperature;
-    float rainfall;
+    float precipitation;
     float humidity;
     float altitude;
 
@@ -40,6 +40,8 @@ enum class Biome : uint8_t
     DESERT,
     FOREST,
     MOUNTAINS,
+    TUNDRA,
+    ICE_FIELDS,
 
     COUNT
 };

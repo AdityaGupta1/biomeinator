@@ -52,6 +52,9 @@ void init()
     BLOCK_DATA_BY_NAME(GRASS) = { BlockUvs(uvec2(2, 0), uvec2(3, 0), uvec2(4, 0)) };
     BLOCK_DATA_BY_NAME(SAND) = { BlockUvs(uvec2(6, 0)) };
     BLOCK_DATA_BY_NAME(SANDSTONE) = { BlockUvs(uvec2(8, 0), uvec2(7, 0), uvec2(8, 0)) };
+    BLOCK_DATA_BY_NAME(SNOW) = { BlockUvs(uvec2(9, 0)) };
+    BLOCK_DATA_BY_NAME(SNOWY_GRASS) = { BlockUvs(uvec2(9, 0), uvec2(10, 0), uvec2(4, 0)) };
+    BLOCK_DATA_BY_NAME(ICE) = { BlockUvs(uvec2(11, 0)) };
 }
 
 const BlockData& getBlockData(Block block)

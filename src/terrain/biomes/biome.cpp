@@ -29,7 +29,7 @@ namespace FN = FastNoise;
 
 inline constexpr ClimateVector climateVecScales = {
     .temperature = 1.0f / 2.0f,
-    .rainfall = 1.0f / 2.0f,
+    .precipitation = 1.0f / 2.0f,
     .humidity = 1.0f / 2.0f,
     .altitude = 1.0f / chunkSizeY,
 };
@@ -37,7 +37,7 @@ inline constexpr ClimateVector climateVecScales = {
 float ClimateVector::distance2(const ClimateVector& other) const
 {
     return (temperature - other.temperature) * (temperature - other.temperature) * climateVecScales.temperature +
-           (rainfall - other.rainfall) * (rainfall - other.rainfall) * climateVecScales.rainfall +
+           (precipitation - other.precipitation) * (precipitation - other.precipitation) * climateVecScales.precipitation +
            (humidity - other.humidity) * (humidity - other.humidity) * climateVecScales.humidity +
            (altitude - other.altitude) * (altitude - other.altitude) * climateVecScales.altitude;
 }
@@ -68,7 +68,7 @@ void init()
 
         BIOME_DATA_BY_NAME(PLAINS).climateVec = {
             .temperature = 0.0f,
-            .rainfall = 0.0f,
+            .precipitation = 0.0f,
             .humidity = 0.0f,
             .altitude = 120.0f,
         };
@@ -91,7 +91,7 @@ void init()
 
         BIOME_DATA_BY_NAME(DESERT).climateVec = {
             .temperature = 1.0f,
-            .rainfall = -0.2f,
+            .precipitation = -0.2f,
             .humidity = -1.0f,
             .altitude = 110.0f,
         };
@@ -118,7 +118,7 @@ void init()
 
         BIOME_DATA_BY_NAME(FOREST).climateVec = {
             .temperature = -0.1f,
-            .rainfall = 0.2f,
+            .precipitation = 0.2f,
             .humidity = 0.2f,
             .altitude = 130.0f,
         };
@@ -141,7 +141,7 @@ void init()
 
         BIOME_DATA_BY_NAME(MOUNTAINS).climateVec = {
             .temperature = -0.4f,
-            .rainfall = -0.1f,
+            .precipitation = -0.1f,
             .humidity = -0.4f,
             .altitude = 200.0f,
         };
@@ -149,6 +149,87 @@ void init()
         BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
             .top = Block::STONE,
             .mid = Block::STONE,
+        };
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(509324019);
+        fnSimplex->SetScale(200.0f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(4);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnFractal);
+        fnMul->SetRHS(10.0f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnMul);
+        fnAdd->SetRHS(120.0f);
+
+        BIOME_DATA_BY_NAME(TUNDRA).climateVec = {
+            .temperature = -0.7f,
+            .precipitation = -0.3f,
+            .humidity = -0.6f,
+            .altitude = 120.0f,
+        };
+        BIOME_DATA_BY_NAME(TUNDRA).heightFn = fnAdd;
+        BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
+            .top = Block::SNOWY_GRASS,
+            .mid = Block::DIRT,
+        };
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(509324019);
+        fnSimplex->SetScale(200.0f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(4);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnFractal);
+        fnMul->SetRHS(10.0f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnMul);
+        fnAdd->SetRHS(120.0f);
+
+        BIOME_DATA_BY_NAME(TUNDRA).climateVec = {
+            .temperature = -0.7f,
+            .precipitation = -0.3f,
+            .humidity = -0.6f,
+            .altitude = 120.0f,
+        };
+        BIOME_DATA_BY_NAME(TUNDRA).heightFn = fnAdd;
+        BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
+            .top = Block::SNOWY_GRASS,
+            .mid = Block::DIRT,
+        };
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(509324019);
+        fnSimplex->SetScale(500.0f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(4);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnFractal);
+        fnMul->SetRHS(20.0f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnMul);
+        fnAdd->SetRHS(100.0f);
+
+        BIOME_DATA_BY_NAME(ICE_FIELDS).climateVec = {
+            .temperature = -0.85f,
+            .precipitation = 0.1f,
+            .humidity = -0.8f,
+            .altitude = 100.0f,
+        };
+        BIOME_DATA_BY_NAME(ICE_FIELDS).heightFn = fnAdd;
+        BIOME_DATA_BY_NAME(ICE_FIELDS).topBlocks = {
+            .top = Block::SNOW,
+            .mid = Block::ICE,
         };
     }
 }

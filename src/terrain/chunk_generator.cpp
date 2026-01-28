@@ -94,7 +94,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             const uint blockIdx = blockZ * chunkSizeXZ + blockX;
             const ClimateVector climateVec = {
                 .temperature = climateNoise[0 * chunkSizeXZSquare + blockIdx],
-                .rainfall = climateNoise[1 * chunkSizeXZSquare + blockIdx],
+                .precipitation = climateNoise[1 * chunkSizeXZSquare + blockIdx],
                 .humidity = climateNoise[2 * chunkSizeXZSquare + blockIdx],
                 .altitude = climateNoise[3 * chunkSizeXZSquare + blockIdx],
             };
