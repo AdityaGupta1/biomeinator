@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <FastNoise/FastNoise.h>
 
+inline constexpr uint32_t numClosestBiomes = 3;
+
 struct ClimateVector
 {
     float temperature;
@@ -55,11 +57,19 @@ struct BiomeData
     TopBlocks topBlocks;
 };
 
+struct BiomeWeight
+{
+    Biome biome;
+    float weight;
+};
+
 namespace Biomes
 {
 
 void init();
 
 const BiomeData& getBiomeData(Biome biome);
+
+void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights);
 
 } // namespace Biomes

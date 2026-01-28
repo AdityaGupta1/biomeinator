@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../chunk.h"
 
 #include <array>
+#include <limits>
 
 namespace FN = FastNoise;
 
@@ -93,7 +94,7 @@ void init()
             .altitude = 110.0f,
         };
         BIOME_DATA_BY_NAME(DESERT).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
+        BIOME_DATA_BY_NAME(DESERT).topBlocks = {
             .top = Block::SAND,
             .mid = Block::SANDSTONE,
         };
@@ -108,16 +109,16 @@ void init()
         fnFractal->SetOctaveCount(4);
         auto fnMul = FN::New<FN::Multiply>();
         fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(12.0f);
+        fnMul->SetRHS(15.0f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(125.0f);
+        fnAdd->SetRHS(130.0f);
 
         BIOME_DATA_BY_NAME(FOREST).climateVec = {
             .temperature = -0.1f,
             .rainfall = 0.2f,
             .humidity = 0.2f,
-            .altitude = 125.0f,
+            .altitude = 130.0f,
         };
         BIOME_DATA_BY_NAME(FOREST).heightFn = fnAdd;
     }
@@ -131,16 +132,16 @@ void init()
         fnFractal->SetOctaveCount(4);
         auto fnMul = FN::New<FN::Multiply>();
         fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(30.0f);
+        fnMul->SetRHS(50.0f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(180.0f);
+        fnAdd->SetRHS(200.0f);
 
         BIOME_DATA_BY_NAME(MOUNTAINS).climateVec = {
             .temperature = -0.4f,
             .rainfall = -0.1f,
             .humidity = -0.4f,
-            .altitude = 180.0f,
+            .altitude = 200.0f,
         };
         BIOME_DATA_BY_NAME(MOUNTAINS).heightFn = fnAdd;
         BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
@@ -153,6 +154,44 @@ void init()
 const BiomeData& getBiomeData(Biome biome)
 {
     return BIOME_DATA(biome);
+}
+
+// inline constexpr float biomeBlendWidth = 0.02f;
+
+void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
+{
+    constexpr size_t paddedNumClosest = numClosestBiomes + 1;
+    std::array<BiomeWeight, paddedNumClosest> closestBiomes;
+    for (size_t i = 0; i < paddedNumClosest; ++i)
+    {
+        closestBiomes[i].biome = Biome::COUNT;
+        closestBiomes[i].weight = std::numeric_limits<float>::max();
+    }
+
+    for (size_t biomeIdx = 0; biomeIdx < static_cast<size_t>(Biome::COUNT); ++biomeIdx)
+    {
+        const Biome biome = static_cast<Biome>(biomeIdx);
+        const float dist2 = climateVec.distance2(BIOME_DATA(biome).climateVec);
+
+        // insert if closer than the farthest biome so far
+        if (dist2 < closestBiomes[paddedNumClosest - 1].weight)
+        {
+            closestBiomes[paddedNumClosest - 1].biome = biome;
+            closestBiomes[paddedNumClosest - 1].weight = dist2;
+
+            // maintain sorted order
+            for (size_t i = paddedNumClosest - 1; i > 0 && closestBiomes[i].weight < closestBiomes[i - 1].weight; --i)
+            {
+                std::swap(closestBiomes[i], closestBiomes[i - 1]);
+            }
+        }
+    }
+
+    // TODO: use exponential for weights?
+
+    // TODO: normalize weights, ensuring smooth tranistion between third and fourth closest biomes
+
+    std::memcpy(biomeWeights, closestBiomes.data(), numClosestBiomes * sizeof(BiomeWeight));
 }
 
 } // namespace Biomes

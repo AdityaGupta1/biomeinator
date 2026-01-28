@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace ChunkGenerator
 {
 
+void init();
+
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks);
 
 }; // namespace ChunkGenerator
