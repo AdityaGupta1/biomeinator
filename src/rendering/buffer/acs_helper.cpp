@@ -156,8 +156,6 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
         toFreeList.pushManagedBufferSection(sharedAcsScratchSection);
 
         cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-        BufferHelper::uavBarrier(cmdList, nullptr);
     }
 }
 
