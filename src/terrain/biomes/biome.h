@@ -18,50 +18,48 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <cstdint>
-#include <glm/glm.hpp>
+#include "../block.h"
 
-using BlockId = uint16_t;
+#include <FastNoise/FastNoise.h>
 
-enum class Block : BlockId
+struct ClimateVector
 {
-    AIR = 0,
-    BEDROCK,
-    STONE,
-    LAMP,
-    DIRT,
-    GRASS,
-    SAND,
-    SANDSTONE,
+    float temperature;
+    float rainfall;
+    float humidity;
+    float altitude;
+
+    float distance2(const ClimateVector& other) const;
+};
+
+enum class Biome : uint8_t
+{
+    PLAINS,
+    DESERT,
+    FOREST,
+    MOUNTAINS,
 
     COUNT
 };
 
-struct BlockUvs
+struct TopBlocks
 {
-private:
-    glm::uvec2 uvs[3]; // integer position in block texture grid
-                       // order = side, top, bottom
+    Block top{Block::GRASS};
+    Block mid{Block::DIRT};
+}
 
-public:
-    BlockUvs() = default;
-    BlockUvs(glm::uvec2 all);
-    BlockUvs(glm::uvec2 top, glm::uvec2 side, glm::uvec2 bottom);
-
-    const glm::uvec2& operator[](uint32_t idx) const;
+struct BiomeData
+{
+    ClimateVector climateVec;
+    FastNoise::SmartNode<> heightFn;
+    TopBlocks topBlocks;
 };
 
-struct BlockData
-{
-    BlockUvs uvs;
-    bool emitsLight{ false };
-};
-
-namespace Blocks
+namespace Biomes
 {
 
 void init();
 
-const BlockData& getBlockData(Block block);
+const BiomeData& getBiomeData(Biome biome);
 
-} // namespace Blocks
+} // namespace Biomes

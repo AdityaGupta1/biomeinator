@@ -97,9 +97,9 @@ void Chunk::generateBlocks()
 {
     this->blocks.resize(numChunkBlocks);
 
-    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    ChunkGenerator::fillBlocks(chunkPosBlocksXZ_WS, this->blocks);
+    ChunkGenerator::fillBlocks(chunkBlockPosXZ_WS, this->blocks);
 
     this->advanceState(ChunkState::HAS_BLOCKS);
 
