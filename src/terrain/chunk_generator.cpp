@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "chunk.h"
 #include "rng.h"
+#include "biomes/biome.h"
 
 #include <array>
 

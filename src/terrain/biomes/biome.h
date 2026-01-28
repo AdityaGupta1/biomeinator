@@ -44,9 +44,9 @@ enum class Biome : uint8_t
 
 struct TopBlocks
 {
-    Block top{Block::GRASS};
-    Block mid{Block::DIRT};
-}
+    Block top{ Block::GRASS };
+    Block mid{ Block::DIRT };
+};
 
 struct BiomeData
 {
