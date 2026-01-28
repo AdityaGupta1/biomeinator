@@ -19,8 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk_generator.h"
 
 #include "chunk.h"
-#include "rng.h"
 #include "biomes/biome.h"
+#include "util/rng.h"
 
 #include <array>
 
