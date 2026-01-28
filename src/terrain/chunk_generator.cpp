@@ -100,7 +100,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             };
             BiomeWeight* biomeWeightsPtr = biomeWeights.data() + blockIdx * numClosestBiomes;
             Biomes::getBiomeWeights(climateVec, biomeWeightsPtr);
-            biomeSet.insert(biomeWeightsPtr[0].biome); // TODO: insert all biomes and keep track of extents
+            for (uint i = 0; i < numClosestBiomes; ++i)
+            {
+                biomeSet.insert(biomeWeightsPtr[i].biome); // TODO: keep track of extents
+            }
         }
     }
 
@@ -127,9 +130,16 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const uint blockIdx = blockZ * chunkSizeXZ + blockX;
-            const Biome closestBiome = biomeWeights[blockIdx * numClosestBiomes].biome;
-            heightfield[blockIdx] = biomeHeightfields[closestBiome][blockIdx];
-            columnBiomes[blockIdx] = closestBiome;
+            const BiomeWeight* colBiomeWeights = biomeWeights.data() + blockIdx * numClosestBiomes;
+
+            float blendedHeight = 0.0f;
+            for (uint i = 0; i < numClosestBiomes; ++i)
+            {
+                const BiomeWeight& biomeWeight = colBiomeWeights[i];
+                blendedHeight += biomeHeightfields[biomeWeight.biome][blockIdx] * biomeWeight.weight;
+            }
+            heightfield[blockIdx] = blendedHeight;
+            columnBiomes[blockIdx] = colBiomeWeights[0].biome;
         }
     }
 

@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <array>
 #include <limits>
 
+#include <glm/glm.hpp>
+
 namespace FN = FastNoise;
 
 inline constexpr ClimateVector climateVecScales = {
@@ -156,7 +158,8 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-// inline constexpr float biomeBlendWidth = 0.02f;
+inline constexpr float farBiomeBlendWidth = 0.04f;
+inline constexpr float biomeWeightExponentMultiplier = 5.0f;
 
 void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
 {
@@ -187,9 +190,24 @@ void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
         }
     }
 
-    // TODO: use exponential for weights?
+    for (size_t i = 0; i < paddedNumClosest; ++i)
+    {
+        closestBiomes[i].weight = std::expf(-closestBiomes[i].weight * biomeWeightExponentMultiplier);
+    }
 
-    // TODO: normalize weights, ensuring smooth tranistion between third and fourth closest biomes
+    const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 1].weight - closestBiomes[paddedNumClosest - 2].weight;
+    const float farBiomeWeightMultiplier = glm::smoothstep(0.f, farBiomeBlendWidth, farBiomeWeightDiff);
+    closestBiomes[paddedNumClosest - 2].weight *= farBiomeWeightMultiplier;
+
+    float totalWeight = 0.f;
+    for (size_t i = 0; i < numClosestBiomes; ++i)
+    {
+        totalWeight += closestBiomes[i].weight;
+    }
+    for (size_t i = 0; i < numClosestBiomes; ++i)
+    {
+        closestBiomes[i].weight /= totalWeight;
+    }
 
     std::memcpy(biomeWeights, closestBiomes.data(), numClosestBiomes * sizeof(BiomeWeight));
 }
