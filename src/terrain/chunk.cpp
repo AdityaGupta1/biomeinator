@@ -408,7 +408,7 @@ void Chunk::setInstance(Instance* instance)
     this->instance->setVisible(this->getIsInstanceVisible());
 }
 
-void Chunk::createInstance(Scene* scene)
+void Chunk::createInstance()
 {
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const XMMATRIX transform = XMMatrixTranslation(

@@ -126,7 +126,7 @@ public:
     void generateSegments();
 
     void setInstance(Instance* instance);
-    void createInstance(Scene* scene);
+    void createInstance();
     void destroyInstance(ToFreeList& toFreeList);
     Instance* getInstance() const;
 

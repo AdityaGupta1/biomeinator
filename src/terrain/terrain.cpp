@@ -54,7 +54,7 @@ static void task_generateSegments(Chunk* chunk)
 
 static void task_createInstance(Chunk* chunk)
 {
-    chunk->createInstance(scene);
+    chunk->createInstance();
 }
 
 static ThreadPool threadPool;
