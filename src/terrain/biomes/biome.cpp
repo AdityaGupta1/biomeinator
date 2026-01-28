@@ -28,10 +28,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace FN = FastNoise;
 
 inline constexpr ClimateVector climateVecScales = {
-    .temperature = 1.0f / 2.0f,
-    .precipitation = 1.0f / 2.0f,
-    .humidity = 1.0f / 2.0f,
-    .altitude = 1.0f / chunkSizeY,
+    .temperature = 1.f / (2.f * 2.f),
+    .precipitation = 1.f / (2.f * 2.f),
+    .humidity = 1.0f / (2.f * 2.f),
+    .altitude = 1.0f / (chunkSizeY * chunkSizeY),
 };
 
 float ClimateVector::distance2(const ClimateVector& other) const
@@ -239,8 +239,7 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-inline constexpr float farBiomeBlendWidth = 0.005f;
-inline constexpr float biomeWeightExponentMultiplier = 0.6f;
+inline constexpr float farBiomeBlendWidth = 0.3f;
 
 void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
 {
@@ -273,12 +272,13 @@ void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
 
     for (size_t i = 0; i < paddedNumClosest; ++i)
     {
-        closestBiomes[i].weight = std::expf(-closestBiomes[i].weight * biomeWeightExponentMultiplier);
+        float newWeight = std::expf(-128.f * closestBiomes[i].weight);
+        closestBiomes[i].weight = newWeight;
     }
 
-    const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 2].weight - closestBiomes[paddedNumClosest - 1].weight;
-    const float farBiomeWeightMultiplier = glm::smoothstep(0.f, farBiomeBlendWidth, farBiomeWeightDiff);
-    closestBiomes[paddedNumClosest - 2].weight *= farBiomeWeightMultiplier;
+    //const float farBiomeWeightDiff = closestBiomes[paddedNumClosest - 2].weight - closestBiomes[paddedNumClosest - 1].weight;
+    //const float farBiomeWeightMultiplier = glm::smoothstep(0.f, farBiomeBlendWidth, farBiomeWeightDiff);
+    //closestBiomes[paddedNumClosest - 2].weight *= farBiomeWeightMultiplier;
 
     float totalWeight = 0.f;
     for (size_t i = 0; i < numClosestBiomes; ++i)

@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <FastNoise/FastNoise.h>
 
-inline constexpr uint32_t numClosestBiomes = 3;
+inline constexpr uint32_t numClosestBiomes = 4;
 
 struct ClimateVector
 {

@@ -33,34 +33,36 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
+// TODO: move to biome.cpp
 static std::vector<FN::SmartNode<FN::Simplex>> climateNoiseFns;
+inline constexpr float climateNoiseScale = 1200.f;
 
 void init()
 {
     auto fnTemperature = FN::New<FN::Simplex>();
     fnTemperature->SetSeedOffset(5689481209);
-    fnTemperature->SetScale(2500.0f);
-    fnTemperature->SetOutputMin(-2.0f);
-    fnTemperature->SetOutputMax(2.0f);
+    fnTemperature->SetScale(2.5f * climateNoiseScale);
+    fnTemperature->SetOutputMin(-1.0f);
+    fnTemperature->SetOutputMax(1.0f);
     climateNoiseFns.push_back(fnTemperature);
 
     auto fnRainfall = FN::New<FN::Simplex>();
     fnRainfall->SetSeedOffset(1023950235);
-    fnRainfall->SetScale(1000.0f);
-    fnRainfall->SetOutputMin(-2.0f);
-    fnRainfall->SetOutputMax(2.0f);
+    fnRainfall->SetScale(1.0f * climateNoiseScale);
+    fnRainfall->SetOutputMin(-1.0f);
+    fnRainfall->SetOutputMax(1.0f);
     climateNoiseFns.push_back(fnRainfall);
 
     auto fnHumidity = FN::New<FN::Simplex>();
     fnHumidity->SetSeedOffset(680199230);
-    fnHumidity->SetScale(1500.0f);
-    fnHumidity->SetOutputMin(-2.0f);
-    fnHumidity->SetOutputMax(2.0f);
+    fnHumidity->SetScale(1.5f * climateNoiseScale);
+    fnHumidity->SetOutputMin(-1.0f);
+    fnHumidity->SetOutputMax(1.0f);
     climateNoiseFns.push_back(fnHumidity);
 
     auto fnAltitude = FN::New<FN::Simplex>();
     fnAltitude->SetSeedOffset(973421495);
-    fnAltitude->SetScale(2000.0f);
+    fnAltitude->SetScale(2.0f * climateNoiseScale);
     fnAltitude->SetOutputMin(64.0f);
     fnAltitude->SetOutputMax(256.0f);
     climateNoiseFns.push_back(fnAltitude);
