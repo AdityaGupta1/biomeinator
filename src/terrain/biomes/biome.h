@@ -20,8 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../block.h"
 
-#include <FastNoise/FastNoise.h>
-
 inline constexpr uint32_t numClosestBiomes = 4;
 
 struct BiomeNoise
@@ -70,6 +68,6 @@ void init();
 
 const BiomeData& getBiomeData(Biome biome);
 
-Biome getBiome(const BiomeNoise& biomeNoise);
+Biome getClosestBiome(const BiomeNoise& biomeNoise);
 
 } // namespace Biomes

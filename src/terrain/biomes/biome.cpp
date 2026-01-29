@@ -105,7 +105,7 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-Biome getBiome(const BiomeNoise& biomeNoise)
+Biome getClosestBiome(const BiomeNoise& biomeNoise)
 {
     Biome closestBiome = Biome::COUNT;
     float closestDist2 = std::numeric_limits<float>::max();
@@ -121,6 +121,8 @@ Biome getBiome(const BiomeNoise& biomeNoise)
             closestDist2 = dist2;
         }
     }
+
+    ASSERT(closestBiome != Biome::COUNT);
 
     return closestBiome;
 }
