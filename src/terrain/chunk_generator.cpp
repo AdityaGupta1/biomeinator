@@ -33,32 +33,50 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
-// TODO: move to biome.cpp
-static std::vector<FN::SmartNode<FN::Generator>> biomeNoiseFns;
+static FN::SmartNode<FN::Generator> fnTemperature;
+static FN::SmartNode<FN::Generator> fnHumidity;
 inline constexpr float biomeNoiseScale = 400.f;
 
 void init()
 {
-    auto fnTemperature = FN::New<FN::Simplex>();
-    fnTemperature->SetSeedOffset(5689481209);
-    fnTemperature->SetScale(2.5f * biomeNoiseScale);
-    fnTemperature->SetOutputMin(-1.0f);
-    fnTemperature->SetOutputMax(1.0f);
-    auto fnWarp = FN::New<FN::DomainWarpGradient>();
-    fnWarp->SetSource(fnTemperature);
-    fnWarp->SetScale(0.06f * biomeNoiseScale);
-    fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
-    auto fnFractal = FN::New<FN::FractalFBm>();
-    fnFractal->SetSource(fnWarp);
-    fnFractal->SetOctaveCount(2);
-    biomeNoiseFns.push_back(fnFractal);
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(5689481209);
+        fnSimplex->SetScale(2.5f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.06f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(2);
 
-    auto fnHumidity = FN::New<FN::Simplex>();
-    fnHumidity->SetSeedOffset(680199230);
-    fnHumidity->SetScale(1.5f * biomeNoiseScale);
-    fnHumidity->SetOutputMin(-1.0f);
-    fnHumidity->SetOutputMax(1.0f);
-    biomeNoiseFns.push_back(fnHumidity);
+        fnTemperature = fnFractal;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(680199230);
+        fnSimplex->SetScale(1.5f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnHumidity = fnSimplex;
+    }
+}
+
+static inline void fillNoiseArray(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
+{
+    fn->GenUniformGrid2D(data.data(),
+                         pos.x, // x
+                         pos.y, // z
+                         chunkSizeXZ,
+                         chunkSizeXZ,
+                         1.f,
+                         1.f,
+                         192350424);
 }
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
@@ -79,22 +97,11 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
     const auto& fnTerrainBase = fnAdd;
 
-    std::vector<float> biomeNoiseArray(biomeNoiseFns.size() * chunkSizeXZSquare);
-    {
-        float* noisePtr = biomeNoiseArray.data();
-        for (const auto& fn : biomeNoiseFns)
-        {
-            fn->GenUniformGrid2D(noisePtr,
-                                 chunkPosBlocksXZ_WS.x, // x
-                                 chunkPosBlocksXZ_WS.y, // z
-                                 chunkSizeXZ,
-                                 chunkSizeXZ,
-                                 1.f,
-                                 1.f,
-                                 192350424);
-            noisePtr += chunkSizeXZSquare;
-        }
-    }
+    std::vector<float> temperatureNoise(chunkSizeXZSquare);
+    fillNoiseArray(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
+
+    std::vector<float> humidityNoise(chunkSizeXZSquare);
+    fillNoiseArray(humidityNoise, fnTemperature, chunkPosBlocksXZ_WS);
 
     std::vector<float> heightfield(chunkSizeXZSquare);
     fnTerrainBase->GenUniformGrid2D(heightfield.data(),
@@ -147,8 +154,8 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
             const BiomeNoise biomeNoise = {
-                .temperature = biomeNoiseArray[0 * chunkSizeXZSquare + columnIdx],
-                .humidity = biomeNoiseArray[1 * chunkSizeXZSquare + columnIdx],
+                .temperature = temperatureNoise[columnIdx],
+                .humidity = humidityNoise[columnIdx],
             };
             const Biome biome = Biomes::getBiome(biomeNoise);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
