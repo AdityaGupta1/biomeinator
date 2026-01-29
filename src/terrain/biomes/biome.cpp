@@ -28,7 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 float BiomeNoise::distance2(const BiomeNoise& other) const
 {
     return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
-           (this->humidity - other.humidity) * (this->humidity - other.humidity);
+           (this->humidity - other.humidity) * (this->humidity - other.humidity) +
+           (this->peak - other.peak) * (this->peak - other.peak) * 4;
 }
 
 namespace Biomes
@@ -39,24 +40,30 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 #define BIOME_DATA(biome) biomeDatas[static_cast<size_t>(biome)]
 #define BIOME_DATA_BY_NAME(biomeName) biomeDatas[static_cast<size_t>(Biome::biomeName)]
 
+// temperature in [-1, 1]
+// humidity in [-1, 1]
+// peak in [0, 1]
 void init()
 {
     // PLAINS
     BIOME_DATA_BY_NAME(PLAINS).biomeNoise = {
         .temperature = 0.0f,
         .humidity = 0.0f,
+        .peak = 0.15f,
     };
 
     // SAVANNA
     BIOME_DATA_BY_NAME(SAVANNA).biomeNoise = {
         .temperature = 0.6f,
         .humidity = -0.6f,
+        .peak = 0.4f,
     };
 
     // DESERT
     BIOME_DATA_BY_NAME(DESERT).biomeNoise = {
         .temperature = 1.0f,
         .humidity = -1.0f,
+        .peak = 0.2f,
     };
     BIOME_DATA_BY_NAME(DESERT).topBlocks = {
         .top = Block::SAND,
@@ -67,12 +74,14 @@ void init()
     BIOME_DATA_BY_NAME(FOREST).biomeNoise = {
         .temperature = -0.1f,
         .humidity = 0.2f,
+        .peak = 0.3f,
     };
 
     // MOUNTAINS
     BIOME_DATA_BY_NAME(MOUNTAINS).biomeNoise = {
         .temperature = -0.4f,
         .humidity = -0.4f,
+        .peak = 0.8f,
     };
     BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
         .top = Block::STONE,
@@ -83,6 +92,7 @@ void init()
     BIOME_DATA_BY_NAME(TUNDRA).biomeNoise = {
         .temperature = -0.7f,
         .humidity = -0.6f,
+        .peak = 0.2f,
     };
     BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
         .top = Block::SNOWY_GRASS,
@@ -93,6 +103,7 @@ void init()
     BIOME_DATA_BY_NAME(ICE_FIELDS).biomeNoise = {
         .temperature = -0.85f,
         .humidity = -0.8f,
+        .peak = 0.15f,
     };
     BIOME_DATA_BY_NAME(ICE_FIELDS).topBlocks = {
         .top = Block::SNOW,

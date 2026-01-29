@@ -34,7 +34,8 @@ namespace ChunkGenerator
 
 static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
-inline constexpr float biomeNoiseScale = 400.f;
+static FN::SmartNode<FN::Generator> fnPeak;
+inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 static FN::SmartNode<FN::Generator> fnCaves;
@@ -70,8 +71,18 @@ void init()
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(901992021);
+        fnSimplex->SetScale(2.5f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnPeak = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(210393129);
-        fnSimplex->SetScale(320.0f);
+        fnSimplex->SetScale(400.0f);
         fnSimplex->SetOutputMin(-0.5f);
         fnSimplex->SetOutputMax(0.5f);
         auto fnFractal = FN::New<FN::FractalFBm>();
@@ -109,13 +120,29 @@ static inline void fillNoiseArray(std::vector<float>& data, const FN::SmartNode<
     fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 192350424);
 }
 
+// TODO: make a generic spline interpolation function/class
+static inline float peakNoiseSpline(float t)
+{
+    if (t < 0.8f)
+    {
+        return t * 0.5f;
+    }
+    else
+    {
+        return 0.4f + (t - 0.8f) * 3.f;
+    }
+}
+
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::vector<float> temperatureNoise(chunkSizeXZSquare);
+    std::vector<float> temperatureNoise(chunkSizeXZSquare); // TODO: pass in preallocated memory for noise
     fillNoiseArray(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
 
     std::vector<float> humidityNoise(chunkSizeXZSquare);
-    fillNoiseArray(humidityNoise, fnTemperature, chunkPosBlocksXZ_WS);
+    fillNoiseArray(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
+
+    std::vector<float> peakNoise(chunkSizeXZSquare);
+    fillNoiseArray(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
     std::vector<float> terrainNoise(numChunkBlocks);
     fnTerrainBase->GenUniformGrid3D(terrainNoise.data(),
@@ -154,6 +181,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             const BiomeNoise biomeNoise = {
                 .temperature = temperatureNoise[columnIdx],
                 .humidity = humidityNoise[columnIdx],
+                .peak = peakNoise[columnIdx],
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
@@ -165,6 +193,9 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 150.f;
+            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.012f;
+
             uint topBlockY = 0;
             bool wasSolid = true;
             for (uint y = 1; y < chunkSizeY; ++y)
@@ -172,10 +203,15 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                 Block block = Block::AIR;
                 const uint blockIdx = baseBlockIdx + y;
 
-                float surfaceVal = (128 - static_cast<float>(y)) * 0.02f;
-                if (y < 128)
+                float surfaceVal = (terrainBaseHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
+                if (y < terrainBaseHeight)
                 {
                     surfaceVal *= 2.0f;
+                }
+
+                if (surfaceVal < -1.2f)
+                {
+                    break;
                 }
 
                 bool isInTerrain = (terrainNoise[blockIdx] < surfaceVal);

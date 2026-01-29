@@ -26,6 +26,7 @@ struct BiomeNoise
 {
     float temperature;
     float humidity;
+    float peak;
 
     float distance2(const BiomeNoise& other) const;
 };
