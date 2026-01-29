@@ -34,31 +34,31 @@ namespace ChunkGenerator
 {
 
 // TODO: move to biome.cpp
-static std::vector<FN::SmartNode<FN::Generator>> climateNoiseFns;
-inline constexpr float climateNoiseScale = 400.f;
+static std::vector<FN::SmartNode<FN::Generator>> biomeNoiseFns;
+inline constexpr float biomeNoiseScale = 400.f;
 
 void init()
 {
     auto fnTemperature = FN::New<FN::Simplex>();
     fnTemperature->SetSeedOffset(5689481209);
-    fnTemperature->SetScale(2.5f * climateNoiseScale);
+    fnTemperature->SetScale(2.5f * biomeNoiseScale);
     fnTemperature->SetOutputMin(-1.0f);
     fnTemperature->SetOutputMax(1.0f);
     auto fnWarp = FN::New<FN::DomainWarpGradient>();
     fnWarp->SetSource(fnTemperature);
-    fnWarp->SetScale(0.06f * climateNoiseScale);
-    fnWarp->SetWarpAmplitude(0.03f * climateNoiseScale);
+    fnWarp->SetScale(0.06f * biomeNoiseScale);
+    fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
     auto fnFractal = FN::New<FN::FractalFBm>();
     fnFractal->SetSource(fnWarp);
     fnFractal->SetOctaveCount(2);
-    climateNoiseFns.push_back(fnFractal);
+    biomeNoiseFns.push_back(fnFractal);
 
     auto fnHumidity = FN::New<FN::Simplex>();
     fnHumidity->SetSeedOffset(680199230);
-    fnHumidity->SetScale(1.5f * climateNoiseScale);
+    fnHumidity->SetScale(1.5f * biomeNoiseScale);
     fnHumidity->SetOutputMin(-1.0f);
     fnHumidity->SetOutputMax(1.0f);
-    climateNoiseFns.push_back(fnHumidity);
+    biomeNoiseFns.push_back(fnHumidity);
 }
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
@@ -79,10 +79,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
     const auto& fnTerrainBase = fnAdd;
 
-    std::vector<float> biomeNoiseArray(climateNoiseFns.size() * chunkSizeXZSquare);
+    std::vector<float> biomeNoiseArray(biomeNoiseFns.size() * chunkSizeXZSquare);
     {
         float* noisePtr = biomeNoiseArray.data();
-        for (const auto& fn : climateNoiseFns)
+        for (const auto& fn : biomeNoiseFns)
         {
             fn->GenUniformGrid2D(noisePtr,
                                  chunkPosBlocksXZ_WS.x, // x
