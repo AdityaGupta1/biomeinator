@@ -180,8 +180,8 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 150.f;
-            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.012f;
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 5.f) * 150.f;
+            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
 
             uint topBlockY = 0;
             bool wasSolid = true;
