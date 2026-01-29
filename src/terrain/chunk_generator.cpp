@@ -37,6 +37,7 @@ static FN::SmartNode<FN::Generator> fnHumidity;
 inline constexpr float biomeNoiseScale = 400.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
+static FN::SmartNode<FN::Generator> fnCaves;
 
 void init()
 {
@@ -70,18 +71,35 @@ void init()
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(210393129);
-        fnSimplex->SetScale(200.0f);
+        fnSimplex->SetScale(320.0f);
+        fnSimplex->SetOutputMin(-0.5f);
+        fnSimplex->SetOutputMax(0.5f);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(15.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(130.0f);
+        fnFractal->SetOctaveCount(5);
 
-        fnTerrainBase = fnAdd;
+        fnTerrainBase = fnFractal;
+    }
+
+    {
+        auto fnCellular = FN::New<FN::CellularDistance>();
+        fnCellular->SetDistanceIndex0(2);
+        fnCellular->SetDistanceIndex1(0);
+        fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
+        fnCellular->SetScale(80.f);
+        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
+        fnDomainWarp->SetSource(fnCellular);
+        fnDomainWarp->SetSeedOffset(302341102);
+        fnDomainWarp->SetWarpAmplitude(50.f);
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetScale(800.f);
+        fnSimplex->SetOutputMin(-0.3f);
+        fnSimplex->SetOutputMax(0.3f);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnDomainWarp);
+        fnAdd->SetRHS(fnSimplex);
+
+        fnCaves = fnAdd;
     }
 }
 
@@ -99,48 +117,32 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
     std::vector<float> humidityNoise(chunkSizeXZSquare);
     fillNoiseArray(humidityNoise, fnTemperature, chunkPosBlocksXZ_WS);
 
-    std::vector<float> heightfield(chunkSizeXZSquare);
-    fnTerrainBase->GenUniformGrid2D(heightfield.data(),
+    std::vector<float> terrainNoise(numChunkBlocks);
+    fnTerrainBase->GenUniformGrid3D(terrainNoise.data(),
+                                    0, // y
                                     chunkPosBlocksXZ_WS.x, // x
                                     chunkPosBlocksXZ_WS.y, // z
+                                    chunkSizeY,
                                     chunkSizeXZ,
                                     chunkSizeXZ,
+                                    1.f,
                                     1.f,
                                     1.f,
                                     91231205);
 
-    static constexpr uint maxCaveHeight = 128;
+    static constexpr uint maxCaveHeight = 160;
     std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
-    {
-        auto fnCellular = FN::New<FN::CellularDistance>();
-        fnCellular->SetDistanceIndex0(2);
-        fnCellular->SetDistanceIndex1(0);
-        fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
-        fnCellular->SetScale(80.f);
-        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
-        fnDomainWarp->SetSource(fnCellular);
-        fnDomainWarp->SetSeedOffset(302341102);
-        fnDomainWarp->SetWarpAmplitude(50.f);
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetScale(1200.f);
-        fnSimplex->SetOutputMin(-0.05f);
-        fnSimplex->SetOutputMax(0.3f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnDomainWarp);
-        fnAdd->SetRHS(fnSimplex);
-
-        fnAdd->GenUniformGrid3D(caveNoise.data(),
-                                0, // y
-                                chunkPosBlocksXZ_WS.x, // x
-                                chunkPosBlocksXZ_WS.y, // z
-                                maxCaveHeight,
-                                chunkSizeXZ,
-                                chunkSizeXZ,
-                                1.f,
-                                1.f,
-                                1.f,
-                                559234912);
-    }
+    fnCaves->GenUniformGrid3D(caveNoise.data(),
+                              0, // y
+                              chunkPosBlocksXZ_WS.x, // x
+                              chunkPosBlocksXZ_WS.y, // z
+                              maxCaveHeight,
+                              chunkSizeXZ,
+                              chunkSizeXZ,
+                              1.f,
+                              1.f,
+                              1.f,
+                              559234912);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -156,53 +158,66 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
-            const uint height = heightfield[columnIdx];
             const TopBlocks& topBlocks = biomeData.topBlocks;
 
-            uint blockIdx = columnIdx * chunkSizeY;
-            uint caveIdx = maxCaveHeight * columnIdx + 1;
+            uint baseBlockIdx = chunkSizeY * columnIdx;
+            uint baseCaveIdx = maxCaveHeight * columnIdx;
 
-            blocks[blockIdx++] = Block::BEDROCK;
+            blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            for (uint y = 1; y < height; ++y)
+            // TODO: keep track of top blocks (those with air on top) for placing top/mid blocks
+
+            for (uint y = 1; y < chunkSizeY; ++y)
             {
                 Block block = Block::AIR;
+                const uint blockIdx = baseBlockIdx + y;
 
-                bool isCave = false;
-                if (y < maxCaveHeight)
+                float surfaceVal = (128 - static_cast<float>(y)) * 0.02f;
+                if (y < 128)
                 {
-                    const float thisCaveNoise = caveNoise[caveIdx++];
-
-                    const float caveIsoSurfaceMixFactor = smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
-                    const float caveIsoSurface = mix(0.f, 0.7f, caveIsoSurfaceMixFactor);
-                    isCave = thisCaveNoise < caveIsoSurface;
+                    surfaceVal *= 2.0f;
                 }
 
-                if (!isCave)
+                bool isSolid = (terrainNoise[blockIdx] < surfaceVal);
+                if (isSolid)
                 {
-                    const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-
-                    if (y < height - 5)
+                    bool isCave = false;
+                    if (y < maxCaveHeight)
                     {
+                        const float caveSurfaceMixFactor =
+                            smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
+                        const float caveSurfaceVal = mix(0.f, 0.6f, caveSurfaceMixFactor);
+                        isCave = caveNoise[baseCaveIdx + y] < caveSurfaceVal;
+                    }
+
+                    if (!isCave)
+                    {
+                        const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
+
                         block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
-                    }
-                    else if (y < height - 1)
-                    {
-                        block = topBlocks.mid;
-                    }
-                    else
-                    {
-                        block = topBlocks.top;
+
+                        //if (y < height - 5)
+                        //{
+                        //    block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
+                        //}
+                        //else if (y < height - 1)
+                        //{
+                        //    block = topBlocks.mid;
+                        //}
+                        //else
+                        //{
+                        //    block = topBlocks.top;
+                        //}
                     }
                 }
 
-                blocks[blockIdx++] = block;
+                blocks[blockIdx] = block;
             }
 
-            if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY && blocks[blockIdx - 1] != Block::AIR)
-            {
-                blocks[blockIdx++] = Block::LAMP;
-            }
+            //if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY && blocks[blockIdx - 1] != Block::AIR)
+            //{
+            //    blocks[blockIdx++] = Block::LAMP;
+            //}
         }
     }
 }
