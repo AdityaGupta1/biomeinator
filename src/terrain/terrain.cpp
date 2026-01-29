@@ -35,11 +35,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include <vector>
 
-#define RENDER_DISTANCE 20
-#define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
-#define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
-
 #define DEBUG_SINGLE_THREAD 0
+
+inline constexpr int renderDistance = 20;
+inline constexpr int createBlasDistance = renderDistance + 1;
+inline constexpr int createBlocksDistance = createBlasDistance + 1;
 
 namespace Terrain
 {
@@ -136,10 +136,10 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - CREATE_BLOCKS_DISTANCE;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + CREATE_BLOCKS_DISTANCE;
-        const glm::ivec2 minLastChunkPos = lastChunkPos - CREATE_BLAS_DISTANCE;
-        const glm::ivec2 maxLastChunkPos = lastChunkPos + CREATE_BLAS_DISTANCE;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - createBlocksDistance;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + createBlocksDistance;
+        const glm::ivec2 minLastChunkPos = lastChunkPos - createBlasDistance;
+        const glm::ivec2 maxLastChunkPos = lastChunkPos + createBlasDistance;
 
         const glm::ivec2 minChunkPos = glm::min(minCurrentChunkPos, minLastChunkPos);
         const glm::ivec2 maxChunkPos = glm::max(maxCurrentChunkPos, maxLastChunkPos);
@@ -201,11 +201,11 @@ void update(ToFreeList& toFreeList)
                         const glm::ivec2 chunkPos = glm::ivec2(chunkX, chunkZ);
 
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
-                        const bool inCurrentRenderDistance = distToCurrentChunk <= RENDER_DISTANCE;
-                        const bool inCurrentCreateBlasDistance = distToCurrentChunk <= CREATE_BLAS_DISTANCE;
-                        const bool inCurrentCreateBlocksDistance = distToCurrentChunk <= CREATE_BLOCKS_DISTANCE;
+                        const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
+                        const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
+                        const bool inCurrentCreateBlocksDistance = distToCurrentChunk <= createBlocksDistance;
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
-                        const bool inLastCreateBlasDistance = distToLastChunk <= CREATE_BLAS_DISTANCE;
+                        const bool inLastCreateBlasDistance = distToLastChunk <= createBlasDistance;
                         if (!inCurrentCreateBlocksDistance && !inLastCreateBlasDistance)
                         {
                             continue;
