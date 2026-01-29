@@ -602,22 +602,17 @@ uint32_t Chunk::getNumNeighborsSet() const
 //             // do stuff here
 uint32_t Chunk::blockPosToIdx(uvec3 chunkBlockPos)
 {
-    return chunkBlockPos.y
-         + chunkBlockPos.x * chunkSizeY
-         + chunkBlockPos.z * (chunkSizeXZ * chunkSizeY);
+    return chunkBlockPos.y + chunkSizeY * (chunkBlockPos.x + chunkSizeXZ * chunkBlockPos.z);
 }
 
 uint32_t Chunk::blockPosXZToIdx(uvec2 chunkBlockPos)
 {
-    return chunkBlockPos.x * chunkSizeY
-         + chunkBlockPos.y /*z*/ * (chunkSizeXZ * chunkSizeY);
+    return chunkSizeY * (chunkBlockPos.x + chunkBlockPos.y /*z*/ * chunkSizeXZ);
 }
 
 uint32_t Chunk::segmentPosToIdx(uvec3 chunkSegmentPos)
 {
-    return chunkSegmentPos.y
-         + chunkSegmentPos.x * numChunkSegmentsY
-         + chunkSegmentPos.z * (numChunkSegmentsXZ * numChunkSegmentsY);
+    return chunkSegmentPos.y + numChunkSegmentsY * (chunkSegmentPos.x + numChunkSegmentsXZ * chunkSegmentPos.z);
 }
 
 void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos, uvec3& outSegmentEndPos)
@@ -680,6 +675,5 @@ uint32_t Region::getNumNeighborsSet() const
 //         // do stuff here
 uint32_t Region::chunkPosToIdx(ivec2 regionChunkPos)
 {
-    return regionChunkPos.x
-         + regionChunkPos.y /*z*/ * regionSideLength;
+    return regionChunkPos.x + regionSideLength * regionChunkPos.y /*z*/;
 }
