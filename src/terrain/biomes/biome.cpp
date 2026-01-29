@@ -25,21 +25,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <glm/glm.hpp>
 
-namespace FN = FastNoise;
-
-inline constexpr ClimateVector climateVecScales = {
-    .temperature = 1.f / (2.f * 2.f),
-    .precipitation = 1.f / (2.f * 2.f),
-    .humidity = 1.0f / (2.f * 2.f),
-    .altitude = 1.0f / (chunkSizeY * chunkSizeY),
-};
-
-float ClimateVector::distance2(const ClimateVector& other) const
+float BiomeNoise::distance2(const BiomeNoise& other) const
 {
-    return (temperature - other.temperature) * (temperature - other.temperature) * climateVecScales.temperature +
-           (precipitation - other.precipitation) * (precipitation - other.precipitation) * climateVecScales.precipitation +
-           (humidity - other.humidity) * (humidity - other.humidity) * climateVecScales.humidity +
-           (altitude - other.altitude) * (altitude - other.altitude) * climateVecScales.altitude;
+    return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
+           (this->humidity - other.humidity) * (this->humidity - other.humidity);
 }
 
 namespace Biomes
@@ -52,191 +41,63 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 
 void init()
 {
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(509324019);
-        fnSimplex->SetScale(250.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(7.5f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(120.0f);
+    // PLAINS
+    BIOME_DATA_BY_NAME(PLAINS).biomeNoise = {
+        .temperature = 0.0f,
+        .humidity = 0.0f,
+    };
 
-        BIOME_DATA_BY_NAME(PLAINS).climateVec = {
-            .temperature = 0.0f,
-            .precipitation = 0.0f,
-            .humidity = 0.0f,
-            .altitude = 120.0f,
-        };
-        BIOME_DATA_BY_NAME(PLAINS).heightFn = fnAdd;
-    }
+    // SAVANNA
+    BIOME_DATA_BY_NAME(SAVANNA).biomeNoise = {
+        .temperature = 0.6f,
+        .humidity = -0.6f,
+    };
 
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(60924912);
-        fnSimplex->SetScale(400.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(2);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(9.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(110.0f);
+    // DESERT
+    BIOME_DATA_BY_NAME(DESERT).biomeNoise = {
+        .temperature = 1.0f,
+        .humidity = -1.0f,
+    };
+    BIOME_DATA_BY_NAME(DESERT).topBlocks = {
+        .top = Block::SAND,
+        .mid = Block::SANDSTONE,
+    };
 
-        BIOME_DATA_BY_NAME(DESERT).climateVec = {
-            .temperature = 1.0f,
-            .precipitation = -0.2f,
-            .humidity = -1.0f,
-            .altitude = 110.0f,
-        };
-        BIOME_DATA_BY_NAME(DESERT).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(DESERT).topBlocks = {
-            .top = Block::SAND,
-            .mid = Block::SANDSTONE,
-        };
-    }
+    // FOREST
+    BIOME_DATA_BY_NAME(FOREST).biomeNoise = {
+        .temperature = -0.1f,
+        .humidity = 0.2f,
+    };
 
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(210393129);
-        fnSimplex->SetScale(200.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(15.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(130.0f);
+    // MOUNTAINS
+    BIOME_DATA_BY_NAME(MOUNTAINS).biomeNoise = {
+        .temperature = -0.4f,
+        .humidity = -0.4f,
+    };
+    BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
+        .top = Block::STONE,
+        .mid = Block::STONE,
+    };
 
-        BIOME_DATA_BY_NAME(FOREST).climateVec = {
-            .temperature = -0.1f,
-            .precipitation = 0.2f,
-            .humidity = 0.2f,
-            .altitude = 130.0f,
-        };
-        BIOME_DATA_BY_NAME(FOREST).heightFn = fnAdd;
-    }
+    // TUNDRA
+    BIOME_DATA_BY_NAME(TUNDRA).biomeNoise = {
+        .temperature = -0.7f,
+        .humidity = -0.6f,
+    };
+    BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
+        .top = Block::SNOWY_GRASS,
+        .mid = Block::DIRT,
+    };
 
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(509324019);
-        fnSimplex->SetScale(300.0f);
-        fnSimplex->SetOutputMin(0.f);
-        fnSimplex->SetOutputMax(0.5f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnPow = FN::New<FN::PowFloat>();
-        fnPow->SetValue(fnFractal);
-        fnPow->SetPow(3.f);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnPow);
-        fnMul->SetRHS(200.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(150.0f);
-
-        BIOME_DATA_BY_NAME(MOUNTAINS).climateVec = {
-            .temperature = -0.4f,
-            .precipitation = -0.1f,
-            .humidity = -0.4f,
-            .altitude = 200.0f,
-        };
-        BIOME_DATA_BY_NAME(MOUNTAINS).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
-            .top = Block::STONE,
-            .mid = Block::STONE,
-        };
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(509324019);
-        fnSimplex->SetScale(200.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(10.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(120.0f);
-
-        BIOME_DATA_BY_NAME(TUNDRA).climateVec = {
-            .temperature = -0.7f,
-            .precipitation = -0.3f,
-            .humidity = -0.6f,
-            .altitude = 120.0f,
-        };
-        BIOME_DATA_BY_NAME(TUNDRA).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
-            .top = Block::SNOWY_GRASS,
-            .mid = Block::DIRT,
-        };
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(509324019);
-        fnSimplex->SetScale(200.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(10.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(120.0f);
-
-        BIOME_DATA_BY_NAME(TUNDRA).climateVec = {
-            .temperature = -0.7f,
-            .precipitation = -0.3f,
-            .humidity = -0.6f,
-            .altitude = 120.0f,
-        };
-        BIOME_DATA_BY_NAME(TUNDRA).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
-            .top = Block::SNOWY_GRASS,
-            .mid = Block::DIRT,
-        };
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(509324019);
-        fnSimplex->SetScale(500.0f);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnSimplex);
-        fnFractal->SetOctaveCount(4);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(20.0f);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(100.0f);
-
-        BIOME_DATA_BY_NAME(ICE_FIELDS).climateVec = {
-            .temperature = -0.85f,
-            .precipitation = 0.1f,
-            .humidity = -0.8f,
-            .altitude = 100.0f,
-        };
-        BIOME_DATA_BY_NAME(ICE_FIELDS).heightFn = fnAdd;
-        BIOME_DATA_BY_NAME(ICE_FIELDS).topBlocks = {
-            .top = Block::SNOW,
-            .mid = Block::ICE,
-        };
-    }
+    // ICE_FIELDS
+    BIOME_DATA_BY_NAME(ICE_FIELDS).biomeNoise = {
+        .temperature = -0.85f,
+        .humidity = -0.8f,
+    };
+    BIOME_DATA_BY_NAME(ICE_FIELDS).topBlocks = {
+        .top = Block::SNOW,
+        .mid = Block::ICE,
+    };
 }
 
 const BiomeData& getBiomeData(Biome biome)
@@ -244,48 +105,24 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights)
+Biome getBiome(const BiomeNoise& biomeNoise)
 {
-    std::array<BiomeWeight, numClosestBiomes> closestBiomes;
-    for (size_t i = 0; i < numClosestBiomes; ++i)
-    {
-        closestBiomes[i].biome = Biome::COUNT;
-        closestBiomes[i].weight = std::numeric_limits<float>::max();
-    }
+    Biome closestBiome = Biome::COUNT;
+    float closestDist2 = std::numeric_limits<float>::max();
 
     for (size_t biomeIdx = 0; biomeIdx < static_cast<size_t>(Biome::COUNT); ++biomeIdx)
     {
         const Biome biome = static_cast<Biome>(biomeIdx);
-        const float dist2 = climateVec.distance2(BIOME_DATA(biome).climateVec);
+        const float dist2 = biomeNoise.distance2(BIOME_DATA(biome).biomeNoise);
 
-        // insert if closer than the farthest biome so far
-        if (dist2 < closestBiomes[numClosestBiomes - 1].weight)
+        if (dist2 < closestDist2)
         {
-            closestBiomes[numClosestBiomes - 1].biome = biome;
-            closestBiomes[numClosestBiomes - 1].weight = dist2;
-
-            // maintain sorted order
-            for (size_t i = numClosestBiomes - 1; i > 0 && closestBiomes[i].weight < closestBiomes[i - 1].weight; --i)
-            {
-                std::swap(closestBiomes[i], closestBiomes[i - 1]);
-            }
+            closestBiome = biome;
+            closestDist2 = dist2;
         }
     }
 
-    float totalWeight = 0.f;
-    for (size_t i = 0; i < numClosestBiomes; ++i)
-    {
-        float newWeight = std::expf(-128.f * closestBiomes[i].weight);
-        closestBiomes[i].weight = newWeight;
-        totalWeight += newWeight;
-    }
-
-    for (size_t i = 0; i < numClosestBiomes; ++i)
-    {
-        closestBiomes[i].weight /= totalWeight;
-    }
-
-    std::memcpy(biomeWeights, closestBiomes.data(), numClosestBiomes * sizeof(BiomeWeight));
+    return closestBiome;
 }
 
 } // namespace Biomes

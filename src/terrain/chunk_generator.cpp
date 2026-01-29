@@ -35,7 +35,7 @@ namespace ChunkGenerator
 
 // TODO: move to biome.cpp
 static std::vector<FN::SmartNode<FN::Generator>> climateNoiseFns;
-inline constexpr float climateNoiseScale = 1200.f;
+inline constexpr float climateNoiseScale = 400.f;
 
 void init()
 {
@@ -53,33 +53,35 @@ void init()
     fnFractal->SetOctaveCount(2);
     climateNoiseFns.push_back(fnFractal);
 
-    auto fnRainfall = FN::New<FN::Simplex>();
-    fnRainfall->SetSeedOffset(1023950235);
-    fnRainfall->SetScale(1.0f * climateNoiseScale);
-    fnRainfall->SetOutputMin(-1.0f);
-    fnRainfall->SetOutputMax(1.0f);
-    climateNoiseFns.push_back(fnRainfall);
-
     auto fnHumidity = FN::New<FN::Simplex>();
     fnHumidity->SetSeedOffset(680199230);
     fnHumidity->SetScale(1.5f * climateNoiseScale);
     fnHumidity->SetOutputMin(-1.0f);
     fnHumidity->SetOutputMax(1.0f);
     climateNoiseFns.push_back(fnHumidity);
-
-    auto fnAltitude = FN::New<FN::Simplex>();
-    fnAltitude->SetSeedOffset(973421495);
-    fnAltitude->SetScale(2.0f * climateNoiseScale);
-    fnAltitude->SetOutputMin(64.0f);
-    fnAltitude->SetOutputMax(256.0f);
-    climateNoiseFns.push_back(fnAltitude);
 }
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::vector<float> climateNoise(climateNoiseFns.size() * chunkSizeXZSquare);
+    // TODO: move to biome.cpp
+    auto fnSimplex = FN::New<FN::Simplex>();
+    fnSimplex->SetSeedOffset(210393129);
+    fnSimplex->SetScale(200.0f);
+    auto fnFractal = FN::New<FN::FractalFBm>();
+    fnFractal->SetSource(fnSimplex);
+    fnFractal->SetOctaveCount(4);
+    auto fnMul = FN::New<FN::Multiply>();
+    fnMul->SetLHS(fnFractal);
+    fnMul->SetRHS(15.0f);
+    auto fnAdd = FN::New<FN::Add>();
+    fnAdd->SetLHS(fnMul);
+    fnAdd->SetRHS(130.0f);
+
+    const auto& fnTerrainBase = fnAdd;
+
+    std::vector<float> biomeNoiseArray(climateNoiseFns.size() * chunkSizeXZSquare);
     {
-        float* noisePtr = climateNoise.data();
+        float* noisePtr = biomeNoiseArray.data();
         for (const auto& fn : climateNoiseFns)
         {
             fn->GenUniformGrid2D(noisePtr,
@@ -94,63 +96,15 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         }
     }
 
-    std::vector<BiomeWeight> biomeWeights(numClosestBiomes * chunkSizeXZSquare);
-    std::unordered_set<Biome> biomeSet;
-    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-    {
-        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
-        {
-            const uint blockIdx = blockZ * chunkSizeXZ + blockX;
-            const ClimateVector climateVec = {
-                .temperature = climateNoise[0 * chunkSizeXZSquare + blockIdx],
-                .precipitation = climateNoise[1 * chunkSizeXZSquare + blockIdx],
-                .humidity = climateNoise[2 * chunkSizeXZSquare + blockIdx],
-                .altitude = climateNoise[3 * chunkSizeXZSquare + blockIdx],
-            };
-            BiomeWeight* biomeWeightsPtr = biomeWeights.data() + blockIdx * numClosestBiomes;
-            Biomes::getBiomeWeights(climateVec, biomeWeightsPtr);
-            for (uint i = 0; i < numClosestBiomes; ++i)
-            {
-                biomeSet.insert(biomeWeightsPtr[i].biome); // TODO: keep track of extents
-            }
-        }
-    }
-
-    std::unordered_map<Biome, std::vector<float>> biomeHeightfields; // TODO: generate these one at a time and accumulate them into one heightfield
-    for (const Biome biome : biomeSet)
-    {
-        const auto& heightFn = Biomes::getBiomeData(biome).heightFn;
-        std::vector<float> heightfield(chunkSizeXZSquare);
-        heightFn->GenUniformGrid2D(heightfield.data(),
-                                   chunkPosBlocksXZ_WS.x, // x
-                                   chunkPosBlocksXZ_WS.y, // z
-                                   chunkSizeXZ,
-                                   chunkSizeXZ,
-                                   1.f,
-                                   1.f,
-                                   91231205);
-        biomeHeightfields[biome] = std::move(heightfield);
-    }
-
     std::vector<float> heightfield(chunkSizeXZSquare);
-    std::vector<Biome> columnBiomes(chunkSizeXZSquare);
-    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-    {
-        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
-        {
-            const uint blockIdx = blockZ * chunkSizeXZ + blockX;
-            const BiomeWeight* colBiomeWeights = biomeWeights.data() + blockIdx * numClosestBiomes;
-
-            float blendedHeight = 0.0f;
-            for (uint i = 0; i < numClosestBiomes; ++i)
-            {
-                const BiomeWeight& biomeWeight = colBiomeWeights[i];
-                blendedHeight += biomeHeightfields[biomeWeight.biome][blockIdx] * biomeWeight.weight;
-            }
-            heightfield[blockIdx] = blendedHeight;
-            columnBiomes[blockIdx] = colBiomeWeights[0].biome;
-        }
-    }
+    fnTerrainBase->GenUniformGrid2D(heightfield.data(),
+                                    chunkPosBlocksXZ_WS.x, // x
+                                    chunkPosBlocksXZ_WS.y, // z
+                                    chunkSizeXZ,
+                                    chunkSizeXZ,
+                                    1.f,
+                                    1.f,
+                                    91231205);
 
     static constexpr uint maxCaveHeight = 128;
     std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
@@ -190,13 +144,20 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
-            const uint colIdx = blockZ * chunkSizeXZ + blockX;
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            const uint height = heightfield[colIdx];
-            const TopBlocks& topBlocks = Biomes::getBiomeData(columnBiomes[colIdx]).topBlocks;
+            const BiomeNoise biomeNoise = {
+                .temperature = biomeNoiseArray[0 * chunkSizeXZSquare + columnIdx],
+                .humidity = biomeNoiseArray[1 * chunkSizeXZSquare + columnIdx],
+            };
+            const Biome biome = Biomes::getBiome(biomeNoise);
+            const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
-            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
-            uint caveIdx = maxCaveHeight * (blockX + chunkSizeXZ * blockZ) + 1;
+            const uint height = heightfield[columnIdx];
+            const TopBlocks& topBlocks = biomeData.topBlocks;
+
+            uint blockIdx = columnIdx * chunkSizeY;
+            uint caveIdx = maxCaveHeight * columnIdx + 1;
 
             blocks[blockIdx++] = Block::BEDROCK;
 

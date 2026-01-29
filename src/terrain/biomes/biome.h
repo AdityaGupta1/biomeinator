@@ -24,19 +24,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 inline constexpr uint32_t numClosestBiomes = 4;
 
-struct ClimateVector
+struct BiomeNoise
 {
     float temperature;
-    float precipitation;
     float humidity;
-    float altitude;
 
-    float distance2(const ClimateVector& other) const;
+    float distance2(const BiomeNoise& other) const;
 };
 
 enum class Biome : uint8_t
 {
     PLAINS,
+    SAVANNA,
     DESERT,
     FOREST,
     MOUNTAINS,
@@ -54,8 +53,7 @@ struct TopBlocks
 
 struct BiomeData
 {
-    ClimateVector climateVec;
-    FastNoise::SmartNode<> heightFn;
+    BiomeNoise biomeNoise;
     TopBlocks topBlocks;
 };
 
@@ -72,6 +70,6 @@ void init();
 
 const BiomeData& getBiomeData(Biome biome);
 
-void getBiomeWeights(const ClimateVector& climateVec, BiomeWeight* biomeWeights);
+Biome getBiome(const BiomeNoise& biomeNoise);
 
 } // namespace Biomes
