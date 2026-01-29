@@ -120,19 +120,6 @@ static inline void fillNoiseArray(std::vector<float>& data, const FN::SmartNode<
     fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 192350424);
 }
 
-// TODO: make a generic spline interpolation function/class
-static inline float peakNoiseSpline(float t)
-{
-    if (t < 0.8f)
-    {
-        return t * 0.5f;
-    }
-    else
-    {
-        return 0.4f + (t - 0.8f) * 3.f;
-    }
-}
-
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
     std::vector<float> temperatureNoise(chunkSizeXZSquare); // TODO: pass in preallocated memory for noise
