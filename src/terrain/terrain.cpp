@@ -296,7 +296,6 @@ void update(ToFreeList& toFreeList)
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
 #endif
 
-
         thisFrameTasks.clear();
     }
 
