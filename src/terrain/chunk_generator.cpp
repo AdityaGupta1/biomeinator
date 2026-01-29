@@ -165,8 +165,8 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            // TODO: keep track of top blocks (those with air on top) for placing top/mid blocks
-
+            uint topBlockY = 0;
+            bool wasSolid = true;
             for (uint y = 1; y < chunkSizeY; ++y)
             {
                 Block block = Block::AIR;
@@ -178,10 +178,10 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                     surfaceVal *= 2.0f;
                 }
 
-                bool isSolid = (terrainNoise[blockIdx] < surfaceVal);
-                if (isSolid)
+                bool isInTerrain = (terrainNoise[blockIdx] < surfaceVal);
+                bool isCave = false;
+                if (isInTerrain)
                 {
-                    bool isCave = false;
                     if (y < maxCaveHeight)
                     {
                         const float caveSurfaceMixFactor =
@@ -195,29 +195,38 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
 
                         block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
-
-                        //if (y < height - 5)
-                        //{
-                        //    block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
-                        //}
-                        //else if (y < height - 1)
-                        //{
-                        //    block = topBlocks.mid;
-                        //}
-                        //else
-                        //{
-                        //    block = topBlocks.top;
-                        //}
                     }
                 }
 
                 blocks[blockIdx] = block;
+
+                const bool isSolid = (block != Block::AIR);
+                if (wasSolid && !isSolid && !isCave)
+                {
+                    topBlockY = y - 1;
+                }
+                wasSolid = isSolid;
             }
 
-            //if (rand1(uvec2(blockPosXZ_WS)) < 0.005f && height < chunkSizeY && blocks[blockIdx - 1] != Block::AIR)
-            //{
-            //    blocks[blockIdx++] = Block::LAMP;
-            //}
+            for (uint y = topBlockY; y > topBlockY - 5; --y)
+            {
+                const uint blockIdx = baseBlockIdx + y;
+                const Block prevBlock = blocks[blockIdx];
+                if (prevBlock == Block::AIR || prevBlock == Block::BEDROCK)
+                {
+                    break;
+                }
+
+                const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                blocks[blockIdx] = newBlock;
+            }
+
+            const uint candidateLampPosY = topBlockY + 1;
+            const ivec3 candidateLampPos = ivec3(blockPosXZ_WS.x, candidateLampPosY, blockPosXZ_WS.y /*z*/);
+            if (candidateLampPosY < chunkSizeY && rand1(uvec3(candidateLampPos)) < 0.005f)
+            {
+                blocks[baseBlockIdx + candidateLampPosY] = Block::LAMP;
+            }
         }
     }
 }
