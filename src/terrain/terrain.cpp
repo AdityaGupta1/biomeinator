@@ -20,12 +20,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "block.h"
 #include "chunk.h"
-#include "rng.h"
+#include "chunk_generator.h"
 #include "terrain_materials.h"
+#include "biomes/biome.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 #include "util/glm_util.h"
+#include "util/rng.h"
 
 #include <algorithm>
 #include <deque>
@@ -36,6 +38,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RENDER_DISTANCE 20
 #define CREATE_BLAS_DISTANCE (RENDER_DISTANCE + 1)
 #define CREATE_BLOCKS_DISTANCE (CREATE_BLAS_DISTANCE + 1)
+
+#define DEBUG_SINGLE_THREAD 0
 
 namespace Terrain
 {
@@ -62,9 +66,11 @@ static ThreadPool threadPool;
 void init(Scene* scene)
 {
     Terrain::scene = scene;
-
     TerrainMaterials::init(scene);
+
     Blocks::init();
+    Biomes::init();
+    ChunkGenerator::init();
 
     threadPool.init();
 }
@@ -281,7 +287,15 @@ void update(ToFreeList& toFreeList)
             tasksToEnqueue.pop_front();
         }
 
+#if DEBUG_SINGLE_THREAD
+        for (const Task& task : thisFrameTasks)
+        {
+            task.fn(task.chunkPtr);
+        }
+#else
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+#endif
+
         thisFrameTasks.clear();
     }
 

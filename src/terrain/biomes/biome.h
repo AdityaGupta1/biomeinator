@@ -18,53 +18,56 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <cstdint>
-#include <glm/glm.hpp>
+#include "../block.h"
 
-using BlockId = uint16_t;
+inline constexpr uint32_t numClosestBiomes = 4;
 
-enum class Block : BlockId
+struct BiomeNoise
 {
-    AIR = 0,
-    BEDROCK,
-    STONE,
-    LAMP,
-    DIRT,
-    GRASS,
-    SAND,
-    SANDSTONE,
-    SNOW,
-    SNOWY_GRASS,
-    ICE,
+    float temperature;
+    float humidity;
+
+    float distance2(const BiomeNoise& other) const;
+};
+
+enum class Biome : uint8_t
+{
+    PLAINS,
+    SAVANNA,
+    DESERT,
+    FOREST,
+    MOUNTAINS,
+    TUNDRA,
+    ICE_FIELDS,
 
     COUNT
 };
 
-struct BlockUvs
+struct TopBlocks
 {
-private:
-    glm::uvec2 uvs[3]; // integer position in block texture grid
-                       // order = side, top, bottom
-
-public:
-    BlockUvs() = default;
-    BlockUvs(glm::uvec2 all);
-    BlockUvs(glm::uvec2 top, glm::uvec2 side, glm::uvec2 bottom);
-
-    const glm::uvec2& operator[](uint32_t idx) const;
+    Block top{ Block::GRASS };
+    Block mid{ Block::DIRT };
 };
 
-struct BlockData
+struct BiomeData
 {
-    BlockUvs uvs;
-    bool emitsLight{ false };
+    BiomeNoise biomeNoise;
+    TopBlocks topBlocks;
 };
 
-namespace Blocks
+struct BiomeWeight
+{
+    Biome biome;
+    float weight;
+};
+
+namespace Biomes
 {
 
 void init();
 
-const BlockData& getBlockData(Block block);
+const BiomeData& getBiomeData(Biome biome);
 
-} // namespace Blocks
+Biome getClosestBiome(const BiomeNoise& biomeNoise);
+
+} // namespace Biomes

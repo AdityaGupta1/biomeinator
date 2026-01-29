@@ -19,9 +19,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk_generator.h"
 
 #include "chunk.h"
-#include "rng.h"
+#include "biomes/biome.h"
+#include "util/rng.h"
 
-#include <array>
+#include <vector>
 
 #include <FastNoise/FastNoise.h>
 
@@ -31,34 +32,85 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
-void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
+static FN::SmartNode<FN::Generator> fnTemperature;
+static FN::SmartNode<FN::Generator> fnHumidity;
+inline constexpr float biomeNoiseScale = 400.f;
+
+static FN::SmartNode<FN::Generator> fnTerrainBase;
+
+void init()
 {
-    std::vector<float> heightfield(chunkSizeXZ * chunkSizeXZ);
     {
         auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetScale(200.f);
+        fnSimplex->SetSeedOffset(5689481209);
+        fnSimplex->SetScale(2.5f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.06f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(2);
+
+        fnTemperature = fnFractal;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(680199230);
+        fnSimplex->SetScale(1.5f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnHumidity = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(210393129);
+        fnSimplex->SetScale(200.0f);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnSimplex);
         fnFractal->SetOctaveCount(4);
         auto fnMul = FN::New<FN::Multiply>();
         fnMul->SetLHS(fnFractal);
-        fnMul->SetRHS(25.f);
+        fnMul->SetRHS(15.0f);
         auto fnAdd = FN::New<FN::Add>();
         fnAdd->SetLHS(fnMul);
-        fnAdd->SetRHS(110.f);
+        fnAdd->SetRHS(130.0f);
 
-        fnAdd->GenUniformGrid2D(heightfield.data(),
-                                chunkPosBlocksXZ_WS.x, // x
-                                chunkPosBlocksXZ_WS.y, // z
-                                chunkSizeXZ,
-                                chunkSizeXZ,
-                                1.f,
-                                1.f,
-                                91231205);
+        fnTerrainBase = fnAdd;
     }
+}
+
+static inline void fillNoiseArray(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
+{
+    ASSERT(data.size() >= chunkSizeXZSquare);
+    fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 192350424);
+}
+
+void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
+{
+    std::vector<float> temperatureNoise(chunkSizeXZSquare);
+    fillNoiseArray(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
+
+    std::vector<float> humidityNoise(chunkSizeXZSquare);
+    fillNoiseArray(humidityNoise, fnTemperature, chunkPosBlocksXZ_WS);
+
+    std::vector<float> heightfield(chunkSizeXZSquare);
+    fnTerrainBase->GenUniformGrid2D(heightfield.data(),
+                                    chunkPosBlocksXZ_WS.x, // x
+                                    chunkPosBlocksXZ_WS.y, // z
+                                    chunkSizeXZ,
+                                    chunkSizeXZ,
+                                    1.f,
+                                    1.f,
+                                    91231205);
 
     static constexpr uint maxCaveHeight = 128;
-    std::vector<float> caveNoise(chunkSizeXZ * maxCaveHeight * chunkSizeXZ);
+    std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
     {
         auto fnCellular = FN::New<FN::CellularDistance>();
         fnCellular->SetDistanceIndex0(2);
@@ -90,15 +142,25 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                                 559234912);
     }
 
-    for (uint z = 0; z < chunkSizeXZ; ++z)
+    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
-        for (uint x = 0; x < chunkSizeXZ; ++x)
+        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
-            const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(x, z);
-            const uint height = heightfield[z * chunkSizeXZ + x];
+            const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(x, z));
-            uint caveIdx = maxCaveHeight * (x + chunkSizeXZ * z) + 1;
+            const BiomeNoise biomeNoise = {
+                .temperature = temperatureNoise[columnIdx],
+                .humidity = humidityNoise[columnIdx],
+            };
+            const Biome biome = Biomes::getClosestBiome(biomeNoise);
+            const BiomeData& biomeData = Biomes::getBiomeData(biome);
+
+            const uint height = heightfield[columnIdx];
+            const TopBlocks& topBlocks = biomeData.topBlocks;
+
+            uint blockIdx = columnIdx * chunkSizeY;
+            uint caveIdx = maxCaveHeight * columnIdx + 1;
 
             blocks[blockIdx++] = Block::BEDROCK;
 
@@ -126,11 +188,11 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                     }
                     else if (y < height - 1)
                     {
-                        block = Block::DIRT;
+                        block = topBlocks.mid;
                     }
                     else
                     {
-                        block = Block::GRASS;
+                        block = topBlocks.top;
                     }
                 }
 
