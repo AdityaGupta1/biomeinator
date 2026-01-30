@@ -162,8 +162,8 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             const TopBlocks& topBlocks = biomeData.topBlocks;
 
-            uint baseBlockIdx = chunkSizeY * columnIdx;
-            uint baseCaveIdx = maxCaveHeight * columnIdx;
+            const uint baseBlockIdx = chunkSizeY * columnIdx;
+            const uint baseCaveIdx = maxCaveHeight * columnIdx;
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
@@ -203,7 +203,6 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
                     if (!isCave)
                     {
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-
                         block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
                     }
                 }
@@ -221,21 +220,14 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
             for (uint y = topBlockY; y > topBlockY - 5; --y)
             {
                 const uint blockIdx = baseBlockIdx + y;
-                const Block prevBlock = blocks[blockIdx];
-                if (prevBlock == Block::AIR || prevBlock == Block::BEDROCK)
+                Block& block = blocks[blockIdx];
+                if (block == Block::AIR || block == Block::BEDROCK)
                 {
                     break;
                 }
 
                 const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
-                blocks[blockIdx] = newBlock;
-            }
-
-            const uint candidateLampPosY = topBlockY + 1;
-            const ivec3 candidateLampPos = ivec3(blockPosXZ_WS.x, candidateLampPosY, blockPosXZ_WS.y /*z*/);
-            if (candidateLampPosY < chunkSizeY && rand1(uvec3(candidateLampPos)) < 0.005f)
-            {
-                blocks[baseBlockIdx + candidateLampPosY] = Block::LAMP;
+                block = newBlock;
             }
         }
     }
