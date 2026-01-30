@@ -99,7 +99,6 @@ private:
     Region* const region;
 
     std::vector<Block> blocks{};
-    std::vector<ChunkSegment> allSegments{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::array<Chunk*, 4> neighbors{};
@@ -115,7 +114,10 @@ private:
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
     bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
-    bool isSegmentSurroundedBySolid(const glm::uvec3 startPos, const glm::uvec3 endPos, const glm::uvec3 chunkSegmentPos);
+    bool isSegmentSurroundedBySolid(const glm::uvec3 startPos,
+                                    const glm::uvec3 endPos,
+                                    const glm::uvec3 chunkSegmentPos,
+                                    const ChunkSegment* const prevSegments);
 
     void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
 
@@ -125,7 +127,7 @@ public:
     void setNeighbors(bool createNeighbors);
 
     void generateBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
-    void generateSegments();
+    void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);
     void createInstance();

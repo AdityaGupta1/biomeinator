@@ -53,7 +53,7 @@ static void task_generateBlocks(Chunk* chunk, ThreadMemoryAllocator& threadMemor
 
 static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateSegments();
+    chunk->generateSegments(threadMemoryAlloc);
 }
 
 static void task_createInstance(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
