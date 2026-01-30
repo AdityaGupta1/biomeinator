@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "settings_manager.h"
 #include "biomes/biome.h"
+#include "multithreading/thread_memory_allocator.h"
 #include "util/rng.h"
 
 #include <vector>
@@ -129,30 +130,28 @@ void init()
     }
 }
 
-static inline void fillNoiseArray2D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
+static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
 {
-    ASSERT(data.size() >= chunkSizeXZSquare);
-    fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid2D(data, pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
 }
 
-static inline void fillNoiseArray3D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
+static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
 {
-    ASSERT(data.size() >= chunkSizeXZSquare * height);
-    fn->GenUniformGrid3D(data.data(), 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid3D(data, 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
 }
 
-void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
+void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    std::vector<float> temperatureNoise(chunkSizeXZSquare);
-    std::vector<float> humidityNoise(chunkSizeXZSquare);
-    std::vector<float> peakNoise(chunkSizeXZSquare);
+    float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
-    std::vector<float> terrainNoise(numChunkBlocks);
+    float* terrainNoise = threadMemoryAlloc.request<float>(numChunkBlocks);
     constexpr uint maxCaveHeight = 160;
-    std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
+    float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
     fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 

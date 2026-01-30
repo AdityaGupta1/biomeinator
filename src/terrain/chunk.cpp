@@ -93,13 +93,13 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
     ++neighborChunk->numNeighborsSet;
 }
 
-void Chunk::generateBlocks()
+void Chunk::generateBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     this->blocks.resize(numChunkBlocks);
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    ChunkGenerator::fillBlocks(chunkBlockPosXZ_WS, this->blocks);
+    ChunkGenerator::fillBlocks(chunkBlockPosXZ_WS, this->blocks, threadMemoryAlloc);
 
     this->advanceState(ChunkState::HAS_BLOCKS);
 

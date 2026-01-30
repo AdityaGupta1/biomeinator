@@ -46,17 +46,17 @@ namespace Terrain
 
 static Scene* scene;
 
-static void task_generateBlocks(Chunk* chunk)
+static void task_generateBlocks(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateBlocks();
+    chunk->generateBlocks(threadMemoryAlloc);
 }
 
-static void task_generateSegments(Chunk* chunk)
+static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->generateSegments();
 }
 
-static void task_createInstance(Chunk* chunk)
+static void task_createInstance(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->createInstance();
 }

@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "thread_pool.h"
 
+#include "thread_memory_allocator.h"
+
 #define MAX_NUM_LOCAL_TASKS 4
 
 ThreadPool::ThreadPool()
@@ -35,6 +37,7 @@ void ThreadPool::init(uint32_t numWorkers)
 
 void ThreadPool::worker()
 {
+    ThreadMemoryAllocator threadMemoryAlloc;
     Task localTasks[MAX_NUM_LOCAL_TASKS];
 
     while (true)
@@ -59,7 +62,8 @@ void ThreadPool::worker()
 
         for (int i = 0; i < numLocalTasks; ++i)
         {
-            localTasks[i].fn(localTasks[i].chunkPtr);
+            localTasks[i].func(localTasks[i].chunkPtr, threadMemoryAlloc);
+            threadMemoryAlloc.clear();
         }
     }
 }

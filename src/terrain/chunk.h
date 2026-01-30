@@ -90,6 +90,7 @@ inline constexpr uint32_t numChunkSegmentsY = chunkSizeY / chunkSegmentSizeY;
 inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmentsY * numChunkSegmentsXZ;
 
 class Region;
+class ThreadMemoryAllocator;
 
 class Chunk
 {
@@ -123,7 +124,7 @@ public:
 
     void setNeighbors(bool createNeighbors);
 
-    void generateBlocks();
+    void generateBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
     void generateSegments();
 
     void setInstance(Instance* instance);
