@@ -84,7 +84,9 @@ struct IVec2Hash
 };
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
-static std::deque<Chunk*> chunksToCreateInstance;
+
+static std::deque<Chunk*> chunksToGenBlocks;
+static std::deque<Chunk*> chunksToGenGeometry;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
@@ -115,6 +117,7 @@ void setDirty()
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
+inline constexpr uint32_t maxNumGenerateBlocksTasksPerFrame = 4;
 
 void update(ToFreeList& toFreeList)
 {
@@ -150,6 +153,8 @@ void update(ToFreeList& toFreeList)
             glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(regionSideLength)));
         const glm::ivec2 maxRegionPos =
             glm::ivec2(glm::floor(glm::vec2(maxChunkPos) / static_cast<float>(regionSideLength)));
+
+        uint32_t numGenerateBlocksTasksThisFrame = 0;
 
         for (int regionZ = minRegionPos.y; regionZ <= maxRegionPos.y; ++regionZ)
         {
@@ -224,7 +229,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_BLOCKS)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_BLOCKS);
-                                tasksToEnqueue.push_back({ task_generateBlocks, chunk });
+                                chunksToGenBlocks.push_back(chunk);
                             }
                             else if (chunkState == ChunkState::NEEDS_SEGMENTS)
                             {
@@ -241,7 +246,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_GEOMETRY)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
-                                chunksToCreateInstance.push_back(chunk);
+                                chunksToGenGeometry.push_back(chunk);
                             }
                         }
                         else if (inLastCreateBlasDistance)
@@ -267,10 +272,20 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    while (!chunksToCreateInstance.empty())
+    const uint32_t numGenerateBlocksTasksThisFrame =
+        std::min(maxNumGenerateBlocksTasksPerFrame, static_cast<uint32_t>(chunksToGenBlocks.size()));
+    for (int i = 0; i < numGenerateBlocksTasksThisFrame; ++i)
     {
-        Chunk* chunk = chunksToCreateInstance.front();
-        chunksToCreateInstance.pop_front();
+        Chunk* chunk = chunksToGenBlocks.front();
+        chunksToGenBlocks.pop_front();
+
+        tasksToEnqueue.push_back({ task_generateBlocks, chunk });
+    }
+
+    while (!chunksToGenGeometry.empty())
+    {
+        Chunk* chunk = chunksToGenGeometry.front();
+        chunksToGenGeometry.pop_front();
 
         Instance* instance = scene->requestNewInstance(toFreeList);
         chunk->setInstance(instance);
