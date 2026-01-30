@@ -144,19 +144,16 @@ static inline void fillNoiseArray3D(std::vector<float>& data, const FN::SmartNod
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
     std::vector<float> temperatureNoise(chunkSizeXZSquare);
-    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
-
     std::vector<float> humidityNoise(chunkSizeXZSquare);
-    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
-
     std::vector<float> peakNoise(chunkSizeXZSquare);
+    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
     std::vector<float> terrainNoise(numChunkBlocks);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
-
     constexpr uint maxCaveHeight = 160;
     std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
