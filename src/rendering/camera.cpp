@@ -29,7 +29,7 @@ void Camera::init(float defaultFovYRadians)
 {
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        this->params.pos_WS = { 0, 140.f, 0 };
+        this->params.pos_WS = { 0, 196.f, 0 };
     }
     else
     {

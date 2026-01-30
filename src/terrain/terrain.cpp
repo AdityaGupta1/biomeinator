@@ -37,7 +37,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define DEBUG_SINGLE_THREAD 0
 
-inline constexpr int renderDistance = 20;
+inline constexpr int renderDistance = 24;
 inline constexpr int createBlasDistance = renderDistance + 1;
 inline constexpr int createBlocksDistance = createBlasDistance + 1;
 

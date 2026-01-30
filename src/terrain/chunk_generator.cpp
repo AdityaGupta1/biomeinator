@@ -80,8 +80,17 @@ void init()
         fnSimplex->SetScale(2.5f * biomeNoiseScale);
         fnSimplex->SetOutputMin(0.0f);
         fnSimplex->SetOutputMax(1.0f);
+        auto fnFractalRidged = FN::New<FN::FractalRidged>();
+        fnFractalRidged->SetSource(fnSimplex);
+        fnFractalRidged->SetOctaveCount(5);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnFractalRidged);
+        fnAdd->SetRHS(1.f);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnAdd);
+        fnMul->SetRHS(0.5f);
 
-        fnPeak = fnSimplex;
+        fnPeak = fnMul;
     }
 
     {
@@ -135,19 +144,16 @@ static inline void fillNoiseArray3D(std::vector<float>& data, const FN::SmartNod
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
     std::vector<float> temperatureNoise(chunkSizeXZSquare);
-    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
-
     std::vector<float> humidityNoise(chunkSizeXZSquare);
-    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
-
     std::vector<float> peakNoise(chunkSizeXZSquare);
+    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
     std::vector<float> terrainNoise(numChunkBlocks);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
-
     constexpr uint maxCaveHeight = 160;
     std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -172,7 +178,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 5.f) * 150.f;
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 165.f;
             const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
 
             uint topBlockY = 0;
