@@ -94,6 +94,7 @@ void init()
 
     {
         auto fnCellular = FN::New<FN::CellularDistance>();
+        fnCellular->SetSeedOffset(86839821);
         fnCellular->SetDistanceIndex0(2);
         fnCellular->SetDistanceIndex1(0);
         fnCellular->SetReturnType(FN::CellularDistance::ReturnType::Index0Div1);
@@ -114,49 +115,35 @@ void init()
     }
 }
 
-static inline void fillNoiseArray(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
+static inline void fillNoiseArray2D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
 {
     ASSERT(data.size() >= chunkSizeXZSquare);
     fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 192350424);
 }
 
+static inline void fillNoiseArray3D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
+{
+    ASSERT(data.size() >= chunkSizeXZSquare * height);
+    fn->GenUniformGrid3D(data.data(), 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, 192350424);
+}
+
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 {
-    std::vector<float> temperatureNoise(chunkSizeXZSquare); // TODO: pass in preallocated memory for noise
-    fillNoiseArray(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
+    std::vector<float> temperatureNoise(chunkSizeXZSquare);
+    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
 
     std::vector<float> humidityNoise(chunkSizeXZSquare);
-    fillNoiseArray(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
 
     std::vector<float> peakNoise(chunkSizeXZSquare);
-    fillNoiseArray(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
     std::vector<float> terrainNoise(numChunkBlocks);
-    fnTerrainBase->GenUniformGrid3D(terrainNoise.data(),
-                                    0, // y
-                                    chunkPosBlocksXZ_WS.x, // x
-                                    chunkPosBlocksXZ_WS.y, // z
-                                    chunkSizeY,
-                                    chunkSizeXZ,
-                                    chunkSizeXZ,
-                                    1.f,
-                                    1.f,
-                                    1.f,
-                                    91231205);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
 
-    static constexpr uint maxCaveHeight = 160;
+    constexpr uint maxCaveHeight = 160;
     std::vector<float> caveNoise(chunkSizeXZSquare * maxCaveHeight);
-    fnCaves->GenUniformGrid3D(caveNoise.data(),
-                              0, // y
-                              chunkPosBlocksXZ_WS.x, // x
-                              chunkPosBlocksXZ_WS.y, // z
-                              maxCaveHeight,
-                              chunkSizeXZ,
-                              chunkSizeXZ,
-                              1.f,
-                              1.f,
-                              1.f,
-                              559234912);
+    fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
