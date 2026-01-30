@@ -80,8 +80,17 @@ void init()
         fnSimplex->SetScale(2.5f * biomeNoiseScale);
         fnSimplex->SetOutputMin(0.0f);
         fnSimplex->SetOutputMax(1.0f);
+        auto fnFractalRidged = FN::New<FN::FractalRidged>();
+        fnFractalRidged->SetSource(fnSimplex);
+        fnFractalRidged->SetOctaveCount(5);
+        auto fnAdd = FN::New<FN::Add>();
+        fnAdd->SetLHS(fnFractalRidged);
+        fnAdd->SetRHS(1.f);
+        auto fnMul = FN::New<FN::Multiply>();
+        fnMul->SetLHS(fnAdd);
+        fnMul->SetRHS(0.5f);
 
-        fnPeak = fnSimplex;
+        fnPeak = fnMul;
     }
 
     {
@@ -172,7 +181,7 @@ void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 5.f) * 150.f;
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 165.f;
             const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
 
             uint topBlockY = 0;
