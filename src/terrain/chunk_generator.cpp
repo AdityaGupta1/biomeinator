@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk_generator.h"
 
 #include "chunk.h"
+#include "settings_manager.h"
 #include "biomes/biome.h"
 #include "util/rng.h"
 
@@ -32,6 +33,8 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
+static uint32_t worldSeed;
+
 static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
@@ -42,6 +45,8 @@ static FN::SmartNode<FN::Generator> fnCaves;
 
 void init()
 {
+    worldSeed = SettingsManager::getAsUint("worldSeed");
+
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(5689481209);
@@ -118,13 +123,13 @@ void init()
 static inline void fillNoiseArray2D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
 {
     ASSERT(data.size() >= chunkSizeXZSquare);
-    fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 192350424);
+    fn->GenUniformGrid2D(data.data(), pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
 }
 
 static inline void fillNoiseArray3D(std::vector<float>& data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
 {
     ASSERT(data.size() >= chunkSizeXZSquare * height);
-    fn->GenUniformGrid3D(data.data(), 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, 192350424);
+    fn->GenUniformGrid3D(data.data(), 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
 }
 
 void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)

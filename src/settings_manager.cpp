@@ -53,6 +53,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("useVsync", "Enable VSync", cxxopts::value<bool>()->default_value("true"));
     optionAdder("lockCamera", "Lock camera (disable player input)", cxxopts::value<bool>()->default_value("false"));
     optionAdder("voxelMode", "Enable voxel mode", cxxopts::value<bool>()->default_value("false"));
+    optionAdder("worldSeed", "World seed", cxxopts::value<uint32_t>()->default_value("1738"));
     optionAdder("movementSpeed", "Movement speed", cxxopts::value<float>()->default_value("12"));
     optionAdder("fullscreen", "Start in fullscreen mode", cxxopts::value<bool>()->default_value("false"));
     optionAdder("useWaitableSwapChain", "Use waitable swap chain", cxxopts::value<bool>()->default_value("true"));
@@ -105,6 +106,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);
     COPY_SETTING("voxelMode", bool);
+    COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);
     COPY_SETTING("fullscreen", bool);
     COPY_SETTING("useWaitableSwapChain", bool);
