@@ -40,16 +40,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 inline constexpr int renderDistance = 30;
 inline constexpr int createBlasDistance = renderDistance + 1;
-inline constexpr int generateTerrainAndStructuresDistance = createBlasDistance + structureMaxChunkRadius;
+inline constexpr int generateTerrainDistance = createBlasDistance + structureMaxChunkRadius;
 
 namespace Terrain
 {
 
 static Scene* scene;
 
-static void task_generateTerrainAndStructures(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateTerrainAndStructures(threadMemoryAlloc);
+    chunk->generateTerrain(threadMemoryAlloc);
 }
 
 static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
@@ -141,8 +141,8 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - generateTerrainAndStructuresDistance;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + generateTerrainAndStructuresDistance;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - generateTerrainDistance;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + generateTerrainDistance;
         const glm::ivec2 minLastChunkPos = lastChunkPos - createBlasDistance;
         const glm::ivec2 maxLastChunkPos = lastChunkPos + createBlasDistance;
 
@@ -210,12 +210,12 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
-                        const bool inCurrentGenerateTerrainAndStructuresDistance = distToCurrentChunk <= generateTerrainAndStructuresDistance;
+                        const bool inCurrentgenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
 
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= createBlasDistance;
 
-                        if (!inCurrentGenerateTerrainAndStructuresDistance && !inLastCreateBlasDistance)
+                        if (!inCurrentgenerateTerrainDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
@@ -228,7 +228,7 @@ void update(ToFreeList& toFreeList)
 
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentGenerateTerrainAndStructuresDistance)
+                        if (inCurrentgenerateTerrainDistance)
                         {
                             if (chunkState == ChunkState::NEEDS_TERRAIN)
                             {
@@ -283,7 +283,7 @@ void update(ToFreeList& toFreeList)
         Chunk* chunk = chunksToGenerateTerrain.front();
         chunksToGenerateTerrain.pop_front();
 
-        tasksToEnqueue.push_back({ task_generateTerrainAndStructures, chunk });
+        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
     }
 
     while (!chunksToGenerateGeometry.empty())

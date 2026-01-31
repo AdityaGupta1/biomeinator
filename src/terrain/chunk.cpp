@@ -94,7 +94,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
     ++neighborChunk->numNeighborsSet;
 }
 
-void Chunk::generateTerrainAndStructures(ThreadMemoryAllocator& threadMemoryAlloc)
+void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     this->blocks.resize(numChunkBlocks);
 
@@ -102,7 +102,13 @@ void Chunk::generateTerrainAndStructures(ThreadMemoryAllocator& threadMemoryAllo
 
     ChunkGenerator::fillTerrainBlocks(chunkBlockPosXZ_WS, this->blocks, threadMemoryAlloc);
 
-    this->advanceState(ChunkState::HAS_TERRAIN);
+    // TODO: create structures
+
+    this->advanceState(ChunkState::HAS_ALL_BLOCKS); // TODO: set state to HAS_TERRAIN instead
+
+    // TODO: check radius for structures
+
+    // TODO: move rest of this function to after filling structures
 
     bool setTerrainDirty = false;
 
@@ -115,7 +121,7 @@ void Chunk::generateTerrainAndStructures(ThreadMemoryAllocator& threadMemoryAllo
 
         const uint neighborNumNeighborsWithBlocks =
             neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_TERRAIN)
+        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_ALL_BLOCKS)
         {
             neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS);
             setTerrainDirty = true;
