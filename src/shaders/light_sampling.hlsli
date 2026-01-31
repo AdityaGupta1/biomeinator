@@ -39,7 +39,7 @@ void getLightNormalAndArea(const AreaLight light, out float3 lightNor_WS, out fl
     area = length(crossVec) * 0.5f;
 }
 
-AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomSampler rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
+AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerator rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
 {
     lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
@@ -95,7 +95,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     return true;
 }
 
-DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
+DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;

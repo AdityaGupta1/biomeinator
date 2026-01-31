@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "math.hlsli"
 #include "rng.hlsli"
 
-float3 sampleHemisphereCosineWeighted(const float3 surfNor_WS, inout RandomSampler rng)
+float3 sampleHemisphereCosineWeighted(const float3 surfNor_WS, inout RandomNumberGenerator rng)
 {
     const float2 rndSample = rng.nextFloat2();
     const float r = sqrt(rndSample.x);
@@ -35,7 +35,7 @@ float hemisphereCosineWeightedPdf(const float3 wi_WS, const float3 surfNor_WS)
     return max(cosTheta(wi_WS, surfNor_WS), 0.f) * M_INV_PI;
 }
 
-float3 sampleSphericalCapUniform(const float3 axis_WS, const float minCosTheta, inout RandomSampler rng)
+float3 sampleSphericalCapUniform(const float3 axis_WS, const float minCosTheta, inout RandomNumberGenerator rng)
 {
     const float2 rndSample = rng.nextFloat2();
 

@@ -32,7 +32,7 @@ struct Payload
     float3 pathColor;
     uint materialIdx;
 
-    RandomSampler rng;
+    RandomNumberGenerator rng;
     uint pad0;
     uint pad1;
     uint pad2;
