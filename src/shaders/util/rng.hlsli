@@ -60,7 +60,7 @@ struct RandomNumberGenerator
 RandomNumberGenerator initRng(uint seed)
 {
     RandomNumberGenerator rng;
-    rng.seed = hash(seed);
+    rng.seed = seed;
     return rng;
 }
 
