@@ -52,7 +52,7 @@ static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 struc
     }
 
     const ivec3 leavesMinPos_CS = glm::max(trunkTopPos_CS - ivec3(2, 2, 2), ivec3(0, 0, 0));
-    const ivec3 leavesMaxPos_CS = glm::min(trunkTopPos_CS + ivec3(2, 2, 2), maxPos_CS - 1);
+    const ivec3 leavesMaxPos_CS = glm::min(trunkTopPos_CS + ivec3(2, 2, 2), chunkSizeVec - 1);
     if (all(lessThanEqual(leavesMinPos_CS, leavesMaxPos_CS)))
     {
         for (int blockZ = leavesMinPos_CS.z; blockZ <= leavesMaxPos_CS.z; ++blockZ)

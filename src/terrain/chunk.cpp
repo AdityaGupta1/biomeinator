@@ -163,9 +163,25 @@ void Chunk::checkStructureNeighbors()
 
 void Chunk::fillStructures()
 {
+    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    const ivec3 chunkMin_WS(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y);
+
     for (Chunk* structureNeighbor : this->structureNeighbors)
     {
-        this->fillStructureBlocks(structureNeighbor->structures.data(), structureNeighbor->structures.size());
+        for (const Structure& structure : structureNeighbor->structures)
+        {
+            const StructureBounds& bounds = Structures::getStructureBounds(structure.type);
+            const ivec3 structurePos_CS = structure.pos_WS - chunkMin_WS;
+            const ivec3 structureMin_CS = structurePos_CS + bounds.minDiff;
+            const ivec3 structureMax_CS = structurePos_CS + bounds.maxDiff;
+
+            if (any(lessThan(structureMin_CS, ivec3(0, 0, 0))) || any(greaterThanEqual(structureMax_CS, chunkSizeVec)))
+            {
+                continue;
+            }
+
+            this->fillStructureBlocks(&structure, 1);
+        }
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
