@@ -45,6 +45,8 @@ struct StructureBounds
     glm::ivec3 maxDiff;
 };
 
+inline constexpr uint32_t structureMaxChunkRadius = 1;
+
 namespace Structures
 {
 

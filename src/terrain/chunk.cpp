@@ -94,7 +94,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
     ++neighborChunk->numNeighborsSet;
 }
 
-void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
+void Chunk::generateTerrainAndStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     this->blocks.resize(numChunkBlocks);
 

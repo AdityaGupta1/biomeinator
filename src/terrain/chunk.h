@@ -126,7 +126,7 @@ public:
 
     void setNeighbors(bool createNeighbors);
 
-    void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    void generateTerrainAndStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);
