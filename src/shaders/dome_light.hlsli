@@ -74,7 +74,7 @@ struct DomeLightSample
     float pdf;
 };
 
-float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomSampler rng, out float pdf)
+float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
     float3 wi_WS;
 
@@ -92,7 +92,7 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomSampler r
     return wi_WS;
 }
 
-DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomSampler rng)
+DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomNumberGenerator rng)
 {
     DomeLightSample result;
 

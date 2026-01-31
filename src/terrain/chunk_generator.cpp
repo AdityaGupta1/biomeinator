@@ -215,7 +215,8 @@ void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
                     if (!isCave)
                     {
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                        block = rand1(uvec3(blockPos_WS)) < 0.02f ? Block::LAMP : Block::STONE;
+                        RandomNumberGenerator rng = initRng(blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                        block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
                     }
                 }
 

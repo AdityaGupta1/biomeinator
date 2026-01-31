@@ -137,7 +137,7 @@ BsdfSample sampleBsdf(
     const float2 uv,
     const float3 wo_WS,
     const float3 surfNor_WS,
-    inout RandomSampler rng)
+    inout RandomNumberGenerator rng)
 {
     BsdfSample result;
     result.bsdfValue = float3(0, 0, 0);

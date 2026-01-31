@@ -51,7 +51,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
                                           const float2 uv,
                                           const float3 wo_WS,
                                           const bool isFirstNonDeltaSurface,
-                                          inout RandomSampler rng,
+                                          inout RandomNumberGenerator rng,
                                           out bool isBsdfSample)
 {
     const uint numLightCandidates = isFirstNonDeltaSurface ? RIS_MAX_NUM_LIGHT_CANDIDATES : RIS_MIN_NUM_LIGHT_CANDIDATES;

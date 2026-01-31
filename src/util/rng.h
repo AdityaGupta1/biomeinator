@@ -33,17 +33,50 @@ inline uint32_t combinedHash(uint32_t seedA, uint32_t seedB)
     return hash(hash(seedA) + 0x9e3779b9 + (seedB << 6) + (seedB >> 2));
 }
 
-inline float rand1(uint32_t seed)
+struct RandomNumberGenerator
 {
-    return (hash(seed) & 0x00FFFFFF) / 16777216.f;
+    uint32_t seed;
+
+    uint32_t nextUint()
+    {
+        seed = hash(seed);
+        return seed;
+    }
+
+    float nextFloat()
+    {
+        return (nextUint() & 0x00FFFFFF) / 16777216.f;
+    }
+
+    glm::vec2 nextFloat2()
+    {
+        return glm::vec2(nextFloat(), nextFloat());
+    }
+
+    glm::vec3 nextFloat3()
+    {
+        return glm::vec3(nextFloat(), nextFloat(), nextFloat());
+    }
+};
+
+inline RandomNumberGenerator initRng(uint32_t seed)
+{
+    RandomNumberGenerator rng;
+    rng.seed = seed;
+    return rng;
 }
 
-inline float rand1(glm::uvec2 seed)
+inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2)
 {
-    return rand1(combinedHash(seed.x, seed.y));
+    return initRng(combinedHash(seed1, seed2));
 }
 
-inline float rand1(glm::uvec3 seed)
+inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2, uint32_t seed3)
 {
-    return rand1(combinedHash(seed.x, combinedHash(seed.y, seed.z)));
+    return initRng(combinedHash(seed1, combinedHash(seed2, seed3)));
+}
+
+inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2, uint32_t seed3, uint32_t seed4)
+{
+    return initRng(combinedHash(seed1, combinedHash(seed2, combinedHash(seed3, seed4))));
 }
