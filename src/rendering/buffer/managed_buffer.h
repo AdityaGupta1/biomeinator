@@ -34,10 +34,10 @@ private:
     ManagedBuffer* buffer;
 
 public:
-    uint32_t offsetBytes;
-    uint32_t sizeBytes;
+    size_t offsetBytes;
+    size_t sizeBytes;
 
-    ManagedBufferSection(ManagedBuffer* buffer, uint32_t offsetBytes, uint32_t sizeBytes);
+    ManagedBufferSection(ManagedBuffer* buffer, size_t offsetBytes, size_t sizeBytes);
     ManagedBufferSection();
 
     ManagedBuffer* getBuffer() const;
@@ -75,35 +75,35 @@ private:
 
     void* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
-    uint32_t bufferSizeBytes{ 0 };
+    size_t bufferSizeBytes{ 0 };
 
     uint32_t srvDescriptorIdx{ ~0u };
     D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
 
     struct FreeNode;
-    using OffsetMap = std::map<uint32_t, FreeNode>;
+    using OffsetMap = std::map<size_t, FreeNode>;
     using OffsetIter = OffsetMap::iterator;
-    using SizeMap = std::multimap<uint32_t, OffsetIter>;
+    using SizeMap = std::multimap<size_t, OffsetIter>;
     using SizeIter = SizeMap::iterator;
     struct FreeNode
     {
-        uint32_t sizeBytes;
+        size_t sizeBytes;
         SizeIter sizeIter;
     };
     OffsetMap freeByOffset;
     SizeMap freeBySize;
 
-    void insertFreeNode(uint32_t offsetBytes, uint32_t sizeBytes);
+    void insertFreeNode(size_t offsetBytes, size_t sizeBytes);
     void eraseFreeNode(OffsetIter offsetIter);
 
     void allocSrvDescriptor(ToFreeList* toFreeList);
 
-    void createBuffer(uint32_t sizeBytes);
+    void createBuffer(size_t sizeBytes);
 
     // resize() works only for non-mapped buffers
     void resize(ID3D12GraphicsCommandList* cmdList,
                 ToFreeList& toFreeList,
-                uint32_t newSizeBytes,
+                size_t newSizeBytes,
                 bool useBackFreeSection);
 
     void freeSection(ManagedBufferSection section);
@@ -115,7 +115,7 @@ public:
                   const D3D12_RESOURCE_STATES initialResourceState,
                   const ManagedBufferOptions options);
 
-    void init(uint32_t sizeBytes);
+    void init(size_t sizeBytes);
 
     void map();
     void unmap();
@@ -124,12 +124,12 @@ public:
 
     ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                          ToFreeList* toFreeList,
-                                         uint32_t sizeBytes);
+                                         size_t sizeBytes);
 
     ManagedBufferSection copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
                                             ToFreeList& toFreeList,
                                             const void* host_srcBuffer,
-                                            uint32_t sizeBytes);
+                                            size_t sizeBytes);
     template<typename T>
     inline ManagedBufferSection copyFromHostVector(ID3D12GraphicsCommandList* cmdList,
                                                    ToFreeList& toFreeList,
@@ -144,8 +144,8 @@ public:
     ManagedBufferSection copyFromDeviceBuffer(ID3D12GraphicsCommandList* cmdList,
                                               ToFreeList& toFreeList,
                                               ID3D12Resource* dev_srcBuffer,
-                                              uint32_t sizeBytes,
-                                              uint32_t offsetBytes = 0);
+                                              size_t srcSizeBytes,
+                                              size_t srcOffsetBytes = 0);
     ManagedBufferSection copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
                                                ToFreeList& toFreeList,
                                                const ManagedBuffer& srcBuffer,
@@ -155,7 +155,7 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const;
     bool hasValidSrvDescriptor() const;
     uint32_t getSrvDescriptorIdx() const;
-    uint32_t getSizeBytes() const;
+    size_t getSizeBytes() const;
 
     void setName(const std::wstring& name);
 };
