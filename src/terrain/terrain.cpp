@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "block.h"
 #include "chunk.h"
 #include "chunk_generator.h"
+#include "structure.h"
 #include "terrain_materials.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
@@ -70,6 +71,7 @@ void init(Scene* scene)
 
     Blocks::init();
     Biomes::init();
+    Structures::init();
     ChunkGenerator::init();
 
     threadPool.init();
