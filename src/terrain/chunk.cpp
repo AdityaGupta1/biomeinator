@@ -201,7 +201,7 @@ void Chunk::fillStructures()
     }
 }
 
-bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool isAirPredicate)
+bool Chunk::isRegionAllBlockType(const uvec3 startPos, const uvec3 endPos, BlockType blockType)
 {
     for (uint blockZ = startPos.z; blockZ <= endPos.z; ++blockZ)
     {
@@ -212,7 +212,7 @@ bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool is
             for (uint blockY = startPos.y; blockY <= endPos.y; ++blockY)
             {
                 const Block block = this->blocks[blockIdx++];
-                if ((block == Block::AIR) != isAirPredicate)
+                if (Blocks::getBlockData(block).type != blockType)
                 {
                     return false;
                 }
@@ -249,13 +249,14 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         {
             chunk = this;
             blockX = startPos.x - 1;
-            check = (prevSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (prevSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::SOLID_SURROUNDED);
         }
 
         if (check)
         {
-            if (!chunk->isRegionAirOrSolid(
-                    uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), false /*isAirPredicate*/))
+            const bool isSolid = !chunk->isRegionAllBlockType(
+                uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID);
+            if (!isSolid)
             {
                 return false;
             }
@@ -263,11 +264,12 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
     }
 
     // -y
-    if (prevSegments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
+    if (prevSegments[thisSegmentIdx - 1] != ChunkSegment::SOLID_SURROUNDED)
     {
         const uint blockY = startPos.y - 1;
-        if (!this->isRegionAirOrSolid(
-            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), false /*isAirPredicate*/))
+        const bool isSolid = this->isRegionAllBlockType(
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID);
+        if (!isSolid)
         {
             return false;
         }
@@ -288,13 +290,14 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         {
             chunk = this;
             blockZ = startPos.z - 1;
-            check = (prevSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (prevSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::SOLID_SURROUNDED);
         }
 
         if (check)
         {
-            if (!chunk->isRegionAirOrSolid(
-                    uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), false /*isAirPredicate*/))
+            const bool isSolid = chunk->isRegionAllBlockType(
+                uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID);
+            if (!isSolid)
             {
                 return false;
             }
@@ -316,8 +319,9 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
             blockX = endPos.x;
         }
 
-        if (!chunk->isRegionAirOrSolid(
-            uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), false /*isAirPredicate*/))
+        const bool isSolid = chunk->isRegionAllBlockType(
+            uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID);
+        if (!isSolid)
         {
             return false;
         }
@@ -326,8 +330,9 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
     // +y
     {
         const uint blockY = endPos.y + 1;
-        if (!this->isRegionAirOrSolid(
-            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), false /*isAirPredicate*/))
+        const bool isSolid = this->isRegionAllBlockType(
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID);
+        if (!isSolid)
         {
             return false;
         }
@@ -348,8 +353,9 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
             blockZ = endPos.z;
         }
 
-        if (!chunk->isRegionAirOrSolid(
-            uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), false /*isAirPredicate*/))
+        const bool isSolid = chunk->isRegionAllBlockType(
+            uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID);
+        if (!isSolid)
         {
             return false;
         }
@@ -376,27 +382,33 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
                 uvec3 segmentStartPos, segmentEndPos;
                 Chunk::segmentPosToBounds(chunkSegmentPos, segmentStartPos, segmentEndPos);
 
-                ChunkSegment segment = ChunkSegment::MIXED;
-
+                ChunkSegment segment;
                 const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentStartPos)];
-                const bool isAirPredicate = blockAtBasePos == Block::AIR;
-                if (!isAirPredicate && (segmentY == 0 || segmentY == numChunkSegmentsY - 1))
+                switch (Blocks::getBlockData(blockAtBasePos).type)
                 {
-                    // this segment has blocks and cannot be surrounded because it's at the top or bottom of the chunk
-                    segment = ChunkSegment::MIXED;
-                }
-                else if (this->isRegionAirOrSolid(segmentStartPos, segmentEndPos, isAirPredicate))
-                {
-                    if (isAirPredicate)
+                    case BlockType::AIR:
                     {
-                        segment = ChunkSegment::AIR;
+                        if (this->isRegionAllBlockType(segmentStartPos, segmentEndPos, BlockType::AIR))
+                        {
+                            segment = ChunkSegment::AIR;
+                        }
+                        break;
                     }
-                    else
+                    case BlockType::SOLID:
                     {
-                        const bool isSurrounded =
-                            isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos, prevSegments);
-                        segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
+                        // top and bottom chunks cannot be surrounded
+                        const bool isTopOrBottom = segmentY == 0 || segmentY == numChunkSegmentsY - 1;
+                        if (!isTopOrBottom &&
+                            this->isRegionAllBlockType(segmentStartPos, segmentEndPos, BlockType::SOLID) &&
+                            isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos, prevSegments))
+                        {
+                            segment = ChunkSegment::SOLID_SURROUNDED;
+                        }
+                        break;
                     }
+                    default:
+                        segment = ChunkSegment::MIXED;
+                        break;
                 }
 
                 prevSegments[segmentIdx++] = segment; // used for easier condition checking for future segments in this function

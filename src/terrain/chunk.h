@@ -75,7 +75,7 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
 enum class ChunkSegment : uint8_t
 {
     AIR,
-    BLOCKS_SURROUNDED,
+    SOLID_SURROUNDED,
     MIXED,
 };
 
@@ -126,7 +126,7 @@ private:
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
-    bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
+    bool isRegionAllBlockType(const glm::uvec3 startPos, const glm::uvec3 endPos, BlockType blockType);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos,
                                     const glm::uvec3 endPos,
                                     const glm::uvec3 chunkSegmentPos,
