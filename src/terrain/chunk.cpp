@@ -104,17 +104,69 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
-    // TODO: check radius for structures instead of unconditionally setting this
-    // TODO: fill vector of "structure neighbor" chunks which will be used to gather structures in fillStructures()
-    this->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
-
     Terrain::setDirty();
+}
+
+void Chunk::checkStructureNeighbors()
+{
+    constexpr uint32_t sideLength = 2 * structureMaxChunkRadius + 1;
+    constexpr uint32_t totalNumStructureNeighbors = sideLength * sideLength;
+    this->structureNeighbors.reserve(totalNumStructureNeighbors);
+
+    Chunk* corner = this;
+    for (uint32_t i = 0; i < structureMaxChunkRadius; ++i)
+    {
+        corner = corner->neighbors[static_cast<size_t>(NeighborDirection::X_NEG)];
+        ASSERT(corner != nullptr);
+    }
+    for (uint32_t i = 0; i < structureMaxChunkRadius; ++i)
+    {
+        corner = corner->neighbors[static_cast<size_t>(NeighborDirection::Z_NEG)];
+        ASSERT(corner != nullptr);
+    }
+
+    bool setTerrainDirty = false;
+    Chunk* rowStart = corner;
+    for (uint32_t z = 0; z < sideLength; ++z)
+    {
+        Chunk* current = rowStart;
+        for (uint32_t x = 0; x < sideLength; ++x)
+        {
+            this->structureNeighbors.push_back(current);
+
+            const uint32_t neighborNumReady = current->numReadyStructureNeighbors.fetch_add(1, std::memory_order_acq_rel) + 1;
+            if (neighborNumReady == totalNumStructureNeighbors && current->getState() >= ChunkState::HAS_TERRAIN)
+            {
+                current->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
+                setTerrainDirty = true;
+            }
+
+            if (x < sideLength - 1)
+            {
+                current = current->neighbors[static_cast<size_t>(NeighborDirection::X_POS)];
+                ASSERT(current != nullptr);
+            }
+        }
+
+        if (z < sideLength - 1)
+        {
+            rowStart = rowStart->neighbors[static_cast<size_t>(NeighborDirection::Z_POS)];
+            ASSERT(rowStart != nullptr);
+        }
+    }
+
+    if (setTerrainDirty)
+    {
+        Terrain::setDirty();
+    }
 }
 
 void Chunk::fillStructures()
 {
-    // TODO: instead of doing this, iterate over "structure neighbors" and fill structures from each one (only structures whose bounds intersect this chunk)
-    this->fillStructureBlocks(this->structures.data(), this->structures.size());
+    for (Chunk* structureNeighbor : this->structureNeighbors)
+    {
+        this->fillStructureBlocks(structureNeighbor->structures.data(), structureNeighbor->structures.size());
+    }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
 
@@ -129,7 +181,7 @@ void Chunk::fillStructures()
 
         const uint neighborNumNeighborsWithBlocks =
             neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_ALL_BLOCKS)
+        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
         {
             neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS);
             setTerrainDirty = true;

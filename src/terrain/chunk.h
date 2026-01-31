@@ -31,10 +31,11 @@ enum class ChunkState : uint8_t
     NEEDS_TERRAIN,
     GENERATING_TERRAIN,
     HAS_TERRAIN,
-    NEEDS_FILL_STRUCTURES, // chunks in structureMaxChunkRadius all have structures (HAS_TERRAIN)
+    AWAITING_STRUCTURE_NEIGHBORS,
+    NEEDS_FILL_STRUCTURES, // chunks in structureMaxChunkRadius all have structures (>= HAS_TERRAIN)
     FILLING_STRUCTURES,
     HAS_ALL_BLOCKS,
-    NEEDS_SEGMENTS, // neighbor chunks all have blocks (HAS_ALL_BLOCKS)
+    NEEDS_SEGMENTS, // neighbor chunks all have blocks (>= HAS_ALL_BLOCKS)
     GENERATING_SEGMENTS,
     NEEDS_GEOMETRY,
     GENERATING_GEOMETRY,
@@ -106,6 +107,8 @@ private:
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::vector<Structure> structures{};
+    std::vector<Chunk*> structureNeighbors{};
+    std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
 
     std::array<Chunk*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
@@ -136,6 +139,7 @@ public:
     void setNeighbors(bool createNeighbors);
 
     void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    void checkStructureNeighbors();
     void fillStructures();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 

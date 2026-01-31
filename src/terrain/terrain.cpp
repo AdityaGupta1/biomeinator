@@ -40,7 +40,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 inline constexpr int renderDistance = 30;
 inline constexpr int createBlasDistance = renderDistance + 1;
-inline constexpr int generateTerrainDistance = createBlasDistance + structureMaxChunkRadius;
+inline constexpr int fillStructuresDistance = createBlasDistance + 1;
+inline constexpr int generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius;
 
 namespace Terrain
 {
@@ -50,6 +51,11 @@ static Scene* scene;
 static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->generateTerrain(threadMemoryAlloc);
+}
+
+static void task_checkStructureNeighbors(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    chunk->checkStructureNeighbors();
 }
 
 static void task_fillStructures(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
@@ -215,6 +221,7 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
+                        const bool inCurrentFillStructuresDistance = distToCurrentChunk <= fillStructuresDistance;
                         const bool inCurrentGenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
 
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
@@ -239,6 +246,15 @@ void update(ToFreeList& toFreeList)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_TERRAIN);
                                 chunksToGenerateTerrain.push_back(chunk);
+                            }
+                        }
+
+                        if (inCurrentFillStructuresDistance)
+                        {
+                            if (chunkState == ChunkState::HAS_TERRAIN)
+                            {
+                                chunk->advanceState(ChunkState::AWAITING_STRUCTURE_NEIGHBORS);
+                                tasksToEnqueue.push_back({ task_checkStructureNeighbors, chunk });
                             }
                             else if (chunkState == ChunkState::NEEDS_FILL_STRUCTURES)
                             {
