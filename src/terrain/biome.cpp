@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "biome.h"
 
-#include "../chunk.h"
+#include "chunk.h"
 
 #include <array>
 #include <limits>

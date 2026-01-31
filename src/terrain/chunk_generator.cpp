@@ -18,9 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "chunk_generator.h"
 
+#include "biome.h"
 #include "chunk.h"
 #include "settings_manager.h"
-#include "biomes/biome.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "util/rng.h"
 

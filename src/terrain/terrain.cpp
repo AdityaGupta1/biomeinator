@@ -18,11 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "terrain.h"
 
+#include "biome.h"
 #include "block.h"
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "terrain_materials.h"
-#include "biomes/biome.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
