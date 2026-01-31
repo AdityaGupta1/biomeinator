@@ -23,14 +23,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace Util
 {
 
-template<typename T> inline uint32_t getVectorSizeBytes(const std::vector<T>& vec)
+template<typename T> inline size_t getVectorSizeBytes(const std::vector<T>& vec)
 {
     return vec.size() * sizeof(T);
 }
 
-template<typename T> inline uint32_t convertByteSizeToCount(uint32_t sizeBytes)
+template<typename T> inline uint32_t convertByteSizeToCount(size_t sizeBytes)
 {
-    return sizeBytes / static_cast<uint32_t>(sizeof(T));
+    return static_cast<uint32_t>(sizeBytes / sizeof(T));
 }
 
 inline std::wstring to_wstring(const char* str)

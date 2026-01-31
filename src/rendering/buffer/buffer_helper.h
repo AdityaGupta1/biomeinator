@@ -54,10 +54,10 @@ void copyResource(ID3D12GraphicsCommandList* cmdList,
 void copyBufferRegion(ID3D12GraphicsCommandList* cmdList,
                       ID3D12Resource* destBuffer,
                       D3D12_RESOURCE_STATES destState,
-                      uint32_t destOffsetBytes,
+                      size_t destOffsetBytes,
                       ID3D12Resource* srcBuffer,
                       D3D12_RESOURCE_STATES srcState,
-                      uint32_t srcOffsetBytes,
-                      uint32_t sizeBytes);
+                      size_t srcOffsetBytes,
+                      size_t sizeBytes);
 
 } // namespace BufferHelper

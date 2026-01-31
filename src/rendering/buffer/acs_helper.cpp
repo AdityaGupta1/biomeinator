@@ -55,7 +55,7 @@ static uint32_t sharedAcsBuffersHead = sharedAcsBuffers.size();
 
 static void allocateNewSharedAcsBuffer()
 {
-    uint32_t newSizeBytes;
+    size_t newSizeBytes;
     if (sharedAcsBuffersHead == sharedAcsBuffers.size())
     {
         newSizeBytes = 1 << 20;
@@ -80,7 +80,7 @@ static void allocateNewSharedAcsBuffer()
     newBuffer->init(newSizeBytes);
 }
 
-static ManagedBufferSection findFreeSharedAcsSection(uint32_t sizeBytes)
+static ManagedBufferSection findFreeSharedAcsSection(size_t sizeBytes)
 {
     sizeBytes = (sizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
                 ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
@@ -140,7 +140,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
         *buildInfo.outAcs = findFreeSharedAcsSection(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
 
-        uint32_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
+        size_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
         scratchSizeBytes = (scratchSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
                            ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
 
