@@ -58,7 +58,7 @@ static void allocateNewSharedAcsBuffer()
     size_t newSizeBytes;
     if (sharedAcsBuffersHead == sharedAcsBuffers.size())
     {
-        newSizeBytes = 1 << 20;
+        newSizeBytes = 1 << 24;
     }
     else
     {
