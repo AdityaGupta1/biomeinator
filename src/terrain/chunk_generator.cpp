@@ -130,9 +130,9 @@ void init()
     }
 }
 
-static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 pos)
+static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
 {
-    fn->GenUniformGrid2D(data, pos.x, pos.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid2D(data, posXZ.x, posXZ.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
 }
 
 static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
@@ -140,10 +140,14 @@ static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generat
     fn->GenUniformGrid3D(data, 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
 }
 
-void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
-                       std::vector<Block>& blocks,
-                       ThreadMemoryAllocator& threadMemoryAlloc)
+}; // namespace ChunkGenerator
+
+using namespace ChunkGenerator;
+
+void Chunk::fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
 {
+    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+
     float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -220,7 +224,7 @@ void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
                     }
                 }
 
-                blocks[blockIdx] = block;
+                this->blocks[blockIdx] = block;
 
                 const bool isSolid = (block != Block::AIR);
                 if (wasSolid && !isSolid && !isCave)
@@ -233,7 +237,7 @@ void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
             for (uint y = topBlockY; y > topBlockY - 5; --y)
             {
                 const uint blockIdx = baseBlockIdx + y;
-                Block& block = blocks[blockIdx];
+                Block& block = this->blocks[blockIdx];
                 if (block == Block::AIR || block == Block::BEDROCK)
                 {
                     break;
@@ -245,5 +249,3 @@ void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
         }
     }
 }
-
-}; // namespace ChunkGenerator

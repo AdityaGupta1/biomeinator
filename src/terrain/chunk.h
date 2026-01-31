@@ -114,6 +114,8 @@ private:
 
     Instance* instance{ nullptr };
 
+    void fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
+
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
     bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);

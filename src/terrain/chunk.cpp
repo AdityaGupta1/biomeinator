@@ -100,7 +100,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    ChunkGenerator::fillTerrainBlocks(chunkBlockPosXZ_WS, this->blocks, threadMemoryAlloc);
+    this->fillTerrainBlocks(threadMemoryAlloc);
 
     // TODO: create structures
 
