@@ -37,11 +37,6 @@ static inline bool isInChunk(ivec3 pos_CS)
     return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
 }
 
-static inline ivec3 clampToChunkBoundaries(ivec3 pos_CS)
-{
-    return glm::clamp(pos_CS, ivec3(0, 0, 0), ivec3(chunkSizeXZ, chunkSizeY, chunkSizeXZ) - 1);
-}
-
 static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
 {
     RandomNumberGenerator rng = initRng(structure.seed);
