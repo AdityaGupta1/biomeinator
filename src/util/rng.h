@@ -37,25 +37,35 @@ struct RandomNumberGenerator
 {
     uint32_t seed;
 
-    uint32_t nextUint()
+    inline uint32_t nextUint()
     {
         seed = hash(seed);
         return seed;
     }
 
-    float nextFloat()
+    inline float nextFloat()
     {
         return (nextUint() & 0x00FFFFFF) / 16777216.f;
     }
 
-    glm::vec2 nextFloat2()
+    inline glm::vec2 nextFloat2()
     {
         return glm::vec2(nextFloat(), nextFloat());
     }
 
-    glm::vec3 nextFloat3()
+    inline glm::vec3 nextFloat3()
     {
         return glm::vec3(nextFloat(), nextFloat(), nextFloat());
+    }
+
+    inline int nextInt(int min, int max)
+    {
+        return static_cast<int>(min + (max - min) * nextFloat());
+    }
+
+    inline int nextInt(int max)
+    {
+        return static_cast<int>(max * nextFloat());
     }
 };
 

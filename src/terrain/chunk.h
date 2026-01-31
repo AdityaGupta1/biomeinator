@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
+#include "structure.h"
 #include "scene/scene.h"
 
 #include <array>
@@ -30,7 +31,11 @@ enum class ChunkState : uint8_t
     NEEDS_TERRAIN,
     GENERATING_TERRAIN,
     HAS_TERRAIN,
-    NEEDS_SEGMENTS,
+    AWAITING_STRUCTURE_NEIGHBORS,
+    NEEDS_FILL_STRUCTURES, // chunks in structureMaxChunkRadius all have structures (>= HAS_TERRAIN)
+    FILLING_STRUCTURES,
+    HAS_ALL_BLOCKS,
+    NEEDS_SEGMENTS, // neighbor chunks all have blocks (>= HAS_ALL_BLOCKS)
     GENERATING_SEGMENTS,
     NEEDS_GEOMETRY,
     GENERATING_GEOMETRY,
@@ -78,6 +83,7 @@ inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
 inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
+inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
@@ -101,6 +107,10 @@ private:
     std::vector<Block> blocks{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
+    std::vector<Structure> structures{};
+    std::vector<Chunk*> structureNeighbors{};
+    std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
+
     std::array<Chunk*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
@@ -110,6 +120,9 @@ private:
     bool isInstanceVisible{ false };
 
     Instance* instance{ nullptr };
+
+    void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
+    void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 
@@ -127,6 +140,8 @@ public:
     void setNeighbors(bool createNeighbors);
 
     void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    void checkStructureNeighbors();
+    void fillStructures();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);

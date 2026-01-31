@@ -100,9 +100,76 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    ChunkGenerator::fillTerrainBlocks(chunkBlockPosXZ_WS, this->blocks, threadMemoryAlloc);
+    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
 
     this->advanceState(ChunkState::HAS_TERRAIN);
+
+    Terrain::setDirty();
+}
+
+void Chunk::checkStructureNeighbors()
+{
+    constexpr uint32_t sideLength = 2 * structureMaxChunkRadius + 1;
+    constexpr uint32_t totalNumStructureNeighbors = sideLength * sideLength;
+    this->structureNeighbors.reserve(totalNumStructureNeighbors);
+
+    Chunk* corner = this;
+    for (uint32_t i = 0; i < structureMaxChunkRadius; ++i)
+    {
+        corner = corner->neighbors[static_cast<size_t>(NeighborDirection::X_NEG)];
+        ASSERT(corner != nullptr);
+        corner = corner->neighbors[static_cast<size_t>(NeighborDirection::Z_NEG)];
+        ASSERT(corner != nullptr);
+    }
+
+    bool setTerrainDirty = false;
+    Chunk* rowStart = corner;
+    for (uint32_t z = 0; z < sideLength; ++z)
+    {
+        Chunk* current = rowStart;
+        for (uint32_t x = 0; x < sideLength; ++x)
+        {
+            this->structureNeighbors.push_back(current);
+
+            const uint32_t neighborNumReady = current->numReadyStructureNeighbors.fetch_add(1, std::memory_order_acq_rel) + 1;
+            if (neighborNumReady == totalNumStructureNeighbors && current->getState() >= ChunkState::HAS_TERRAIN)
+            {
+                current->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
+                setTerrainDirty = true;
+            }
+
+            if (x < sideLength - 1)
+            {
+                current = current->neighbors[static_cast<size_t>(NeighborDirection::X_POS)];
+                ASSERT(current != nullptr);
+            }
+        }
+
+        if (z < sideLength - 1)
+        {
+            rowStart = rowStart->neighbors[static_cast<size_t>(NeighborDirection::Z_POS)];
+            ASSERT(rowStart != nullptr);
+        }
+    }
+
+    if (setTerrainDirty)
+    {
+        Terrain::setDirty();
+    }
+}
+
+void Chunk::fillStructures()
+{
+    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    const ivec3 chunkMin_WS(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y);
+
+    for (Chunk* structureNeighbor : this->structureNeighbors)
+    {
+        const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
+        this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+    }
+
+    this->advanceState(ChunkState::HAS_ALL_BLOCKS);
 
     bool setTerrainDirty = false;
 
@@ -115,7 +182,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
         const uint neighborNumNeighborsWithBlocks =
             neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() == ChunkState::HAS_TERRAIN)
+        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
         {
             neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS);
             setTerrainDirty = true;

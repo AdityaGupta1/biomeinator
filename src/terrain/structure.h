@@ -20,15 +20,36 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "block.h"
 
+#include <glm/glm.hpp>
 #include <vector>
 
-#include <glm/glm.hpp>
+enum StructureType
+{
+	OAK_TREE,
 
-class ThreadMemoryAllocator;
+	COUNT
+};
 
-namespace ChunkGenerator
+struct Structure
+{
+    StructureType type;
+    glm::ivec3 pos_WS;
+    uint64_t seed;
+};
+
+struct StructureBounds
+{
+    glm::ivec3 minDiff;
+    glm::ivec3 maxDiff;
+};
+
+inline constexpr uint32_t structureMaxChunkRadius = 1;
+
+namespace Structures
 {
 
 void init();
 
-}; // namespace ChunkGenerator
+const StructureBounds& getStructureBounds(StructureType type);
+
+} // namespace Structures
