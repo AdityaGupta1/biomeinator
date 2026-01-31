@@ -46,17 +46,17 @@ namespace Terrain
 
 static Scene* scene;
 
-static void task_generateBlocks(Chunk* chunk)
+static void task_generateBlocks(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateBlocks();
+    chunk->generateBlocks(threadMemoryAlloc);
 }
 
-static void task_generateSegments(Chunk* chunk)
+static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateSegments();
+    chunk->generateSegments(threadMemoryAlloc);
 }
 
-static void task_createInstance(Chunk* chunk)
+static void task_createInstance(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->createInstance();
 }
@@ -117,7 +117,7 @@ void setDirty()
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
-inline constexpr uint32_t maxNumGenerateBlocksTasksPerFrame = 4;
+inline constexpr uint32_t maxNumGenerateBlocksTasksPerFrame = 6;
 
 void update(ToFreeList& toFreeList)
 {

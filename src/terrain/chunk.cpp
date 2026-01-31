@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk_generator.h"
 #include "terrain.h"
 #include "terrain_materials.h"
+#include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 
@@ -93,13 +94,13 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
     ++neighborChunk->numNeighborsSet;
 }
 
-void Chunk::generateBlocks()
+void Chunk::generateBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     this->blocks.resize(numChunkBlocks);
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    ChunkGenerator::fillBlocks(chunkBlockPosXZ_WS, this->blocks);
+    ChunkGenerator::fillBlocks(chunkBlockPosXZ_WS, this->blocks, threadMemoryAlloc);
 
     this->advanceState(ChunkState::HAS_BLOCKS);
 
@@ -155,7 +156,10 @@ bool Chunk::isRegionAirOrSolid(const uvec3 startPos, const uvec3 endPos, bool is
     return true;
 }
 
-bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos, const uvec3 chunkSegmentPos)
+bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
+                                       const uvec3 endPos,
+                                       const uvec3 chunkSegmentPos,
+                                       const ChunkSegment* const prevSegments)
 {
     // these two cases should be skipped by generateSegments()
     ASSERT(chunkSegmentPos.y != 0);
@@ -178,7 +182,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         {
             chunk = this;
             blockX = startPos.x - 1;
-            check = (this->allSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (prevSegments[thisSegmentIdx - numChunkSegmentsY] != ChunkSegment::BLOCKS_SURROUNDED);
         }
 
         if (check)
@@ -192,7 +196,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
     }
 
     // -y
-    if (this->allSegments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
+    if (prevSegments[thisSegmentIdx - 1] != ChunkSegment::BLOCKS_SURROUNDED)
     {
         const uint blockY = startPos.y - 1;
         if (!this->isRegionAirOrSolid(
@@ -217,7 +221,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
         {
             chunk = this;
             blockZ = startPos.z - 1;
-            check = (this->allSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
+            check = (prevSegments[thisSegmentIdx - (numChunkSegmentsXZ * numChunkSegmentsY)] != ChunkSegment::BLOCKS_SURROUNDED);
         }
 
         if (check)
@@ -287,9 +291,11 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos, const uvec3 endPos,
     return true;
 }
 
-void Chunk::generateSegments()
+void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    this->allSegments.reserve(numChunkSegments);
+    ChunkSegment* prevSegments = threadMemoryAlloc.request<ChunkSegment>(numChunkSegments);
+    uint32_t segmentIdx = 0;
+
     // reserve space for at least bottom layer and top surface layer
     this->segmentsToGenerate.reserve(numChunkSegmentsXZ * numChunkSegmentsXZ * 2);
 
@@ -320,18 +326,17 @@ void Chunk::generateSegments()
                     }
                     else
                     {
-                        const bool isSurrounded = isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos);
+                        const bool isSurrounded =
+                            isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos, prevSegments);
                         segment = isSurrounded ? ChunkSegment::BLOCKS_SURROUNDED : ChunkSegment::MIXED;
                     }
                 }
 
-                this->allSegments.push_back(segment); // used for easier condition checking for future segments in this function
+                prevSegments[segmentIdx++] = segment; // used for easier condition checking for future segments in this function
                 this->segmentsToGenerate.push_back(chunkSegmentPos);
             }
         }
     }
-
-    this->allSegments.clear();
 
     this->advanceState(ChunkState::NEEDS_GEOMETRY);
     Terrain::setDirty();

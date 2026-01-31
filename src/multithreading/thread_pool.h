@@ -28,10 +28,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 
 class Chunk;
+class ThreadMemoryAllocator;
 
 struct Task
 {
-    void (*fn)(Chunk*);
+    void (*func)(Chunk*, ThreadMemoryAllocator&);
     Chunk* chunkPtr;
 };
 

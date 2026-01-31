@@ -16,21 +16,39 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "thread_memory_allocator.h"
 
-#include "block.h"
-
-#include <vector>
-
-#include <glm/glm.hpp>
-
-class ThreadMemoryAllocator;
-
-namespace ChunkGenerator
+ThreadMemoryAllocator::ThreadMemoryAllocator()
 {
+    this->allocate(1 << 16 /*bytes*/);
+}
 
-void init();
+ThreadMemoryAllocator::~ThreadMemoryAllocator()
+{
+    this->clear();
+    delete[] this->data;
+}
 
-void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks, ThreadMemoryAllocator& threadMemoryAlloc);
+void ThreadMemoryAllocator::allocate(size_t sizeBytes)
+{
+    this->data = new uint8_t[sizeBytes];
+    this->sizeBytes = sizeBytes;
+    this->offsetBytes = 0;
+}
 
-}; // namespace ChunkGenerator
+void ThreadMemoryAllocator::resize(size_t newSizeBytes)
+{
+    this->toFree.push_back(this->data);
+    this->allocate(newSizeBytes);
+}
+
+void ThreadMemoryAllocator::clear()
+{
+    for (uint8_t* ptrToFree : this->toFree)
+    {
+        delete[] ptrToFree;
+    }
+    this->toFree.clear();
+
+    this->offsetBytes = 0;
+}
