@@ -35,8 +35,6 @@ struct Structure
     StructureType type;
     glm::ivec3 pos_WS;
     uint64_t seed;
-    glm::ivec3 boundsMin; // inclusive
-    glm::ivec3 boundsMax; // inclusive
 };
 
 struct StructureBounds
@@ -51,8 +49,6 @@ namespace Structures
 {
 
 void init();
-
-void fillStructureBlocks(const Structure* structures, uint32_t numStructures, glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks);
 
 const StructureBounds& getStructureBounds(StructureType type);
 

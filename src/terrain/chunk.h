@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
+#include "structure.h"
 #include "scene/scene.h"
 
 #include <array>
@@ -104,6 +105,8 @@ private:
     std::vector<Block> blocks{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
+    std::vector<Structure> structures{};
+
     std::array<Chunk*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
@@ -114,7 +117,8 @@ private:
 
     Instance* instance{ nullptr };
 
-    void fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
+    void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
+    void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
 
     bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
 

@@ -100,13 +100,12 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    this->fillTerrainBlocks(threadMemoryAlloc);
-
-    // TODO: create structures
+    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
     // TODO: check radius for structures instead of unconditionally setting this
+    // TODO: fill vector of "structure neighbor" chunks which will be used to gather structures in fillStructures()
     this->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
 
     Terrain::setDirty();
@@ -114,7 +113,8 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
 void Chunk::fillStructures()
 {
-    // TODO: fill structures
+    // TODO: instead of doing this, iterate over "structure neighbors" and fill structures from each one (only structures whose bounds intersect this chunk)
+    this->fillStructureBlocks(this->structures.data(), this->structures.size());
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
 

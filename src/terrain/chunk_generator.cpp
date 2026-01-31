@@ -144,7 +144,7 @@ static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generat
 
 using namespace ChunkGenerator;
 
-void Chunk::fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
+void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
@@ -160,6 +160,8 @@ void Chunk::fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
     float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
     fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
+
+    uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -246,6 +248,23 @@ void Chunk::fillTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
                 const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
                 block = newBlock;
             }
+
+            heightfield[columnIdx] = topBlockY;
         }
+    }
+
+    // TODO: create structures for real instead of this one tree
+
+    RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y, 75902341);
+    const ivec2 treePosXZ_CS = ivec2(rng.nextInt(chunkSizeXZ), rng.nextInt(chunkSizeXZ));
+    const uint treeY = heightfield[treePosXZ_CS.x + chunkSizeXZ * treePosXZ_CS.y /*z*/] + 1;
+    const uvec2 treePos_XZ_WS = treePosXZ_CS + chunkPosBlocksXZ_WS;
+    const ivec3 treePos_WS = ivec3(treePos_XZ_WS.x, treeY, treePos_XZ_WS.y /*z*/);
+    this->structures.emplace_back(StructureType::OAK_TREE, treePos_WS);
+
+    for (Structure& structure : this->structures)
+    {
+        // TODO: do we need to store the seed, or can we calculate it as needed?
+        structure.seed = initRng(structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z).nextUint();
     }
 }

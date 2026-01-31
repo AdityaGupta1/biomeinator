@@ -95,8 +95,19 @@ void init()
     STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec3(-2, 0, -2), ivec3(2, 10, 2) };
 }
 
-void fillStructureBlocks(const Structure* structures, uint32_t numStructures, ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
+const StructureBounds& getStructureBounds(StructureType type)
 {
+    return structureBounds[static_cast<size_t>(type)];
+}
+
+} // namespace Structures
+
+using namespace Structures;
+
+void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructures)
+{
+    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+
     for (uint32_t i = 0; i < numStructures; i++)
     {
         const Structure& structure = structures[i];
@@ -105,10 +116,3 @@ void fillStructureBlocks(const Structure* structures, uint32_t numStructures, iv
         fillStructureFunc(structure, structurePos_CS, blocks);
     }
 }
-
-const StructureBounds& getStructureBounds(StructureType type)
-{
-    return structureBounds[static_cast<size_t>(type)];
-}
-
-} // namespace Structures
