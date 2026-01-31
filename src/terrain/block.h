@@ -36,6 +36,8 @@ enum class Block : BlockId
     SNOW,
     SNOWY_GRASS,
     ICE,
+    OAK_LOG,
+    OAK_LEAVES,
 
     COUNT
 };
