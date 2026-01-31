@@ -62,9 +62,11 @@ static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 struc
     {
         for (int blockX = leavesMinPos_CS.x; blockX <= leavesMaxPos_CS.x; ++blockX)
         {
+            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, leavesMinPos_CS.y, blockZ));
+
             for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
             {
-                Block& block = blocks[Chunk::blockPosToIdx(ivec3(blockX, blockY, blockZ))];
+                Block& block = blocks[blockIdx++];
                 if (block == Block::AIR)
                 {
                     block = Block::OAK_LEAVES;

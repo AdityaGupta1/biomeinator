@@ -52,6 +52,11 @@ static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemo
     chunk->generateTerrain(threadMemoryAlloc);
 }
 
+static void task_fillStructures(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    chunk->fillStructures();
+}
+
 static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->generateSegments(threadMemoryAlloc);
@@ -210,12 +215,12 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
-                        const bool inCurrentgenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
+                        const bool inCurrentGenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
 
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= createBlasDistance;
 
-                        if (!inCurrentgenerateTerrainDistance && !inLastCreateBlasDistance)
+                        if (!inCurrentGenerateTerrainDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
@@ -228,12 +233,17 @@ void update(ToFreeList& toFreeList)
 
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentgenerateTerrainDistance)
+                        if (inCurrentGenerateTerrainDistance)
                         {
                             if (chunkState == ChunkState::NEEDS_TERRAIN)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_TERRAIN);
                                 chunksToGenerateTerrain.push_back(chunk);
+                            }
+                            else if (chunkState == ChunkState::NEEDS_FILL_STRUCTURES)
+                            {
+                                chunk->advanceState(ChunkState::FILLING_STRUCTURES);
+                                tasksToEnqueue.push_back({ task_fillStructures, chunk });
                             }
                             else if (chunkState == ChunkState::NEEDS_SEGMENTS)
                             {

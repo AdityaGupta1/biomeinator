@@ -104,11 +104,19 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
     // TODO: create structures
 
-    this->advanceState(ChunkState::HAS_ALL_BLOCKS); // TODO: set state to HAS_TERRAIN instead
+    this->advanceState(ChunkState::HAS_TERRAIN);
 
-    // TODO: check radius for structures
+    // TODO: check radius for structures instead of unconditionally setting this
+    this->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
 
-    // TODO: move rest of this function to after filling structures
+    Terrain::setDirty();
+}
+
+void Chunk::fillStructures()
+{
+    // TODO: fill structures
+
+    this->advanceState(ChunkState::HAS_ALL_BLOCKS);
 
     bool setTerrainDirty = false;
 

@@ -30,9 +30,10 @@ enum class ChunkState : uint8_t
     NEEDS_TERRAIN,
     GENERATING_TERRAIN,
     HAS_TERRAIN,
+    NEEDS_FILL_STRUCTURES, // chunks in structureMaxChunkRadius all have structures (HAS_TERRAIN)
     FILLING_STRUCTURES,
     HAS_ALL_BLOCKS,
-    NEEDS_SEGMENTS,
+    NEEDS_SEGMENTS, // neighbor chunks all have blocks (HAS_ALL_BLOCKS)
     GENERATING_SEGMENTS,
     NEEDS_GEOMETRY,
     GENERATING_GEOMETRY,
@@ -129,6 +130,7 @@ public:
     void setNeighbors(bool createNeighbors);
 
     void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    void fillStructures();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);
