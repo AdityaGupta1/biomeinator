@@ -109,8 +109,18 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
     for (uint32_t i = 0; i < numStructures; i++)
     {
         const Structure& structure = structures[i];
-        const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
+
         const ivec3 structurePos_CS = structure.pos_WS - ivec3(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y /*z*/);
+        const StructureBounds& bounds = Structures::getStructureBounds(structure.type);
+        const ivec3 structureMin_CS = structurePos_CS + bounds.minDiff;
+        const ivec3 structureMax_CS = structurePos_CS + bounds.maxDiff;
+
+        if (any(lessThan(structureMin_CS, ivec3(0, 0, 0))) || any(greaterThanEqual(structureMax_CS, chunkSizeVec)))
+        {
+            continue;
+        }
+
+        const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
         fillStructureFunc(structure, structurePos_CS, blocks);
     }
 }

@@ -118,9 +118,6 @@ void Chunk::checkStructureNeighbors()
     {
         corner = corner->neighbors[static_cast<size_t>(NeighborDirection::X_NEG)];
         ASSERT(corner != nullptr);
-    }
-    for (uint32_t i = 0; i < structureMaxChunkRadius; ++i)
-    {
         corner = corner->neighbors[static_cast<size_t>(NeighborDirection::Z_NEG)];
         ASSERT(corner != nullptr);
     }
@@ -168,20 +165,8 @@ void Chunk::fillStructures()
 
     for (Chunk* structureNeighbor : this->structureNeighbors)
     {
-        for (const Structure& structure : structureNeighbor->structures)
-        {
-            const StructureBounds& bounds = Structures::getStructureBounds(structure.type);
-            const ivec3 structurePos_CS = structure.pos_WS - chunkMin_WS;
-            const ivec3 structureMin_CS = structurePos_CS + bounds.minDiff;
-            const ivec3 structureMax_CS = structurePos_CS + bounds.maxDiff;
-
-            if (any(lessThan(structureMin_CS, ivec3(0, 0, 0))) || any(greaterThanEqual(structureMax_CS, chunkSizeVec)))
-            {
-                continue;
-            }
-
-            this->fillStructureBlocks(&structure, 1);
-        }
+        const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
+        this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
