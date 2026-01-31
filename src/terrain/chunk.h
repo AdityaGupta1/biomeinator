@@ -27,9 +27,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 enum class ChunkState : uint8_t
 {
-    NEEDS_BLOCKS,
-    GENERATING_BLOCKS,
-    HAS_BLOCKS,
+    NEEDS_TERRAIN,
+    GENERATING_TERRAIN,
+    HAS_TERRAIN,
     NEEDS_SEGMENTS,
     GENERATING_SEGMENTS,
     NEEDS_GEOMETRY,
@@ -105,7 +105,7 @@ private:
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
-    std::atomic<ChunkState> state{ ChunkState::NEEDS_BLOCKS };
+    std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
@@ -126,7 +126,7 @@ public:
 
     void setNeighbors(bool createNeighbors);
 
-    void generateBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
+    void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);
