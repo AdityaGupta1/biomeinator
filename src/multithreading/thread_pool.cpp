@@ -37,7 +37,7 @@ void ThreadPool::init(uint32_t numWorkers)
 
 void ThreadPool::worker()
 {
-    ThreadMemoryAllocator threadMemoryAlloc;
+    ThreadMemoryAllocator threadMemoryAlloc{};
     Task localTasks[MAX_NUM_LOCAL_TASKS];
 
     while (true)
