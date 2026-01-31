@@ -22,7 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DirectXMath.h>
 
 #define uint uint32_t
-#define uint64 uint64_t
 #define uint2 DirectX::XMUINT2
 
 #define float2 DirectX::XMFLOAT2
