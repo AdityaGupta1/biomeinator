@@ -57,6 +57,11 @@ struct RandomNumberGenerator
     {
         return glm::vec3(nextFloat(), nextFloat(), nextFloat());
     }
+
+    int nextInt(int min, int max)
+    {
+        return static_cast<int>(min + (max - min) * nextFloat());
+    }
 };
 
 inline RandomNumberGenerator initRng(uint32_t seed)
