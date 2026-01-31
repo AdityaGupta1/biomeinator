@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"
+#include "materials.hlsli"
 #include "payload.hlsli"
 
 #define RAY_DEFAULT_TMAX 10000.f
@@ -125,6 +126,34 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v0 = verts[instanceData.vertsBufferOffset + i0];
     v1 = verts[instanceData.vertsBufferOffset + i1];
     v2 = verts[instanceData.vertsBufferOffset + i2];
+}
+
+[shader("anyhit")]
+void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+{
+    const InstanceData instanceData = instanceDatas[InstanceID()];
+
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
+    const Material material = materials[instanceData.materialIdx];
+    if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
+    {
+        return;
+    }
+
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+
+    Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
+    const float alpha = tex.SampleLevel(texSampler, uv, 0).a;
+    if (alpha < 0.999f)
+    {
+        IgnoreHit();
+        return;
+    }
 }
 
 [shader("closesthit")]

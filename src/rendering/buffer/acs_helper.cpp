@@ -168,7 +168,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     buildInfo->geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 
         .Triangles = {
             .Transform3x4 = 0,
