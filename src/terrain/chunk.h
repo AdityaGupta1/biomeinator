@@ -83,6 +83,7 @@ inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
 inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
+inline constexpr glm::ivec3 maxPos_CS = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;

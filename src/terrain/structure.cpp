@@ -56,20 +56,23 @@ static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 struc
         }
     }
 
-    const ivec3 leavesMinPos_CS = clampToChunkBoundaries(trunkTopPos_CS - ivec3(2, 2, 2));
-    const ivec3 leavesMaxPos_CS = clampToChunkBoundaries(trunkTopPos_CS + ivec3(2, 2, 2));
-    for (int blockZ = leavesMinPos_CS.z; blockZ <= leavesMaxPos_CS.z; ++blockZ)
+    const ivec3 leavesMinPos_CS = glm::max(trunkTopPos_CS - ivec3(2, 2, 2), ivec3(0, 0, 0));
+    const ivec3 leavesMaxPos_CS = glm::min(trunkTopPos_CS + ivec3(2, 2, 2), maxPos_CS - 1);
+    if (all(lessThanEqual(leavesMinPos_CS, leavesMaxPos_CS)))
     {
-        for (int blockX = leavesMinPos_CS.x; blockX <= leavesMaxPos_CS.x; ++blockX)
+        for (int blockZ = leavesMinPos_CS.z; blockZ <= leavesMaxPos_CS.z; ++blockZ)
         {
-            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, leavesMinPos_CS.y, blockZ));
-
-            for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
+            for (int blockX = leavesMinPos_CS.x; blockX <= leavesMaxPos_CS.x; ++blockX)
             {
-                Block& block = blocks[blockIdx++];
-                if (block == Block::AIR)
+                uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, leavesMinPos_CS.y, blockZ));
+
+                for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
                 {
-                    block = Block::OAK_LEAVES;
+                    Block& block = blocks[blockIdx++];
+                    if (block == Block::AIR)
+                    {
+                        block = Block::OAK_LEAVES;
+                    }
                 }
             }
         }
