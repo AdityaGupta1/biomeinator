@@ -39,7 +39,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 inline constexpr int renderDistance = 30;
 inline constexpr int createBlasDistance = renderDistance + 1;
-inline constexpr int createTerrainDistance = createBlasDistance + 1;
+inline constexpr int generateTerrainDistance = createBlasDistance + 1;
 
 namespace Terrain
 {
@@ -85,8 +85,8 @@ struct IVec2Hash
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
 
-static std::deque<Chunk*> chunksToGenTerrain;
-static std::deque<Chunk*> chunksToGenGeometry;
+static std::deque<Chunk*> chunksToGenerateTerrain;
+static std::deque<Chunk*> chunksToGenerateGeometry;
 static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
@@ -139,8 +139,8 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - createTerrainDistance;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + createTerrainDistance;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - generateTerrainDistance;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + generateTerrainDistance;
         const glm::ivec2 minLastChunkPos = lastChunkPos - createBlasDistance;
         const glm::ivec2 maxLastChunkPos = lastChunkPos + createBlasDistance;
 
@@ -208,10 +208,10 @@ void update(ToFreeList& toFreeList)
                         const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
                         const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
                         const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
-                        const bool inCurrentCreateTerrainDistance = distToCurrentChunk <= createTerrainDistance;
+                        const bool inCurrentGenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
                         const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
                         const bool inLastCreateBlasDistance = distToLastChunk <= createBlasDistance;
-                        if (!inCurrentCreateTerrainDistance && !inLastCreateBlasDistance)
+                        if (!inCurrentGenerateTerrainDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
@@ -224,12 +224,12 @@ void update(ToFreeList& toFreeList)
 
                         const ChunkState chunkState = chunk->getState();
 
-                        if (inCurrentCreateTerrainDistance)
+                        if (inCurrentGenerateTerrainDistance)
                         {
                             if (chunkState == ChunkState::NEEDS_TERRAIN)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_TERRAIN);
-                                chunksToGenTerrain.push_back(chunk);
+                                chunksToGenerateTerrain.push_back(chunk);
                             }
                             else if (chunkState == ChunkState::NEEDS_SEGMENTS)
                             {
@@ -246,7 +246,7 @@ void update(ToFreeList& toFreeList)
                             if (chunkState == ChunkState::NEEDS_GEOMETRY)
                             {
                                 chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
-                                chunksToGenGeometry.push_back(chunk);
+                                chunksToGenerateGeometry.push_back(chunk);
                             }
                         }
                         else if (inLastCreateBlasDistance)
@@ -273,19 +273,19 @@ void update(ToFreeList& toFreeList)
     }
 
     const uint32_t numGenerateTerrainTasksThisFrame =
-        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenTerrain.size()));
+        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
     for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
     {
-        Chunk* chunk = chunksToGenTerrain.front();
-        chunksToGenTerrain.pop_front();
+        Chunk* chunk = chunksToGenerateTerrain.front();
+        chunksToGenerateTerrain.pop_front();
 
         tasksToEnqueue.push_back({ task_generateTerrain, chunk });
     }
 
-    while (!chunksToGenGeometry.empty())
+    while (!chunksToGenerateGeometry.empty())
     {
-        Chunk* chunk = chunksToGenGeometry.front();
-        chunksToGenGeometry.pop_front();
+        Chunk* chunk = chunksToGenerateGeometry.front();
+        chunksToGenerateGeometry.pop_front();
 
         Instance* instance = scene->requestNewInstance(toFreeList);
         chunk->setInstance(instance);

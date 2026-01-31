@@ -31,6 +31,8 @@ namespace ChunkGenerator
 
 void init();
 
-void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks, ThreadMemoryAllocator& threadMemoryAlloc);
+void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
+                       std::vector<Block>& blocks,
+                       ThreadMemoryAllocator& threadMemoryAlloc);
 
 }; // namespace ChunkGenerator

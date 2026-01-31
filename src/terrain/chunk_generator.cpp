@@ -140,7 +140,9 @@ static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generat
     fn->GenUniformGrid3D(data, 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
 }
 
-void fillBlocks(glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks, ThreadMemoryAllocator& threadMemoryAlloc)
+void fillTerrainBlocks(glm::ivec2 chunkPosBlocksXZ_WS,
+                       std::vector<Block>& blocks,
+                       ThreadMemoryAllocator& threadMemoryAlloc)
 {
     float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
