@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "block.h"
+#include "../block.h"
 
 #include <glm/glm.hpp>
 #include <vector>

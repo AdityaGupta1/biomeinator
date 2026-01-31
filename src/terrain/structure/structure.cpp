@@ -18,8 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "structure.h"
 
-#include "block.h"
-#include "chunk.h"
+#include "../block.h"
+#include "../chunk.h"
 #include "util/rng.h"
 
 #include <array>

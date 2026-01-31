@@ -19,8 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
-#include "structure.h"
 #include "scene/scene.h"
+#include "structure/structure.h"
 
 #include <array>
 #include <atomic>
