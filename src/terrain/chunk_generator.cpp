@@ -155,10 +155,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
-    float* terrainNoise = threadMemoryAlloc.request<float>(numChunkBlocks);
+    constexpr uint terrainNoiseMinY = 80;
+    constexpr uint terrainNoiseHeight = chunkSizeY - terrainNoiseMinY;
+    float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
     constexpr uint maxCaveHeight = 160;
     float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeY);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight);
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
@@ -181,7 +183,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const TopBlocks& topBlocks = biomeData.topBlocks;
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
-            const uint baseCaveIdx = maxCaveHeight * columnIdx;
+            const int baseTerrainNoiseIdx = terrainNoiseHeight * columnIdx - terrainNoiseMinY;
+            const uint baseCaveNoiseIdx = maxCaveHeight * columnIdx;
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
@@ -206,7 +209,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     break;
                 }
 
-                bool isInTerrain = (terrainNoise[blockIdx] < surfaceVal);
+                bool isInTerrain = y < terrainNoiseMinY || (terrainNoise[baseTerrainNoiseIdx + y] < surfaceVal);
                 bool isCave = false;
                 if (isInTerrain)
                 {
@@ -215,7 +218,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const float caveSurfaceMixFactor =
                             smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
                         const float caveSurfaceVal = mix(0.f, 0.6f, caveSurfaceMixFactor);
-                        isCave = caveNoise[baseCaveIdx + y] < caveSurfaceVal;
+                        isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
                     }
 
                     if (!isCave)
