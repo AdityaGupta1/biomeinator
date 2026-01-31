@@ -20,7 +20,9 @@ Or, you can:
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
 
-Once the project is running, you can open a glTF scene from `test_scenes/` with <kbd>Ctrl</kbd> + <kbd>O</kbd>. Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. You can also press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu, hold <kbd>C</kbd> to zoom, or press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`).
+For voxel terrain, run with the command line argument `--voxelMode`. Otherwise, you can open glTF scenes with <kbd>Ctrl</kbd> + <kbd>O</kbd>. Some example scenes are available in `test_scenes/`.
+
+Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. You can also press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu, hold <kbd>C</kbd> to zoom, or press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`).
 
 ## Third-Party Licenses
 
