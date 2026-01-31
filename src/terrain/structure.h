@@ -39,11 +39,19 @@ struct Structure
     glm::ivec3 boundsMax; // inclusive
 };
 
+struct StructureBounds
+{
+    glm::ivec3 minDiff;
+    glm::ivec3 maxDiff;
+};
+
 namespace Structures
 {
 
 void init();
 
 void fillStructureBlocks(const Structure* structures, uint32_t numStructures, glm::ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks);
+
+const StructureBounds& getStructureBounds(StructureType type);
 
 } // namespace Structures

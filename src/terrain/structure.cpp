@@ -80,12 +80,17 @@ namespace Structures
 using FillStructureFunc = void (*)(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks);
 static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs;
 
-#define GET_FILL_STRUCTURE_FUNC_BY_NAME(structureName) fillStructureFuncs[static_cast<size_t>(StructureType::structureName)]
-#define SET_FILL_STRUCTURE_FUNC(structureName) GET_FILL_STRUCTURE_FUNC_BY_NAME(structureName) = fillStructureBlocks_##structureName;
+#define FILL_STRUCTURE_FUNC_BY_NAME(structureName) fillStructureFuncs[static_cast<size_t>(StructureType::structureName)]
+#define SET_FILL_STRUCTURE_FUNC(structureName) FILL_STRUCTURE_FUNC_BY_NAME(structureName) = fillStructureBlocks_##structureName;
+
+static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> structureBounds;
+
+#define STRUCTURE_BOUNDS_BY_NAME(structureName) structureBounds[static_cast<size_t>(StructureType::structureName)]
 
 void init()
 {
     SET_FILL_STRUCTURE_FUNC(OAK_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec3(-2, 0, -2), ivec3(2, 10, 2) };
 }
 
 void fillStructureBlocks(const Structure* structures, uint32_t numStructures, ivec2 chunkPosBlocksXZ_WS, std::vector<Block>& blocks)
@@ -97,6 +102,11 @@ void fillStructureBlocks(const Structure* structures, uint32_t numStructures, iv
         const ivec3 structurePos_CS = structure.pos_WS - ivec3(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y /*z*/);
         fillStructureFunc(structure, structurePos_CS, blocks);
     }
+}
+
+const StructureBounds& getStructureBounds(StructureType type)
+{
+    return structureBounds[static_cast<size_t>(type)];
 }
 
 } // namespace Structures
