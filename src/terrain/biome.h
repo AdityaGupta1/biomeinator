@@ -18,9 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "../block.h"
-
-inline constexpr uint32_t numClosestBiomes = 4;
+#include "block.h"
 
 struct BiomeNoise
 {
