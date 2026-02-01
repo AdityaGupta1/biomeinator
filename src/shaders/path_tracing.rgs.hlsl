@@ -71,8 +71,7 @@ void pathTraceRay(inout Payload payload)
     {
         const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
         const int2 chunkPosBlocksXZ_WS = int2(floor(surfPos_WS.xz / 16.f)); // should be chunkSizeXZ instead of 16.f but whatever
-        RandomNumberGenerator rng = initRng(chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y);
-        float3 chunkColor = rng.nextFloat3();
+        const float3 chunkColor = (chunkPosBlocksXZ_WS.x + chunkPosBlocksXZ_WS.y /*z*/) % 2 == 0 ? float3(1.f, 0.5f, 0.5f) : float3(0.5f, 1.f, 1.f);
         payload.pathWeight *= chunkColor;
     }
 
