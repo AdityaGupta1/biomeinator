@@ -382,7 +382,7 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
                 uvec3 segmentStartPos, segmentEndPos;
                 Chunk::segmentPosToBounds(chunkSegmentPos, segmentStartPos, segmentEndPos);
 
-                ChunkSegment segment;
+                ChunkSegment segment = ChunkSegment::MIXED;
                 const Block blockAtBasePos = this->blocks[Chunk::blockPosToIdx(segmentStartPos)];
                 switch (Blocks::getBlockData(blockAtBasePos).type)
                 {
@@ -406,9 +406,6 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
                         }
                         break;
                     }
-                    default:
-                        segment = ChunkSegment::MIXED;
-                        break;
                 }
 
                 prevSegments[segmentIdx++] = segment; // used for easier condition checking for future segments in this function
