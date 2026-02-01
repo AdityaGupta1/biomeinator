@@ -61,19 +61,36 @@ fillStructureBlocksHeader(OAK_TREE)
         {
             blocks[blockIdx++] = Block::OAK_LOG;
         }
+        for (int dy = 0; dy < 2; ++dy)
+        {
+            blocks[blockIdx++] = Block::OAK_LEAVES;
+        }
     }
 
-    const ivec3 leavesMinPos_CS = glm::max(trunkTopPos_CS - ivec3(2, 2, 2), ivec3(0, 0, 0));
-    const ivec3 leavesMaxPos_CS = glm::min(trunkTopPos_CS + ivec3(2, 2, 2), chunkSizeVec - 1);
-    if (all(lessThanEqual(leavesMinPos_CS, leavesMaxPos_CS)))
+    const ivec2 leavesMinPosXZ_CS = glm::max(ivec2(trunkTopPos_CS.x - 2, trunkTopPos_CS.z - 2), ivec2(0, 0));
+    const ivec2 leavesMaxPosXZ_CS = glm::min(ivec2(trunkTopPos_CS.x + 2, trunkTopPos_CS.z + 2), ivec2(chunkSizeXZ, chunkSizeXZ) - 1);
+    for (int blockZ = leavesMinPosXZ_CS.y /*z*/; blockZ <= leavesMaxPosXZ_CS.y /*z*/; ++blockZ)
     {
-        for (int blockZ = leavesMinPos_CS.z; blockZ <= leavesMaxPos_CS.z; ++blockZ)
+        for (int blockX = leavesMinPosXZ_CS.x; blockX <= leavesMaxPosXZ_CS.x; ++blockX)
         {
-            for (int blockX = leavesMinPos_CS.x; blockX <= leavesMaxPos_CS.x; ++blockX)
-            {
-                uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, leavesMinPos_CS.y, blockZ));
+            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, trunkTopPos_CS.y - 1, blockZ));
 
-                for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
+            ivec2 diffXZ = abs(ivec2(blockX, blockZ) - ivec2(structurePos_CS.x, structurePos_CS.z));
+            if (diffXZ.x == 2 && diffXZ.y /*z*/ == 2)
+            {
+                if (rng.chance(0.5f))
+                {
+                    if (rng.chance(0.5f))
+                    {
+                        blockIdx++;
+                    }
+                    setBlockIfAir(blocks, blockIdx, Block::OAK_LEAVES);
+                }
+            }
+            else
+            {
+                int leavesHeight = (diffXZ.x + diffXZ.y == 1) ? 4 : 2;
+                for (int dy = 0; dy < leavesHeight; ++dy)
                 {
                     setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
                 }
