@@ -151,6 +151,10 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
     }
 }
 
+StructureBounds::StructureBounds(int diff)
+    : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
+{}
+
 namespace Structures
 {
 
@@ -167,10 +171,10 @@ static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> st
 void init()
 {
     SET_FILL_STRUCTURE_FUNC(OAK_TREE);
-    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec2(-2, -2), ivec2(2, 2) };
+    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = 2;
 
     SET_FILL_STRUCTURE_FUNC(SAGUARO_CACTUS);
-    STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = { ivec2(-2, -2), ivec2(2, 2) };
+    STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = 2;
 }
 
 const StructureBounds& getStructureBounds(StructureType type)

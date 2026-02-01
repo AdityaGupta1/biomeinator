@@ -42,6 +42,9 @@ struct StructureBounds
 {
     glm::ivec2 minDiffXZ;
     glm::ivec2 maxDiffXZ;
+
+    StructureBounds() = default;
+    StructureBounds(int diff);
 };
 
 inline constexpr uint32_t structureMaxChunkRadius = 1;
