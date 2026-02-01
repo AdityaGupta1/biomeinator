@@ -37,7 +37,9 @@ static inline bool isInChunk(ivec3 pos_CS)
     return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
 }
 
-static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+#define fillStructureBlocksHeader(structureName) static void fillStructureBlocks_##structureName(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+
+fillStructureBlocksHeader(OAK_TREE)
 {
     RandomNumberGenerator rng = initRng(structure.seed);
     ivec3 trunkTopPos_CS = structurePos_CS;
@@ -74,6 +76,11 @@ static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 struc
     }
 }
 
+fillStructureBlocksHeader(SAGUARO_CACTUS)
+{
+
+}
+
 namespace Structures
 {
 
@@ -90,7 +97,10 @@ static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> st
 void init()
 {
     SET_FILL_STRUCTURE_FUNC(OAK_TREE);
-    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec3(-2, 0, -2), ivec3(2, 10, 2) };
+    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec2(-2, -2), ivec2(2, 2) };
+
+    SET_FILL_STRUCTURE_FUNC(SAGUARO_CACTUS);
+    STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = { ivec2(-2, -2), ivec2(2, 2) };
 }
 
 const StructureBounds& getStructureBounds(StructureType type)
@@ -110,17 +120,18 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
     {
         const Structure& structure = structures[i];
 
-        const ivec3 structurePos_CS = structure.pos_WS - ivec3(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y /*z*/);
+        const ivec2 structurePosXZ_CS = ivec2(structure.pos_WS.x, structure.pos_WS.z) - chunkPosBlocksXZ_WS;
         const StructureBounds& bounds = Structures::getStructureBounds(structure.type);
-        const ivec3 structureMin_CS = structurePos_CS + bounds.minDiff;
-        const ivec3 structureMax_CS = structurePos_CS + bounds.maxDiff;
+        const ivec2 structureMinXZ_CS = structurePosXZ_CS - bounds.minDiffXZ;
+        const ivec2 structureMaxXZ_CS = structurePosXZ_CS + bounds.maxDiffXZ;
 
-        if (any(lessThan(structureMin_CS, ivec3(0, 0, 0))) || any(greaterThanEqual(structureMax_CS, chunkSizeVec)))
+        if (structureMinXZ_CS.x >= chunkSizeXZ || structureMinXZ_CS.y /*z*/ >= chunkSizeXZ ||
+            structureMaxXZ_CS.x < 0 || structureMaxXZ_CS.y /*z*/ < 0)
         {
             continue;
         }
 
         const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
-        fillStructureFunc(structure, structurePos_CS, blocks);
+        fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks);
     }
 }

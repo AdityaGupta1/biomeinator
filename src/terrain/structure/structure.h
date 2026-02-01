@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 enum StructureType
 {
 	OAK_TREE,
+    SAGUARO_CACTUS,
 
 	COUNT
 };
@@ -39,8 +40,8 @@ struct Structure
 
 struct StructureBounds
 {
-    glm::ivec3 minDiff;
-    glm::ivec3 maxDiff;
+    glm::ivec2 minDiffXZ;
+    glm::ivec2 maxDiffXZ;
 };
 
 inline constexpr uint32_t structureMaxChunkRadius = 1;
