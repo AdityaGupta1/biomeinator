@@ -85,11 +85,13 @@ inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 
+static_assert((chunkSizeXZ & (chunkSizeXZ - 1)) == 0, "chunkSizeXZ must be a power of two");
+
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
 
-static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0);
-static_assert(chunkSizeY % chunkSegmentSizeY == 0);
+static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0, "chunkSizeXZ must be a multiple of chunkSegmentSizeXZ");
+static_assert(chunkSizeY % chunkSegmentSizeY == 0, "chunkSizeY must be a multiple of chunkSegmentSizeY");
 
 inline constexpr uint32_t numChunkSegmentsXZ = chunkSizeXZ / chunkSegmentSizeXZ;
 inline constexpr uint32_t numChunkSegmentsY = chunkSizeY / chunkSegmentSizeY;

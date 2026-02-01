@@ -457,9 +457,9 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 
         const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
         ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until all neighbors have blocks
         const ivec3 pos_neighborCS = {
-            (neighborPos_CS.x + chunkSizeXZ) % chunkSizeXZ,
+            (neighborPos_CS.x + chunkSizeXZ) & (chunkSizeXZ - 1),
             neighborPos_CS.y,
-            (neighborPos_CS.z + chunkSizeXZ) % chunkSizeXZ,
+            (neighborPos_CS.z + chunkSizeXZ) & (chunkSizeXZ - 1),
         };
         neighborBlock = neighborChunk->blocks[Chunk::blockPosToIdx(uvec3(pos_neighborCS))];
     }
