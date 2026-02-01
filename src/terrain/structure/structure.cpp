@@ -37,11 +37,21 @@ static inline bool isInChunk(ivec3 pos_CS)
     return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
 }
 
+static inline void setBlockIfAir(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
+{
+    Block& block = blocks[blockIdx];
+    if (block == Block::AIR)
+    {
+        block = newBlock;
+    }
+}
+
 #define fillStructureBlocksHeader(structureName) static void fillStructureBlocks_##structureName(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
 
 fillStructureBlocksHeader(OAK_TREE)
 {
     RandomNumberGenerator rng = initRng(structure.seed);
+
     ivec3 trunkTopPos_CS = structurePos_CS;
     trunkTopPos_CS.y += rng.nextInt(4, 7);
     if (isInChunkXZ(structurePos_CS))
@@ -65,11 +75,7 @@ fillStructureBlocksHeader(OAK_TREE)
 
                 for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
                 {
-                    Block& block = blocks[blockIdx++];
-                    if (block == Block::AIR)
-                    {
-                        block = Block::OAK_LEAVES;
-                    }
+                    setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
                 }
             }
         }
@@ -78,7 +84,54 @@ fillStructureBlocksHeader(OAK_TREE)
 
 fillStructureBlocksHeader(SAGUARO_CACTUS)
 {
+    RandomNumberGenerator rng = initRng(structure.seed);
 
+    const int trunkHeight = rng.nextInt(4, 10);
+
+    if (isInChunkXZ(structurePos_CS))
+    {
+        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
+        for (int dy = 0; dy <= trunkHeight; ++dy)
+        {
+            blocks[blockIdx++] = Block::CACTUS;
+        }
+    }
+
+    if (trunkHeight <= 5)
+    {
+        return;
+    }
+
+    constexpr float generateArmChance = 0.4f;
+    for (uint dirIdx = 0; dirIdx < 4; ++dirIdx)
+    {
+        if (!rng.chance(generateArmChance))
+        {
+            continue;
+        }
+
+        const int armBaseHeight = rng.nextInt(2, trunkHeight - 3);
+        const int armHeight = rng.nextInt(2, 4);
+
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        const ivec2 dirOffset = neighborOffset(dir);
+
+        const ivec3 armConnectorPos_CS = structurePos_CS + ivec3(dirOffset.x, armBaseHeight, dirOffset.y /*z*/);
+        if (isInChunkXZ(armConnectorPos_CS))
+        {
+            setBlockIfAir(blocks, Chunk::blockPosToIdx(armConnectorPos_CS), Block::CACTUS);
+        }
+
+        const ivec3 armBendPos_CS = armConnectorPos_CS + ivec3(dirOffset.x, 0, dirOffset.y /*z*/);
+        if (isInChunkXZ(armBendPos_CS))
+        {
+            uint blockIdx = Chunk::blockPosToIdx(armBendPos_CS);
+            for (int dy = 0; dy <= armHeight; ++dy)
+            {
+                setBlockIfAir(blocks, blockIdx++, Block::CACTUS);
+            }
+        }
+    }
 }
 
 namespace Structures
