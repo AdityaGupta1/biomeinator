@@ -160,9 +160,6 @@ void Chunk::checkStructureNeighbors()
 
 void Chunk::fillStructures()
 {
-    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
-    const ivec3 chunkMin_WS(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y);
-
     for (Chunk* structureNeighbor : this->structureNeighbors)
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
