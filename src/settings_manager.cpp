@@ -61,6 +61,7 @@ void parseArgs(const int argc, const char* const* argv)
 
     optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
     optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
+    optionAdder("debugColorChunks", "Color chunks", cxxopts::value<bool>()->default_value("false"));
     optionAdder("debugBool0", "Debug bool 0", cxxopts::value<bool>()->default_value("false"));
     optionAdder("debugBool1", "Debug bool 1", cxxopts::value<bool>()->default_value("false"));
     optionAdder("debugBool2", "Debug bool 2", cxxopts::value<bool>()->default_value("false"));
@@ -114,6 +115,7 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
+    COPY_SETTING("debugColorChunks", bool);
     COPY_SETTING("debugBool0", bool);
     COPY_SETTING("debugBool1", bool);
     COPY_SETTING("debugBool2", bool);

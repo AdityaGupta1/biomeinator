@@ -137,7 +137,7 @@ struct DebugParams
     uint debugOutputSrvIdx;
     uint debugOutputNumChannels;
     float debugOutputScale;
-    uint pad0;
+    uint colorChunks;
 
     uint debugBool0;
     uint debugBool1;

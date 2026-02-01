@@ -37,9 +37,21 @@ static inline bool isInChunk(ivec3 pos_CS)
     return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
 }
 
-static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+static inline void setBlockIfAir(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
+{
+    Block& block = blocks[blockIdx];
+    if (block == Block::AIR)
+    {
+        block = newBlock;
+    }
+}
+
+#define fillStructureBlocksHeader(structureName) static void fillStructureBlocks_##structureName(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+
+fillStructureBlocksHeader(OAK_TREE)
 {
     RandomNumberGenerator rng = initRng(structure.seed);
+
     ivec3 trunkTopPos_CS = structurePos_CS;
     trunkTopPos_CS.y += rng.nextInt(4, 7);
     if (isInChunkXZ(structurePos_CS))
@@ -49,30 +61,99 @@ static void fillStructureBlocks_OAK_TREE(const Structure& structure, ivec3 struc
         {
             blocks[blockIdx++] = Block::OAK_LOG;
         }
+        for (int dy = 0; dy < 2; ++dy)
+        {
+            blocks[blockIdx++] = Block::OAK_LEAVES;
+        }
     }
 
-    const ivec3 leavesMinPos_CS = glm::max(trunkTopPos_CS - ivec3(2, 2, 2), ivec3(0, 0, 0));
-    const ivec3 leavesMaxPos_CS = glm::min(trunkTopPos_CS + ivec3(2, 2, 2), chunkSizeVec - 1);
-    if (all(lessThanEqual(leavesMinPos_CS, leavesMaxPos_CS)))
+    const ivec2 leavesMinPosXZ_CS = glm::max(ivec2(trunkTopPos_CS.x - 2, trunkTopPos_CS.z - 2), ivec2(0, 0));
+    const ivec2 leavesMaxPosXZ_CS = glm::min(ivec2(trunkTopPos_CS.x + 2, trunkTopPos_CS.z + 2), ivec2(chunkSizeXZ, chunkSizeXZ) - 1);
+    for (int blockZ = leavesMinPosXZ_CS.y /*z*/; blockZ <= leavesMaxPosXZ_CS.y /*z*/; ++blockZ)
     {
-        for (int blockZ = leavesMinPos_CS.z; blockZ <= leavesMaxPos_CS.z; ++blockZ)
+        for (int blockX = leavesMinPosXZ_CS.x; blockX <= leavesMaxPosXZ_CS.x; ++blockX)
         {
-            for (int blockX = leavesMinPos_CS.x; blockX <= leavesMaxPos_CS.x; ++blockX)
-            {
-                uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, leavesMinPos_CS.y, blockZ));
+            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, trunkTopPos_CS.y - 1, blockZ));
 
-                for (int blockY = leavesMinPos_CS.y; blockY <= leavesMaxPos_CS.y; ++blockY)
+            ivec2 diffXZ = abs(ivec2(blockX, blockZ) - ivec2(structurePos_CS.x, structurePos_CS.z));
+            if (diffXZ.x == 2 && diffXZ.y /*z*/ == 2)
+            {
+                if (rng.chance(0.5f))
                 {
-                    Block& block = blocks[blockIdx++];
-                    if (block == Block::AIR)
+                    if (rng.chance(0.5f))
                     {
-                        block = Block::OAK_LEAVES;
+                        blockIdx++;
                     }
+                    setBlockIfAir(blocks, blockIdx, Block::OAK_LEAVES);
+                }
+            }
+            else
+            {
+                int leavesHeight = (diffXZ.x + diffXZ.y == 1) ? 4 : 2;
+                for (int dy = 0; dy < leavesHeight; ++dy)
+                {
+                    setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
                 }
             }
         }
     }
 }
+
+fillStructureBlocksHeader(SAGUARO_CACTUS)
+{
+    RandomNumberGenerator rng = initRng(structure.seed);
+
+    const int trunkHeight = rng.nextInt(4, 10);
+
+    if (isInChunkXZ(structurePos_CS))
+    {
+        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
+        for (int dy = 0; dy <= trunkHeight; ++dy)
+        {
+            blocks[blockIdx++] = Block::CACTUS;
+        }
+    }
+
+    if (trunkHeight <= 5)
+    {
+        return;
+    }
+
+    constexpr float generateArmChance = 0.4f;
+    for (uint dirIdx = 0; dirIdx < 4; ++dirIdx)
+    {
+        if (!rng.chance(generateArmChance))
+        {
+            continue;
+        }
+
+        const int armBaseHeight = rng.nextInt(2, trunkHeight - 3);
+        const int armHeight = rng.nextInt(2, 4);
+
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        const ivec2 dirOffset = neighborOffset(dir);
+
+        const ivec3 armConnectorPos_CS = structurePos_CS + ivec3(dirOffset.x, armBaseHeight, dirOffset.y /*z*/);
+        if (isInChunkXZ(armConnectorPos_CS))
+        {
+            setBlockIfAir(blocks, Chunk::blockPosToIdx(armConnectorPos_CS), Block::CACTUS);
+        }
+
+        const ivec3 armBendPos_CS = armConnectorPos_CS + ivec3(dirOffset.x, 0, dirOffset.y /*z*/);
+        if (isInChunkXZ(armBendPos_CS))
+        {
+            uint blockIdx = Chunk::blockPosToIdx(armBendPos_CS);
+            for (int dy = 0; dy <= armHeight; ++dy)
+            {
+                setBlockIfAir(blocks, blockIdx++, Block::CACTUS);
+            }
+        }
+    }
+}
+
+StructureBounds::StructureBounds(int diff)
+    : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
+{}
 
 namespace Structures
 {
@@ -90,7 +171,10 @@ static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> st
 void init()
 {
     SET_FILL_STRUCTURE_FUNC(OAK_TREE);
-    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = { ivec3(-2, 0, -2), ivec3(2, 10, 2) };
+    STRUCTURE_BOUNDS_BY_NAME(OAK_TREE) = 2;
+
+    SET_FILL_STRUCTURE_FUNC(SAGUARO_CACTUS);
+    STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = 2;
 }
 
 const StructureBounds& getStructureBounds(StructureType type)
@@ -106,21 +190,22 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    for (uint32_t i = 0; i < numStructures; i++)
+    for (uint32_t i = 0; i < numStructures; ++i)
     {
         const Structure& structure = structures[i];
 
-        const ivec3 structurePos_CS = structure.pos_WS - ivec3(chunkPosBlocksXZ_WS.x, 0, chunkPosBlocksXZ_WS.y /*z*/);
+        const ivec2 structurePosXZ_CS = ivec2(structure.pos_WS.x, structure.pos_WS.z) - chunkPosBlocksXZ_WS;
         const StructureBounds& bounds = Structures::getStructureBounds(structure.type);
-        const ivec3 structureMin_CS = structurePos_CS + bounds.minDiff;
-        const ivec3 structureMax_CS = structurePos_CS + bounds.maxDiff;
+        const ivec2 structureMinXZ_CS = structurePosXZ_CS + bounds.minDiffXZ;
+        const ivec2 structureMaxXZ_CS = structurePosXZ_CS + bounds.maxDiffXZ;
 
-        if (any(lessThan(structureMin_CS, ivec3(0, 0, 0))) || any(greaterThanEqual(structureMax_CS, chunkSizeVec)))
+        if (structureMinXZ_CS.x >= static_cast<int>(chunkSizeXZ) || structureMinXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||
+            structureMaxXZ_CS.x < 0 || structureMaxXZ_CS.y /*z*/ < 0)
         {
             continue;
         }
 
         const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
-        fillStructureFunc(structure, structurePos_CS, blocks);
+        fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks);
     }
 }

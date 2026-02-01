@@ -38,6 +38,7 @@ enum class Block : BlockId
     ICE,
     OAK_LOG,
     OAK_LEAVES,
+    CACTUS,
 
     COUNT
 };

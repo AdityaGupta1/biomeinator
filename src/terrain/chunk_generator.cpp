@@ -164,6 +164,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
+    Biome* biomes = threadMemoryAlloc.request<Biome>(chunkSizeXZSquare);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -178,6 +179,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 .peak = peakNoise[columnIdx],
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
+            biomes[columnIdx] = biome;
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
             const TopBlocks& topBlocks = biomeData.topBlocks;
@@ -256,14 +258,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         }
     }
 
-    // TODO: create structures for real instead of this one tree
+    // TODO: create structures for real instead of doing this
 
     RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y, 75902341);
-    const ivec2 treePosXZ_CS = ivec2(rng.nextInt(chunkSizeXZ), rng.nextInt(chunkSizeXZ));
-    const uint treeY = heightfield[treePosXZ_CS.x + chunkSizeXZ * treePosXZ_CS.y /*z*/] + 1;
-    const uvec2 treePos_XZ_WS = treePosXZ_CS + chunkPosBlocksXZ_WS;
-    const ivec3 treePos_WS = ivec3(treePos_XZ_WS.x, treeY, treePos_XZ_WS.y /*z*/);
-    this->structures.emplace_back(StructureType::OAK_TREE, treePos_WS);
+    const ivec2 structurePosXZ_CS = ivec2(rng.nextInt(chunkSizeXZ), rng.nextInt(chunkSizeXZ));
+    const uint structureColumnIdx = structurePosXZ_CS.x + chunkSizeXZ * structurePosXZ_CS.y /*z*/;
+    const uint structureY = heightfield[structureColumnIdx] + 1;
+    const uvec2 structurePos_XZ_WS = structurePosXZ_CS + chunkPosBlocksXZ_WS;
+    const ivec3 structurePos_WS = ivec3(structurePos_XZ_WS.x, structureY, structurePos_XZ_WS.y /*z*/);
+    const Biome structureBiome = biomes[structureColumnIdx];
+    const StructureType structureType = structureBiome == Biome::DESERT ? StructureType::SAGUARO_CACTUS : StructureType::OAK_TREE;
+    this->structures.emplace_back(structureType, structurePos_WS);
 
     for (Structure& structure : this->structures)
     {

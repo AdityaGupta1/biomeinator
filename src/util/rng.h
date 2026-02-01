@@ -58,6 +58,11 @@ struct RandomNumberGenerator
         return glm::vec3(nextFloat(), nextFloat(), nextFloat());
     }
 
+    inline bool chance(float p)
+    {
+        return nextFloat() < p;
+    }
+
     inline int nextInt(int min, int max)
     {
         return static_cast<int>(min + (max - min) * nextFloat());
