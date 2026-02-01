@@ -116,7 +116,7 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    for (uint32_t i = 0; i < numStructures; i++)
+    for (uint32_t i = 0; i < numStructures; ++i)
     {
         const Structure& structure = structures[i];
 

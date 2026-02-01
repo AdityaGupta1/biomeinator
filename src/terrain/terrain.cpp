@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "terrain_materials.h"
+#include "multithreading/thread_memory_allocator.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
@@ -333,9 +334,11 @@ void update(ToFreeList& toFreeList)
         }
 
 #if DEBUG_SINGLE_THREAD
+        ThreadMemoryAllocator threadMemoryAlloc{};
         for (const Task& task : thisFrameTasks)
         {
-            task.fn(task.chunkPtr);
+            task.func(task.chunkPtr, threadMemoryAlloc);
+            threadMemoryAlloc.clear();
         }
 #else
         threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
