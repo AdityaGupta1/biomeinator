@@ -69,6 +69,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("debugFloat1", "Debug float 1", cxxopts::value<float>()->default_value("0.f"));
     optionAdder("debugFloat2", "Debug float 2", cxxopts::value<float>()->default_value("0.f"));
     optionAdder("debugFloat3", "Debug float 3", cxxopts::value<float>()->default_value("0.f"));
+    optionAdder("debugColorChunks", "Color chunks", cxxopts::value<bool>()->default_value("false"));
     optionAdder("gpuValidation", "Enable GPU validation (debug mode only)", cxxopts::value<bool>()->default_value("false"));
     optionAdder("verboseLogging", "Enable SL verbose logging (debug mode only)", cxxopts::value<bool>()->default_value("false"));
 
@@ -122,6 +123,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("debugFloat1", float);
     COPY_SETTING("debugFloat2", float);
     COPY_SETTING("debugFloat3", float);
+    COPY_SETTING("debugColorChunks", bool);
     COPY_SETTING("gpuValidation", bool);
     COPY_SETTING("verboseLogging", bool);
 

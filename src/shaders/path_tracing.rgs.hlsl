@@ -67,6 +67,15 @@ void pathTraceRay(inout Payload payload)
     bool previousWasSpecular = false;
     bool hasEncounteredNonDeltaSurface = false;
 
+    if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
+    {
+        const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+        const int2 chunkPosBlocksXZ_WS = int2(floor(surfPos_WS.xz / 16.f)); // should be chunkSizeXZ instead of 16.f but whatever
+        RandomNumberGenerator rng = initRng(chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y);
+        float3 chunkColor = rng.nextFloat3();
+        payload.pathWeight *= chunkColor;
+    }
+
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = materials[payload.materialIdx];
