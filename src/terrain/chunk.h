@@ -75,7 +75,7 @@ constexpr NeighborDirection oppositeNeighborDirection(NeighborDirection dir)
 enum class ChunkSegment : uint8_t
 {
     AIR,
-    BLOCKS_SURROUNDED,
+    SOLID_SURROUNDED,
     MIXED,
 };
 
@@ -85,11 +85,13 @@ inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 
+static_assert(chunkSizeXZ > 0 && (chunkSizeXZ & (chunkSizeXZ - 1)) == 0, "chunkSizeXZ must be a power of two");
+
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
 
-static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0);
-static_assert(chunkSizeY % chunkSegmentSizeY == 0);
+static_assert(chunkSizeXZ % chunkSegmentSizeXZ == 0, "chunkSizeXZ must be a multiple of chunkSegmentSizeXZ");
+static_assert(chunkSizeY % chunkSegmentSizeY == 0, "chunkSizeY must be a multiple of chunkSegmentSizeY");
 
 inline constexpr uint32_t numChunkSegmentsXZ = chunkSizeXZ / chunkSegmentSizeXZ;
 inline constexpr uint32_t numChunkSegmentsY = chunkSizeY / chunkSegmentSizeY;
@@ -124,9 +126,9 @@ private:
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
 
-    bool isBlockAir(glm::ivec3 pos_CS, int faceIdx);
+    bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, glm::ivec3 neighborPos_CS, int faceIdx);
 
-    bool isRegionAirOrSolid(const glm::uvec3 startPos, const glm::uvec3 endPos, bool isAirPredicate);
+    bool isRegionAllBlockType(const glm::uvec3 startPos, const glm::uvec3 endPos, BlockType blockType);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos,
                                     const glm::uvec3 endPos,
                                     const glm::uvec3 chunkSegmentPos,

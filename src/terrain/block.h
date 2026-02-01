@@ -42,6 +42,13 @@ enum class Block : BlockId
     COUNT
 };
 
+enum class BlockType : uint8_t
+{
+    AIR,
+    SOLID,
+    TRANSPARENT_CUTOUT
+};
+
 struct BlockUvs
 {
 private:
@@ -58,7 +65,8 @@ public:
 
 struct BlockData
 {
-    BlockUvs uvs;
+    BlockUvs uvs{};
+    BlockType type{ BlockType::SOLID };
     bool emitsLight{ false };
 };
 
