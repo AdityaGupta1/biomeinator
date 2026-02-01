@@ -1355,12 +1355,14 @@ static void imguiEndFrame(double deltaTime)
             didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
 
             SettingsGuiHelpers::VerticalSpacing();
-            SettingsGuiHelpers::SectionTitle("Debug parameters");
+
             if (voxelMode)
             {
                 didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Color chunks", "debugColorChunks");
             }
+
             SettingsGuiHelpers::VerticalSpacing();
+
             didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
             didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
             didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
