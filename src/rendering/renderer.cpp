@@ -79,7 +79,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <nvapi.h>
 #include <nvShaderExtnEnums.h>
 
-#ifdef _DEBUG
+#if ENABLE_ASSERTS
 static void printSlResultError(sl::Result result)
 {
     std::string msg;
@@ -257,13 +257,11 @@ static void initStreamline()
     prefs.showConsole = false;
     prefs.logLevel = testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
-#ifdef _DEBUG
     if (SettingsManager::getAsBool("verboseLogging"))
     {
         prefs.showConsole = true;
         prefs.logLevel = sl::LogLevel::eVerbose;
     }
-#endif
 
     const sl::Feature features[] = { sl::kFeatureDLSS_RR };
     prefs.featuresToLoad = features;
@@ -1592,19 +1590,9 @@ void render()
     }
     else
     {
-#ifdef _DEBUG
-        if (debugOutputTarget->debugOutputNumChannels == 0)
-        {
-            Logger::logError("Cannot set debug view to an RtTarget with 0 debug channels");
-            debugOutputTarget = nullptr;
-            debugParams->debugOutputSrvIdx = ~0u;
-        }
-        else
-#endif
-        {
-            debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
-            debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
-        }
+        ASSERT(debugOutputTarget->debugOutputNumChannels > 0);
+        debugParams->debugOutputSrvIdx = debugOutputTarget->getSrvIdx();
+        debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
 
@@ -1951,7 +1939,7 @@ void destroy()
     cmdQueue.Reset();
     factory.Reset();
 
-#ifdef _DEBUG
+#if ENABLE_ASSERTS
     ComPtr<ID3D12DebugDevice> debugDevice;
     if (SUCCEEDED(device.As(&debugDevice)))
     {

@@ -114,13 +114,7 @@ public:
 
     T& operator[](uint32_t idx)
     {
-#ifdef _DEBUG
-        if (idx >= this->size)
-        {
-            throw std::exception("MappedArray access out of bounds");
-        }
-#endif
-
+        ASSERT(idx < this->size);
         this->dirtyBeginIdx = std::min(this->dirtyBeginIdx, idx);
         this->dirtyEndIdx = std::max(this->dirtyEndIdx, idx + 1);
         return host_buffer[idx];

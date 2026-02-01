@@ -250,6 +250,7 @@ target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     TARGET_FILE_DIR="$<TARGET_FILE_DIR:Biomeinator>"
+    ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
 )
 
 # ==================================================

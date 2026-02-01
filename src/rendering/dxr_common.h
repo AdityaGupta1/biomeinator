@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "logger.h"
 
-#ifdef _DEBUG
+#if ENABLE_ASSERTS
 #include <stdio.h>
 #define CHECK_HRESULT(expr)                                                                                            \
     do                                                                                                                 \

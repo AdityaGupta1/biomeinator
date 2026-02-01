@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#ifdef _DEBUG
+#if ENABLE_ASSERTS
 #include "logger.h"
 #include <cassert>
 
@@ -34,7 +34,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             }                                                                                                          \
             Logger::logError("File: %s, line: %d", __FILE__, __LINE__);                                                \
             __debugbreak();                                                                                            \
-            assert(false);                                                                                             \
         }                                                                                                              \
     } while (0)
 
