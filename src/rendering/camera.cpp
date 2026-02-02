@@ -31,11 +31,11 @@ void Camera::init(float defaultFovYRadians)
 {
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        this->posFloat_WS = { 0, 196.f, 0 };
+        this->setPos_WS({ 0, 196.f, 0 });
     }
     else
     {
-        this->posFloat_WS = { 0, 1.5f, 7.f };
+        this->setPos_WS({ 0, 1.5f, 7.f });
     }
 
     this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
@@ -297,6 +297,12 @@ void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::floa
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
+}
+
+void Camera::setPos_WS(glm::vec3 newPos)
+{
+    this->posInt_WS = glm::ivec3(0, 0, 0);
+    this->posFloat_WS = newPos;
 }
 
 glm::vec3 Camera::getPos_WS() const

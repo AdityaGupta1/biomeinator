@@ -34,7 +34,7 @@ class Camera
 private:
     CameraParams params{};
 
-    glm::ivec3 posInt_WS{}; // TODO: use this in terrain for determining chunk updates instead of full pos_WS()
+    glm::ivec3 posInt_WS{};
     glm::vec3 posFloat_WS{};
 
     bool areMatricesDirty{ true };
@@ -68,6 +68,8 @@ private:
     void rotate(float dTheta, float dPhi);
 
     void setMatrices(bool instanceOffsetChanged);
+
+    void setPos_WS(glm::vec3 newPos);
 
 public:
     void init(float defaultFovYRadians);
