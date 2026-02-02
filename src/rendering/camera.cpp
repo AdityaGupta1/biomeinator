@@ -160,7 +160,7 @@ constexpr float zoomFovRatio = 0.3f;
 
 void Camera::processInput(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if instanceOffset has changed, correction will be applied in setMatrices()
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if instanceOffset changed, a correction will be applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -227,11 +227,12 @@ bool Camera::update()
 {
     const Scene& scene = Renderer::getScene();
 
-    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - scene.getInstanceOffset()) + this->getPosFloat_WS();
-    this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
-
     const glm::ivec3 instanceOffset = scene.getInstanceOffset();
     const glm::ivec3 prevInstanceOffset = scene.getPrevInstanceOffset();
+
+    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - instanceOffset) + this->getPosFloat_WS();
+    this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
+
     this->params.instanceOffset = toDirectXInt3(instanceOffset);
     this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
     const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
@@ -302,7 +303,7 @@ void Camera::copyParamsTo(CameraParams* dest) const
 void Camera::setPos_WS(glm::vec3 newPos)
 {
     this->posInt_WS = glm::ivec3(0, 0, 0);
-    this->posFloat_WS = newPos;
+    this->posFloat_WS = newPos; // will be updated properly on next call to processInput()
 }
 
 glm::vec3 Camera::getPos_WS() const
