@@ -49,6 +49,7 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerato
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
     pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+    pointOnLight_WS -= cameraParams.instanceOffset;
 
     float3 lightNor_WS;
     float lightArea;
