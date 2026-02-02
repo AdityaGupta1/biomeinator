@@ -1412,7 +1412,7 @@ static void imguiEndFrame(double deltaTime)
 
     if (ImGui::Begin("Debug", nullptr, windowFlags))
     {
-        const DirectX::XMFLOAT3 cameraPos_WS = camera.getPos_WS();
+        const glm::vec3 cameraPos_WS = camera.getPos_WS();
         ImGui::Text("Position: (%.2f, %.2f, %.2f)", cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z);
     }
     ImGui::End();

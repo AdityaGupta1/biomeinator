@@ -81,5 +81,7 @@ public:
     void copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::float4x4* cameraViewToWorld);
     void copyParamsTo(CameraParams* dest) const;
 
-    DirectX::XMFLOAT3 getPos_WS() const;
+    glm::vec3 getPos_WS() const;
+    glm::ivec3 getPosInt_WS() const;
+    glm::vec3 getPosFloat_WS() const;
 };

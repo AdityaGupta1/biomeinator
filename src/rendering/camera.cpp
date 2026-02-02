@@ -93,9 +93,14 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
+static XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
 void Camera::setMatrices()
 {
-    const XMFLOAT3 pos_WS = this->getPos_WS();
+    const XMFLOAT3 pos_WS = toDirectXFloat3(this->getPos_WS());
     const XMVECTOR eye = XMLoadFloat3(&pos_WS); // TODO: fix
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
@@ -218,6 +223,11 @@ inline sl::float3 toSlFloat3(const DirectX::XMFLOAT3& v)
     return { v.x, v.y, v.z };
 }
 
+inline sl::float3 toSlFloat3(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
 inline sl::float4x4 toSlFloat4x4(const DirectX::XMFLOAT4X4& m)
 {
     sl::float4x4 result;
@@ -258,11 +268,20 @@ void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::floa
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
-    dest->pos_WS = this->getPos_WS(); // TODO: remove
+    dest->pos_WS = toDirectXFloat3(this->getPos_WS()); // TODO: remove
 }
 
-DirectX::XMFLOAT3 Camera::getPos_WS() const
+glm::vec3 Camera::getPos_WS() const
 {
-    glm::vec3 pos_WS = glm::vec3(this->posInt_WS) + this->posFloat_WS;
-    return { pos_WS.x, pos_WS.y, pos_WS.z };
+    return glm::vec3(this->posInt_WS) + this->posFloat_WS;
+}
+
+glm::ivec3 Camera::getPosInt_WS() const
+{
+    return this->posInt_WS;
+}
+
+glm::vec3 Camera::getPosFloat_WS() const
+{
+    return this->posFloat_WS;
 }

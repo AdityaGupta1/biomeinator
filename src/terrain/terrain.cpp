@@ -135,7 +135,7 @@ inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 6;
 
 void update(ToFreeList& toFreeList)
 {
-    const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
+    const glm::vec3 cameraPos_WS = Renderer::getCamera().getPos_WS(); // TODO: use getPosInt_WS() instead
     const glm::ivec2 currentChunkPos =
         glm::ivec2(glm::floor(glm::vec2(cameraPos_WS.x, cameraPos_WS.z) / static_cast<float>(chunkSizeXZ)));
 
