@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "camera.h"
 
+#include "renderer.h"
 #include "rendering/dxr_common.h"
 #include "settings_manager.h"
 
@@ -93,15 +94,9 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-static XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
-{
-    return { v.x, v.y, v.z };
-}
-
 void Camera::setMatrices()
 {
-    const XMFLOAT3 pos_WS = toDirectXFloat3(this->getPos_WS());
-    const XMVECTOR eye = XMLoadFloat3(&pos_WS); // TODO: fix
+    const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
     const XMMATRIX worldToView = XMMatrixLookAtRH(eye, lookAt, up);
@@ -131,6 +126,11 @@ void Camera::setMatrices()
 
     XMStoreFloat4x4(&this->worldToPrevViewMat, worldToView);
     this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
+}
+
+static XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
 }
 
 constexpr float mouseSensitivity = 0.0016f;
@@ -199,17 +199,24 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
             floatPosI -= intPart;
         }
     }
+    this->params.pos_WS = toDirectXFloat3(this->posFloat_WS);
 
-    const bool didChange = this->areMatricesDirty;
+    this->params.jitter = this->jitterHalton.next();
+
+    return this->areMatricesDirty;
+}
+
+void Camera::update2()
+{
+    const glm::vec3 paramsPos_WS =
+        glm::vec3(this->getPosInt_WS() - Renderer::getSceneInstanceOffset()) + this->getPosFloat_WS();
+    this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
+
     if (this->areMatricesDirty)
     {
         this->setMatrices();
         this->areMatricesDirty = false;
     }
-
-    this->params.jitter = this->jitterHalton.next();
-
-    return didChange;
 }
 
 void Camera::setAspectRatio(float aspectRatio)
@@ -219,11 +226,6 @@ void Camera::setAspectRatio(float aspectRatio)
 }
 
 inline sl::float3 toSlFloat3(const DirectX::XMFLOAT3& v)
-{
-    return { v.x, v.y, v.z };
-}
-
-inline sl::float3 toSlFloat3(const glm::vec3& v)
 {
     return { v.x, v.y, v.z };
 }
@@ -248,7 +250,7 @@ void Camera::copySlConstantsTo(sl::Constants* constants)
     constants->jitterOffset = { 0.5f - this->params.jitter.x, 0.5f - this->params.jitter.y };
     constants->mvecScale = { 1, 1 };
     constants->cameraPinholeOffset = { 0, 0 };
-    constants->cameraPos = toSlFloat3(this->getPos_WS()); // TODO: fix
+    constants->cameraPos = toSlFloat3(this->params.pos_WS);
     constants->cameraUp = toSlFloat3(this->params.up_WS);
     constants->cameraRight = toSlFloat3(this->params.right_WS);
     constants->cameraFwd = toSlFloat3(this->params.forward_WS);
@@ -268,7 +270,6 @@ void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::floa
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
-    dest->pos_WS = toDirectXFloat3(this->getPos_WS()); // TODO: remove
 }
 
 glm::vec3 Camera::getPos_WS() const
@@ -276,12 +277,12 @@ glm::vec3 Camera::getPos_WS() const
     return glm::vec3(this->posInt_WS) + this->posFloat_WS;
 }
 
-glm::ivec3 Camera::getPosInt_WS() const
+const glm::ivec3& Camera::getPosInt_WS() const
 {
     return this->posInt_WS;
 }
 
-glm::vec3 Camera::getPosFloat_WS() const
+const glm::vec3& Camera::getPosFloat_WS() const
 {
     return this->posFloat_WS;
 }

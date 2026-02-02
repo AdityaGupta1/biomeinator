@@ -75,6 +75,7 @@ public:
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
     bool update(double deltaTime, const PlayerInput& input);
+    void update2(); // TODO: rename
     void setAspectRatio(float aspectRatio);
 
     void copySlConstantsTo(sl::Constants* constants);
@@ -82,6 +83,6 @@ public:
     void copyParamsTo(CameraParams* dest) const;
 
     glm::vec3 getPos_WS() const;
-    glm::ivec3 getPosInt_WS() const;
-    glm::vec3 getPosFloat_WS() const;
+    const glm::ivec3& getPosInt_WS() const;
+    const glm::vec3& getPosFloat_WS() const;
 };

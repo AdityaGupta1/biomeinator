@@ -1525,6 +1525,15 @@ void render()
     }
     const bool didCameraChange = camera.update(deltaTime, playerInput);
 
+    if (voxelMode)
+    {
+        Terrain::update(frameCtx.toFreeList);
+    }
+
+    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
+
+    camera.update2();
+
     if (useDlss)
     {
         camera.copySlConstantsTo(&slConstants);
@@ -1535,13 +1544,6 @@ void render()
     }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
-
-    if (voxelMode)
-    {
-        Terrain::update(frameCtx.toFreeList);
-    }
-
-    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     const bool resetAccumulation = didCameraChange || didSceneChange || didPathTracingSettingsChange;
 
@@ -1953,6 +1955,11 @@ void destroy()
 const Camera& getCamera()
 {
     return camera;
+}
+
+const glm::ivec3& getSceneInstanceOffset()
+{
+    return scene.getInstanceOffset();
 }
 
 } // namespace Renderer
