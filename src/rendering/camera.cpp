@@ -158,9 +158,9 @@ constexpr float mouseSensitivity = 0.0016f;
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
 
-bool Camera::update(double deltaTime, const PlayerInput& input)
+void Camera::processInput(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if offset has changed, correction will be applied in setMatrices()
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if instanceOffset has changed, correction will be applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -211,21 +211,19 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
 
     for (int i = 0; i < 3; ++i)
     {
-        float& floatPosI = this->posFloat_WS[i];
-        if (floatPosI < 0.f || floatPosI > 1.f)
+        float& floatPosComponent = this->posFloat_WS[i];
+        if (floatPosComponent < 0.f || floatPosComponent > 1.f)
         {
-            const int intPart = static_cast<int>(floor(floatPosI));
+            const int intPart = static_cast<int>(floor(floatPosComponent));
             this->posInt_WS[i] += intPart;
-            floatPosI -= intPart;
+            floatPosComponent -= intPart;
         }
     }
 
     this->params.jitter = this->jitterHalton.next();
-
-    return this->areMatricesDirty;
 }
 
-void Camera::update2()
+bool Camera::update()
 {
     const Scene& scene = Renderer::getScene();
 
@@ -238,11 +236,14 @@ void Camera::update2()
     this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
     const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
 
-    if (this->areMatricesDirty || instanceOffsetChanged)
+    const bool didChange = this->areMatricesDirty || instanceOffsetChanged;
+    if (didChange)
     {
         this->setMatrices(instanceOffsetChanged);
         this->areMatricesDirty = false;
     }
+
+    return didChange;
 }
 
 void Camera::setAspectRatio(float aspectRatio)

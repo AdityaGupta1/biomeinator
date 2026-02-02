@@ -1523,7 +1523,7 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    const bool didCameraChange = camera.update(deltaTime, playerInput);
+    camera.processInput(deltaTime, playerInput);
 
     if (voxelMode)
     {
@@ -1532,7 +1532,7 @@ void render()
 
     const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
-    camera.update2();
+    const bool didCameraChange = camera.update();
 
     if (useDlss)
     {

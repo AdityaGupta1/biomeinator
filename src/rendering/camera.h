@@ -74,8 +74,8 @@ public:
 
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
-    bool update(double deltaTime, const PlayerInput& input);
-    void update2(); // TODO: rename
+    void processInput(double deltaTime, const PlayerInput& input);
+    bool update();
     void setAspectRatio(float aspectRatio);
 
     void copySlConstantsTo(sl::Constants* constants);
