@@ -120,10 +120,10 @@ void Camera::setMatrices(bool instanceOffsetChanged)
     if (instanceOffsetChanged)
     {
         // not sure if this correction is necessary for SL...
-        XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
-        XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
-        XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
-        XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
+        const XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
+        const XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
+        const XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
+        const XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
         worldToPrevView = XMMatrixMultiply(translationMat, worldToPrevView);
 
         // ...but this one is necessary to fix motion vectors

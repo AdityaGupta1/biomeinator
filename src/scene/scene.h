@@ -138,7 +138,7 @@ private:
     bool isTlasDirty{ false };
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
-    glm::ivec3 instanceOffset{}; // TODO: do this correction only in voxel mode?
+    glm::ivec3 instanceOffset{};
     glm::ivec3 prevInstanceOffset{};
 
     uint32_t nextMaterialIdx{ 0 };
