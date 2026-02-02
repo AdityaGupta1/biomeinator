@@ -29,11 +29,11 @@ void Camera::init(float defaultFovYRadians)
 {
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        this->params.pos_WS = { 0, 196.f, 0 };
+        this->posFloat_WS = { 0, 196.f, 0 };
     }
     else
     {
-        this->params.pos_WS = { 0, 1.5f, 7.f };
+        this->posFloat_WS = { 0, 1.5f, 7.f };
     }
 
     this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
@@ -79,9 +79,9 @@ void Camera::moveLinear(XMFLOAT3 linearMovement)
                                   XMVectorSet(0, linearMovement.y, 0, 0) +
                                   XMVectorScale(forwardFlat_WS, linearMovement.z);
 
-    XMVECTOR pos = XMLoadFloat3(&this->params.pos_WS);
-    pos = XMVectorAdd(pos, displacement);
-    XMStoreFloat3(&this->params.pos_WS, pos);
+    XMFLOAT3 displacementVec;
+    XMStoreFloat3(&displacementVec, displacement);
+    this->posFloat_WS += glm::vec3(displacementVec.x, displacementVec.y, displacementVec.z);
 }
 
 constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
@@ -95,7 +95,8 @@ void Camera::rotate(float dTheta, float dPhi)
 
 void Camera::setMatrices()
 {
-    const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
+    const XMFLOAT3 pos_WS = this->getPos_WS();
+    const XMVECTOR eye = XMLoadFloat3(&pos_WS); // TODO: fix
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
     const XMVECTOR up = XMLoadFloat3(&this->params.up_WS);
     const XMMATRIX worldToView = XMMatrixLookAtRH(eye, lookAt, up);
@@ -183,6 +184,17 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
+    for (int i = 0; i < 3; ++i)
+    {
+        float& floatPosI = this->posFloat_WS[i];
+        if (floatPosI < 0.f || floatPosI > 1.f)
+        {
+            const int intPart = static_cast<int>(floor(floatPosI));
+            this->posInt_WS[i] += intPart;
+            floatPosI -= intPart;
+        }
+    }
+
     const bool didChange = this->areMatricesDirty;
     if (this->areMatricesDirty)
     {
@@ -226,7 +238,7 @@ void Camera::copySlConstantsTo(sl::Constants* constants)
     constants->jitterOffset = { 0.5f - this->params.jitter.x, 0.5f - this->params.jitter.y };
     constants->mvecScale = { 1, 1 };
     constants->cameraPinholeOffset = { 0, 0 };
-    constants->cameraPos = toSlFloat3(this->params.pos_WS);
+    constants->cameraPos = toSlFloat3(this->getPos_WS()); // TODO: fix
     constants->cameraUp = toSlFloat3(this->params.up_WS);
     constants->cameraRight = toSlFloat3(this->params.right_WS);
     constants->cameraFwd = toSlFloat3(this->params.forward_WS);
@@ -246,9 +258,11 @@ void Camera::copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::floa
 void Camera::copyParamsTo(CameraParams* dest) const
 {
     memcpy(dest, &this->params, sizeof(CameraParams));
+    dest->pos_WS = this->getPos_WS(); // TODO: remove
 }
 
 DirectX::XMFLOAT3 Camera::getPos_WS() const
 {
-    return this->params.pos_WS;
+    glm::vec3 pos_WS = glm::vec3(this->posInt_WS) + this->posFloat_WS;
+    return { pos_WS.x, pos_WS.y, pos_WS.z };
 }

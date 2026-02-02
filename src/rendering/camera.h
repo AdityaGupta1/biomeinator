@@ -26,12 +26,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <numbers>
 
+#include <glm/glm.hpp>
 #include <sl_consts.h>
 
 class Camera
 {
 private:
     CameraParams params{};
+
+    glm::ivec3 posInt_WS{}; // TODO: use this in terrain for determining chunk updates instead of full pos_WS()
+    glm::vec3 posFloat_WS{};
 
     bool areMatricesDirty{ true };
     struct
