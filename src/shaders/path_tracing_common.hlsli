@@ -133,10 +133,16 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
 
+    const uint materialIdx = instanceData.materialIdx;
+    if (materialIdx == MATERIAL_IDX_INVALID)
+    {
+        return;
+    }
+
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
 
-    const Material material = materials[instanceData.materialIdx];
+    const Material material = materials[materialIdx];
     if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
     {
         return;
