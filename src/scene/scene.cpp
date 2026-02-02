@@ -93,9 +93,9 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         light.instanceId = this->id;
         light.triangleIdx = triangleIdx;
 
-        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
-        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
-        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
+        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos_OS);
+        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos_OS);
+        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos_OS);
 
         p0 = DirectX::XMVector3Transform(p0, objectToWorld);
         p1 = DirectX::XMVector3Transform(p1, objectToWorld);
