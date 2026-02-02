@@ -23,9 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string>
 
-#include <glm/glm.hpp>
-
 class Camera;
+class Scene;
 
 namespace Renderer
 {
@@ -53,6 +52,6 @@ extern DescriptorHeapAllocator sharedDescHeapAlloc;
 
 const Camera& getCamera();
 
-const glm::ivec3& getSceneInstanceOffset();
+const Scene& getScene();
 
 } // namespace Renderer

@@ -440,6 +440,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     const uint32_t frameIdx = Renderer::getFrameIndex();
     MappedArray<D3D12_RAYTRACING_INSTANCE_DESC>& currentFrameInstanceDescs = this->mappedInstanceDescsArrays[frameIdx];
 
+    this->prevInstanceOffset = this->instanceOffset;
     this->instanceOffset = Renderer::getCamera().getPosInt_WS();
 
     uint32_t nextInstanceDescIdx = 0;
@@ -498,6 +499,11 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 const glm::ivec3& Scene::getInstanceOffset() const
 {
     return this->instanceOffset;
+}
+
+const glm::ivec3& Scene::getPrevInstanceOffset() const
+{
+    return this->prevInstanceOffset;
 }
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

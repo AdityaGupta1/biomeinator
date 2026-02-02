@@ -1957,9 +1957,9 @@ const Camera& getCamera()
     return camera;
 }
 
-const glm::ivec3& getSceneInstanceOffset()
+const Scene& getScene()
 {
-    return scene.getInstanceOffset();
+    return scene;
 }
 
 } // namespace Renderer

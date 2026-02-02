@@ -67,7 +67,7 @@ private:
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void setMatrices();
+    void setMatrices(bool instanceOffsetChanged);
 
 public:
     void init(float defaultFovYRadians);

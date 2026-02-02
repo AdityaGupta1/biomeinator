@@ -18,8 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "camera.h"
 
+#include "dxr_common.h"
 #include "renderer.h"
-#include "rendering/dxr_common.h"
+#include "scene/scene.h"
 #include "settings_manager.h"
 
 #include <numbers>
@@ -94,7 +95,7 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-void Camera::setMatrices()
+void Camera::setMatrices(bool instanceOffsetChanged)
 {
     const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
@@ -115,7 +116,15 @@ void Camera::setMatrices()
 
     const XMMATRIX viewToWorld = XMMatrixInverse(&det, worldToView);
     XMStoreFloat4x4(&this->viewToWorldMat, viewToWorld);
-    const XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
+    XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
+    if (instanceOffsetChanged)
+    {
+        XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
+        XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
+        XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
+        XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
+        worldToPrevView = XMMatrixMultiply(translationMat, worldToPrevView);
+    }
     const XMMATRIX viewToPrevView = XMMatrixMultiply(viewToWorld, worldToPrevView);
     const XMMATRIX clipToPrevView = XMMatrixMultiply(clipToView, viewToPrevView);
     const XMMATRIX prevViewToPrevClip = XMLoadFloat4x4(&this->prevViewToPrevClipMat);
@@ -129,6 +138,11 @@ void Camera::setMatrices()
 }
 
 static XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
+static XMINT3 toDirectXInt3(const glm::ivec3& v)
 {
     return { v.x, v.y, v.z };
 }
@@ -208,13 +222,20 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
 
 void Camera::update2()
 {
-    const glm::vec3 paramsPos_WS =
-        glm::vec3(this->getPosInt_WS() - Renderer::getSceneInstanceOffset()) + this->getPosFloat_WS();
+    const Scene& scene = Renderer::getScene();
+
+    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - scene.getInstanceOffset()) + this->getPosFloat_WS();
     this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
+
+    const glm::ivec3 instanceOffset = scene.getInstanceOffset();
+    const glm::ivec3 prevInstanceOffset = scene.getPrevInstanceOffset();
+    this->params.instanceOffset = toDirectXInt3(instanceOffset);
+    this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
 
     if (this->areMatricesDirty)
     {
-        this->setMatrices();
+        const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
+        this->setMatrices(instanceOffsetChanged);
         this->areMatricesDirty = false;
     }
 }

@@ -139,6 +139,7 @@ private:
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
     glm::ivec3 instanceOffset{}; // TODO: do this correction only in voxel mode?
+    glm::ivec3 prevInstanceOffset{};
 
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{ {} };
@@ -187,6 +188,7 @@ public:
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
     const glm::ivec3& getInstanceOffset() const;
+    const glm::ivec3& getPrevInstanceOffset() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 
