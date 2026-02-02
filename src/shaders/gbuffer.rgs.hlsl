@@ -37,13 +37,12 @@ float2 calculateMotionFromPos(const float3 pos_WS)
 {
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
     currNdc /= currNdc.w;
-    const int3 offsetCorrection = cameraParams.instanceOffset - cameraParams.prevInstanceOffset;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS + offsetCorrection, 1));
+    // worldToPrevClipMat accounts for changed instanceOffset
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1));
     prevNdc /= prevNdc.w;
 
     float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;
     motion.y = -motion.y;
-    //motion *= DispatchRaysDimensions().xy;
     return motion;
 }
 

@@ -119,11 +119,17 @@ void Camera::setMatrices(bool instanceOffsetChanged)
     XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
     if (instanceOffsetChanged)
     {
+        // not sure if this correction is necessary for SL...
         XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
         XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
         XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
         XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
         worldToPrevView = XMMatrixMultiply(translationMat, worldToPrevView);
+
+        // ...but this one is necessary to fix motion vectors
+        XMMATRIX worldToPrevClip = XMLoadFloat4x4(&this->params.worldToPrevClipMat);
+        worldToPrevClip = XMMatrixMultiply(translationMat, worldToPrevClip);
+        XMStoreFloat4x4(&this->params.worldToPrevClipMat, worldToPrevClip);
     }
     const XMMATRIX viewToPrevView = XMMatrixMultiply(viewToWorld, worldToPrevView);
     const XMMATRIX clipToPrevView = XMMatrixMultiply(clipToView, viewToPrevView);
@@ -137,12 +143,12 @@ void Camera::setMatrices(bool instanceOffsetChanged)
     this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
 
-static XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
+static inline XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
 {
     return { v.x, v.y, v.z };
 }
 
-static XMINT3 toDirectXInt3(const glm::ivec3& v)
+static inline XMINT3 toDirectXInt3(const glm::ivec3& v)
 {
     return { v.x, v.y, v.z };
 }
@@ -154,7 +160,7 @@ constexpr float zoomFovRatio = 0.3f;
 
 bool Camera::update(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // does not correct for changed instanceOffset
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if offset has changed, correction will be applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
