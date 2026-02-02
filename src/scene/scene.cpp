@@ -302,8 +302,11 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
         didChange = true;
     }
 
+    this->prevInstanceOffset = this->instanceOffset;
     if (this->isTlasDirty)
     {
+        const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
+        this->instanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z);
         this->makeTlas(cmdList, toFreeList);
         didChange = true;
     }
@@ -439,9 +442,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     const uint32_t frameIdx = Renderer::getFrameIndex();
     MappedArray<D3D12_RAYTRACING_INSTANCE_DESC>& currentFrameInstanceDescs = this->mappedInstanceDescsArrays[frameIdx];
-
-    this->prevInstanceOffset = this->instanceOffset;
-    this->instanceOffset = Renderer::getCamera().getPosInt_WS();
 
     uint32_t nextInstanceDescIdx = 0;
     uint32_t nextAreaLightSamplingIdx = 0;

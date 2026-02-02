@@ -154,7 +154,7 @@ constexpr float zoomFovRatio = 0.3f;
 
 bool Camera::update(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // does not correct for changed instanceOffset
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -213,7 +213,6 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
             floatPosI -= intPart;
         }
     }
-    this->params.pos_WS = toDirectXFloat3(this->posFloat_WS);
 
     this->params.jitter = this->jitterHalton.next();
 
@@ -231,10 +230,10 @@ void Camera::update2()
     const glm::ivec3 prevInstanceOffset = scene.getPrevInstanceOffset();
     this->params.instanceOffset = toDirectXInt3(instanceOffset);
     this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
+    const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
 
-    if (this->areMatricesDirty)
+    if (this->areMatricesDirty || instanceOffsetChanged)
     {
-        const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
         this->setMatrices(instanceOffsetChanged);
         this->areMatricesDirty = false;
     }
