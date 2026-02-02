@@ -18,15 +18,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "scene.h"
 
+#include "debug.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
+#include "rendering/camera.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "util/util.h"
 
-#include "debug.h"
-#include <stdexcept>
+#include <glm/glm.hpp>
 
 using namespace DirectX;
 
@@ -93,9 +94,9 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         light.instanceId = this->id;
         light.triangleIdx = triangleIdx;
 
-        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos);
-        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos);
-        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos);
+        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos_OS);
+        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos_OS);
+        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos_OS);
 
         p0 = DirectX::XMVector3Transform(p0, objectToWorld);
         p1 = DirectX::XMVector3Transform(p1, objectToWorld);
@@ -301,8 +302,11 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
         didChange = true;
     }
 
+    this->prevInstanceOffset = this->instanceOffset;
     if (this->isTlasDirty)
     {
+        const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
+        this->instanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z);
         this->makeTlas(cmdList, toFreeList);
         didChange = true;
     }
@@ -450,7 +454,13 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         }
 
         D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = currentFrameInstanceDescs[nextInstanceDescIdx++];
+
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
+        for (int i = 0; i < 3; ++i)
+        {
+            instanceDesc.Transform[i][3] -= this->instanceOffset[i];
+        }
+
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
         instanceDesc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
@@ -484,6 +494,16 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
 
     this->numVisibleBlasesWaitingForTlas = 0;
+}
+
+const glm::ivec3& Scene::getInstanceOffset() const
+{
+    return this->instanceOffset;
+}
+
+const glm::ivec3& Scene::getPrevInstanceOffset() const
+{
+    return this->prevInstanceOffset;
 }
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

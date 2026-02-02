@@ -49,6 +49,7 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerato
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
     pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+    pointOnLight_WS -= cameraParams.instanceOffset;
 
     float3 lightNor_WS;
     float lightArea;
@@ -161,7 +162,7 @@ void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttribu
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
 
     const float4x3 objectToWorldMat = ObjectToWorld4x3();
-    const float3 hitPos_OS = v0.pos * bary.x + v1.pos * bary.y + v2.pos * bary.z;
+    const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;

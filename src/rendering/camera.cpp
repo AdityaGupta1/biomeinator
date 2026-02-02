@@ -18,7 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "camera.h"
 
-#include "rendering/dxr_common.h"
+#include "dxr_common.h"
+#include "renderer.h"
+#include "scene/scene.h"
 #include "settings_manager.h"
 
 #include <numbers>
@@ -29,11 +31,11 @@ void Camera::init(float defaultFovYRadians)
 {
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        this->params.pos_WS = { 0, 196.f, 0 };
+        this->setPos_WS({ 0, 196.f, 0 });
     }
     else
     {
-        this->params.pos_WS = { 0, 1.5f, 7.f };
+        this->setPos_WS({ 0, 1.5f, 7.f });
     }
 
     this->defaultFovYRadians = this->currentFovYRadians = defaultFovYRadians;
@@ -79,9 +81,9 @@ void Camera::moveLinear(XMFLOAT3 linearMovement)
                                   XMVectorSet(0, linearMovement.y, 0, 0) +
                                   XMVectorScale(forwardFlat_WS, linearMovement.z);
 
-    XMVECTOR pos = XMLoadFloat3(&this->params.pos_WS);
-    pos = XMVectorAdd(pos, displacement);
-    XMStoreFloat3(&this->params.pos_WS, pos);
+    XMFLOAT3 displacementVec;
+    XMStoreFloat3(&displacementVec, displacement);
+    this->posFloat_WS += glm::vec3(displacementVec.x, displacementVec.y, displacementVec.z);
 }
 
 constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
@@ -93,7 +95,7 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-void Camera::setMatrices()
+void Camera::setMatrices(bool instanceOffsetChanged)
 {
     const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
@@ -114,7 +116,21 @@ void Camera::setMatrices()
 
     const XMMATRIX viewToWorld = XMMatrixInverse(&det, worldToView);
     XMStoreFloat4x4(&this->viewToWorldMat, viewToWorld);
-    const XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
+    XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
+    if (instanceOffsetChanged)
+    {
+        // not sure if this correction is necessary for SL...
+        const XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
+        const XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
+        const XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
+        const XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
+        worldToPrevView = XMMatrixMultiply(translationMat, worldToPrevView);
+
+        // ...but this one is necessary to fix motion vectors
+        XMMATRIX worldToPrevClip = XMLoadFloat4x4(&this->params.worldToPrevClipMat);
+        worldToPrevClip = XMMatrixMultiply(translationMat, worldToPrevClip);
+        XMStoreFloat4x4(&this->params.worldToPrevClipMat, worldToPrevClip);
+    }
     const XMMATRIX viewToPrevView = XMMatrixMultiply(viewToWorld, worldToPrevView);
     const XMMATRIX clipToPrevView = XMMatrixMultiply(clipToView, viewToPrevView);
     const XMMATRIX prevViewToPrevClip = XMLoadFloat4x4(&this->prevViewToPrevClipMat);
@@ -127,14 +143,24 @@ void Camera::setMatrices()
     this->prevViewToPrevClipMat = this->dlssMatrices.viewToClipMat;
 }
 
+static inline XMFLOAT3 toDirectXFloat3(const glm::vec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
+static inline XMINT3 toDirectXInt3(const glm::ivec3& v)
+{
+    return { v.x, v.y, v.z };
+}
+
 constexpr float mouseSensitivity = 0.0016f;
 
 constexpr float fovTransitionSpeed = 10.f;
 constexpr float zoomFovRatio = 0.3f;
 
-bool Camera::update(double deltaTime, const PlayerInput& input)
+void Camera::processInput(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat;
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if instanceOffset changed, a correction will be applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -183,14 +209,40 @@ bool Camera::update(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
-    const bool didChange = this->areMatricesDirty;
-    if (this->areMatricesDirty)
+    for (int i = 0; i < 3; ++i)
     {
-        this->setMatrices();
-        this->areMatricesDirty = false;
+        float& floatPosComponent = this->posFloat_WS[i];
+        if (floatPosComponent < 0.f || floatPosComponent > 1.f)
+        {
+            const int intPart = static_cast<int>(floor(floatPosComponent));
+            this->posInt_WS[i] += intPart;
+            floatPosComponent -= intPart;
+        }
     }
 
     this->params.jitter = this->jitterHalton.next();
+}
+
+bool Camera::update()
+{
+    const Scene& scene = Renderer::getScene();
+
+    const glm::ivec3 instanceOffset = scene.getInstanceOffset();
+    const glm::ivec3 prevInstanceOffset = scene.getPrevInstanceOffset();
+
+    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - instanceOffset) + this->getPosFloat_WS();
+    this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
+
+    this->params.instanceOffset = toDirectXInt3(instanceOffset);
+    this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
+    const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
+
+    const bool didChange = this->areMatricesDirty || instanceOffsetChanged;
+    if (didChange)
+    {
+        this->setMatrices(instanceOffsetChanged);
+        this->areMatricesDirty = false;
+    }
 
     return didChange;
 }
@@ -248,7 +300,23 @@ void Camera::copyParamsTo(CameraParams* dest) const
     memcpy(dest, &this->params, sizeof(CameraParams));
 }
 
-DirectX::XMFLOAT3 Camera::getPos_WS() const
+void Camera::setPos_WS(glm::vec3 newPos)
 {
-    return this->params.pos_WS;
+    this->posInt_WS = glm::ivec3(0, 0, 0);
+    this->posFloat_WS = newPos; // will be updated properly on next call to processInput()
+}
+
+glm::vec3 Camera::getPos_WS() const
+{
+    return glm::vec3(this->posInt_WS) + this->posFloat_WS;
+}
+
+const glm::ivec3& Camera::getPosInt_WS() const
+{
+    return this->posInt_WS;
+}
+
+const glm::vec3& Camera::getPosFloat_WS() const
+{
+    return this->posFloat_WS;
 }

@@ -26,12 +26,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <numbers>
 
+#include <glm/glm.hpp>
 #include <sl_consts.h>
 
 class Camera
 {
 private:
     CameraParams params{};
+
+    glm::ivec3 posInt_WS{};
+    glm::vec3 posFloat_WS{};
 
     bool areMatricesDirty{ true };
     struct
@@ -63,19 +67,24 @@ private:
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void setMatrices();
+    void setMatrices(bool instanceOffsetChanged);
+
+    void setPos_WS(glm::vec3 newPos);
 
 public:
     void init(float defaultFovYRadians);
 
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
-    bool update(double deltaTime, const PlayerInput& input);
+    void processInput(double deltaTime, const PlayerInput& input);
+    bool update();
     void setAspectRatio(float aspectRatio);
 
     void copySlConstantsTo(sl::Constants* constants);
     void copyMatricesToDlssOptions(sl::float4x4* worldToCameraView, sl::float4x4* cameraViewToWorld);
     void copyParamsTo(CameraParams* dest) const;
 
-    DirectX::XMFLOAT3 getPos_WS() const;
+    glm::vec3 getPos_WS() const;
+    const glm::ivec3& getPosInt_WS() const;
+    const glm::vec3& getPosFloat_WS() const;
 };

@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+#define int3 DirectX::XMINT3
+
 #define uint uint32_t
 #define uint2 DirectX::XMUINT2
 
@@ -105,6 +107,12 @@ struct CameraParams
 
     float3 prevUp_WS;
     uint pad3;
+
+    int3 instanceOffset;
+    uint pad4;
+
+    int3 prevInstanceOffset;
+    uint pad5;
 };
 
 struct SceneParams

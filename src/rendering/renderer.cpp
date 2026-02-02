@@ -1412,7 +1412,7 @@ static void imguiEndFrame(double deltaTime)
 
     if (ImGui::Begin("Debug", nullptr, windowFlags))
     {
-        const DirectX::XMFLOAT3 cameraPos_WS = camera.getPos_WS();
+        const glm::vec3 cameraPos_WS = camera.getPos_WS();
         ImGui::Text("Position: (%.2f, %.2f, %.2f)", cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z);
     }
     ImGui::End();
@@ -1523,7 +1523,16 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    const bool didCameraChange = camera.update(deltaTime, playerInput);
+    camera.processInput(deltaTime, playerInput);
+
+    if (voxelMode)
+    {
+        Terrain::update(frameCtx.toFreeList);
+    }
+
+    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
+
+    const bool didCameraChange = camera.update();
 
     if (useDlss)
     {
@@ -1535,13 +1544,6 @@ void render()
     }
 
     camera.copyParamsTo(paramBlockManager.cameraParams);
-
-    if (voxelMode)
-    {
-        Terrain::update(frameCtx.toFreeList);
-    }
-
-    const bool didSceneChange = scene.update(cmdList.Get(), frameCtx.toFreeList);
 
     const bool resetAccumulation = didCameraChange || didSceneChange || didPathTracingSettingsChange;
 
@@ -1953,6 +1955,11 @@ void destroy()
 const Camera& getCamera()
 {
     return camera;
+}
+
+const Scene& getScene()
+{
+    return scene;
 }
 
 } // namespace Renderer

@@ -33,6 +33,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unordered_set>
 #include <vector>
 
+#include <glm/glm.hpp>
+
 class ToFreeList;
 
 class Scene;
@@ -136,6 +138,9 @@ private:
     bool isTlasDirty{ false };
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
+    glm::ivec3 instanceOffset{};
+    glm::ivec3 prevInstanceOffset{};
+
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{ {} };
 
@@ -181,6 +186,9 @@ public:
     uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
+
+    const glm::ivec3& getInstanceOffset() const;
+    const glm::ivec3& getPrevInstanceOffset() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 

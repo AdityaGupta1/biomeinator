@@ -135,9 +135,8 @@ inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 6;
 
 void update(ToFreeList& toFreeList)
 {
-    const DirectX::XMFLOAT3 cameraPos_WS = Renderer::getCamera().getPos_WS();
-    const glm::ivec2 currentChunkPos =
-        glm::ivec2(glm::floor(glm::vec2(cameraPos_WS.x, cameraPos_WS.z) / static_cast<float>(chunkSizeXZ)));
+    const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
+    const glm::ivec2 currentChunkPos = glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / static_cast<int>(chunkSizeXZ);
 
     bool updateTerrain = currentChunkPos != lastChunkPos;
     if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))

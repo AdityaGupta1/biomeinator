@@ -19,12 +19,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "dxr_includes.h"
-
 #include "buffer/descriptor_heap_allocator.h"
 
 #include <string>
 
 class Camera;
+class Scene;
 
 namespace Renderer
 {
@@ -51,5 +51,7 @@ extern ComPtr<ID3D12Device5> device;
 extern DescriptorHeapAllocator sharedDescHeapAlloc;
 
 const Camera& getCamera();
+
+const Scene& getScene();
 
 } // namespace Renderer
