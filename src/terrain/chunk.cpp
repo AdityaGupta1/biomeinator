@@ -513,15 +513,6 @@ void Chunk::setInstance(Instance* instance)
 
 void Chunk::createInstance()
 {
-    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
-    const XMMATRIX transform = XMMatrixTranslation(
-        static_cast<float>(chunkBlockPos_WS.x),
-        0.f,
-        static_cast<float>(chunkBlockPos_WS.y)
-    );
-    XMFLOAT3X4 instanceTransform;
-    XMStoreFloat3x4(&instanceTransform, transform);
-
     std::vector<Vertex>& verts = this->instance->host_verts;
     std::vector<uint32_t>& idxs = this->instance->host_idxs;
     std::vector<uint32_t> emissiveTriangleIdxs;
@@ -604,7 +595,11 @@ void Chunk::createInstance()
     ASSERT(verts.size() > 0);
     ASSERT(idxs.size() > 0);
 
-    instance->finalizeGeometry(instanceTransform);
+    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    instance->setTransformOffset(ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/));
+
+    instance->finalizeGeometry();
+
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
 
     instance->addAreaLights(emissiveTriangleIdxs);

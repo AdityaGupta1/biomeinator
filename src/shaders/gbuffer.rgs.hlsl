@@ -37,8 +37,7 @@ float2 calculateMotionFromPos(const float3 pos_WS)
 {
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
     currNdc /= currNdc.w;
-    // worldToPrevClipMat accounts for changed instanceOffset
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1));
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1)); // worldToPrevClipMat accounts for changed globalInstanceOffset
     prevNdc /= prevNdc.w;
 
     float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;

@@ -108,10 +108,10 @@ struct CameraParams
     float3 prevUp_WS;
     uint pad3;
 
-    int3 instanceOffset;
+    int3 globalInstanceOffset;
     uint pad4;
 
-    int3 prevInstanceOffset;
+    int3 prevGlobalInstanceOffset;
     uint pad5;
 };
 

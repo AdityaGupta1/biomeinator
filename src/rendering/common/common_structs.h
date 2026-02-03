@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+#define int3 DirectX::XMINT3
+
 #define uint uint32_t
 #define uint2 DirectX::XMUINT2
 
@@ -67,8 +69,11 @@ struct InstanceData
     uint idxsBufferByteOffset;
     uint perTriDatasBufferOffset;
 
+    int3 transformOffset;
     uint areaLightsBufferOffset;
+
     uint materialIdx;
+    uint pad0;
     uint pad1;
     uint pad2;
 };
@@ -153,7 +158,7 @@ public:
 
 struct AreaLight
 {
-    float3 pos0_WS;
+    float3 pos0_WS; // not accounting for instance.transformOffset or globalInstanceOffset
     uint instanceId;
 
     float3 pos1_WS;
@@ -178,18 +183,9 @@ public:
     uint pad2;
 };
 
-struct RisSample
-{
-    uint lightIdx;
-    float3 pointOnLight_WS; // TODO: optimize by storing the uv coords of the point instead, to make the struct 16 bytes?
-
-    float W;
-    float p_hat;
-    uint confidence;
-    uint pad0;
-};
-
 #ifdef __cplusplus
+#undef int3
+
 #undef uint
 #undef uint2
 

@@ -63,7 +63,12 @@ private:
     void reset(bool alsoFreeFromScene = true);
     std::vector<PerTriangleData> host_perTriDatas;
 
-    DirectX::XMFLOAT3X4 transform{};
+    DirectX::XMFLOAT3X4 transform{
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+    };
+    glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
 
@@ -71,7 +76,9 @@ public:
     std::vector<Vertex> host_verts{};
     std::vector<uint32_t> host_idxs{};
 
-    void finalizeGeometry(const DirectX::XMFLOAT3X4& transform);
+    void setTransform(const DirectX::XMFLOAT3X4& transform);
+    void setTransformOffset(glm::ivec3 offset);
+    void finalizeGeometry();
 
     // finalizeGeometry() must be called before calling this function
     void addAreaLights(const std::vector<uint32_t>& triangleIdxs);
@@ -138,8 +145,8 @@ private:
     bool isTlasDirty{ false };
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
-    glm::ivec3 instanceOffset{};
-    glm::ivec3 prevInstanceOffset{};
+    glm::ivec3 globalInstanceOffset{};
+    glm::ivec3 prevGlobalInstanceOffset{};
 
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{ {} };
@@ -187,8 +194,8 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    const glm::ivec3& getInstanceOffset() const;
-    const glm::ivec3& getPrevInstanceOffset() const;
+    const glm::ivec3& getGlobalInstanceOffset() const;
+    const glm::ivec3& getPrevGlobalInstanceOffset() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 

@@ -30,6 +30,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RIS_MIN_NUM_BSDF_CANDIDATES 0
 #define DO_BSDF_SAMPLES (RIS_MIN_NUM_BSDF_CANDIDATES > 0 || RIS_MAX_NUM_BSDF_CANDIDATES > 0)
 
+struct RisSample
+{
+    uint lightIdx;
+    float3 pointOnLight_WS;
+    float W;
+};
+
 float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
@@ -154,8 +161,6 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f);
-    risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.confidence = 1;
     return risSampleOut;
 }
 

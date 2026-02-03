@@ -67,7 +67,7 @@ private:
     void moveLinear(DirectX::XMFLOAT3 linearMovement);
     void rotate(float dTheta, float dPhi);
 
-    void setMatrices(bool instanceOffsetChanged);
+    void setMatrices(bool globalInstanceOffsetChanged);
 
     void setPos_WS(glm::vec3 newPos);
 

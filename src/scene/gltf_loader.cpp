@@ -420,8 +420,9 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
             DirectX::XMFLOAT3X4 instanceTransform;
             DirectX::XMStoreFloat3x4(&instanceTransform, transform);
+            instance->setTransform(instanceTransform);
 
-            instance->finalizeGeometry(instanceTransform);
+            instance->finalizeGeometry();
 
             const bool isEmissive = prim.material >= 0 &&
                                     static_cast<uint32_t>(prim.material) < materialIsEmissive.size() &&
