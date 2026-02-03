@@ -61,7 +61,10 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
     }
 
     float pdf = 0.f;
-    pdf += sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    if (isInSun(wi_WS))
+    {
+        pdf += sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    }
     pdf += (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
     return pdf;
 }
