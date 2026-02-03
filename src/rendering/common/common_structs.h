@@ -183,17 +183,6 @@ public:
     uint pad2;
 };
 
-struct RisSample
-{
-    uint lightIdx;
-    float3 pointOnLight_WS; // TODO: optimize by storing the uv coords of the point instead, to make the struct 16 bytes?
-
-    float W;
-    float p_hat;
-    uint confidence;
-    uint pad0;
-};
-
 #ifdef __cplusplus
 #undef int3
 
