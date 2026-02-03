@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+#define int3 DirectX::XMINT3
+
 #define uint uint32_t
 #define uint2 DirectX::XMUINT2
 
@@ -67,8 +69,11 @@ struct InstanceData
     uint idxsBufferByteOffset;
     uint perTriDatasBufferOffset;
 
+    int3 transformOffset;
     uint areaLightsBufferOffset;
+
     uint materialIdx;
+    uint pad0;
     uint pad1;
     uint pad2;
 };
@@ -190,6 +195,8 @@ struct RisSample
 };
 
 #ifdef __cplusplus
+#undef int3
+
 #undef uint
 #undef uint2
 

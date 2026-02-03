@@ -63,7 +63,12 @@ private:
     void reset(bool alsoFreeFromScene = true);
     std::vector<PerTriangleData> host_perTriDatas;
 
-    DirectX::XMFLOAT3X4 transform{};
+    DirectX::XMFLOAT3X4 transform{
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+    };
+    glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
 
@@ -71,7 +76,9 @@ public:
     std::vector<Vertex> host_verts{};
     std::vector<uint32_t> host_idxs{};
 
-    void finalizeGeometry(const DirectX::XMFLOAT3X4& transform);
+    void setTransform(const DirectX::XMFLOAT3X4& transform);
+    void setTransformOffset(glm::ivec3 offset);
+    void finalizeGeometry();
 
     // finalizeGeometry() must be called before calling this function
     void addAreaLights(const std::vector<uint32_t>& triangleIdxs);

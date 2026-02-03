@@ -55,11 +55,19 @@ void Instance::reset(bool alsoFreeFromScene)
     }
 }
 
-void Instance::finalizeGeometry(const DirectX::XMFLOAT3X4& transform)
+void Instance::setTransform(const DirectX::XMFLOAT3X4& transform)
+{
+    this->transform = transform;
+}
+
+void Instance::setTransformOffset(glm::ivec3 offset)
+{
+    this->transformOffset = offset;
+}
+
+void Instance::finalizeGeometry()
 {
     ASSERT(this->host_verts.size() > 0);
-
-    this->transform = transform;
 
     const uint32_t triCount = this->getTriCount();
     this->host_perTriDatas.resize(triCount);
@@ -424,6 +432,12 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             toFreeList.pushManagedBufferSection(areaLightsUploadBufferSection);
         }
 
+        instanceData.transformOffset = {
+            instance->transformOffset.x,
+            instance->transformOffset.y,
+            instance->transformOffset.z,
+        };
+
         if (instance->isVisible)
         {
             ++numVisibleBlasesWaitingForTlas;
@@ -458,7 +472,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         for (int i = 0; i < 3; ++i)
         {
-            instanceDesc.Transform[i][3] -= this->instanceOffset[i];
+            instanceDesc.Transform[i][3] += instance->transformOffset[i] - this->instanceOffset[i];
         }
 
         instanceDesc.InstanceID = instanceId;
