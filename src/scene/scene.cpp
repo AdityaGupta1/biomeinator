@@ -314,7 +314,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     if (this->isTlasDirty)
     {
         const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
-        this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z);
+        this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z); // y = 0 to optimize for voxel mode
         this->makeTlas(cmdList, toFreeList);
         didChange = true;
     }
@@ -470,9 +470,10 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = currentFrameInstanceDescs[nextInstanceDescIdx++];
 
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
+        const glm::ivec3 totalOffset = instance->transformOffset - this->globalInstanceOffset;
         for (int i = 0; i < 3; ++i)
         {
-            instanceDesc.Transform[i][3] += instance->transformOffset[i] - this->globalInstanceOffset[i];
+            instanceDesc.Transform[i][3] += totalOffset[i];
         }
 
         instanceDesc.InstanceID = instanceId;

@@ -597,6 +597,7 @@ void Chunk::createInstance()
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     instance->setTransformOffset(ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/));
+
     instance->finalizeGeometry();
 
     instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
