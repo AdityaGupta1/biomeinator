@@ -51,8 +51,6 @@ float3 getDomeLightColor(float3 wi_WS)
     return skyColor;
 }
 
-static const float sunSampleChance = 0.6f;
-
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 {
     if (sceneParams.voxelMode == 0)
@@ -60,10 +58,14 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
         return 0.f;
     }
 
-    float pdf = 0.f;
-    pdf += sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
-    pdf += (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
-    return pdf;
+    if (isInSun(wi_WS))
+    {
+        return sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    }
+    else
+    {
+        return 0.f;
+    }
 }
 
 struct DomeLightSample
@@ -76,19 +78,8 @@ struct DomeLightSample
 
 float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
-    float3 wi_WS;
-
-    if (rng.nextFloat() < sunSampleChance)
-    {
-        wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
-        pdf = sunSampleChance * sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
-    }
-    else
-    {
-        wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
-        pdf = (1.f - sunSampleChance) * hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
-    }
-
+    const float3 wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
+    pdf = sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
     return wi_WS;
 }
 
