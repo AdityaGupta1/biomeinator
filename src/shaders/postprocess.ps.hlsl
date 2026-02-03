@@ -71,6 +71,11 @@ float4 getDebugOutputColor(float2 uv)
         }
     }
 
+    if (debugParams.debugOutputSrvIdx == heapIndices.srv.pathTracingTargetIdx)
+    {
+        debugColor.rgb = applyTonemapping(debugColor.rgb);
+    }
+
     debugColor.rgb *= debugParams.debugOutputScale;
     return debugColor;
 }
