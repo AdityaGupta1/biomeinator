@@ -310,11 +310,11 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
         didChange = true;
     }
 
-    this->prevInstanceOffset = this->instanceOffset;
+    this->prevGlobalInstanceOffset = this->globalInstanceOffset;
     if (this->isTlasDirty)
     {
         const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
-        this->instanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z);
+        this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z);
         this->makeTlas(cmdList, toFreeList);
         didChange = true;
     }
@@ -472,7 +472,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         for (int i = 0; i < 3; ++i)
         {
-            instanceDesc.Transform[i][3] += instance->transformOffset[i] - this->instanceOffset[i];
+            instanceDesc.Transform[i][3] += instance->transformOffset[i] - this->globalInstanceOffset[i];
         }
 
         instanceDesc.InstanceID = instanceId;
@@ -510,14 +510,14 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     this->numVisibleBlasesWaitingForTlas = 0;
 }
 
-const glm::ivec3& Scene::getInstanceOffset() const
+const glm::ivec3& Scene::getGlobalInstanceOffset() const
 {
-    return this->instanceOffset;
+    return this->globalInstanceOffset;
 }
 
-const glm::ivec3& Scene::getPrevInstanceOffset() const
+const glm::ivec3& Scene::getPrevGlobalInstanceOffset() const
 {
-    return this->prevInstanceOffset;
+    return this->prevGlobalInstanceOffset;
 }
 
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

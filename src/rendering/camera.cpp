@@ -95,7 +95,7 @@ void Camera::rotate(float dTheta, float dPhi)
     this->setDirectionVectorsFromAngles();
 }
 
-void Camera::setMatrices(bool instanceOffsetChanged)
+void Camera::setMatrices(bool globalInstanceOffsetChanged)
 {
     const XMVECTOR eye = XMLoadFloat3(&this->params.pos_WS);
     const XMVECTOR lookAt = XMVectorAdd(eye, XMLoadFloat3(&this->params.forward_WS));
@@ -117,12 +117,12 @@ void Camera::setMatrices(bool instanceOffsetChanged)
     const XMMATRIX viewToWorld = XMMatrixInverse(&det, worldToView);
     XMStoreFloat4x4(&this->viewToWorldMat, viewToWorld);
     XMMATRIX worldToPrevView = XMLoadFloat4x4(&this->worldToPrevViewMat);
-    if (instanceOffsetChanged)
+    if (globalInstanceOffsetChanged)
     {
         // not sure if this correction is necessary for SL...
-        const XMVECTOR instanceOffset = XMLoadSInt3(&this->params.instanceOffset);
-        const XMVECTOR prevInstanceOffset = XMLoadSInt3(&this->params.prevInstanceOffset);
-        const XMVECTOR translation = XMVectorSubtract(instanceOffset, prevInstanceOffset);
+        const XMVECTOR globalInstanceOffset = XMLoadSInt3(&this->params.globalInstanceOffset);
+        const XMVECTOR prevGlobalInstanceOffset = XMLoadSInt3(&this->params.prevGlobalInstanceOffset);
+        const XMVECTOR translation = XMVectorSubtract(globalInstanceOffset, prevGlobalInstanceOffset);
         const XMMATRIX translationMat = XMMatrixTranslationFromVector(translation);
         worldToPrevView = XMMatrixMultiply(translationMat, worldToPrevView);
 
@@ -160,7 +160,7 @@ constexpr float zoomFovRatio = 0.3f;
 
 void Camera::processInput(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if instanceOffset changed, a correction will be applied in setMatrices()
+    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if globalInstanceOffset changed, a correction to worldToPrevClipMat will be applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -227,20 +227,20 @@ bool Camera::update()
 {
     const Scene& scene = Renderer::getScene();
 
-    const glm::ivec3 instanceOffset = scene.getInstanceOffset();
-    const glm::ivec3 prevInstanceOffset = scene.getPrevInstanceOffset();
+    const glm::ivec3 globalInstanceOffset = scene.getGlobalInstanceOffset();
+    const glm::ivec3 prevGlobalInstanceOffset = scene.getPrevGlobalInstanceOffset();
 
-    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - instanceOffset) + this->getPosFloat_WS();
+    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - globalInstanceOffset) + this->getPosFloat_WS();
     this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
 
-    this->params.instanceOffset = toDirectXInt3(instanceOffset);
-    this->params.prevInstanceOffset = toDirectXInt3(prevInstanceOffset);
-    const bool instanceOffsetChanged = prevInstanceOffset != instanceOffset;
+    this->params.globalInstanceOffset = toDirectXInt3(globalInstanceOffset);
+    this->params.prevGlobalInstanceOffset = toDirectXInt3(prevGlobalInstanceOffset);
+    const bool globalInstanceOffsetChanged = prevGlobalInstanceOffset != globalInstanceOffset;
 
-    const bool didChange = this->areMatricesDirty || instanceOffsetChanged;
+    const bool didChange = this->areMatricesDirty || globalInstanceOffsetChanged;
     if (didChange)
     {
-        this->setMatrices(instanceOffsetChanged);
+        this->setMatrices(globalInstanceOffsetChanged);
         this->areMatricesDirty = false;
     }
 

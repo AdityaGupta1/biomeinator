@@ -158,7 +158,7 @@ public:
 
 struct AreaLight
 {
-    float3 pos0_WS;
+    float3 pos0_WS; // not accounting for instance.transformOffset or globalInstanceOffset
     uint instanceId;
 
     float3 pos1_WS;

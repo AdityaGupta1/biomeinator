@@ -145,8 +145,8 @@ private:
     bool isTlasDirty{ false };
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
-    glm::ivec3 instanceOffset{};
-    glm::ivec3 prevInstanceOffset{};
+    glm::ivec3 globalInstanceOffset{};
+    glm::ivec3 prevGlobalInstanceOffset{};
 
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray{ {} };
@@ -194,8 +194,8 @@ public:
 
     uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
 
-    const glm::ivec3& getInstanceOffset() const;
-    const glm::ivec3& getPrevInstanceOffset() const;
+    const glm::ivec3& getGlobalInstanceOffset() const;
+    const glm::ivec3& getPrevGlobalInstanceOffset() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevInstanceDatasAddress() const;
 
