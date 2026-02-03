@@ -59,4 +59,3 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
     pathTracingTarget[pixelIdx] = color;
 }
-
