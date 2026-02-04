@@ -282,9 +282,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 paddedMinGridPos = minGridPos - padding;
             const ivec2 paddedMaxGridPos = maxGridPos + padding;
 
-            const int paddedNumGridCellsX = paddedMaxGridPos.x - paddedMinGridPos.x + 1;
-            const int paddedNumGridCellsZ = paddedMaxGridPos.y /*z*/ - paddedMinGridPos.y /*z*/ + 1;
-            ASSERT(paddedNumGridCellsX > 0 && paddedNumGridCellsZ > 0);
+            const uint paddedNumGridCellsX = paddedMaxGridPos.x - paddedMinGridPos.x + 1;
+            const uint paddedNumGridCellsZ = paddedMaxGridPos.y /*z*/ - paddedMinGridPos.y /*z*/ + 1;
             ivec2* candidatePositionsXZ_WS = threadMemoryAlloc.request<ivec2>(paddedNumGridCellsX * paddedNumGridCellsZ);
 
             uint candidatePosIdx = 0;
@@ -308,22 +307,28 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 for (int gridX = minGridPos.x; gridX <= maxGridPos.x; ++gridX)
                 {
                     const int xOffset = gridX - paddedMinGridPos.x;
-                    const int idx = zOffset * paddedNumGridCellsX + xOffset;
+                    const uint candidatePosIdx = zOffset * paddedNumGridCellsX + xOffset;
 
-                    const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[idx];
+                    const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[candidatePosIdx];
                     const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
                     if (!Chunk::isPosInBounds(candidatePosXZ_CS))
                     {
                         continue;
                     }
 
-                    uint candidateGroundHeight = heightfield[candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/];
+                    const uint columnIdx = candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/;
+
+                    const uint candidateGroundHeight = heightfield[columnIdx];
                     if (candidateGroundHeight == 0)
                     {
                         continue; // the top of this column is a cave, so skip this candidate
                     }
 
-                    // TODO: check biome
+                    const Biome columnBiome = biomes[columnIdx];
+                    if (columnBiome != biome)
+                    {
+                        continue;
+                    }
 
                     // TODO: check neighbors
 
