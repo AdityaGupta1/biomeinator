@@ -393,10 +393,4 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
         }
     }
-
-    for (Structure& structure : this->structures)
-    {
-        // TODO: do we need to store the seed, or can we calculate it as needed?
-        structure.seed = initRng(structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z).nextUint();
-    }
 }

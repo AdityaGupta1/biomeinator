@@ -35,7 +35,6 @@ struct Structure
 {
     StructureType type;
     glm::ivec3 pos_WS;
-    uint64_t seed;
 };
 
 inline constexpr uint32_t structureMaxChunkRadius = 1;

@@ -46,12 +46,12 @@ static inline void setBlockIfAir(std::vector<Block>& blocks, uint blockIdx, Bloc
     }
 }
 
-#define fillStructureBlocksHeader(structureName) static void fillStructureBlocks_##structureName(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+#define fillStructureBlocksHeader(structureName)                                                                       \
+    static void fillStructureBlocks_##structureName(                                                                   \
+        const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng)
 
 fillStructureBlocksHeader(OAK_TREE)
 {
-    RandomNumberGenerator rng = initRng(structure.seed);
-
     ivec3 trunkTopPos_CS = structurePos_CS;
     trunkTopPos_CS.y += rng.nextInt(4, 7);
     if (isInChunkXZ(structurePos_CS))
@@ -101,8 +101,6 @@ fillStructureBlocksHeader(OAK_TREE)
 
 fillStructureBlocksHeader(SAGUARO_CACTUS)
 {
-    RandomNumberGenerator rng = initRng(structure.seed);
-
     const int trunkHeight = rng.nextInt(4, 10);
 
     if (isInChunkXZ(structurePos_CS))
@@ -158,7 +156,7 @@ StructureBounds::StructureBounds(int diff)
 namespace Structures
 {
 
-using FillStructureFunc = void (*)(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks);
+using FillStructureFunc = void (*)(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng);
 static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs;
 
 #define FILL_STRUCTURE_FUNC_BY_NAME(structureName) fillStructureFuncs[static_cast<size_t>(StructureType::structureName)]
@@ -206,6 +204,7 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
         }
 
         const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
-        fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks);
+        RandomNumberGenerator rng = initRng(structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z);
+        fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks, rng);
     }
 }
