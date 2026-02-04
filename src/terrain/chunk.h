@@ -171,6 +171,8 @@ public:
     static uint32_t segmentPosToIdx(glm::uvec3 chunkSegmentPos);
 
     static void segmentPosToBounds(glm::uvec3 chunkSegmentPos, glm::uvec3& outSegmentStartPos, glm::uvec3& outSegmentEndPos);
+
+    static bool isPosInBounds(glm::ivec2 posXZ_CS);
 };
 
 inline constexpr uint32_t regionSideLength = 32;

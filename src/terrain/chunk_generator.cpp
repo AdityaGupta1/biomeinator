@@ -22,8 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
+#include "util/glm_util.h"
 #include "util/rng.h"
 
+#include <set>
 #include <vector>
 
 #include <FastNoise/FastNoise.h>
@@ -165,6 +167,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
     Biome* biomes = threadMemoryAlloc.request<Biome>(chunkSizeXZSquare);
+    std::set<Biome> biomeSet;
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -180,6 +183,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             biomes[columnIdx] = biome;
+            biomeSet.insert(biome);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
             const TopBlocks& topBlocks = biomeData.topBlocks;
@@ -241,38 +245,148 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 wasSolid = isSolid;
             }
 
-            for (uint y = topBlockY; y > topBlockY - 5; --y)
+            if (topBlockY != 0)
             {
-                const uint blockIdx = baseBlockIdx + y;
-                Block& block = this->blocks[blockIdx];
-                if (block == Block::AIR || block == Block::BEDROCK)
+                for (uint y = topBlockY; y > topBlockY - 5; --y)
                 {
-                    break;
-                }
+                    const uint blockIdx = baseBlockIdx + y;
+                    Block& block = this->blocks[blockIdx];
+                    if (block == Block::AIR || block == Block::BEDROCK)
+                    {
+                        break;
+                    }
 
-                const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
-                block = newBlock;
+                    const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    block = newBlock;
+                }
             }
 
             heightfield[columnIdx] = topBlockY;
         }
     }
 
-    // TODO: create structures for real instead of doing this
+    const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 
-    RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y, 75902341);
-    const ivec2 structurePosXZ_CS = ivec2(rng.nextInt(chunkSizeXZ), rng.nextInt(chunkSizeXZ));
-    const uint structureColumnIdx = structurePosXZ_CS.x + chunkSizeXZ * structurePosXZ_CS.y /*z*/;
-    const uint structureY = heightfield[structureColumnIdx] + 1;
-    const uvec2 structurePos_XZ_WS = structurePosXZ_CS + chunkPosBlocksXZ_WS;
-    const ivec3 structurePos_WS = ivec3(structurePos_XZ_WS.x, structureY, structurePos_XZ_WS.y /*z*/);
-    const Biome structureBiome = biomes[structureColumnIdx];
-    const StructureType structureType = structureBiome == Biome::DESERT ? StructureType::SAGUARO_CACTUS : StructureType::OAK_TREE;
-    this->structures.emplace_back(structureType, structurePos_WS);
-
-    for (Structure& structure : this->structures)
+    for (Biome biome : biomeSet)
     {
-        // TODO: do we need to store the seed, or can we calculate it as needed?
-        structure.seed = initRng(structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z).nextUint();
+        const BiomeData& biomeData = Biomes::getBiomeData(biome);
+        for (const StructureGen& structureGen : biomeData.structureGens)
+        {
+            const uint gridCellSideLength = structureGen.gridCellSideLength;
+
+            const ivec2 minGridPos = glmUtil::floorDiv(chunkPosBlocksXZ_WS, ivec2(gridCellSideLength)); // inclusive
+            const ivec2 maxGridPos = glmUtil::floorDiv(chunkEndPosBlocksXZ_WS - 1, ivec2(gridCellSideLength)); // inclusive
+
+            ASSERT(structureGen.minRadius < gridCellSideLength);
+
+            const ivec2 paddedMinGridPos = minGridPos - 1;
+            const ivec2 paddedMaxGridPos = maxGridPos + 1;
+
+            const uint paddedNumGridCellsX = paddedMaxGridPos.x - paddedMinGridPos.x + 1;
+            const uint paddedNumGridCellsZ = paddedMaxGridPos.y /*z*/ - paddedMinGridPos.y /*z*/ + 1;
+            ivec2* candidatePositionsXZ_WS = threadMemoryAlloc.request<ivec2>(paddedNumGridCellsX * paddedNumGridCellsZ);
+
+            uint candidatePosIdx = 0;
+            for (int gridZ = paddedMinGridPos.y /*z*/; gridZ <= paddedMaxGridPos.y /*z*/; ++gridZ)
+            {
+                for (int gridX = paddedMinGridPos.x; gridX <= paddedMaxGridPos.x; ++gridX)
+                {
+                    const ivec2 gridPosBlocks_WS = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
+                    RandomNumberGenerator rng =
+                        initRng(gridPosBlocks_WS.x, gridPosBlocks_WS.y /*z*/, static_cast<uint>(structureGen.type), 87152059);
+                    const ivec2 candidatePosXZ_WS =
+                        gridPosBlocks_WS + ivec2(rng.nextInt(gridCellSideLength), rng.nextInt(gridCellSideLength));
+                    candidatePositionsXZ_WS[candidatePosIdx++] = candidatePosXZ_WS;
+                }
+            }
+
+            const float r = structureGen.minRadius;
+            const float r2 = r * r;
+
+            for (int gridZ = minGridPos.y; gridZ <= maxGridPos.y; ++gridZ)
+            {
+                const int zOffset = gridZ - paddedMinGridPos.y;
+
+                for (int gridX = minGridPos.x; gridX <= maxGridPos.x; ++gridX)
+                {
+                    const int xOffset = gridX - paddedMinGridPos.x;
+                    const uint candidatePosIdx = xOffset + paddedNumGridCellsX * zOffset;
+
+                    const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[candidatePosIdx];
+                    const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
+                    if (!Chunk::isPosInBounds(candidatePosXZ_CS))
+                    {
+                        continue;
+                    }
+
+                    const uint columnIdx = candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/;
+
+                    const uint candidateGroundHeight = heightfield[columnIdx];
+                    if (candidateGroundHeight == 0)
+                    {
+                        continue; // top of this column is a cave, so skip this candidate
+                    }
+
+                    const Biome columnBiome = biomes[columnIdx];
+                    if (columnBiome != biome)
+                    {
+                        continue;
+                    }
+
+                    // check neighbors
+                    // note that this does not check distance between candidates of different types; I will revisit this if it becomes a noticeable issue
+                    {
+                        bool tooClose = false;
+
+                        for (int nGridZ = gridZ - 1; nGridZ <= gridZ + 1; ++nGridZ)
+                        {
+                            const uint nZOffset = nGridZ - paddedMinGridPos.y /*z*/;
+                            if (nZOffset < 0 || nZOffset >= paddedNumGridCellsZ)
+                            {
+                                continue;
+                            }
+
+                            for (int nGridX = gridX - 1; nGridX <= gridX + 1; ++nGridX)
+                            {
+                                const uint nXOffset = nGridX - paddedMinGridPos.x;
+                                if (nXOffset < 0 || nXOffset >= paddedNumGridCellsX)
+                                {
+                                    continue;
+                                }
+
+                                if (nGridX == gridX && nGridZ == gridZ)
+                                {
+                                    continue;
+                                }
+
+                                const uint nIdx = nZOffset * paddedNumGridCellsX + nXOffset;
+                                const ivec2 nPosXZ_WS = candidatePositionsXZ_WS[nIdx];
+
+                                const ivec2 d = nPosXZ_WS - candidatePosXZ_WS;
+                                const float dist2 = d.x * d.x + d.y * d.y;
+                                if (dist2 < r2)
+                                {
+                                    tooClose = true;
+                                    break;
+                                }
+                            }
+
+                            if (tooClose)
+                            {
+                                break;
+                            }
+                        }
+
+                        if (tooClose)
+                        {
+                            continue;
+                        }
+                    }
+
+                    const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
+                    this->structures.emplace_back(structureGen.type, candidatePos_WS);
+                }
+            }
+        }
     }
 }

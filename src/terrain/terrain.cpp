@@ -162,10 +162,8 @@ void update(ToFreeList& toFreeList)
 
         // this combined region logic will become a problem if I ever add teleportation (since the region could
         // become huge)
-        const glm::ivec2 minRegionPos =
-            glm::ivec2(glm::floor(glm::vec2(minChunkPos) / static_cast<float>(regionSideLength)));
-        const glm::ivec2 maxRegionPos =
-            glm::ivec2(glm::floor(glm::vec2(maxChunkPos) / static_cast<float>(regionSideLength)));
+        const glm::ivec2 minRegionPos = glmUtil::floorDiv(minChunkPos, glm::ivec2(regionSideLength));
+        const glm::ivec2 maxRegionPos = glmUtil::floorDiv(maxChunkPos, glm::ivec2(regionSideLength));
 
         uint32_t numGenerateTerrainTasksThisFrame = 0;
 

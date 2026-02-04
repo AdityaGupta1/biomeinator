@@ -18,48 +18,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "../block.h"
+#include "debug.h"
 
-#include <glm/glm.hpp>
-#include <vector>
-
-enum StructureType
-{
-	OAK_TREE,
-    SAGUARO_CACTUS,
-
-	COUNT
-};
-
-struct Structure
-{
-    StructureType type;
-    glm::ivec3 pos_WS;
-};
-
-inline constexpr uint32_t structureMaxChunkRadius = 1;
-
-struct StructureBounds
-{
-    glm::ivec2 minDiffXZ;
-    glm::ivec2 maxDiffXZ;
-
-    StructureBounds() = default;
-    StructureBounds(int diff);
-};
-
-struct StructureGen
-{
-    StructureType type;
-    uint32_t gridCellSideLength;
-    float minRadius;
-};
-
-namespace Structures
+namespace MathUtil
 {
 
-void init();
+inline int floorDiv(int a, int d)
+{
+    ASSERT(d > 0);
+    return (a / d) - ((a ^ d) < 0 && a % d != 0);
+}
 
-const StructureBounds& getStructureBounds(StructureType type);
-
-} // namespace Structures
+}

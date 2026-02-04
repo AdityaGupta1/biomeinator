@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "math.h"
+
 #include <glm/glm.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -29,6 +31,14 @@ namespace glmUtil
 inline int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
 {
     return glm::compMax(glm::abs(a - b));
+}
+
+inline glm::ivec2 floorDiv(const glm::ivec2& a, const glm::ivec2& d)
+{
+    return {
+        MathUtil::floorDiv(a.x, d.x),
+        MathUtil::floorDiv(a.y, d.y),
+    };
 }
 
 }

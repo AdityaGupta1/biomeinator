@@ -51,6 +51,9 @@ void init()
         .humidity = 0.0f,
         .peak = 0.15f,
     };
+    BIOME_DATA_BY_NAME(PLAINS).structureGens = {
+        { StructureType::OAK_TREE, 7, 1.5f },
+    };
 
     // SAVANNA
     BIOME_DATA_BY_NAME(SAVANNA).biomeNoise = {
@@ -68,6 +71,9 @@ void init()
     BIOME_DATA_BY_NAME(DESERT).topBlocks = {
         .top = Block::SAND,
         .mid = Block::SANDSTONE,
+    };
+    BIOME_DATA_BY_NAME(DESERT).structureGens = {
+        { StructureType::SAGUARO_CACTUS, 20, 4.0f },
     };
 
     // FOREST
