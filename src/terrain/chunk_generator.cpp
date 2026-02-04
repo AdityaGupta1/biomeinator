@@ -334,6 +334,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     // check neighbors
+                    // note that this does not check distance between candidates of different types; I will revisit this if it becomes a noticeable issue
                     {
                         bool tooClose = false;
 
