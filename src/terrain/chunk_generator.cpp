@@ -300,6 +300,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
             }
 
+            const float r = structureGen.minRadius;
+            const float r2 = r * r;
+
             for (int gridZ = minGridPos.y; gridZ <= maxGridPos.y; ++gridZ)
             {
                 const int zOffset = gridZ - paddedMinGridPos.y;
@@ -330,7 +333,59 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
-                    // TODO: check neighbors
+                    // check neighbors
+                    {
+                        bool tooClose = false;
+
+                        const int nGridZMin = gridZ - padding;
+                        const int nGridZMax = gridZ + padding;
+                        const int nGridXMin = gridX - padding;
+                        const int nGridXMax = gridX + padding;
+
+                        for (int nGridZ = nGridZMin; nGridZ <= nGridZMax; ++nGridZ)
+                        {
+                            const int nzOff = nGridZ - paddedMinGridPos.y;
+                            if (nzOff < 0 || nzOff >= static_cast<int>(paddedNumGridCellsZ))
+                            {
+                                continue;
+                            }
+
+                            for (int nGridX = nGridXMin; nGridX <= nGridXMax; ++nGridX)
+                            {
+                                const int nxOff = nGridX - paddedMinGridPos.x;
+                                if (nxOff < 0 || nxOff >= static_cast<int>(paddedNumGridCellsX))
+                                {
+                                    continue;
+                                }
+
+                                if (nGridX == gridX && nGridZ == gridZ)
+                                {
+                                    continue;
+                                }
+
+                                const uint nIdx = static_cast<uint>(nzOff * paddedNumGridCellsX + nxOff);
+                                const ivec2 nPosXZ_WS = candidatePositionsXZ_WS[nIdx];
+
+                                const ivec2 d = nPosXZ_WS - candidatePosXZ_WS;
+                                const float dist2 = d.x * d.x + d.y * d.y;
+                                if (dist2 < r2)
+                                {
+                                    tooClose = true;
+                                    break;
+                                }
+                            }
+
+                            if (tooClose)
+                            {
+                                break;
+                            }
+                        }
+
+                        if (tooClose)
+                        {
+                            continue;
+                        }
+                    }
 
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     this->structures.emplace_back(structureGen.type, candidatePos_WS);

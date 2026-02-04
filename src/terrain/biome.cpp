@@ -52,7 +52,7 @@ void init()
         .peak = 0.15f,
     };
     BIOME_DATA_BY_NAME(PLAINS).structureGens = {
-        { StructureType::OAK_TREE, 7, 3.0f },
+        { StructureType::OAK_TREE, 7, 1.5f },
     };
 
     // SAVANNA
