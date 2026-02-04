@@ -22,8 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "chunk.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
+#include "util/glm_util.h"
 #include "util/rng.h"
 
+#include <set>
 #include <vector>
 
 #include <FastNoise/FastNoise.h>
@@ -165,6 +167,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
     Biome* biomes = threadMemoryAlloc.request<Biome>(chunkSizeXZSquare);
+    std::set<Biome> biomeSet;
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -180,6 +183,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             biomes[columnIdx] = biome;
+            biomeSet.insert(biome);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
             const TopBlocks& topBlocks = biomeData.topBlocks;
@@ -258,17 +262,69 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         }
     }
 
-    // TODO: create structures for real instead of doing this
+    const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 
-    RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y, 75902341);
-    const ivec2 structurePosXZ_CS = ivec2(rng.nextInt(chunkSizeXZ), rng.nextInt(chunkSizeXZ));
-    const uint structureColumnIdx = structurePosXZ_CS.x + chunkSizeXZ * structurePosXZ_CS.y /*z*/;
-    const uint structureY = heightfield[structureColumnIdx] + 1;
-    const uvec2 structurePos_XZ_WS = structurePosXZ_CS + chunkPosBlocksXZ_WS;
-    const ivec3 structurePos_WS = ivec3(structurePos_XZ_WS.x, structureY, structurePos_XZ_WS.y /*z*/);
-    const Biome structureBiome = biomes[structureColumnIdx];
-    const StructureType structureType = structureBiome == Biome::DESERT ? StructureType::SAGUARO_CACTUS : StructureType::OAK_TREE;
-    this->structures.emplace_back(structureType, structurePos_WS);
+    for (Biome biome : biomeSet)
+    {
+        const BiomeData& biomeData = Biomes::getBiomeData(biome);
+        for (const StructureGen& structureGen : biomeData.structureGens)
+        {
+            const uint gridCellSideLength = structureGen.gridCellSideLength;
+
+            const ivec2 minGridPos = glmUtil::floorDiv(chunkPosBlocksXZ_WS, ivec2(gridCellSideLength)); // inclusive
+            const ivec2 maxGridPos = glmUtil::floorDiv(chunkEndPosBlocksXZ_WS - 1, ivec2(gridCellSideLength)); // inclusive
+
+            const int padding = static_cast<int>(std::ceil(structureGen.minRadius / static_cast<float>(gridCellSideLength)));
+
+            const ivec2 paddedMinGridPos = minGridPos - padding;
+            const ivec2 paddedMaxGridPos = maxGridPos + padding;
+
+            const int paddedNumGridCellsX = paddedMaxGridPos.x - paddedMinGridPos.x + 1;
+            const int paddedNumGridCellsZ = paddedMaxGridPos.y /*z*/ - paddedMinGridPos.y /*z*/ + 1;
+            ASSERT(paddedNumGridCellsX > 0 && paddedNumGridCellsZ > 0);
+            ivec2* candidatePositionsXZ_WS = threadMemoryAlloc.request<ivec2>(paddedNumGridCellsX * paddedNumGridCellsZ);
+
+            uint candidatePosIdx = 0;
+            for (int gridZ = paddedMinGridPos.y /*z*/; gridZ <= paddedMaxGridPos.y /*z*/; ++gridZ)
+            {
+                for (int gridX = paddedMinGridPos.x; gridX <= paddedMaxGridPos.x; ++gridX)
+                {
+                    const ivec2 gridPosBlocks = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
+                    RandomNumberGenerator rng =
+                        initRng(gridPosBlocks.x, gridPosBlocks.y /*z*/, static_cast<uint>(structureGen.type), 87152059);
+                    const ivec2 candidatePosXZ_WS =
+                        gridPosBlocks + ivec2(rng.nextInt(gridCellSideLength), rng.nextInt(gridCellSideLength));
+                    candidatePositionsXZ_WS[candidatePosIdx++] = candidatePosXZ_WS;
+                }
+            }
+
+            for (int gridZ = minGridPos.y; gridZ <= maxGridPos.y; ++gridZ)
+            {
+                const int zOffset = gridZ - paddedMinGridPos.y;
+
+                for (int gridX = minGridPos.x; gridX <= maxGridPos.x; ++gridX)
+                {
+                    const int xOffset = gridX - paddedMinGridPos.x;
+                    const int idx = zOffset * paddedNumGridCellsX + xOffset;
+
+                    const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[idx];
+                    const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
+                    if (!Chunk::isPosInBounds(candidatePosXZ_CS))
+                    {
+                        continue;
+                    }
+
+                    // TODO: check biome
+
+                    // TODO: check neighbors
+
+                    const uint candidateHeight = heightfield[candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/] + 1;
+                    const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateHeight, candidatePosXZ_WS.y /*z*/);
+                    this->structures.emplace_back(structureGen.type, candidatePos_WS);
+                }
+            }
+        }
+    }
 
     for (Structure& structure : this->structures)
     {

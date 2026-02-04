@@ -19,6 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
+#include "structure/structure.h"
+
+#include <vector>
 
 struct BiomeNoise
 {
@@ -52,6 +55,7 @@ struct BiomeData
 {
     BiomeNoise biomeNoise;
     TopBlocks topBlocks;
+    std::vector<StructureGen> structureGens;
 };
 
 struct BiomeWeight

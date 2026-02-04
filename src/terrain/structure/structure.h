@@ -38,6 +38,8 @@ struct Structure
     uint64_t seed;
 };
 
+inline constexpr uint32_t structureMaxChunkRadius = 1;
+
 struct StructureBounds
 {
     glm::ivec2 minDiffXZ;
@@ -47,7 +49,12 @@ struct StructureBounds
     StructureBounds(int diff);
 };
 
-inline constexpr uint32_t structureMaxChunkRadius = 1;
+struct StructureGen
+{
+    StructureType type;
+    uint32_t gridCellSideLength;
+    float minRadius;
+};
 
 namespace Structures
 {
