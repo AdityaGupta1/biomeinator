@@ -245,17 +245,20 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 wasSolid = isSolid;
             }
 
-            for (uint y = topBlockY; y > topBlockY - 5; --y)
+            if (topBlockY != 0)
             {
-                const uint blockIdx = baseBlockIdx + y;
-                Block& block = this->blocks[blockIdx];
-                if (block == Block::AIR || block == Block::BEDROCK)
+                for (uint y = topBlockY; y > topBlockY - 5; --y)
                 {
-                    break;
-                }
+                    const uint blockIdx = baseBlockIdx + y;
+                    Block& block = this->blocks[blockIdx];
+                    if (block == Block::AIR || block == Block::BEDROCK)
+                    {
+                        break;
+                    }
 
-                const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
-                block = newBlock;
+                    const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    block = newBlock;
+                }
             }
 
             heightfield[columnIdx] = topBlockY;
@@ -314,12 +317,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
+                    uint candidateGroundHeight = heightfield[candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/];
+                    if (candidateGroundHeight == 0)
+                    {
+                        continue; // the top of this column is a cave, so skip this candidate
+                    }
+
                     // TODO: check biome
 
                     // TODO: check neighbors
 
-                    const uint candidateHeight = heightfield[candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/] + 1;
-                    const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateHeight, candidatePosXZ_WS.y /*z*/);
+                    const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     this->structures.emplace_back(structureGen.type, candidatePos_WS);
                 }
             }

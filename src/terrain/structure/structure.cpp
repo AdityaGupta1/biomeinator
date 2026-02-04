@@ -59,11 +59,11 @@ fillStructureBlocksHeader(OAK_TREE)
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int y = structurePos_CS.y; y <= trunkTopPos_CS.y; ++y)
         {
-            blocks[blockIdx++] = Block::OAK_LOG;
+            setBlockIfAir(blocks, blockIdx++, Block::OAK_LOG);
         }
         for (int dy = 0; dy < 2; ++dy)
         {
-            blocks[blockIdx++] = Block::OAK_LEAVES;
+            setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
         }
     }
 
@@ -110,7 +110,7 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int dy = 0; dy <= trunkHeight; ++dy)
         {
-            blocks[blockIdx++] = Block::CACTUS;
+            setBlockIfAir(blocks, blockIdx++, Block::CACTUS);
         }
     }
 
