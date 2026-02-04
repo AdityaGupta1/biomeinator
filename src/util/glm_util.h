@@ -33,11 +33,11 @@ inline int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
     return glm::compMax(glm::abs(a - b));
 }
 
-inline glm::ivec2 floorDiv(const glm::ivec2& a, const glm::ivec2& b)
+inline glm::ivec2 floorDiv(const glm::ivec2& a, const glm::ivec2& d)
 {
     return {
-        MathUtil::floorDiv(a.x, b.x),
-        MathUtil::floorDiv(a.y, b.y),
+        MathUtil::floorDiv(a.x, d.x),
+        MathUtil::floorDiv(a.y, d.y),
     };
 }
 

@@ -277,10 +277,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 minGridPos = glmUtil::floorDiv(chunkPosBlocksXZ_WS, ivec2(gridCellSideLength)); // inclusive
             const ivec2 maxGridPos = glmUtil::floorDiv(chunkEndPosBlocksXZ_WS - 1, ivec2(gridCellSideLength)); // inclusive
 
-            const int padding = static_cast<int>(std::ceil(structureGen.minRadius / static_cast<float>(gridCellSideLength)));
+            ASSERT(structureGen.minRadius < gridCellSideLength);
 
-            const ivec2 paddedMinGridPos = minGridPos - padding;
-            const ivec2 paddedMaxGridPos = maxGridPos + padding;
+            const ivec2 paddedMinGridPos = minGridPos - 1;
+            const ivec2 paddedMaxGridPos = maxGridPos + 1;
 
             const uint paddedNumGridCellsX = paddedMaxGridPos.x - paddedMinGridPos.x + 1;
             const uint paddedNumGridCellsZ = paddedMaxGridPos.y /*z*/ - paddedMinGridPos.y /*z*/ + 1;
@@ -291,11 +291,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             {
                 for (int gridX = paddedMinGridPos.x; gridX <= paddedMaxGridPos.x; ++gridX)
                 {
-                    const ivec2 gridPosBlocks = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
+                    const ivec2 gridPosBlocks_WS = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
                     RandomNumberGenerator rng =
-                        initRng(gridPosBlocks.x, gridPosBlocks.y /*z*/, static_cast<uint>(structureGen.type), 87152059);
+                        initRng(gridPosBlocks_WS.x, gridPosBlocks_WS.y /*z*/, static_cast<uint>(structureGen.type), 87152059);
                     const ivec2 candidatePosXZ_WS =
-                        gridPosBlocks + ivec2(rng.nextInt(gridCellSideLength), rng.nextInt(gridCellSideLength));
+                        gridPosBlocks_WS + ivec2(rng.nextInt(gridCellSideLength), rng.nextInt(gridCellSideLength));
                     candidatePositionsXZ_WS[candidatePosIdx++] = candidatePosXZ_WS;
                 }
             }
@@ -310,7 +310,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 for (int gridX = minGridPos.x; gridX <= maxGridPos.x; ++gridX)
                 {
                     const int xOffset = gridX - paddedMinGridPos.x;
-                    const uint candidatePosIdx = zOffset * paddedNumGridCellsX + xOffset;
+                    const uint candidatePosIdx = xOffset + paddedNumGridCellsX * zOffset;
 
                     const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[candidatePosIdx];
                     const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
@@ -324,7 +324,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const uint candidateGroundHeight = heightfield[columnIdx];
                     if (candidateGroundHeight == 0)
                     {
-                        continue; // the top of this column is a cave, so skip this candidate
+                        continue; // top of this column is a cave, so skip this candidate
                     }
 
                     const Biome columnBiome = biomes[columnIdx];
@@ -337,23 +337,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         bool tooClose = false;
 
-                        const int nGridZMin = gridZ - padding;
-                        const int nGridZMax = gridZ + padding;
-                        const int nGridXMin = gridX - padding;
-                        const int nGridXMax = gridX + padding;
-
-                        for (int nGridZ = nGridZMin; nGridZ <= nGridZMax; ++nGridZ)
+                        for (int nGridZ = gridZ - 1; nGridZ <= gridZ + 1; ++nGridZ)
                         {
-                            const int nzOff = nGridZ - paddedMinGridPos.y;
-                            if (nzOff < 0 || nzOff >= static_cast<int>(paddedNumGridCellsZ))
+                            const uint nZOffset = nGridZ - paddedMinGridPos.y /*z*/;
+                            if (nZOffset < 0 || nZOffset >= paddedNumGridCellsZ)
                             {
                                 continue;
                             }
 
-                            for (int nGridX = nGridXMin; nGridX <= nGridXMax; ++nGridX)
+                            for (int nGridX = gridX - 1; nGridX <= gridX + 1; ++nGridX)
                             {
-                                const int nxOff = nGridX - paddedMinGridPos.x;
-                                if (nxOff < 0 || nxOff >= static_cast<int>(paddedNumGridCellsX))
+                                const uint nXOffset = nGridX - paddedMinGridPos.x;
+                                if (nXOffset < 0 || nXOffset >= paddedNumGridCellsX)
                                 {
                                     continue;
                                 }
@@ -363,7 +358,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                     continue;
                                 }
 
-                                const uint nIdx = static_cast<uint>(nzOff * paddedNumGridCellsX + nxOff);
+                                const uint nIdx = nZOffset * paddedNumGridCellsX + nXOffset;
                                 const ivec2 nPosXZ_WS = candidatePositionsXZ_WS[nIdx];
 
                                 const ivec2 d = nPosXZ_WS - candidatePosXZ_WS;
