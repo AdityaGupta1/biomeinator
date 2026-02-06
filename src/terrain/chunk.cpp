@@ -545,7 +545,7 @@ inline constexpr vec3 xShapedFaceVertPositions[8] = {
 };
 inline constexpr vec3 xShapedFaceNormals[2] = {
     vec3(-halfInvSqrt2, 0.f, halfInvSqrt2),
-    vec3(halfInvSqrt2, 0.f, -halfInvSqrt2),
+    vec3(halfInvSqrt2, 0.f, halfInvSqrt2),
 };
 
 inline constexpr uvec2 uvOffsets[4] = {

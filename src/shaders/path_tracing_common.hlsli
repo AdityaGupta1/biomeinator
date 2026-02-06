@@ -179,7 +179,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), objectToWorldMat).xyz;
 
     const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
-    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3) objectToWorldMat));
+    float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) objectToWorldMat));
+    nor_WS = faceforward(nor_WS, -WorldRayDirection());
+    payload.hitInfo.hitNor_WS = nor_WS;
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     payload.hitInfo.instanceId = InstanceID();

@@ -87,7 +87,7 @@ void pathTraceRay(inout Payload payload)
         }
 
         const float3 wo_WS = -ray.Direction;
-        const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+        const float3 surfNor_WS = payload.hitInfo.hitNor_WS;
 
         if (pathDepth == 0 && renderParams.enablePathSplitting)
         {
@@ -257,9 +257,8 @@ void pathTraceRay(inout Payload payload)
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
 
-            const float3 secondBounceNor_WS = faceforward(payload.hitInfo.hitNor_WS, -ray.Direction);
             RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-            normalsAndRoughnessTarget[pixelIdx].xyz = secondBounceNor_WS;
+            normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
         }
 
         if (doMis)
