@@ -14,9 +14,9 @@ Then, you should be able to just open the folder with Visual Studio 2022 and hav
 
 Or, you can:
 
+- Install CMake if you don't have it already
 - Run `setup.bat`
-  - You probably need CMake installed for this to work
-- Load the Visual Studio solution at `build/Biomeinator.sln`
+- Load `build/Biomeinator.sln` with Visual Studio 2022
 - Right-click "Biomeinator" in the Solution Explorer and set as default startup project
 - Build and run
 
