@@ -66,6 +66,9 @@ void init()
     BLOCK_DATA_BY_NAME(DEAD_BUSH) = { .uvs = BlockUvs(uvec2(17, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = BlockUvs(uvec2(18, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = BlockUvs(uvec2(19, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = BlockUvs(uvec2(21, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(TINY_CACTUS) = { .uvs = BlockUvs(uvec2(22, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = BlockUvs(uvec2(23, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
 }
 
 const BlockData& getBlockData(Block block)

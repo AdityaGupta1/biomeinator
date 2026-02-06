@@ -44,6 +44,9 @@ enum class Block : BlockId
     DEAD_BUSH,
     DEAD_GRASS_1,
     DEAD_GRASS_2,
+    GOLDENROD,
+    TINY_CACTUS,
+    PINK_DAFFODIL,
 
     COUNT
 };

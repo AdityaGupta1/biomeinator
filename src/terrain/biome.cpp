@@ -55,6 +55,8 @@ void init()
         };
         data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 5.f);
         data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 6.f);
+        data.decorator.addEntry(Block::GOLDENROD, { Block::GRASS_BLOCK }, 1.f);
+        data.decorator.addEntry(Block::PINK_DAFFODIL, { Block::GRASS_BLOCK }, 2.f);
         data.decorator.addEntry(Block::AIR, {}, 15.f);
     }
 
@@ -68,6 +70,7 @@ void init()
         };
         data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 2.f);
         data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 8.f);
+        data.decorator.addEntry(Block::GOLDENROD, { Block::GRASS_BLOCK }, 2.f);
         data.decorator.addEntry(Block::AIR, {}, 10.f);
     }
 
@@ -87,9 +90,10 @@ void init()
             { StructureType::SAGUARO_CACTUS, 20, 4.0f },
         };
         data.decorator.addEntry(Block::DEAD_BUSH, { Block::SAND }, 1.f);
+        data.decorator.addEntry(Block::TINY_CACTUS, { Block::SAND }, 2.f);
         data.decorator.addEntry(Block::DEAD_GRASS_1, { Block::SAND }, 5.f);
         data.decorator.addEntry(Block::DEAD_GRASS_2, { Block::SAND }, 5.f);
-        data.decorator.addEntry(Block::AIR, {}, 50.f);
+        data.decorator.addEntry(Block::AIR, {}, 60.f);
     }
 
     // FOREST
@@ -103,9 +107,11 @@ void init()
         data.structureGens = {
             { StructureType::OAK_TREE, 7, 1.5f },
         };
-        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 3.f);
-        data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 5.f);
-        data.decorator.addEntry(Block::AIR, {}, 10.f);
+        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 4.f);
+        data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 8.f);
+        data.decorator.addEntry(Block::GOLDENROD, { Block::GRASS_BLOCK }, 2.f);
+        data.decorator.addEntry(Block::PINK_DAFFODIL, { Block::GRASS_BLOCK }, 1.f);
+        data.decorator.addEntry(Block::AIR, {}, 15.f);
     }
 
     // MOUNTAINS
