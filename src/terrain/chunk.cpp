@@ -603,6 +603,7 @@ void Chunk::createInstance()
                         const uvec2 baseTexCoords = blockData.uvs[1]; // side
                         for (uint i = 0; i < 8; ++i)
                         {
+                            // TODO: random jitter offset
                             const vec3 vertPos_CS = vec3(blockPos_CS) + xShapedFaceVertPositions[i];
                             const vec3 normal = xShapedFaceNormals[i / 4];
                             const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;

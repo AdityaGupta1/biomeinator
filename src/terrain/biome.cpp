@@ -53,8 +53,9 @@ void init()
             .humidity = 0.0f,
             .peak = 0.15f,
         };
-        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 4.f);
-        data.decorator.addEntry(Block::AIR, {}, 10.f);
+        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 5.f);
+        data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 6.f);
+        data.decorator.addEntry(Block::AIR, {}, 15.f);
     }
 
     // SAVANNA
@@ -66,6 +67,7 @@ void init()
             .peak = 0.4f,
         };
         data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 2.f);
+        data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 8.f);
         data.decorator.addEntry(Block::AIR, {}, 10.f);
     }
 
@@ -84,6 +86,10 @@ void init()
         data.structureGens = {
             { StructureType::SAGUARO_CACTUS, 20, 4.0f },
         };
+        data.decorator.addEntry(Block::DEAD_BUSH, { Block::SAND }, 1.f);
+        data.decorator.addEntry(Block::DEAD_GRASS_1, { Block::SAND }, 5.f);
+        data.decorator.addEntry(Block::DEAD_GRASS_2, { Block::SAND }, 5.f);
+        data.decorator.addEntry(Block::AIR, {}, 50.f);
     }
 
     // FOREST
@@ -97,7 +103,8 @@ void init()
         data.structureGens = {
             { StructureType::OAK_TREE, 7, 1.5f },
         };
-        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 6.f);
+        data.decorator.addEntry(Block::GRASS, { Block::GRASS_BLOCK }, 3.f);
+        data.decorator.addEntry(Block::SHORT_GRASS, { Block::GRASS_BLOCK }, 5.f);
         data.decorator.addEntry(Block::AIR, {}, 10.f);
     }
 

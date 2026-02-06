@@ -62,7 +62,10 @@ void init()
     BLOCK_DATA_BY_NAME(OAK_LEAVES) = { .uvs = BlockUvs(uvec2(14, 0)), .type = BlockType::TRANSPARENT_CUTOUT };
     BLOCK_DATA_BY_NAME(CACTUS) = { BlockUvs(uvec2(15, 0)) };
     BLOCK_DATA_BY_NAME(GRASS) = { .uvs = BlockUvs(uvec2(16, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(SHORT_GRASS) = { .uvs = BlockUvs(uvec2(20, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(DEAD_BUSH) = { .uvs = BlockUvs(uvec2(17, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = BlockUvs(uvec2(18, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = BlockUvs(uvec2(19, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
 }
 
 const BlockData& getBlockData(Block block)

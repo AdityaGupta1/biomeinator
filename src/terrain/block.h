@@ -40,7 +40,10 @@ enum class Block : BlockId
     OAK_LEAVES,
     CACTUS,
     GRASS,
+    SHORT_GRASS,
     DEAD_BUSH,
+    DEAD_GRASS_1,
+    DEAD_GRASS_2,
 
     COUNT
 };
