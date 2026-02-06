@@ -25,8 +25,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
+#include "util/rng.h"
 
 #include <DirectXMath.h>
+
+#include <numbers>
 #include <vector>
 
 using namespace glm;
@@ -97,6 +100,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     this->blocks.resize(numChunkBlocks);
+    this->biomes.resize(chunkSizeXZSquare);
 
     const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
@@ -158,12 +162,47 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
-void Chunk::fillStructures()
+void Chunk::fillStructuresAndDecorators()
 {
     for (Chunk* structureNeighbor : this->structureNeighbors)
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+    }
+
+    RandomNumberGenerator decoratorRng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 198594190);
+    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
+    {
+        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
+        {
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+
+            const Biome biome = this->biomes[columnIdx];
+            const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
+
+            if (decorator.isEmpty())
+            {
+                continue;
+            }
+
+            const uint baseBlockIdx = chunkSizeY * columnIdx;
+            Block lastBlock = Block::BEDROCK;
+            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
+            {
+                Block& thisBlock = this->blocks[baseBlockIdx + blockY];
+
+                if (thisBlock == Block::AIR && lastBlock != Block::AIR)
+                {
+                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), lastBlock);
+                    if (decoratorBlock != Block::AIR)
+                    {
+                        thisBlock = decoratorBlock;
+                    }
+                }
+
+                lastBlock = thisBlock;
+            }
+        }
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
@@ -425,16 +464,6 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-// first four match NeighborDirection enum
-static constexpr ivec3 faceOffsets[6] = {
-    ivec3(1, 0, 0),  // +x
-    ivec3(0, 0, 1),  // +z
-    ivec3(-1, 0, 0), // -x
-    ivec3(0, 0, -1), // -z
-    ivec3(0, 1, 0),  // +y
-    ivec3(0, -1, 0), // -y
-};
-
 bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 neighborPos_CS, int faceIdx)
 {
     ASSERT(thisBlockType != BlockType::AIR); // AIR should be skipped before this function is even called
@@ -488,7 +517,17 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 
     return false;
 }
 
-static constexpr ivec3 allFaceVertPositions[24] = {
+// first four match NeighborDirection enum
+inline constexpr ivec3 faceOffsets[6] = {
+    ivec3(1, 0, 0),  // +x
+    ivec3(0, 0, 1),  // +z
+    ivec3(-1, 0, 0), // -x
+    ivec3(0, 0, -1), // -z
+    ivec3(0, 1, 0),  // +y
+    ivec3(0, -1, 0), // -y
+};
+
+inline constexpr ivec3 cubeFaceVertPositions[24] = {
     ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
     ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
     ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
@@ -497,13 +536,25 @@ static constexpr ivec3 allFaceVertPositions[24] = {
     ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
 };
 
-static constexpr uvec2 uvOffsets[4] = {
+inline constexpr float halfInvSqrt2 = 0.5f / std::numbers::sqrt2_v<float>;
+inline constexpr float xShapeMin = 0.5f - halfInvSqrt2;
+inline constexpr float xShapeMax = 0.5f + halfInvSqrt2;
+inline constexpr vec3 xShapedFaceVertPositions[8] = {
+    vec3(xShapeMax, 1.f, xShapeMax), vec3(xShapeMin, 1.f, xShapeMin), vec3(xShapeMin, 0.f, xShapeMin), vec3(xShapeMax, 0.f, xShapeMax),
+    vec3(xShapeMin, 1.f, xShapeMax), vec3(xShapeMax, 1.f, xShapeMin), vec3(xShapeMax, 0.f, xShapeMin), vec3(xShapeMin, 0.f, xShapeMax),
+};
+inline constexpr vec3 xShapedFaceNormals[2] = {
+    vec3(-halfInvSqrt2, 0.f, halfInvSqrt2),
+    vec3(halfInvSqrt2, 0.f, -halfInvSqrt2),
+};
+
+inline constexpr uvec2 uvOffsets[4] = {
     uvec2(1, 0),
     uvec2(0, 0),
     uvec2(0, 1),
     uvec2(1, 1),
 };
-static constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
+inline constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
 void Chunk::setInstance(Instance* instance)
 {
@@ -545,46 +596,75 @@ void Chunk::createInstance()
 
                     const BlockData& blockData = Blocks::getBlockData(block);
 
-                    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                    if (blockData.shape == BlockShape::X_SHAPED)
                     {
-                        const ivec3 neighborOffset = faceOffsets[faceIdx];
-                        const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+                        const uint baseVertIdx = static_cast<uint>(verts.size());
 
-                        if (!shouldGenerateFace(blockPos_CS, blockData.type, neighborPos_CS, faceIdx))
+                        const uvec2 baseTexCoords = blockData.uvs[1]; // side
+                        for (uint i = 0; i < 8; ++i)
                         {
-                            continue;
-                        }
-
-                        const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
-                        const ivec3* thisFaceVertPositions = allFaceVertPositions + (faceIdx * 4);
-                        const uint32_t baseVertIdx = static_cast<uint32_t>(verts.size());
-                        for (uint i = 0; i < 4; ++i)
-                        {
-                            const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-
-                            const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                            const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
-
+                            const vec3 vertPos_CS = vec3(blockPos_CS) + xShapedFaceVertPositions[i];
+                            const vec3 normal = xShapedFaceNormals[i / 4];
+                            const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;
                             verts.emplace_back(
                                 vec3ToDirectX(vertPos_CS),
-                                normal,
+                                vec3ToDirectX(normal),
                                 vec2ToDirectX(uv)
                             );
                         }
 
-                        const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
-
-                        idxs.emplace_back(baseVertIdx + 0u);
-                        idxs.emplace_back(baseVertIdx + 1u);
-                        idxs.emplace_back(baseVertIdx + 2u);
-                        idxs.emplace_back(baseVertIdx + 0u);
-                        idxs.emplace_back(baseVertIdx + 2u);
-                        idxs.emplace_back(baseVertIdx + 3u);
-
-                        if (blockData.emitsLight)
+                        for (uint j = 0; j < 2; ++j)
                         {
-                            emissiveTriangleIdxs.emplace_back(triangleIdx);
-                            emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                            const uint offset = j * 4;
+                            idxs.emplace_back(baseVertIdx + offset + 0u);
+                            idxs.emplace_back(baseVertIdx + offset + 1u);
+                            idxs.emplace_back(baseVertIdx + offset + 2u);
+                            idxs.emplace_back(baseVertIdx + offset + 0u);
+                            idxs.emplace_back(baseVertIdx + offset + 2u);
+                            idxs.emplace_back(baseVertIdx + offset + 3u);
+                        }
+                        continue;
+                    }
+                    else // if (blockData.shape == BlockShape::CUBE)
+                    {
+                        for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                        {
+                            const ivec3 neighborOffset = faceOffsets[faceIdx];
+                            const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+
+                            if (!shouldGenerateFace(blockPos_CS, blockData.type, neighborPos_CS, faceIdx))
+                            {
+                                continue;
+                            }
+
+                            const uint baseVertIdx = static_cast<uint>(verts.size());
+
+                            const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                            const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
+                            for (uint i = 0; i < 4; ++i)
+                            {
+                                const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+
+                                const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
+                                const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
+
+                                verts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
+                            }
+
+                            const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
+
+                            idxs.emplace_back(baseVertIdx + 0u);
+                            idxs.emplace_back(baseVertIdx + 1u);
+                            idxs.emplace_back(baseVertIdx + 2u);
+                            idxs.emplace_back(baseVertIdx + 0u);
+                            idxs.emplace_back(baseVertIdx + 2u);
+                            idxs.emplace_back(baseVertIdx + 3u);
+
+                            if (blockData.emitsLight)
+                            {
+                                emissiveTriangleIdxs.emplace_back(triangleIdx);
+                                emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                            }
                         }
                     }
                 }

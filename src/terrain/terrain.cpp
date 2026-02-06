@@ -61,7 +61,7 @@ static void task_checkStructureNeighbors(Chunk* chunk, ThreadMemoryAllocator& th
 
 static void task_fillStructures(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->fillStructures();
+    chunk->fillStructuresAndDecorators();
 }
 
 static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)

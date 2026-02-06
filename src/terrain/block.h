@@ -30,15 +30,17 @@ enum class Block : BlockId
     STONE,
     LAMP,
     DIRT,
-    GRASS,
+    GRASS_BLOCK,
     SAND,
     SANDSTONE,
     SNOW,
-    SNOWY_GRASS,
+    SNOWY_GRASS_BLOCK,
     ICE,
     OAK_LOG,
     OAK_LEAVES,
     CACTUS,
+    GRASS,
+    DEAD_BUSH,
 
     COUNT
 };
@@ -48,6 +50,12 @@ enum class BlockType : uint8_t
     AIR,
     SOLID,
     TRANSPARENT_CUTOUT
+};
+
+enum class BlockShape : uint8_t
+{
+    CUBE,
+    X_SHAPED
 };
 
 struct BlockUvs
@@ -68,6 +76,7 @@ struct BlockData
 {
     BlockUvs uvs{};
     BlockType type{ BlockType::SOLID };
+    BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
 };
 

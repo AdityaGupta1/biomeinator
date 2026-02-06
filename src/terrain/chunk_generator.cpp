@@ -166,7 +166,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
-    Biome* biomes = threadMemoryAlloc.request<Biome>(chunkSizeXZSquare);
     std::set<Biome> biomeSet;
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -182,7 +181,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 .peak = peakNoise[columnIdx],
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
-            biomes[columnIdx] = biome;
+            this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
@@ -327,7 +326,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue; // top of this column is a cave, so skip this candidate
                     }
 
-                    const Biome columnBiome = biomes[columnIdx];
+                    const Biome columnBiome = this->biomes[columnIdx];
                     if (columnBiome != biome)
                     {
                         continue;
