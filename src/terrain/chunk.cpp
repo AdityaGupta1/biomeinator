@@ -573,6 +573,8 @@ void Chunk::createInstance()
     idxs.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
+    RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
+
     for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
         uvec3 segmentStartPos, segmentEndPos;
@@ -600,11 +602,13 @@ void Chunk::createInstance()
                     {
                         const uint baseVertIdx = static_cast<uint>(verts.size());
 
+                        const vec2 jitter = (rng.nextFloat2() - 0.5f) * 0.4f;
+                        const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
+
                         const uvec2 baseTexCoords = blockData.uvs[1]; // side
                         for (uint i = 0; i < 8; ++i)
                         {
-                            // TODO: random jitter offset
-                            const vec3 vertPos_CS = vec3(blockPos_CS) + xShapedFaceVertPositions[i];
+                            const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
                             const vec3 normal = xShapedFaceNormals[i / 4];
                             const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;
                             verts.emplace_back(
