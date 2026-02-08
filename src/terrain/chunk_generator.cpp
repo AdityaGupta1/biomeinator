@@ -163,8 +163,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
 
-    uint terrainNoiseMinY = chunkSizeY;
-    uint terrainNoiseMaxY = 0;
+    int terrainNoiseMinY = chunkSizeY;
+    int terrainNoiseMaxY = 0;
 
     std::set<Biome> biomeSet;
 
@@ -190,12 +190,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
 
-            const uint thisColumnTerrainMinY = static_cast<uint>(std::floor(terrainBaseHeight - (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
-            const uint thisColumnTerrainMaxY = static_cast<uint>(std::ceil(terrainBaseHeight + (surfaceValBound / terrainSurfaceMultiplier)));
+            const int thisColumnTerrainMinY = static_cast<int>(std::floor(terrainBaseHeight - (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
+            const int thisColumnTerrainMaxY = static_cast<int>(std::ceil(terrainBaseHeight + (surfaceValBound / terrainSurfaceMultiplier)));
             terrainNoiseMinY = std::min(terrainNoiseMinY, thisColumnTerrainMinY);
             terrainNoiseMaxY = std::max(terrainNoiseMaxY, thisColumnTerrainMaxY);
         }
     }
+
+    terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
+    terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
 
     uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
@@ -218,7 +221,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const TopBlocks& topBlocks = biomeData.topBlocks;
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
-            const int baseTerrainNoiseIdx = terrainNoiseHeight * columnIdx - terrainNoiseMinY;
+            const int baseTerrainNoiseIdx = static_cast<int>(terrainNoiseHeight * columnIdx) - terrainNoiseMinY;
             const uint baseCaveNoiseIdx = maxCaveHeight * columnIdx;
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
