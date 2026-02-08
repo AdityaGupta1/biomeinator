@@ -137,14 +137,17 @@ static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generat
     fn->GenUniformGrid2D(data, posXZ.x, posXZ.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
 }
 
-static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height)
+static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height, int yOffset = 0)
 {
-    fn->GenUniformGrid3D(data, 0 /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid3D(data, yOffset /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
 }
 
 }; // namespace ChunkGenerator
 
 using namespace ChunkGenerator;
+
+inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
+inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -157,15 +160,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
 
-    constexpr uint terrainNoiseMinY = 80;
-    constexpr uint terrainNoiseHeight = chunkSizeY - terrainNoiseMinY;
-    float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
-    constexpr uint maxCaveHeight = 160;
-    float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight);
-    fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
+    float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
 
-    uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
+    int terrainNoiseMinY = chunkSizeY;
+    int terrainNoiseMaxY = 0;
+
     std::set<Biome> biomeSet;
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -183,38 +183,75 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
-            const BiomeData& biomeData = Biomes::getBiomeData(biome);
 
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 155.f;
+            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
+
+            terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
+            terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
+
+            const int thisColumnTerrainMinY = static_cast<int>(std::floor(terrainBaseHeight - (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
+            const int thisColumnTerrainMaxY = static_cast<int>(std::ceil(terrainBaseHeight + (surfaceValBound / terrainSurfaceMultiplier)));
+            terrainNoiseMinY = std::min(terrainNoiseMinY, thisColumnTerrainMinY);
+            terrainNoiseMaxY = std::max(terrainNoiseMaxY, thisColumnTerrainMaxY);
+        }
+    }
+
+    terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
+    terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
+
+    const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
+    float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
+    constexpr uint maxCaveHeight = 160;
+    float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight, terrainNoiseMinY);
+    fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
+
+    uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
+
+    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
+    {
+        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
+        {
+            const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+
+            const Biome biome = this->biomes[columnIdx];
+            const BiomeData& biomeData = Biomes::getBiomeData(biome);
             const TopBlocks& topBlocks = biomeData.topBlocks;
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
-            const int baseTerrainNoiseIdx = terrainNoiseHeight * columnIdx - terrainNoiseMinY;
+            const int baseTerrainNoiseIdx = static_cast<int>(terrainNoiseHeight * columnIdx) - terrainNoiseMinY;
             const uint baseCaveNoiseIdx = maxCaveHeight * columnIdx;
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 165.f;
-            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
+            const float terrainBaseHeight = terrainBaseHeightArray[columnIdx];
+            const float terrainSurfaceMultiplier = terrainSurfaceMultiplierArray[columnIdx];
 
             uint topBlockY = 0;
             bool wasSolid = true;
-            for (uint y = 1; y < chunkSizeY; ++y)
+            for (uint y = 1; y <= terrainNoiseMaxY; ++y)
             {
                 Block block = Block::AIR;
                 const uint blockIdx = baseBlockIdx + y;
 
-                float surfaceVal = (terrainBaseHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
-                if (y < terrainBaseHeight)
+                bool isInTerrain;
+                if (y < terrainNoiseMinY)
                 {
-                    surfaceVal *= 2.0f;
+                    isInTerrain = true;
+                }
+                else
+                {
+                    float surfaceVal = (terrainBaseHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
+                    if (y < terrainBaseHeight)
+                    {
+                        surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
+                    }
+
+                    isInTerrain = terrainNoise[baseTerrainNoiseIdx + static_cast<int>(y)] < surfaceVal;
                 }
 
-                if (surfaceVal < -1.2f)
-                {
-                    break;
-                }
-
-                bool isInTerrain = y < terrainNoiseMinY || (terrainNoise[baseTerrainNoiseIdx + y] < surfaceVal);
                 bool isCave = false;
                 if (isInTerrain)
                 {
