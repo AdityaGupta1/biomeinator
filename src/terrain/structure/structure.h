@@ -25,10 +25,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 enum StructureType
 {
-	OAK_TREE,
+    OAK_TREE,
     SAGUARO_CACTUS,
 
-	COUNT
+    COUNT
 };
 
 struct Structure

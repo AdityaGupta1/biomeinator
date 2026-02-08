@@ -186,21 +186,21 @@ void Chunk::fillStructuresAndDecorators()
             }
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
-            Block lastBlock = Block::BEDROCK;
+            Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
                 Block& thisBlock = this->blocks[baseBlockIdx + blockY];
 
-                if (thisBlock == Block::AIR && lastBlock != Block::AIR)
+                if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
                 {
-                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), lastBlock);
+                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
                     if (decoratorBlock != Block::AIR)
                     {
                         thisBlock = decoratorBlock;
                     }
                 }
 
-                lastBlock = thisBlock;
+                bottomBlock = thisBlock;
             }
         }
     }
@@ -611,11 +611,7 @@ void Chunk::createInstance()
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
                             const vec3 normal = xShapedFaceNormals[i / 4];
                             const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;
-                            verts.emplace_back(
-                                vec3ToDirectX(vertPos_CS),
-                                vec3ToDirectX(normal),
-                                vec2ToDirectX(uv)
-                            );
+                            verts.emplace_back(vec3ToDirectX(vertPos_CS), vec3ToDirectX(normal), vec2ToDirectX(uv));
                         }
 
                         for (uint j = 0; j < 2; ++j)
