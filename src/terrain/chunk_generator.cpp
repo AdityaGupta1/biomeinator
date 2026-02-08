@@ -147,7 +147,7 @@ static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generat
 using namespace ChunkGenerator;
 
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
-inline constexpr float surfaceValBound = 1.2f;
+inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -200,7 +200,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
     terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
 
-    uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
+    const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
     constexpr uint maxCaveHeight = 160;
     float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
