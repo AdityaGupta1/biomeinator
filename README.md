@@ -46,4 +46,6 @@ This project uses various third-party libraries:
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
 
-Block textures come from the [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) texture pack by Acaitart.
+Block textures come from
+- [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) by Acaitart
+- [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore

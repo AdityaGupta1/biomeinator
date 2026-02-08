@@ -20,46 +20,26 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../block.h"
 
-#include <glm/glm.hpp>
+#include <unordered_set>
 #include <vector>
 
-enum StructureType
+struct DecoratorEntry
 {
-    OAK_TREE,
-    SAGUARO_CACTUS,
-
-    COUNT
+    Block block{ Block::AIR };
+    float weight{ 1.f };
+    std::unordered_set<Block> groundBlocks{};
 };
 
-struct Structure
+class Decorator
 {
-    StructureType type;
-    glm::ivec3 pos_WS;
+private:
+    std::vector<DecoratorEntry> entries{};
+    float totalWeight{ 0.f };
+
+public:
+    void addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks = {});
+
+    Block getBlock(float rndSample, Block bottomBlock) const;
+
+    bool isEmpty() const;
 };
-
-inline constexpr uint32_t structureMaxChunkRadius = 1;
-
-struct StructureBounds
-{
-    glm::ivec2 minDiffXZ;
-    glm::ivec2 maxDiffXZ;
-
-    StructureBounds() = default;
-    StructureBounds(int diff);
-};
-
-struct StructureGen
-{
-    StructureType type;
-    uint32_t gridCellSideLength;
-    float minRadius;
-};
-
-namespace Structures
-{
-
-void init();
-
-const StructureBounds& getStructureBounds(StructureType type);
-
-} // namespace Structures

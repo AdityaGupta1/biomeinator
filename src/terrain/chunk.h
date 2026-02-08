@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "biome.h"
 #include "block.h"
 #include "scene/scene.h"
 #include "structure/structure.h"
@@ -109,6 +110,8 @@ private:
     std::vector<Block> blocks{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
+    std::vector<Biome> biomes{};
+
     std::vector<Structure> structures{};
     std::vector<Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
@@ -143,7 +146,7 @@ public:
 
     void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
     void checkStructureNeighbors();
-    void fillStructures();
+    void fillStructuresAndDecorators();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstance(Instance* instance);

@@ -229,7 +229,7 @@ file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS
     "${ASSETS_SRC_DIR}/*"
 )
 
-add_custom_command(TARGET Biomeinator POST_BUILD
+add_custom_target(copy_assets ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "${ASSETS_DST_DIR}"
     VERBATIM
 )
@@ -239,12 +239,14 @@ foreach(src IN LISTS ASSET_FILES)
     set(dst "${ASSETS_DST_DIR}/${rel}")
     get_filename_component(dst_dir "${dst}" DIRECTORY)
 
-    add_custom_command(TARGET Biomeinator POST_BUILD
+    add_custom_command(TARGET copy_assets
         COMMAND ${CMAKE_COMMAND} -E make_directory "${dst_dir}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${src}" "${dst}"
         VERBATIM
     )
 endforeach()
+
+add_dependencies(Biomeinator copy_assets)
 
 target_compile_definitions(Biomeinator PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"

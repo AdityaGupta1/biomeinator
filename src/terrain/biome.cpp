@@ -46,75 +46,115 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 void init()
 {
     // PLAINS
-    BIOME_DATA_BY_NAME(PLAINS).biomeNoise = {
-        .temperature = 0.0f,
-        .humidity = 0.0f,
-        .peak = 0.15f,
-    };
-    BIOME_DATA_BY_NAME(PLAINS).structureGens = {
-        { StructureType::OAK_TREE, 7, 1.5f },
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(PLAINS);
+        data.biomeNoise = {
+            .temperature = 0.0f,
+            .humidity = 0.0f,
+            .peak = 0.15f,
+        };
+        data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::PINK_DAFFODIL, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 15.f);
+    }
 
     // SAVANNA
-    BIOME_DATA_BY_NAME(SAVANNA).biomeNoise = {
-        .temperature = 0.6f,
-        .humidity = -0.6f,
-        .peak = 0.4f,
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(SAVANNA);
+        data.biomeNoise = {
+            .temperature = 0.6f,
+            .humidity = -0.6f,
+            .peak = 0.4f,
+        };
+        data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GOLDENROD, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 10.f);
+    }
 
     // DESERT
-    BIOME_DATA_BY_NAME(DESERT).biomeNoise = {
-        .temperature = 1.0f,
-        .humidity = -1.0f,
-        .peak = 0.2f,
-    };
-    BIOME_DATA_BY_NAME(DESERT).topBlocks = {
-        .top = Block::SAND,
-        .mid = Block::SANDSTONE,
-    };
-    BIOME_DATA_BY_NAME(DESERT).structureGens = {
-        { StructureType::SAGUARO_CACTUS, 20, 4.0f },
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(DESERT);
+        data.biomeNoise = {
+            .temperature = 1.0f,
+            .humidity = -1.0f,
+            .peak = 0.2f,
+        };
+        data.topBlocks = {
+            .top = Block::SAND,
+            .mid = Block::SANDSTONE,
+        };
+        data.structureGens = {
+            { StructureType::SAGUARO_CACTUS, 20, 4.0f },
+        };
+        data.decorator.addEntry(Block::DEAD_BUSH, 1.f, { Block::SAND });
+        data.decorator.addEntry(Block::TINY_CACTUS, 2.f, { Block::SAND });
+        data.decorator.addEntry(Block::DEAD_GRASS_1, 5.f, { Block::SAND });
+        data.decorator.addEntry(Block::DEAD_GRASS_2, 5.f, { Block::SAND });
+        data.decorator.addEntry(Block::AIR, 60.f);
+    }
 
     // FOREST
-    BIOME_DATA_BY_NAME(FOREST).biomeNoise = {
-        .temperature = -0.1f,
-        .humidity = 0.2f,
-        .peak = 0.3f,
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(FOREST);
+        data.biomeNoise = {
+            .temperature = -0.1f,
+            .humidity = 0.2f,
+            .peak = 0.3f,
+        };
+        data.structureGens = {
+            { StructureType::OAK_TREE, 7, 1.5f },
+        };
+        data.decorator.addEntry(Block::GRASS, 4.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GOLDENROD, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::PINK_DAFFODIL, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 15.f);
+    }
 
     // MOUNTAINS
-    BIOME_DATA_BY_NAME(MOUNTAINS).biomeNoise = {
-        .temperature = -0.4f,
-        .humidity = -0.4f,
-        .peak = 0.8f,
-    };
-    BIOME_DATA_BY_NAME(MOUNTAINS).topBlocks = {
-        .top = Block::STONE,
-        .mid = Block::STONE,
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(MOUNTAINS);
+        data.biomeNoise = {
+            .temperature = -0.4f,
+            .humidity = -0.4f,
+            .peak = 0.8f,
+        };
+        data.topBlocks = {
+            .top = Block::STONE,
+            .mid = Block::STONE,
+        };
+    }
 
     // TUNDRA
-    BIOME_DATA_BY_NAME(TUNDRA).biomeNoise = {
-        .temperature = -0.7f,
-        .humidity = -0.6f,
-        .peak = 0.2f,
-    };
-    BIOME_DATA_BY_NAME(TUNDRA).topBlocks = {
-        .top = Block::SNOWY_GRASS,
-        .mid = Block::DIRT,
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(TUNDRA);
+        data.biomeNoise = {
+            .temperature = -0.7f,
+            .humidity = -0.6f,
+            .peak = 0.2f,
+        };
+        data.topBlocks = {
+            .top = Block::SNOWY_GRASS_BLOCK,
+            .mid = Block::DIRT,
+        };
+    }
 
     // ICE_FIELDS
-    BIOME_DATA_BY_NAME(ICE_FIELDS).biomeNoise = {
-        .temperature = -0.85f,
-        .humidity = -0.8f,
-        .peak = 0.15f,
-    };
-    BIOME_DATA_BY_NAME(ICE_FIELDS).topBlocks = {
-        .top = Block::SNOW,
-        .mid = Block::ICE,
-    };
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(ICE_FIELDS);
+        data.biomeNoise = {
+            .temperature = -0.85f,
+            .humidity = -0.8f,
+            .peak = 0.15f,
+        };
+        data.topBlocks = {
+            .top = Block::SNOW,
+            .mid = Block::ICE,
+        };
+    }
 }
 
 const BiomeData& getBiomeData(Biome biome)

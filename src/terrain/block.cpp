@@ -52,15 +52,23 @@ void init()
     BLOCK_DATA_BY_NAME(STONE) = { BlockUvs(uvec2(0, 0)) };
     BLOCK_DATA_BY_NAME(LAMP) = { .uvs = BlockUvs(uvec2(1, 0)), .emitsLight = true };
     BLOCK_DATA_BY_NAME(DIRT) = { BlockUvs(uvec2(4, 0)) };
-    BLOCK_DATA_BY_NAME(GRASS) = { BlockUvs(uvec2(2, 0), uvec2(3, 0), uvec2(4, 0)) };
+    BLOCK_DATA_BY_NAME(GRASS_BLOCK) = { BlockUvs(uvec2(2, 0), uvec2(3, 0), uvec2(4, 0)) };
     BLOCK_DATA_BY_NAME(SAND) = { BlockUvs(uvec2(6, 0)) };
     BLOCK_DATA_BY_NAME(SANDSTONE) = { BlockUvs(uvec2(8, 0), uvec2(7, 0), uvec2(8, 0)) };
     BLOCK_DATA_BY_NAME(SNOW) = { BlockUvs(uvec2(9, 0)) };
-    BLOCK_DATA_BY_NAME(SNOWY_GRASS) = { BlockUvs(uvec2(9, 0), uvec2(10, 0), uvec2(4, 0)) };
+    BLOCK_DATA_BY_NAME(SNOWY_GRASS_BLOCK) = { BlockUvs(uvec2(9, 0), uvec2(10, 0), uvec2(4, 0)) };
     BLOCK_DATA_BY_NAME(ICE) = { BlockUvs(uvec2(11, 0)) };
     BLOCK_DATA_BY_NAME(OAK_LOG) = { BlockUvs(uvec2(13, 0), uvec2(12, 0), uvec2(13, 0)) };
     BLOCK_DATA_BY_NAME(OAK_LEAVES) = { .uvs = BlockUvs(uvec2(14, 0)), .type = BlockType::TRANSPARENT_CUTOUT };
     BLOCK_DATA_BY_NAME(CACTUS) = { BlockUvs(uvec2(15, 0)) };
+    BLOCK_DATA_BY_NAME(GRASS) = { .uvs = BlockUvs(uvec2(16, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(SHORT_GRASS) = { .uvs = BlockUvs(uvec2(20, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_BUSH) = { .uvs = BlockUvs(uvec2(17, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = BlockUvs(uvec2(18, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = BlockUvs(uvec2(19, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = BlockUvs(uvec2(21, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(TINY_CACTUS) = { .uvs = BlockUvs(uvec2(22, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = BlockUvs(uvec2(23, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
 }
 
 const BlockData& getBlockData(Block block)

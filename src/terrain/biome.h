@@ -19,15 +19,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include "block.h"
+#include "structure/decorator.h"
 #include "structure/structure.h"
 
 #include <vector>
 
 struct BiomeNoise
 {
-    float temperature;
-    float humidity;
-    float peak;
+    float temperature{ 0.f };
+    float humidity{ 0.f };
+    float peak{ 0.f };
 
     float distance2(const BiomeNoise& other) const;
 };
@@ -47,15 +48,16 @@ enum class Biome : uint8_t
 
 struct TopBlocks
 {
-    Block top{ Block::GRASS };
+    Block top{ Block::GRASS_BLOCK };
     Block mid{ Block::DIRT };
 };
 
 struct BiomeData
 {
-    BiomeNoise biomeNoise;
-    TopBlocks topBlocks;
-    std::vector<StructureGen> structureGens;
+    BiomeNoise biomeNoise{};
+    TopBlocks topBlocks{};
+    std::vector<StructureGen> structureGens{};
+    Decorator decorator{};
 };
 
 struct BiomeWeight
