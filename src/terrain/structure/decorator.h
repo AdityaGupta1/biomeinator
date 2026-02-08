@@ -26,8 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 struct DecoratorEntry
 {
     Block block{ Block::AIR };
-    std::unordered_set<Block> groundBlocks{ Block::GRASS_BLOCK };
     float weight{ 1.f };
+    std::unordered_set<Block> groundBlocks{};
 };
 
 class Decorator
@@ -37,7 +37,7 @@ private:
     float totalWeight{ 0.f };
 
 public:
-    void addEntry(Block block, std::initializer_list<Block> groundBlocks, float weight);
+    void addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks = {});
 
     Block getBlock(float rndSample, Block bottomBlock) const;
 

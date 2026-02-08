@@ -20,22 +20,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "debug.h"
 
-void Decorator::addEntry(Block block, std::initializer_list<Block> groundBlocks, float weight)
+void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks)
 {
     ASSERT(weight > 0.f);
     this->entries.push_back({
         block,
+        weight,
         std::unordered_set<Block>(groundBlocks),
-        weight
     });
     totalWeight += weight;
 }
 
 Block Decorator::getBlock(float rndSample, Block bottomBlock) const
 {
-    if (this->entries.empty())
+    if (this->isEmpty())
     {
-        ASSERT(false); // empty decorators should not be called
+        ASSERT(false, "empty decorators should not be called");
         return Block::AIR;
     }
 
@@ -43,8 +43,7 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
     int entryIdx = -1;
     while (rndSample > 0.f)
     {
-        ++entryIdx;
-        rndSample -= this->entries[entryIdx].weight;
+        rndSample -= this->entries[++entryIdx].weight;
     }
 
     const DecoratorEntry& entry = this->entries[entryIdx];
