@@ -164,6 +164,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
 
     uint terrainNoiseMinY = chunkSizeY;
+    uint terrainNoiseMaxY = 0;
 
     std::set<Biome> biomeSet;
 
@@ -189,17 +190,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
 
-            const uint thisColumnTerrainMinY = static_cast<uint>(
-                floor(terrainBaseHeight -
-                      (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
-            if (thisColumnTerrainMinY < terrainNoiseMinY)
-            {
-                terrainNoiseMinY = thisColumnTerrainMinY;
-            }
+            const uint thisColumnTerrainMinY = static_cast<uint>(std::floor(terrainBaseHeight - (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
+            const uint thisColumnTerrainMaxY = static_cast<uint>(std::ceil(terrainBaseHeight + (surfaceValBound / terrainSurfaceMultiplier)));
+            terrainNoiseMinY = std::min(terrainNoiseMinY, thisColumnTerrainMinY);
+            terrainNoiseMaxY = std::max(terrainNoiseMaxY, thisColumnTerrainMaxY);
         }
     }
 
-    uint terrainNoiseHeight = chunkSizeY - terrainNoiseMinY;
+    uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
     constexpr uint maxCaveHeight = 160;
     float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
@@ -230,7 +228,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             uint topBlockY = 0;
             bool wasSolid = true;
-            for (uint y = 1; y < chunkSizeY; ++y)
+            for (uint y = 1; y <= terrainNoiseMaxY; ++y)
             {
                 Block block = Block::AIR;
                 const uint blockIdx = baseBlockIdx + y;
@@ -246,11 +244,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     if (y < terrainBaseHeight)
                     {
                         surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
-                    }
-
-                    if (surfaceVal < -surfaceValBound)
-                    {
-                        break;
                     }
 
                     isInTerrain = terrainNoise[baseTerrainNoiseIdx + static_cast<int>(y)] < surfaceVal;
