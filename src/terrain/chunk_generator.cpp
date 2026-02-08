@@ -184,7 +184,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 165.f;
+            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 155.f;
             const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
