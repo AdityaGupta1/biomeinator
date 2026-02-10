@@ -394,8 +394,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
 
-    BufferHelper::uavBarrier(cmdList, nullptr);
-
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
     {
