@@ -364,6 +364,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     }
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
+    allBlasInputs.reserve(instancesToBuildThisFrame.size());
 
     uint32_t numPerTriDatas = 0;
     uint32_t numAreaLights = 0;
@@ -499,6 +500,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
     inputs.numInstances = nextInstanceDescIdx;
+    inputs.updateScratchSizePtr = nullptr;
     inputs.outTlas = &this->tlasBufferSection;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);
