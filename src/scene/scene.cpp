@@ -35,18 +35,31 @@ Instance::Instance(Scene* scene, uint32_t id)
     : scene(scene), id(id)
 {}
 
+void Instance::stealVectors(Instance* other)
+{
+    ASSERT(other->host_verts.empty());
+    ASSERT(other->host_idxs.empty());
+    ASSERT(other->host_perTriDatas.empty());
+    ASSERT(other->host_areaLights.empty());
+
+    this->host_verts = std::move(other->host_verts);
+    this->host_idxs = std::move(other->host_idxs);
+    this->host_perTriDatas = std::move(other->host_perTriDatas);
+    this->host_areaLights = std::move(other->host_areaLights);
+}
+
 void Instance::reset(bool alsoFreeFromScene)
 {
     this->geoWrapper.blasBufferSection.free();
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
     this->perTriDatasBufferSection.free();
-
     this->areaLightsBufferSection.free();
 
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
+    this->host_areaLights.clear();
     this->isGeometryFinalized = false;
 
     if (alsoFreeFromScene)
@@ -252,9 +265,13 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     Instance* newInstancePtr = newInstance.get();
     this->instances.emplace(id, std::move(newInstance));
 
-    ASSERT(newInstancePtr->host_verts.empty());
-    ASSERT(newInstancePtr->host_idxs.empty());
-    ASSERT(newInstancePtr->host_perTriDatas.empty());
+    if (!instancesToReuse.empty())
+    {
+        newInstancePtr->stealVectors(instancesToReuse.front().get());
+        instancesToReuse.pop();
+    }
+
+    printf("size: %u\n", static_cast<uint32_t>(instancesToReuse.size()));
 
     return newInstancePtr;
 }
@@ -268,7 +285,12 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
-    this->instances.erase(instance->id);
+
+    auto instanceIter = this->instances.find(instance->id);
+    ASSERT(instanceIter != this->instances.end());
+    this->instancesToReuse.push(std::move(instanceIter->second));
+    this->instances.erase(instanceIter);
+
     this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
 }
 
@@ -364,6 +386,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     }
 
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
+    allBlasInputs.reserve(instancesToBuildThisFrame.size());
 
     uint32_t numPerTriDatas = 0;
     uint32_t numAreaLights = 0;
@@ -393,8 +416,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     }
 
     AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
-
-    BufferHelper::uavBarrier(cmdList, nullptr);
 
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
@@ -501,6 +522,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
     inputs.numInstances = nextInstanceDescIdx;
+    inputs.updateScratchSizePtr = nullptr;
     inputs.outTlas = &this->tlasBufferSection;
 
     AcsHelper::makeTlas(cmdList, toFreeList, inputs);

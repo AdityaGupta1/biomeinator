@@ -175,7 +175,7 @@ public:
 
     inline bool getIsDirty() const
     {
-        return this->dirtyBeginIdx <= this->dirtyEndIdx;
+        return this->dirtyBeginIdx < this->dirtyEndIdx;
     }
 
     inline ID3D12Resource* getUploadBuffer() const

@@ -50,6 +50,7 @@ private:
     uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
+    std::vector<PerTriangleData> host_perTriDatas;
     ManagedBufferSection perTriDatasBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
@@ -60,8 +61,9 @@ private:
 
     Instance(::Scene* scene, uint32_t id);
 
+    void stealVectors(Instance* other);
+
     void reset(bool alsoFreeFromScene = true);
-    std::vector<PerTriangleData> host_perTriDatas;
 
     DirectX::XMFLOAT3X4 transform{
         1, 0, 0, 0,
@@ -130,6 +132,8 @@ private:
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
+
+    std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
     ManagedBuffer sharedBlasUploadBuffer{
