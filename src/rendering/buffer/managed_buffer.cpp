@@ -163,7 +163,7 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList)
         .StructureByteStride = this->options.srvElementByteSize,
     };
     this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
-    Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
+    Renderer::getDevice()->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
 }
 
 ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* cmdList,

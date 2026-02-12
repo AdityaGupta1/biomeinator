@@ -1952,6 +1952,11 @@ void destroy()
     device.Reset();
 }
 
+ID3D12Device5* getDevice()
+{
+    return device.Get();
+}
+
 const Camera& getCamera()
 {
     return camera;

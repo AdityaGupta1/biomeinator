@@ -88,7 +88,7 @@ void makeRtPipeline(const RtPipelineInputs& inputs)
         .NumSubobjects = static_cast<uint32_t>(subobjects.size()),
         .pSubobjects = subobjects.data(),
     };
-    CHECK_HRESULT(Renderer::device->CreateStateObject(&desc, IID_PPV_ARGS(&inputs.pso)));
+    CHECK_HRESULT(Renderer::getDevice()->CreateStateObject(&desc, IID_PPV_ARGS(&inputs.pso)));
     const std::wstring psoName = inputs.name + L"_pso";
     inputs.pso->SetName(psoName.c_str());
 

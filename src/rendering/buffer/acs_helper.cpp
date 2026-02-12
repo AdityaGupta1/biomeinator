@@ -192,7 +192,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
         .pGeometryDescs = &buildInfo->geometryDesc,
     };
 
-    Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
+    Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
     buildInfo->outAcs = outBlas;
 }
@@ -252,7 +252,7 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress(),
     };
 
-    Renderer::device->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo.inputs, &buildInfo.prebuildInfo);
+    Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo.inputs, &buildInfo.prebuildInfo);
 
     if (inputs.updateScratchSizePtr != nullptr)
     {
