@@ -31,7 +31,6 @@ public:
     void init();
 
     uint64_t signal(ID3D12CommandQueue* cmdQueue);
-
     void waitFor(uint64_t waitFenceValue);
 
     void reset();
