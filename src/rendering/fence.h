@@ -24,9 +24,15 @@ class Fence
 {
 private:
     ComPtr<ID3D12Fence> fence;
-    uint64_t nextFenceValue{ 0 };
+    uint64_t fenceValue{ 0 };
     HANDLE fenceEvent{ nullptr };
 
 public:
     void init();
+
+    uint64_t signal(ID3D12CommandQueue* cmdQueue);
+
+    void waitFor(uint64_t waitFenceValue);
+
+    void reset();
 };

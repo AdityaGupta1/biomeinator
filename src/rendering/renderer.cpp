@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <shlobj.h>
 
 #include "camera.h"
+#include "fence.h"
 #include "param_block_manager.h"
 #include "pipeline_builder.h"
 #include "rt_target.h"
@@ -152,8 +153,6 @@ struct FrameContext
 
 static FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
 static uint32_t frameCtxIdx = 0;
-static uint64_t nextFenceValue = 1;
-static HANDLE fenceEvent;
 static bool useWaitableSwapChain = true;
 static HANDLE frameLatencyWaitable;
 
@@ -278,7 +277,8 @@ ComPtr<ID3D12Device5> device;
 
 static ComPtr<IDXGIFactory5> factory;
 static ComPtr<ID3D12CommandQueue> cmdQueue;
-static ComPtr<ID3D12Fence> fence;
+
+Fence fence;
 
 static void initDevice()
 {
@@ -352,7 +352,7 @@ static void initDevice()
     };
     CHECK_HRESULT(device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue)));
 
-    CHECK_HRESULT(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+    fence.init();
 }
 
 static ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
@@ -687,8 +687,6 @@ static void initCommand()
     CHECK_HRESULT(device->CreateCommandList1(
         0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList)));
     cmdList->SetName(L"main cmdList");
-
-    fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 }
 
 static void initConstantParams()
@@ -1786,9 +1784,7 @@ void render()
 
     submitCmd();
 
-    const uint64_t fenceValue = nextFenceValue++;
-    CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
-    frameCtx.fenceValue = fenceValue;
+    frameCtx.fenceValue = fence.signal(cmdQueue.Get());
 
     UINT syncInterval;
     UINT presentFlags;
@@ -1823,15 +1819,6 @@ void render()
     }
 }
 
-static void waitForFence(const uint64_t fenceValue)
-{
-    if (fence->GetCompletedValue() < fenceValue)
-    {
-        CHECK_HRESULT(fence->SetEventOnCompletion(fenceValue, fenceEvent));
-        WaitForSingleObjectEx(fenceEvent, 1000 /*ms*/, true);
-    }
-}
-
 static void beginFrame()
 {
     FrameContext& frame = frameCtxs[frameCtxIdx];
@@ -1840,7 +1827,7 @@ static void beginFrame()
     {
         WaitForSingleObjectEx(frameLatencyWaitable, 1000 /*ms*/, true);
     }
-    waitForFence(frame.fenceValue);
+    fence.waitFor(frame.fenceValue);
 
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
@@ -1855,10 +1842,7 @@ static void submitCmd()
 
 void flush()
 {
-    const uint64_t fenceValue = nextFenceValue++;
-    CHECK_HRESULT(cmdQueue->Signal(fence.Get(), fenceValue));
-
-    waitForFence(fenceValue);
+    fence.waitFor(fence.signal(cmdQueue.Get()));
 
     for (auto& frame : frameCtxs)
     {
@@ -1928,11 +1912,8 @@ void destroy()
 
     cmdList.Reset();
 
-    fence.Reset();
-    if (fenceEvent)
-    {
-        CloseHandle(fenceEvent);
-    }
+    fence.reset();
+
     if (useWaitableSwapChain && frameLatencyWaitable)
     {
         CloseHandle(frameLatencyWaitable);
