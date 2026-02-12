@@ -271,8 +271,6 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
         instancesToReuse.pop();
     }
 
-    printf("size: %u\n", static_cast<uint32_t>(instancesToReuse.size()));
-
     return newInstancePtr;
 }
 
@@ -557,12 +555,12 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         texDesc.SampleDesc = SAMPLE_DESC_NO_AA;
 
         ComPtr<ID3D12Resource> dev_texture;
-        CHECK_HRESULT(Renderer::device->CreateCommittedResource(&DEFAULT_HEAP,
-                                                                D3D12_HEAP_FLAG_NONE,
-                                                                &texDesc,
-                                                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                                                                nullptr,
-                                                                IID_PPV_ARGS(&dev_texture)));
+        CHECK_HRESULT(Renderer::getDevice()->CreateCommittedResource(&DEFAULT_HEAP,
+                                                                     D3D12_HEAP_FLAG_NONE,
+                                                                     &texDesc,
+                                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                                     nullptr,
+                                                                     IID_PPV_ARGS(&dev_texture)));
         dev_texture->SetName(L"scene texture");
 
         const uint32_t rowPitchBytes = pendingTex.width * 4;
@@ -615,7 +613,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                 .MipLevels = 1,
             },
         };
-        Renderer::device->CreateShaderResourceView(dev_texture.Get(), &srvDesc, pendingTex.cpuHandle);
+        Renderer::getDevice()->CreateShaderResourceView(dev_texture.Get(), &srvDesc, pendingTex.cpuHandle);
 
         this->textures.push_back(dev_texture);
         toFreeList.pushResource(dev_uploadBuffer, true);

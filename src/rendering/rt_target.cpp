@@ -83,26 +83,26 @@ void RtTarget::setDimensions(uint32_t width, uint32_t height)
 void RtTarget::init()
 {
     this->targetResourceState = D3D12_RESOURCE_STATE_COMMON;
-    Renderer::device->CreateCommittedResource(&DEFAULT_HEAP,
-                                              D3D12_HEAP_FLAG_NONE,
-                                              &this->targetResourceDesc,
-                                              this->targetResourceState,
-                                              nullptr,
-                                              IID_PPV_ARGS(&this->target));
+    Renderer::getDevice()->CreateCommittedResource(&DEFAULT_HEAP,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &this->targetResourceDesc,
+                                                   this->targetResourceState,
+                                                   nullptr,
+                                                   IID_PPV_ARGS(&this->target));
     this->target->SetName(this->name.c_str());
 
     if (this->hasUav)
     {
         D3D12_CPU_DESCRIPTOR_HANDLE uavHandle;
         this->uav.idx = Renderer::sharedDescHeapAlloc.alloc(&uavHandle);
-        Renderer::device->CreateUnorderedAccessView(this->target.Get(), nullptr, &this->uav.desc, uavHandle);
+        Renderer::getDevice()->CreateUnorderedAccessView(this->target.Get(), nullptr, &this->uav.desc, uavHandle);
     }
 
     if (this->hasSrv)
     {
         D3D12_CPU_DESCRIPTOR_HANDLE srvHandle;
         this->srv.idx = Renderer::sharedDescHeapAlloc.alloc(&srvHandle);
-        Renderer::device->CreateShaderResourceView(this->target.Get(), &this->srv.desc, srvHandle);
+        Renderer::getDevice()->CreateShaderResourceView(this->target.Get(), &this->srv.desc, srvHandle);
     }
 }
 

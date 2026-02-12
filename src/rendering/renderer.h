@@ -46,9 +46,9 @@ void destroy();
 inline constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
 uint32_t getFrameIndex();
 
-extern ComPtr<ID3D12Device5> device;
-
 extern DescriptorHeapAllocator sharedDescHeapAlloc;
+
+ID3D12Device5* getDevice();
 
 const Camera& getCamera();
 

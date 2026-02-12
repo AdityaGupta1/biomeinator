@@ -71,7 +71,7 @@ private:
             .StructureByteStride = sizeof(T),
         };
         this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
-        Renderer::device->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
+        Renderer::getDevice()->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
     }
 
     void init(uint32_t size, ToFreeList* toFreeList)
