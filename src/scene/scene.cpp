@@ -344,19 +344,13 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     return didChange;
 }
 
-static constexpr uint32_t maxBlasBuildsPerFrame = 8;
-static constexpr uint32_t maxBlasesWaitingForTlas = 64;
+static constexpr uint32_t maxBlasBuildsPerFrame = 4;
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
-    if (this->numVisibleBlasesWaitingForTlas > maxBlasesWaitingForTlas)
-    {
-        return true; // force update TLAS since many BLASes are waiting
-    }
-
     if (this->instancesReadyForBlasBuild.empty())
     {
-        return numVisibleBlasesWaitingForTlas > 0;
+        return false;
     }
 
     std::vector<Instance*> instancesToBuildThisFrame;
@@ -376,6 +370,11 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         {
             break;
         }
+    }
+
+    if (instancesToBuildThisFrame.empty())
+    {
+        return false;
     }
 
     for (Instance* const instance : instancesToBuildThisFrame)
@@ -425,9 +424,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         instanceData.materialIdx = instance->materialIdx;
 
-        instance->host_verts.clear();
-        instance->host_idxs.clear();
-
         const ManagedBufferSection perTriDatasUploadBufferSection =
             sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
         instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
@@ -435,7 +431,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instanceData.perTriDatasBufferOffset =
             Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
 
-        instance->host_perTriDatas.clear();
         toFreeList.pushManagedBufferSection(perTriDatasUploadBufferSection);
 
         if (!instance->host_areaLights.empty())
@@ -447,7 +442,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instanceData.areaLightsBufferOffset =
                 Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
-            instance->host_areaLights.clear();
             toFreeList.pushManagedBufferSection(areaLightsUploadBufferSection);
         }
 
@@ -463,7 +457,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
     }
 
-    return false;
+    return true;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
