@@ -26,11 +26,6 @@ uint hash(uint seed)
     return (word >> 22u) ^ word;
 }
 
-uint combinedHash(uint seedA, uint seedB)
-{
-    return hash(hash(seedA) + 0x9e3779b9 + (seedB << 6) + (seedB >> 2));
-}
-
 struct RandomNumberGenerator
 {
     uint seed;
@@ -66,15 +61,15 @@ RandomNumberGenerator initRng(uint seed)
 
 RandomNumberGenerator initRng(uint seed1, uint seed2)
 {
-    return initRng(combinedHash(seed1, seed2));
+    return initRng(seed1 ^ hash(seed2));
 }
 
 RandomNumberGenerator initRng(uint seed1, uint seed2, uint seed3)
 {
-    return initRng(combinedHash(seed1, combinedHash(seed2, seed3)));
+    return initRng(seed1 ^ hash(seed2 ^ hash(seed3)));
 }
 
 RandomNumberGenerator initRng(uint seed1, uint seed2, uint seed3, uint seed4)
 {
-    return initRng(combinedHash(seed1, combinedHash(seed2, combinedHash(seed3, seed4))));
+    return initRng(seed1 ^ hash(seed2 ^ hash(seed3 ^ hash(seed4))));
 }

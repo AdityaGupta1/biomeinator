@@ -28,11 +28,6 @@ inline uint32_t hash(uint32_t seed)
     return (word >> 22u) ^ word;
 }
 
-inline uint32_t combinedHash(uint32_t seedA, uint32_t seedB)
-{
-    return hash(hash(seedA) + 0x9e3779b9 + (seedB << 6) + (seedB >> 2));
-}
-
 struct RandomNumberGenerator
 {
     uint32_t seed;
@@ -83,15 +78,15 @@ inline RandomNumberGenerator initRng(uint32_t seed)
 
 inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2)
 {
-    return initRng(combinedHash(seed1, seed2));
+    return initRng(seed1 ^ hash(seed2));
 }
 
 inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2, uint32_t seed3)
 {
-    return initRng(combinedHash(seed1, combinedHash(seed2, seed3)));
+    return initRng(seed1 ^ hash(seed2 ^ hash(seed3)));
 }
 
 inline RandomNumberGenerator initRng(uint32_t seed1, uint32_t seed2, uint32_t seed3, uint32_t seed4)
 {
-    return initRng(combinedHash(seed1, combinedHash(seed2, combinedHash(seed3, seed4))));
+    return initRng(seed1 ^ hash(seed2 ^ hash(seed3 ^ hash(seed4))));
 }

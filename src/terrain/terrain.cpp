@@ -93,7 +93,7 @@ struct IVec2Hash
 {
     size_t operator()(const glm::ivec2& v) const noexcept
     {
-        return combinedHash(static_cast<uint32_t>(v.x), static_cast<uint32_t>(v.y));
+        return hash(v.x ^ hash(v.y));
     }
 };
 
