@@ -34,9 +34,9 @@ float3x3 computeTBN(const float3 normal)
     );
 }
 
-float3 faceforward(const float3 normal, const float3 vec)
+float3 faceforward(const float3 vec, const float3 ref)
 {
-    return (dot(normal, vec) < 0.f) ? -normal : normal;
+    return (dot(vec, ref) < 0.f) ? -vec : vec;
 }
 
 float cosTheta(const float3 v_WS, const float3 normal_WS)

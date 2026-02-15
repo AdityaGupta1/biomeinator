@@ -229,8 +229,7 @@ void pathTraceRay(inout Payload payload)
             payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
         }
 
-        ray.Origin = surfPos_WS + RAY_ORIGIN_OFFSET_EPSILON * surfNor_WS;
-        ray.Direction = surfBsdfSample.wi_WS;
+        setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS);
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
