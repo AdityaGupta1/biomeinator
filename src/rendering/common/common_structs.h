@@ -83,10 +83,10 @@ struct InstanceData
 
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
-#define MATERIAL_FLAG_GLOSSY_TRASNMISSION (1 << 2)
+#define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
 
-#define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRASNMISSION)
-#define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRASNMISSION)
+#define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
+#define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
 
 struct Material
 {
@@ -119,6 +119,11 @@ public:
         return bool(flags & MATERIAL_FLAG_GLOSSY_REFLECTION);
     }
 
+    bool hasGlossyTransmission()
+    {
+        return bool(flags & MATERIAL_FLAG_GLOSSY_TRANSMISSION);
+    }
+
     bool hasEmission()
     {
         return emissiveStrength > 0.f;
@@ -148,6 +153,11 @@ public:
     void setHasGlossyReflection(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_GLOSSY_REFLECTION) | (-uint32_t(enable) & MATERIAL_FLAG_GLOSSY_REFLECTION);
+    }
+
+    void setHasGlossyTransmission(bool enable)
+    {
+        flags = (flags & ~MATERIAL_FLAG_GLOSSY_TRANSMISSION) | (-uint32_t(enable) & MATERIAL_FLAG_GLOSSY_TRANSMISSION);
     }
 #endif
 };

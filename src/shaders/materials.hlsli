@@ -180,11 +180,21 @@ BsdfSample sampleBsdf(
     }
     else
     {
-        const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
-        result.wi_WS = wi_WS;
-        result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
-        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS);
-        result.bsdfValue = bsdfValue;
+        if (material.hasGlossyTransmission())
+        {
+            // TODO: refract
+            result.pdf = 1.f - fresnelReflectance;
+            result.bsdfValue = material.baseColor * (1.f - fresnelReflectance);
+            result.wasSpecular = true;
+        }
+        else
+        {
+            const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
+            result.wi_WS = wi_WS;
+            result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
+            const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS);
+            result.bsdfValue = bsdfValue;
+        }
     }
 
     return result;
@@ -196,12 +206,7 @@ float bsdfPdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (!material.hasDiffuse()) // TODO: update this after adding roughness
-    {
-        return 0.f;
-    }
-
-    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness + transmission
+    if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness
     {
         return 0.f;
     }
