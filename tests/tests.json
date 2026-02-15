@@ -254,6 +254,33 @@
             ],
             "golden": "emissive_texture/golden.png",
             "threshold": 0.004
+        },
+        {
+            "name": "cutout_opacity",
+            "scene": "cutout_opacity/cutout_opacity.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12"
+            ],
+            "golden": "cutout_opacity/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "cutout_opacity_blender_no_tonemap",
+            "scene": "cutout_opacity/cutout_opacity.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "cutout_opacity/golden_blender_no_tonemap.png",
+            "threshold": 0.006
         }
     ]
 }

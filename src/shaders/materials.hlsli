@@ -108,6 +108,11 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
+    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: revisit after adding transmission
+    {
+        return 0;
+    }
+
     if (material.hasDiffuse())
     {
         const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
@@ -121,7 +126,7 @@ float3 evaluateBsdf(
         return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance);
     }
 
-    return float3(0, 0, 0);
+    return 0;
 }
 
 struct BsdfSample
