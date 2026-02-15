@@ -135,17 +135,17 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
         const bool hasEmission = material.emissiveStrength > 0;
 
-        bool hasDiffuse, hasSpecularReflection;
+        bool hasDiffuse, hasGlossyReflection;
 
         if (hasEmission)
         {
             hasDiffuse = false;
-            hasSpecularReflection = false;
+            hasGlossyReflection = false;
         }
         else
         {
             hasDiffuse = false;
-            hasSpecularReflection = true;
+            hasGlossyReflection = true;
 
             const auto& pbr = gltfMat.pbrMetallicRoughness;
             // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
@@ -213,17 +213,17 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                             if (!hasDiffuse)
                             {
                                 // Metallic/specular-only material: keep specular enabled
-                                hasSpecularReflection = true;
+                                hasGlossyReflection = true;
                             }
                             else
                             {
                                 // Dielectric material with diffuse: respect specularFactor
-                                hasSpecularReflection = specularFactor != 0.0;
+                                hasGlossyReflection = specularFactor != 0.0;
                             }
                         }
                     }
 
-                    if (hasSpecularReflection && ext.Has("specularColorFactor"))
+                    if (hasGlossyReflection && ext.Has("specularColorFactor"))
                     {
                         const tinygltf::Value& val = ext.Get("specularColorFactor");
                         if (val.IsArray() && val.ArrayLen() >= 3)
@@ -240,7 +240,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         }
 
         material.setHasDiffuse(hasDiffuse);
-        material.setHasSpecularReflection(hasSpecularReflection);
+        material.setHasGlossyReflection(hasGlossyReflection);
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIdxs.push_back(id);

@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "common_structs.h"
 
 Material::Material()
-    : flags(MATERIAL_FLAG_HAS_DIFFUSE),
+    : flags(MATERIAL_FLAG_DIFFUSE),
       baseColor{ 1, 1, 1 },
       baseColorTextureId(TEXTURE_ID_INVALID),
       specularColor{ 1, 1, 1 },

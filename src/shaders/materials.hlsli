@@ -118,7 +118,7 @@ float3 evaluateBsdf(
         const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
 
         float fresnelReflectance = 0.f;
-        if (material.hasSpecularReflection())
+        if (material.hasGlossyReflection())
         {
             fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         }
@@ -148,22 +148,22 @@ BsdfSample sampleBsdf(
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
-
-    if (!hasGlossyReflection && !hasDiffuseOrTransmission)
+    if (!material.canScatter())
     {
         return result;
     }
 
+    const bool hasGlossyReflection = material.hasGlossyReflection();
+    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
+
     float fresnelReflectance;
     bool chooseReflect;
-    if (hasGlossyReflection && !hasDiffuseOrTransmission)
+    if (hasGlossyReflection && !hasDiffuseOrGlossyTransmission)
     {
         fresnelReflectance = 1.f;
         chooseReflect = true;
     }
-    else if (!hasGlossyReflection && hasDiffuseOrTransmission)
+    else if (!hasGlossyReflection && hasDiffuseOrGlossyTransmission)
     {
         fresnelReflectance = 0.f;
         chooseReflect = false;
@@ -200,27 +200,19 @@ float bsdfPdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (!material.canScatter())
+    if (!material.hasDiffuse()) // TODO: update this after adding roughness
     {
         return 0.f;
     }
 
-    const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
-
-    if (!hasDiffuseOrTransmission) // TODO: update this after adding microfacet reflection
-    {
-        return 0.f;
-    }
-
-    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding microfacet refraction
+    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness + transmission
     {
         return 0.f;
     }
 
     float pdf = hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
 
-    if (hasGlossyReflection)
+    if (material.hasGlossyReflection())
     {
         const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         pdf *= (1.f - fresnelReflectance);
@@ -231,7 +223,7 @@ float bsdfPdf(
 
 bool shouldSplitMaterial(const Material material)
 {
-    return material.hasGlossyReflection() && (material.hasDiffuseOrTransmission() || material.hasEmission());
+    return material.hasGlossyReflection() && (material.hasDiffuseOrGlossyTransmission() || material.hasEmission());
 }
 
 Material getSplitMaterial(const Material material, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
@@ -242,8 +234,8 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
 
     if (pathSplitIdx == 0)
     {
-        // Diffuse and transmission lobes, and emission
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION;
+        // diffuse and transmission lobes, and emission
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
         splitMaterial.specularColor = float3(0, 0, 0);
@@ -255,8 +247,8 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
     }
     else
     {
-        // Glossy reflection lobes
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_GLOSSY_REFLECTION;
+        // glossy reflection lobes
+        splitMaterial.flags = material.flags & MATERIAL_FLAG_GLOSSY_REFLECTION;
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
         splitMaterial.specularColor = material.specularColor;

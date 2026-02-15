@@ -253,7 +253,7 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        if (pathDepth == 0 && surfBsdfSample.wasSpecular)
+        if (pathDepth == 0 && surfBsdfSample.wasSpecular) // TODO: update to support multiple specular bounces?
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
