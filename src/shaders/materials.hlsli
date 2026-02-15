@@ -148,13 +148,13 @@ BsdfSample sampleBsdf(
     result.bsdfValue = float3(0, 0, 0);
     result.wasSpecular = false;
 
-    const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
-
-    if (!hasGlossyReflection && !hasDiffuseOrGlossyTransmission)
+    if (!material.canScatter())
     {
         return result;
     }
+
+    const bool hasGlossyReflection = material.hasGlossyReflection();
+    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
 
     float fresnelReflectance;
     bool chooseReflect;
@@ -200,27 +200,19 @@ float bsdfPdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (!material.canScatter())
+    if (!material.hasDiffuse()) // TODO: update this after adding roughness
     {
         return 0.f;
     }
 
-    const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
-
-    if (!hasDiffuseOrGlossyTransmission) // TODO: update this after adding microfacet reflection
-    {
-        return 0.f;
-    }
-
-    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding microfacet refraction
+    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness + transmission
     {
         return 0.f;
     }
 
     float pdf = hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
 
-    if (hasGlossyReflection)
+    if (material.hasGlossyReflection())
     {
         const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         pdf *= (1.f - fresnelReflectance);

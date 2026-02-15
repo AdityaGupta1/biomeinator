@@ -85,7 +85,8 @@ struct InstanceData
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
 #define MATERIAL_FLAG_GLOSSY_TRASNMISSION (1 << 2)
 
-#define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE) // TODO: add more conditions here later (e.g. specular transmission)
+#define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRASNMISSION)
+#define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRASNMISSION)
 
 struct Material
 {
@@ -125,7 +126,7 @@ public:
 
     bool isDelta()
     {
-        return (flags == MATERIAL_FLAG_GLOSSY_REFLECTION); // TODO: update after adding roughness
+        return (flags & MATERIAL_FLAGS_GLOSSY) && !(flags & MATERIAL_FLAG_DIFFUSE); // TODO: update after adding roughness
     }
 
     bool hasDiffuseOrGlossyTransmission()
