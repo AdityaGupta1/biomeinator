@@ -80,7 +80,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
                 diffuseAlbedo += tonemappedEmission;
             }
 
-            if (surfMaterial.hasSpecularReflection())
+            if (surfMaterial.hasGlossyReflection())
             {
                 const float alpha = roughness * roughness;
                 const float nDotV = dot(hitNor_WS, -ray.Direction);

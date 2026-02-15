@@ -118,7 +118,7 @@ float3 evaluateBsdf(
         const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
 
         float fresnelReflectance = 0.f;
-        if (material.hasSpecularReflection())
+        if (material.hasGlossyReflection())
         {
             fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
         }
@@ -256,7 +256,7 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
     else
     {
         // glossy reflection lobes
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_GLOSSY_REFLECTION;
+        splitMaterial.flags = material.flags & MATERIAL_FLAG_GLOSSY_REFLECTION;
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
         splitMaterial.specularColor = material.specularColor;
