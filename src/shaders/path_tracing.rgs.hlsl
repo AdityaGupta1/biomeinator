@@ -233,6 +233,7 @@ void pathTraceRay(inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
+        payload.flags = 0;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
