@@ -76,7 +76,7 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv)
 
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
 // alpha = roughness^2
-float3 calculateDlssSpecularAlbedo(const float3 specularColor, const float alpha, float nDotV)
+float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const float alpha, float nDotV)
 {
     nDotV = abs(nDotV);
     // [Ray Tracing Gems, Chapter 32]
@@ -97,8 +97,8 @@ float3 calculateDlssSpecularAlbedo(const float3 specularColor, const float alpha
     float bias = dot(mul(M1, X.xy), Y.xy) * rcp(dot(mul(M2, X.xyw), Y.xyw));
     const float scale = dot(mul(M3, X.xy), Y.xy) * rcp(dot(mul(M4, X.xzw), Y.xyw));
     // This is a hack for specular reflectance of 0
-    bias *= saturate(specularColor.g * 50);
-    return mad(specularColor, max(0, scale), max(0, bias));
+    bias *= saturate(glossyReflectionTint.g * 50);
+    return mad(glossyReflectionTint, max(0, scale), max(0, bias));
 }
 
 float3 evaluateBsdf(
@@ -179,7 +179,7 @@ BsdfSample sampleBsdf(
         const float3 wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
         result.wi_WS = wi_WS;
         result.pdf = fresnelReflectance;
-        result.bsdfValue = material.specularColor * fresnelReflectance;
+        result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
         result.wasSpecular = true;
     }
     else
@@ -238,7 +238,7 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
-        splitMaterial.specularColor = float3(0, 0, 0);
+        splitMaterial.glossyReflectionTint = float3(0, 0, 0);
         splitMaterial.ior = 1.f;
         splitMaterial.emissiveStrength = material.emissiveStrength;
         splitMaterial.emissiveColor = material.emissiveColor;
@@ -251,7 +251,7 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.flags = material.flags & MATERIAL_FLAG_GLOSSY_REFLECTION;
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-        splitMaterial.specularColor = material.specularColor;
+        splitMaterial.glossyReflectionTint = material.glossyReflectionTint;
         splitMaterial.ior = material.ior;
         splitMaterial.emissiveStrength = 0.f;
         splitMaterial.emissiveColor = float3(0, 0, 0);

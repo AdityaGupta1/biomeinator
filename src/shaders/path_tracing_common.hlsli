@@ -96,9 +96,9 @@ float3 getPrevPrimaryRayDirection(const uint2 pixelIdx)
     return normalize(targetPos_WS - cameraParams.prevPos_WS);
 }
 
-void setRayOriginAndDirection(inout RayDesc ray, float3 origin_WS, float3 normal_WS, float3 wi_WS, bool faceforward)
+void setRayOriginAndDirection(inout RayDesc ray, float3 origin_WS, float3 normal_WS, float3 wi_WS, bool faceforwardNormal)
 {
-    if (faceforward)
+    if (faceforwardNormal)
     {
         normal_WS = faceforward(normal_WS, wi_WS);
     }

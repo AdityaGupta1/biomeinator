@@ -98,7 +98,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
     }
 
     RayDesc ray;
-    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, false /*faceforward*/);
+    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, false /*faceforwardNormal*/);
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 

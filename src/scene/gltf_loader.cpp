@@ -228,7 +228,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         const tinygltf::Value& val = ext.Get("specularColorFactor");
                         if (val.IsArray() && val.ArrayLen() >= 3)
                         {
-                            material.specularColor = {
+                            material.glossyReflectionTint = {
                                 static_cast<float>(val.Get(0).GetNumberAsDouble()),
                                 static_cast<float>(val.Get(1).GetNumberAsDouble()),
                                 static_cast<float>(val.Get(2).GetNumberAsDouble()),
