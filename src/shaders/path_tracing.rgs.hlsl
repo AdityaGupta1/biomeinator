@@ -78,7 +78,7 @@ void pathTraceRay(inout Payload payload)
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        Material surfMaterial = materials[payload.materialIdx];
+        Material surfMaterial = getMaterialFromPayload(payload);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -265,7 +265,8 @@ void pathTraceRay(inout Payload payload)
         {
             // no need to consider dome light pdf here because dome light sampling can't hit area lights
 
-            const Material hitMaterial = materials[payload.materialIdx];
+            const Material hitMaterial = getMaterialFromPayload(payload);
+
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);

@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
+#include "payload.hlsli"
 #include "util/sampling.hlsli"
 
 StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
@@ -214,6 +215,18 @@ float bsdfPdf(
     }
 
     return pdf;
+}
+
+Material getMaterialFromPayload(const Payload payload)
+{
+    Material material = materials[payload.materialIdx];
+
+    if (bool(material.flags & PAYLOAD_FLAG_BACKFACE_HIT))
+    {
+        material.ior = 1.f / material.ior;
+    }
+
+    return material;
 }
 
 bool shouldSplitMaterial(const Material material)
