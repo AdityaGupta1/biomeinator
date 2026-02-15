@@ -230,7 +230,7 @@ Material getMaterialFromPayload(const Payload payload)
 {
     Material material = materials[payload.materialIdx];
 
-    if (bool(material.flags & PAYLOAD_FLAG_BACKFACE_HIT))
+    if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {
         material.ior = 1.f / material.ior;
     }
