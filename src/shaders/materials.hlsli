@@ -172,8 +172,7 @@ BsdfSample sampleBsdf(
 
     if (chooseReflect)
     {
-        const float3 wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
-        result.wi_WS = wi_WS;
+        result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
         // pdf cancels out with the `* fresnelReflectance` in bsdfValue, so actual bsdf value is material.glossyReflectionTint * implicit fresnelReflectance from random chance of choosing reflection
         result.pdf = fresnelReflectance;
         result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
@@ -185,19 +184,16 @@ BsdfSample sampleBsdf(
 
         if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
         {
-            const float3 wi_WS = normalize(refract(-wo_WS, surfNor_WS, material.ior));
-            result.wi_WS = wi_WS;
+            result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, material.ior));
             result.pdf = oneMinusFresnelReflectance;
             result.bsdfValue = material.baseColor * oneMinusFresnelReflectance;
             result.wasSpecular = true;
         }
         else
         {
-            const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
-            result.wi_WS = wi_WS;
-            result.pdf = absCosTheta(wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
-            const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS);
-            result.bsdfValue = bsdfValue;
+            result.wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
+            result.pdf = absCosTheta(result.wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
+            result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS);
         }
     }
 
