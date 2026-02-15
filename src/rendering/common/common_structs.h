@@ -82,10 +82,11 @@ struct InstanceData
 #define TEXTURE_ID_INVALID ~0u
 
 #define MATERIAL_FLAG_HAS_DIFFUSE (1 << 0)
-#define MATERIAL_FLAG_HAS_SPECULAR (1 << 1)
+#define MATERIAL_FLAG_HAS_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
+#define MATERIAL_FLAG_HAS_GLOSSY_TRASNMISSION (1 << 2)
 
-#define MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION (MATERIAL_FLAG_HAS_DIFFUSE) // TODO: add more conditions here later (e.g. specular transmission)
-#define MATERIAL_FLAGS_GLOSSY_REFLECTION (MATERIAL_FLAG_HAS_SPECULAR) // TODO: add more conditions here later
+#define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_HAS_DIFFUSE) // TODO: add more conditions here later (e.g. specular transmission)
+#define MATERIAL_FLAGS_GLOSSY_REFLECTION (MATERIAL_FLAG_HAS_GLOSSY_REFLECTION) // TODO: add more conditions here later
 
 struct Material
 {
@@ -115,7 +116,7 @@ public:
 
     bool hasSpecularReflection()
     {
-        return bool(flags & MATERIAL_FLAG_HAS_SPECULAR);
+        return bool(flags & MATERIAL_FLAG_HAS_GLOSSY_REFLECTION);
     }
 
     bool hasEmission()
@@ -125,7 +126,7 @@ public:
 
     bool isDelta()
     {
-        return (flags == MATERIAL_FLAG_HAS_SPECULAR);
+        return (flags == MATERIAL_FLAG_HAS_GLOSSY_REFLECTION); // TODO: update after adding roughness
     }
 
     bool hasGlossyReflection()
@@ -133,14 +134,14 @@ public:
         return bool(flags & MATERIAL_FLAGS_GLOSSY_REFLECTION);
     }
 
-    bool hasDiffuseOrTransmission()
+    bool hasDiffuseOrGlossyTransmission()
     {
-        return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION);
+        return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION);
     }
 
     bool canScatter()
     {
-        return hasGlossyReflection() || hasDiffuseOrTransmission();
+        return hasGlossyReflection() || hasDiffuseOrGlossyTransmission();
     }
 
 #ifdef __cplusplus
@@ -151,7 +152,7 @@ public:
 
     void setHasSpecularReflection(bool enable)
     {
-        flags = (flags & ~MATERIAL_FLAG_HAS_SPECULAR) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_SPECULAR);
+        flags = (flags & ~MATERIAL_FLAG_HAS_GLOSSY_REFLECTION) | (-uint32_t(enable) & MATERIAL_FLAG_HAS_GLOSSY_REFLECTION);
     }
 #endif
 };

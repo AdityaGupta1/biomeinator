@@ -149,21 +149,21 @@ BsdfSample sampleBsdf(
     result.wasSpecular = false;
 
     const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
+    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
 
-    if (!hasGlossyReflection && !hasDiffuseOrTransmission)
+    if (!hasGlossyReflection && !hasDiffuseOrGlossyTransmission)
     {
         return result;
     }
 
     float fresnelReflectance;
     bool chooseReflect;
-    if (hasGlossyReflection && !hasDiffuseOrTransmission)
+    if (hasGlossyReflection && !hasDiffuseOrGlossyTransmission)
     {
         fresnelReflectance = 1.f;
         chooseReflect = true;
     }
-    else if (!hasGlossyReflection && hasDiffuseOrTransmission)
+    else if (!hasGlossyReflection && hasDiffuseOrGlossyTransmission)
     {
         fresnelReflectance = 0.f;
         chooseReflect = false;
@@ -206,9 +206,9 @@ float bsdfPdf(
     }
 
     const bool hasGlossyReflection = material.hasGlossyReflection();
-    const bool hasDiffuseOrTransmission = material.hasDiffuseOrTransmission();
+    const bool hasDiffuseOrGlossyTransmission = material.hasDiffuseOrGlossyTransmission();
 
-    if (!hasDiffuseOrTransmission) // TODO: update this after adding microfacet reflection
+    if (!hasDiffuseOrGlossyTransmission) // TODO: update this after adding microfacet reflection
     {
         return 0.f;
     }
@@ -231,7 +231,7 @@ float bsdfPdf(
 
 bool shouldSplitMaterial(const Material material)
 {
-    return material.hasGlossyReflection() && (material.hasDiffuseOrTransmission() || material.hasEmission());
+    return material.hasGlossyReflection() && (material.hasDiffuseOrGlossyTransmission() || material.hasEmission());
 }
 
 Material getSplitMaterial(const Material material, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
@@ -242,8 +242,8 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
 
     if (pathSplitIdx == 0)
     {
-        // Diffuse and transmission lobes, and emission
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_TRANSMISSION;
+        // diffuse and transmission lobes, and emission
+        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
         splitMaterial.specularColor = float3(0, 0, 0);
@@ -255,7 +255,7 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
     }
     else
     {
-        // Glossy reflection lobes
+        // glossy reflection lobes
         splitMaterial.flags = material.flags & MATERIAL_FLAGS_GLOSSY_REFLECTION;
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
