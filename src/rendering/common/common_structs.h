@@ -103,7 +103,7 @@ public:
     float3 baseColor;
     uint baseColorTextureId;
 
-    float3 specularColor;
+    float3 glossyReflectionTint;
     float ior;
 
     float3 emissiveColor;

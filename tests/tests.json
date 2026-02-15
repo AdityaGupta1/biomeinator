@@ -281,6 +281,19 @@
             ],
             "golden": "cutout_opacity/golden_blender_no_tonemap.png",
             "threshold": 0.006
+        },
+        {
+            "name": "backfaces",
+            "scene": "backfaces/backfaces.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=3"
+            ],
+            "golden": "backfaces/golden.png",
+            "threshold": 0.002
         }
     ]
 }

@@ -77,7 +77,7 @@ struct DirectLightingSample
 bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, out float3 Le)
 {
     RayDesc ray;
-    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS);
+    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, false /*faceforwardNormal*/);
     ray.TMin = 0.f;
     ray.TMax = distance(surfPos_WS, pointOnLight_WS) + 2 * RAY_ORIGIN_OFFSET_EPSILON;
 
