@@ -179,7 +179,7 @@ BsdfSample sampleBsdf(
         result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
         result.wasSpecular = true;
     }
-    else
+    else // diffuse or glossy transmission
     {
         const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
 
