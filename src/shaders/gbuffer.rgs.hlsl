@@ -70,7 +70,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
             const Material surfMaterial = materials[payload.materialIdx];
             if (surfMaterial.hasDiffuse())
             {
-                diffuseAlbedo = getMaterialDiffuseAlbedo(surfMaterial, payload.hitInfo.uv);
+                diffuseAlbedo = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv);
             }
 
             if (surfMaterial.hasEmission())

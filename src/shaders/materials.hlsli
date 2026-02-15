@@ -52,15 +52,15 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-float3 getMaterialDiffuseAlbedo(const Material material, const float2 uv)
+float3 getMaterialBaseColor(const Material material, const float2 uv)
 {
-    float3 diffuseAlbedo = material.baseColor;
+    float3 baseColor = material.baseColor;
     if (material.baseColorTextureId != TEXTURE_ID_INVALID)
     {
         Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-        diffuseAlbedo = tex.SampleLevel(texSampler, uv, 0).rgb;
+        baseColor = tex.SampleLevel(texSampler, uv, 0).rgb;
     }
-    return diffuseAlbedo;
+    return baseColor;
 }
 
 float3 getMaterialEmissiveColor(const Material material, const float2 uv)
@@ -108,25 +108,20 @@ float3 evaluateBsdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: revisit after adding transmission
+    if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: revisit after adding roughness
     {
         return 0;
     }
 
-    if (material.hasDiffuse())
+    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv);
+
+    float fresnelReflectance = 0.f;
+    if (material.hasGlossyReflection())
     {
-        const float3 diffuseAlbedo = getMaterialDiffuseAlbedo(material, uv);
-
-        float fresnelReflectance = 0.f;
-        if (material.hasGlossyReflection())
-        {
-            fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
-        }
-
-        return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance);
+        fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
     }
 
-    return 0;
+    return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance);
 }
 
 struct BsdfSample
