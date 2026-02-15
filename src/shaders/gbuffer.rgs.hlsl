@@ -53,7 +53,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
-    float roughness = 1.f;
+    float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -85,6 +85,10 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
                 const float alpha = roughness * roughness;
                 const float nDotV = dot(hitNor_WS, -ray.Direction);
                 specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.specularColor, alpha, nDotV);
+            }
+            else
+            {
+                roughness = 1.f; // for now, roughness is 0.f for all materials that have glossy reflection and 1.f otherwise
             }
         }
     }
