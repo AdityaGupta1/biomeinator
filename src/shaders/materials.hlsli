@@ -252,7 +252,6 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
         splitMaterial.glossyReflectionTint = float3(0, 0, 0);
-        splitMaterial.ior = 1.f;
         splitMaterial.emissiveStrength = material.emissiveStrength;
         splitMaterial.emissiveColor = material.emissiveColor;
         splitMaterial.emissiveColorTextureId = material.emissiveColorTextureId;
@@ -265,12 +264,13 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
         splitMaterial.glossyReflectionTint = material.glossyReflectionTint;
-        splitMaterial.ior = material.ior;
         splitMaterial.emissiveStrength = 0.f;
         splitMaterial.emissiveColor = float3(0, 0, 0);
         splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
         pathWeight *= fresnelReflectance;
     }
+
+    splitMaterial.ior = material.ior;
 
     return splitMaterial;
 }
