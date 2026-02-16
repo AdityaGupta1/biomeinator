@@ -335,6 +335,33 @@
             ],
             "golden": "cornell_box_glass_sphere/golden_blender_no_tonemap.png",
             "threshold": 0.015
+        },
+        {
+            "name": "different_ior",
+            "scene": "different_ior/different_ior.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12"
+            ],
+            "golden": "different_ior/golden.png",
+            "threshold": 0.015
+        },
+        {
+            "name": "different_ior_blender_no_tonemap",
+            "scene": "different_ior/different_ior.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "different_ior/golden_blender_no_tonemap.png",
+            "threshold": 0.015
         }
     ]
 }
