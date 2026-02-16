@@ -188,7 +188,7 @@ BsdfSample sampleBsdf(
             // e.g. 1.f / 1.5f for going from air to glass
             result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
-            result.bsdfValue = material.baseColor * oneMinusFresnelReflectance;
+            result.bsdfValue = getMaterialBaseColor(material, uv) * oneMinusFresnelReflectance;
             result.wasSpecular = true;
         }
         else
