@@ -362,6 +362,33 @@
             ],
             "golden": "different_ior/golden_blender_no_tonemap.png",
             "threshold": 0.015
+        },
+        {
+            "name": "glass_diamonds",
+            "scene": "glass_diamonds/glass_diamonds.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12"
+            ],
+            "golden": "glass_diamonds/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "glass_diamonds_blender_no_tonemap",
+            "scene": "glass_diamonds/glass_diamonds.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "glass_diamonds/golden_blender_no_tonemap.png",
+            "threshold": 0.01
         }
     ]
 }
