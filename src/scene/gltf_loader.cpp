@@ -135,17 +135,19 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
         const bool hasEmission = material.emissiveStrength > 0;
 
-        bool hasDiffuse, hasGlossyReflection;
+        bool hasDiffuse, hasGlossyReflection, hasGlossyTransmission;
 
         if (hasEmission)
         {
             hasDiffuse = false;
             hasGlossyReflection = false;
+            hasGlossyTransmission = false;
         }
         else
         {
             hasDiffuse = false;
             hasGlossyReflection = true;
+            hasGlossyTransmission = false;
 
             const auto& pbr = gltfMat.pbrMetallicRoughness;
             // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
@@ -237,10 +239,52 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     }
                 }
             }
+
+            const auto transmissionExtIt = gltfMat.extensions.find("KHR_materials_transmission");
+            if (transmissionExtIt != gltfMat.extensions.end())
+            {
+                const tinygltf::Value& ext = transmissionExtIt->second;
+                if (ext.IsObject() && ext.Has("transmissionFactor"))
+                {
+                    const tinygltf::Value& val = ext.Get("transmissionFactor");
+                    if (val.IsNumber())
+                    {
+                        const double transmissionFactor = val.GetNumberAsDouble();
+                        if (transmissionFactor > 0.0)
+                        {
+                            hasGlossyTransmission = true;
+                        }
+                    }
+                }
+            }
+
+            const auto iorExtIt = gltfMat.extensions.find("KHR_materials_ior");
+            if (iorExtIt != gltfMat.extensions.end())
+            {
+                const tinygltf::Value& ext = iorExtIt->second;
+                if (ext.IsObject() && ext.Has("ior"))
+                {
+                    const tinygltf::Value& val = ext.Get("ior");
+                    if (val.IsNumber())
+                    {
+                        const double ior = val.GetNumberAsDouble();
+                        if (ior > 0.0)
+                        {
+                            material.ior = static_cast<float>(ior);
+                        }
+                    }
+                }
+            }
+
+            if (hasGlossyTransmission)
+            {
+                hasDiffuse = false;
+            }
         }
 
         material.setHasDiffuse(hasDiffuse);
         material.setHasGlossyReflection(hasGlossyReflection);
+        material.setHasGlossyTransmission(hasGlossyTransmission);
 
         const uint32_t id = scene.addMaterial(toFreeList, &material);
         materialIdxs.push_back(id);

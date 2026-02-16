@@ -598,9 +598,9 @@ void resize()
     dev_gbuffer->SetName(L"dev_gbuffer");
 
     dev_pathTracingRawBuffer.Reset();
-    const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
+    const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
     const uint32_t pathTracingRawBufferSizeBytes =
-        renderWidth * renderHeight * (enablePathSplitting ? 2 : 1) * sizeof(float) * 4;
+        renderWidth * renderHeight * (doPathSplitting ? 2 : 1) * sizeof(float) * 4;
     dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
@@ -1311,7 +1311,7 @@ static void imguiEndFrame(double deltaTime)
     {
         didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
         SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
-        needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "enablePathSplitting");
+        needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "doPathSplitting");
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
@@ -1572,8 +1572,8 @@ void render()
     renderParams->tonemapping = SettingsManager::getAsUint("tonemapping");
     renderParams->preTonemappedColorSrvIdx = useDlss ? dlssOutputTarget.getSrvIdx() : pathTracingTarget.getSrvIdx();
     renderParams->renderSize = { renderWidth, renderHeight };
-    const bool enablePathSplitting = SettingsManager::getAsBool("enablePathSplitting");
-    renderParams->enablePathSplitting = enablePathSplitting ? 1 : 0;
+    const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
+    renderParams->doPathSplitting = doPathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
 
     RtTarget* debugOutputTarget = nullptr;
@@ -1689,7 +1689,7 @@ void render()
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
-        ptDispatchDesc.Width = gbufferDispatchDesc.Width * (enablePathSplitting ? 2 : 1);
+        ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
 

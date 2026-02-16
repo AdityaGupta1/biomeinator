@@ -134,7 +134,7 @@ struct RenderParams
     uint preTonemappedColorSrvIdx;
     uint2 renderSize;
 
-    uint enablePathSplitting;
+    uint doPathSplitting;
     uint antialiasingMode;
     uint pad0;
     uint pad1;

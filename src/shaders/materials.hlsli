@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
+#include "payload.hlsli"
 #include "util/sampling.hlsli"
 
 StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
@@ -171,19 +172,31 @@ BsdfSample sampleBsdf(
 
     if (chooseReflect)
     {
-        const float3 wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
-        result.wi_WS = wi_WS;
+        result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
+        // pdf cancels out with the `* fresnelReflectance` in bsdfValue, so actual bsdf value is material.glossyReflectionTint * implicit fresnelReflectance from random chance of choosing reflection
         result.pdf = fresnelReflectance;
         result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
         result.wasSpecular = true;
     }
-    else
+    else // diffuse or glossy transmission
     {
-        const float3 wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
-        result.wi_WS = wi_WS;
-        result.pdf = absCosTheta(wi_WS, surfNor_WS) * (1.f - fresnelReflectance) * M_INV_PI;
-        const float3 bsdfValue = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS);
-        result.bsdfValue = bsdfValue;
+        const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
+
+        if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
+        {
+            // ior parameter here is ratio of "from medium ior" over "to medium ior"
+            // e.g. 1.f / 1.5f for going from air to glass
+            result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
+            result.pdf = oneMinusFresnelReflectance;
+            result.bsdfValue = material.baseColor * oneMinusFresnelReflectance;
+            result.wasSpecular = true;
+        }
+        else
+        {
+            result.wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
+            result.pdf = absCosTheta(result.wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
+            result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS);
+        }
     }
 
     return result;
@@ -195,12 +208,7 @@ float bsdfPdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (!material.hasDiffuse()) // TODO: update this after adding roughness
-    {
-        return 0.f;
-    }
-
-    if (dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness + transmission
+    if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness
     {
         return 0.f;
     }
@@ -214,6 +222,18 @@ float bsdfPdf(
     }
 
     return pdf;
+}
+
+Material getMaterialFromPayload(const Payload payload)
+{
+    Material material = materials[payload.materialIdx];
+
+    if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
+    {
+        material.ior = 1.f / material.ior;
+    }
+
+    return material;
 }
 
 bool shouldSplitMaterial(const Material material)
@@ -234,7 +254,6 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.baseColor = material.baseColor;
         splitMaterial.baseColorTextureId = material.baseColorTextureId;
         splitMaterial.glossyReflectionTint = float3(0, 0, 0);
-        splitMaterial.ior = 1.f;
         splitMaterial.emissiveStrength = material.emissiveStrength;
         splitMaterial.emissiveColor = material.emissiveColor;
         splitMaterial.emissiveColorTextureId = material.emissiveColorTextureId;
@@ -247,12 +266,13 @@ Material getSplitMaterial(const Material material, const float3 surfNor_WS, cons
         splitMaterial.baseColor = float3(0, 0, 0);
         splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
         splitMaterial.glossyReflectionTint = material.glossyReflectionTint;
-        splitMaterial.ior = material.ior;
         splitMaterial.emissiveStrength = 0.f;
         splitMaterial.emissiveColor = float3(0, 0, 0);
         splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
         pathWeight *= fresnelReflectance;
     }
+
+    splitMaterial.ior = material.ior;
 
     return splitMaterial;
 }

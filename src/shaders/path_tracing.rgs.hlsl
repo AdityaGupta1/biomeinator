@@ -78,7 +78,7 @@ void pathTraceRay(inout Payload payload)
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        Material surfMaterial = materials[payload.materialIdx];
+        Material surfMaterial = getMaterialFromPayload(payload);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -90,7 +90,7 @@ void pathTraceRay(inout Payload payload)
         const float3 wo_WS = -ray.Direction;
         const float3 surfNor_WS = payload.hitInfo.hitNor_WS;
 
-        if (pathDepth == 0 && renderParams.enablePathSplitting)
+        if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             if (shouldSplitMaterial(surfMaterial))
             {
@@ -233,6 +233,7 @@ void pathTraceRay(inout Payload payload)
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
+        payload.flags = 0;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -265,7 +266,8 @@ void pathTraceRay(inout Payload payload)
         {
             // no need to consider dome light pdf here because dome light sampling can't hit area lights
 
-            const Material hitMaterial = materials[payload.materialIdx];
+            const Material hitMaterial = getMaterialFromPayload(payload);
+
             if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
@@ -303,7 +305,7 @@ void RayGeneration()
     pathTraceRay(payload);
 
     const float3 colorPreTonemap = payload.pathColor;
-    const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
+    const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
         pathTracingRawBufferOut[writePixelIdx].xyz += colorPreTonemap;

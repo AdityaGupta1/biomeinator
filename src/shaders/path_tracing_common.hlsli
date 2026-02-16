@@ -37,7 +37,7 @@ ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {
-    if (renderParams.enablePathSplitting)
+    if (bool(renderParams.doPathSplitting))
     {
         return DispatchRaysIndex().x % 2;
     }
@@ -50,7 +50,7 @@ uint getPathSplitIdx()
 uint2 getPixelIdx()
 {
     const uint2 dispatchIdx = DispatchRaysIndex().xy;
-    if (renderParams.enablePathSplitting)
+    if (bool(renderParams.doPathSplitting))
     {
         return uint2(dispatchIdx.x / 2, dispatchIdx.y);
     }
@@ -191,7 +191,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) objectToWorldMat));
-    nor_WS = faceforward(nor_WS, -WorldRayDirection());
+    if (dot(nor_WS, -WorldRayDirection()) < 0.f)
+    {
+        nor_WS = -nor_WS;
+        payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
+    }
     payload.hitInfo.hitNor_WS = nor_WS;
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
