@@ -184,7 +184,7 @@ BsdfSample sampleBsdf(
 
         if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
         {
-            result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, material.ior));
+            result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
             result.bsdfValue = material.baseColor * oneMinusFresnelReflectance;
             result.wasSpecular = true;
