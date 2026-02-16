@@ -40,7 +40,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
     float4 color;
-    if (renderParams.pathSplitting)
+    if (bool(renderParams.doPathSplitting))
     {
         const float4 color0 = pathTracingRawBufferIn[linearPixelIdx * 2];
         const float4 color1 = pathTracingRawBufferIn[linearPixelIdx * 2 + 1];

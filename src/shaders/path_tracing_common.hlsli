@@ -37,7 +37,7 @@ ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {
-    if (renderParams.pathSplitting)
+    if (renderParams.doPathSplitting)
     {
         return DispatchRaysIndex().x % 2;
     }
@@ -50,7 +50,7 @@ uint getPathSplitIdx()
 uint2 getPixelIdx()
 {
     const uint2 dispatchIdx = DispatchRaysIndex().xy;
-    if (renderParams.pathSplitting)
+    if (renderParams.doPathSplitting)
     {
         return uint2(dispatchIdx.x / 2, dispatchIdx.y);
     }
