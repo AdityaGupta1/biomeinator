@@ -90,7 +90,7 @@ void pathTraceRay(inout Payload payload)
         const float3 wo_WS = -ray.Direction;
         const float3 surfNor_WS = payload.hitInfo.hitNor_WS;
 
-        if (pathDepth == 0 && renderParams.enablePathSplitting)
+        if (pathDepth == 0 && renderParams.pathSplitting)
         {
             if (shouldSplitMaterial(surfMaterial))
             {
@@ -305,7 +305,7 @@ void RayGeneration()
     pathTraceRay(payload);
 
     const float3 colorPreTonemap = payload.pathColor;
-    const uint writePixelIdx = linearPixelIdx * (renderParams.enablePathSplitting ? 2 : 1) + pathSplitIdx;
+    const uint writePixelIdx = linearPixelIdx * (renderParams.pathSplitting ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
         pathTracingRawBufferOut[writePixelIdx].xyz += colorPreTonemap;

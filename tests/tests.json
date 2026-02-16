@@ -309,6 +309,20 @@
             "threshold": 0.02
         },
         {
+            "name": "cornell_box_glass_sphere_no_path_splitting",
+            "scene": "cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12",
+                "--doPathSplitting=false"
+            ],
+            "golden": "cornell_box_glass_sphere/golden.png",
+            "threshold": 0.02
+        },
+        {
             "name": "cornell_box_glass_sphere_blender_no_tonemap",
             "scene": "cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
             "args": [

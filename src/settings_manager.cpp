@@ -49,7 +49,7 @@ void parseArgs(const int argc, const char* const* argv)
     optionAdder("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", cxxopts::value<uint32_t>()->default_value("0"));
     optionAdder("maxAccumulatedFrames", "Max accumulated frames", cxxopts::value<uint32_t>()->default_value("512"));
     optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
-    optionAdder("enablePathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
+    optionAdder("pathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
     optionAdder("useVsync", "Enable VSync", cxxopts::value<bool>()->default_value("true"));
     optionAdder("lockCamera", "Lock camera (disable player input)", cxxopts::value<bool>()->default_value("false"));
     optionAdder("voxelMode", "Enable voxel mode", cxxopts::value<bool>()->default_value("false"));
@@ -103,7 +103,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);
     COPY_SETTING("dlssMode", uint32_t);
-    COPY_SETTING("enablePathSplitting", bool);
+    COPY_SETTING("pathSplitting", bool);
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);
     COPY_SETTING("voxelMode", bool);

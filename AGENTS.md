@@ -8,7 +8,7 @@ This project aims to implement a real-time path traced voxel engine using DXR. I
 
 - Path splitting uses `pathSplitIdx` to deterministically evaluate different lobes: index 0 for diffuse or transmission lobes (and emission), index 1 for specular/glossy reflection lobes.
 - When a material doesn't need splitting (only has one lobe type), `pathSplitIdx == 1` should return early to avoid wasted work.
-- Material splitting only occurs on the first bounce (`pathDepth == 0`) and only when path splitting is enabled using the "enablePathSplitting" setting.
+- Material splitting only occurs on the first bounce (`pathDepth == 0`) and only when path splitting is enabled using the "pathSplitting" setting.
 
 ## Coding Conventions
 
