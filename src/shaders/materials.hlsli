@@ -184,6 +184,8 @@ BsdfSample sampleBsdf(
 
         if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
         {
+            // ior parameter here is ratio of "from medium ior" over "to medium ior"
+            // e.g. 1.f / 1.5f for going from air to glass
             result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
             result.bsdfValue = material.baseColor * oneMinusFresnelReflectance;
