@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
@@ -143,8 +144,9 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
 void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
 
-    const uint materialIdx = instanceData.materialIdx;
+    const uint materialIdx = perTriData.materialIdx;
     if (materialIdx == MATERIAL_IDX_INVALID)
     {
         return;
@@ -177,6 +179,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
 
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
@@ -202,7 +205,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
-    payload.materialIdx = instanceData.materialIdx;
+    payload.materialIdx = perTriData.materialIdx;
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

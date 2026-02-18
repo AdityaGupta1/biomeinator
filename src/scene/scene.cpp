@@ -83,7 +83,17 @@ void Instance::finalizeGeometry()
     ASSERT(this->host_verts.size() > 0);
 
     const uint32_t triCount = this->getTriCount();
-    this->host_perTriDatas.resize(triCount);
+
+    // Assert that perTriDatas has the correct number of elements (one per triangle)
+    if (this->host_idxs.empty())
+    {
+        ASSERT(this->host_perTriDatas.size() == this->host_verts.size() / 3);
+    }
+    else
+    {
+        ASSERT(this->host_perTriDatas.size() == this->host_idxs.size() / 3);
+    }
+    ASSERT(this->host_perTriDatas.size() == triCount);
 
     this->isGeometryFinalized = true;
 }
@@ -127,9 +137,10 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         DirectX::XMStoreFloat3(&light.pos1_WS, p1);
         DirectX::XMStoreFloat3(&light.pos2_WS, p2);
 
-        light.materialIdx = this->materialIdx;
+        PerTriangleData& perTriData = this->host_perTriDatas[triangleIdx];
 
-        this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+        light.materialIdx = perTriData.materialIdx; // TODO: see if light.materialIdx can be removed now that materialIdx is in perTriData
+        perTriData.localAreaLightIdx = localAreaLightIdx;
     }
 }
 
@@ -156,11 +167,6 @@ void Instance::setVisible(bool visible)
         this->scene->isTlasDirty = true;
     }
     this->isVisible = visible;
-}
-
-void Instance::setMaterialIdx(uint32_t id)
-{
-    this->materialIdx = id;
 }
 
 void Scene::init()
@@ -422,7 +428,6 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
-        instanceData.materialIdx = instance->materialIdx;
 
         const ManagedBufferSection perTriDatasUploadBufferSection =
             sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);

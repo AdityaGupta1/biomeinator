@@ -393,7 +393,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             {
                 materialIdx = materialIdxs[prim.material];
             }
-            instance->setMaterialIdx(materialIdx);
 
             const Accessor& posAccessor = model.accessors[prim.attributes.find("POSITION")->second];
             const Accessor& norAccessor = model.accessors[prim.attributes.find("NORMAL")->second];
@@ -406,6 +405,9 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
             const size_t vertCount = posAccessor.count;
             std::vector<Vertex>& host_verts = instance->host_verts;
+            std::vector<uint32_t>& host_idxs = instance->host_idxs;
+            std::vector<PerTriangleData>& host_perTriDatas = instance->host_perTriDatas;
+
             host_verts.resize(vertCount);
 
             const unsigned char* posData = readAccessorData(posAccessor);
@@ -430,8 +432,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
                 host_verts[v] = { { p[0], p[1], p[2] }, { n[0], n[1], n[2] }, uv };
             }
-
-            std::vector<uint32_t>& host_idxs = instance->host_idxs;
             if (prim.indices >= 0)
             {
                 const Accessor& idxAccessor = model.accessors[prim.indices];
@@ -459,6 +459,24 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                             break;
                     }
                     host_idxs[i] = idx;
+                }
+
+                // Populate per-triangle data with material indices
+                const uint32_t triCount = static_cast<uint32_t>(idxCount / 3);
+                host_perTriDatas.resize(triCount);
+                for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
+                {
+                    host_perTriDatas[triIdx].materialIdx = materialIdx;
+                }
+            }
+            else
+            {
+                // No indices - triangles are formed from consecutive vertices
+                const uint32_t triCount = static_cast<uint32_t>(vertCount / 3);
+                host_perTriDatas.resize(triCount);
+                for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
+                {
+                    host_perTriDatas[triIdx].materialIdx = materialIdx;
                 }
             }
 

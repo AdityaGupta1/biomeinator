@@ -47,10 +47,8 @@ class Instance
 private:
     ::Scene* const scene;
     const uint32_t id;
-    uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
-    std::vector<PerTriangleData> host_perTriDatas;
     ManagedBufferSection perTriDatasBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
@@ -77,6 +75,7 @@ private:
 public:
     std::vector<Vertex> host_verts{};
     std::vector<uint32_t> host_idxs{};
+    std::vector<PerTriangleData> host_perTriDatas{};
 
     void setTransform(const DirectX::XMFLOAT3X4& transform);
     void setTransformOffset(glm::ivec3 offset);
@@ -92,8 +91,6 @@ public:
     bool getIsGeometryFinalized() const;
 
     void setVisible(bool visible);
-
-    void setMaterialIdx(uint32_t id);
 };
 
 class Scene

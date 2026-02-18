@@ -566,12 +566,18 @@ void Chunk::createInstance()
 {
     std::vector<Vertex>& verts = this->instance->host_verts;
     std::vector<uint32_t>& idxs = this->instance->host_idxs;
-    std::vector<uint32_t> emissiveTriangleIdxs;
+    std::vector<PerTriangleData>& perTriDatas = this->instance->host_perTriDatas;
 
     constexpr size_t numVertsToReserve = 1 << 15;
+    constexpr size_t numIdxsToReserve = numVertsToReserve * 6 / 4;
     verts.reserve(numVertsToReserve);
-    idxs.reserve(numVertsToReserve * 6 / 4);
+    idxs.reserve(numIdxsToReserve);
+    perTriDatas.reserve(numIdxsToReserve / 3);
+    
+    std::vector<uint32_t> emissiveTriangleIdxs;
     emissiveTriangleIdxs.reserve(512);
+
+    const uint32_t materialIdx = TerrainMaterials::getDefaultMaterialIdx();
 
     RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
 
@@ -623,8 +629,12 @@ void Chunk::createInstance()
                             idxs.emplace_back(baseVertIdx + offset + 0u);
                             idxs.emplace_back(baseVertIdx + offset + 2u);
                             idxs.emplace_back(baseVertIdx + offset + 3u);
+
+                            perTriDatas.emplace_back();
+                            perTriDatas.back().materialIdx = materialIdx;
+                            perTriDatas.emplace_back();
+                            perTriDatas.back().materialIdx = materialIdx;
                         }
-                        continue;
                     }
                     else // if (blockData.shape == BlockShape::CUBE)
                     {
@@ -661,6 +671,11 @@ void Chunk::createInstance()
                             idxs.emplace_back(baseVertIdx + 2u);
                             idxs.emplace_back(baseVertIdx + 3u);
 
+                            perTriDatas.emplace_back();
+                            perTriDatas.back().materialIdx = materialIdx;
+                            perTriDatas.emplace_back();
+                            perTriDatas.back().materialIdx = materialIdx;
+
                             if (blockData.emitsLight)
                             {
                                 emissiveTriangleIdxs.emplace_back(triangleIdx);
@@ -680,8 +695,6 @@ void Chunk::createInstance()
     instance->setTransformOffset(ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/));
 
     instance->finalizeGeometry();
-
-    instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
 
     instance->addAreaLights(emissiveTriangleIdxs);
 

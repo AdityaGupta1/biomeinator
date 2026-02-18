@@ -71,11 +71,6 @@ struct InstanceData
 
     int3 transformOffset;
     uint areaLightsBufferOffset;
-
-    uint materialIdx;
-    uint pad0;
-    uint pad1;
-    uint pad2;
 };
 
 #define MATERIAL_IDX_INVALID ~0u
@@ -183,10 +178,10 @@ public:
     PerTriangleData();
 #endif
 
+    uint materialIdx;
     uint localAreaLightIdx;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus
