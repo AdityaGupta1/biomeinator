@@ -690,6 +690,8 @@ void Chunk::createInstance()
 
     ASSERT(verts.size() > 0);
     ASSERT(idxs.size() > 0);
+    ASSERT(idxs.size() % 3 == 0);
+    ASSERT(perTriDatas.size() == idxs.size() / 3);
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     instance->setTransformOffset(ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/));

@@ -462,6 +462,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 }
 
                 // Populate per-triangle data with material indices
+                ASSERT(idxCount % 3 == 0);
                 const uint32_t triCount = static_cast<uint32_t>(idxCount / 3);
                 host_perTriDatas.resize(triCount);
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
@@ -472,6 +473,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             else
             {
                 // No indices - triangles are formed from consecutive vertices
+                ASSERT(vertCount % 3 == 0);
                 const uint32_t triCount = static_cast<uint32_t>(vertCount / 3);
                 host_perTriDatas.resize(triCount);
                 for (uint32_t triIdx = 0; triIdx < triCount; ++triIdx)
