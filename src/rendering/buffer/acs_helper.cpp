@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "acs_helper.h"
 
 #include "buffer_helper.h"
+#include "committed_managed_buffer.h"
 #include "debug.h"
 #include "managed_buffer.h"
 #include "to_free_list.h"
@@ -30,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace AcsHelper
 {
 
-static ManagedBuffer sharedAcsScratchBuffer{
+static CommittedManagedBuffer sharedAcsScratchBuffer{
     &DEFAULT_HEAP,
     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     {
@@ -50,7 +51,7 @@ struct AcsBuildInfo
     ManagedBufferSection* outAcs;
 };
 
-static std::array<std::unique_ptr<ManagedBuffer>, 10> sharedAcsBuffers;
+static std::array<std::unique_ptr<CommittedManagedBuffer>, 10> sharedAcsBuffers;
 static uint32_t sharedAcsBuffersHead = sharedAcsBuffers.size();
 
 static void allocateNewSharedAcsBuffer()
@@ -66,7 +67,7 @@ static void allocateNewSharedAcsBuffer()
     }
 
     ASSERT(sharedAcsBuffersHead > 0);
-    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<ManagedBuffer>(
+    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<CommittedManagedBuffer>(
         &DEFAULT_HEAP,
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
         ManagedBufferOptions{
@@ -99,7 +100,7 @@ static ManagedBufferSection findFreeSharedAcsSection(size_t sizeBytes)
     return findFreeSharedAcsSection(sizeBytes);
 }
 
-static ManagedBuffer sharedVertsUploadBuffer{
+static CommittedManagedBuffer sharedVertsUploadBuffer{
     &UPLOAD_HEAP,
     D3D12_RESOURCE_STATE_GENERIC_READ,
     {
@@ -107,7 +108,7 @@ static ManagedBuffer sharedVertsUploadBuffer{
         .isMapped = true,
     },
 };
-static ManagedBuffer sharedIdxsUploadBuffer{
+static CommittedManagedBuffer sharedIdxsUploadBuffer{
     &UPLOAD_HEAP,
     D3D12_RESOURCE_STATE_GENERIC_READ,
     {

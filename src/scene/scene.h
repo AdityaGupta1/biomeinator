@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/host_structs.h"
 #include "rendering/renderer.h"
 #include "rendering/buffer/acs_helper.h"
+#include "rendering/buffer/committed_managed_buffer.h"
+#include "rendering/buffer/reserved_managed_buffer.h"
 #include "rendering/buffer/mapped_array.h"
 #include "rendering/common/common_registers.h"
 #include "rendering/common/common_structs.h"
@@ -102,22 +104,31 @@ class Scene
     friend class ToFreeList;
 
 private:
-    ManagedBuffer managedVertsBuffer{
-        &DEFAULT_HEAP,
+    // Maximum virtual address space for each reserved GPU buffer.
+    // Physical VRAM is allocated lazily in kReservedGrowthChunkBytes (32 MB) chunks via
+    // ID3D12Heap + UpdateTileMappings.  Increasing these limits is free until memory is
+    // actually consumed.
+    static constexpr size_t kMaxVertsBufferBytes      = 4ull  * 1024 * 1024 * 1024; // 4 GB
+    static constexpr size_t kMaxIdxsBufferBytes       = 1ull  * 1024 * 1024 * 1024; // 1 GB
+    static constexpr size_t kMaxPerTriDatasBufferBytes = 1ull  * 1024 * 1024 * 1024; // 1 GB
+    static constexpr size_t kMaxAreaLightsBufferBytes  = 500ull * 1024 * 1024;        // 500 MB
+
+    ReservedManagedBuffer managedVertsBuffer{
+        kMaxVertsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
-    ManagedBuffer managedIdxsBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedIdxsBuffer{
+        kMaxIdxsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
-    ManagedBuffer managedPerTriDatasBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedPerTriDatasBuffer{
+        kMaxPerTriDatasBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
@@ -136,7 +147,8 @@ private:
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
-    ManagedBuffer sharedBlasUploadBuffer{
+    // UPLOAD heap, CPU-mapped – stays as CommittedManagedBuffer (not eligible for Reserved).
+    CommittedManagedBuffer sharedBlasUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         {
@@ -165,8 +177,8 @@ private:
     };
     std::vector<PendingTexture> pendingTextures;
 
-    ManagedBuffer managedAreaLightsBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedAreaLightsBuffer{
+        kMaxAreaLightsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,

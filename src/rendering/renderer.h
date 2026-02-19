@@ -49,6 +49,7 @@ uint32_t getFrameIndex();
 extern DescriptorHeapAllocator sharedDescHeapAlloc;
 
 ID3D12Device5* getDevice();
+ID3D12CommandQueue* getGraphicsQueue();
 
 const Camera& getCamera();
 

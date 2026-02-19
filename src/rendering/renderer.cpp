@@ -1938,6 +1938,11 @@ ID3D12Device5* getDevice()
     return device.Get();
 }
 
+ID3D12CommandQueue* getGraphicsQueue()
+{
+    return cmdQueue.Get();
+}
+
 const Camera& getCamera()
 {
     return camera;

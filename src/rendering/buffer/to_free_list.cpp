@@ -29,15 +29,6 @@ ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource,
     return resourceVector.back().Get();
 }
 
-void ToFreeList::pushManagedBuffer(const ManagedBuffer* buffer)
-{
-    this->pushResource(buffer->dev_buffer, buffer->options.isMapped);
-    if (buffer->options.hasSrvDescriptor && buffer->hasValidSrvDescriptor())
-    {
-        this->pushDescriptor(buffer->getSrvDescriptorIdx());
-    }
-}
-
 void ToFreeList::pushManagedBufferSection(const ManagedBufferSection& bufferSection)
 {
     managedBufferSections.push_back(bufferSection);
