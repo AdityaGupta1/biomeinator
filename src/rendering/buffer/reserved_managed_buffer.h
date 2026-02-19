@@ -25,14 +25,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 
 // Hardware tile granularity for D3D12 reserved (tiled) buffer resources.
-inline constexpr size_t kReservedTileSizeBytes = 65536; // 64 KB
+inline constexpr size_t reservedTileSizeBytes = 65536; // 64 KB
 
 // Minimum growth increment for ReservedManagedBuffer physical backing.
-// Must be a multiple of kReservedTileSizeBytes (enforced by static_assert below).
-inline constexpr size_t kReservedGrowthChunkBytes = 32ull * 1024 * 1024; // 32 MB
+// Must be a multiple of reservedTileSizeBytes (enforced by static_assert below).
+inline constexpr size_t reservedGrowthChunkBytes = 32ull * 1024 * 1024; // 32 MB
 
-static_assert(kReservedGrowthChunkBytes % kReservedTileSizeBytes == 0,
-              "kReservedGrowthChunkBytes must be a multiple of kReservedTileSizeBytes (64 KB)");
+static_assert(reservedGrowthChunkBytes % reservedTileSizeBytes == 0,
+              "reservedGrowthChunkBytes must be a multiple of reservedTileSizeBytes (64 KB)");
 
 // ManagedBuffer backed by a single CreateReservedResource (virtual address space) plus
 // a collection of ID3D12Heap objects (physical VRAM).
@@ -40,7 +40,7 @@ static_assert(kReservedGrowthChunkBytes % kReservedTileSizeBytes == 0,
 // Key properties:
 //   - The GPU resource (dev_buffer) is created once and NEVER recreated.  Its GPU virtual
 //     address is therefore stable for the entire lifetime of this object.
-//   - Physical memory is allocated lazily in chunks of kReservedGrowthChunkBytes by
+//   - Physical memory is allocated lazily in chunks of reservedGrowthChunkBytes by
 //     creating new heaps and calling UpdateTileMappings on the graphics queue.
 //   - Growing never requires copying old data – the reserved resource covers old and new
 //     ranges as one contiguous virtual buffer.
@@ -50,7 +50,7 @@ static_assert(kReservedGrowthChunkBytes % kReservedTileSizeBytes == 0,
 //     NumElements so it covers the full virtual range and never needs recreation.
 //
 // Constructor argument maxReservedSizeBytes determines the size of the virtual address
-// space.  It must be aligned to kReservedTileSizeBytes.  Physical VRAM is not consumed
+// space.  It must be aligned to reservedTileSizeBytes.  Physical VRAM is not consumed
 // until init() is called.
 class ReservedManagedBuffer final : public ManagedBuffer
 {
@@ -86,7 +86,7 @@ private:
     std::vector<ComPtr<ID3D12Heap>> heaps;
 
     // Allocate a new heap of at least minAdditionalBytes (rounded up to the nearest
-    // kReservedGrowthChunkBytes) and map its tiles into the reserved resource starting at
+    // reservedGrowthChunkBytes) and map its tiles into the reserved resource starting at
     // virtualStartTile.  Returns the actual heap size in bytes.
     size_t mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes);
 };

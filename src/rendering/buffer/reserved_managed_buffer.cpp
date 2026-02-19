@@ -34,8 +34,8 @@ ReservedManagedBuffer::ReservedManagedBuffer(size_t maxReservedSizeBytes,
 {
     ASSERT(!options.isMapped, "ReservedManagedBuffer cannot be CPU-mapped");
     ASSERT(maxReservedSizeBytes > 0);
-    ASSERT(maxReservedSizeBytes % kReservedTileSizeBytes == 0,
-           "maxReservedSizeBytes must be aligned to kReservedTileSizeBytes (64 KB)");
+    ASSERT(maxReservedSizeBytes % reservedTileSizeBytes == 0,
+           "maxReservedSizeBytes must be aligned to reservedTileSizeBytes (64 KB)");
 }
 
 // ---------------------------------------------------------------------------
@@ -97,14 +97,14 @@ void ReservedManagedBuffer::initializeStorage(size_t sizeBytes)
 
 size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes)
 {
-    // Round up to the nearest kReservedGrowthChunkBytes.
-    // Because kReservedGrowthChunkBytes is a multiple of kReservedTileSizeBytes (enforced by
+    // Round up to the nearest reservedGrowthChunkBytes.
+    // Because reservedGrowthChunkBytes is a multiple of reservedTileSizeBytes (enforced by
     // static_assert in the header), this rounding is automatically tile-aligned too.
-    const size_t chunkSize = kReservedGrowthChunkBytes;
+    const size_t chunkSize = reservedGrowthChunkBytes;
     size_t heapSize = std::max(chunkSize, minAdditionalBytes);
     heapSize = (heapSize + chunkSize - 1) & ~(chunkSize - 1);
 
-    ASSERT(virtualStartTile * kReservedTileSizeBytes + heapSize <= maxReservedSizeBytes,
+    ASSERT(virtualStartTile * reservedTileSizeBytes + heapSize <= maxReservedSizeBytes,
            "ReservedManagedBuffer: virtual address space exhausted - increase maxReservedSizeBytes");
 
     // -----------------------------------------------------------------------
@@ -134,7 +134,7 @@ size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAddi
     // queue, queue serialisation guarantees the mapping is visible before any draw.
     // No extra fencing is needed.
     // -----------------------------------------------------------------------
-    const UINT tileCount  = static_cast<UINT>(heapSize / kReservedTileSizeBytes);
+    const UINT tileCount  = static_cast<UINT>(heapSize / reservedTileSizeBytes);
     const UINT heapOffset = 0;
     D3D12_TILE_RANGE_FLAGS rangeFlags = D3D12_TILE_RANGE_FLAG_NONE;
 
@@ -173,7 +173,7 @@ void ReservedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
         return;
 
     const size_t additionalNeeded = minCapacityBytes - this->mappedCapacityBytes;
-    const size_t virtualStartTile = this->mappedCapacityBytes / kReservedTileSizeBytes;
+    const size_t virtualStartTile = this->mappedCapacityBytes / reservedTileSizeBytes;
 
     const size_t oldMapped = this->mappedCapacityBytes;
 

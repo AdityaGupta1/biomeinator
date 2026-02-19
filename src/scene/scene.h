@@ -108,27 +108,27 @@ private:
     // Physical VRAM is allocated lazily in kReservedGrowthChunkBytes (32 MB) chunks via
     // ID3D12Heap + UpdateTileMappings.  Increasing these limits is free until memory is
     // actually consumed.
-    static constexpr size_t kMaxVertsBufferBytes      = 4ull  * 1024 * 1024 * 1024; // 4 GB
-    static constexpr size_t kMaxIdxsBufferBytes       = 1ull  * 1024 * 1024 * 1024; // 1 GB
-    static constexpr size_t kMaxPerTriDatasBufferBytes = 1ull  * 1024 * 1024 * 1024; // 1 GB
-    static constexpr size_t kMaxAreaLightsBufferBytes  = 500ull * 1024 * 1024;        // 500 MB
+    static constexpr size_t maxVertsBufferBytes = 4ull * 1024 * 1024 * 1024; // 4 GB
+    static constexpr size_t maxIdxsBufferBytes = 1ull * 1024 * 1024 * 1024; // 1 GB
+    static constexpr size_t maxPerTriDatasBufferBytes = 1ull * 1024 * 1024 * 1024; // 1 GB
+    static constexpr size_t maxAreaLightsBufferBytes = 500ull * 1024 * 1024; // 500 MB
 
     ReservedManagedBuffer managedVertsBuffer{
-        kMaxVertsBufferBytes,
+        maxVertsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
     ReservedManagedBuffer managedIdxsBuffer{
-        kMaxIdxsBufferBytes,
+        maxIdxsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
     ReservedManagedBuffer managedPerTriDatasBuffer{
-        kMaxPerTriDatasBufferBytes,
+        maxPerTriDatasBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
@@ -178,7 +178,7 @@ private:
     std::vector<PendingTexture> pendingTextures;
 
     ReservedManagedBuffer managedAreaLightsBuffer{
-        kMaxAreaLightsBufferBytes,
+        maxAreaLightsBufferBytes,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
