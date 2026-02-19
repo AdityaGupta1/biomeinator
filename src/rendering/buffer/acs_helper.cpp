@@ -20,13 +20,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "buffer_helper.h"
 #include "committed_managed_buffer.h"
+#include "reserved_managed_buffer.h"
 #include "debug.h"
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
 #include "util/util.h"
-
-#include <array>
 
 namespace AcsHelper
 {
@@ -51,54 +50,16 @@ struct AcsBuildInfo
     ManagedBufferSection* outAcs;
 };
 
-static std::array<std::unique_ptr<CommittedManagedBuffer>, 10> sharedAcsBuffers;
-static uint32_t sharedAcsBuffersHead = sharedAcsBuffers.size();
-
-static void allocateNewSharedAcsBuffer()
-{
-    size_t newSizeBytes;
-    if (sharedAcsBuffersHead == sharedAcsBuffers.size())
+static ReservedManagedBuffer sharedAcsBuffer{
+    8ull * 1024 * 1024 * 1024,
+    D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
     {
-        newSizeBytes = 1 << 24;
+        .isResizable = true,
+        .bufferCreationFlags = {
+            .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        },
     }
-    else
-    {
-        newSizeBytes = sharedAcsBuffers[sharedAcsBuffersHead]->getSizeBytes() * 2;
-    }
-
-    ASSERT(sharedAcsBuffersHead > 0);
-    sharedAcsBuffers[--sharedAcsBuffersHead] = std::make_unique<CommittedManagedBuffer>(
-        &DEFAULT_HEAP,
-        D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-        ManagedBufferOptions{
-            .bufferCreationFlags = {
-                .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-            },
-        }
-    );
-
-    ManagedBuffer* newBuffer = sharedAcsBuffers[sharedAcsBuffersHead].get();
-    newBuffer->init(newSizeBytes);
-}
-
-static ManagedBufferSection findFreeSharedAcsSection(size_t sizeBytes)
-{
-    sizeBytes = (sizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
-                ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
-
-    for (size_t bufferIdx = sharedAcsBuffersHead; bufferIdx < sharedAcsBuffers.size(); ++bufferIdx)
-    {
-        ManagedBufferSection freeSection = sharedAcsBuffers[bufferIdx]->findFreeSection(nullptr, nullptr, sizeBytes);
-        if (freeSection.isValid())
-        {
-            return freeSection;
-        }
-    }
-
-    allocateNewSharedAcsBuffer();
-
-    return findFreeSharedAcsSection(sizeBytes);
-}
+};
 
 static CommittedManagedBuffer sharedVertsUploadBuffer{
     &UPLOAD_HEAP,
@@ -119,7 +80,8 @@ static CommittedManagedBuffer sharedIdxsUploadBuffer{
 
 void init()
 {
-    allocateNewSharedAcsBuffer();
+    sharedAcsBuffer.setName(L"sharedAcsBuffer");
+    sharedAcsBuffer.init(kReservedGrowthChunkBytes);
 
     sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
     sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
@@ -139,7 +101,10 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         const auto& buildInfo = buildInfos[i];
 
-        *buildInfo.outAcs = findFreeSharedAcsSection(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
+        size_t acsSizeBytes = buildInfo.prebuildInfo.ResultDataMaxSizeInBytes;
+        acsSizeBytes = (acsSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
+                       ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
+        *buildInfo.outAcs = sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, acsSizeBytes);
 
         size_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
         scratchSizeBytes = (scratchSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
