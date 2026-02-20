@@ -18,9 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "reserved_managed_buffer.h"
 
+#include "debug.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
-#include "debug.h"
+#include "util/math.h"
 
 #include <algorithm>
 
@@ -30,6 +31,7 @@ ReservedManagedBuffer::ReservedManagedBuffer(size_t maxReservedSizeBytes,
     : ManagedBuffer(nullptr /*heapProperties*/, initialResourceState, options),
       maxReservedSizeBytes(maxReservedSizeBytes)
 {
+    ASSERT(options.isResizable, "ReservedManagedBuffer must be resizable");
     ASSERT(!options.isMapped, "ReservedManagedBuffer cannot be mapped");
     ASSERT(maxReservedSizeBytes > 0);
     ASSERT(maxReservedSizeBytes % D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT == 0,
@@ -62,23 +64,22 @@ void ReservedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t siz
 
 size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes)
 {
-    const size_t chunkSize = reservedGrowthChunkBytes;
-    size_t heapSize = std::max(chunkSize, minAdditionalBytes);
-    heapSize = (heapSize + chunkSize - 1) & ~(chunkSize - 1);
+    ASSERT(minAdditionalBytes > 0);
+    const size_t newHeapSize = MathUtil::roundUp(minAdditionalBytes, reservedGrowthChunkBytes);
 
-    ASSERT(virtualStartTile * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT + heapSize <= maxReservedSizeBytes,
+    ASSERT(virtualStartTile * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT + newHeapSize <= maxReservedSizeBytes,
            "ReservedManagedBuffer ran out of virtual space");
 
-    D3D12_HEAP_DESC heapDesc = {};
-    heapDesc.SizeInBytes = static_cast<UINT64>(heapSize);
-    heapDesc.Properties = DEFAULT_HEAP;
-    heapDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
-    heapDesc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+    D3D12_HEAP_DESC newHeapDesc = {};
+    newHeapDesc.SizeInBytes = static_cast<UINT64>(newHeapSize);
+    newHeapDesc.Properties = DEFAULT_HEAP;
+    newHeapDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    newHeapDesc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
 
-    ComPtr<ID3D12Heap> heap;
-    CHECK_HRESULT(Renderer::getDevice()->CreateHeap(&heapDesc, IID_PPV_ARGS(&heap)));
+    ComPtr<ID3D12Heap> newHeap;
+    CHECK_HRESULT(Renderer::getDevice()->CreateHeap(&newHeapDesc, IID_PPV_ARGS(&newHeap)));
 
-    const UINT tileCount = static_cast<UINT>(heapSize / D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT);
+    const UINT tileCount = static_cast<UINT>(newHeapSize / D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT);
     const UINT heapOffset = 0;
     D3D12_TILE_RANGE_FLAGS rangeFlags = D3D12_TILE_RANGE_FLAG_NONE;
 
@@ -93,15 +94,15 @@ size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAddi
                                                      1,
                                                      &startCoord,
                                                      &regionSize,
-                                                     heap.Get(),
+                                                     newHeap.Get(),
                                                      1,
                                                      &rangeFlags,
                                                      &heapOffset,
                                                      &tileCount,
                                                      D3D12_TILE_MAPPING_FLAG_NONE);
 
-    this->heaps.push_back(std::move(heap));
-    return heapSize;
+    this->heaps.push_back(std::move(newHeap));
+    return newHeapSize;
 }
 
 void ReservedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,

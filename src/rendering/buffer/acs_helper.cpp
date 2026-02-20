@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
+#include "util/math.h"
 #include "util/util.h"
 
 namespace AcsHelper
@@ -51,7 +52,7 @@ struct AcsBuildInfo
 };
 
 static ReservedManagedBuffer sharedAcsBuffer{
-    8ull * 1024 * 1024 * 1024,
+    8ull * 1024 * 1024 * 1024, // 8 GB
     D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
     {
         .isResizable = true,
@@ -101,15 +102,12 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         const auto& buildInfo = buildInfos[i];
 
-        size_t acsSizeBytes = buildInfo.prebuildInfo.ResultDataMaxSizeInBytes;
-        acsSizeBytes = (acsSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
-                       ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
+        const size_t acsSizeBytes = MathUtil::roundUp(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
+                                                      D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
         *buildInfo.outAcs = sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, acsSizeBytes);
 
-        size_t scratchSizeBytes = buildInfo.prebuildInfo.ScratchDataSizeInBytes;
-        scratchSizeBytes = (scratchSizeBytes + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
-                           ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
-
+        const size_t scratchSizeBytes = MathUtil::roundUp(buildInfo.prebuildInfo.ScratchDataSizeInBytes,
+                                                          D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
         ManagedBufferSection sharedAcsScratchSection =
             sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
 
