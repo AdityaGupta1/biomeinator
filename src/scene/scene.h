@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/host_structs.h"
 #include "rendering/renderer.h"
 #include "rendering/buffer/acs_helper.h"
+#include "rendering/buffer/committed_managed_buffer.h"
+#include "rendering/buffer/reserved_managed_buffer.h"
 #include "rendering/buffer/mapped_array.h"
 #include "rendering/common/common_registers.h"
 #include "rendering/common/common_structs.h"
@@ -102,22 +104,22 @@ class Scene
     friend class ToFreeList;
 
 private:
-    ManagedBuffer managedVertsBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedVertsBuffer{
+        4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
-    ManagedBuffer managedIdxsBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedIdxsBuffer{
+        1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
-    ManagedBuffer managedPerTriDatasBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedPerTriDatasBuffer{
+        1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
@@ -136,7 +138,7 @@ private:
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
-    ManagedBuffer sharedBlasUploadBuffer{
+    CommittedManagedBuffer sharedBlasUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         {
@@ -165,8 +167,8 @@ private:
     };
     std::vector<PendingTexture> pendingTextures;
 
-    ManagedBuffer managedAreaLightsBuffer{
-        &DEFAULT_HEAP,
+    ReservedManagedBuffer managedAreaLightsBuffer{
+        512ull * 1024 * 1024, // 512 MB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,

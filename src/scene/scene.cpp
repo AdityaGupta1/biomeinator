@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/camera.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "util/math.h"
 #include "util/util.h"
 
 #include <glm/glm.hpp>
@@ -165,13 +166,12 @@ void Instance::setMaterialIdx(uint32_t id)
 
 void Scene::init()
 {
-    // these resources can be dynamically resized later
     this->managedVertsBuffer.setName(L"scene verts");
-    this->managedVertsBuffer.init(1 << 16 /*bytes*/);
+    this->managedVertsBuffer.init();
     this->managedIdxsBuffer.setName(L"scene idxs");
-    this->managedIdxsBuffer.init(1 << 14 /*bytes*/);
+    this->managedIdxsBuffer.init();
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init(1 << 14 /*bytes*/);
+    this->managedPerTriDatasBuffer.init();
 
     this->maxNumInstances = 1 << 8;
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
@@ -193,7 +193,7 @@ void Scene::init()
     this->mappedMaterialsArray.init(8 /*elements*/);
 
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
-    this->managedAreaLightsBuffer.init(1 << 14 /*bytes*/);
+    this->managedAreaLightsBuffer.init();
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
     this->areaLightSamplingStructure.init(1 << 8 /*elements*/);
 }
@@ -558,8 +558,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         dev_texture->SetName(L"scene texture");
 
         const uint32_t rowPitchBytes = pendingTex.width * 4;
-        const uint32_t rowPitchBytesAligned =
-            (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+        const uint32_t rowPitchBytesAligned = MathUtil::roundUp(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const uint32_t uploadSizeBytes = rowPitchBytesAligned * pendingTex.height;
 
         ComPtr<ID3D12Resource> dev_uploadBuffer = BufferHelper::createBasicBuffer(uploadSizeBytes, &UPLOAD_HEAP);

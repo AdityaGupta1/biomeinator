@@ -65,7 +65,7 @@ class ManagedBuffer
     friend class ManagedBufferSection;
     friend class ToFreeList;
 
-private:
+protected:
     std::wstring name{ L"ManagedBuffer" };
 
     const D3D12_HEAP_PROPERTIES* heapProperties;
@@ -75,7 +75,7 @@ private:
 
     void* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
-    size_t bufferSizeBytes{ 0 };
+    size_t bufferSizeBytes{ 0 }; // actual physical allocated memory (i.e. not virtual memory in case of ReservedManagedBuffer)
 
     uint32_t srvDescriptorIdx{ ~0u };
     D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
@@ -96,29 +96,34 @@ private:
     void insertFreeNode(size_t offsetBytes, size_t sizeBytes);
     void eraseFreeNode(OffsetIter offsetIter);
 
-    void allocSrvDescriptor(ToFreeList* toFreeList);
+    void allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSizeBytes = 0);
 
-    void createBuffer(size_t sizeBytes);
-
-    // resize() works only for non-mapped buffers
-    void resize(ID3D12GraphicsCommandList* cmdList,
-                ToFreeList& toFreeList,
-                size_t newSizeBytes,
-                bool useBackFreeSection);
+    void extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection);
 
     void freeSection(ManagedBufferSection section);
 
     void setBufferName();
 
-public:
+    virtual void initializeStorage(ToFreeList* toFreeList, size_t sizeBytes) = 0;
+
+    virtual void ensureCapacity(ID3D12GraphicsCommandList* cmdList,
+                                ToFreeList& toFreeList,
+                                size_t minCapacityBytes,
+                                bool useBackFreeSection) = 0;
+
+    virtual void onReset() = 0;
+
     ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                   const D3D12_RESOURCE_STATES initialResourceState,
                   const ManagedBufferOptions options);
 
-    void init(size_t sizeBytes);
-
     void map();
     void unmap();
+
+public:
+    virtual ~ManagedBuffer() = default;
+
+    void init(size_t sizeBytes = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT);
 
     void reset();
 
