@@ -63,7 +63,7 @@ void ManagedBuffer::init(size_t sizeBytes)
 {
     ASSERT(sizeBytes > 0);
 
-    this->initializeStorage(sizeBytes);
+    this->initializeStorage(nullptr /*toFreeList*/, sizeBytes);
 
     this->freeByOffset.clear();
     this->freeBySize.clear();
@@ -72,12 +72,6 @@ void ManagedBuffer::init(size_t sizeBytes)
     if (this->options.isMapped)
     {
         this->map();
-    }
-
-    // TODO: move this to subclass (CommittedManagedBuffer specifically, since Reserved already does it in initializeStorage())
-    if (this->options.hasSrvDescriptor && !this->hasValidSrvDescriptor())
-    {
-        this->allocSrvDescriptor(nullptr);
     }
 }
 

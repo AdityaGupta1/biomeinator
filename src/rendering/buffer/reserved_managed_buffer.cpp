@@ -36,7 +36,7 @@ ReservedManagedBuffer::ReservedManagedBuffer(size_t maxReservedSizeBytes,
            "maxReservedSizeBytes must be aligned to D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT");
 }
 
-void ReservedManagedBuffer::initializeStorage(size_t sizeBytes)
+void ReservedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t sizeBytes)
 {
     ASSERT(Renderer::getGraphicsQueue() != nullptr,
            "Renderer graphics queue must be initialised before ReservedManagedBuffer::init");
@@ -48,8 +48,6 @@ void ReservedManagedBuffer::initializeStorage(size_t sizeBytes)
     CHECK_HRESULT(Renderer::getDevice()->CreateReservedResource(
         &resDesc, this->initialResourceState, nullptr /*pOptimizedClearValue*/, IID_PPV_ARGS(&this->dev_buffer)));
 
-    this->setBufferName();
-
     const size_t heapSize = mapNewHeap(0 /*virtualStartTile*/, sizeBytes);
     this->mappedCapacityBytes = heapSize;
 
@@ -59,8 +57,10 @@ void ReservedManagedBuffer::initializeStorage(size_t sizeBytes)
     if (this->options.hasSrvDescriptor)
     {
         // allocated only once
-        this->allocSrvDescriptor(nullptr, maxReservedSizeBytes);
+        this->allocSrvDescriptor(toFreeList, maxReservedSizeBytes);
     }
+
+    this->setBufferName();
 }
 
 size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes)

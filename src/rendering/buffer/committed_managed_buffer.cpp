@@ -27,7 +27,7 @@ CommittedManagedBuffer::CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heap
     : ManagedBuffer(heapProperties, initialResourceState, options)
 {}
 
-void CommittedManagedBuffer::initializeStorage(size_t sizeBytes)
+void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t sizeBytes)
 {
     if (this->initialResourceState == D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
     {
@@ -42,6 +42,12 @@ void CommittedManagedBuffer::initializeStorage(size_t sizeBytes)
     }
 
     this->bufferSizeBytes = sizeBytes;
+
+    if (this->options.hasSrvDescriptor)
+    {
+        this->allocSrvDescriptor(toFreeList);
+    }
+
     this->setBufferName();
 }
 
@@ -61,7 +67,7 @@ void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
     const size_t oldSizeBytes = this->bufferSizeBytes;
 
-    this->initializeStorage(newSizeBytes);
+    this->initializeStorage(&toFreeList, newSizeBytes);
 
     if (this->options.isMapped)
     {
@@ -82,11 +88,6 @@ void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
     }
 
     this->extendFreelistCapacity(oldSizeBytes, newSizeBytes, useBackFreeSection);
-
-    if (this->options.hasSrvDescriptor)
-    {
-        this->allocSrvDescriptor(&toFreeList);
-    }
 }
 
 void CommittedManagedBuffer::onReset()

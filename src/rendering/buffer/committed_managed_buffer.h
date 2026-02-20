@@ -28,7 +28,7 @@ public:
                            ManagedBufferOptions options);
 
 protected:
-    void initializeStorage(size_t sizeBytes) override;
+    void initializeStorage(ToFreeList* toFreeList, size_t sizeBytes) override;
 
     void ensureCapacity(size_t minCapacityBytes,
                         bool useBackFreeSection,
