@@ -134,11 +134,11 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSi
 
     ASSERT(this->options.srvElementByteSize > 0);
 
-    const size_t sizeForSrv = (explicitSizeBytes > 0) ? explicitSizeBytes : this->bufferSizeBytes;
+    const size_t srvSizeBytes = (explicitSizeBytes > 0) ? explicitSizeBytes : this->bufferSizeBytes;
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
     srvDesc.Buffer = {
-        .NumElements = static_cast<uint32_t>(sizeForSrv / this->options.srvElementByteSize),
+        .NumElements = static_cast<uint32_t>(srvSizeBytes / this->options.srvElementByteSize),
         .StructureByteStride = this->options.srvElementByteSize,
     };
     this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);

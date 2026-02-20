@@ -29,17 +29,8 @@ CommittedManagedBuffer::CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heap
 
 void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t sizeBytes)
 {
-    if (this->initialResourceState == D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
-    {
-        // have to pass state explicitly for D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
-        this->dev_buffer = BufferHelper::createBasicBuffer(
-            sizeBytes, this->heapProperties, this->initialResourceState, this->options.bufferCreationFlags);
-    }
-    else
-    {
-        this->dev_buffer = BufferHelper::createBasicBuffer(
-            sizeBytes, this->heapProperties, this->options.bufferCreationFlags);
-    }
+    this->dev_buffer = BufferHelper::createBasicBuffer(
+        sizeBytes, this->heapProperties, this->initialResourceState, this->options.bufferCreationFlags);
 
     this->bufferSizeBytes = sizeBytes;
 

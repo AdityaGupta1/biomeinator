@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -60,8 +60,8 @@ void ReservedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t siz
 
     if (this->options.hasSrvDescriptor)
     {
-        // allocated only once
-        this->allocSrvDescriptor(toFreeList, maxReservedSizeBytes);
+        // allocated only once, so it doesn't need a ToFreeList
+        this->allocSrvDescriptor(nullptr, maxReservedSizeBytes);
     }
 
     this->setBufferName();
