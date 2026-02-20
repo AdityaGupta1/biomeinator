@@ -93,4 +93,5 @@ void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
 void CommittedManagedBuffer::onReset()
 {
     this->dev_buffer.Reset();
+    this->bufferSizeBytes = 0;
 }

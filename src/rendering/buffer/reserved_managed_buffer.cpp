@@ -49,10 +49,7 @@ void ReservedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t siz
         &resDesc, this->initialResourceState, nullptr /*pOptimizedClearValue*/, IID_PPV_ARGS(&this->dev_buffer)));
 
     const size_t heapSize = mapNewHeap(0 /*virtualStartTile*/, sizeBytes);
-    this->mappedCapacityBytes = heapSize;
-
-    // bufferSizeBytes = actual allocated memory
-    this->bufferSizeBytes = this->mappedCapacityBytes;
+    this->bufferSizeBytes = heapSize;
 
     if (this->options.hasSrvDescriptor)
     {
@@ -112,22 +109,20 @@ void ReservedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
                                            ID3D12GraphicsCommandList* cmdList,
                                            ToFreeList& toFreeList)
 {
-    if (this->mappedCapacityBytes >= minCapacityBytes)
+    if (this->bufferSizeBytes >= minCapacityBytes)
     {
         return;
     }
 
-    const size_t additionalNeeded = minCapacityBytes - this->mappedCapacityBytes;
-    const size_t virtualStartTile = this->mappedCapacityBytes / D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    const size_t additionalNeeded = minCapacityBytes - this->bufferSizeBytes;
+    const size_t virtualStartTile = this->bufferSizeBytes / D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
 
-    const size_t oldMapped = this->mappedCapacityBytes;
+    const size_t oldBufferSizeBytes = this->bufferSizeBytes;
 
     const size_t heapSize = mapNewHeap(virtualStartTile, additionalNeeded);
-    this->mappedCapacityBytes += heapSize;
+    this->bufferSizeBytes += heapSize;
 
-    this->bufferSizeBytes = this->mappedCapacityBytes;
-
-    this->extendFreelistCapacity(oldMapped, this->mappedCapacityBytes, useBackFreeSection);
+    this->extendFreelistCapacity(oldBufferSizeBytes, this->bufferSizeBytes, useBackFreeSection);
 
     // no need to recreate SRV here since it already covers the entire virtual memory range
 }
@@ -135,12 +130,11 @@ void ReservedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
 void ReservedManagedBuffer::onReset()
 {
     this->dev_buffer.Reset();
+    this->bufferSizeBytes = 0;
 
     for (auto& heap : this->heaps)
     {
         heap.Reset();
     }
     this->heaps.clear();
-
-    this->mappedCapacityBytes = 0;
 }

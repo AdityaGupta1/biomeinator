@@ -49,8 +49,6 @@ protected:
 private:
     const size_t maxReservedSizeBytes; // virtual size
 
-    size_t mappedCapacityBytes{ 0 }; // TODO: do we need this, or can we just use bufferSizeBytes?
-
     std::vector<ComPtr<ID3D12Heap>> heaps;
 
     size_t mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes);
