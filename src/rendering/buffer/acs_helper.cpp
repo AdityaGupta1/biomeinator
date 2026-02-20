@@ -82,7 +82,7 @@ static CommittedManagedBuffer sharedIdxsUploadBuffer{
 void init()
 {
     sharedAcsBuffer.setName(L"sharedAcsBuffer");
-    sharedAcsBuffer.init(reservedGrowthChunkBytes);
+    sharedAcsBuffer.init();
 
     sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
     sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);

@@ -166,15 +166,12 @@ void Instance::setMaterialIdx(uint32_t id)
 
 void Scene::init()
 {
-    // Reserved buffers: init with one growth chunk (32 MB) of initial physical backing.
-    // The virtual address space (maxReservedSizeBytes) was already set in the constructor;
-    // init() maps the first reservedGrowthChunkBytes of physical VRAM immediately.
     this->managedVertsBuffer.setName(L"scene verts");
-    this->managedVertsBuffer.init(reservedGrowthChunkBytes);
+    this->managedVertsBuffer.init();
     this->managedIdxsBuffer.setName(L"scene idxs");
-    this->managedIdxsBuffer.init(reservedGrowthChunkBytes);
+    this->managedIdxsBuffer.init();
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init(reservedGrowthChunkBytes);
+    this->managedPerTriDatasBuffer.init();
 
     this->maxNumInstances = 1 << 8;
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
@@ -196,7 +193,7 @@ void Scene::init()
     this->mappedMaterialsArray.init(8 /*elements*/);
 
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
-    this->managedAreaLightsBuffer.init(reservedGrowthChunkBytes);
+    this->managedAreaLightsBuffer.init();
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
     this->areaLightSamplingStructure.init(1 << 8 /*elements*/);
 }

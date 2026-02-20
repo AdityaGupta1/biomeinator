@@ -25,6 +25,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <algorithm>
 
+inline constexpr size_t reservedGrowthChunkBytes = 32ull * 1024 * 1024; // 32 MB
+
+static_assert(reservedGrowthChunkBytes % D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT == 0,
+              "reservedGrowthChunkBytes must be a multiple of D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT");
+
 ReservedManagedBuffer::ReservedManagedBuffer(size_t maxReservedSizeBytes,
                                              D3D12_RESOURCE_STATES initialResourceState,
                                              ManagedBufferOptions options)

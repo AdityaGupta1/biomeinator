@@ -104,31 +104,22 @@ class Scene
     friend class ToFreeList;
 
 private:
-    // Maximum virtual address space for each reserved GPU buffer.
-    // Physical VRAM is allocated lazily in kReservedGrowthChunkBytes (32 MB) chunks via
-    // ID3D12Heap + UpdateTileMappings.  Increasing these limits is free until memory is
-    // actually consumed.
-    static constexpr size_t maxVertsBufferBytes = 4ull * 1024 * 1024 * 1024; // 4 GB
-    static constexpr size_t maxIdxsBufferBytes = 1ull * 1024 * 1024 * 1024; // 1 GB
-    static constexpr size_t maxPerTriDatasBufferBytes = 1ull * 1024 * 1024 * 1024; // 1 GB
-    static constexpr size_t maxAreaLightsBufferBytes = 500ull * 1024 * 1024; // 500 MB
-
     ReservedManagedBuffer managedVertsBuffer{
-        maxVertsBufferBytes,
+        4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
     ReservedManagedBuffer managedIdxsBuffer{
-        maxIdxsBufferBytes,
+        1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
         },
     };
     ReservedManagedBuffer managedPerTriDatasBuffer{
-        maxPerTriDatasBufferBytes,
+        1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
@@ -147,7 +138,6 @@ private:
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
-    // UPLOAD heap, CPU-mapped – stays as CommittedManagedBuffer (not eligible for Reserved).
     CommittedManagedBuffer sharedBlasUploadBuffer{
         &UPLOAD_HEAP,
         D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -178,7 +168,7 @@ private:
     std::vector<PendingTexture> pendingTextures;
 
     ReservedManagedBuffer managedAreaLightsBuffer{
-        maxAreaLightsBufferBytes,
+        512ull * 1024 * 1024, // 512 MB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,

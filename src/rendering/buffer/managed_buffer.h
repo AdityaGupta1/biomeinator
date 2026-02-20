@@ -123,7 +123,7 @@ protected:
 public:
     virtual ~ManagedBuffer() = default;
 
-    void init(size_t sizeBytes);
+    void init(size_t sizeBytes = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT);
 
     void reset();
 
