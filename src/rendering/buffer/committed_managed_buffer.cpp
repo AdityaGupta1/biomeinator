@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,14 +29,11 @@ CommittedManagedBuffer::CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heap
 
 void CommittedManagedBuffer::initializeStorage(size_t sizeBytes)
 {
-    // Mirror the old ManagedBuffer::createBuffer() logic.
     if (this->initialResourceState == D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
     {
-        // RAYTRACING_ACCELERATION_STRUCTURE requires the initial state to be passed explicitly
-        // because BufferHelper::createBasicBuffer(w, heap, flags) auto-selects the state.
+        // have to pass state explicitly for D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
         this->dev_buffer = BufferHelper::createBasicBuffer(
-            sizeBytes, this->heapProperties, this->initialResourceState,
-            this->options.bufferCreationFlags);
+            sizeBytes, this->heapProperties, this->initialResourceState, this->options.bufferCreationFlags);
     }
     else
     {
@@ -53,32 +50,27 @@ void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
                                              ID3D12GraphicsCommandList* cmdList,
                                              ToFreeList& toFreeList)
 {
-    // Power-of-2 growth – identical to the old ManagedBuffer::resize() policy.
     size_t newSizeBytes = 1;
     while (newSizeBytes < minCapacityBytes)
+    {
         newSizeBytes *= 2;
+    }
 
-    // Save CPU-side pointer before mapping changes.
     void* host_oldBuffer = this->host_buffer;
 
-    // Hand the old GPU resource off to toFreeList for deferred release.
-    // For mapped buffers toFreeList will call Unmap; for unmapped ones it just holds
-    // the ComPtr alive until the frame is done.
     ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
     const size_t oldSizeBytes = this->bufferSizeBytes;
 
-    // Allocate the new (larger) committed resource.
     this->initializeStorage(newSizeBytes);
 
     if (this->options.isMapped)
     {
-        // Map the new buffer immediately; the old one will be unmapped by toFreeList.
+        // old buffer will be unmapped by ToFreeList
         this->map();
         std::memcpy(this->host_buffer, host_oldBuffer, oldSizeBytes);
     }
     else
     {
-        // GPU-side copy of old contents into the new resource.
         BufferHelper::copyBufferRegion(cmdList,
                                        this->dev_buffer.Get(),
                                        this->initialResourceState,
@@ -89,10 +81,15 @@ void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
                                        oldSizeBytes);
     }
 
-    // Extend the freelist to account for the extra capacity.
     this->extendFreelistCapacity(oldSizeBytes, newSizeBytes, useBackFreeSection);
 
-    // Recreate SRV with the new (larger) element count.
     if (this->options.hasSrvDescriptor)
+    {
         this->allocSrvDescriptor(&toFreeList);
+    }
+}
+
+void CommittedManagedBuffer::onReset()
+{
+    this->dev_buffer.Reset();
 }

@@ -30,7 +30,7 @@ ReservedManagedBuffer::ReservedManagedBuffer(size_t maxReservedSizeBytes,
     : ManagedBuffer(nullptr /*heapProperties*/, initialResourceState, options),
       maxReservedSizeBytes(maxReservedSizeBytes)
 {
-    ASSERT(!options.isMapped, "ReservedManagedBuffer cannot be CPU-mapped");
+    ASSERT(!options.isMapped, "ReservedManagedBuffer cannot be mapped");
     ASSERT(maxReservedSizeBytes > 0);
     ASSERT(maxReservedSizeBytes % D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT == 0,
            "maxReservedSizeBytes must be aligned to D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT");

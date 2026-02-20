@@ -27,10 +27,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <iterator>
 
-// ---------------------------------------------------------------------------
-// ManagedBufferSection
-// ---------------------------------------------------------------------------
-
 ManagedBufferSection::ManagedBufferSection(ManagedBuffer* buffer, size_t offsetBytes, size_t sizeBytes)
     : buffer(buffer), offsetBytes(offsetBytes), sizeBytes(sizeBytes)
 {}
@@ -57,28 +53,18 @@ void ManagedBufferSection::free() const
     }
 }
 
-// ---------------------------------------------------------------------------
-// ManagedBuffer – constructor
-// ---------------------------------------------------------------------------
-
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_RESOURCE_STATES initialResourceState,
                              const ManagedBufferOptions options)
     : heapProperties(heapProperties), initialResourceState(initialResourceState), options(options)
 {}
 
-// ---------------------------------------------------------------------------
-// ManagedBuffer – public lifecycle
-// ---------------------------------------------------------------------------
-
 void ManagedBuffer::init(size_t sizeBytes)
 {
     ASSERT(sizeBytes > 0);
 
-    // Delegate resource creation to the concrete subclass.
     this->initializeStorage(sizeBytes);
 
-    // Initialise the freelist to cover the entire mapped range reported by initializeStorage.
     this->freeByOffset.clear();
     this->freeBySize.clear();
     this->insertFreeNode(0, this->bufferSizeBytes);
@@ -88,9 +74,7 @@ void ManagedBuffer::init(size_t sizeBytes)
         this->map();
     }
 
-    // CommittedManagedBuffer leaves SRV creation to here (initializeStorage does not call it).
-    // ReservedManagedBuffer calls allocSrvDescriptor inside initializeStorage with
-    // maxReservedSizeBytes as the explicit size, so the guard prevents a double-alloc.
+    // TODO: move this to subclass (CommittedManagedBuffer specifically, since Reserved already does it in initializeStorage())
     if (this->options.hasSrvDescriptor && !this->hasValidSrvDescriptor())
     {
         this->allocSrvDescriptor(nullptr);
@@ -127,14 +111,9 @@ void ManagedBuffer::reset()
     }
     ASSERT(!isBufferOccupied);
 
-    // Delegate resource release to the concrete subclass (may release heaps, etc.).
     this->onReset();
     this->bufferSizeBytes = 0;
 }
-
-// ---------------------------------------------------------------------------
-// ManagedBuffer – freelist internals
-// ---------------------------------------------------------------------------
 
 void ManagedBuffer::insertFreeNode(size_t offsetBytes, size_t sizeBytes)
 {
@@ -149,10 +128,6 @@ void ManagedBuffer::eraseFreeNode(OffsetIter offsetIter)
     this->freeByOffset.erase(offsetIter);
 }
 
-// ---------------------------------------------------------------------------
-// ManagedBuffer – protected helpers
-// ---------------------------------------------------------------------------
-
 void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSizeBytes)
 {
     ASSERT(this->options.hasSrvDescriptor);
@@ -165,8 +140,6 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSi
 
     ASSERT(this->options.srvElementByteSize > 0);
 
-    // Use explicitSizeBytes when provided (ReservedManagedBuffer passes maxReservedSizeBytes
-    // so the SRV NumElements covers the full virtual range and never needs recreation).
     const size_t sizeForSrv = (explicitSizeBytes > 0) ? explicitSizeBytes : this->bufferSizeBytes;
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
@@ -180,13 +153,10 @@ void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSi
 
 void ManagedBuffer::extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection)
 {
-    // This mirrors the freelist-update logic that was previously inside resize().
     const size_t diffSizeBytes = newSizeBytes - oldSizeBytes;
 
     if (useBackFreeSection)
     {
-        // The trailing free block (backIter) already ends exactly at oldSizeBytes.
-        // Extend it in place to cover the newly added range.
         const auto backIter = std::prev(this->freeByOffset.end());
         const size_t newBackSizeBytes = backIter->second.sizeBytes + diffSizeBytes;
 
@@ -198,7 +168,6 @@ void ManagedBuffer::extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBy
     }
     else
     {
-        // No free block at the tail – insert a fresh one for the growth region.
         this->insertFreeNode(oldSizeBytes, diffSizeBytes);
     }
 }
@@ -212,7 +181,7 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
 
     const OffsetIter nextIter = this->freeByOffset.lower_bound(section.offsetBytes);
 
-    // Check previous neighbour for merging.
+    // check previous neighbor for merging
     if (nextIter != this->freeByOffset.begin())
     {
         OffsetIter prevIter = std::prev(nextIter);
@@ -226,7 +195,7 @@ void ManagedBuffer::freeSection(ManagedBufferSection section)
         }
     }
 
-    // Check next neighbour for merging.
+    // check next neighbor for merging
     if (nextIter != this->freeByOffset.end())
     {
         const size_t nextOffsetBytes = nextIter->first;
@@ -247,18 +216,10 @@ void ManagedBuffer::setBufferName()
     this->dev_buffer->SetName(nameWithSize.c_str());
 }
 
-// ---------------------------------------------------------------------------
-// ManagedBuffer – default virtual implementations
-// ---------------------------------------------------------------------------
-
 void ManagedBuffer::onReset()
 {
     this->dev_buffer.Reset();
 }
-
-// ---------------------------------------------------------------------------
-// ManagedBuffer – public API
-// ---------------------------------------------------------------------------
 
 ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* cmdList,
                                                     ToFreeList* toFreeList,
@@ -291,8 +252,6 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
     ASSERT(cmdList != nullptr);
     ASSERT(toFreeList != nullptr);
 
-    // Check whether the trailing free block (if any) abuts the end of the buffer.
-    // If so, growing from there avoids internal fragmentation.
     bool useBackFreeSection = false;
     size_t backSizeBytes = 0;
     if (!this->freeByOffset.empty())
@@ -307,12 +266,8 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         }
     }
 
-    // Minimum total capacity we need after growth.
     const size_t minNewSizeBytes = this->bufferSizeBytes + sizeBytes - backSizeBytes;
 
-    // Delegate the actual growth to the concrete subclass.
-    // CommittedManagedBuffer will round up to a power of 2 and recreate the resource.
-    // ReservedManagedBuffer will map additional heaps without touching the resource.
     this->ensureCapacity(minNewSizeBytes, useBackFreeSection, cmdList, *toFreeList);
 
     return findFreeSection(cmdList, toFreeList, sizeBytes);
