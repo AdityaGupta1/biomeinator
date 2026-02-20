@@ -104,10 +104,10 @@ size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAddi
     return heapSize;
 }
 
-void ReservedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
-                                           bool useBackFreeSection,
-                                           ID3D12GraphicsCommandList* cmdList,
-                                           ToFreeList& toFreeList)
+void ReservedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
+                                            ToFreeList& toFreeList,
+                                            size_t minCapacityBytes,
+                                            bool useBackFreeSection)
 {
     if (this->bufferSizeBytes >= minCapacityBytes)
     {

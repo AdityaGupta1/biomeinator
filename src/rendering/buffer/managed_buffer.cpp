@@ -262,7 +262,7 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
 
     const size_t minNewSizeBytes = this->bufferSizeBytes + sizeBytes - backSizeBytes;
 
-    this->ensureCapacity(minNewSizeBytes, useBackFreeSection, cmdList, *toFreeList);
+    this->ensureCapacity(cmdList, *toFreeList, minNewSizeBytes, useBackFreeSection);
 
     return findFreeSection(cmdList, toFreeList, sizeBytes);
 }

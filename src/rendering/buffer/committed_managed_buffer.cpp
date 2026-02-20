@@ -51,10 +51,10 @@ void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t si
     this->setBufferName();
 }
 
-void CommittedManagedBuffer::ensureCapacity(size_t minCapacityBytes,
-                                             bool useBackFreeSection,
-                                             ID3D12GraphicsCommandList* cmdList,
-                                             ToFreeList& toFreeList)
+void CommittedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
+                                             ToFreeList& toFreeList,
+                                             size_t minCapacityBytes,
+                                             bool useBackFreeSection)
 {
     size_t newSizeBytes = 1;
     while (newSizeBytes < minCapacityBytes)

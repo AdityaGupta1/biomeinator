@@ -106,10 +106,10 @@ protected:
 
     virtual void initializeStorage(ToFreeList* toFreeList, size_t sizeBytes) = 0;
 
-    virtual void ensureCapacity(size_t minCapacityBytes,
-                                bool useBackFreeSection,
-                                ID3D12GraphicsCommandList* cmdList,
-                                ToFreeList& toFreeList) = 0; // TODO; put cmdList and toFreeList at beginning of param list
+    virtual void ensureCapacity(ID3D12GraphicsCommandList* cmdList,
+                                ToFreeList& toFreeList,
+                                size_t minCapacityBytes,
+                                bool useBackFreeSection) = 0;
 
     virtual void onReset() = 0;
 
