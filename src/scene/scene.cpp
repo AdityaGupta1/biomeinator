@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/camera.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "util/math.h"
 #include "util/util.h"
 
 #include <glm/glm.hpp>
@@ -560,8 +561,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         dev_texture->SetName(L"scene texture");
 
         const uint32_t rowPitchBytes = pendingTex.width * 4;
-        const uint32_t rowPitchBytesAligned =
-            (rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+        const uint32_t rowPitchBytesAligned = MathUtil::roundUp(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const uint32_t uploadSizeBytes = rowPitchBytesAligned * pendingTex.height;
 
         ComPtr<ID3D12Resource> dev_uploadBuffer = BufferHelper::createBasicBuffer(uploadSizeBytes, &UPLOAD_HEAP);

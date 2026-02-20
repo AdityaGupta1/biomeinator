@@ -42,6 +42,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
+#include "util/math.h"
 #include "util/ring_buffer.h"
 #include "util/util.h"
 
@@ -1161,8 +1162,7 @@ static void captureQueuedScreenshot()
 
     screenshotRequest.rowPitchBytes = width * 4;
     screenshotRequest.rowPitchBytesAligned =
-        (screenshotRequest.rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) &
-        ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+        MathUtil::roundUp(screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
     const uint32_t readbackSizeBytes = screenshotRequest.rowPitchBytesAligned * height;
 
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
