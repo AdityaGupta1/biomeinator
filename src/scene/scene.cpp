@@ -85,7 +85,6 @@ void Instance::finalizeGeometry()
 
     const uint32_t triCount = this->getTriCount();
 
-    // Assert that perTriDatas has the correct number of elements (one per triangle)
     if (this->host_idxs.empty())
     {
         ASSERT(this->host_perTriDatas.size() == this->host_verts.size() / 3);
