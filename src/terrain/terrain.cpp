@@ -69,9 +69,9 @@ static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMem
     chunk->generateSegments(threadMemoryAlloc);
 }
 
-static void task_createInstance(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->createInstance();
+    chunk->createInstances();
 }
 
 static ThreadPool threadPool;
@@ -315,9 +315,10 @@ void update(ToFreeList& toFreeList)
         Chunk* chunk = chunksToGenerateGeometry.front();
         chunksToGenerateGeometry.pop_front();
 
-        Instance* instance = scene->requestNewInstance(toFreeList);
-        chunk->setInstance(instance);
-        tasksToEnqueue.push_back({ task_createInstance, chunk });
+        Instance* terrainInst = scene->requestNewInstance(toFreeList);
+        Instance* waterInst = scene->requestNewInstance(toFreeList);
+        chunk->setInstances(terrainInst, waterInst);
+        tasksToEnqueue.push_back({ task_createInstances, chunk });
     }
 
     if (!tasksToEnqueue.empty())
@@ -352,8 +353,19 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToCreateBlasNow)
     {
-        ASSERT(chunk->getInstance()->getIsGeometryFinalized());
-        scene->markInstanceReadyForBlasBuild(chunk->getInstance());
+        ASSERT(chunk->getTerrainInstance()->getIsGeometryFinalized());
+        scene->markInstanceReadyForBlasBuild(chunk->getTerrainInstance());
+
+        Instance* waterInst = chunk->getWaterInstance();
+        if (waterInst->getIsGeometryFinalized())
+        {
+            scene->markInstanceReadyForBlasBuild(waterInst);
+        }
+        else
+        {
+            toFreeList.pushInstance(waterInst);
+            chunk->setInstances(chunk->getTerrainInstance(), nullptr);
+        }
     }
 
     std::vector<Chunk*> chunksToDestroyNow;
@@ -364,7 +376,7 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToDestroyNow)
     {
-        chunk->destroyInstance(toFreeList);
+        chunk->destroyInstances(toFreeList);
     }
 }
 

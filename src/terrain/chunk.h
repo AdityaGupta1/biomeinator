@@ -125,7 +125,8 @@ private:
     std::atomic<bool> isMarkedForDestruction{ false };
     bool isInstanceVisible{ false };
 
-    Instance* instance{ nullptr };
+    Instance* terrainInstance{ nullptr };
+    Instance* waterInstance{ nullptr };
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
@@ -150,10 +151,11 @@ public:
     void fillStructuresAndDecorators();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
-    void setInstance(Instance* instance);
-    void createInstance();
-    void destroyInstance(ToFreeList& toFreeList);
-    Instance* getInstance() const;
+    void setInstances(Instance* terrain, Instance* water);
+    void createInstances();
+    void destroyInstances(ToFreeList& toFreeList);
+    Instance* getTerrainInstance() const;
+    Instance* getWaterInstance() const;
 
     ChunkState getState() const;
     void setState(ChunkState newState);

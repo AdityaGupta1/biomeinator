@@ -37,10 +37,10 @@ static inline bool isInChunk(ivec3 pos_CS)
     return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
 }
 
-static inline void setBlockIfAir(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
+static inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
 {
     Block& block = blocks[blockIdx];
-    if (block == Block::AIR)
+    if (block == Block::AIR || block == Block::WATER)
     {
         block = newBlock;
     }
@@ -59,11 +59,11 @@ fillStructureBlocksHeader(OAK_TREE)
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int y = structurePos_CS.y; y <= trunkTopPos_CS.y; ++y)
         {
-            setBlockIfAir(blocks, blockIdx++, Block::OAK_LOG);
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::OAK_LOG);
         }
         for (int dy = 0; dy < 2; ++dy)
         {
-            setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::OAK_LEAVES);
         }
     }
 
@@ -84,7 +84,7 @@ fillStructureBlocksHeader(OAK_TREE)
                     {
                         blockIdx++;
                     }
-                    setBlockIfAir(blocks, blockIdx, Block::OAK_LEAVES);
+                    tryPlaceStructureBlock(blocks, blockIdx, Block::OAK_LEAVES);
                 }
             }
             else
@@ -92,7 +92,7 @@ fillStructureBlocksHeader(OAK_TREE)
                 int leavesHeight = (diffXZ.x + diffXZ.y == 1) ? 4 : 2;
                 for (int dy = 0; dy < leavesHeight; ++dy)
                 {
-                    setBlockIfAir(blocks, blockIdx++, Block::OAK_LEAVES);
+                    tryPlaceStructureBlock(blocks, blockIdx++, Block::OAK_LEAVES);
                 }
             }
         }
@@ -108,7 +108,7 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int dy = 0; dy <= trunkHeight; ++dy)
         {
-            setBlockIfAir(blocks, blockIdx++, Block::CACTUS);
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::CACTUS);
         }
     }
 
@@ -134,7 +134,7 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
         const ivec3 armConnectorPos_CS = structurePos_CS + ivec3(dirOffset.x, armBaseHeight, dirOffset.y /*z*/);
         if (isInChunkXZ(armConnectorPos_CS))
         {
-            setBlockIfAir(blocks, Chunk::blockPosToIdx(armConnectorPos_CS), Block::CACTUS);
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(armConnectorPos_CS), Block::CACTUS);
         }
 
         const ivec3 armBendPos_CS = armConnectorPos_CS + ivec3(dirOffset.x, 0, dirOffset.y /*z*/);
@@ -143,7 +143,7 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
             uint blockIdx = Chunk::blockPosToIdx(armBendPos_CS);
             for (int dy = 0; dy <= armHeight; ++dy)
             {
-                setBlockIfAir(blocks, blockIdx++, Block::CACTUS);
+                tryPlaceStructureBlock(blocks, blockIdx++, Block::CACTUS);
             }
         }
     }

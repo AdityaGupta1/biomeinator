@@ -507,13 +507,27 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 
             {
                 return false;
             }
-
-            ASSERT(neighborBlockType == BlockType::TRANSPARENT_CUTOUT);
-            return all(lessThanEqual(thisPos_CS, neighborPos_CS)); // prevents overlapping faces
+            else if (neighborBlockType == BlockType::TRANSPARENT_CUTOUT)
+            {
+                return all(lessThanEqual(thisPos_CS, neighborPos_CS));
+            }
+            return true;
+        }
+        case BlockType::WATER:
+        {
+            if (neighborBlockType == BlockType::WATER)
+            {
+                return false;
+            }
+            if (neighborBlockType == BlockType::SOLID || neighborBlockType == BlockType::TRANSPARENT_CUTOUT)
+            {
+                return faceIdx == 4;
+            }
+            return true;
         }
     }
 
-    ASSERT(false); // this should not be reachable
+    ASSERT(false);
     return false;
 }
 
@@ -556,21 +570,28 @@ inline constexpr uvec2 uvOffsets[4] = {
 };
 inline constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
-void Chunk::setInstance(Instance* instance)
+void Chunk::setInstances(Instance* terrain, Instance* water)
 {
-    this->instance = instance;
-    this->instance->setVisible(this->getIsInstanceVisible());
+    this->terrainInstance = terrain;
+    this->waterInstance = water;
+    this->terrainInstance->setVisible(this->isInstanceVisible);
+    if (this->waterInstance != nullptr)
+    {
+        this->waterInstance->setVisible(this->isInstanceVisible);
+    }
 }
 
-void Chunk::createInstance()
+void Chunk::createInstances()
 {
-    std::vector<Vertex>& verts = this->instance->host_verts;
-    std::vector<uint32_t>& idxs = this->instance->host_idxs;
+    std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
+    std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
+    std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
+    std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
     std::vector<uint32_t> emissiveTriangleIdxs;
 
     constexpr size_t numVertsToReserve = 1 << 15;
-    verts.reserve(numVertsToReserve);
-    idxs.reserve(numVertsToReserve * 6 / 4);
+    terrainVerts.reserve(numVertsToReserve);
+    terrainIdxs.reserve(numVertsToReserve * 6 / 4);
     emissiveTriangleIdxs.reserve(512);
 
     RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
@@ -600,7 +621,7 @@ void Chunk::createInstance()
 
                     if (blockData.shape == BlockShape::X_SHAPED)
                     {
-                        const uint baseVertIdx = static_cast<uint>(verts.size());
+                        const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
                         const vec2 jitter = (rng.nextFloat2() - 0.5f) * 0.4f;
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
@@ -611,18 +632,52 @@ void Chunk::createInstance()
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
                             const vec3 normal = xShapedFaceNormals[i / 4];
                             const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;
-                            verts.emplace_back(vec3ToDirectX(vertPos_CS), vec3ToDirectX(normal), vec2ToDirectX(uv));
+                            terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), vec3ToDirectX(normal), vec2ToDirectX(uv));
                         }
 
                         for (uint j = 0; j < 2; ++j)
                         {
                             const uint offset = j * 4;
-                            idxs.emplace_back(baseVertIdx + offset + 0u);
-                            idxs.emplace_back(baseVertIdx + offset + 1u);
-                            idxs.emplace_back(baseVertIdx + offset + 2u);
-                            idxs.emplace_back(baseVertIdx + offset + 0u);
-                            idxs.emplace_back(baseVertIdx + offset + 2u);
-                            idxs.emplace_back(baseVertIdx + offset + 3u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 0u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 1u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 0u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
+                            terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
+                        }
+                        continue;
+                    }
+                    else if (blockData.shape == BlockShape::LIQUID)
+                    {
+                        for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                        {
+                            const ivec3 neighborOffset = faceOffsets[faceIdx];
+                            const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+
+                            if (!shouldGenerateFace(ivec3(blockPos_CS), blockData.type, neighborPos_CS, faceIdx))
+                            {
+                                continue;
+                            }
+
+                            const uint baseVertIdx = static_cast<uint>(waterVerts.size());
+
+                            const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                            const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
+                            for (uint i = 0; i < 4; ++i)
+                            {
+                                const ivec3 vert = thisFaceVertPositions[i];
+                                const vec3 vertPos_CS = vec3(blockPos_CS) + vec3(vert.x, vert.y * (7.f / 8.f), vert.z);
+                                const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
+                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier;
+                                waterVerts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
+                            }
+
+                            waterIdxs.emplace_back(baseVertIdx + 0u);
+                            waterIdxs.emplace_back(baseVertIdx + 1u);
+                            waterIdxs.emplace_back(baseVertIdx + 2u);
+                            waterIdxs.emplace_back(baseVertIdx + 0u);
+                            waterIdxs.emplace_back(baseVertIdx + 2u);
+                            waterIdxs.emplace_back(baseVertIdx + 3u);
                         }
                         continue;
                     }
@@ -638,7 +693,7 @@ void Chunk::createInstance()
                                 continue;
                             }
 
-                            const uint baseVertIdx = static_cast<uint>(verts.size());
+                            const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
                             const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
@@ -649,17 +704,17 @@ void Chunk::createInstance()
                                 const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                                 const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
 
-                                verts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
+                                terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
                             }
 
-                            const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
+                            const uint32_t triangleIdx = static_cast<uint32_t>(terrainIdxs.size() / 3u);
 
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 1u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 3u);
+                            terrainIdxs.emplace_back(baseVertIdx + 0u);
+                            terrainIdxs.emplace_back(baseVertIdx + 1u);
+                            terrainIdxs.emplace_back(baseVertIdx + 2u);
+                            terrainIdxs.emplace_back(baseVertIdx + 0u);
+                            terrainIdxs.emplace_back(baseVertIdx + 2u);
+                            terrainIdxs.emplace_back(baseVertIdx + 3u);
 
                             if (blockData.emitsLight)
                             {
@@ -673,17 +728,23 @@ void Chunk::createInstance()
         }
     }
 
-    ASSERT(verts.size() > 0);
-    ASSERT(idxs.size() > 0);
+    ASSERT(terrainVerts.size() > 0);
+    ASSERT(terrainIdxs.size() > 0);
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
-    instance->setTransformOffset(ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/));
+    const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
-    instance->finalizeGeometry();
+    terrainInstance->setTransformOffset(transformOffset);
+    terrainInstance->finalizeGeometry();
+    terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
+    terrainInstance->addAreaLights(emissiveTriangleIdxs);
 
-    instance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
-
-    instance->addAreaLights(emissiveTriangleIdxs);
+    if (!waterVerts.empty())
+    {
+        waterInstance->setTransformOffset(transformOffset);
+        waterInstance->finalizeGeometry();
+        waterInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::WATER));
+    }
 
     this->advanceState(ChunkState::HAS_GEOMETRY);
     if (this->getIsMarkedForDestruction())
@@ -696,17 +757,27 @@ void Chunk::createInstance()
     }
 }
 
-void Chunk::destroyInstance(ToFreeList& toFreeList)
+void Chunk::destroyInstances(ToFreeList& toFreeList)
 {
-    toFreeList.pushInstance(this->instance);
-    this->instance = nullptr;
+    toFreeList.pushInstance(this->terrainInstance);
+    this->terrainInstance = nullptr;
+    if (this->waterInstance != nullptr)
+    {
+        toFreeList.pushInstance(this->waterInstance);
+        this->waterInstance = nullptr;
+    }
     this->setState(ChunkState::NEEDS_GEOMETRY);
     this->setIsMarkedForDestruction(false);
 }
 
-Instance* Chunk::getInstance() const
+Instance* Chunk::getTerrainInstance() const
 {
-    return instance;
+    return this->terrainInstance;
+}
+
+Instance* Chunk::getWaterInstance() const
+{
+    return this->waterInstance;
 }
 
 ChunkState Chunk::getState() const
@@ -753,9 +824,13 @@ bool Chunk::getIsInstanceVisible() const
 void Chunk::setInstanceVisible(bool visible)
 {
     this->isInstanceVisible = visible;
-    if (this->instance != nullptr)
+    if (this->terrainInstance != nullptr)
     {
-        this->instance->setVisible(this->isInstanceVisible);
+        this->terrainInstance->setVisible(visible);
+    }
+    if (this->waterInstance != nullptr)
+    {
+        this->waterInstance->setVisible(visible);
     }
 }
 

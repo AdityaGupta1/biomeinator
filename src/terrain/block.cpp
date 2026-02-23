@@ -46,6 +46,7 @@ std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
 void init()
 {
     BLOCK_DATA_BY_NAME(AIR) = { .type = BlockType::AIR };
+    BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::LIQUID };
 
     BLOCK_DATA_BY_NAME(BEDROCK) = { BlockUvs(uvec2(5, 0)) };
 

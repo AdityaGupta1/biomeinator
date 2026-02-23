@@ -149,6 +149,8 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
+inline constexpr int seaLevel = 150;
+
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
@@ -209,6 +211,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
+    const uint maxFillY = max(terrainNoiseMaxY, seaLevel);
+
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -231,7 +235,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             uint topBlockY = 0;
             bool wasSolid = true;
-            for (uint y = 1; y <= terrainNoiseMaxY; ++y)
+            for (uint y = 1; y <= maxFillY; ++y)
             {
                 Block block = Block::AIR;
                 const uint blockIdx = baseBlockIdx + y;
@@ -270,10 +274,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
                     }
                 }
+                else if (y <= seaLevel)
+                {
+                    block = Block::WATER;
+                }
 
                 this->blocks[blockIdx] = block;
 
-                const bool isSolid = (block != Block::AIR);
+                const bool isSolid = (Blocks::getBlockData(block).type == BlockType::SOLID);
                 if (wasSolid && !isSolid && !isCave)
                 {
                     topBlockY = y - 1;
