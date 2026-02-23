@@ -356,15 +356,15 @@ void update(ToFreeList& toFreeList)
         ASSERT(chunk->getTerrainInstance()->getIsGeometryFinalized());
         scene->markInstanceReadyForBlasBuild(chunk->getTerrainInstance());
 
-        Instance* waterInst = chunk->getWaterInstance();
-        if (waterInst->getIsGeometryFinalized())
+        Instance* waterInstance = chunk->getWaterInstance();
+        if (waterInstance->getIsGeometryFinalized())
         {
-            scene->markInstanceReadyForBlasBuild(waterInst);
+            scene->markInstanceReadyForBlasBuild(waterInstance);
         }
         else
         {
-            toFreeList.pushInstance(waterInst);
-            chunk->setInstances(chunk->getTerrainInstance(), nullptr);
+            toFreeList.pushInstance(waterInstance);
+            chunk->setInstances(chunk->getTerrainInstance(), nullptr); // TODO: figure out cleaner way to do this
         }
     }
 
