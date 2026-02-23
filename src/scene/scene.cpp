@@ -82,18 +82,7 @@ void Instance::setTransformOffset(glm::ivec3 offset)
 void Instance::finalizeGeometry()
 {
     ASSERT(this->host_verts.size() > 0);
-
-    const uint32_t triCount = this->getTriCount();
-
-    if (this->host_idxs.empty())
-    {
-        ASSERT(this->host_perTriDatas.size() == this->host_verts.size() / 3);
-    }
-    else
-    {
-        ASSERT(this->host_perTriDatas.size() == this->host_idxs.size() / 3);
-    }
-    ASSERT(this->host_perTriDatas.size() == triCount);
+    ASSERT(this->host_perTriDatas.size() == this->getTriCount());
 
     this->isGeometryFinalized = true;
 }
