@@ -42,6 +42,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
+#include "util/math.h"
 #include "util/ring_buffer.h"
 #include "util/util.h"
 
@@ -276,7 +277,7 @@ static void initStreamline()
 ComPtr<ID3D12Device5> device;
 
 static ComPtr<IDXGIFactory5> factory;
-static ComPtr<ID3D12CommandQueue> cmdQueue;
+static ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
 
 Fence fence;
 
@@ -347,10 +348,10 @@ static void initDevice()
         adapter.Reset();
     }
 
-    D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {
+    D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
-    CHECK_HRESULT(device->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(&cmdQueue)));
+    CHECK_HRESULT(device->CreateCommandQueue(&graphicsCmdQueueDesc, IID_PPV_ARGS(&graphicsCmdQueue)));
 
     fence.init();
 }
@@ -443,7 +444,7 @@ static void initSwapChain()
         .Flags = swapChainFlags,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
-    CHECK_HRESULT(factory->CreateSwapChainForHwnd(cmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
+    CHECK_HRESULT(factory->CreateSwapChainForHwnd(graphicsCmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
     CHECK_HRESULT(swapChain1.As(&swapChain));
 
     CHECK_HRESULT(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
@@ -1096,7 +1097,7 @@ static void initImgui()
 
     ImGui_ImplDX12_InitInfo imguiDX12InitInfo = {};
     imguiDX12InitInfo.Device = device.Get();
-    imguiDX12InitInfo.CommandQueue = cmdQueue.Get();
+    imguiDX12InitInfo.CommandQueue = graphicsCmdQueue.Get();
     imguiDX12InitInfo.NumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
     imguiDX12InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
@@ -1161,8 +1162,7 @@ static void captureQueuedScreenshot()
 
     screenshotRequest.rowPitchBytes = width * 4;
     screenshotRequest.rowPitchBytesAligned =
-        (screenshotRequest.rowPitchBytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) &
-        ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+        MathUtil::roundUp(screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
     const uint32_t readbackSizeBytes = screenshotRequest.rowPitchBytesAligned * height;
 
     screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
@@ -1784,7 +1784,7 @@ void render()
 
     submitCmd();
 
-    frameCtx.fenceValue = fence.signal(cmdQueue.Get());
+    frameCtx.fenceValue = fence.signal(graphicsCmdQueue.Get());
 
     UINT syncInterval;
     UINT presentFlags;
@@ -1837,12 +1837,12 @@ static void beginFrame()
 static void submitCmd()
 {
     CHECK_HRESULT(cmdList->Close());
-    cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
+    graphicsCmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(cmdList.GetAddressOf()));
 }
 
 void flush()
 {
-    fence.waitFor(fence.signal(cmdQueue.Get()));
+    fence.waitFor(fence.signal(graphicsCmdQueue.Get()));
 
     for (auto& frame : frameCtxs)
     {
@@ -1919,7 +1919,7 @@ void destroy()
         CloseHandle(frameLatencyWaitable);
     }
 
-    cmdQueue.Reset();
+    graphicsCmdQueue.Reset();
     factory.Reset();
 
 #if ENABLE_ASSERTS
@@ -1936,6 +1936,11 @@ void destroy()
 ID3D12Device5* getDevice()
 {
     return device.Get();
+}
+
+ID3D12CommandQueue* getGraphicsQueue()
+{
+    return graphicsCmdQueue.Get();
 }
 
 const Camera& getCamera()

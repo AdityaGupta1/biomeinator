@@ -1,6 +1,6 @@
 /*
 Biomeinator - real-time path traced voxel engine
-Copyright (C) 2025 Aditya Gupta
+Copyright (C) 2026 Aditya Gupta
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,41 +18,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "buffer/descriptor_heap_allocator.h"
+#include "managed_buffer.h"
 
-#include <string>
-
-class Camera;
-class Scene;
-
-namespace Renderer
+class CommittedManagedBuffer final : public ManagedBuffer
 {
+public:
+    CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
+                           D3D12_RESOURCE_STATES initialResourceState,
+                           ManagedBufferOptions options);
 
-void init();
+protected:
+    void initializeStorage(ToFreeList* toFreeList, size_t sizeBytes) override;
 
-void loadScene(const std::string& filePathStr);
+    void ensureCapacity(ID3D12GraphicsCommandList* cmdList,
+                        ToFreeList& toFreeList,
+                        size_t minCapacityBytes,
+                        bool useBackFreeSection) override;
 
-void resize();
-
-void render();
-
-void queueScreenshot(const bool useTestOutputPath = false);
-
-void flush();
-
-void destroy();
-
-inline constexpr uint32_t NUM_FRAMES_IN_FLIGHT = 3;
-uint32_t getFrameIndex();
-
-extern DescriptorHeapAllocator sharedDescHeapAlloc;
-
-ID3D12Device5* getDevice();
-ID3D12CommandQueue* getGraphicsQueue();
-
-const Camera& getCamera();
-
-const Scene& getScene();
-
-} // namespace Renderer
+    void onReset() override;
+};

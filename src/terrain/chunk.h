@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "block.h"
 #include "scene/scene.h"
 #include "structure/structure.h"
+#include "util/math.h"
 
 #include <array>
 #include <atomic>
@@ -86,7 +87,7 @@ inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 
-static_assert(chunkSizeXZ > 0 && (chunkSizeXZ & (chunkSizeXZ - 1)) == 0, "chunkSizeXZ must be a power of two");
+static_assert(MathUtil::isPowerOfTwo(chunkSizeXZ), "chunkSizeXZ must be a power of two");
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
