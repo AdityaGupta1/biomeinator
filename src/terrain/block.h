@@ -59,14 +59,14 @@ enum class BlockType : uint8_t
     AIR,
     WATER,
     SOLID,
-    TRANSPARENT_CUTOUT
+    TRANSPARENT_CUTOUT,
 };
 
 enum class BlockShape : uint8_t
 {
     CUBE,
     X_SHAPED,
-    LIQUID
+    LIQUID,
 };
 
 struct BlockUvs

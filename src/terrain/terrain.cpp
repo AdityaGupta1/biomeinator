@@ -269,7 +269,7 @@ void update(ToFreeList& toFreeList)
                         if (inCurrentCreateBlasDistance)
                         {
                             chunk->setIsMarkedForDestruction(false);
-                            chunk->setInstanceVisible(inCurrentRenderDistance);
+                            chunk->setInstancesVisible(inCurrentRenderDistance);
 
                             if (chunkState == ChunkState::NEEDS_GEOMETRY)
                             {
@@ -279,7 +279,7 @@ void update(ToFreeList& toFreeList)
                         }
                         else if (inLastCreateBlasDistance)
                         {
-                            chunk->setInstanceVisible(false);
+                            chunk->setInstancesVisible(false);
 
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {

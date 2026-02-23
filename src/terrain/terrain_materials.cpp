@@ -31,8 +31,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace TerrainMaterials
 {
 
-static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;
-
 static uint32_t loadTexture(Scene* scene, const std::filesystem::path& path);
 
 static void createMaterials(Scene* scene);
@@ -67,6 +65,8 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
     return scene->addTexture(std::move(textureData), static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 }
 
+static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;
+
 #define MATERIAL_IDX(material) materialIdxs[static_cast<size_t>(material)]
 
 static void createMaterials(Scene* scene)
@@ -96,7 +96,7 @@ static void createMaterials(Scene* scene)
 
     {
         Material waterMaterial{};
-        waterMaterial.baseColor = { 29.f / 255.f, 162.f / 255.f, 216.f / 255.f };
+        waterMaterial.baseColor = { 29.f / 255.f, 162.f / 255.f, 216.f / 255.f }; // TODO: replace with volume absorption
         waterMaterial.setHasDiffuse(false);
         waterMaterial.setHasGlossyTransmission(true);
         waterMaterial.ior = 1.33f;

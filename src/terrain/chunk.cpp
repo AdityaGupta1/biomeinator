@@ -521,13 +521,13 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 
             }
             if (neighborBlockType == BlockType::SOLID || neighborBlockType == BlockType::TRANSPARENT_CUTOUT)
             {
-                return faceIdx == 4;
+                return faceIdx == 4; // top
             }
             return true;
         }
     }
 
-    ASSERT(false);
+    ASSERT(false, "shouldGenerateFace() reached end of function");
     return false;
 }
 
@@ -574,11 +574,7 @@ void Chunk::setInstances(Instance* terrain, Instance* water)
 {
     this->terrainInstance = terrain;
     this->waterInstance = water;
-    this->terrainInstance->setVisible(this->isInstanceVisible);
-    if (this->waterInstance != nullptr)
-    {
-        this->waterInstance->setVisible(this->isInstanceVisible);
-    }
+    this->setInstancesVisible(this->areInstancesVisible);
 }
 
 void Chunk::createInstances()
@@ -645,7 +641,6 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
-                        continue;
                     }
                     else if (blockData.shape == BlockShape::LIQUID)
                     {
@@ -654,7 +649,7 @@ void Chunk::createInstances()
                             const ivec3 neighborOffset = faceOffsets[faceIdx];
                             const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                            if (!shouldGenerateFace(ivec3(blockPos_CS), blockData.type, neighborPos_CS, faceIdx))
+                            if (!shouldGenerateFace(blockPos_CS, blockData.type, neighborPos_CS, faceIdx))
                             {
                                 continue;
                             }
@@ -665,10 +660,13 @@ void Chunk::createInstances()
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             for (uint i = 0; i < 4; ++i)
                             {
-                                const ivec3 vert = thisFaceVertPositions[i];
-                                const vec3 vertPos_CS = vec3(blockPos_CS) + vec3(vert.x, vert.y * (7.f / 8.f), vert.z);
+                                const ivec3 faceVertPos = thisFaceVertPositions[i];
+                                const vec3 vertPos_CS =
+                                    vec3(blockPos_CS) + vec3(faceVertPos.x, faceVertPos.y * (7.f / 8.f), faceVertPos.z);
+
                                 const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier;
+                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier; // TODO: fix these for lava probably
+
                                 waterVerts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
                             }
 
@@ -679,7 +677,6 @@ void Chunk::createInstances()
                             waterIdxs.emplace_back(baseVertIdx + 2u);
                             waterIdxs.emplace_back(baseVertIdx + 3u);
                         }
-                        continue;
                     }
                     else // if (blockData.shape == BlockShape::CUBE)
                     {
@@ -818,12 +815,12 @@ void Chunk::setIsMarkedForDestruction(bool marked)
 
 bool Chunk::getIsInstanceVisible() const
 {
-    return this->isInstanceVisible;
+    return this->areInstancesVisible;
 }
 
-void Chunk::setInstanceVisible(bool visible)
+void Chunk::setInstancesVisible(bool visible)
 {
-    this->isInstanceVisible = visible;
+    this->areInstancesVisible = visible;
     if (this->terrainInstance != nullptr)
     {
         this->terrainInstance->setVisible(visible);
