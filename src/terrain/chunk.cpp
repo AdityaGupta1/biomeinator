@@ -681,7 +681,7 @@ void Chunk::createInstance()
 
     instance->finalizeGeometry();
 
-    instance->setMaterialIdx(TerrainMaterials::getDefaultMaterialIdx());
+    instance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
 
     instance->addAreaLights(emissiveTriangleIdxs);
 

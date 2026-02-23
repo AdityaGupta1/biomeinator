@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace TerrainMaterials
 {
 
-static uint32_t defaultMaterialIdx = MATERIAL_IDX_INVALID;
+static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;
 
 static uint32_t loadTexture(Scene* scene, const std::filesystem::path& path);
 
@@ -67,6 +67,8 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
     return scene->addTexture(std::move(textureData), static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 }
 
+#define MATERIAL_IDX(material) materialIdxs[static_cast<size_t>(material)]
+
 static void createMaterials(Scene* scene)
 {
     ToFreeList toFreeList{};
@@ -83,20 +85,30 @@ static void createMaterials(Scene* scene)
         return;
     }
 
-    Material material{};
-    material.emissiveStrength = 3.0f;
-    material.baseColorTextureId = diffuseTextureId;
-    material.emissiveColorTextureId = emissionTextureId;
-    material.setHasDiffuse(true);
+    {
+        Material defaultMaterial{};
+        defaultMaterial.emissiveStrength = 3.0f;
+        defaultMaterial.baseColorTextureId = diffuseTextureId;
+        defaultMaterial.emissiveColorTextureId = emissionTextureId;
+        defaultMaterial.setHasDiffuse(true);
+        MATERIAL_IDX(TerrainMaterial::DEFAULT) = scene->addMaterial(toFreeList, &defaultMaterial);
+    }
 
-    defaultMaterialIdx = scene->addMaterial(toFreeList, &material);
+    {
+        Material waterMaterial{};
+        waterMaterial.baseColor = { 29.f / 255.f, 162.f / 255.f, 216.f / 255.f };
+        waterMaterial.setHasDiffuse(false);
+        waterMaterial.setHasGlossyTransmission(true);
+        waterMaterial.ior = 1.33f;
+        MATERIAL_IDX(TerrainMaterial::WATER) = scene->addMaterial(toFreeList, &waterMaterial);
+    }
 
     toFreeList.freeAll();
 }
 
-uint32_t getDefaultMaterialIdx()
+uint32_t getMaterialIdx(TerrainMaterial terrainMaterial)
 {
-    return defaultMaterialIdx;
+    return MATERIAL_IDX(terrainMaterial);
 }
 
 } // namespace TerrainMaterials
