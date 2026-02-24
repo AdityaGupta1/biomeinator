@@ -653,7 +653,7 @@ void Chunk::createInstances()
                         const bool isWater = (block == Block::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
-                        const float yScale = isLiquid ? (7.f / 8.f) : 1.f;
+                        const float topYSubtract = isLiquid ? (1.f / 8.f) : 0.f;
 
                         for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                         {
@@ -671,8 +671,8 @@ void Chunk::createInstances()
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             for (uint i = 0; i < 4; ++i)
                             {
-                                const ivec3 faceVertPos = thisFaceVertPositions[i];
-                                const vec3 vertPos_CS = vec3(blockPos_CS) + vec3(faceVertPos.x, faceVertPos.y * yScale, faceVertPos.z);
+                                vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
+                                vertPos_CS.y -= topYSubtract;
 
                                 const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                                 const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier;
