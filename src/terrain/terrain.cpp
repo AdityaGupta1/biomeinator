@@ -315,9 +315,9 @@ void update(ToFreeList& toFreeList)
         Chunk* chunk = chunksToGenerateGeometry.front();
         chunksToGenerateGeometry.pop_front();
 
-        Instance* terrainInst = scene->requestNewInstance(toFreeList);
-        Instance* waterInst = scene->requestNewInstance(toFreeList);
-        chunk->setInstances(terrainInst, waterInst);
+        Instance* terrainInstance = scene->requestNewInstance(toFreeList);
+        Instance* waterInstance = scene->requestNewInstance(toFreeList);
+        chunk->setInstances(terrainInstance, waterInstance);
         tasksToEnqueue.push_back({ task_createInstances, chunk });
     }
 
