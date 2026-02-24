@@ -744,6 +744,16 @@ void Chunk::destroyInstances(ToFreeList& toFreeList)
     this->setIsMarkedForDestruction(false);
 }
 
+void Chunk::cleanUnusedInstances(ToFreeList& toFreeList)
+{
+    // if the geometry was never finalized, that means the instance has no verts
+    if (this->waterInstance != nullptr && !this->waterInstance->getIsGeometryFinalized())
+    {
+        toFreeList.pushInstance(this->waterInstance);
+        this->waterInstance = nullptr;
+    }
+}
+
 Instance* Chunk::getTerrainInstance() const
 {
     return this->terrainInstance;

@@ -154,6 +154,7 @@ public:
     void setInstances(Instance* terrainInstance, Instance* waterInstance);
     void createInstances();
     void destroyInstances(ToFreeList& toFreeList);
+    void cleanUnusedInstances(ToFreeList& toFreeList);
     Instance* getTerrainInstance() const;
     Instance* getWaterInstance() const;
 
