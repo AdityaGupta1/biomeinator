@@ -803,7 +803,10 @@ void Chunk::setIsMarkedForDestruction(bool marked)
 void Chunk::setInstancesVisible(bool visible)
 {
     this->areInstancesVisible = visible;
-    this->terrainInstance->setVisible(visible);
+    if (this->terrainInstance != nullptr) // this check is needed as this function could be called before terrainInstance is set
+    {
+        this->terrainInstance->setVisible(visible);
+    }
     if (this->waterInstance != nullptr)
     {
         this->waterInstance->setVisible(visible);
