@@ -813,11 +813,6 @@ void Chunk::setIsMarkedForDestruction(bool marked)
     this->isMarkedForDestruction.store(marked, std::memory_order_release);
 }
 
-bool Chunk::getIsInstanceVisible() const
-{
-    return this->areInstancesVisible;
-}
-
 void Chunk::setInstancesVisible(bool visible)
 {
     this->areInstancesVisible = visible;

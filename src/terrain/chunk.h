@@ -164,7 +164,6 @@ public:
     bool getIsMarkedForDestruction();
     void setIsMarkedForDestruction(bool marked = true);
 
-    bool getIsInstanceVisible() const;
     void setInstancesVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
