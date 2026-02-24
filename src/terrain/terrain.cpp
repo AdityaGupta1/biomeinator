@@ -69,9 +69,9 @@ static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMem
     chunk->generateSegments(threadMemoryAlloc);
 }
 
-static void task_createInstance(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->createInstance();
+    chunk->createInstances();
 }
 
 static ThreadPool threadPool;
@@ -269,7 +269,7 @@ void update(ToFreeList& toFreeList)
                         if (inCurrentCreateBlasDistance)
                         {
                             chunk->setIsMarkedForDestruction(false);
-                            chunk->setInstanceVisible(inCurrentRenderDistance);
+                            chunk->setInstancesVisible(inCurrentRenderDistance);
 
                             if (chunkState == ChunkState::NEEDS_GEOMETRY)
                             {
@@ -279,7 +279,7 @@ void update(ToFreeList& toFreeList)
                         }
                         else if (inLastCreateBlasDistance)
                         {
-                            chunk->setInstanceVisible(false);
+                            chunk->setInstancesVisible(false);
 
                             if (chunkState == ChunkState::GENERATING_GEOMETRY)
                             {
@@ -315,9 +315,10 @@ void update(ToFreeList& toFreeList)
         Chunk* chunk = chunksToGenerateGeometry.front();
         chunksToGenerateGeometry.pop_front();
 
-        Instance* instance = scene->requestNewInstance(toFreeList);
-        chunk->setInstance(instance);
-        tasksToEnqueue.push_back({ task_createInstance, chunk });
+        Instance* terrainInstance = scene->requestNewInstance(toFreeList);
+        Instance* waterInstance = scene->requestNewInstance(toFreeList);
+        chunk->setInstances(terrainInstance, waterInstance);
+        tasksToEnqueue.push_back({ task_createInstances, chunk });
     }
 
     if (!tasksToEnqueue.empty())
@@ -352,8 +353,16 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToCreateBlasNow)
     {
-        ASSERT(chunk->getInstance()->getIsGeometryFinalized());
-        scene->markInstanceReadyForBlasBuild(chunk->getInstance());
+        ASSERT(chunk->getTerrainInstance()->getIsGeometryFinalized());
+        scene->markInstanceReadyForBlasBuild(chunk->getTerrainInstance());
+
+        chunk->cleanUnusedInstances(toFreeList);
+
+        Instance* waterInstance = chunk->getWaterInstance();
+        if (waterInstance != nullptr)
+        {
+            scene->markInstanceReadyForBlasBuild(waterInstance);
+        }
     }
 
     std::vector<Chunk*> chunksToDestroyNow;
@@ -364,7 +373,7 @@ void update(ToFreeList& toFreeList)
     }
     for (Chunk* chunk : chunksToDestroyNow)
     {
-        chunk->destroyInstance(toFreeList);
+        chunk->destroyInstances(toFreeList);
     }
 }
 

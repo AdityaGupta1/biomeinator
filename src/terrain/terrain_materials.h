@@ -22,11 +22,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 class Scene;
 
+enum class TerrainMaterial : uint8_t
+{
+	DEFAULT,
+	WATER,
+
+	COUNT
+};
+
 namespace TerrainMaterials
 {
 
 void init(Scene* scene);
 
-uint32_t getDefaultMaterialIdx();
+uint32_t getMaterialIdx(TerrainMaterial terrainMaterial);
 
 } // namespace TerrainMaterials

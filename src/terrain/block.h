@@ -26,6 +26,9 @@ using BlockId = uint16_t;
 enum class Block : BlockId
 {
     AIR = 0,
+
+    WATER,
+
     BEDROCK,
     STONE,
     LAMP,
@@ -54,14 +57,16 @@ enum class Block : BlockId
 enum class BlockType : uint8_t
 {
     AIR,
+    WATER,
     SOLID,
-    TRANSPARENT_CUTOUT
+    TRANSPARENT_CUTOUT,
 };
 
 enum class BlockShape : uint8_t
 {
     CUBE,
-    X_SHAPED
+    X_SHAPED,
+    LIQUID,
 };
 
 struct BlockUvs

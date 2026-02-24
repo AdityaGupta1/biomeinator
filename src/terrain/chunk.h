@@ -123,9 +123,10 @@ private:
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
-    bool isInstanceVisible{ false };
+    bool areInstancesVisible{ false };
 
-    Instance* instance{ nullptr };
+    Instance* terrainInstance{ nullptr };
+    Instance* waterInstance{ nullptr };
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
@@ -150,10 +151,12 @@ public:
     void fillStructuresAndDecorators();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
-    void setInstance(Instance* instance);
-    void createInstance();
-    void destroyInstance(ToFreeList& toFreeList);
-    Instance* getInstance() const;
+    void setInstances(Instance* terrainInstance, Instance* waterInstance);
+    void createInstances();
+    void destroyInstances(ToFreeList& toFreeList);
+    void cleanUnusedInstances(ToFreeList& toFreeList);
+    Instance* getTerrainInstance() const;
+    Instance* getWaterInstance() const;
 
     ChunkState getState() const;
     void setState(ChunkState newState);
@@ -162,8 +165,7 @@ public:
     bool getIsMarkedForDestruction();
     void setIsMarkedForDestruction(bool marked = true);
 
-    bool getIsInstanceVisible() const;
-    void setInstanceVisible(bool visible);
+    void setInstancesVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
 
