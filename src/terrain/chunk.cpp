@@ -647,8 +647,14 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
                     }
-                    else if (blockData.shape == BlockShape::LIQUID)
+                    else // BlockShape::LIQUID or BlockShape::CUBE
                     {
+                        const bool isLiquid = blockData.shape == BlockShape::LIQUID;
+                        const bool isWater = (block == Block::WATER);
+                        std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
+                        std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
+                        const float yScale = isLiquid ? (7.f / 8.f) : 1.f;
+
                         for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                         {
                             const ivec3 neighborOffset = faceOffsets[faceIdx];
@@ -659,64 +665,29 @@ void Chunk::createInstances()
                                 continue;
                             }
 
-                            const uint baseVertIdx = static_cast<uint>(waterVerts.size());
+                            const uint baseVertIdx = static_cast<uint>(verts.size());
 
                             const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             for (uint i = 0; i < 4; ++i)
                             {
                                 const ivec3 faceVertPos = thisFaceVertPositions[i];
-                                const vec3 vertPos_CS =
-                                    vec3(blockPos_CS) + vec3(faceVertPos.x, faceVertPos.y * (7.f / 8.f), faceVertPos.z);
+                                const vec3 vertPos_CS = vec3(blockPos_CS) + vec3(faceVertPos.x, faceVertPos.y * yScale, faceVertPos.z);
 
                                 const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier; // TODO: fix these for lava probably
+                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier;
 
-                                waterVerts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
+                                verts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
                             }
 
-                            waterIdxs.emplace_back(baseVertIdx + 0u);
-                            waterIdxs.emplace_back(baseVertIdx + 1u);
-                            waterIdxs.emplace_back(baseVertIdx + 2u);
-                            waterIdxs.emplace_back(baseVertIdx + 0u);
-                            waterIdxs.emplace_back(baseVertIdx + 2u);
-                            waterIdxs.emplace_back(baseVertIdx + 3u);
-                        }
-                    }
-                    else // if (blockData.shape == BlockShape::CUBE)
-                    {
-                        for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
-                        {
-                            const ivec3 neighborOffset = faceOffsets[faceIdx];
-                            const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+                            const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
 
-                            if (!shouldGenerateFace(blockPos_CS, blockData.type, neighborPos_CS, faceIdx))
-                            {
-                                continue;
-                            }
-
-                            const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
-
-                            const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
-                            const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
-                            for (uint i = 0; i < 4; ++i)
-                            {
-                                const vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-
-                                const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                                const vec2 uv = (vec2(baseTexCoords + uvOffsets[i])) * uvMultiplier;
-
-                                terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
-                            }
-
-                            const uint32_t triangleIdx = static_cast<uint32_t>(terrainIdxs.size() / 3u);
-
-                            terrainIdxs.emplace_back(baseVertIdx + 0u);
-                            terrainIdxs.emplace_back(baseVertIdx + 1u);
-                            terrainIdxs.emplace_back(baseVertIdx + 2u);
-                            terrainIdxs.emplace_back(baseVertIdx + 0u);
-                            terrainIdxs.emplace_back(baseVertIdx + 2u);
-                            terrainIdxs.emplace_back(baseVertIdx + 3u);
+                            idxs.emplace_back(baseVertIdx + 0u);
+                            idxs.emplace_back(baseVertIdx + 1u);
+                            idxs.emplace_back(baseVertIdx + 2u);
+                            idxs.emplace_back(baseVertIdx + 0u);
+                            idxs.emplace_back(baseVertIdx + 2u);
+                            idxs.emplace_back(baseVertIdx + 3u);
 
                             if (blockData.emitsLight)
                             {
