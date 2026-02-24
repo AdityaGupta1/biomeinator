@@ -581,9 +581,9 @@ void Chunk::createInstances()
 {
     std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
     std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
+    std::vector<uint32_t> terrainEmissiveTriangleIdxs;
     std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
-    std::vector<uint32_t> emissiveTriangleIdxs;
 
     constexpr size_t numTerrainVertsToReserve = 1 << 15;
     terrainVerts.reserve(numTerrainVertsToReserve);
@@ -593,7 +593,7 @@ void Chunk::createInstances()
     waterVerts.reserve(numWaterVertsToReserve);
     waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
 
-    emissiveTriangleIdxs.reserve(512);
+    terrainEmissiveTriangleIdxs.reserve(512);
 
     RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
 
@@ -691,8 +691,9 @@ void Chunk::createInstances()
 
                             if (blockData.emitsLight)
                             {
-                                emissiveTriangleIdxs.emplace_back(triangleIdx);
-                                emissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
+                                // water does not emit light so it will never reach this
+                                terrainEmissiveTriangleIdxs.emplace_back(triangleIdx);
+                                terrainEmissiveTriangleIdxs.emplace_back(triangleIdx + 1u);
                             }
                         }
                     }
@@ -710,7 +711,7 @@ void Chunk::createInstances()
     terrainInstance->setTransformOffset(transformOffset);
     terrainInstance->finalizeGeometry();
     terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
-    terrainInstance->addAreaLights(emissiveTriangleIdxs);
+    terrainInstance->addAreaLights(terrainEmissiveTriangleIdxs);
 
     if (!waterVerts.empty())
     {
@@ -792,10 +793,7 @@ void Chunk::setIsMarkedForDestruction(bool marked)
 void Chunk::setInstancesVisible(bool visible)
 {
     this->areInstancesVisible = visible;
-    if (this->terrainInstance != nullptr)
-    {
-        this->terrainInstance->setVisible(visible);
-    }
+    this->terrainInstance->setVisible(visible);
     if (this->waterInstance != nullptr)
     {
         this->waterInstance->setVisible(visible);
