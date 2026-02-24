@@ -151,7 +151,7 @@ public:
     void fillStructuresAndDecorators();
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
-    void setInstances(Instance* terrain, Instance* water);
+    void setInstances(Instance* terrainInstance, Instance* waterInstance);
     void createInstances();
     void destroyInstances(ToFreeList& toFreeList);
     Instance* getTerrainInstance() const;

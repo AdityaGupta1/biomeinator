@@ -570,10 +570,10 @@ inline constexpr uvec2 uvOffsets[4] = {
 };
 inline constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
-void Chunk::setInstances(Instance* terrain, Instance* water)
+void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
 {
-    this->terrainInstance = terrain;
-    this->waterInstance = water;
+    this->terrainInstance = terrainInstance;
+    this->waterInstance = waterInstance;
     this->setInstancesVisible(this->areInstancesVisible);
 }
 
@@ -585,9 +585,14 @@ void Chunk::createInstances()
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
     std::vector<uint32_t> emissiveTriangleIdxs;
 
-    constexpr size_t numVertsToReserve = 1 << 15;
-    terrainVerts.reserve(numVertsToReserve);
-    terrainIdxs.reserve(numVertsToReserve * 6 / 4);
+    constexpr size_t numTerrainVertsToReserve = 1 << 15;
+    terrainVerts.reserve(numTerrainVertsToReserve);
+    terrainIdxs.reserve(numTerrainVertsToReserve * 6 / 4);
+
+    constexpr size_t numWaterVertsToReserve = 1 << 7;
+    waterVerts.reserve(numWaterVertsToReserve);
+    waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
+
     emissiveTriangleIdxs.reserve(512);
 
     RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
