@@ -98,6 +98,7 @@ static void createMaterials(Scene* scene)
         Material waterMaterial{};
         waterMaterial.baseColor = { 29.f / 255.f, 162.f / 255.f, 216.f / 255.f }; // TODO: replace with volume absorption
         waterMaterial.setHasDiffuse(false);
+        waterMaterial.setHasGlossyReflection(true);
         waterMaterial.setHasGlossyTransmission(true);
         waterMaterial.ior = 1.33f;
         MATERIAL_IDX(TerrainMaterial::WATER) = scene->addMaterial(toFreeList, &waterMaterial);
