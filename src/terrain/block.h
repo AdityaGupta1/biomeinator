@@ -28,6 +28,7 @@ enum class Block : BlockId
     AIR = 0,
 
     WATER,
+    WATER_TOP,
 
     BEDROCK,
     STONE,
@@ -66,7 +67,7 @@ enum class BlockShape : uint8_t
 {
     CUBE,
     X_SHAPED,
-    LIQUID,
+    LIQUID_TOP,
 };
 
 struct BlockUvs

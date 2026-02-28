@@ -464,7 +464,7 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
     return { v.x, v.y, v.z };
 }
 
-bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 neighborPos_CS, int faceIdx)
+bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, ivec3 neighborPos_CS, int faceIdx)
 {
     ASSERT(thisBlockType != BlockType::AIR); // AIR should be skipped before this function is even called
 
@@ -515,15 +515,7 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, ivec3 
         }
         case BlockType::WATER:
         {
-            if (neighborBlockType == BlockType::WATER)
-            {
-                return false;
-            }
-            if (neighborBlockType == BlockType::SOLID || neighborBlockType == BlockType::TRANSPARENT_CUTOUT)
-            {
-                return faceIdx == 4; // top
-            }
-            return true;
+            return (thisBlockShape == BlockShape::LIQUID_TOP && faceIdx == 4) || (neighborBlockType == BlockType::AIR);
         }
     }
 
@@ -647,10 +639,10 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
                     }
-                    else // BlockShape::LIQUID or BlockShape::CUBE
+                    else // BlockShape::LIQUID_TOP or BlockShape::CUBE
                     {
-                        const bool isLiquid = blockData.shape == BlockShape::LIQUID;
-                        const bool isWater = (block == Block::WATER);
+                        const bool isLiquid = (blockData.shape == BlockShape::LIQUID_TOP);
+                        const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
                         const float topYSubtract = isLiquid ? (1.f / 8.f) : 0.f;
@@ -660,7 +652,7 @@ void Chunk::createInstances()
                             const ivec3 neighborOffset = faceOffsets[faceIdx];
                             const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
-                            if (!shouldGenerateFace(blockPos_CS, blockData.type, neighborPos_CS, faceIdx))
+                            if (!shouldGenerateFace(blockPos_CS, blockData.type, blockData.shape, neighborPos_CS, faceIdx))
                             {
                                 continue;
                             }

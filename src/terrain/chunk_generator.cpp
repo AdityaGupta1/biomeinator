@@ -276,7 +276,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
                 else if (y <= seaLevel)
                 {
-                    block = Block::WATER;
+                    block = (y == seaLevel) ? Block::WATER_TOP : Block::WATER;
                 }
 
                 this->blocks[blockIdx] = block;

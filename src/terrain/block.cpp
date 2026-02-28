@@ -47,7 +47,8 @@ void init()
 {
     BLOCK_DATA_BY_NAME(AIR) = { .type = BlockType::AIR };
 
-    BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::LIQUID };
+    BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::CUBE };
+    BLOCK_DATA_BY_NAME(WATER_TOP) = { .type = BlockType::WATER, .shape = BlockShape::LIQUID_TOP };
 
     BLOCK_DATA_BY_NAME(BEDROCK) = { BlockUvs(uvec2(5, 0)) };
     BLOCK_DATA_BY_NAME(STONE) = { BlockUvs(uvec2(0, 0)) };

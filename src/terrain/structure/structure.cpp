@@ -40,7 +40,7 @@ static inline bool isInChunk(ivec3 pos_CS)
 static inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
 {
     Block& block = blocks[blockIdx];
-    if (block == Block::AIR || block == Block::WATER)
+    if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
     {
         block = newBlock;
     }
