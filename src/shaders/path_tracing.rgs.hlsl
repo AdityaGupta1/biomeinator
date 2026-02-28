@@ -111,7 +111,7 @@ void pathTraceRay(inout Payload payload)
 
         if (bool(renderParams.refractionIndirectPassthrough) && hasEncounteredNonDeltaSurface && surfMaterial.hasGlossyTransmission())
         {
-            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv);
+            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfNor_WS, ray.Direction, true /*faceforwardNormal*/);
             ray.TMin = 0.f;
             ray.TMax = RAY_DEFAULT_TMAX;

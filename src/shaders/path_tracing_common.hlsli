@@ -161,7 +161,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 
     if (bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission())
     {
-        payload.pathWeight *= getMaterialBaseColor(material, uv);
+        payload.pathWeight *= getMaterialBaseColor(material, uv).rgb;
         IgnoreHit();
         return;
     }
