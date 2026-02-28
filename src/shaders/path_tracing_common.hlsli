@@ -153,23 +153,28 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
 
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+
     const Material material = materials[materialIdx];
+
+    if (bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission())
+    {
+        payload.pathWeight *= getMaterialBaseColor(material, uv);
+        IgnoreHit();
+        return;
+    }
+
     if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
     {
         return;
     }
 
-    const float2 bary2 = attribs.barycentrics;
-    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-
-    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-
     Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-    const float alpha = tex.SampleLevel(texSampler, uv, 0).a;
-    if (alpha < 0.999f)
+    if (tex.SampleLevel(texSampler, uv, 0).a < 0.999f)
     {
         IgnoreHit();
-        return;
     }
 }
 

@@ -1315,18 +1315,18 @@ static void imguiEndFrame(double deltaTime)
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
-        didPathTracingSettingsChange |=
-            SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
-        //const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
+        didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+
+        SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("Materials");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
-        const bool didAntialiasingChange =
-            SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+        const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
         needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
         didPathTracingSettingsChange |= didAntialiasingChange;
-        const AntialiasingMode antialiasingMode =
-            static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+        const AntialiasingMode antialiasingMode = static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
 
         if (antialiasingMode == AntialiasingMode::ACCUMULATE)
         {
@@ -1575,6 +1575,7 @@ void render()
     const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
     renderParams->doPathSplitting = doPathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
+    renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

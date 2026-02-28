@@ -66,6 +66,7 @@ void pathTraceRay(inout Payload payload)
 
     bool previousWasSpecular = false;
     bool hasEncounteredNonDeltaSurface = false;
+    float prevBsdfPdf = 0.f;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -108,6 +109,29 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
+        if (bool(renderParams.refractionIndirectPassthrough) && hasEncounteredNonDeltaSurface && surfMaterial.hasGlossyTransmission())
+        {
+            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv);
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            ray.TMin = 0.f;
+            ray.TMax = RAY_DEFAULT_TMAX;
+            payload.flags = 0;
+            TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+            if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+            {
+                if (doMis)
+                {
+                    const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS);
+                    payload.pathWeight *= prevBsdfPdf / (prevBsdfPdf + bsdfSampleDomeLightPdf);
+                }
+                payload.pathColor += payload.pathWeight * getDomeLightColor(ray.Direction);
+                return;
+            }
+            if (payload.materialIdx == MATERIAL_IDX_INVALID) { return; }
+            continue;
+        }
+
         // russian roulette
         if (pathDepth >= 2)
         {
@@ -145,11 +169,11 @@ void pathTraceRay(inout Payload payload)
                 const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                 bool isBsdfSampleUnused;
                 const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, bool(renderParams.refractionIndirectPassthrough)); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
             }
             else
             {
-                lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+                lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, bool(renderParams.refractionIndirectPassthrough), payload.rng);
             }
 
             if (lightSample.didHitLight)
@@ -196,7 +220,7 @@ void pathTraceRay(inout Payload payload)
 
             if (sceneParams.voxelMode == 1)
             {
-                DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rng);
+                DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, bool(renderParams.refractionIndirectPassthrough), payload.rng);
                 if (domeLightSample.didReachDomeLight)
                 {
                     // no need to consider area light pdf because area light sampling can't hit dome light
@@ -279,6 +303,7 @@ void pathTraceRay(inout Payload payload)
             // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
         }
 
+        prevBsdfPdf = surfBsdfSample.pdf;
         previousWasSpecular = surfBsdfSample.wasSpecular;
     }
 }

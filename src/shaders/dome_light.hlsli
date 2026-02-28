@@ -83,7 +83,7 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGen
     return wi_WS;
 }
 
-DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, inout RandomNumberGenerator rng)
+DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS, const bool useRefractionPassthrough, inout RandomNumberGenerator rng)
 {
     DomeLightSample result;
 
@@ -103,15 +103,15 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
     ray.TMax = RAY_DEFAULT_TMAX;
 
     Payload domeLightPayload;
-    domeLightPayload.flags = 0;
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
+    domeLightPayload.flags = useRefractionPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     domeLightPayload.pathColor = float3(0.f, 0.f, 0.f);
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
-    result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
+    result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight : float3(0.f, 0.f, 0.f);
     result.pdf = pdf;
     return result;
 }
