@@ -66,9 +66,9 @@ void pathTraceRay(inout Payload payload)
         return;
     }
 
-    bool previousWasSpecular = false;
+    bool prevBounceWasSpecular = false;
     bool hasEncounteredNonDeltaSurface = false;
-    float prevBsdfPdf = 0.f;
+    float prevBounceBsdfPdf = 0.f;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -127,7 +127,7 @@ void pathTraceRay(inout Payload payload)
         {
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfNor_WS, ray.Direction, true /*faceforwardNormal*/);
-            // prevBsdfPdf and previousWasSpecular are intentionally preserved from the last real BSDF sample
+            // prevBounceBsdfPdf and prevBounceWasSpecular are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
         {
@@ -240,8 +240,8 @@ void pathTraceRay(inout Payload payload)
 
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
-            prevBsdfPdf = surfBsdfSample.pdf;
-            previousWasSpecular = surfBsdfSample.wasSpecular;
+            prevBounceBsdfPdf = surfBsdfSample.pdf;
+            prevBounceWasSpecular = surfBsdfSample.wasSpecular;
         } // !isPassthrough
 
         ray.TMin = 0.f;
@@ -255,7 +255,7 @@ void pathTraceRay(inout Payload payload)
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
-                const float balanceHeuristicWeight = prevBsdfPdf / (prevBsdfPdf + bsdfSampleDomeLightPdf);
+                const float balanceHeuristicWeight = prevBounceBsdfPdf / (prevBounceBsdfPdf + bsdfSampleDomeLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
@@ -267,7 +267,7 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        if (pathDepth == 0 && previousWasSpecular) // TODO: update to support multiple specular bounces?
+        if (pathDepth == 0 && prevBounceWasSpecular && pathSplitIdx == 0) // TODO: update to support multiple specular bounces?
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
@@ -282,11 +282,11 @@ void pathTraceRay(inout Payload payload)
 
             const Material hitMaterial = getMaterialFromPayload(payload);
 
-            if (hitMaterial.hasEmission() && !previousWasSpecular)
+            if (hitMaterial.hasEmission() && !prevBounceWasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
 
-                const float balanceHeuristicWeight = prevBsdfPdf / (prevBsdfPdf + bsdfSampleLightPdf);
+                const float balanceHeuristicWeight = prevBounceBsdfPdf / (prevBounceBsdfPdf + bsdfSampleLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
