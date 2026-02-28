@@ -152,7 +152,8 @@ void pathTraceRay(inout Payload payload)
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
 
-        const uint coherenceHint = (pathDepth == 0 ? (1 << 2) : 0) |
+        const uint coherenceHint =
+            (pathDepth == 0 ? (1 << 2) : 0) |
             (surfMaterial.hasGlossyTransmission() ? (1 << 1) : 0) |
             (isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0;
         const uint numCoherenceHintBits = 3;
