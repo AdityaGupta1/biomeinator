@@ -103,8 +103,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS, const float3 surfNor_WS
     ray.TMax = RAY_DEFAULT_TMAX;
 
     Payload domeLightPayload;
-    domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     domeLightPayload.flags = useRefractionPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
+    domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     domeLightPayload.pathColor = float3(0.f, 0.f, 0.f);
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);

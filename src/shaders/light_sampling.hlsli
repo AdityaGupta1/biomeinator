@@ -82,8 +82,8 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     ray.TMax = distance(surfPos_WS, pointOnLight_WS) + 2 * RAY_ORIGIN_OFFSET_EPSILON;
 
     Payload lightPayload;
-    lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     lightPayload.flags = useRefractionPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
+    lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
     if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)

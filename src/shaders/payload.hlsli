@@ -28,8 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 struct Payload
 {
-    float3 pathWeight;
     uint flags;
+    float3 pathWeight;
 
     float3 pathColor;
     uint materialIdx;
