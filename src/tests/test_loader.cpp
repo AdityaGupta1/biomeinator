@@ -1,6 +1,7 @@
 #include "test_loader.h"
 
 #include <fstream>
+#include <iostream>
 #include <json.hpp>
 
 #include <stb_image.h>
@@ -19,7 +20,22 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
         return {};
     }
 
-    const nlohmann::json data = nlohmann::json::parse(content);
+    nlohmann::json data;
+    try
+    {
+        data = nlohmann::json::parse(content);
+    }
+    catch (const nlohmann::json::parse_error& ex)
+    {
+        std::cerr << "JSON parse error in " << jsonPath.string() << ": " << ex.what() << "\n";
+        exit(1);
+    }
+    catch (const nlohmann::json::exception& ex)
+    {
+        std::cerr << "JSON error in " << jsonPath.string() << ": " << ex.what() << "\n";
+        exit(1);
+    }
+
     const std::filesystem::path testsDir = jsonPath.parent_path();
 
     std::vector<TestCase> cases;

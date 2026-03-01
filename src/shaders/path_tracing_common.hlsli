@@ -150,26 +150,36 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
         return;
     }
 
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
-
     const Material material = materials[materialIdx];
-    if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
+    const bool maybeRefractionPassthrough =
+        bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission();
+    const bool maybeAlphaCutout =
+        material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
+
+    if (!maybeRefractionPassthrough && !maybeAlphaCutout)
     {
         return;
     }
 
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-    const float alpha = tex.SampleLevel(texSampler, uv, 0).a;
-    if (alpha < 0.999f)
+    const float4 baseColor = getMaterialBaseColor(material, uv);
+
+    if (maybeRefractionPassthrough)
     {
+        payload.pathWeight *= baseColor.rgb;
         IgnoreHit();
         return;
+    }
+
+    if (maybeAlphaCutout && baseColor.a < 0.999f)
+    {
+        IgnoreHit();
     }
 }
 

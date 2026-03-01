@@ -136,8 +136,8 @@ struct RenderParams
 
     uint doPathSplitting;
     uint antialiasingMode;
+    uint refractionIndirectPassthrough;
     uint pad0;
-    uint pad1;
 };
 
 struct DebugParams

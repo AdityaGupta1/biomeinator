@@ -64,7 +64,11 @@ void pathTraceRay(inout Payload payload)
         return;
     }
 
-    bool previousWasSpecular = false;
+    // data of last "real" bounce (i.e. not passthrough)
+    bool bounceWasSpecular = false;
+    float bounceBsdfPdf = 0.f;
+    float3 surfPos_WS, surfNor_WS;
+
     bool hasEncounteredNonDeltaSurface = false;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
@@ -88,13 +92,12 @@ void pathTraceRay(inout Payload payload)
         }
 
         const float3 wo_WS = -ray.Direction;
-        const float3 surfNor_WS = payload.hitInfo.hitNor_WS;
 
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             if (shouldSplitMaterial(surfMaterial))
             {
-                surfMaterial = getSplitMaterial(surfMaterial, surfNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
+                surfMaterial = getSplitMaterial(surfMaterial, payload.hitInfo.hitNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
             }
             else if (pathSplitIdx == 1)
             {
@@ -108,128 +111,149 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        // russian roulette
-        if (pathDepth >= 2)
+        const bool isDeltaSurface = surfMaterial.isDelta();
+
+        // canPassthrough = has the path encountered a non-delta surface (including this one)
+        // isPassthrough = this intersection has glossy transmission and should be passed through
+        const bool canPassthrough = bool(renderParams.refractionIndirectPassthrough) && (!isDeltaSurface || hasEncounteredNonDeltaSurface);
+        const bool isPassthrough = canPassthrough && surfMaterial.hasGlossyTransmission() && isDeltaSurface;
+
+        // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last
+        // "real" bounce's information. This is important for matching MIS weights with direct light sampling, which
+        // traces only one ray and ignores passthrough surfaces in the anyhit shader.
+        if (!isPassthrough)
         {
-            const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-            if (payload.rng.nextFloat() >= survivalProbability)
-            {
-                return;
-            }
-            payload.pathWeight /= survivalProbability;
+            surfNor_WS = payload.hitInfo.hitNor_WS;
+            surfPos_WS = payload.hitInfo.hitPos_WS;
         }
 
-        const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+        const uint coherenceHint =
+            (pathDepth == 0 ? (1 << 2) : 0) |
+            (isPassthrough ? (1 << 1) : 0) |
+            (!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0;
+        NvReorderThread(coherenceHint, 3 /*numCoherenceHintBits*/);
 
-        const bool isNonDeltaSurface = !surfMaterial.isDelta();
-
-        uint coherenceHint = (isNonDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0;
-        uint numCoherenceHintBits = 1;
-        if (useRis)
+        if (isPassthrough)
         {
-            coherenceHint |= (pathDepth == 0 ? (1 << 1) : 0);
-            ++numCoherenceHintBits;
+            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            // bounceBsdfPdf and bounceWasSpecular are intentionally preserved from the last real BSDF sample
         }
-
-        NvReorderThread(coherenceHint, numCoherenceHintBits);
-
-        if (doMis && surfMaterial.canScatter() && isNonDeltaSurface)
+        else // !isPassthrough
         {
-            // ------------------------------
-            // sample area lights
-            // ------------------------------
-
-            DirectLightingSample lightSample;
-            if (useRis)
+            // russian roulette
+            if (pathDepth >= 2)
             {
-                const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                bool isBsdfSampleUnused;
-                const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
-            }
-            else
-            {
-                lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rng);
+                const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+                if (payload.rng.nextFloat() >= survivalProbability)
+                {
+                    return;
+                }
+                payload.pathWeight /= survivalProbability;
             }
 
-            if (lightSample.didHitLight)
+            if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
-                // no need to consider dome light pdf because dome light sampling can't hit area lights
+                // ------------------------------
+                // sample area lights
+                // ------------------------------
 
-                const float3 bsdfVal = evaluateBsdf(
-                    surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
-
-                float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
-
-                const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                DirectLightingSample lightSample;
                 if (useRis)
                 {
-                    const float W = lightSample.pdfOrW_Y;
-
-                    const AreaLight light = areaLights[lightSample.lightIdx];
-
-                    float3 lightNor_WS;
-                    float lightArea;
-                    getLightNormalAndArea(light, lightNor_WS, lightArea);
-
-                    // TODO: use lightPdfUniform function?
-                    const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                    const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
-
-                    const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
-                    contribution *= W * balanceHeuristicWeight;
+                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
+                    bool isBsdfSampleUnused;
+                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
+                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, canPassthrough); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
                 }
                 else
                 {
-                    const float lightPdf = lightSample.pdfOrW_Y;
-                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
-
-                    contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
+                    lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, canPassthrough, payload.rng);
                 }
 
-                payload.pathColor += contribution;
-            }
-
-            // ------------------------------
-            // sample dome light
-            // ------------------------------
-
-            if (sceneParams.voxelMode == 1)
-            {
-                DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rng);
-                if (domeLightSample.didReachDomeLight)
+                if (lightSample.didHitLight)
                 {
-                    // no need to consider area light pdf because area light sampling can't hit dome light
+                    // no need to consider dome light pdf because dome light sampling can't hit area lights
 
-                    const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+                    const float3 bsdfVal = evaluateBsdf(
+                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
 
-                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
+                    float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
-                    const float domeLightPdf = domeLightSample.pdf;
-                    const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
-                    const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
+                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
+                    if (useRis)
+                    {
+                        const float W = lightSample.pdfOrW_Y;
 
-                    contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
+                        const AreaLight light = areaLights[lightSample.lightIdx];
+
+                        float3 lightNor_WS;
+                        float lightArea;
+                        getLightNormalAndArea(light, lightNor_WS, lightArea);
+
+                        // TODO: use lightPdfUniform function?
+                        const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
+                        const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
+
+                        const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
+                        contribution *= W * balanceHeuristicWeight;
+                    }
+                    else
+                    {
+                        const float lightPdf = lightSample.pdfOrW_Y;
+                        const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
+
+                        contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
+                    }
 
                     payload.pathColor += contribution;
                 }
+
+                // ------------------------------
+                // sample dome light
+                // ------------------------------
+
+                if (sceneParams.voxelMode == 1)
+                {
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, canPassthrough, payload.rng);
+                    if (domeLightSample.didReachDomeLight)
+                    {
+                        // no need to consider area light pdf because area light sampling can't hit dome light
+
+                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+
+                        float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
+
+                        const float domeLightPdf = domeLightSample.pdf;
+                        const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+                        const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
+
+                        contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
+
+                        payload.pathColor += contribution;
+                    }
+                }
             }
-        }
 
-        if (isNonDeltaSurface)
-        {
-            hasEncounteredNonDeltaSurface = true;
-        }
+            if (!isDeltaSurface)
+            {
+                hasEncounteredNonDeltaSurface = true;
+            }
 
-        const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
+            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
-        payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
-        if (!surfBsdfSample.wasSpecular)
-        {
-            payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
-        }
+            payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
+            if (!surfBsdfSample.wasSpecular)
+            {
+                payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
+            }
 
-        setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
+
+            bounceBsdfPdf = surfBsdfSample.pdf;
+            bounceWasSpecular = surfBsdfSample.wasSpecular;
+        } // !isPassthrough
+
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
@@ -241,7 +265,7 @@ void pathTraceRay(inout Payload payload)
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
-                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleDomeLightPdf);
+                const float balanceHeuristicWeight = bounceBsdfPdf / (bounceBsdfPdf + bsdfSampleDomeLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
@@ -253,7 +277,7 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        if (pathDepth == 0 && surfBsdfSample.wasSpecular) // TODO: update to support multiple specular bounces?
+        if (pathDepth == 0 && bounceWasSpecular && pathSplitIdx == 0) // TODO: update to support multiple specular bounces?
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
@@ -268,18 +292,16 @@ void pathTraceRay(inout Payload payload)
 
             const Material hitMaterial = getMaterialFromPayload(payload);
 
-            if (hitMaterial.hasEmission() && !surfBsdfSample.wasSpecular)
+            if (hitMaterial.hasEmission() && !bounceWasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
 
-                const float balanceHeuristicWeight = surfBsdfSample.pdf / (surfBsdfSample.pdf + bsdfSampleLightPdf);
+                const float balanceHeuristicWeight = bounceBsdfPdf / (bounceBsdfPdf + bsdfSampleLightPdf);
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
             // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
         }
-
-        previousWasSpecular = surfBsdfSample.wasSpecular;
     }
 }
 

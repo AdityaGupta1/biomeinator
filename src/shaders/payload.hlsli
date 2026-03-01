@@ -24,11 +24,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
 #define PAYLOAD_FLAG_BACKFACE_HIT (1 << 1)
+#define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
 
 struct Payload
 {
-    float3 pathWeight;
     uint flags;
+    float3 pathWeight;
 
     float3 pathColor;
     uint materialIdx;

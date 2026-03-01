@@ -53,13 +53,13 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-float3 getMaterialBaseColor(const Material material, const float2 uv)
+float4 getMaterialBaseColor(const Material material, const float2 uv)
 {
-    float3 baseColor = material.baseColor;
+    float4 baseColor = float4(material.baseColor, 1.f);
     if (material.baseColorTextureId != TEXTURE_ID_INVALID)
     {
         Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-        baseColor = tex.SampleLevel(texSampler, uv, 0).rgb;
+        baseColor = tex.SampleLevel(texSampler, uv, 0);
     }
     return baseColor;
 }
@@ -114,7 +114,7 @@ float3 evaluateBsdf(
         return 0;
     }
 
-    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv);
+    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv).rgb;
 
     float fresnelReflectance = 0.f;
     if (material.hasGlossyReflection())
@@ -188,7 +188,7 @@ BsdfSample sampleBsdf(
             // e.g. 1.f / 1.5f for going from air to glass
             result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
-            result.bsdfValue = getMaterialBaseColor(material, uv) * oneMinusFresnelReflectance;
+            result.bsdfValue = getMaterialBaseColor(material, uv).rgb * oneMinusFresnelReflectance;
             result.wasSpecular = true;
         }
         else
