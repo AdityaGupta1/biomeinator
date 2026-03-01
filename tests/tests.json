@@ -432,6 +432,19 @@
             ],
             "golden": "refraction_passthrough_mis_distance/golden.png",
             "threshold": 0.002
+        },
+        {
+            "name": "refraction_passthrough_specular_chain",
+            "scene": "refraction_passthrough_specular_chain/refraction_passthrough_specular_chain.gltf",
+            "args": [
+                "--width=540",
+                "--height=675",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12"
+            ],
+            "golden": "refraction_passthrough_specular_chain/golden.png",
+            "threshold": 0.002
         }
     ]
 }
