@@ -250,7 +250,7 @@ static void initStreamline()
     {
         Logger::logError("Could not verify signature of sl.interposer.dll");
         Logger::log("Exiting...");
-        exit(-1);
+        exit(1);
     }
 
     sl::Preferences prefs = {};

@@ -92,7 +92,7 @@ void parseArgs(const int argc, const char* const* argv)
         if (!testOutputPath.ends_with(".png"))
         {
             std::cerr << "--testOutput must be a .png" << std::endl;
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -137,19 +137,19 @@ void parseArgs(const int argc, const char* const* argv)
     if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {
         std::cerr << "Invalid samplingMode option" << std::endl;
-        exit(-1);
+        exit(1);
     }
 
     if (getAsUint("antialiasingMode") >= static_cast<uint32_t>(AntialiasingMode::COUNT))
     {
         std::cerr << "Invalid antialiasingMode option" << std::endl;
-        exit(-1);
+        exit(1);
     }
 
     if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
     {
         std::cerr << "Invalid tonemapping option" << std::endl;
-        exit(-1);
+        exit(1);
     }
 }
 
