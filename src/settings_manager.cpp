@@ -38,41 +38,46 @@ void parseArgs(const int argc, const char* const* argv)
 {
     Options options("Biomeinator", "Real-time path traced voxel engine");
     OptionAdder optionAdder = options.add_options();
-    optionAdder("h,help", "Print this message");
-    optionAdder("width", "Window width", cxxopts::value<uint32_t>()->default_value("1920"));
-    optionAdder("height", "Window height", cxxopts::value<uint32_t>()->default_value("1080"));
-    optionAdder("maxPathDepth", "Maximum path depth", cxxopts::value<uint32_t>()->default_value("12"));
-    optionAdder("scene", "Scene file (*.gltf; *.glb)", cxxopts::value<std::string>()->default_value(""));
-    optionAdder("testOutput", "Test screenshot output path (*.png)", cxxopts::value<std::string>()->default_value(""));
-    optionAdder("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS)", cxxopts::value<uint32_t>()->default_value("2"));
-    optionAdder("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", cxxopts::value<uint32_t>()->default_value("3"));
-    optionAdder("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", cxxopts::value<uint32_t>()->default_value("0"));
-    optionAdder("maxAccumulatedFrames", "Max accumulated frames", cxxopts::value<uint32_t>()->default_value("512"));
-    optionAdder("dlssMode", "DLSS mode", cxxopts::value<uint32_t>()->default_value("2")); // sl::DLSSMode::eBalanced
-    optionAdder("doPathSplitting", "Enable path splitting", cxxopts::value<bool>()->default_value("true"));
-    optionAdder("useVsync", "Enable VSync", cxxopts::value<bool>()->default_value("true"));
-    optionAdder("lockCamera", "Lock camera (disable player input)", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("voxelMode", "Enable voxel mode", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("worldSeed", "World seed", cxxopts::value<uint32_t>()->default_value("1738"));
-    optionAdder("movementSpeed", "Movement speed", cxxopts::value<float>()->default_value("12"));
-    optionAdder("fullscreen", "Start in fullscreen mode", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("useWaitableSwapChain", "Use waitable swap chain", cxxopts::value<bool>()->default_value("true"));
-    optionAdder("showGui", "Show GUI", cxxopts::value<bool>()->default_value("true"));
-    optionAdder("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", cxxopts::value<bool>()->default_value("false"));
 
-    optionAdder("debugView", "Debug view", cxxopts::value<std::string>()->default_value("off"));
-    optionAdder("debugViewScale", "Debug view scale", cxxopts::value<float>()->default_value("1.f"));
-    optionAdder("debugColorChunks", "Color chunks", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("debugBool0", "Debug bool 0", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("debugBool1", "Debug bool 1", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("debugBool2", "Debug bool 2", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("debugBool3", "Debug bool 3", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("debugFloat0", "Debug float 0", cxxopts::value<float>()->default_value("0.f"));
-    optionAdder("debugFloat1", "Debug float 1", cxxopts::value<float>()->default_value("0.f"));
-    optionAdder("debugFloat2", "Debug float 2", cxxopts::value<float>()->default_value("0.f"));
-    optionAdder("debugFloat3", "Debug float 3", cxxopts::value<float>()->default_value("0.f"));
-    optionAdder("gpuValidation", "Enable GPU validation (debug mode only)", cxxopts::value<bool>()->default_value("false"));
-    optionAdder("verboseLogging", "Enable SL verbose logging (debug mode only)", cxxopts::value<bool>()->default_value("false"));
+#define ADD_OPTION(name, desc, type, defaultValue) optionAdder(name, desc, cxxopts::value<type>()->default_value(defaultValue))
+
+    optionAdder("h,help", "Print this message");
+    ADD_OPTION("width", "Window width", uint32_t, "1920");
+    ADD_OPTION("height", "Window height", uint32_t, "1080");
+    ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
+    ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
+    ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
+    ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS)", uint32_t, "2");
+    ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
+    ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", uint32_t, "0");
+    ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
+    ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
+    ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
+    ADD_OPTION("useVsync", "Enable VSync", bool, "true");
+    ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
+    ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
+    ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
+    ADD_OPTION("movementSpeed", "Movement speed", float, "12");
+    ADD_OPTION("fullscreen", "Start in fullscreen mode", bool, "false");
+    ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
+    ADD_OPTION("showGui", "Show GUI", bool, "true");
+    ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "false");
+
+    ADD_OPTION("debugView", "Debug view", std::string, "off");
+    ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
+    ADD_OPTION("debugColorChunks", "Color chunks", bool, "false");
+    ADD_OPTION("debugBool0", "Debug bool 0", bool, "false");
+    ADD_OPTION("debugBool1", "Debug bool 1", bool, "false");
+    ADD_OPTION("debugBool2", "Debug bool 2", bool, "false");
+    ADD_OPTION("debugBool3", "Debug bool 3", bool, "false");
+    ADD_OPTION("debugFloat0", "Debug float 0", float, "0.f");
+    ADD_OPTION("debugFloat1", "Debug float 1", float, "0.f");
+    ADD_OPTION("debugFloat2", "Debug float 2", float, "0.f");
+    ADD_OPTION("debugFloat3", "Debug float 3", float, "0.f");
+    ADD_OPTION("gpuValidation", "Enable GPU validation (debug mode only)", bool, "false");
+    ADD_OPTION("verboseLogging", "Enable SL verbose logging (debug mode only)", bool, "false");
+
+#undef ADD_OPTION
 
     ParseResult parseResult = options.parse(argc, argv);
 
