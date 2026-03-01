@@ -392,6 +392,19 @@
             ],
             "golden": "glass_diamonds/golden_blender_no_tonemap.png",
             "threshold": 0.01
+        },
+        {
+            "name": "refraction_passthrough_direct_lighting",
+            "scene": "refraction_passthrough_direct_lighting/refraction_passthrough_direct_lighting.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12"
+            ],
+            "golden": "refraction_passthrough_direct_lighting/golden.png",
+            "threshold": 0.001
         }
     ]
 }
