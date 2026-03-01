@@ -40,37 +40,28 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
-    float4 color;
+    float3 color, diffuseAlbedo;
     if (bool(renderParams.doPathSplitting))
     {
-        const float4 color0 = pathTracingRawBufferIn[linearPixelIdx * 2];
-        const float4 color1 = pathTracingRawBufferIn[linearPixelIdx * 2 + 1];
-        color = color0 + color1;
+        const uint bufferIdx0 = linearPixelIdx * 2;
+        const uint bufferIdx1 = bufferIdx0 + 1;
+
+        color = pathTracingRawBufferIn[bufferIdx0].rgb + pathTracingRawBufferIn[bufferIdx1].rgb;
+        diffuseAlbedo = ptDiffuseAlbedoRawBufferIn[bufferIdx0].rgb + ptDiffuseAlbedoRawBufferIn[bufferIdx1].rgb;
     }
     else
     {
-        color = pathTracingRawBufferIn[linearPixelIdx];
+        color = pathTracingRawBufferIn[linearPixelIdx].rgb;
+        diffuseAlbedo = ptDiffuseAlbedoRawBufferIn[linearPixelIdx].rgb;
     }
 
     if ((AntialiasingMode) renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE)
     {
-        color.rgb /= (renderParams.accumulatedFrameNumber + 1.f);
+        color /= (renderParams.accumulatedFrameNumber + 1.f);
     }
 
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
-    pathTracingTarget[pixelIdx] = color;
-
-    float3 diffuseAlbedo;
-    if (bool(renderParams.doPathSplitting))
-    {
-        const float3 da0 = ptDiffuseAlbedoRawBufferIn[linearPixelIdx * 2].rgb;
-        const float3 da1 = ptDiffuseAlbedoRawBufferIn[linearPixelIdx * 2 + 1].rgb;
-        diffuseAlbedo = da0 + da1;
-    }
-    else
-    {
-        diffuseAlbedo = ptDiffuseAlbedoRawBufferIn[linearPixelIdx].rgb;
-    }
+    pathTracingTarget[pixelIdx] = float4(color, 1.f);
 
     RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
     diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1.f);
