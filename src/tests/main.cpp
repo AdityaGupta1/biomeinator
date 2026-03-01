@@ -52,8 +52,13 @@ int main(int argc, char** argv)
 
     Options options("BiomeinatorTests", "Tests for Biomeinator");
     OptionAdder optionAdder = options.add_options();
+
+#define ADD_OPTION(name, desc, type, default) optionAdder(name, desc, cxxopts::value<type>()->default_value(default))
+
     optionAdder("h,help", "Print this message");
-    optionAdder("f,filter", "Test filter (regex)", cxxopts::value<std::string>()->default_value(".*"));
+    ADD_OPTION("f,filter", "Test filter (regex)", std::string, ".*");
+
+#undef ADD_OPTION
 
     ParseResult parseResult = options.parse(argc, argv);
 
