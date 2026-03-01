@@ -56,9 +56,9 @@ void pathTraceRay(inout Payload payload)
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
-    const uint ptDiffAlbedoWriteIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
+    const uint ptDiffuseAlbedoWriteIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     // TODO: remove this default write after RT target clearing is added (issue #176)
-    ptDiffuseAlbedoRawBufferOut[ptDiffAlbedoWriteIdx] = float4(0.f, 0.f, 0.f, 0.f);
+    ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(0, 0, 0, 0);
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -77,7 +77,7 @@ void pathTraceRay(inout Payload payload)
 
     bool hasEncounteredNonDeltaSurface = false;
 
-    float3 capturedPathWeightForDiffAlbedo = float3(0.f, 0.f, 0.f);
+    float3 firstBouncePathWeight = float3(0, 0, 0);
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -258,7 +258,7 @@ void pathTraceRay(inout Payload payload)
 
             if (pathDepth == 0)
             {
-                capturedPathWeightForDiffAlbedo = payload.pathWeight;
+                firstBouncePathWeight = payload.pathWeight;
             }
 
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
@@ -275,31 +275,36 @@ void pathTraceRay(inout Payload payload)
 
         if (pathDepth == 0)
         {
-            float3 ptDiffAlbedo;
+            float3 ptDiffuseAlbedo = float3(0, 0, 0);
             if (!bool(renderParams.doPathSplitting))
             {
-                // Simplified: primary diffuse albedo or 0 (no secondary hit consideration)
-                ptDiffAlbedo = bounceWasSpecular ? float3(0.f, 0.f, 0.f) : capturedPathWeightForDiffAlbedo;
-            }
-            else if (!bounceWasSpecular)
-            {
-                // capturedPathWeightForDiffAlbedo = fresnel_weight * primaryDiffuseAlbedo
-                ptDiffAlbedo = capturedPathWeightForDiffAlbedo;
+                if (!bounceWasSpecular)
+                {
+                    ptDiffuseAlbedo = firstBouncePathWeight;
+                }
             }
             else
             {
-                // capturedPathWeightForDiffAlbedo = fresnel_weight * specularTint; multiply by secondary diffuse albedo
-                ptDiffAlbedo = float3(0.f, 0.f, 0.f);
-                if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+                if (!bounceWasSpecular)
                 {
-                    const Material secondaryMaterial = getMaterialFromPayload(payload);
-                    if (secondaryMaterial.hasDiffuse())
+                    // firstBouncePathWeight = fresnel_weight * primaryDiffuseAlbedo
+                    ptDiffuseAlbedo = firstBouncePathWeight;
+                }
+                else
+                {
+                    // firstBouncePathWeight = fresnel_weight * specularTint; multiply by secondary diffuse albedo
+                    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
-                        ptDiffAlbedo = capturedPathWeightForDiffAlbedo * getMaterialBaseColor(secondaryMaterial, payload.hitInfo.uv).rgb;
+                        const Material secondHitMaterial = getMaterialFromPayload(payload);
+                        if (secondHitMaterial.hasDiffuse())
+                        {
+                            ptDiffuseAlbedo =
+                                firstBouncePathWeight * getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                        }
                     }
                 }
             }
-            ptDiffuseAlbedoRawBufferOut[ptDiffAlbedoWriteIdx] = float4(ptDiffAlbedo, 0.f);
+            ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(ptDiffuseAlbedo, 0.f);
         }
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))

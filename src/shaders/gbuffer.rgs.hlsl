@@ -55,6 +55,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
+    // diffuse albedo is written in path_tracing.rgs.hlsl so it can be modulated by specular bounces
+
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
