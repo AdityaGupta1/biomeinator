@@ -74,7 +74,7 @@ struct DirectLightingSample
 };
 
 #ifdef HITGROUP_LIGHTS
-bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, const bool useRefractionPassthrough, out float3 Le)
+bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3 wi_WS, const float3 pointOnLight_WS, const AreaLight light, const bool canPassthrough, out float3 Le)
 {
     RayDesc ray;
     setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, false /*faceforwardNormal*/);
@@ -82,7 +82,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     ray.TMax = distance(surfPos_WS, pointOnLight_WS) + 2 * RAY_ORIGIN_OFFSET_EPSILON;
 
     Payload lightPayload;
-    lightPayload.flags = useRefractionPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
+    lightPayload.flags = canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
@@ -96,7 +96,7 @@ bool traceToLight(const float3 surfPos_WS, const float3 surfNor_WS, const float3
     return true;
 }
 
-DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, const bool useRefractionPassthrough, inout RandomNumberGenerator rng)
+DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const float3 surfNor_WS, const bool canPassthrough, inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
@@ -110,7 +110,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS, const 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, useRefractionPassthrough, Le))
+    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, canPassthrough, Le))
     {
         return result;
     }
