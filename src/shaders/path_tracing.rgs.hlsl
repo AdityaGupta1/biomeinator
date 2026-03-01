@@ -126,7 +126,7 @@ void pathTraceRay(inout Payload payload)
         if (isPassthrough)
         {
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
-            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // prevBounceBsdfPdf and prevBounceWasSpecular are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
