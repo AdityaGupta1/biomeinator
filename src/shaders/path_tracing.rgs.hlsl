@@ -43,7 +43,7 @@ float balanceHeuristic(const float pdfA, const float pdfB)
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload)
+void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 {
     const uint2 pixelIdx = getPixelIdx();
 
@@ -54,11 +54,6 @@ void pathTraceRay(inout Payload payload)
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
-
-    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
-    const uint ptDiffuseAlbedoWriteIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
-    // TODO: remove this default write after RT target clearing is added (issue #176)
-    ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(0.f, 0.f, 0.f, 0.f);
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -77,7 +72,7 @@ void pathTraceRay(inout Payload payload)
 
     bool hasEncounteredNonDeltaSurface = false;
 
-    float3 ptDiffuseAlbedo = 0.f;
+    ptDiffuseAlbedo = 0.f;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -265,7 +260,7 @@ void pathTraceRay(inout Payload payload)
 
             if (pathDepth == 0)
             {
-                ptDiffuseAlbedo = payload.pathWeight;
+                ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
             }
 
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
@@ -282,7 +277,7 @@ void pathTraceRay(inout Payload payload)
 
         if (pathDepth == 0)
         {
-            // ptDiffuseAlbedo = first bounce path weight or emission
+            // at this point, ptDiffuseAlbedo = first bounce path weight or emission
 
             if (bounceWasSpecular)
             {
@@ -311,8 +306,6 @@ void pathTraceRay(inout Payload payload)
             }
 
             // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
-
-            ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(ptDiffuseAlbedo, 0.f);
         }
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -384,7 +377,8 @@ void RayGeneration()
     Payload payload = gbufferPayload;
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
-    pathTraceRay(payload);
+    float3 outPtDiffuseAlbedo = 0.f;
+    pathTraceRay(payload, outPtDiffuseAlbedo);
 
     const float3 colorPreTonemap = payload.pathColor;
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
@@ -396,4 +390,6 @@ void RayGeneration()
     {
         pathTracingRawBufferOut[writePixelIdx].xyz = colorPreTonemap;
     }
+
+    ptDiffuseAlbedoRawBufferOut[writePixelIdx] = float4(outPtDiffuseAlbedo, 0.f);
 }
