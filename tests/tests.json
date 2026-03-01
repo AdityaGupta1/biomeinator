@@ -400,11 +400,38 @@
                 "--width=960",
                 "--height=540",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
+                "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
             "golden": "refraction_passthrough_direct_lighting/golden.png",
             "threshold": 0.001
+        },
+        {
+            "name": "refraction_passthrough_mis_distance",
+            "scene": "refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=12"
+            ],
+            "golden": "refraction_passthrough_mis_distance/golden.png",
+            "threshold": 0.002
+        },
+        {
+            "name": "refraction_passthrough_mis_distance_naive",
+            "scene": "refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12",
+                "--samplingMode=0"
+            ],
+            "golden": "refraction_passthrough_mis_distance/golden.png",
+            "threshold": 0.002
         }
     ]
 }
