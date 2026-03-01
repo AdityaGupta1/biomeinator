@@ -94,7 +94,9 @@ void pathTraceRay(inout Payload payload)
 
         const bool isPassthrough = refractionIndirectPassthrough && hasEncounteredNonDeltaSurface && surfMaterial.hasGlossyTransmission();
 
-        // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last "real" bounce's information.
+        // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last
+        // "real" bounce's information. This is important for matching MIS weights with direct light sampling, which
+        // traces only one ray and ignores passthrough surfaces in the anyhit shader.
         if (!isPassthrough)
         {
             surfNor_WS = payload.hitInfo.hitNor_WS;
@@ -122,7 +124,7 @@ void pathTraceRay(inout Payload payload)
         }
 
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
-        
+
         const uint coherenceHint =
             (pathDepth == 0 ? (1 << 2) : 0) |
             (isPassthrough ? (1 << 1) : 0) |
