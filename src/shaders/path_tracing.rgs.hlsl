@@ -79,6 +79,8 @@ void pathTraceRay(inout Payload payload)
         payload.pathWeight *= chunkColor;
     }
 
+    float3 surfPos_WS, surfNor_WS; // pos/nor of last "real" bounce (i.e. not passthrough)
+
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = getMaterialFromPayload(payload);
@@ -90,8 +92,16 @@ void pathTraceRay(inout Payload payload)
             payload.pathColor += payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
         }
 
+        const bool isPassthrough = refractionIndirectPassthrough && hasEncounteredNonDeltaSurface && surfMaterial.hasGlossyTransmission();
+
+        // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last "real" bounce's information.
+        if (!isPassthrough)
+        {
+            surfNor_WS = payload.hitInfo.hitNor_WS;
+            surfPos_WS = payload.hitInfo.hitPos_WS;
+        }
+
         const float3 wo_WS = -ray.Direction;
-        const float3 surfNor_WS = payload.hitInfo.hitNor_WS;
 
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
@@ -111,10 +121,7 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
-
         const bool isNonDeltaSurface = !surfMaterial.isDelta();
-        const bool isPassthrough = refractionIndirectPassthrough && hasEncounteredNonDeltaSurface && surfMaterial.hasGlossyTransmission();
         
         const uint coherenceHint =
             (pathDepth == 0 ? (1 << 2) : 0) |
