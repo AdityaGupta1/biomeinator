@@ -494,6 +494,7 @@ static void initRtTargets()
 
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
+static ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
@@ -605,6 +606,11 @@ void resize()
     dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
+
+    dev_ptDiffuseAlbedoRawBuffer.Reset();
+    dev_ptDiffuseAlbedoRawBuffer = BufferHelper::createBasicBuffer(
+        pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
 
     const uint32_t rtvIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
@@ -738,6 +744,7 @@ enum class PtParam
     GBUFFER_IN,
 
     PATH_TRACING_RAW_BUFFER_OUT,
+    PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
 
     COUNT
 };
@@ -754,6 +761,7 @@ enum class CollectParam
     GLOBAL_PARAMS,
 
     PATH_TRACING_RAW_BUFFER_IN,
+    PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN,
 
     COUNT
 };
@@ -854,6 +862,7 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(GBUFFER_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_IN);
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
+        ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
         if (useSer)
         {
@@ -900,6 +909,7 @@ static void initRootSignature()
 
         collectParams[COLLECT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
         collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER_IN);
+        collectParams[COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC collectRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -1688,6 +1698,7 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
@@ -1702,12 +1713,17 @@ void render()
                                                      dev_pathTracingRawBuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_ptDiffuseAlbedoRawBuffer.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
 
         cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
         const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
         const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
@@ -1885,6 +1901,7 @@ void destroy()
 
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
+    dev_ptDiffuseAlbedoRawBuffer.Reset();
 
     screenshotRequest.readbackBuffer.Reset();
 

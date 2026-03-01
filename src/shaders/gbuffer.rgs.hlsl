@@ -49,7 +49,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
 
-    float3 diffuseAlbedo = 0.f;
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 hitNor_WS = 0.f;
@@ -69,18 +68,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         {
             const Material surfMaterial = getMaterialFromPayload(payload);
 
-            if (surfMaterial.hasDiffuseOrGlossyTransmission())
-            {
-                diffuseAlbedo = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
-            }
-
-            if (surfMaterial.hasEmission())
-            {
-                const float3 emissionColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
-                const float3 tonemappedEmission = applyReinhard(emissionColor);
-                diffuseAlbedo += tonemappedEmission;
-            }
-
             if (surfMaterial.hasGlossyReflection())
             {
                 const float alpha = roughness * roughness;
@@ -98,9 +85,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
         hitNor_WS = normalize(-ray.Direction);
     }
-
-    RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
-    diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1);
 
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;

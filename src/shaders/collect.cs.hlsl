@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/packing.hlsli"
 
 StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT, PATH_TRACING_RAW_BUFFER_IN);
+StructuredBuffer<float4> ptDiffuseAlbedoRawBufferIn : REGISTER_T(COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
 
 [shader("compute")]
 [numthreads(COLLECT_WORKGROUP_SIZE_X, COLLECT_WORKGROUP_SIZE_Y, 1)]
@@ -58,4 +59,19 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];
     pathTracingTarget[pixelIdx] = color;
+
+    float3 diffuseAlbedo;
+    if (bool(renderParams.doPathSplitting))
+    {
+        const float3 da0 = ptDiffuseAlbedoRawBufferIn[linearPixelIdx * 2].rgb;
+        const float3 da1 = ptDiffuseAlbedoRawBufferIn[linearPixelIdx * 2 + 1].rgb;
+        diffuseAlbedo = da0 + da1;
+    }
+    else
+    {
+        diffuseAlbedo = ptDiffuseAlbedoRawBufferIn[linearPixelIdx].rgb;
+    }
+
+    RWTexture2D<float4> diffuseAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.diffuseAlbedoTargetIdx];
+    diffuseAlbedoTarget[pixelIdx] = float4(diffuseAlbedo, 1.f);
 }

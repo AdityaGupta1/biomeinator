@@ -36,6 +36,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
+RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
@@ -54,6 +55,11 @@ void pathTraceRay(inout Payload payload)
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+    const uint ptDiffAlbedoWriteIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
+    // TODO: remove this default write after RT target clearing is added (issue #176)
+    ptDiffuseAlbedoRawBufferOut[ptDiffAlbedoWriteIdx] = float4(0.f, 0.f, 0.f, 0.f);
+
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         payload.pathColor = getDomeLightColor(ray.Direction);
@@ -70,6 +76,8 @@ void pathTraceRay(inout Payload payload)
     float3 surfPos_WS, surfNor_WS;
 
     bool hasEncounteredNonDeltaSurface = false;
+
+    float3 capturedPathWeightForDiffAlbedo = float3(0.f, 0.f, 0.f);
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -248,6 +256,11 @@ void pathTraceRay(inout Payload payload)
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
 
+            if (pathDepth == 0)
+            {
+                capturedPathWeightForDiffAlbedo = payload.pathWeight;
+            }
+
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
@@ -259,6 +272,35 @@ void pathTraceRay(inout Payload payload)
 
         payload.flags = 0;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        if (pathDepth == 0)
+        {
+            float3 ptDiffAlbedo;
+            if (!bool(renderParams.doPathSplitting))
+            {
+                // Simplified: primary diffuse albedo or 0 (no secondary hit consideration)
+                ptDiffAlbedo = bounceWasSpecular ? float3(0.f, 0.f, 0.f) : capturedPathWeightForDiffAlbedo;
+            }
+            else if (!bounceWasSpecular)
+            {
+                // capturedPathWeightForDiffAlbedo = fresnel_weight * primaryDiffuseAlbedo
+                ptDiffAlbedo = capturedPathWeightForDiffAlbedo;
+            }
+            else
+            {
+                // capturedPathWeightForDiffAlbedo = fresnel_weight * specularTint; multiply by secondary diffuse albedo
+                ptDiffAlbedo = float3(0.f, 0.f, 0.f);
+                if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+                {
+                    const Material secondaryMaterial = getMaterialFromPayload(payload);
+                    if (secondaryMaterial.hasDiffuse())
+                    {
+                        ptDiffAlbedo = capturedPathWeightForDiffAlbedo * getMaterialBaseColor(secondaryMaterial, payload.hitInfo.uv).rgb;
+                    }
+                }
+            }
+            ptDiffuseAlbedoRawBufferOut[ptDiffAlbedoWriteIdx] = float4(ptDiffAlbedo, 0.f);
+        }
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
         {
@@ -281,9 +323,6 @@ void pathTraceRay(inout Payload payload)
         {
             RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
             specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
-
-            RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-            normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
         }
 
         if (doMis)
