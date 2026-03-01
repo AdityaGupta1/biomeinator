@@ -331,7 +331,8 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12",
-                "--tonemapping=0"
+                "--tonemapping=0",
+                "--refractionIndirectPassthrough=false"
             ],
             "golden": "cornell_box_glass_sphere/golden_blender_no_tonemap.png",
             "threshold": 0.015
@@ -358,7 +359,8 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12",
-                "--tonemapping=0"
+                "--tonemapping=0",
+                "--refractionIndirectPassthrough=false"
             ],
             "golden": "different_ior/golden_blender_no_tonemap.png",
             "threshold": 0.015
@@ -385,7 +387,8 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12",
-                "--tonemapping=0"
+                "--tonemapping=0",
+                "--refractionIndirectPassthrough=false"
             ],
             "golden": "glass_diamonds/golden_blender_no_tonemap.png",
             "threshold": 0.01
