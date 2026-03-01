@@ -58,7 +58,7 @@ void pathTraceRay(inout Payload payload)
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
     const uint ptDiffuseAlbedoWriteIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     // TODO: remove this default write after RT target clearing is added (issue #176)
-    ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(0, 0, 0, 0);
+    ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(0.f, 0.f, 0.f, 0.f);
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -77,7 +77,7 @@ void pathTraceRay(inout Payload payload)
 
     bool hasEncounteredNonDeltaSurface = false;
 
-    float3 firstBouncePathWeight = float3(0, 0, 0);
+    float3 ptDiffuseAlbedo = 0.f;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
@@ -96,7 +96,14 @@ void pathTraceRay(inout Payload payload)
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            payload.pathColor += payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
+            const float3 emissiveContrib =
+                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
+            payload.pathColor += emissiveContrib;
+
+            if (pathDepth == 0)
+            {
+                ptDiffuseAlbedo += emissiveContrib;
+            }
         }
 
         const float3 wo_WS = -ray.Direction;
@@ -258,7 +265,7 @@ void pathTraceRay(inout Payload payload)
 
             if (pathDepth == 0)
             {
-                firstBouncePathWeight = payload.pathWeight;
+                ptDiffuseAlbedo = payload.pathWeight;
             }
 
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
@@ -275,35 +282,36 @@ void pathTraceRay(inout Payload payload)
 
         if (pathDepth == 0)
         {
-            float3 ptDiffuseAlbedo = float3(0, 0, 0);
-            if (!bool(renderParams.doPathSplitting))
+            // ptDiffuseAlbedo = first bounce path weight or emission
+
+            if (bounceWasSpecular)
             {
-                if (!bounceWasSpecular)
+                if (!bool(renderParams.doPathSplitting))
                 {
-                    ptDiffuseAlbedo = firstBouncePathWeight;
-                }
-            }
-            else
-            {
-                if (!bounceWasSpecular)
-                {
-                    // firstBouncePathWeight = fresnel_weight * primaryDiffuseAlbedo
-                    ptDiffuseAlbedo = firstBouncePathWeight;
+                    ptDiffuseAlbedo = 0.f;
                 }
                 else
                 {
-                    // firstBouncePathWeight = fresnel_weight * specularTint; multiply by secondary diffuse albedo
+                    bool secondHitHasDiffuse = false;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
                         const Material secondHitMaterial = getMaterialFromPayload(payload);
                         if (secondHitMaterial.hasDiffuse())
                         {
-                            ptDiffuseAlbedo =
-                                firstBouncePathWeight * getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                            ptDiffuseAlbedo *= getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                            secondHitHasDiffuse = true;
                         }
+                    }
+
+                    if (!secondHitHasDiffuse)
+                    {
+                        ptDiffuseAlbedo = 0.f;
                     }
                 }
             }
+
+            // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
+
             ptDiffuseAlbedoRawBufferOut[ptDiffuseAlbedoWriteIdx] = float4(ptDiffuseAlbedo, 0.f);
         }
 
