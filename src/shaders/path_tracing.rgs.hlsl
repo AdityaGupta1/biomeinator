@@ -319,10 +319,22 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        if (pathDepth == 0 && bounceWasSpecular && pathSplitIdx == 0) // TODO: update to support multiple specular bounces?
+        if (pathDepth == 0 && bounceWasSpecular) // TODO: update to support multiple specular bounces?
         {
-            RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
-            specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+            if (pathSplitIdx == 0) // transmission
+            {
+                if (bool(renderParams.doPathSplitting) && dot(ray.Direction, surfNor_WS) < 0.f)
+                {
+                    RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
+                    normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
+                }
+
+            }
+            else // reflection
+            {
+                RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+                specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+            }
         }
 
         if (doMis)
