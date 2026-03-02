@@ -55,6 +55,8 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
+    ptDiffuseAlbedo = 0.f;
+
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         payload.pathColor = getDomeLightColor(ray.Direction);
@@ -71,8 +73,6 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
     float3 surfPos_WS, surfNor_WS;
 
     bool hasEncounteredNonDeltaSurface = false;
-
-    ptDiffuseAlbedo = 0.f;
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
