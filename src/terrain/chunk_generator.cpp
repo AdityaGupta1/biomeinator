@@ -36,8 +36,6 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
-static uint32_t worldSeed;
-
 static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
@@ -47,9 +45,15 @@ inline constexpr float biomeNoiseScale = 1000.f;
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 static FN::SmartNode<FN::Generator> fnCaves;
 
+static uint worldSeed;
+static ivec2 noiseOffsetXZ;
+
 void init()
 {
-    worldSeed = SettingsManager::getAsUint("worldSeed");
+    worldSeed = SettingsManager::getWorldSeed();
+
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
+    noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
@@ -153,12 +157,29 @@ void init()
 
 static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
 {
-    fn->GenUniformGrid2D(data, posXZ.x, posXZ.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid2D(data,
+                         posXZ.x + noiseOffsetXZ.x,
+                         posXZ.y + noiseOffsetXZ.y /*z*/,
+                         chunkSizeXZ,
+                         chunkSizeXZ,
+                         1.f,
+                         1.f,
+                         worldSeed ^ hash(719023919));
 }
 
 static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height, int yOffset = 0)
 {
-    fn->GenUniformGrid3D(data, yOffset /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid3D(data,
+                         yOffset /*y*/,
+                         posXZ.x + noiseOffsetXZ.x /*x*/,
+                         posXZ.y + noiseOffsetXZ.y /*z*/,
+                         height,
+                         chunkSizeXZ,
+                         chunkSizeXZ,
+                         1.f,
+                         1.f,
+                         1.f,
+                         worldSeed ^ hash(391023545));
 }
 
 }; // namespace ChunkGenerator
@@ -172,8 +193,6 @@ inline constexpr int seaLevel = 125;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    const uint worldSeed = SettingsManager::getWorldSeed();
-
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);

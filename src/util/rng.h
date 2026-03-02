@@ -73,14 +73,14 @@ struct RandomNumberGenerator
         return nextFloat() < p;
     }
 
-    inline int nextInt(int min, int max)
-    {
-        return static_cast<int>(min + (max - min) * nextFloat());
-    }
-
     inline int nextInt(int max)
     {
         return static_cast<int>(max * nextFloat());
+    }
+
+    inline int nextInt(int min, int max)
+    {
+        return static_cast<int>(min + (max - min) * nextFloat());
     }
 };
 
