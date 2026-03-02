@@ -34,6 +34,8 @@ using namespace cxxopts;
 using settingValue = std::variant<bool, int, uint32_t, float, std::string>;
 static std::unordered_map<std::string, settingValue> settings;
 
+uint32_t worldSeed;
+
 void parseArgs(const int argc, const char* const* argv)
 {
     Options options("Biomeinator", "Real-time path traced voxel engine");
@@ -153,6 +155,8 @@ void parseArgs(const int argc, const char* const* argv)
         std::cerr << "Invalid tonemapping option" << std::endl;
         exit(1);
     }
+
+    worldSeed = getAsUint("worldSeed");
 }
 
 bool getAsBool(const std::string& name)
@@ -203,6 +207,11 @@ void setAsFloat(const std::string& name, float value)
 void setAsString(const std::string& name, const std::string& value)
 {
     settings[name] = value;
+}
+
+uint32_t getWorldSeed()
+{
+    return worldSeed;
 }
 
 } // namespace SettingsManager

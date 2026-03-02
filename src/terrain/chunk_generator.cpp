@@ -172,7 +172,7 @@ inline constexpr int seaLevel = 125;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    const uint worldSeed = SettingsManager::getAsUint("worldSeed"); // TODO: cache this somewhere instead of getting from SettingsManager every time
+    const uint worldSeed = SettingsManager::getWorldSeed();
 
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
@@ -200,7 +200,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            RandomNumberGenerator rng = initRng(worldSeed ^ 330910521, blockPosXZ_WS.x, blockPosXZ_WS.y /*z*/);
+            RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), blockPosXZ_WS.x, blockPosXZ_WS.y /*z*/);
 
             const BiomeNoise biomeNoise = {
                 .temperature = temperatureNoise[columnIdx],
@@ -309,7 +309,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     if (!isCave)
                     {
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                        RandomNumberGenerator rng = initRng(worldSeed ^ 103290193, blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                        RandomNumberGenerator rng =
+                            initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                         block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
                     }
                 }
@@ -375,7 +376,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 for (int gridX = paddedMinGridPos.x; gridX <= paddedMaxGridPos.x; ++gridX)
                 {
                     const ivec2 gridPosBlocks_WS = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
-                    RandomNumberGenerator rng = initRng(worldSeed ^ 87152059,
+                    RandomNumberGenerator rng = initRng(worldSeed ^ hash(87152059),
                                                         gridPosBlocks_WS.x,
                                                         gridPosBlocks_WS.y /*z*/,
                                                         static_cast<uint>(structureGen.type));

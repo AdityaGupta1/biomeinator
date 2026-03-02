@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <glm/glm.hpp>
 
 // https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
-inline uint32_t hash(uint32_t seed)
+constexpr inline uint32_t hash(uint32_t seed)
 {
     uint32_t state = seed * 747796405u + 2891336453u;
     uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
