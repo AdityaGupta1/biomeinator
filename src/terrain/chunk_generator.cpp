@@ -63,7 +63,7 @@ void init()
         fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(2);
+        fnFractal->SetOctaveCount(3);
 
         fnTemperature = fnFractal;
     }
@@ -74,8 +74,15 @@ void init()
         fnSimplex->SetScale(1.5f * biomeNoiseScale);
         fnSimplex->SetOutputMin(-1.0f);
         fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.04f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(3);
 
-        fnHumidity = fnSimplex;
+        fnHumidity = fnFractal;
     }
 
     {
@@ -99,11 +106,11 @@ void init()
         fnSimplex->SetOutputMax(1.0f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.1f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.05f * biomeNoiseScale);
+        fnWarp->SetScale(0.04f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(4);
+        fnFractal->SetOctaveCount(5);
 
         fnInland = fnFractal;
     }

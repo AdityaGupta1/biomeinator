@@ -37,9 +37,9 @@ BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerato
 {
     return {
         .temperature = base.temperature + rng.nextFloatAbs(0.005f),
-        .humidity = base.humidity + rng.nextFloatAbs(0.010f),
+        .humidity = base.humidity + rng.nextFloatAbs(0.008f),
         .peak = base.peak + rng.nextFloatAbs(0.005f),
-        .inland = base.inland + rng.nextFloatAbs(0.015f),
+        .inland = base.inland + rng.nextFloatAbs(0.012f),
     };
 }
 
