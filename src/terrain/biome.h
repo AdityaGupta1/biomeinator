@@ -43,6 +43,8 @@ enum class Biome : uint8_t
     OCEAN,
 
     BEACH,
+    GRAVEL_BEACH,
+    BLACK_SAND_BEACH,
 
     PLAINS,
     DESERT,

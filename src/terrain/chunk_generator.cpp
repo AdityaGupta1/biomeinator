@@ -213,7 +213,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
                 terrainBaseHeight += inlandHeightModifier * 90.f;
                 const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
-                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 12), seaLevelPullFactor);
+                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 8), seaLevelPullFactor);
             }
             float terrainSurfaceMultiplier = 0.02f;
             {

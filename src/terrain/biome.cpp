@@ -37,7 +37,7 @@ BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerato
 {
     return {
         .temperature = base.temperature + rng.nextFloatAbs(0.005f),
-        .humidity = base.humidity + rng.nextFloatAbs(0.005f),
+        .humidity = base.humidity + rng.nextFloatAbs(0.010f),
         .peak = base.peak + rng.nextFloatAbs(0.005f),
         .inland = base.inland + rng.nextFloatAbs(0.015f),
     };
@@ -89,13 +89,43 @@ void init()
         BiomeData& data = BIOME_DATA_BY_NAME(BEACH);
         beachBiomes.push_back(Biome::BEACH);
         data.biomeNoise = {
-            .temperature = 0.0f,
-            .humidity = 0.0f,
+            .temperature = 0.3f,
+            .humidity = 0.2f,
             .peak = -1.0f,
         };
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SAND,
+        };
+    }
+
+    // GRAVEL_BEACH
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(GRAVEL_BEACH);
+        beachBiomes.push_back(Biome::GRAVEL_BEACH);
+        data.biomeNoise = {
+            .temperature = -0.2f,
+            .humidity = -0.2f,
+            .peak = -1.0f,
+        };
+        data.topBlocks = {
+            .top = Block::GRAVEL,
+            .mid = Block::GRAVEL,
+        };
+    }
+
+    // BLACK_SAND_BEACH
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(BLACK_SAND_BEACH);
+        beachBiomes.push_back(Biome::BLACK_SAND_BEACH);
+        data.biomeNoise = {
+            .temperature = -0.6f,
+            .humidity = -0.3f,
+            .peak = -1.0f,
+        };
+        data.topBlocks = {
+            .top = Block::BLACK_SAND,
+            .mid = Block::BLACK_SAND,
         };
     }
 
@@ -234,7 +264,7 @@ const BiomeData& getBiomeData(Biome biome)
 Biome getClosestBiome(const BiomeNoise& biomeNoise)
 {
     std::vector<Biome>* closestBiomeCandidates;
-    if (biomeNoise.inland < -0.1f)
+    if (biomeNoise.inland < -0.15f)
     {
         closestBiomeCandidates = &oceanBiomes;
     }

@@ -51,6 +51,8 @@ enum class Block : BlockId
     GOLDENROD,
     TINY_CACTUS,
     PINK_DAFFODIL,
+    BLACK_SAND,
+    GRAVEL,
 
     COUNT
 };

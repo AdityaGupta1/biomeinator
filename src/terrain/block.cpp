@@ -71,6 +71,8 @@ void init()
     BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = BlockUvs(uvec2(21, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(TINY_CACTUS) = { .uvs = BlockUvs(uvec2(22, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = BlockUvs(uvec2(23, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(BLACK_SAND) = { BlockUvs(uvec2(24, 0)) };
+    BLOCK_DATA_BY_NAME(GRAVEL) = { BlockUvs(uvec2(25, 0)) };
 }
 
 const BlockData& getBlockData(Block block)
