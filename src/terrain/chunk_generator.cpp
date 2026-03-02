@@ -167,7 +167,7 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
-inline constexpr int seaLevel = 104;
+inline constexpr int seaLevel = 125;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -207,13 +207,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            float terrainBaseHeight = 120.f;
+            float terrainBaseHeight = 140.f;
             {
-                terrainBaseHeight += pow(biomeNoise.peak * max(biomeNoise.inland, 0.1f), 3.f) * 145.f;
+                terrainBaseHeight += pow(biomeNoise.peak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
                 const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
                 terrainBaseHeight += inlandHeightModifier * 90.f;
-                const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland));
-                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 12), seaLevelPullFactor * 0.7f);
+                const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
+                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 12), seaLevelPullFactor);
             }
             float terrainSurfaceMultiplier = 0.02f;
             {
@@ -294,8 +294,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     if (y < maxCaveHeight)
                     {
                         const float caveSurfaceMixFactor =
-                            smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
-                        const float caveSurfaceVal = mix(0.f, 0.6f, caveSurfaceMixFactor);
+                            smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
+                        const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
                         isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
                     }
 
