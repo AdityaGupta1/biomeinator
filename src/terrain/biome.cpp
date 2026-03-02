@@ -29,15 +29,13 @@ constexpr BiomeNoise biomeNoiseDistance2Scale = {
     .temperature = 1.f,
     .humidity = 1.f,
     .peak = 1.f,
-    .inland = 6.f,
 };
 
 float BiomeNoise::distance2(const BiomeNoise& other) const
 {
     return (this->temperature - other.temperature) * (this->temperature - other.temperature) * biomeNoiseDistance2Scale.temperature +
            (this->humidity - other.humidity) * (this->humidity - other.humidity) * biomeNoiseDistance2Scale.humidity +
-           (this->peak - other.peak) * (this->peak - other.peak) * (4.f * biomeNoiseDistance2Scale.peak) + // 4x due to having half the range of the others
-           (this->inland - other.inland) * (this->inland - other.inland) * biomeNoiseDistance2Scale.inland;
+           (this->peak - other.peak) * (this->peak - other.peak) * (4.f * biomeNoiseDistance2Scale.peak); // 4x due to having half the range of the others
 }
 
 namespace Biomes
@@ -48,6 +46,11 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 #define BIOME_DATA(biome) biomeDatas[static_cast<size_t>(biome)]
 #define BIOME_DATA_BY_NAME(biomeName) biomeDatas[static_cast<size_t>(Biome::biomeName)]
 
+static std::vector<Biome> oceanBiomes;
+static std::vector<Biome> beachBiomes;
+static std::vector<Biome> landBiomes;
+static std::vector<Biome> mountainBiomes;
+
 // temperature in [-1, 1]
 // humidity in [-1, 1]
 // peak in [0, 1]
@@ -56,15 +59,14 @@ void init()
     // OCEAN
     {
         BiomeData& data = BIOME_DATA_BY_NAME(OCEAN);
+        oceanBiomes.push_back(Biome::OCEAN);
         data.biomeNoise = {
             .temperature = 0.0f,
             .humidity = 0.0f,
             .peak = 0.0f,
-            .inland = -0.2f,
         };
         data.topBlocks = {
-            //.top = Block::SAND,
-            .top = Block::OAK_LOG, // TODO: temporary
+            .top = Block::SAND,
             .mid = Block::SAND,
         };
     }
@@ -72,11 +74,11 @@ void init()
     // BEACH
     {
         BiomeData& data = BIOME_DATA_BY_NAME(BEACH);
+        beachBiomes.push_back(Biome::BEACH);
         data.biomeNoise = {
             .temperature = 0.0f,
             .humidity = 0.0f,
             .peak = 0.0f,
-            .inland = 0.0f,
         };
         data.topBlocks = {
             .top = Block::SAND,
@@ -87,11 +89,11 @@ void init()
     // PLAINS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(PLAINS);
+        landBiomes.push_back(Biome::PLAINS);
         data.biomeNoise = {
             .temperature = 0.0f,
             .humidity = 0.0f,
             .peak = 0.15f,
-            .inland = 0.2f,
         };
         data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
@@ -103,11 +105,11 @@ void init()
     // SAVANNA
     {
         BiomeData& data = BIOME_DATA_BY_NAME(SAVANNA);
+        landBiomes.push_back(Biome::SAVANNA);
         data.biomeNoise = {
             .temperature = 0.6f,
             .humidity = -0.6f,
             .peak = 0.4f,
-            .inland = 0.4f,
         };
         data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
@@ -118,11 +120,11 @@ void init()
     // DESERT
     {
         BiomeData& data = BIOME_DATA_BY_NAME(DESERT);
+        landBiomes.push_back(Biome::DESERT);
         data.biomeNoise = {
             .temperature = 1.0f,
             .humidity = -1.0f,
             .peak = 0.2f,
-            .inland = 0.3f,
         };
         data.topBlocks = {
             .top = Block::SAND,
@@ -141,11 +143,11 @@ void init()
     // FOREST
     {
         BiomeData& data = BIOME_DATA_BY_NAME(FOREST);
+        landBiomes.push_back(Biome::FOREST);
         data.biomeNoise = {
             .temperature = -0.1f,
             .humidity = 0.2f,
             .peak = 0.3f,
-            .inland = 0.2f,
         };
         data.structureGens = {
             { StructureType::OAK_TREE, 7, 1.5f },
@@ -157,29 +159,14 @@ void init()
         data.decorator.addEntry(Block::AIR, 15.f);
     }
 
-    // MOUNTAINS
-    {
-        BiomeData& data = BIOME_DATA_BY_NAME(MOUNTAINS);
-        data.biomeNoise = {
-            .temperature = -0.4f,
-            .humidity = -0.4f,
-            .peak = 0.8f,
-            .inland = 0.8f,
-        };
-        data.topBlocks = {
-            .top = Block::STONE,
-            .mid = Block::STONE,
-        };
-    }
-
     // TUNDRA
     {
         BiomeData& data = BIOME_DATA_BY_NAME(TUNDRA);
+        landBiomes.push_back(Biome::TUNDRA);
         data.biomeNoise = {
             .temperature = -0.7f,
             .humidity = -0.6f,
             .peak = 0.2f,
-            .inland = 0.3f,
         };
         data.topBlocks = {
             .top = Block::SNOWY_GRASS_BLOCK,
@@ -190,15 +177,30 @@ void init()
     // ICE_FIELDS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(ICE_FIELDS);
+        landBiomes.push_back(Biome::ICE_FIELDS);
         data.biomeNoise = {
             .temperature = -0.85f,
             .humidity = -0.8f,
             .peak = 0.15f,
-            .inland = 0.55f,
         };
         data.topBlocks = {
             .top = Block::SNOW,
             .mid = Block::ICE,
+        };
+    }
+
+    // MOUNTAINS
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(MOUNTAINS);
+        mountainBiomes.push_back(Biome::MOUNTAINS);
+        data.biomeNoise = {
+            .temperature = -0.4f,
+            .humidity = -0.4f,
+            .peak = 0.8f,
+        };
+        data.topBlocks = {
+            .top = Block::STONE,
+            .mid = Block::STONE,
         };
     }
 }
@@ -210,12 +212,29 @@ const BiomeData& getBiomeData(Biome biome)
 
 Biome getClosestBiome(const BiomeNoise& biomeNoise)
 {
+    std::vector<Biome>* closestBiomeCandidates;
+    if (biomeNoise.inland < -0.1f)
+    {
+        closestBiomeCandidates = &oceanBiomes;
+    }
+    else if (biomeNoise.inland < 0.0f)
+    {
+        closestBiomeCandidates = &beachBiomes;
+    }
+    else if (biomeNoise.inland < 0.6f)
+    {
+        closestBiomeCandidates = &landBiomes;
+    }
+    else
+    {
+        closestBiomeCandidates = &mountainBiomes;
+    }
+
     Biome closestBiome = Biome::COUNT;
     float closestDist2 = std::numeric_limits<float>::max();
 
-    for (size_t biomeIdx = 0; biomeIdx < static_cast<size_t>(Biome::COUNT); ++biomeIdx)
+    for (const Biome biome : *closestBiomeCandidates)
     {
-        const Biome biome = static_cast<Biome>(biomeIdx);
         const float dist2 = biomeNoise.distance2(BIOME_DATA(biome).biomeNoise);
 
         if (dist2 < closestDist2)

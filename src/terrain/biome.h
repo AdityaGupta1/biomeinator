@@ -37,14 +37,17 @@ struct BiomeNoise
 enum class Biome : uint8_t
 {
     OCEAN,
+
     BEACH,
+
     PLAINS,
     SAVANNA,
     DESERT,
     FOREST,
-    MOUNTAINS,
     TUNDRA,
     ICE_FIELDS,
+
+    MOUNTAINS,
 
     COUNT
 };

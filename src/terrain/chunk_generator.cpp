@@ -103,8 +103,15 @@ void init()
         fnSimplex->SetScale(5.f * biomeNoiseScale);
         fnSimplex->SetOutputMin(-1.0f);
         fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.1f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.05f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(4);
 
-        fnInland = fnSimplex;
+        fnInland = fnFractal;
     }
 
     {
@@ -160,7 +167,7 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
-inline constexpr int seaLevel = 108;
+inline constexpr int seaLevel = 104;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -200,17 +207,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            float terrainBaseHeight = 128.f;
+            float terrainBaseHeight = 120.f;
             {
                 terrainBaseHeight += pow(biomeNoise.peak * max(biomeNoise.inland, 0.1f), 3.f) * 145.f;
                 const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
-                terrainBaseHeight += inlandHeightModifier * 45.f;
-                const float seaLevelPullFactor = max(2.f / (5.f * abs(biomeNoise.inland) + 1.f) - 1.f, 0.f);
-                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel), seaLevelPullFactor);
+                terrainBaseHeight += inlandHeightModifier * 90.f;
+                const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland));
+                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 12), seaLevelPullFactor * 0.7f);
             }
             float terrainSurfaceMultiplier = 0.02f;
             {
                 terrainSurfaceMultiplier -= biomeNoise.peak * 0.008f;
+                terrainSurfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
             }
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
