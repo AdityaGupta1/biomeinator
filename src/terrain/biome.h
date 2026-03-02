@@ -41,12 +41,12 @@ enum class Biome : uint8_t
     BEACH,
 
     PLAINS,
-    SAVANNA,
     DESERT,
     FOREST,
     TUNDRA,
-    ICE_FIELDS,
 
+    SAVANNA,
+    ICE_FIELDS,
     MOUNTAINS,
 
     COUNT

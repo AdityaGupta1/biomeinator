@@ -48,8 +48,8 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 
 static std::vector<Biome> oceanBiomes;
 static std::vector<Biome> beachBiomes;
-static std::vector<Biome> landBiomes;
-static std::vector<Biome> mountainBiomes;
+static std::vector<Biome> lowlandBiomes;
+static std::vector<Biome> highlandBiomes;
 
 // temperature in [-1, 1]
 // humidity in [-1, 1]
@@ -89,7 +89,7 @@ void init()
     // PLAINS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(PLAINS);
-        landBiomes.push_back(Biome::PLAINS);
+        lowlandBiomes.push_back(Biome::PLAINS);
         data.biomeNoise = {
             .temperature = 0.0f,
             .humidity = 0.0f,
@@ -102,25 +102,10 @@ void init()
         data.decorator.addEntry(Block::AIR, 15.f);
     }
 
-    // SAVANNA
-    {
-        BiomeData& data = BIOME_DATA_BY_NAME(SAVANNA);
-        landBiomes.push_back(Biome::SAVANNA);
-        data.biomeNoise = {
-            .temperature = 0.6f,
-            .humidity = -0.6f,
-            .peak = 0.4f,
-        };
-        data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::GOLDENROD, 2.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::AIR, 10.f);
-    }
-
     // DESERT
     {
         BiomeData& data = BIOME_DATA_BY_NAME(DESERT);
-        landBiomes.push_back(Biome::DESERT);
+        lowlandBiomes.push_back(Biome::DESERT);
         data.biomeNoise = {
             .temperature = 1.0f,
             .humidity = -1.0f,
@@ -143,7 +128,7 @@ void init()
     // FOREST
     {
         BiomeData& data = BIOME_DATA_BY_NAME(FOREST);
-        landBiomes.push_back(Biome::FOREST);
+        lowlandBiomes.push_back(Biome::FOREST);
         data.biomeNoise = {
             .temperature = -0.1f,
             .humidity = 0.2f,
@@ -162,7 +147,7 @@ void init()
     // TUNDRA
     {
         BiomeData& data = BIOME_DATA_BY_NAME(TUNDRA);
-        landBiomes.push_back(Biome::TUNDRA);
+        lowlandBiomes.push_back(Biome::TUNDRA);
         data.biomeNoise = {
             .temperature = -0.7f,
             .humidity = -0.6f,
@@ -174,10 +159,25 @@ void init()
         };
     }
 
+    // SAVANNA
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(SAVANNA);
+        highlandBiomes.push_back(Biome::SAVANNA);
+        data.biomeNoise = {
+            .temperature = 0.6f,
+            .humidity = -0.6f,
+            .peak = 0.4f,
+        };
+        data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GOLDENROD, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 10.f);
+    }
+
     // ICE_FIELDS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(ICE_FIELDS);
-        landBiomes.push_back(Biome::ICE_FIELDS);
+        highlandBiomes.push_back(Biome::ICE_FIELDS);
         data.biomeNoise = {
             .temperature = -0.85f,
             .humidity = -0.8f,
@@ -192,7 +192,7 @@ void init()
     // MOUNTAINS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(MOUNTAINS);
-        mountainBiomes.push_back(Biome::MOUNTAINS);
+        highlandBiomes.push_back(Biome::MOUNTAINS);
         data.biomeNoise = {
             .temperature = -0.4f,
             .humidity = -0.4f,
@@ -223,11 +223,11 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     }
     else if (biomeNoise.inland < 0.6f)
     {
-        closestBiomeCandidates = &landBiomes;
+        closestBiomeCandidates = &lowlandBiomes;
     }
     else
     {
-        closestBiomeCandidates = &mountainBiomes;
+        closestBiomeCandidates = &highlandBiomes;
     }
 
     Biome closestBiome = Biome::COUNT;
