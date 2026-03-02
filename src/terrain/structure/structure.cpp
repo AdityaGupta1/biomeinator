@@ -187,9 +187,9 @@ using namespace Structures;
 
 void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructures)
 {
-    const uint worldSeed = SettingsManager::getWorldSeed();
-
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+
+    const uint rngSeed = SettingsManager::getWorldSeed() ^ hash(719266093);
 
     for (uint32_t i = 0; i < numStructures; ++i)
     {
@@ -207,7 +207,7 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
         }
 
         const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
-        RandomNumberGenerator rng = initRng(worldSeed ^ hash(719266093), structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z);
+        RandomNumberGenerator rng = initRng(rngSeed ^ hash(static_cast<uint>(structure.type)), structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z);
         fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks, rng);
     }
 }

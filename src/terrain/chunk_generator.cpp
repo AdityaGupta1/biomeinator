@@ -51,7 +51,6 @@ static ivec2 noiseOffsetXZ;
 void init()
 {
     worldSeed = SettingsManager::getWorldSeed();
-
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
     noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
 

@@ -34,7 +34,7 @@ using namespace cxxopts;
 using settingValue = std::variant<bool, int, uint32_t, float, std::string>;
 static std::unordered_map<std::string, settingValue> settings;
 
-uint32_t worldSeed;
+uint32_t worldSeed; // cached due to frequent access
 
 void parseArgs(const int argc, const char* const* argv)
 {
