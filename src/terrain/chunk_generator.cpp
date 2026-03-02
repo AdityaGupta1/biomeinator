@@ -87,14 +87,8 @@ void init()
         auto fnFractalRidged = FN::New<FN::FractalRidged>();
         fnFractalRidged->SetSource(fnSimplex);
         fnFractalRidged->SetOctaveCount(5);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnFractalRidged);
-        fnAdd->SetRHS(1.f);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnAdd);
-        fnMul->SetRHS(0.5f);
 
-        fnPeak = fnMul;
+        fnPeak = fnFractalRidged;
     }
 
     {
@@ -207,9 +201,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
+            const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
+
             float terrainBaseHeight = 140.f;
             {
-                terrainBaseHeight += pow(biomeNoise.peak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
+                terrainBaseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
                 const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
                 terrainBaseHeight += inlandHeightModifier * 90.f;
                 const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
@@ -217,7 +213,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
             float terrainSurfaceMultiplier = 0.02f;
             {
-                terrainSurfaceMultiplier -= biomeNoise.peak * 0.008f;
+                terrainSurfaceMultiplier -= scaledPeak * 0.008f;
                 terrainSurfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
             }
 
