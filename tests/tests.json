@@ -479,11 +479,11 @@
                 "--width=540",
                 "--height=540",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
+                "--maxAccumulatedFrames=1024",
                 "--maxPathDepth=12"
             ],
             "golden": "non_uniform_scale/golden.png",
-            "threshold": 0.002
+            "threshold": 0.0005
         }
     ]
 }
