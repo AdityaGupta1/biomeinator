@@ -178,7 +178,8 @@ int main(int argc, char** argv)
 
         printf("\n=============================================\n");
         printf("FINISHED TEST: %s\n", test.name.c_str());
-        printf("Error: %.4f, Threshold: %.4f\n", rmse, test.threshold);
+        printf("Error:     %.5f\n", rmse);
+        printf("Threshold: %.5f\n", test.threshold);
         printf("=============================================\n\n");
     }
 
