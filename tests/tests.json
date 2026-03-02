@@ -471,6 +471,19 @@
             ],
             "golden": "emissive_texture/golden_diffuseAlbedo.png",
             "threshold": 0.001
+        },
+        {
+            "name": "non_uniform_scale",
+            "scene": "non_uniform_scale/non_uniform_scale.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12"
+            ],
+            "golden": "non_uniform_scale/golden.png",
+            "threshold": 0.002
         }
     ]
 }
