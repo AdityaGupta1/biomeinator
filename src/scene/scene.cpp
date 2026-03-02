@@ -480,18 +480,17 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             continue;
         }
 
-        D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = currentFrameInstanceDescs[nextInstanceDescIdx++];
-
+        D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         const glm::ivec3 totalOffset = instance->transformOffset - this->globalInstanceOffset;
         for (int i = 0; i < 3; ++i)
         {
             instanceDesc.Transform[i][3] += totalOffset[i];
         }
-
         instanceDesc.InstanceID = instanceId;
         instanceDesc.InstanceMask = 1;
         instanceDesc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
+        currentFrameInstanceDescs[nextInstanceDescIdx++] = instanceDesc;
 
         if (instance->areaLightsBufferSection.sizeBytes > 0)
         {
