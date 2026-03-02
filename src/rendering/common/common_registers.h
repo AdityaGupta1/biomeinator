@@ -58,6 +58,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
+#define PT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT 1
 
 // =============================================
 #define COLLECT_REGISTER_SPACE 2
@@ -65,6 +66,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // t#
 #define COLLECT_REGISTER_PATH_TRACING_RAW_BUFFER_IN 0
+#define COLLECT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN 1
 
 // =============================================
 #define POSTPROCESS_REGISTER_SPACE 3

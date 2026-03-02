@@ -445,6 +445,32 @@
             ],
             "golden": "refraction_passthrough_specular_chain/golden.png",
             "threshold": 0.002
+        },
+        {
+            "name": "diffuse_albedo_modulation",
+            "scene": "diffuse_albedo_modulation/diffuse_albedo_modulation.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=0",
+                "--maxPathDepth=4",
+                "--debugView=\"diffuseAlbedo\""
+            ],
+            "golden": "diffuse_albedo_modulation/golden_diffuseAlbedo.png",
+            "threshold": 0.001
+        },
+        {
+            "name": "diffuse_albedo_modulation_emission",
+            "scene": "emissive_texture/emissive_texture.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=0",
+                "--maxPathDepth=4",
+                "--debugView=\"diffuseAlbedo\""
+            ],
+            "golden": "emissive_texture/golden_diffuseAlbedo.png",
+            "threshold": 0.001
         }
     ]
 }

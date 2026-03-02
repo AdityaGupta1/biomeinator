@@ -36,13 +36,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
+RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload)
+void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 {
     const uint2 pixelIdx = getPixelIdx();
 
@@ -53,6 +54,8 @@ void pathTraceRay(inout Payload payload)
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
+
+    ptDiffuseAlbedo = 0.f;
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -88,7 +91,14 @@ void pathTraceRay(inout Payload payload)
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            payload.pathColor += payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
+            const float3 emissiveContrib =
+                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
+            payload.pathColor += emissiveContrib;
+
+            if (pathDepth == 0)
+            {
+                ptDiffuseAlbedo += applyReinhard(emissiveContrib);
+            }
         }
 
         const float3 wo_WS = -ray.Direction;
@@ -248,6 +258,11 @@ void pathTraceRay(inout Payload payload)
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
 
+            if (pathDepth == 0)
+            {
+                ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
+            }
+
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
@@ -259,6 +274,49 @@ void pathTraceRay(inout Payload payload)
 
         payload.flags = 0;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        if (pathDepth == 0)
+        {
+            // at this point, ptDiffuseAlbedo = first bounce path weight or emission
+
+            if (bounceWasSpecular)
+            {
+                if (!bool(renderParams.doPathSplitting))
+                {
+                    ptDiffuseAlbedo = 0.f;
+                }
+                else
+                {
+                    bool secondHitHasDiffuseAlbedo = false;
+                    float3 secondHitDiffuseAlbedo = 0.f;
+                    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+                    {
+                        const Material secondHitMaterial = getMaterialFromPayload(payload);
+                        if (secondHitMaterial.hasEmission())
+                        {
+                            secondHitDiffuseAlbedo = applyReinhard(getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv));
+                            secondHitHasDiffuseAlbedo = true;
+                        }
+                        else if (secondHitMaterial.hasDiffuse())
+                        {
+                            secondHitDiffuseAlbedo = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                            secondHitHasDiffuseAlbedo = true;
+                        }
+                    }
+
+                    if (secondHitHasDiffuseAlbedo)
+                    {
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo;
+                    }
+                    else
+                    {
+                        ptDiffuseAlbedo = 0.f;
+                    }
+                }
+            }
+
+            // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
+        }
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
         {
@@ -277,13 +335,18 @@ void pathTraceRay(inout Payload payload)
             return;
         }
 
-        if (pathDepth == 0 && bounceWasSpecular && pathSplitIdx == 0) // TODO: update to support multiple specular bounces?
+        if (bool(renderParams.doPathSplitting) && pathDepth == 0 && bounceWasSpecular) // TODO: support multiple specular bounces?
         {
-            RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
-            specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
-
-            RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-            normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
+            if (pathSplitIdx == 0) // transmission
+            {
+                RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
+                normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
+            }
+            else // reflection
+            {
+                RWTexture2D<float> specularHitDistanceTarget = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+                specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
+            }
         }
 
         if (doMis)
@@ -324,7 +387,8 @@ void RayGeneration()
     Payload payload = gbufferPayload;
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
-    pathTraceRay(payload);
+    float3 outPtDiffuseAlbedo;
+    pathTraceRay(payload, outPtDiffuseAlbedo);
 
     const float3 colorPreTonemap = payload.pathColor;
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
@@ -336,4 +400,6 @@ void RayGeneration()
     {
         pathTracingRawBufferOut[writePixelIdx].xyz = colorPreTonemap;
     }
+
+    ptDiffuseAlbedoRawBufferOut[writePixelIdx] = float4(outPtDiffuseAlbedo, 0.f);
 }
