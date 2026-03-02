@@ -212,14 +212,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     std::set<Biome> biomeSet;
 
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y /*z*/);
+
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-
-            RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), blockPosXZ_WS.x, blockPosXZ_WS.y /*z*/);
 
             const BiomeNoise biomeNoise = {
                 .temperature = temperatureNoise[columnIdx],

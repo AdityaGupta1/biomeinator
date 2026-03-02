@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
+#include "settings_manager.h"
 #include "util/rng.h"
 
 #include <DirectXMath.h>
@@ -170,7 +171,8 @@ void Chunk::fillStructuresAndDecorators()
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
     }
 
-    RandomNumberGenerator decoratorRng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 198594190);
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -587,7 +589,8 @@ void Chunk::createInstances()
 
     terrainEmissiveTriangleIdxs.reserve(512);
 
-    RandomNumberGenerator rng = initRng(this->chunkPos.x, this->chunkPos.y /*z*/, 392421012);
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(392421012), this->chunkPos.x, this->chunkPos.y /*z*/);
 
     for (const uvec3& segmentPos : this->segmentsToGenerate)
     {

@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../block.h"
 #include "../chunk.h"
+#include "settings_manager.h"
 #include "util/rng.h"
 
 #include <array>
@@ -186,6 +187,8 @@ using namespace Structures;
 
 void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructures)
 {
+    const uint worldSeed = SettingsManager::getWorldSeed();
+
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint32_t i = 0; i < numStructures; ++i)
@@ -204,7 +207,7 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
         }
 
         const FillStructureFunc fillStructureFunc = fillStructureFuncs[static_cast<size_t>(structure.type)];
-        RandomNumberGenerator rng = initRng(structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z);
+        RandomNumberGenerator rng = initRng(worldSeed ^ hash(719266093), structure.pos_WS.x, structure.pos_WS.y, structure.pos_WS.z);
         fillStructureFunc(structure, ivec3(structurePosXZ_CS.x, structure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks, rng);
     }
 }
