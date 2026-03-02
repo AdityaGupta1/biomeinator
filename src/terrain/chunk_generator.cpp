@@ -36,19 +36,23 @@ namespace FN = FastNoise;
 namespace ChunkGenerator
 {
 
-static uint32_t worldSeed;
-
 static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
+static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 static FN::SmartNode<FN::Generator> fnCaves;
 
+static uint worldSeed;
+static ivec2 noiseOffsetXZ;
+
 void init()
 {
-    worldSeed = SettingsManager::getAsUint("worldSeed");
+    worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
+    noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
@@ -62,7 +66,7 @@ void init()
         fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(2);
+        fnFractal->SetOctaveCount(3);
 
         fnTemperature = fnFractal;
     }
@@ -73,8 +77,15 @@ void init()
         fnSimplex->SetScale(1.5f * biomeNoiseScale);
         fnSimplex->SetOutputMin(-1.0f);
         fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.04f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(3);
 
-        fnHumidity = fnSimplex;
+        fnHumidity = fnFractal;
     }
 
     {
@@ -86,14 +97,25 @@ void init()
         auto fnFractalRidged = FN::New<FN::FractalRidged>();
         fnFractalRidged->SetSource(fnSimplex);
         fnFractalRidged->SetOctaveCount(5);
-        auto fnAdd = FN::New<FN::Add>();
-        fnAdd->SetLHS(fnFractalRidged);
-        fnAdd->SetRHS(1.f);
-        auto fnMul = FN::New<FN::Multiply>();
-        fnMul->SetLHS(fnAdd);
-        fnMul->SetRHS(0.5f);
 
-        fnPeak = fnMul;
+        fnPeak = fnFractalRidged;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(76123912);
+        fnSimplex->SetScale(5.f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+        auto fnWarp = FN::New<FN::DomainWarpGradient>();
+        fnWarp->SetSource(fnSimplex);
+        fnWarp->SetScale(0.04f * biomeNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnWarp);
+        fnFractal->SetOctaveCount(5);
+
+        fnInland = fnFractal;
     }
 
     {
@@ -134,12 +156,29 @@ void init()
 
 static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
 {
-    fn->GenUniformGrid2D(data, posXZ.x, posXZ.y /*z*/, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid2D(data,
+                         posXZ.x + noiseOffsetXZ.x,
+                         posXZ.y + noiseOffsetXZ.y /*z*/,
+                         chunkSizeXZ,
+                         chunkSizeXZ,
+                         1.f,
+                         1.f,
+                         worldSeed ^ hash(719023919));
 }
 
 static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height, int yOffset = 0)
 {
-    fn->GenUniformGrid3D(data, yOffset /*y*/, posXZ.x /*x*/, posXZ.y /*z*/, height, chunkSizeXZ, chunkSizeXZ, 1.f, 1.f, 1.f, worldSeed);
+    fn->GenUniformGrid3D(data,
+                         yOffset /*y*/,
+                         posXZ.x + noiseOffsetXZ.x /*x*/,
+                         posXZ.y + noiseOffsetXZ.y /*z*/,
+                         height,
+                         chunkSizeXZ,
+                         chunkSizeXZ,
+                         1.f,
+                         1.f,
+                         1.f,
+                         worldSeed ^ hash(391023545));
 }
 
 }; // namespace ChunkGenerator
@@ -149,7 +188,7 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
-inline constexpr int seaLevel = 150;
+inline constexpr int seaLevel = 125;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -158,9 +197,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(inlandNoise, fnInland, chunkPosBlocksXZ_WS);
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -169,6 +210,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     int terrainNoiseMaxY = 0;
 
     std::set<Biome> biomeSet;
+
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y /*z*/);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -181,13 +224,27 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 .temperature = temperatureNoise[columnIdx],
                 .humidity = humidityNoise[columnIdx],
                 .peak = peakNoise[columnIdx],
+                .inland = inlandNoise[columnIdx],
             };
-            const Biome biome = Biomes::getClosestBiome(biomeNoise);
+            const Biome biome = Biomes::getClosestBiome(BiomeNoise::randomOffset(biomeNoise, rng));
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 155.f;
-            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
+            const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
+
+            float terrainBaseHeight = 140.f;
+            {
+                terrainBaseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
+                const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
+                terrainBaseHeight += inlandHeightModifier * 90.f;
+                const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
+                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 8), seaLevelPullFactor);
+            }
+            float terrainSurfaceMultiplier = 0.02f;
+            {
+                terrainSurfaceMultiplier -= scaledPeak * 0.008f;
+                terrainSurfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
+            }
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
@@ -262,15 +319,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     if (y < maxCaveHeight)
                     {
                         const float caveSurfaceMixFactor =
-                            smoothstep<float>(-8, 24, y) * smoothstep<float>(115, 48, y);
-                        const float caveSurfaceVal = mix(0.f, 0.6f, caveSurfaceMixFactor);
+                            smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
+                        const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
                         isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
                     }
 
                     if (!isCave)
                     {
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                        RandomNumberGenerator rng = initRng(blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                        RandomNumberGenerator rng =
+                            initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                         block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
                     }
                 }
@@ -336,8 +394,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 for (int gridX = paddedMinGridPos.x; gridX <= paddedMaxGridPos.x; ++gridX)
                 {
                     const ivec2 gridPosBlocks_WS = ivec2(gridX, gridZ) * static_cast<int>(gridCellSideLength);
-                    RandomNumberGenerator rng =
-                        initRng(gridPosBlocks_WS.x, gridPosBlocks_WS.y /*z*/, static_cast<uint>(structureGen.type), 87152059);
+                    RandomNumberGenerator rng = initRng(worldSeed ^ hash(87152059),
+                                                        gridPosBlocks_WS.x,
+                                                        gridPosBlocks_WS.y /*z*/,
+                                                        static_cast<uint>(structureGen.type));
                     const ivec2 candidatePosXZ_WS =
                         gridPosBlocks_WS + ivec2(rng.nextInt(gridCellSideLength), rng.nextInt(gridCellSideLength));
                     candidatePositionsXZ_WS[candidatePosIdx++] = candidatePosXZ_WS;

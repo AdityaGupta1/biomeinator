@@ -24,24 +24,36 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <vector>
 
+class RandomNumberGenerator;
+
 struct BiomeNoise
 {
     float temperature{ 0.f };
     float humidity{ 0.f };
     float peak{ 0.f };
+    float inland{ 0.f };
 
     float distance2(const BiomeNoise& other) const;
+
+    static BiomeNoise randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng);
 };
 
 enum class Biome : uint8_t
 {
+    OCEAN,
+
+    BEACH,
+    GRAVEL_BEACH,
+    BLACK_SAND_BEACH,
+
     PLAINS,
-    SAVANNA,
     DESERT,
     FOREST,
-    MOUNTAINS,
     TUNDRA,
+
+    SAVANNA,
     ICE_FIELDS,
+    MOUNTAINS,
 
     COUNT
 };

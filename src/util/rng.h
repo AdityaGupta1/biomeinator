@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <glm/glm.hpp>
 
 // https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
-inline uint32_t hash(uint32_t seed)
+constexpr inline uint32_t hash(uint32_t seed)
 {
     uint32_t state = seed * 747796405u + 2891336453u;
     uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
@@ -43,6 +43,21 @@ struct RandomNumberGenerator
         return (nextUint() & 0x00FFFFFF) / 16777216.f;
     }
 
+    inline float nextFloat(float max)
+    {
+        return nextFloat() * max;
+    }
+
+    inline float nextFloat(float min, float max)
+    {
+        return min + nextFloat(max - min);
+    }
+
+    inline float nextFloatAbs(float absMax)
+    {
+        return nextFloat(-absMax, absMax);
+    }
+
     inline glm::vec2 nextFloat2()
     {
         return glm::vec2(nextFloat(), nextFloat());
@@ -58,14 +73,14 @@ struct RandomNumberGenerator
         return nextFloat() < p;
     }
 
-    inline int nextInt(int min, int max)
-    {
-        return static_cast<int>(min + (max - min) * nextFloat());
-    }
-
     inline int nextInt(int max)
     {
         return static_cast<int>(max * nextFloat());
+    }
+
+    inline int nextInt(int min, int max)
+    {
+        return static_cast<int>(min + (max - min) * nextFloat());
     }
 };
 
