@@ -335,7 +335,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
             return;
         }
 
-        if (pathDepth == 0 && bounceWasSpecular && bool(renderParams.doPathSplitting)) // TODO: update to support multiple specular bounces?
+        if (bool(renderParams.doPathSplitting) && pathDepth == 0 && bounceWasSpecular) // TODO: support multiple specular bounces?
         {
             if (pathSplitIdx == 0) // transmission
             {
@@ -387,7 +387,7 @@ void RayGeneration()
     Payload payload = gbufferPayload;
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
-    float3 outPtDiffuseAlbedo = 0.f;
+    float3 outPtDiffuseAlbedo;
     pathTraceRay(payload, outPtDiffuseAlbedo);
 
     const float3 colorPreTonemap = payload.pathColor;
