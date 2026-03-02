@@ -29,12 +29,15 @@ struct BiomeNoise
     float temperature{ 0.f };
     float humidity{ 0.f };
     float peak{ 0.f };
+    float inland{ 0.f };
 
     float distance2(const BiomeNoise& other) const;
 };
 
 enum class Biome : uint8_t
 {
+    OCEAN,
+    BEACH,
     PLAINS,
     SAVANNA,
     DESERT,

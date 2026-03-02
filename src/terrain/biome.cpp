@@ -25,11 +25,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <glm/glm.hpp>
 
+constexpr BiomeNoise biomeNoiseDistance2Scale = {
+    .temperature = 1.f,
+    .humidity = 1.f,
+    .peak = 1.f,
+    .inland = 6.f,
+};
+
 float BiomeNoise::distance2(const BiomeNoise& other) const
 {
-    return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
-           (this->humidity - other.humidity) * (this->humidity - other.humidity) +
-           (this->peak - other.peak) * (this->peak - other.peak) * 4;
+    return (this->temperature - other.temperature) * (this->temperature - other.temperature) * biomeNoiseDistance2Scale.temperature +
+           (this->humidity - other.humidity) * (this->humidity - other.humidity) * biomeNoiseDistance2Scale.humidity +
+           (this->peak - other.peak) * (this->peak - other.peak) * (4.f * biomeNoiseDistance2Scale.peak) + // 4x due to having half the range of the others
+           (this->inland - other.inland) * (this->inland - other.inland) * biomeNoiseDistance2Scale.inland;
 }
 
 namespace Biomes
@@ -45,6 +53,37 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 // peak in [0, 1]
 void init()
 {
+    // OCEAN
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(OCEAN);
+        data.biomeNoise = {
+            .temperature = 0.0f,
+            .humidity = 0.0f,
+            .peak = 0.0f,
+            .inland = -0.2f,
+        };
+        data.topBlocks = {
+            //.top = Block::SAND,
+            .top = Block::OAK_LOG, // TODO: temporary
+            .mid = Block::SAND,
+        };
+    }
+
+    // BEACH
+    {
+        BiomeData& data = BIOME_DATA_BY_NAME(BEACH);
+        data.biomeNoise = {
+            .temperature = 0.0f,
+            .humidity = 0.0f,
+            .peak = 0.0f,
+            .inland = 0.0f,
+        };
+        data.topBlocks = {
+            .top = Block::SAND,
+            .mid = Block::SAND,
+        };
+    }
+
     // PLAINS
     {
         BiomeData& data = BIOME_DATA_BY_NAME(PLAINS);
@@ -52,6 +91,7 @@ void init()
             .temperature = 0.0f,
             .humidity = 0.0f,
             .peak = 0.15f,
+            .inland = 0.2f,
         };
         data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
@@ -67,6 +107,7 @@ void init()
             .temperature = 0.6f,
             .humidity = -0.6f,
             .peak = 0.4f,
+            .inland = 0.4f,
         };
         data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
@@ -81,6 +122,7 @@ void init()
             .temperature = 1.0f,
             .humidity = -1.0f,
             .peak = 0.2f,
+            .inland = 0.3f,
         };
         data.topBlocks = {
             .top = Block::SAND,
@@ -103,6 +145,7 @@ void init()
             .temperature = -0.1f,
             .humidity = 0.2f,
             .peak = 0.3f,
+            .inland = 0.2f,
         };
         data.structureGens = {
             { StructureType::OAK_TREE, 7, 1.5f },
@@ -121,6 +164,7 @@ void init()
             .temperature = -0.4f,
             .humidity = -0.4f,
             .peak = 0.8f,
+            .inland = 0.8f,
         };
         data.topBlocks = {
             .top = Block::STONE,
@@ -135,6 +179,7 @@ void init()
             .temperature = -0.7f,
             .humidity = -0.6f,
             .peak = 0.2f,
+            .inland = 0.3f,
         };
         data.topBlocks = {
             .top = Block::SNOWY_GRASS_BLOCK,
@@ -149,6 +194,7 @@ void init()
             .temperature = -0.85f,
             .humidity = -0.8f,
             .peak = 0.15f,
+            .inland = 0.55f,
         };
         data.topBlocks = {
             .top = Block::SNOW,

@@ -41,6 +41,7 @@ static uint32_t worldSeed;
 static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
+static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
@@ -98,6 +99,16 @@ void init()
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(76123912);
+        fnSimplex->SetScale(5.f * biomeNoiseScale);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnInland = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(210393129);
         fnSimplex->SetScale(400.0f);
         fnSimplex->SetOutputMin(-0.5f);
@@ -149,7 +160,7 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
-inline constexpr int seaLevel = 150;
+inline constexpr int seaLevel = 108;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -158,9 +169,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
     fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
+    fillNoiseArray2D(inlandNoise, fnInland, chunkPosBlocksXZ_WS);
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -181,13 +194,24 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 .temperature = temperatureNoise[columnIdx],
                 .humidity = humidityNoise[columnIdx],
                 .peak = peakNoise[columnIdx],
+                .inland = inlandNoise[columnIdx],
             };
             const Biome biome = Biomes::getClosestBiome(biomeNoise);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            const float terrainBaseHeight = 100.f + powf(biomeNoise.peak, 3.f) * 155.f;
-            const float terrainSurfaceMultiplier = 0.02f - biomeNoise.peak * 0.008f;
+            float terrainBaseHeight = 128.f;
+            {
+                terrainBaseHeight += pow(biomeNoise.peak * max(biomeNoise.inland, 0.1f), 3.f) * 145.f;
+                const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
+                terrainBaseHeight += inlandHeightModifier * 45.f;
+                const float seaLevelPullFactor = max(2.f / (5.f * abs(biomeNoise.inland) + 1.f) - 1.f, 0.f);
+                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel), seaLevelPullFactor);
+            }
+            float terrainSurfaceMultiplier = 0.02f;
+            {
+                terrainSurfaceMultiplier -= biomeNoise.peak * 0.008f;
+            }
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
