@@ -97,7 +97,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
             if (pathDepth == 0)
             {
-                ptDiffuseAlbedo += emissiveContrib;
+                ptDiffuseAlbedo += applyReinhard(emissiveContrib);
             }
         }
 
@@ -287,18 +287,28 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 }
                 else
                 {
-                    bool secondHitHasDiffuse = false;
+                    bool secondHitHasDiffuseAlbedo = false;
+                    float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
                         const Material secondHitMaterial = getMaterialFromPayload(payload);
-                        if (secondHitMaterial.hasDiffuse())
+                        if (secondHitMaterial.hasEmission())
                         {
-                            ptDiffuseAlbedo *= getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
-                            secondHitHasDiffuse = true;
+                            secondHitDiffuseAlbedo = applyReinhard(getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv));
+                            secondHitHasDiffuseAlbedo = true;
+                        }
+                        else if (secondHitMaterial.hasDiffuse())
+                        {
+                            secondHitDiffuseAlbedo = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                            secondHitHasDiffuseAlbedo = true;
                         }
                     }
 
-                    if (!secondHitHasDiffuse)
+                    if (secondHitHasDiffuseAlbedo)
+                    {
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo;
+                    }
+                    else
                     {
                         ptDiffuseAlbedo = 0.f;
                     }
