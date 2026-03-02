@@ -470,7 +470,7 @@
                 "--debugView=\"diffuseAlbedo\""
             ],
             "golden": "emissive_texture/golden_diffuseAlbedo.png",
-            "threshold": 0.001
+            "threshold": 0.0001
         },
         {
             "name": "non_uniform_scale",
@@ -483,7 +483,7 @@
                 "--maxPathDepth=12"
             ],
             "golden": "non_uniform_scale/golden.png",
-            "threshold": 0.0005
+            "threshold": 0.0001
         }
     ]
 }
