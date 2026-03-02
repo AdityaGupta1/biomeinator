@@ -43,6 +43,21 @@ struct RandomNumberGenerator
         return (nextUint() & 0x00FFFFFF) / 16777216.f;
     }
 
+    inline float nextFloat(float max)
+    {
+        return nextFloat() * max;
+    }
+
+    inline float nextFloat(float min, float max)
+    {
+        return min + nextFloat(max - min);
+    }
+
+    inline float nextFloatAbs(float absMax)
+    {
+        return nextFloat(-absMax, absMax);
+    }
+
     inline glm::vec2 nextFloat2()
     {
         return glm::vec2(nextFloat(), nextFloat());

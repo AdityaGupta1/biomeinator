@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <vector>
 
+class RandomNumberGenerator;
+
 struct BiomeNoise
 {
     float temperature{ 0.f };
@@ -32,6 +34,8 @@ struct BiomeNoise
     float inland{ 0.f };
 
     float distance2(const BiomeNoise& other) const;
+
+    static BiomeNoise randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng);
 };
 
 enum class Biome : uint8_t

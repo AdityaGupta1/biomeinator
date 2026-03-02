@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "biome.h"
 
 #include "chunk.h"
+#include "util/rng.h"
 
 #include <array>
 #include <limits>
@@ -30,6 +31,16 @@ float BiomeNoise::distance2(const BiomeNoise& other) const
     return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
            (this->humidity - other.humidity) * (this->humidity - other.humidity) +
            (this->peak - other.peak) * (this->peak - other.peak);
+}
+
+BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng)
+{
+    return {
+        .temperature = base.temperature + rng.nextFloatAbs(0.005f),
+        .humidity = base.humidity + rng.nextFloatAbs(0.005f),
+        .peak = base.peak + rng.nextFloatAbs(0.005f),
+        .inland = base.inland + rng.nextFloatAbs(0.015f),
+    };
 }
 
 namespace Biomes
