@@ -89,15 +89,39 @@ float getDistanceToVoxelBounds(const RayDesc ray)
     const float3 boundsMin = float3(sceneParams.voxelBoundsMin_WS);
     const float3 boundsMax = float3(sceneParams.voxelBoundsMax_WS);
 
-    const float3 invDir = rcp(ray.Direction);
-    const float3 t0 = (boundsMin - ray.Origin) * invDir;
-    const float3 t1 = (boundsMax - ray.Origin) * invDir;
+    float tEnter = 0.f;
+    float tExit = 1e30f;
 
-    const float3 tMin = min(t0, t1);
-    const float3 tMax = max(t0, t1);
+    [unroll]
+    for (uint axis = 0; axis < 3; ++axis)
+    {
+        const float origin = ray.Origin[axis];
+        const float dir = ray.Direction[axis];
+        const float bMin = boundsMin[axis];
+        const float bMax = boundsMax[axis];
 
-    const float tEnter = max(max(tMin.x, tMin.y), tMin.z);
-    const float tExit = min(min(tMax.x, tMax.y), tMax.z);
+        if (abs(dir) < 1e-8f)
+        {
+            if (origin < bMin || origin > bMax)
+            {
+                return 0.f;
+            }
+            continue;
+        }
+
+        const float invDir = 1.f / dir;
+        float t0 = (bMin - origin) * invDir;
+        float t1 = (bMax - origin) * invDir;
+        if (t0 > t1)
+        {
+            const float tmp = t0;
+            t0 = t1;
+            t1 = tmp;
+        }
+
+        tEnter = max(tEnter, t0);
+        tExit = min(tExit, t1);
+    }
 
     const float nearT = max(tEnter, 0.f);
     if (tExit <= nearT)

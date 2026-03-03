@@ -73,7 +73,9 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         return;
     }
 
-    applyWaterAbsorption(payload, distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS));
+    const float primarySegmentDistance = distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS);
+    const float3 primarySegmentAbsorption = getWaterAbsorptionFactor(payload, primarySegmentDistance);
+    payload.pathWeight *= primarySegmentAbsorption;
 
     // data of last "real" bounce (i.e. not passthrough)
     bool bounceWasSpecular = false;
@@ -309,10 +311,6 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
         const float3 segmentAbsorption = getSegmentAbsorptionFactor(payload, ray);
         payload.pathWeight *= segmentAbsorption;
-        if (pathDepth == 0 && bounceWasSpecular)
-        {
-            ptDiffuseAlbedo *= segmentAbsorption;
-        }
 
         if (pathDepth == 0)
         {
