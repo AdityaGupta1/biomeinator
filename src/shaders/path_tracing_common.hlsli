@@ -36,7 +36,7 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
-static const float3 waterSigmaA = float3(0.35f, 0.08f, 0.02f) * 0.5f;
+static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.5f;
 
 bool isWaterTriangle(const uint instanceId, const uint triangleIdx)
 {
