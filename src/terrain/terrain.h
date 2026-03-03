@@ -35,7 +35,7 @@ void addChunkToDestroy(Chunk* chunk);
 void setDirty();
 
 void update(ToFreeList& toFreeList);
-bool getCameraUnderwater();
+bool isCameraUnderwater();
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();
 

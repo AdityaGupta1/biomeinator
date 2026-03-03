@@ -445,7 +445,7 @@ void shutdown()
     threadPool.shutdown();
 }
 
-bool getCameraUnderwater()
+bool isCameraUnderwater()
 {
     return cameraUnderwater;
 }

@@ -827,7 +827,7 @@ uint32_t Chunk::getNumNeighborsSet() const
 
 bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
 {
-    if (this->state.load(std::memory_order_acquire) < ChunkState::HAS_ALL_BLOCKS)
+    if (this->getState() < ChunkState::HAS_ALL_BLOCKS)
     {
         return false;
     }

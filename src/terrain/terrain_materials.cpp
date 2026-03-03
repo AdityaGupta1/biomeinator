@@ -96,7 +96,7 @@ static void createMaterials(Scene* scene)
 
     {
         Material waterMaterial{};
-        waterMaterial.baseColor = { 1.f, 1.f, 1.f };
+        waterMaterial.baseColor = { 1.f, 1.f, 1.f }; // blue color comes from volume absorption
         waterMaterial.setHasDiffuse(false);
         waterMaterial.setHasGlossyReflection(true);
         waterMaterial.setHasGlossyTransmission(true);

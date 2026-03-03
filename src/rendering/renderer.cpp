@@ -1633,7 +1633,7 @@ void render()
         const glm::ivec3 voxelBoundsMax_WS = Terrain::getVoxelRenderBoundsMax_WS();
         const glm::ivec3 globalInstanceOffset = scene.getGlobalInstanceOffset();
 
-        sceneParams->cameraUnderwater = Terrain::getCameraUnderwater() ? 1 : 0;
+        sceneParams->cameraUnderwater = Terrain::isCameraUnderwater() ? 1 : 0;
         sceneParams->voxelBoundsMin_WS = {
             voxelBoundsMin_WS.x - globalInstanceOffset.x,
             voxelBoundsMin_WS.y - globalInstanceOffset.y,
