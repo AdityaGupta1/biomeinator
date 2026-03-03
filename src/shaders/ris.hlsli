@@ -98,7 +98,11 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
     return risSampleOut;
 }
 
-DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 surfPos_WS, const float3 surfNor_WS, const bool canPassthrough)
+DirectLightingSample evaluateRisSample(const RisSample risSample,
+                                       const float3 surfPos_WS,
+                                       const float3 surfNor_WS,
+                                       const bool canPassthrough,
+                                       const bool startUnderwater)
 {
     DirectLightingSample result;
     result.lightIdx = risSample.lightIdx;
@@ -113,7 +117,15 @@ DirectLightingSample evaluateRisSample(const RisSample risSample, const float3 s
     result.wi_WS = normalize(risSample.pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, risSample.pointOnLight_WS, areaLights[risSample.lightIdx], canPassthrough, Le))
+    if (!traceToLight(
+            surfPos_WS,
+            surfNor_WS,
+            result.wi_WS,
+            risSample.pointOnLight_WS,
+            areaLights[risSample.lightIdx],
+            canPassthrough,
+            startUnderwater,
+            Le))
     {
         return result;
     }

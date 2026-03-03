@@ -96,7 +96,7 @@ static void createMaterials(Scene* scene)
 
     {
         Material waterMaterial{};
-        waterMaterial.baseColor = { 29.f / 255.f, 162.f / 255.f, 216.f / 255.f }; // TODO: replace with volume absorption
+        waterMaterial.baseColor = { 1.f, 1.f, 1.f };
         waterMaterial.setHasDiffuse(false);
         waterMaterial.setHasGlossyReflection(true);
         waterMaterial.setHasGlossyTransmission(true);

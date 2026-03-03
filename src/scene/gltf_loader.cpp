@@ -466,6 +466,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             DirectX::XMStoreFloat3x4(&instanceTransform, transform);
             instance->setTransform(instanceTransform);
 
+            instance->host_perTriDatas.resize(instance->getTriCount());
             instance->finalizeGeometry();
 
             const bool isEmissive = prim.material >= 0 &&

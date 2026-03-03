@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
 #define PAYLOAD_FLAG_BACKFACE_HIT (1 << 1)
 #define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
+#define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 
 struct Payload
 {

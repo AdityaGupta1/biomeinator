@@ -1624,6 +1624,27 @@ void render()
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
+    sceneParams->cameraUnderwater = 0;
+    sceneParams->voxelBoundsMin_WS = { 0, 0, 0 };
+    sceneParams->voxelBoundsMax_WS = { 0, 0, 0 };
+    if (voxelMode)
+    {
+        const glm::ivec3 voxelBoundsMin_WS = Terrain::getVoxelRenderBoundsMin_WS();
+        const glm::ivec3 voxelBoundsMax_WS = Terrain::getVoxelRenderBoundsMax_WS();
+        const glm::ivec3 globalInstanceOffset = scene.getGlobalInstanceOffset();
+
+        sceneParams->cameraUnderwater = Terrain::getCameraUnderwater() ? 1 : 0;
+        sceneParams->voxelBoundsMin_WS = {
+            voxelBoundsMin_WS.x - globalInstanceOffset.x,
+            voxelBoundsMin_WS.y - globalInstanceOffset.y,
+            voxelBoundsMin_WS.z - globalInstanceOffset.z,
+        };
+        sceneParams->voxelBoundsMax_WS = {
+            voxelBoundsMax_WS.x - globalInstanceOffset.x,
+            voxelBoundsMax_WS.y - globalInstanceOffset.y,
+            voxelBoundsMax_WS.z - globalInstanceOffset.z,
+        };
+    }
 
     ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
 

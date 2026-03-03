@@ -170,6 +170,7 @@ public:
     glm::ivec2 getChunkPos() const;
 
     uint32_t getNumNeighborsSet() const;
+    bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);

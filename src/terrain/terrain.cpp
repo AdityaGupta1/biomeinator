@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.h"
 
 #include <algorithm>
+#include <cmath>
 #include <deque>
 #include <mutex>
 #include <unordered_map>
@@ -129,14 +130,76 @@ void setDirty()
 }
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
+static bool cameraUnderwater = false;
+static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
+static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 6;
 
 void update(ToFreeList& toFreeList)
 {
+    const glm::vec3 cameraPos_WS = Renderer::getCamera().getPos_WS();
     const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
     const glm::ivec2 currentChunkPos = glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / static_cast<int>(chunkSizeXZ);
+    const glm::ivec2 minRenderChunkPos = currentChunkPos - renderDistance;
+    const glm::ivec2 maxRenderChunkPos = currentChunkPos + renderDistance;
+
+    voxelRenderBoundsMin_WS = {
+        minRenderChunkPos.x * static_cast<int>(chunkSizeXZ),
+        0,
+        minRenderChunkPos.y * static_cast<int>(chunkSizeXZ),
+    };
+    voxelRenderBoundsMax_WS = {
+        (maxRenderChunkPos.x + 1) * static_cast<int>(chunkSizeXZ),
+        static_cast<int>(chunkSizeY),
+        (maxRenderChunkPos.y + 1) * static_cast<int>(chunkSizeXZ),
+    };
+
+    cameraUnderwater = false;
+    {
+        const glm::ivec3 cameraBlockPos_WS = glm::ivec3(glm::floor(cameraPos_WS));
+        if (cameraBlockPos_WS.y >= 0 && cameraBlockPos_WS.y < static_cast<int>(chunkSizeY))
+        {
+            const glm::ivec2 cameraChunkPos = glm::ivec2(
+                MathUtil::floorDiv(cameraBlockPos_WS.x, static_cast<int>(chunkSizeXZ)),
+                MathUtil::floorDiv(cameraBlockPos_WS.z, static_cast<int>(chunkSizeXZ)));
+
+            const glm::ivec2 regionPos = glmUtil::floorDiv(cameraChunkPos, glm::ivec2(regionSideLength));
+            const auto regionIter = regions.find(regionPos);
+            if (regionIter != regions.end())
+            {
+                Chunk* const cameraChunk = regionIter->second->getChunk(cameraChunkPos);
+                if (cameraChunk != nullptr &&
+                    cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
+                    !cameraChunk->getIsMarkedForDestruction())
+                {
+                    const int localX = cameraBlockPos_WS.x - cameraChunkPos.x * static_cast<int>(chunkSizeXZ);
+                    const int localZ = cameraBlockPos_WS.z - cameraChunkPos.y * static_cast<int>(chunkSizeXZ);
+                    const glm::uvec3 cameraBlockPos_CS{
+                        static_cast<uint32_t>(localX),
+                        static_cast<uint32_t>(cameraBlockPos_WS.y),
+                        static_cast<uint32_t>(localZ),
+                    };
+
+                    Block cameraBlock;
+                    if (cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
+                        Blocks::getBlockData(cameraBlock).type == BlockType::WATER)
+                    {
+                        if (cameraBlock == Block::WATER_TOP)
+                        {
+                            const float cameraYFrac = cameraPos_WS.y - std::floor(cameraPos_WS.y);
+                            cameraUnderwater = cameraYFrac < 0.875f;
+                        }
+                        else
+                        {
+                            cameraUnderwater = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     bool updateTerrain = currentChunkPos != lastChunkPos;
     if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
@@ -380,6 +443,21 @@ void update(ToFreeList& toFreeList)
 void shutdown()
 {
     threadPool.shutdown();
+}
+
+bool getCameraUnderwater()
+{
+    return cameraUnderwater;
+}
+
+glm::ivec3 getVoxelRenderBoundsMin_WS()
+{
+    return voxelRenderBoundsMin_WS;
+}
+
+glm::ivec3 getVoxelRenderBoundsMax_WS()
+{
+    return voxelRenderBoundsMax_WS;
 }
 
 } // namespace Terrain

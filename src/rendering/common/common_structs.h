@@ -175,6 +175,7 @@ struct AreaLight
 };
 
 #define LIGHT_IDX_INVALID ~0u
+#define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData
 {
@@ -184,9 +185,9 @@ public:
 #endif
 
     uint localAreaLightIdx;
+    uint flags;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus

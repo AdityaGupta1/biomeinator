@@ -700,6 +700,13 @@ void Chunk::createInstances()
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
 
+    terrainInstance->host_perTriDatas.resize(terrainIdxs.size() / 3u);
+    waterInstance->host_perTriDatas.resize(waterIdxs.size() / 3u);
+    for (PerTriangleData& perTriData : waterInstance->host_perTriDatas)
+    {
+        perTriData.flags |= TRIANGLE_FLAG_IS_WATER;
+    }
+
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
@@ -816,6 +823,17 @@ glm::ivec2 Chunk::getChunkPos() const
 uint32_t Chunk::getNumNeighborsSet() const
 {
     return this->numNeighborsSet;
+}
+
+bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
+{
+    if (this->state.load(std::memory_order_acquire) < ChunkState::HAS_ALL_BLOCKS)
+    {
+        return false;
+    }
+
+    outBlock = this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
+    return true;
 }
 
 // y changes fastest, then x, then z

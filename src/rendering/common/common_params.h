@@ -119,8 +119,14 @@ struct SceneParams
 {
     uint voxelMode;
     uint numAreaLights;
+    uint cameraUnderwater;
     uint pad0;
+
+    int3 voxelBoundsMin_WS;
     uint pad1;
+
+    int3 voxelBoundsMax_WS;
+    uint pad2;
 };
 
 struct RenderParams

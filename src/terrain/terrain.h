@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <glm/glm.hpp>
+
 class Chunk;
 class Scene;
 class ToFreeList;
@@ -33,6 +35,9 @@ void addChunkToDestroy(Chunk* chunk);
 void setDirty();
 
 void update(ToFreeList& toFreeList);
+bool getCameraUnderwater();
+glm::ivec3 getVoxelRenderBoundsMin_WS();
+glm::ivec3 getVoxelRenderBoundsMax_WS();
 
 void shutdown();
 
