@@ -30,6 +30,6 @@ Material::Material()
 {}
 
 PerTriangleData::PerTriangleData()
-    : localAreaLightIdx(LIGHT_IDX_INVALID),
-      flags(0)
+    : flags(0),
+      localAreaLightIdx(LIGHT_IDX_INVALID)
 {}
