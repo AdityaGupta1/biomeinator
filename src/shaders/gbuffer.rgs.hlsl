@@ -119,7 +119,6 @@ void RayGeneration()
     Payload payload;
     payload.materialIdx = MATERIAL_IDX_INVALID;
     payload.flags = sceneParams.cameraUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0;
-    payload.pad0 = 0;
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
