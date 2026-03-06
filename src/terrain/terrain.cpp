@@ -139,8 +139,8 @@ inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 6;
 
 void update(ToFreeList& toFreeList)
 {
-    const glm::vec3 cameraPos_WS = Renderer::getCamera().getPos_WS();
-    const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
+    const Camera& camera = Renderer::getCamera();
+    const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
     const glm::ivec2 currentChunkPos = glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / static_cast<int>(chunkSizeXZ);
     const glm::ivec2 minRenderChunkPos = currentChunkPos - renderDistance;
     const glm::ivec2 maxRenderChunkPos = currentChunkPos + renderDistance;
@@ -158,43 +158,36 @@ void update(ToFreeList& toFreeList)
 
     cameraUnderwater = false;
     {
-        const glm::ivec3 cameraBlockPos_WS = glm::ivec3(glm::floor(cameraPos_WS));
-        if (cameraBlockPos_WS.y >= 0 && cameraBlockPos_WS.y < static_cast<int>(chunkSizeY))
+        if (cameraPosInt_WS.y >= 0 && cameraPosInt_WS.y < static_cast<int>(chunkSizeY))
         {
-            const glm::ivec2 cameraChunkPos = glm::ivec2(
-                MathUtil::floorDiv(cameraBlockPos_WS.x, static_cast<int>(chunkSizeXZ)),
-                MathUtil::floorDiv(cameraBlockPos_WS.z, static_cast<int>(chunkSizeXZ)));
+            const glm::ivec2 cameraChunkPos =
+                glm::ivec2(MathUtil::floorDiv(cameraPosInt_WS.x, static_cast<int>(chunkSizeXZ)),
+                           MathUtil::floorDiv(cameraPosInt_WS.z, static_cast<int>(chunkSizeXZ)));
 
             const glm::ivec2 regionPos = glmUtil::floorDiv(cameraChunkPos, glm::ivec2(regionSideLength));
             const auto regionIter = regions.find(regionPos);
             if (regionIter != regions.end())
             {
-                Chunk* const cameraChunk = regionIter->second->getChunk(cameraChunkPos);
-                if (cameraChunk != nullptr &&
-                    cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
-                    !cameraChunk->getIsMarkedForDestruction())
+                const Chunk* cameraChunk = regionIter->second->getChunk(cameraChunkPos);
+                const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
+                                        !cameraChunk->getIsMarkedForDestruction();
+                if (chunkValid)
                 {
-                    const int localX = cameraBlockPos_WS.x - cameraChunkPos.x * static_cast<int>(chunkSizeXZ);
-                    const int localZ = cameraBlockPos_WS.z - cameraChunkPos.y * static_cast<int>(chunkSizeXZ);
+                    const int localX = cameraPosInt_WS.x - (cameraChunkPos.x * static_cast<int>(chunkSizeXZ));
+                    const int localZ = cameraPosInt_WS.z - (cameraChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
                     const glm::uvec3 cameraBlockPos_CS{
                         static_cast<uint32_t>(localX),
-                        static_cast<uint32_t>(cameraBlockPos_WS.y),
+                        static_cast<uint32_t>(cameraPosInt_WS.y),
                         static_cast<uint32_t>(localZ),
                     };
 
                     Block cameraBlock;
-                    if (cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
-                        Blocks::getBlockData(cameraBlock).type == BlockType::WATER)
+                    const bool blockIsWater = cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
+                                              Blocks::getBlockData(cameraBlock).type == BlockType::WATER;
+                    if (blockIsWater)
                     {
-                        if (cameraBlock == Block::WATER_TOP)
-                        {
-                            const float cameraYFrac = cameraPos_WS.y - std::floor(cameraPos_WS.y);
-                            cameraUnderwater = cameraYFrac < 0.875f;
-                        }
-                        else
-                        {
-                            cameraUnderwater = true;
-                        }
+                        cameraUnderwater =
+                            (cameraBlock == Block::WATER_TOP) ? (camera.getPosFloat_WS().y < 0.875f) : true;
                     }
                 }
             }

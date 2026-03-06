@@ -791,7 +791,7 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-bool Chunk::getIsMarkedForDestruction()
+bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
 }

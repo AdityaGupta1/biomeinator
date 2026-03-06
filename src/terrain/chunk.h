@@ -162,7 +162,7 @@ public:
     void setState(ChunkState newState);
     bool advanceState(ChunkState newState);
 
-    bool getIsMarkedForDestruction();
+    bool getIsMarkedForDestruction() const;
     void setIsMarkedForDestruction(bool marked = true);
 
     void setInstancesVisible(bool visible);
