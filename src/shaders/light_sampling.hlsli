@@ -91,7 +91,6 @@ bool traceToLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    lightPayload.pad0 = asuint(0.f);
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
     finalizePassthroughRayAbsorption(lightPayload, ray);
 
@@ -123,8 +122,9 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(
-            surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, canPassthrough, startUnderwater, Le))
+    const bool didHitLight =
+        traceToLight(surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, canPassthrough, startUnderwater, Le);
+    if (!didHitLight)
     {
         return result;
     }

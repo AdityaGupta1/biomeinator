@@ -111,7 +111,6 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    domeLightPayload.pathColor = float3(0.f, 0.f, 0.f);
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
     finalizePassthroughRayAbsorption(domeLightPayload, ray);
