@@ -117,15 +117,15 @@ DirectLightingSample evaluateRisSample(const RisSample risSample,
     result.wi_WS = normalize(risSample.pointOnLight_WS - surfPos_WS);
 
     float3 Le;
-    if (!traceToLight(
-            surfPos_WS,
-            surfNor_WS,
-            result.wi_WS,
-            risSample.pointOnLight_WS,
-            areaLights[risSample.lightIdx],
-            canPassthrough,
-            startUnderwater,
-            Le))
+    const bool didHitLight = traceToLight(surfPos_WS,
+                                          surfNor_WS,
+                                          result.wi_WS,
+                                          risSample.pointOnLight_WS,
+                                          areaLights[risSample.lightIdx],
+                                          canPassthrough,
+                                          startUnderwater,
+                                          Le);
+    if (!didHitLight)
     {
         return result;
     }

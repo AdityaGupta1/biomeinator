@@ -644,11 +644,10 @@ void Chunk::createInstances()
                     }
                     else // BlockShape::LIQUID_TOP or BlockShape::CUBE
                     {
-                        const bool isLiquid = (blockData.shape == BlockShape::LIQUID_TOP);
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
-                        const float topYSubtract = isLiquid ? (1.f / 8.f) : 0.f;
+                        const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
 
                         for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                         {
@@ -700,8 +699,8 @@ void Chunk::createInstances()
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
 
-    terrainInstance->host_perTriDatas.resize(terrainIdxs.size() / 3u);
-    waterInstance->host_perTriDatas.resize(waterIdxs.size() / 3u);
+    terrainInstance->host_perTriDatas.resize(terrainInstance->getTriCount());
+    waterInstance->host_perTriDatas.resize(waterInstance->getTriCount());
     for (PerTriangleData& perTriData : waterInstance->host_perTriDatas)
     {
         perTriData.flags |= TRIANGLE_FLAG_IS_WATER;
