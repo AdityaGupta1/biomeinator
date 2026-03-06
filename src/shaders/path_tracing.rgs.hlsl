@@ -251,11 +251,8 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS,
-                                                                      surfNor_WS,
-                                                                      canPassthrough,
-                                                                      bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
-                                                                      payload.rng);
+                    DomeLightSample domeLightSample =
+                        sampleDomeLight(surfPos_WS, surfNor_WS, canPassthrough, isUnderwater, payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
