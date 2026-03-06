@@ -304,6 +304,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         ray.TMax = RAY_DEFAULT_TMAX;
 
         payload.flags &= PAYLOAD_FLAG_UNDERWATER;
+        payload.pad0 = asuint(0.f);
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
         const float3 segmentAbsorption = getSegmentAbsorptionFactor(payload, ray);
         payload.pathWeight *= segmentAbsorption;
@@ -414,6 +415,7 @@ void RayGeneration()
     gbufferPayload.flags = gbufferData.payloadFlags;
     gbufferPayload.pathWeight = float3(1.f, 1.f, 1.f);
     gbufferPayload.pathColor = float3(0.f, 0.f, 0.f);
+    gbufferPayload.pad0 = asuint(0.f);
 
     const uint pathSplitIdx = getPathSplitIdx();
 
