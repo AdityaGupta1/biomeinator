@@ -183,27 +183,28 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 // sample area lights
                 // ------------------------------
 
+                const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
+
                 DirectLightingSample lightSample;
                 if (useRis)
                 {
                     const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                     bool isBsdfSampleUnused;
-                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                    lightSample = evaluateRisSample(
-                        risSample,
-                        surfPos_WS,
-                        surfNor_WS,
-                        canPassthrough,
-                        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER)); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS,
+                                                                                surfNor_WS,
+                                                                                surfMaterial,
+                                                                                payload.hitInfo.uv,
+                                                                                wo_WS,
+                                                                                isFirstNonDeltaSurface,
+                                                                                payload.rng,
+                                                                                isBsdfSampleUnused);
+                    // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, canPassthrough, isUnderwater);
                 }
                 else
                 {
-                    lightSample = sampleDirectLightingUniform(
-                        surfPos_WS,
-                        surfNor_WS,
-                        canPassthrough,
-                        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
-                        payload.rng);
+                    lightSample =
+                        sampleDirectLightingUniform(surfPos_WS, surfNor_WS, canPassthrough, isUnderwater, payload.rng);
                 }
 
                 if (lightSample.didHitLight)
@@ -250,12 +251,11 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(
-                        surfPos_WS,
-                        surfNor_WS,
-                        canPassthrough,
-                        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
-                        payload.rng);
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS,
+                                                                      surfNor_WS,
+                                                                      canPassthrough,
+                                                                      bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
+                                                                      payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
@@ -307,7 +307,6 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         ray.TMax = RAY_DEFAULT_TMAX;
 
         payload.flags &= PAYLOAD_FLAG_UNDERWATER;
-        payload.pad0 = asuint(0.f);
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
         const float3 segmentAbsorption = getSegmentAbsorptionFactor(payload, ray);
         payload.pathWeight *= segmentAbsorption;
@@ -418,7 +417,6 @@ void RayGeneration()
     gbufferPayload.flags = gbufferData.payloadFlags;
     gbufferPayload.pathWeight = float3(1.f, 1.f, 1.f);
     gbufferPayload.pathColor = float3(0.f, 0.f, 0.f);
-    gbufferPayload.pad0 = asuint(0.f);
 
     const uint pathSplitIdx = getPathSplitIdx();
 
