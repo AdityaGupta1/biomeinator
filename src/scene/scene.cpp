@@ -84,7 +84,7 @@ void Instance::finalizeGeometry()
     ASSERT(this->host_verts.size() > 0);
 
     const uint32_t triCount = this->getTriCount();
-    this->host_perTriDatas.resize(triCount);
+    ASSERT(this->host_perTriDatas.size() == triCount);
 
     this->isGeometryFinalized = true;
 }
@@ -141,7 +141,7 @@ uint32_t Instance::getId() const
 
 uint32_t Instance::getTriCount() const
 {
-    return this->host_idxs.empty() ? this->host_verts.size() / 3 : this->host_idxs.size() / 3;
+    return this->host_idxs.empty() ? (this->host_verts.size() / 3) : (this->host_idxs.size() / 3);
 }
 
 bool Instance::getIsGeometryFinalized() const

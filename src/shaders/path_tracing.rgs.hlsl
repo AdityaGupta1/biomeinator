@@ -57,12 +57,15 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     ptDiffuseAlbedo = 0.f;
 
+    tryApplySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        payload.pathColor = getDomeLightColor(ray.Direction);
+        payload.pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
         return;
     }
-    else if (payload.materialIdx == MATERIAL_IDX_INVALID)
+
+    if (payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         return;
     }
@@ -86,6 +89,11 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = getMaterialFromPayload(payload);
+
+        const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
+        const PerTriangleData perTriData =
+            perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+        const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -146,6 +154,10 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         if (isPassthrough)
         {
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
+            if (hitWasWater)
+            {
+                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+            }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf and bounceWasSpecular are intentionally preserved from the last real BSDF sample
         }
@@ -168,17 +180,28 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 // sample area lights
                 // ------------------------------
 
+                const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
+
                 DirectLightingSample lightSample;
                 if (useRis)
                 {
                     const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                     bool isBsdfSampleUnused;
-                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS, surfNor_WS, surfMaterial, payload.hitInfo.uv, wo_WS, isFirstNonDeltaSurface, payload.rng, isBsdfSampleUnused);
-                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, canPassthrough); // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS,
+                                                                                surfNor_WS,
+                                                                                surfMaterial,
+                                                                                payload.hitInfo.uv,
+                                                                                wo_WS,
+                                                                                isFirstNonDeltaSurface,
+                                                                                payload.rng,
+                                                                                isBsdfSampleUnused);
+                    // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
+                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, canPassthrough, isUnderwater);
                 }
                 else
                 {
-                    lightSample = sampleDirectLightingUniform(surfPos_WS, surfNor_WS, canPassthrough, payload.rng);
+                    lightSample =
+                        sampleDirectLightingUniform(surfPos_WS, surfNor_WS, canPassthrough, isUnderwater, payload.rng);
                 }
 
                 if (lightSample.didHitLight)
@@ -225,7 +248,8 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, canPassthrough, payload.rng);
+                    DomeLightSample domeLightSample =
+                        sampleDomeLight(surfPos_WS, surfNor_WS, canPassthrough, isUnderwater, payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
@@ -258,6 +282,11 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
 
+            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f) // apply only for rays that will transmit through the water
+            {
+                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+            }
+
             if (pathDepth == 0)
             {
                 ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
@@ -272,8 +301,12 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
-        payload.flags = 0;
+        payload.flags &= PAYLOAD_FLAG_UNDERWATER; // reset all payload flags except PAYLOAD_FLAG_UNDERWATER
+        payload.waterEntryT = RAY_DEFAULT_TMAX;
+        payload.waterExitT = RAY_DEFAULT_TMAX;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
+        tryApplySegmentAbsorption(payload, ray.Origin, ray.Direction);
 
         if (pathDepth == 0)
         {
@@ -381,6 +414,8 @@ void RayGeneration()
     gbufferPayload.flags = gbufferData.payloadFlags;
     gbufferPayload.pathWeight = float3(1.f, 1.f, 1.f);
     gbufferPayload.pathColor = float3(0.f, 0.f, 0.f);
+    gbufferPayload.waterEntryT = RAY_DEFAULT_TMAX;
+    gbufferPayload.waterExitT = RAY_DEFAULT_TMAX;
 
     const uint pathSplitIdx = getPathSplitIdx();
 

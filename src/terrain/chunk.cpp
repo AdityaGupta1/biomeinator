@@ -644,11 +644,10 @@ void Chunk::createInstances()
                     }
                     else // BlockShape::LIQUID_TOP or BlockShape::CUBE
                     {
-                        const bool isLiquid = (blockData.shape == BlockShape::LIQUID_TOP);
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
-                        const float topYSubtract = isLiquid ? (1.f / 8.f) : 0.f;
+                        const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
 
                         for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
                         {
@@ -699,6 +698,13 @@ void Chunk::createInstances()
 
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
+
+    terrainInstance->host_perTriDatas.resize(terrainInstance->getTriCount());
+    waterInstance->host_perTriDatas.resize(waterInstance->getTriCount());
+    for (PerTriangleData& perTriData : waterInstance->host_perTriDatas)
+    {
+        perTriData.flags |= TRIANGLE_FLAG_IS_WATER;
+    }
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
@@ -785,7 +791,7 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-bool Chunk::getIsMarkedForDestruction()
+bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
 }
@@ -816,6 +822,17 @@ glm::ivec2 Chunk::getChunkPos() const
 uint32_t Chunk::getNumNeighborsSet() const
 {
     return this->numNeighborsSet;
+}
+
+bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
+{
+    if (this->getState() < ChunkState::HAS_ALL_BLOCKS)
+    {
+        return false;
+    }
+
+    outBlock = this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
+    return true;
 }
 
 // y changes fastest, then x, then z

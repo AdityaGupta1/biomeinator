@@ -80,6 +80,7 @@ struct InstanceData
 
 #define MATERIAL_IDX_INVALID ~0u
 #define TEXTURE_ID_INVALID ~0u
+#define LIGHT_IDX_INVALID ~0u
 
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
@@ -174,7 +175,7 @@ struct AreaLight
     uint materialIdx;
 };
 
-#define LIGHT_IDX_INVALID ~0u
+#define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData
 {
@@ -183,10 +184,10 @@ public:
     PerTriangleData();
 #endif
 
+    uint flags;
     uint localAreaLightIdx;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus

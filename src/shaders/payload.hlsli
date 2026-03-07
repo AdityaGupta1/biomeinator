@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
 #define PAYLOAD_FLAG_BACKFACE_HIT (1 << 1)
 #define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
+#define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 
 struct Payload
 {
@@ -35,8 +36,8 @@ struct Payload
     uint materialIdx;
 
     RandomNumberGenerator rng;
-    uint pad0;
-    uint pad1;
+    float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
+    float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
     uint pad2;
 
     HitInfo hitInfo;

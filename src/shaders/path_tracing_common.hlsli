@@ -31,9 +31,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
+StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
+
+#include "volume.hlsli"
 
 uint getPathSplitIdx()
 {
@@ -151,12 +154,12 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     }
 
     const Material material = materials[materialIdx];
-    const bool maybeRefractionPassthrough =
+    const bool testRefractionPassthrough =
         bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission();
-    const bool maybeAlphaCutout =
+    const bool testAlphaCutout =
         material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
 
-    if (!maybeRefractionPassthrough && !maybeAlphaCutout)
+    if (!testRefractionPassthrough && !testAlphaCutout)
     {
         return;
     }
@@ -167,17 +170,32 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-
     const float4 baseColor = getMaterialBaseColor(material, uv);
 
-    if (maybeRefractionPassthrough)
+    if (testRefractionPassthrough)
     {
         payload.pathWeight *= baseColor.rgb;
+
+        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER))
+        {
+            // Track the first water entry/exit T for absorption in applyPassthroughAbsorption.
+            // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
+            if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
+            {
+                payload.waterEntryT = min(payload.waterEntryT, RayTCurrent());
+            }
+            else
+            {
+                payload.waterExitT = min(payload.waterExitT, RayTCurrent());
+            }
+        }
+
         IgnoreHit();
         return;
     }
 
-    if (maybeAlphaCutout && baseColor.a < 0.999f)
+    if (baseColor.a < 0.999f) // testAlphaCutout
     {
         IgnoreHit();
     }
