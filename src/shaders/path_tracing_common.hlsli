@@ -36,157 +36,7 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.5f;
-
-bool isWaterTriangle(const uint instanceId, const uint triangleIdx)
-{
-    if (sceneParams.voxelMode == 0)
-    {
-        return false;
-    }
-
-    const InstanceData instanceData = instanceDatas[instanceId];
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + triangleIdx];
-    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
-}
-
-bool isWaterHit(const Payload payload)
-{
-    return isWaterTriangle(payload.hitInfo.instanceId, payload.hitInfo.triangleIdx);
-}
-
-void setUnderwaterFromFrontOrBackHit(inout Payload payload, const bool wasBackfaceHit)
-{
-    if (wasBackfaceHit)
-    {
-        payload.flags &= ~PAYLOAD_FLAG_UNDERWATER;
-    }
-    else
-    {
-        payload.flags |= PAYLOAD_FLAG_UNDERWATER;
-    }
-}
-
-float3 getWaterAbsorptionFactor(const Payload payload, const float distance)
-{
-    if (sceneParams.voxelMode == 0 ||
-        !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER) ||
-        distance <= 0.f)
-    {
-        return float3(1.f, 1.f, 1.f);
-    }
-
-    return exp(-waterSigmaA * distance);
-}
-
-void applyWaterAbsorption(inout Payload payload, const float distance)
-{
-    payload.pathWeight *= getWaterAbsorptionFactor(payload, distance);
-}
-
-float getDistanceToVoxelBounds(const RayDesc ray)
-{
-    const float3 boundsMin = float3(sceneParams.voxelBoundsMin_WS);
-    const float3 boundsMax = float3(sceneParams.voxelBoundsMax_WS);
-
-    float tEnter = 0.f;
-    float tExit = 1e30f;
-
-    [unroll]
-    for (uint axis = 0; axis < 3; ++axis)
-    {
-        const float origin = ray.Origin[axis];
-        const float dir = ray.Direction[axis];
-        const float bMin = boundsMin[axis];
-        const float bMax = boundsMax[axis];
-
-        if (abs(dir) < 1e-8f)
-        {
-            if (origin < bMin || origin > bMax)
-            {
-                return 0.f;
-            }
-            continue;
-        }
-
-        const float invDir = 1.f / dir;
-        float t0 = (bMin - origin) * invDir;
-        float t1 = (bMax - origin) * invDir;
-        if (t0 > t1)
-        {
-            const float tmp = t0;
-            t0 = t1;
-            t1 = tmp;
-        }
-
-        tEnter = max(tEnter, t0);
-        tExit = min(tExit, t1);
-    }
-
-    const float nearT = max(tEnter, 0.f);
-    if (tExit <= nearT)
-    {
-        return 0.f;
-    }
-
-    return tExit;
-}
-
-float3 getSegmentAbsorptionFactor(const Payload payload, const RayDesc ray)
-{
-    float segmentDistance = 0.f;
-    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
-    {
-        segmentDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-    }
-    else
-    {
-        segmentDistance = getDistanceToVoxelBounds(ray);
-    }
-
-    return getWaterAbsorptionFactor(payload, segmentDistance);
-}
-
-void applySegmentAbsorption(inout Payload payload, const RayDesc ray)
-{
-    payload.pathWeight *= getSegmentAbsorptionFactor(payload, ray);
-}
-
-float getPayloadPassthroughRayT(const Payload payload)
-{
-    return asfloat(payload.pad0);
-}
-
-void setPayloadPassthroughRayT(inout Payload payload, const float rayT)
-{
-    payload.pad0 = asuint(rayT);
-}
-
-void applyPassthroughSegmentAbsorption(inout Payload payload, const float currentRayT)
-{
-    const float prevRayT = getPayloadPassthroughRayT(payload);
-    const float segmentLength = max(currentRayT - prevRayT, 0.f);
-    applyWaterAbsorption(payload, segmentLength);
-}
-
-void finalizePassthroughRayAbsorption(inout Payload payload, const RayDesc ray)
-{
-    float rayEndT;
-    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
-    {
-        rayEndT = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-    }
-    else if (ray.TMax < RAY_DEFAULT_TMAX)
-    {
-        rayEndT = ray.TMax;
-    }
-    else
-    {
-        rayEndT = getDistanceToVoxelBounds(ray);
-    }
-
-    applyPassthroughSegmentAbsorption(payload, rayEndT);
-}
+#include "volume.hlsli"
 
 uint getPathSplitIdx()
 {
@@ -304,37 +154,28 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     }
 
     const Material material = materials[materialIdx];
-    const bool maybeRefractionPassthrough =
+    const bool isRefractionPassthrough =
         bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission();
-    const bool maybeAlphaCutout =
+    const bool isAlphaCutout =
         material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
 
-    if (!maybeRefractionPassthrough && !maybeAlphaCutout)
+    if (!isRefractionPassthrough && !isAlphaCutout)
     {
         return;
     }
 
-    if (maybeRefractionPassthrough)
+    if (isRefractionPassthrough && isWaterTriangle(instanceData, PrimitiveIndex()))
     {
-        const float currentRayT = RayTCurrent();
-        applyPassthroughSegmentAbsorption(payload, currentRayT);
-        setPayloadPassthroughRayT(payload, currentRayT);
-
-        if (isWaterTriangle(InstanceID(), PrimitiveIndex()))
+        // Track the first water entry/exit T for absorption in applyPassthroughAbsorption.
+        // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
+        if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
         {
-            setUnderwaterFromFrontOrBackHit(payload, HitKind() == HIT_KIND_TRIANGLE_BACK_FACE);
-            IgnoreHit();
-            return;
+            payload.waterEntryT = min(payload.waterEntryT, RayTCurrent());
         }
-
-        Vertex v0, v1, v2;
-        loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
-
-        const float2 bary2 = attribs.barycentrics;
-        const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-        const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-        const float4 baseColor = getMaterialBaseColor(material, uv);
-        payload.pathWeight *= baseColor.rgb;
+        else
+        {
+            payload.waterExitT = min(payload.waterExitT, RayTCurrent());
+        }
         IgnoreHit();
         return;
     }
@@ -347,7 +188,14 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     const float4 baseColor = getMaterialBaseColor(material, uv);
 
-    if (maybeAlphaCutout && baseColor.a < 0.999f)
+    if (isRefractionPassthrough)
+    {
+        payload.pathWeight *= baseColor.rgb;
+        IgnoreHit();
+        return;
+    }
+
+    if (baseColor.a < 0.999f)
     {
         IgnoreHit();
     }

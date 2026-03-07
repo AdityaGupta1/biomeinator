@@ -91,9 +91,14 @@ bool traceToLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    lightPayload.pad0 = asuint(0.f);
+    lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
+    lightPayload.waterExitT = RAY_DEFAULT_TMAX;
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
-    finalizePassthroughRayAbsorption(lightPayload, ray);
+
+    const float rayEndT = bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(ray.Origin, lightPayload.hitInfo.hitPos_WS)
+        : ray.TMax;
+    applyPassthroughAbsorption(lightPayload, rayEndT);
 
     if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
     {

@@ -111,10 +111,15 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    domeLightPayload.pad0 = 0;
+    domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
+    domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
-    finalizePassthroughRayAbsorption(domeLightPayload, ray);
+
+    const float rayEndT = bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(ray.Origin, domeLightPayload.hitInfo.hitPos_WS)
+        : getDistanceToVoxelBounds(ray.Origin, ray.Direction);
+    applyPassthroughAbsorption(domeLightPayload, rayEndT);
 
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;

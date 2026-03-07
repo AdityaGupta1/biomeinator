@@ -36,8 +36,8 @@ struct Payload
     uint materialIdx;
 
     RandomNumberGenerator rng;
-    uint pad0;
-    uint pad1;
+    float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
+    float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
     uint pad2;
 
     HitInfo hitInfo;

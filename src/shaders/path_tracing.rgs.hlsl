@@ -59,12 +59,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        RayDesc missRay;
-        missRay.Origin = cameraParams.pos_WS;
-        missRay.Direction = ray.Direction;
-        missRay.TMin = 0.f;
-        missRay.TMax = RAY_DEFAULT_TMAX;
-        applySegmentAbsorption(payload, missRay);
+        applySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
         payload.pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
         return;
     }
@@ -73,9 +68,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         return;
     }
 
-    const float primarySegmentDistance = distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS);
-    const float3 primarySegmentAbsorption = getWaterAbsorptionFactor(payload, primarySegmentDistance);
-    payload.pathWeight *= primarySegmentAbsorption;
+    applySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
 
     // data of last "real" bounce (i.e. not passthrough)
     bool bounceWasSpecular = false;
@@ -96,7 +89,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = getMaterialFromPayload(payload);
-        const bool hitWasWater = isWaterHit(payload);
+        const bool hitWasWater = isWaterTriangle(payload.hitInfo.instanceId, payload.hitInfo.triangleIdx);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -304,10 +297,10 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         ray.TMax = RAY_DEFAULT_TMAX;
 
         payload.flags &= PAYLOAD_FLAG_UNDERWATER;
-        payload.pad0 = asuint(0.f);
+        payload.waterEntryT = RAY_DEFAULT_TMAX;
+        payload.waterExitT = RAY_DEFAULT_TMAX;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-        const float3 segmentAbsorption = getSegmentAbsorptionFactor(payload, ray);
-        payload.pathWeight *= segmentAbsorption;
+        applySegmentAbsorption(payload, ray.Origin, ray.Direction);
 
         if (pathDepth == 0)
         {
@@ -415,7 +408,8 @@ void RayGeneration()
     gbufferPayload.flags = gbufferData.payloadFlags;
     gbufferPayload.pathWeight = float3(1.f, 1.f, 1.f);
     gbufferPayload.pathColor = float3(0.f, 0.f, 0.f);
-    gbufferPayload.pad0 = asuint(0.f);
+    gbufferPayload.waterEntryT = RAY_DEFAULT_TMAX;
+    gbufferPayload.waterExitT = RAY_DEFAULT_TMAX;
 
     const uint pathSplitIdx = getPathSplitIdx();
 
