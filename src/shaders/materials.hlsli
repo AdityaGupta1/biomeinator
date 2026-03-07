@@ -250,25 +250,23 @@ bool trySplitMaterial(inout Material surfMaterial, const float2 uv, const float3
             const float alpha = baseColorSample.a;
             if (pathSplitIdx == 0)
             {
-                // opaque layer: full material with baked texture color and weight scaled by alpha
+                // opaque
                 surfMaterial.baseColor = baseColorSample.rgb;
                 surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
                 pathWeight *= alpha;
             }
             else
             {
-                // passthrough layer: glossy transmission with ior=1 so the ray continues unchanged
-                Material splitMaterial;
-                splitMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
-                splitMaterial.baseColor = float3(1.f, 1.f, 1.f);
-                splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-                splitMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
-                splitMaterial.ior = 1.f;
-                splitMaterial.emissiveStrength = 0.f;
-                splitMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
-                splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+                // transparent
+                surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
+                surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
+                surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+                surfMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
+                surfMaterial.ior = 1.f; // passthrough without refraction
+                surfMaterial.emissiveStrength = 0.f;
+                surfMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
+                surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
                 pathWeight *= (1.f - alpha);
-                surfMaterial = splitMaterial;
             }
             return true;
         }
@@ -278,33 +276,24 @@ bool trySplitMaterial(inout Material surfMaterial, const float2 uv, const float3
     {
         const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfNor_WS));
 
-        Material splitMaterial;
         if (pathSplitIdx == 0)
         {
             // diffuse and transmission lobes, and emission
-            splitMaterial.flags = surfMaterial.flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
-            splitMaterial.baseColor = surfMaterial.baseColor;
-            splitMaterial.baseColorTextureId = surfMaterial.baseColorTextureId;
-            splitMaterial.glossyReflectionTint = float3(0, 0, 0);
-            splitMaterial.emissiveStrength = surfMaterial.emissiveStrength;
-            splitMaterial.emissiveColor = surfMaterial.emissiveColor;
-            splitMaterial.emissiveColorTextureId = surfMaterial.emissiveColorTextureId;
+            surfMaterial.flags &= MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
+            surfMaterial.glossyReflectionTint = float3(0, 0, 0);
             pathWeight *= (1.f - fresnelReflectance);
         }
         else
         {
             // glossy reflection lobes
-            splitMaterial.flags = surfMaterial.flags & MATERIAL_FLAG_GLOSSY_REFLECTION;
-            splitMaterial.baseColor = float3(0, 0, 0);
-            splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-            splitMaterial.glossyReflectionTint = surfMaterial.glossyReflectionTint;
-            splitMaterial.emissiveStrength = 0.f;
-            splitMaterial.emissiveColor = float3(0, 0, 0);
-            splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+            surfMaterial.flags &= MATERIAL_FLAG_GLOSSY_REFLECTION;
+            surfMaterial.baseColor = float3(0, 0, 0);
+            surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+            surfMaterial.emissiveStrength = 0.f;
+            surfMaterial.emissiveColor = float3(0, 0, 0);
+            surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
             pathWeight *= fresnelReflectance;
         }
-        splitMaterial.ior = surfMaterial.ior;
-        surfMaterial = splitMaterial;
         return true;
     }
 
