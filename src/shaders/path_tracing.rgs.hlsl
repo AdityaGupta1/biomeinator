@@ -415,6 +415,8 @@ void RayGeneration()
     const uint2 pixelIdx = getPixelIdx();
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
+    const uint pathSplitIdx = getPathSplitIdx();
+
     const GbufferData gbufferData = gbufferIn[linearPixelIdx];
     Payload payload;
     payload.hitInfo = gbufferData.hitInfo;
@@ -422,12 +424,9 @@ void RayGeneration()
     payload.flags = gbufferData.payloadFlags;
     payload.pathWeight = float3(1.f, 1.f, 1.f);
     payload.pathColor = float3(0.f, 0.f, 0.f);
+    payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
-
-    const uint pathSplitIdx = getPathSplitIdx();
-
-    payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 
     float3 outPtDiffuseAlbedo;
     pathTraceRay(payload, outPtDiffuseAlbedo);
