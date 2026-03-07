@@ -325,15 +325,23 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
                         const Material secondHitMaterial = getMaterialFromPayload(payload);
-                        if (secondHitMaterial.hasEmission())
+                        if (secondHitMaterial.hasDiffuse())
                         {
-                            secondHitDiffuseAlbedo = applyReinhard(getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv));
-                            secondHitHasDiffuseAlbedo = true;
+                            const float3 baseColor = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
+                            if (any(baseColor > 0.f))
+                            {
+                                secondHitDiffuseAlbedo = baseColor;
+                                secondHitHasDiffuseAlbedo = true;
+                            }
                         }
-                        else if (secondHitMaterial.hasDiffuse())
+                        if (!secondHitHasDiffuseAlbedo && secondHitMaterial.hasEmission())
                         {
-                            secondHitDiffuseAlbedo = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
-                            secondHitHasDiffuseAlbedo = true;
+                            const float3 emissiveColor = getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv);
+                            if (any(emissiveColor > 0.f))
+                            {
+                                secondHitDiffuseAlbedo = applyReinhard(emissiveColor);
+                                secondHitHasDiffuseAlbedo = true;
+                            }
                         }
                     }
 
