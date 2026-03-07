@@ -236,43 +236,70 @@ Material getMaterialFromPayload(const Payload payload)
     return material;
 }
 
-bool shouldSplitMaterial(const Material material)
+// Attempts to split surfMaterial for path splitting. Returns true if the material was split, in which case surfMaterial
+// is replaced with the split variant for pathSplitIdx and pathWeight is scaled accordingly. Returns false if no split
+// applies; the caller should then early-out for pathSplitIdx == 1.
+bool trySplitMaterial(inout Material surfMaterial,
+                      const float2 uv,
+                      const float3 surfNor_WS,
+                      const float3 wo_WS,
+                      const uint pathSplitIdx,
+                      inout float3 pathWeight)
 {
-    return material.hasGlossyReflection() && (material.hasDiffuseOrGlossyTransmission() || material.hasEmission());
-}
-
-Material getSplitMaterial(const Material material, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
-{
-    const float fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
-
-    Material splitMaterial;
-
-    if (pathSplitIdx == 0)
+    if (surfMaterial.hasDiffuse() && surfMaterial.baseColorTextureId != TEXTURE_ID_INVALID)
     {
-        // diffuse and transmission lobes, and emission
-        splitMaterial.flags = material.flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
-        splitMaterial.baseColor = material.baseColor;
-        splitMaterial.baseColorTextureId = material.baseColorTextureId;
-        splitMaterial.glossyReflectionTint = float3(0, 0, 0);
-        splitMaterial.emissiveStrength = material.emissiveStrength;
-        splitMaterial.emissiveColor = material.emissiveColor;
-        splitMaterial.emissiveColorTextureId = material.emissiveColorTextureId;
-        pathWeight *= (1.f - fresnelReflectance);
-    }
-    else
-    {
-        // glossy reflection lobes
-        splitMaterial.flags = material.flags & MATERIAL_FLAG_GLOSSY_REFLECTION;
-        splitMaterial.baseColor = float3(0, 0, 0);
-        splitMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-        splitMaterial.glossyReflectionTint = material.glossyReflectionTint;
-        splitMaterial.emissiveStrength = 0.f;
-        splitMaterial.emissiveColor = float3(0, 0, 0);
-        splitMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
-        pathWeight *= fresnelReflectance;
+        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv);
+        if (baseColorSample.a < 0.999f)
+        {
+            const float alpha = baseColorSample.a;
+            if (pathSplitIdx == 0)
+            {
+                // opaque
+                surfMaterial.baseColor = baseColorSample.rgb;
+                surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+                pathWeight *= alpha;
+            }
+            else
+            {
+                // transparent
+                surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
+                surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
+                surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+                surfMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
+                surfMaterial.ior = 1.f; // passthrough without refraction
+                surfMaterial.emissiveStrength = 0.f;
+                surfMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
+                surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+                pathWeight *= (1.f - alpha);
+            }
+            return true;
+        }
     }
 
-    splitMaterial.ior = material.ior;
+    if (surfMaterial.hasGlossyReflection() && (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission()))
+    {
+        const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfNor_WS));
 
-    return splitMaterial;
+        if (pathSplitIdx == 0)
+        {
+            // diffuse and transmission lobes, and emission
+            surfMaterial.flags &= MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
+            surfMaterial.glossyReflectionTint = float3(0, 0, 0);
+            pathWeight *= (1.f - fresnelReflectance);
+        }
+        else
+        {
+            // glossy reflection lobes
+            surfMaterial.flags &= MATERIAL_FLAG_GLOSSY_REFLECTION;
+            surfMaterial.baseColor = float3(0, 0, 0);
+            surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+            surfMaterial.emissiveStrength = 0.f;
+            surfMaterial.emissiveColor = float3(0, 0, 0);
+            surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+            pathWeight *= fresnelReflectance;
+        }
+        return true;
+    }
+
+    return false;
 }

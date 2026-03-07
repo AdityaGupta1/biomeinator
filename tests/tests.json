@@ -484,6 +484,47 @@
             ],
             "golden": "non_uniform_scale/golden.png",
             "threshold": 0.0001
+        },
+        {
+            "name": "fractional_opacity",
+            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=2"
+            ],
+            "golden": "fractional_opacity/golden.png",
+            "threshold": 0.0001
+        },
+        {
+            "name": "fractional_opacity_no_path_splitting",
+            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=2",
+                "--doPathSplitting=false"
+            ],
+            "golden": "fractional_opacity/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "fractional_opacity_blender_no_tonemap",
+            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=2",
+                "--tonemapping=0"
+            ],
+            "golden": "fractional_opacity/golden_blender_no_tonemap.png",
+            "threshold": 0.006
         }
     ]
 }
