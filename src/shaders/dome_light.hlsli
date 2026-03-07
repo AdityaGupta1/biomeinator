@@ -126,6 +126,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
+    domeLightPayload.rng = rng;
     domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
 

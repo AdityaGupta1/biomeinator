@@ -102,7 +102,8 @@ DirectLightingSample evaluateRisSample(const RisSample risSample,
                                        const float3 surfPos_WS,
                                        const float3 surfNor_WS,
                                        const bool canPassthrough,
-                                       const bool startUnderwater)
+                                       const bool startUnderwater,
+                                       inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
     result.lightIdx = risSample.lightIdx;
@@ -124,6 +125,7 @@ DirectLightingSample evaluateRisSample(const RisSample risSample,
                                           areaLights[risSample.lightIdx],
                                           canPassthrough,
                                           startUnderwater,
+                                          rng,
                                           Le);
     if (!didHitLight)
     {
