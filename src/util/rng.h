@@ -82,11 +82,6 @@ struct RandomNumberGenerator
     {
         return static_cast<int>(min + (max - min) * nextFloat());
     }
-
-    inline int nextIntAbs(int max)
-    {
-        return nextInt(-max, max + 1);
-    }
 };
 
 inline RandomNumberGenerator initRng(uint32_t seed)
