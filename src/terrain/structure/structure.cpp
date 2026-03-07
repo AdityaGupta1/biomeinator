@@ -135,23 +135,23 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
 
 fillStructureBlocksHeader(PALM_TREE)
 {
-    std::vector<glm::vec3> ctrlPts;
+    std::vector<vec3> ctrlPts;
     ctrlPts.push_back(structurePos_CS);
     for (int i = 0; i < 2; ++i)
     {
-        ctrlPts.push_back(ctrlPts.back() + glm::vec3(rng.nextFloatAbs(3), rng.nextFloat(4, 7), rng.nextFloatAbs(3)));
+        ctrlPts.push_back(ctrlPts.back() + vec3(rng.nextFloatAbs(3), rng.nextFloat(4, 7), rng.nextFloatAbs(3)));
     }
 
-    const std::vector<glm::vec3> spline = buildSpline(ctrlPts, 3);
+    const std::vector<vec3> spline = buildSpline(ctrlPts, 3);
     fillSpline(blocks, spline, Block::PALM_LOG);
 
-    const glm::vec3 trunkTip = spline.back();
-    const glm::vec3 trunkDir = glm::normalize(trunkTip - spline[spline.size() - 2]);
+    const vec3 trunkTip = spline.back();
+    const vec3 trunkDir = glm::normalize(trunkTip - spline[spline.size() - 2]);
 
-    constexpr glm::vec3 worldUp(0.f, 1.f, 0.f);
-    const glm::vec3 ref = (glm::abs(glm::dot(trunkDir, worldUp)) < 0.9f) ? worldUp : glm::vec3(1.f, 0.f, 0.f);
-    const glm::vec3 basis1 = glm::normalize(glm::cross(ref, trunkDir));
-    const glm::vec3 basis2 = glm::normalize(glm::cross(trunkDir, basis1));
+    constexpr vec3 worldUp(0.f, 1.f, 0.f);
+    const vec3 ref = (glm::abs(glm::dot(trunkDir, worldUp)) < 0.9f) ? worldUp : vec3(1.f, 0.f, 0.f);
+    const vec3 basis1 = glm::normalize(glm::cross(ref, trunkDir));
+    const vec3 basis2 = glm::normalize(glm::cross(trunkDir, basis1));
 
     const ivec3 trunkTipPos_CS = ivec3(glm::floor(trunkTip));
     if (Chunk::isInChunkXZ(trunkTipPos_CS))
@@ -170,13 +170,13 @@ fillStructureBlocksHeader(PALM_TREE)
     {
         const float baseAngle = (i / static_cast<float>(numLeaves)) * glm::two_pi<float>();
         const float angle = baseAngle + rng.nextFloatAbs(maxAngleJitterRadians);
-        const glm::vec3 leafDir = glm::cos(angle) * basis1 + glm::sin(angle) * basis2;
+        const vec3 leafDir = glm::cos(angle) * basis1 + glm::sin(angle) * basis2;
 
         const float segment1Length = rng.nextFloat(3.f, 4.f);
         const float segment2Length = rng.nextFloat(2.f, 3.f);
 
-        const glm::vec3 segment1End = trunkTip + leafDir * segment1Length;
-        const glm::vec3 segment2End = segment1End + leafDir * segment2Length - glm::vec3(0.f, 1.8f, 0.f);
+        const vec3 segment1End = trunkTip + leafDir * segment1Length;
+        vec3 segment2End = segment1End + glm::normalize(leafDir * segment2Length - glm::vec3(0.f, 1.8f, 0.f)) * segment2Length;
 
         fillLine(blocks, ivec3(glm::floor(trunkTip)), ivec3(glm::floor(segment1End)), Block::PALM_LEAVES);
         fillLine(blocks, ivec3(glm::floor(segment1End)), ivec3(glm::floor(segment2End)), Block::PALM_LEAVES);
