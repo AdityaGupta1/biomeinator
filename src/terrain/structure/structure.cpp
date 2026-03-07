@@ -135,51 +135,8 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
 fillStructureBlocksHeader(PALM_TREE)
 {
     ivec3 trunkTopPos_CS = structurePos_CS;
-    trunkTopPos_CS.y += rng.nextInt(4, 7);
-    if (Chunk::isInChunkXZ(structurePos_CS))
-    {
-        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
-        for (int y = structurePos_CS.y; y <= trunkTopPos_CS.y; ++y)
-        {
-            tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LOG);
-        }
-        for (int dy = 0; dy < 2; ++dy)
-        {
-            tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LEAVES);
-        }
-    }
-
-    const ivec2 leavesMinPosXZ_CS = glm::max(ivec2(trunkTopPos_CS.x - 2, trunkTopPos_CS.z - 2), ivec2(0, 0));
-    const ivec2 leavesMaxPosXZ_CS =
-        glm::min(ivec2(trunkTopPos_CS.x + 2, trunkTopPos_CS.z + 2), ivec2(chunkSizeXZ, chunkSizeXZ) - 1);
-    for (int blockZ = leavesMinPosXZ_CS.y /*z*/; blockZ <= leavesMaxPosXZ_CS.y /*z*/; ++blockZ)
-    {
-        for (int blockX = leavesMinPosXZ_CS.x; blockX <= leavesMaxPosXZ_CS.x; ++blockX)
-        {
-            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, trunkTopPos_CS.y - 1, blockZ));
-
-            ivec2 diffXZ = abs(ivec2(blockX, blockZ) - ivec2(structurePos_CS.x, structurePos_CS.z));
-            if (diffXZ.x == 2 && diffXZ.y /*z*/ == 2)
-            {
-                if (rng.chance(0.5f))
-                {
-                    if (rng.chance(0.5f))
-                    {
-                        blockIdx++;
-                    }
-                    tryPlaceStructureBlock(blocks, blockIdx, Block::PALM_LEAVES);
-                }
-            }
-            else
-            {
-                int leavesHeight = (diffXZ.x + diffXZ.y == 1) ? 4 : 2;
-                for (int dy = 0; dy < leavesHeight; ++dy)
-                {
-                    tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LEAVES);
-                }
-            }
-        }
-    }
+    trunkTopPos_CS += ivec3(rng.nextIntAbs(3), rng.nextInt(6, 10), rng.nextIntAbs(3));
+    fillLine(blocks, structurePos_CS, trunkTopPos_CS, Block::PALM_LOG);
 }
 
 StructureBounds::StructureBounds(int diff)
