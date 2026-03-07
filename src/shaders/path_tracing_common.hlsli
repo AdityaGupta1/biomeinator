@@ -197,7 +197,10 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 
     if (baseColor.a < 0.999f) // testAlphaCutout
     {
-        IgnoreHit();
+        if (baseColor.a == 0.f || payload.rng.nextFloat() > baseColor.a)
+        {
+            IgnoreHit();
+        }
     }
 }
 
