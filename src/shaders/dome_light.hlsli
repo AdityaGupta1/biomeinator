@@ -27,13 +27,30 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 static const float3 sunDir_WS = normalize(float3(1.f, 2.f, 4.f));
 static const float sunCosTheta = 0.999f;
+static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 1600.f;
 
-static const float3 skyColor = float3(0.3f, 0.7f, 0.95f);
-static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 1200.f;
+static const float3 zenithColor = float3(0.15f, 0.40f, 0.65f) * 1.5f;
+static const float3 horizonColor = float3(0.45f, 0.55f, 0.65f) * 1.2f;
+static const float3 groundColor = float3(0.09f, 0.08f, 0.07f);
 
 bool isInSun(float3 wi_WS)
 {
     return dot(wi_WS, sunDir_WS) >= sunCosTheta;
+}
+
+float3 getSkyGradientColor(float3 wi_WS)
+{
+    const float y = wi_WS.y;
+    if (y >= 0.f)
+    {
+        float t = pow(1.f - y, 4.f);
+        return lerp(zenithColor, horizonColor, t);
+    }
+    else
+    {
+        float t = saturate(-y * 2.f);
+        return lerp(horizonColor, groundColor, t);
+    }
 }
 
 float3 getDomeLightColor(float3 wi_WS)
@@ -48,7 +65,7 @@ float3 getDomeLightColor(float3 wi_WS)
         return sunColor;
     }
 
-    return skyColor;
+    return getSkyGradientColor(wi_WS);
 }
 
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
@@ -62,10 +79,8 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
     {
         return sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
     }
-    else
-    {
-        return 0.f;
-    }
+
+    return 0.f;
 }
 
 struct DomeLightSample
