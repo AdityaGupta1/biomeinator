@@ -138,7 +138,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     if (result.didReachDomeLight)
     {
         const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        result.Le = getDomeLightColor(ray.Direction) * passthroughAbsorption;
+        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight * passthroughAbsorption;
     }
     else
     {

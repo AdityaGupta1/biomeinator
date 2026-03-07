@@ -104,7 +104,7 @@ bool traceToLight(const float3 surfPos_WS,
 
     const Material material = materials[light.materialIdx];
     const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, distance(ray.Origin, lightPayload.hitInfo.hitPos_WS));
-    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv) * passthroughAbsorption;
+    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }
 
