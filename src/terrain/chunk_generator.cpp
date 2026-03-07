@@ -422,7 +422,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                     const ivec2 candidatePosXZ_WS = candidatePositionsXZ_WS[candidatePosIdx];
                     const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
-                    if (!Chunk::isPosInBounds(candidatePosXZ_CS))
+                    if (!Chunk::isInChunkXZ(candidatePosXZ_CS))
                     {
                         continue;
                     }
