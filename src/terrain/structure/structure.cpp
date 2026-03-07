@@ -134,9 +134,15 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
 
 fillStructureBlocksHeader(PALM_TREE)
 {
-    ivec3 trunkTopPos_CS = structurePos_CS;
-    trunkTopPos_CS += ivec3(rng.nextIntAbs(3), rng.nextInt(6, 10), rng.nextIntAbs(3));
-    fillLine(blocks, structurePos_CS, trunkTopPos_CS, Block::PALM_LOG);
+    std::vector<glm::vec3> ctrlPts;
+    ctrlPts.push_back(structurePos_CS);
+    for (int i = 0; i < 2; ++i)
+    {
+        ctrlPts.push_back(ctrlPts.back() + glm::vec3(rng.nextFloatAbs(3), rng.nextFloat(4, 7), rng.nextFloatAbs(3)));
+    }
+
+    const std::vector<glm::vec3> spline = buildSpline(ctrlPts, 3);
+    fillSpline(blocks, spline, Block::PALM_LOG);
 }
 
 StructureBounds::StructureBounds(int diff)

@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../block.h"
 #include "../chunk.h"
 
+#include <vector>
+
 namespace StructureHelpers
 {
 
@@ -58,11 +60,66 @@ void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 end
             tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos)), block);
         }
 
-        if (err1 > 0) { pos[axis1] += s[axis1]; err1 -= dm2; }
-        if (err2 > 0) { pos[axis2] += s[axis2]; err2 -= dm2; }
+        if (err1 > 0)
+        {
+            pos[axis1] += s[axis1];
+            err1 -= dm2;
+        }
+        if (err2 > 0)
+        {
+            pos[axis2] += s[axis2];
+            err2 -= dm2;
+        }
         err1 += dErr1;
         err2 += dErr2;
         pos[axis0] += s[axis0];
+    }
+}
+
+std::vector<glm::vec3> buildSpline(const std::vector<glm::vec3>& ctrlPts, uint32_t numSplinePts)
+{
+    std::vector<glm::vec3> result;
+    result.reserve(numSplinePts);
+
+    const uint32_t n = static_cast<uint32_t>(ctrlPts.size());
+    if (n == 0)
+    {
+        return result;
+    }
+    else if (n == 1)
+    {
+        result.push_back(ctrlPts[0]);
+        return result;
+    }
+
+    std::vector<glm::vec3> pts;
+    pts.resize(n);
+
+    for (uint32_t i = 0; i < numSplinePts; ++i)
+    {
+        const float t = static_cast<float>(i) / static_cast<float>(numSplinePts - 1);
+
+        // De Casteljau: iteratively lerp down to a single point
+        std::memcpy(pts.data(), ctrlPts.data(), n * sizeof(glm::vec3));
+        for (uint32_t level = n - 1; level > 0; --level)
+        {
+            for (uint32_t j = 0; j < level; ++j)
+            {
+                pts[j] = glm::mix(pts[j], pts[j + 1], t);
+            }
+        }
+
+        result.push_back(pts[0]);
+    }
+
+    return result;
+}
+
+void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline, Block block)
+{
+    for (int i = 0; i < spline.size() - 1; ++i)
+    {
+        fillLine(blocks, glm::ivec3(glm::floor(spline[i])), glm::ivec3(glm::floor(spline[i + 1])), block);
     }
 }
 
