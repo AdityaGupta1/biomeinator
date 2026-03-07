@@ -89,7 +89,11 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
         Material surfMaterial = getMaterialFromPayload(payload);
-        const bool hitWasWater = isWaterTriangle(payload.hitInfo.instanceId, payload.hitInfo.triangleIdx);
+
+        const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
+        const PerTriangleData perTriData =
+            perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+        const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -278,7 +282,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
 
-            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f)
+            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f) // apply only for rays that will transmit through the water
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }

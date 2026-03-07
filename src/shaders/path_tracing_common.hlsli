@@ -154,29 +154,13 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     }
 
     const Material material = materials[materialIdx];
-    const bool isRefractionPassthrough =
+    const bool testRefractionPassthrough =
         bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission();
-    const bool isAlphaCutout =
+    const bool testAlphaCutout =
         material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
 
-    if (!isRefractionPassthrough && !isAlphaCutout)
+    if (!testRefractionPassthrough && !testAlphaCutout)
     {
-        return;
-    }
-
-    if (isRefractionPassthrough && isWaterTriangle(instanceData, PrimitiveIndex()))
-    {
-        // Track the first water entry/exit T for absorption in applyPassthroughAbsorption.
-        // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
-        if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
-        {
-            payload.waterEntryT = min(payload.waterEntryT, RayTCurrent());
-        }
-        else
-        {
-            payload.waterExitT = min(payload.waterExitT, RayTCurrent());
-        }
-        IgnoreHit();
         return;
     }
 
@@ -188,14 +172,30 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     const float4 baseColor = getMaterialBaseColor(material, uv);
 
-    if (isRefractionPassthrough)
+    if (testRefractionPassthrough)
     {
         payload.pathWeight *= baseColor.rgb;
+
+        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER))
+        {
+            // Track the first water entry/exit T for absorption in applyPassthroughAbsorption.
+            // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
+            if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
+            {
+                payload.waterEntryT = min(payload.waterEntryT, RayTCurrent());
+            }
+            else
+            {
+                payload.waterExitT = min(payload.waterExitT, RayTCurrent());
+            }
+        }
+
         IgnoreHit();
         return;
     }
 
-    if (baseColor.a < 0.999f)
+    if (baseColor.a < 0.999f) // testAlphaCutout
     {
         IgnoreHit();
     }

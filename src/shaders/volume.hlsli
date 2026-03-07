@@ -79,17 +79,6 @@ float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
     return tExit;
 }
 
-bool isWaterTriangle(const InstanceData instanceData, const uint triangleIdx)
-{
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + triangleIdx];
-    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
-}
-
-bool isWaterTriangle(const uint instanceId, const uint triangleIdx)
-{
-    return isWaterTriangle(instanceDatas[instanceId], triangleIdx);
-}
-
 void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
 {
     if (wasBackfaceHit)
