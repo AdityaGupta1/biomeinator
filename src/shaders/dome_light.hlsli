@@ -26,10 +26,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/sampling.hlsli"
 
 static const float3 sunDir_WS = normalize(float3(1.f, 2.f, 4.f));
-static const float sunCosTheta = 0.9985f;
+static const float sunCosTheta = 0.999f;
 
 static const float3 skyColor = float3(0.3f, 0.7f, 0.95f);
-static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 800.f;
+static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 1200.f;
 
 bool isInSun(float3 wi_WS)
 {
