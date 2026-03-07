@@ -236,11 +236,15 @@ Material getMaterialFromPayload(const Payload payload)
     return material;
 }
 
-// Attempts to split surfMaterial for path splitting. Returns true if the material was split,
-// in which case surfMaterial is replaced with the split variant for pathSplitIdx and pathWeight
-// is scaled accordingly. Returns false if no split applies; the caller should early-out for
-// pathSplitIdx == 1 in that case.
-bool trySplitMaterial(inout Material surfMaterial, const float2 uv, const float3 surfNor_WS, const float3 wo_WS, const uint pathSplitIdx, inout float3 pathWeight)
+// Attempts to split surfMaterial for path splitting. Returns true if the material was split, in which case surfMaterial
+// is replaced with the split variant for pathSplitIdx and pathWeight is scaled accordingly. Returns false if no split
+// applies; the caller should then early-out for pathSplitIdx == 1.
+bool trySplitMaterial(inout Material surfMaterial,
+                      const float2 uv,
+                      const float3 surfNor_WS,
+                      const float3 wo_WS,
+                      const uint pathSplitIdx,
+                      inout float3 pathWeight)
 {
     if (surfMaterial.hasDiffuse() && surfMaterial.baseColorTextureId != TEXTURE_ID_INVALID)
     {
