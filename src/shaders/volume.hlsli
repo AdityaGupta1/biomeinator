@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "payload.hlsli"
 
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.5f;
+static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
 
 float3 computeWaterAbsorption(const float dist)
 {
@@ -94,7 +94,7 @@ bool isWaterTriangle(const uint instanceId, const uint triangleIdx)
     return isWaterTriangle(instanceDatas[instanceId], triangleIdx);
 }
 
-void setUnderwaterFromFrontOrBackHit(inout Payload payload, const bool wasBackfaceHit)
+void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
 {
     if (wasBackfaceHit)
     {

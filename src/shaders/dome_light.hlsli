@@ -119,7 +119,6 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
     result.pdf = pdf;
-
     if (result.didReachDomeLight)
     {
         applyPassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));

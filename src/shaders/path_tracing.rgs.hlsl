@@ -152,7 +152,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
             if (hitWasWater)
             {
-                setUnderwaterFromFrontOrBackHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf and bounceWasSpecular are intentionally preserved from the last real BSDF sample
@@ -277,9 +277,10 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
             {
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
-            else if (hitWasWater && surfMaterial.hasGlossyTransmission() && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f)
+
+            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f)
             {
-                setUnderwaterFromFrontOrBackHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
 
             if (pathDepth == 0)
@@ -296,10 +297,11 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
-        payload.flags &= PAYLOAD_FLAG_UNDERWATER;
+        payload.flags &= PAYLOAD_FLAG_UNDERWATER; // reset all payload flags except PAYLOAD_FLAG_UNDERWATER
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
         applySegmentAbsorption(payload, ray.Origin, ray.Direction);
 
         if (pathDepth == 0)
