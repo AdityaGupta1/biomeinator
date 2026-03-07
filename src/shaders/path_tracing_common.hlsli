@@ -170,7 +170,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    const float4 baseColor = getMaterialBaseColor(material, uv);
+    const float4 baseColor = getMaterialBaseColor(material, uv, 0.f);
 
     if (testRefractionPassthrough)
     {
@@ -232,6 +232,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
     payload.materialIdx = instanceData.materialIdx;
+
+    payload.coneWidth += payload.coneSurfaceSpreadAngle * RayTCurrent();
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

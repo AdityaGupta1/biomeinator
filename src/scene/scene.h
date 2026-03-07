@@ -160,8 +160,8 @@ private:
     std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
     {
-        std::vector<uint8_t> data;
-        uint32_t width;
+        std::vector<std::vector<uint8_t>> mipData; // mipData[0] = full-res, mipData[1] = half-res, etc.
+        uint32_t width;                            // mip 0 width
         uint32_t height;
         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     };
@@ -198,7 +198,7 @@ public:
 
     uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);
 
-    uint32_t addTexture(std::vector<uint8_t>&& data, uint32_t width, uint32_t height);
+    uint32_t addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height);
 
     const glm::ivec3& getGlobalInstanceOffset() const;
     const glm::ivec3& getPrevGlobalInstanceOffset() const;

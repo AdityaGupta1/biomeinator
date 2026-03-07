@@ -122,6 +122,8 @@ void RayGeneration()
     payload.rng = initRng(constantParams.rngSeed, 123909203, linearPixelIdx, renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
+    payload.coneWidth = 0.f;
+    payload.coneSurfaceSpreadAngle = 0.f;
 
     // If doing path splitting, we defer evaluation of alpha, etc. to trySplitMaterial() in the main PT pass. So we
     // don't want to do alpha testing in the anyhit shader here.

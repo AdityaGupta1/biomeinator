@@ -95,6 +95,8 @@ bool traceToLight(const float3 surfPos_WS,
     lightPayload.rng = rng;
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
+    lightPayload.coneWidth = 0.f;
+    lightPayload.coneSurfaceSpreadAngle = 0.f;
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
     if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
@@ -104,7 +106,7 @@ bool traceToLight(const float3 surfPos_WS,
 
     const Material material = materials[light.materialIdx];
     const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, distance(ray.Origin, lightPayload.hitInfo.hitPos_WS));
-    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv) * lightPayload.pathWeight * passthroughAbsorption;
+    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv, 0.f) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }
 
