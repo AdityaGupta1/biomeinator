@@ -95,7 +95,7 @@ void init()
             .mid = Block::SAND,
         };
         data.structureGens = {
-            { StructureType::PALM_TREE, 32, 8.0f },
+            { StructureType::PALM_TREE, 32, 12.0f },
         };
     }
 

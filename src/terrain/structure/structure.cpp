@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/rng.h"
 
 #include <array>
+#include <glm/gtc/constants.hpp>
 
 using namespace glm;
 using namespace StructureHelpers;
@@ -143,6 +144,43 @@ fillStructureBlocksHeader(PALM_TREE)
 
     const std::vector<glm::vec3> spline = buildSpline(ctrlPts, 3);
     fillSpline(blocks, spline, Block::PALM_LOG);
+
+    const glm::vec3 trunkTip = spline.back();
+    const glm::vec3 trunkDir = glm::normalize(spline.back() - spline[spline.size() - 2]);
+
+    constexpr glm::vec3 worldUp(0.f, 1.f, 0.f);
+    const glm::vec3 ref = (glm::abs(glm::dot(trunkDir, worldUp)) < 0.9f) ? worldUp : glm::vec3(1.f, 0.f, 0.f);
+    const glm::vec3 basis1 = glm::normalize(glm::cross(ref, trunkDir));
+    const glm::vec3 basis2 = glm::normalize(glm::cross(trunkDir, basis1));
+
+    const ivec3 trunkTipPos_CS = ivec3(glm::floor(trunkTip));
+    if (Chunk::isInChunkXZ(trunkTipPos_CS))
+    {
+        Block& trunkTipBlock = blocks[Chunk::blockPosToIdx(trunkTipPos_CS)];
+        if (trunkTipBlock == Block::PALM_LOG)
+        {
+            trunkTipBlock = Block::PALM_LEAVES;
+        }
+    }
+
+    constexpr float maxAngleJitterRadians = 5.0f * glm::pi<float>() / 180.0f;
+    const int numLeaves = rng.nextInt(7, 10);
+
+    for (int i = 0; i < numLeaves; ++i)
+    {
+        const float baseAngle = (static_cast<float>(i) / static_cast<float>(numLeaves)) * 2.f * glm::pi<float>();
+        const float angle = baseAngle + rng.nextFloatAbs(maxAngleJitterRadians);
+        const glm::vec3 leafDir = glm::cos(angle) * basis1 + glm::sin(angle) * basis2;
+
+        const float seg1Len = rng.nextFloat(3.f, 4.f);
+        const float seg2Len = rng.nextFloat(2.f, 3.f);
+
+        const glm::vec3 seg1End = trunkTip + leafDir * seg1Len;
+        const glm::vec3 seg2End = seg1End + leafDir * seg2Len - glm::vec3(0.f, 1.8f, 0.f);
+
+        fillLine(blocks, ivec3(glm::floor(trunkTip)), ivec3(glm::floor(seg1End)), Block::PALM_LEAVES);
+        fillLine(blocks, ivec3(glm::floor(seg1End)), ivec3(glm::floor(seg2End)), Block::PALM_LEAVES);
+    }
 }
 
 StructureBounds::StructureBounds(int diff)
