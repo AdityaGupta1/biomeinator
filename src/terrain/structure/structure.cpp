@@ -213,7 +213,7 @@ void init()
     STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = 2;
 
     SET_FILL_STRUCTURE_FUNC(PALM_TREE);
-    STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 4;
+    STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 12;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {
