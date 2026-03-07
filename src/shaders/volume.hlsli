@@ -123,8 +123,8 @@ void applyPassthroughAbsorption(inout Payload payload, const float rayEndT)
 {
     // waterEntryT is initialized to 0 if the ray starts underwater, RAY_DEFAULT_TMAX otherwise.
     // waterExitT is initialized to RAY_DEFAULT_TMAX and updated in AnyHit on water surface hits.
-    // NOTE: this correctly handles one water entry/exit along the ray. It breaks down if there
-    // are multiple distinct water bodies along the ray (e.g. two separate ponds).
+    // NOTE: this correctly handles one water entry and exit (in that order) along the ray. It breaks
+    // down if there are multiple distinct water bodies along the ray (e.g. two separate ponds).
     const float waterLength = max(min(payload.waterExitT, rayEndT) - payload.waterEntryT, 0.f);
     payload.pathWeight *= computeWaterAbsorption(waterLength);
 }
