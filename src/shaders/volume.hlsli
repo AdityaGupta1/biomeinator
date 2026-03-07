@@ -36,47 +36,18 @@ float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
     const float3 boundsMin = float3(sceneParams.voxelBoundsMin_WS);
     const float3 boundsMax = float3(sceneParams.voxelBoundsMax_WS);
 
-    float tEnter = 0.f;
-    float tExit = 1e30f;
+    const float3 invDir = rcp(dir);
+    const float3 t0 = (boundsMin - origin) * invDir;
+    const float3 t1 = (boundsMax - origin) * invDir;
 
-    [unroll]
-    for (uint axis = 0; axis < 3; ++axis)
-    {
-        const float o = origin[axis];
-        const float d = dir[axis];
-        const float bMin = boundsMin[axis];
-        const float bMax = boundsMax[axis];
+    const float3 tFar = max(t0, t1);
+    float tExit = min(tFar.x, min(tFar.y, tFar.z));
 
-        if (abs(d) < 1e-8f)
-        {
-            if (o < bMin || o > bMax)
-            {
-                return 0.f;
-            }
-            continue;
-        }
+    // Handle Y-axis: ray may start outside bounds
+    const float3 tNear = min(t0, t1);
+    float tEnter = max(tNear.y, 0.f);
 
-        const float invDir = 1.f / d;
-        float t0 = (bMin - o) * invDir;
-        float t1 = (bMax - o) * invDir;
-        if (t0 > t1)
-        {
-            const float tmp = t0;
-            t0 = t1;
-            t1 = tmp;
-        }
-
-        tEnter = max(tEnter, t0);
-        tExit = min(tExit, t1);
-    }
-
-    const float nearT = max(tEnter, 0.f);
-    if (tExit <= nearT)
-    {
-        return 0.f;
-    }
-
-    return tExit;
+    return (tExit > tEnter) ? tExit : 0.f;
 }
 
 void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
