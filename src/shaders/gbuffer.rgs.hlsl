@@ -123,7 +123,10 @@ void RayGeneration()
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
 
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
+    // If doing path splitting, we defer evaluation of alpha, etc. to trySplitMaterial() in the main PT pass. So we
+    // don't want to do alpha testing in the anyhit shader here.
+    const uint rayFlags = bool(renderParams.doPathSplitting) ? RAY_FLAG_FORCE_OPAQUE : RAY_FLAG_NONE;
+    TraceRay(raytracingAcs, rayFlags, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     outputGuideBuffers(payload, ray);
 

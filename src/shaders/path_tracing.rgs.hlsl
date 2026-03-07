@@ -114,11 +114,9 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
-            if (shouldSplitMaterial(surfMaterial))
-            {
-                surfMaterial = getSplitMaterial(surfMaterial, payload.hitInfo.hitNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
-            }
-            else if (pathSplitIdx == 1)
+            const bool didSplitMaterial = trySplitMaterial(
+                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
+            if (!didSplitMaterial && pathSplitIdx == 1)
             {
                 return;
             }
