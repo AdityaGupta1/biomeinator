@@ -321,7 +321,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const float caveSurfaceMixFactor =
                             smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
                         const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
-                        isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
+                        //isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
+                        isCave = false; // temporary until caves look less ugly (see #241)
                     }
 
                     if (!isCave)
