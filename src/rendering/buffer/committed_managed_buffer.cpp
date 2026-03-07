@@ -29,8 +29,11 @@ CommittedManagedBuffer::CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heap
 
 void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t sizeBytes)
 {
-    this->dev_buffer = BufferHelper::createBasicBuffer(
-        sizeBytes, this->heapProperties, this->initialResourceState, this->options.bufferCreationFlags);
+    // Specifically not passing in initialResourceState here as that's used only for internal tracking. For example,
+    // even if the initialResourceState is D3D12_RESOURCE_STATE_UNORDERED_ACCESS, the resource should be created in
+    // D3D12_RESOURCE_STATE_COMMON.
+    this->dev_buffer =
+        BufferHelper::createBasicBuffer(sizeBytes, this->heapProperties, this->options.bufferCreationFlags);
 
     this->bufferSizeBytes = sizeBytes;
 
