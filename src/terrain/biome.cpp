@@ -94,6 +94,9 @@ void init()
             .top = Block::SAND,
             .mid = Block::SAND,
         };
+        data.structureGens = {
+            { StructureType::PALM_TREE, 32, 8.0f },
+        };
     }
 
     // GRAVEL_BEACH

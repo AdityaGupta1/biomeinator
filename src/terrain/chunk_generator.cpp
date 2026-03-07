@@ -380,10 +380,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         {
             const uint gridCellSideLength = structureGen.gridCellSideLength;
 
+            ASSERT(structureGen.minRadius < gridCellSideLength);
+
             const ivec2 minGridPos = glmUtil::floorDiv(chunkPosBlocksXZ_WS, ivec2(gridCellSideLength)); // inclusive
             const ivec2 maxGridPos = glmUtil::floorDiv(chunkEndPosBlocksXZ_WS - 1, ivec2(gridCellSideLength)); // inclusive
-
-            ASSERT(structureGen.minRadius < gridCellSideLength);
 
             const ivec2 paddedMinGridPos = minGridPos - 1;
             const ivec2 paddedMaxGridPos = maxGridPos + 1;
@@ -411,9 +411,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float r = structureGen.minRadius;
             const float r2 = r * r;
 
-            for (int gridZ = minGridPos.y; gridZ <= maxGridPos.y; ++gridZ)
+            for (int gridZ = minGridPos.y /*z*/; gridZ <= maxGridPos.y /*z*/; ++gridZ)
             {
-                const int zOffset = gridZ - paddedMinGridPos.y;
+                const int zOffset = gridZ - paddedMinGridPos.y /*z*/;
 
                 for (int gridX = minGridPos.x; gridX <= maxGridPos.x; ++gridX)
                 {
@@ -433,6 +433,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     if (candidateGroundHeight == 0)
                     {
                         continue; // top of this column is a cave, so skip this candidate
+                    }
+
+                    if (!bool(structureGen.flags & STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER))
+                    {
+                        const uint blockIdx = (candidateGroundHeight + 1) + (chunkSizeY * columnIdx);
+                        if (Blocks::getBlockData(this->blocks[blockIdx]).type == BlockType::WATER)
+                        {
+                            continue;
+                        }
                     }
 
                     const Biome columnBiome = this->biomes[columnIdx];

@@ -27,6 +27,7 @@ enum StructureType
 {
     OAK_TREE,
     SAGUARO_CACTUS,
+    PALM_TREE,
 
     COUNT
 };
@@ -46,13 +47,17 @@ struct StructureBounds
 
     StructureBounds() = default;
     StructureBounds(int diff);
+    StructureBounds(glm::ivec2 minDiffXZ, glm::ivec2 maxDiffXZ);
 };
+
+#define STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER (1 << 0)
 
 struct StructureGen
 {
     StructureType type;
     uint32_t gridCellSideLength;
-    float minRadius;
+    float minRadius{ 0.f };
+    uint32_t flags{ 0 };
 };
 
 namespace Structures

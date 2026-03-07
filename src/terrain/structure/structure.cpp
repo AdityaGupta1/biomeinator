@@ -150,20 +150,74 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
     }
 }
 
+fillStructureBlocksHeader(PALM_TREE)
+{
+    ivec3 trunkTopPos_CS = structurePos_CS;
+    trunkTopPos_CS.y += rng.nextInt(4, 7);
+    if (isInChunkXZ(structurePos_CS))
+    {
+        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
+        for (int y = structurePos_CS.y; y <= trunkTopPos_CS.y; ++y)
+        {
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LOG);
+        }
+        for (int dy = 0; dy < 2; ++dy)
+        {
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LEAVES);
+        }
+    }
+
+    const ivec2 leavesMinPosXZ_CS = glm::max(ivec2(trunkTopPos_CS.x - 2, trunkTopPos_CS.z - 2), ivec2(0, 0));
+    const ivec2 leavesMaxPosXZ_CS =
+        glm::min(ivec2(trunkTopPos_CS.x + 2, trunkTopPos_CS.z + 2), ivec2(chunkSizeXZ, chunkSizeXZ) - 1);
+    for (int blockZ = leavesMinPosXZ_CS.y /*z*/; blockZ <= leavesMaxPosXZ_CS.y /*z*/; ++blockZ)
+    {
+        for (int blockX = leavesMinPosXZ_CS.x; blockX <= leavesMaxPosXZ_CS.x; ++blockX)
+        {
+            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, trunkTopPos_CS.y - 1, blockZ));
+
+            ivec2 diffXZ = abs(ivec2(blockX, blockZ) - ivec2(structurePos_CS.x, structurePos_CS.z));
+            if (diffXZ.x == 2 && diffXZ.y /*z*/ == 2)
+            {
+                if (rng.chance(0.5f))
+                {
+                    if (rng.chance(0.5f))
+                    {
+                        blockIdx++;
+                    }
+                    tryPlaceStructureBlock(blocks, blockIdx, Block::PALM_LEAVES);
+                }
+            }
+            else
+            {
+                int leavesHeight = (diffXZ.x + diffXZ.y == 1) ? 4 : 2;
+                for (int dy = 0; dy < leavesHeight; ++dy)
+                {
+                    tryPlaceStructureBlock(blocks, blockIdx++, Block::PALM_LEAVES);
+                }
+            }
+        }
+    }
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
+{}
+
+StructureBounds::StructureBounds(glm::ivec2 minDiffXZ, glm::ivec2 maxDiffXZ)
+    : minDiffXZ(minDiffXZ), maxDiffXZ(maxDiffXZ)
 {}
 
 namespace Structures
 {
 
 using FillStructureFunc = void (*)(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng);
-static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs;
+static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs{};
 
 #define FILL_STRUCTURE_FUNC_BY_NAME(structureName) fillStructureFuncs[static_cast<size_t>(StructureType::structureName)]
 #define SET_FILL_STRUCTURE_FUNC(structureName) FILL_STRUCTURE_FUNC_BY_NAME(structureName) = fillStructureBlocks_##structureName;
 
-static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> structureBounds;
+static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> structureBounds{};
 
 #define STRUCTURE_BOUNDS_BY_NAME(structureName) structureBounds[static_cast<size_t>(StructureType::structureName)]
 
@@ -174,6 +228,14 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(SAGUARO_CACTUS);
     STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = 2;
+
+    SET_FILL_STRUCTURE_FUNC(PALM_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 4;
+
+    for (const FillStructureFunc func : fillStructureFuncs)
+    {
+        ASSERT(func != nullptr);
+    }
 }
 
 const StructureBounds& getStructureBounds(StructureType type)
