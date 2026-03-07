@@ -62,25 +62,25 @@ void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
     }
 }
 
-void tryApplySegmentAbsorption(inout Payload payload, const float3 rayOrigin, const float3 rayDir)
+float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, const float3 rayDir)
 {
     if (!bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
     {
-        return;
+        return float3(1.f, 1.f, 1.f);
     }
 
     const float dist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(rayOrigin, payload.hitInfo.hitPos_WS)
         : getDistanceToVoxelBounds(rayOrigin, rayDir);
-    payload.pathWeight *= computeWaterAbsorption(dist);
+    return computeWaterAbsorption(dist);
 }
 
-void applyPassthroughAbsorption(inout Payload payload, const float rayEndT)
+float3 computePassthroughAbsorption(const Payload payload, const float rayEndT)
 {
     // waterEntryT is initialized to 0 if the ray starts underwater, RAY_DEFAULT_TMAX otherwise.
     // waterExitT is initialized to RAY_DEFAULT_TMAX and updated in AnyHit on water surface hits.
     // NOTE: this correctly handles one water entry and exit (in that order) along the ray. It breaks
     // down if there are multiple distinct water bodies along the ray (e.g. two separate ponds).
     const float waterLength = max(min(payload.waterExitT, rayEndT) - payload.waterEntryT, 0.f);
-    payload.pathWeight *= computeWaterAbsorption(waterLength);
+    return computeWaterAbsorption(waterLength);
 }

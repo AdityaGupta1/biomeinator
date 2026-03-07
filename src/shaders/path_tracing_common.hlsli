@@ -179,7 +179,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER))
         {
-            // Track the first water entry/exit T for absorption in applyPassthroughAbsorption.
+            // Track the first water entry/exit T for absorption in computePassthroughAbsorption.
             // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
             if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
             {

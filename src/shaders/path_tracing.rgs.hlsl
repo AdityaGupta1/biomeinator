@@ -57,7 +57,8 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     ptDiffuseAlbedo = 0.f;
 
-    tryApplySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+    const float3 segmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+    payload.pathWeight *= segmentAbsorption;
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -306,7 +307,8 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         payload.waterExitT = RAY_DEFAULT_TMAX;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
 
-        tryApplySegmentAbsorption(payload, ray.Origin, ray.Direction);
+        const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
+        payload.pathWeight *= segmentAbsorption;
 
         if (pathDepth == 0)
         {
@@ -347,7 +349,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption;
                     }
                     else
                     {

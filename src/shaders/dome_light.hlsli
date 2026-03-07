@@ -121,8 +121,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     result.pdf = pdf;
     if (result.didReachDomeLight)
     {
-        applyPassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight;
+        const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
+        result.Le = getDomeLightColor(ray.Direction) * passthroughAbsorption;
     }
     else
     {
