@@ -87,10 +87,6 @@ bool isWaterTriangle(const InstanceData instanceData, const uint triangleIdx)
 
 bool isWaterTriangle(const uint instanceId, const uint triangleIdx)
 {
-    if (sceneParams.voxelMode == 0)
-    {
-        return false;
-    }
     return isWaterTriangle(instanceDatas[instanceId], triangleIdx);
 }
 
@@ -106,9 +102,9 @@ void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
     }
 }
 
-void applySegmentAbsorption(inout Payload payload, const float3 rayOrigin, const float3 rayDir)
+void tryApplySegmentAbsorption(inout Payload payload, const float3 rayOrigin, const float3 rayDir)
 {
-    if (sceneParams.voxelMode == 0 || !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    if (!bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
     {
         return;
     }
