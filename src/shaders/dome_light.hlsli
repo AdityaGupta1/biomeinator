@@ -116,15 +116,19 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
-    const float rayEndT = bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? distance(ray.Origin, domeLightPayload.hitInfo.hitPos_WS)
-        : getDistanceToVoxelBounds(ray.Origin, ray.Direction);
-    applyPassthroughAbsorption(domeLightPayload, rayEndT);
-
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
-    result.Le = result.didReachDomeLight ? getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight : float3(0.f, 0.f, 0.f);
     result.pdf = pdf;
+
+    if (result.didReachDomeLight)
+    {
+        applyPassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
+        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight;
+    }
+    else
+    {
+        result.Le = float3(0.f, 0.f, 0.f);
+    }
     return result;
 }
 

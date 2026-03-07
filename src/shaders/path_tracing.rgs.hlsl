@@ -57,18 +57,18 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     ptDiffuseAlbedo = 0.f;
 
+    applySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        applySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
         payload.pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
         return;
     }
-    else if (payload.materialIdx == MATERIAL_IDX_INVALID)
+
+    if (payload.materialIdx == MATERIAL_IDX_INVALID)
     {
         return;
     }
-
-    applySegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
 
     // data of last "real" bounce (i.e. not passthrough)
     bool bounceWasSpecular = false;
