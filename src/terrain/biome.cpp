@@ -56,9 +56,6 @@ static std::vector<Biome> beachBiomes;
 static std::vector<Biome> lowlandBiomes;
 static std::vector<Biome> highlandBiomes;
 
-// temperature in [-1, 1]
-// humidity in [-1, 1]
-// peak in [-1, 1]
 void init()
 {
     // ==================================================
@@ -272,7 +269,7 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     {
         closestBiomeCandidates = &beachBiomes;
     }
-    else if (biomeNoise.inland < 0.6f)
+    else if (biomeNoise.inland < 0.85f)
     {
         closestBiomeCandidates = &lowlandBiomes;
     }

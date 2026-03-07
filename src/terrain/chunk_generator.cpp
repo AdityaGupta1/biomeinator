@@ -58,8 +58,8 @@ void init()
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(5689481209);
         fnSimplex->SetScale(2.5f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(-1.0f);
-        fnSimplex->SetOutputMax(1.0f);
+        fnSimplex->SetOutputMin(-0.7f);
+        fnSimplex->SetOutputMax(0.7f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
         fnWarp->SetScale(0.06f * biomeNoiseScale);
@@ -75,8 +75,8 @@ void init()
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(680199230);
         fnSimplex->SetScale(1.5f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(-1.0f);
-        fnSimplex->SetOutputMax(1.0f);
+        fnSimplex->SetOutputMin(-0.7f);
+        fnSimplex->SetOutputMax(0.7f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
         fnWarp->SetScale(0.04f * biomeNoiseScale);
@@ -97,8 +97,11 @@ void init()
         auto fnFractalRidged = FN::New<FN::FractalRidged>();
         fnFractalRidged->SetSource(fnSimplex);
         fnFractalRidged->SetOctaveCount(5);
+        auto fnMultiply = FN::New<FN::Multiply>();
+        fnMultiply->SetLHS(fnFractalRidged);
+        fnMultiply->SetRHS(0.7f);
 
-        fnPeak = fnFractalRidged;
+        fnPeak = fnMultiply;
     }
 
     {
