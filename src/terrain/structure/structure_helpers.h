@@ -97,9 +97,8 @@ std::vector<glm::vec3> buildSpline(const std::vector<glm::vec3>& ctrlPts, uint32
 
     for (uint32_t i = 0; i < numSplinePts; ++i)
     {
-        const float t = static_cast<float>(i) / static_cast<float>(numSplinePts - 1);
+        const float t = i / static_cast<float>(numSplinePts - 1);
 
-        // De Casteljau: iteratively lerp down to a single point
         std::memcpy(pts.data(), ctrlPts.data(), n * sizeof(glm::vec3));
         for (uint32_t level = n - 1; level > 0; --level)
         {
