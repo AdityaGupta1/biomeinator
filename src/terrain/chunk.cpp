@@ -477,7 +477,7 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
 
     Block neighborBlock;
 
-    if (!Chunk::isPosInBounds(ivec2(neighborPos_CS.x, neighborPos_CS.z)))
+    if (!Chunk::isInChunkXZ(neighborPos_CS))
     {
         const Chunk* neighborChunk = this->neighbors[faceIdx]; // faceIdx 0-3 corresponds to NeighborDirection
         ASSERT(neighborChunk != nullptr); // neighborChunk should exist because this function is not called until all neighbors have blocks
@@ -864,11 +864,6 @@ void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos,
 {
     outSegmentStartPos = chunkSegmentPos * uvec3(chunkSegmentSizeXZ, chunkSegmentSizeY, chunkSegmentSizeXZ);
     outSegmentEndPos = outSegmentStartPos + uvec3(chunkSegmentSizeXZ - 1, chunkSegmentSizeY - 1, chunkSegmentSizeXZ - 1);
-}
-
-bool Chunk::isPosInBounds(glm::ivec2 posXZ_CS)
-{
-    return std::min(posXZ_CS.x, posXZ_CS.y /*z*/) >= 0 && std::max(posXZ_CS.x, posXZ_CS.y /*z*/) < chunkSizeXZ;
 }
 
 Region::Region(glm::ivec2 regionPos)

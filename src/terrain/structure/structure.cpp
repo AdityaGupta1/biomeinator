@@ -21,31 +21,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../block.h"
 #include "../chunk.h"
 #include "settings_manager.h"
+#include "structure_helpers.h"
 #include "util/rng.h"
 
 #include <array>
+#include <glm/gtc/constants.hpp>
 
 using namespace glm;
-
-// TODO: make these into static functions of Chunk?
-static inline bool isInChunkXZ(ivec3 pos_CS)
-{
-    return min(pos_CS.x, pos_CS.z) >= 0 && max(pos_CS.x, pos_CS.z) < chunkSizeXZ;
-}
-
-static inline bool isInChunk(ivec3 pos_CS)
-{
-    return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
-}
-
-static inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint blockIdx, Block newBlock)
-{
-    Block& block = blocks[blockIdx];
-    if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
-    {
-        block = newBlock;
-    }
-}
+using namespace StructureHelpers;
 
 #define fillStructureBlocksHeader(structureName)                                                                       \
     static void fillStructureBlocks_##structureName(                                                                   \
@@ -55,7 +38,7 @@ fillStructureBlocksHeader(OAK_TREE)
 {
     ivec3 trunkTopPos_CS = structurePos_CS;
     trunkTopPos_CS.y += rng.nextInt(4, 7);
-    if (isInChunkXZ(structurePos_CS))
+    if (Chunk::isInChunkXZ(structurePos_CS))
     {
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int y = structurePos_CS.y; y <= trunkTopPos_CS.y; ++y)
@@ -104,7 +87,7 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
 {
     const int trunkHeight = rng.nextInt(4, 10);
 
-    if (isInChunkXZ(structurePos_CS))
+    if (Chunk::isInChunkXZ(structurePos_CS))
     {
         uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
         for (int dy = 0; dy <= trunkHeight; ++dy)
@@ -133,13 +116,13 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
         const ivec2 dirOffset = neighborOffset(dir);
 
         const ivec3 armConnectorPos_CS = structurePos_CS + ivec3(dirOffset.x, armBaseHeight, dirOffset.y /*z*/);
-        if (isInChunkXZ(armConnectorPos_CS))
+        if (Chunk::isInChunkXZ(armConnectorPos_CS))
         {
             tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(armConnectorPos_CS), Block::CACTUS);
         }
 
         const ivec3 armBendPos_CS = armConnectorPos_CS + ivec3(dirOffset.x, 0, dirOffset.y /*z*/);
-        if (isInChunkXZ(armBendPos_CS))
+        if (Chunk::isInChunkXZ(armBendPos_CS))
         {
             uint blockIdx = Chunk::blockPosToIdx(armBendPos_CS);
             for (int dy = 0; dy <= armHeight; ++dy)
@@ -150,20 +133,74 @@ fillStructureBlocksHeader(SAGUARO_CACTUS)
     }
 }
 
+fillStructureBlocksHeader(PALM_TREE)
+{
+    std::vector<glm::vec3> ctrlPts;
+    ctrlPts.push_back(structurePos_CS);
+    for (int i = 0; i < 2; ++i)
+    {
+        ctrlPts.push_back(ctrlPts.back() + glm::vec3(rng.nextFloatAbs(3), rng.nextFloat(4, 7), rng.nextFloatAbs(3)));
+    }
+
+    const std::vector<glm::vec3> spline = buildSpline(ctrlPts, 3);
+    fillSpline(blocks, spline, Block::PALM_LOG);
+
+    const glm::vec3 trunkTip = spline.back();
+    const glm::vec3 trunkDir = glm::normalize(trunkTip - spline[spline.size() - 2]);
+
+    constexpr glm::vec3 worldUp(0.f, 1.f, 0.f);
+    const glm::vec3 ref = (glm::abs(glm::dot(trunkDir, worldUp)) < 0.9f) ? worldUp : glm::vec3(1.f, 0.f, 0.f);
+    const glm::vec3 basis1 = glm::normalize(glm::cross(ref, trunkDir));
+    const glm::vec3 basis2 = glm::normalize(glm::cross(trunkDir, basis1));
+
+    const ivec3 trunkTipPos_CS = ivec3(glm::floor(trunkTip));
+    if (Chunk::isInChunkXZ(trunkTipPos_CS))
+    {
+        Block& trunkTipBlock = blocks[Chunk::blockPosToIdx(trunkTipPos_CS)];
+        if (trunkTipBlock == Block::PALM_LOG)
+        {
+            trunkTipBlock = Block::PALM_LEAVES;
+        }
+    }
+
+    constexpr float maxAngleJitterRadians = 5.0f * glm::pi<float>() / 180.0f;
+    const int numLeaves = rng.nextInt(7, 10);
+
+    for (int i = 0; i < numLeaves; ++i)
+    {
+        const float baseAngle = (i / static_cast<float>(numLeaves)) * glm::two_pi<float>();
+        const float angle = baseAngle + rng.nextFloatAbs(maxAngleJitterRadians);
+        const glm::vec3 leafDir = glm::cos(angle) * basis1 + glm::sin(angle) * basis2;
+
+        const float segment1Length = rng.nextFloat(3.f, 4.f);
+        const float segment2Length = rng.nextFloat(2.f, 3.f);
+
+        const glm::vec3 segment1End = trunkTip + leafDir * segment1Length;
+        const glm::vec3 segment2End = segment1End + leafDir * segment2Length - glm::vec3(0.f, 1.8f, 0.f);
+
+        fillLine(blocks, ivec3(glm::floor(trunkTip)), ivec3(glm::floor(segment1End)), Block::PALM_LEAVES);
+        fillLine(blocks, ivec3(glm::floor(segment1End)), ivec3(glm::floor(segment2End)), Block::PALM_LEAVES);
+    }
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
+{}
+
+StructureBounds::StructureBounds(glm::ivec2 minDiffXZ, glm::ivec2 maxDiffXZ)
+    : minDiffXZ(minDiffXZ), maxDiffXZ(maxDiffXZ)
 {}
 
 namespace Structures
 {
 
 using FillStructureFunc = void (*)(const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng);
-static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs;
+static std::array<FillStructureFunc, static_cast<size_t>(StructureType::COUNT)> fillStructureFuncs{};
 
 #define FILL_STRUCTURE_FUNC_BY_NAME(structureName) fillStructureFuncs[static_cast<size_t>(StructureType::structureName)]
 #define SET_FILL_STRUCTURE_FUNC(structureName) FILL_STRUCTURE_FUNC_BY_NAME(structureName) = fillStructureBlocks_##structureName;
 
-static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> structureBounds;
+static std::array<StructureBounds, static_cast<size_t>(StructureType::COUNT)> structureBounds{};
 
 #define STRUCTURE_BOUNDS_BY_NAME(structureName) structureBounds[static_cast<size_t>(StructureType::structureName)]
 
@@ -174,6 +211,14 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(SAGUARO_CACTUS);
     STRUCTURE_BOUNDS_BY_NAME(SAGUARO_CACTUS) = 2;
+
+    SET_FILL_STRUCTURE_FUNC(PALM_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 12;
+
+    for (const FillStructureFunc func : fillStructureFuncs)
+    {
+        ASSERT(func != nullptr);
+    }
 }
 
 const StructureBounds& getStructureBounds(StructureType type)

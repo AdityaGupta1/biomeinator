@@ -73,6 +73,8 @@ void init()
     BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = BlockUvs(uvec2(23, 0)), .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(BLACK_SAND) = { BlockUvs(uvec2(24, 0)) };
     BLOCK_DATA_BY_NAME(GRAVEL) = { BlockUvs(uvec2(25, 0)) };
+    BLOCK_DATA_BY_NAME(PALM_LOG) = { BlockUvs(uvec2(27, 0), uvec2(26, 0), uvec2(27, 0)) };
+    BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = BlockUvs(uvec2(28, 0)), .type = BlockType::TRANSPARENT_CUTOUT };
 }
 
 const BlockData& getBlockData(Block block)

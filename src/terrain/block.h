@@ -53,6 +53,8 @@ enum class Block : BlockId
     PINK_DAFFODIL,
     BLACK_SAND,
     GRAVEL,
+    PALM_LOG,
+    PALM_LEAVES,
 
     COUNT
 };

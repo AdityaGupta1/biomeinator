@@ -180,7 +180,20 @@ public:
 
     static void segmentPosToBounds(glm::uvec3 chunkSegmentPos, glm::uvec3& outSegmentStartPos, glm::uvec3& outSegmentEndPos);
 
-    static bool isPosInBounds(glm::ivec2 posXZ_CS);
+    static inline bool isInChunkXZ(glm::ivec2 pos_CS)
+    {
+        return glm::min(pos_CS.x, pos_CS.y /*z*/) >= 0 && glm::max(pos_CS.x, pos_CS.y /*z*/) < chunkSizeXZ;
+    }
+
+    static inline bool isInChunkXZ(glm::ivec3 pos_CS)
+    {
+        return isInChunkXZ(glm::ivec2(pos_CS.x, pos_CS.z));
+    }
+
+    static inline bool isInChunk(glm::ivec3 pos_CS)
+    {
+        return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
+    }
 };
 
 inline constexpr uint32_t regionSideLength = 32;
