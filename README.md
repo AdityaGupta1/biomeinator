@@ -2,9 +2,9 @@
 
 Real-time path traced voxel engine
 
-<img width="2560" height="1440" alt="2026 01 31_18-19-07" src="https://github.com/user-attachments/assets/d4d95199-c33d-4b8c-9429-f32fd10f8d30" />
+![](img/title.png)
 
-Video demo: https://youtu.be/eoOcb3PMwJM
+Video demo: https://youtu.be/6ehg5h1aBRI
 
 ## Building
 
