@@ -55,6 +55,8 @@ enum class Block : BlockId
     GRAVEL,
     PALM_LOG,
     PALM_LEAVES,
+    ACACIA_LOG,
+    ACACIA_LEAVES,
 
     COUNT
 };

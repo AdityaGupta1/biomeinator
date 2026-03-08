@@ -37,6 +37,14 @@ inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx
 
 void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 endPos_CS, Block block)
 {
+    const glm::ivec3 minPt = glm::min(startPos_CS, endPos_CS);
+    const glm::ivec3 maxPt = glm::max(startPos_CS, endPos_CS);
+    const glm::ivec3 chunkSize(chunkSizeXZ, chunkSizeY, chunkSizeXZ);
+    if (glm::any(glm::lessThan(maxPt, glm::ivec3(0))) || glm::any(glm::greaterThanEqual(minPt, chunkSize)))
+    {
+        return;
+    }
+
     const glm::ivec3 d = glm::abs(endPos_CS - startPos_CS);
     const glm::ivec3 s = glm::sign(endPos_CS - startPos_CS);
     glm::ivec3 pos = startPos_CS;

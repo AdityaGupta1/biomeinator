@@ -75,6 +75,8 @@ void init()
     BLOCK_DATA_BY_NAME(GRAVEL) = { BlockUvs(uvec2(25, 0)) };
     BLOCK_DATA_BY_NAME(PALM_LOG) = { BlockUvs(uvec2(27, 0), uvec2(26, 0), uvec2(27, 0)) };
     BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = BlockUvs(uvec2(28, 0)), .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(ACACIA_LOG) = { BlockUvs(uvec2(30, 0), uvec2(29, 0), uvec2(30, 0)) };
+    BLOCK_DATA_BY_NAME(ACACIA_LEAVES) = { .uvs = BlockUvs(uvec2(31, 0)), .type = BlockType::TRANSPARENT_CUTOUT };
 }
 
 const BlockData& getBlockData(Block block)

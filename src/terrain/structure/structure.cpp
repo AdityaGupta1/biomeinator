@@ -164,7 +164,7 @@ fillStructureBlocksHeader(PALM_TREE)
     }
 
     constexpr float maxAngleJitterRadians = 5.0f * glm::pi<float>() / 180.0f;
-    const int numLeaves = rng.nextInt(7, 10);
+    const int numLeaves = rng.nextInt(7, 11);
 
     for (int i = 0; i < numLeaves; ++i)
     {
@@ -181,6 +181,11 @@ fillStructureBlocksHeader(PALM_TREE)
         fillLine(blocks, ivec3(glm::floor(trunkTip)), ivec3(glm::floor(segment1End)), Block::PALM_LEAVES);
         fillLine(blocks, ivec3(glm::floor(segment1End)), ivec3(glm::floor(segment2End)), Block::PALM_LEAVES);
     }
+}
+
+fillStructureBlocksHeader(ACACIA_TREE)
+{
+
 }
 
 StructureBounds::StructureBounds(int diff)
@@ -214,6 +219,9 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(PALM_TREE);
     STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 12;
+
+    SET_FILL_STRUCTURE_FUNC(ACACIA_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(ACACIA_TREE) = 8;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {
