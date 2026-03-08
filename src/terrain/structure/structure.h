@@ -28,6 +28,7 @@ enum StructureType
     OAK_TREE,
     SAGUARO_CACTUS,
     PALM_TREE,
+    ACACIA_TREE,
 
     COUNT
 };

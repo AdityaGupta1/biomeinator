@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../block.h"
 #include "../chunk.h"
+#include "util/rng.h"
 
 #include <vector>
 
@@ -37,6 +38,14 @@ inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx
 
 void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 endPos_CS, Block block)
 {
+    const glm::ivec3 minPt = glm::min(startPos_CS, endPos_CS);
+    const glm::ivec3 maxPt = glm::max(startPos_CS, endPos_CS);
+    const glm::ivec3 chunkSize(chunkSizeXZ, chunkSizeY, chunkSizeXZ);
+    if (glm::any(glm::lessThan(maxPt, glm::ivec3(0))) || glm::any(glm::greaterThanEqual(minPt, chunkSize)))
+    {
+        return;
+    }
+
     const glm::ivec3 d = glm::abs(endPos_CS - startPos_CS);
     const glm::ivec3 s = glm::sign(endPos_CS - startPos_CS);
     glm::ivec3 pos = startPos_CS;
@@ -119,6 +128,44 @@ void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline
     for (int i = 0; i < spline.size() - 1; ++i)
     {
         fillLine(blocks, glm::ivec3(glm::floor(spline[i])), glm::ivec3(glm::floor(spline[i + 1])), block);
+    }
+}
+
+void placeLeafCap(std::vector<Block>& blocks,
+                  glm::ivec3 centerPos_CS,
+                  float minRadius,
+                  float maxRadius,
+                  float maxHeight,
+                  RandomNumberGenerator& rng,
+                  Block block)
+{
+    const float radiusMultiplier = rng.nextFloat(0.9f, 1.1f);
+    const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
+    const int yMax = centerPos_CS.y + (int)glm::floor(maxHeight - 0.5f);
+
+    for (int y = centerPos_CS.y; y <= yMax; ++y)
+    {
+        const float posY = y - centerPos_CS.y + 0.5f;
+        const float leavesRadius = glm::mix(maxRadius, minRadius, posY / maxHeight) * radiusMultiplier;
+        const float leavesRadius2 = leavesRadius * leavesRadius;
+
+        for (int dz = -maxRadiusCeil; dz <= maxRadiusCeil; ++dz)
+        {
+            for (int dx = -maxRadiusCeil; dx <= maxRadiusCeil; ++dx)
+            {
+                if (dx * dx + dz * dz >= leavesRadius2)
+                {
+                    continue;
+                }
+                const glm::ivec3 pos_CS(centerPos_CS.x + dx, y, centerPos_CS.z + dz);
+                if (!Chunk::isInChunk(pos_CS))
+                {
+                    continue;
+                }
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+
+            }
+        }
     }
 }
 
