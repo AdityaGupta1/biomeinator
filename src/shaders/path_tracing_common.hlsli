@@ -197,9 +197,19 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 
     if (baseColor.a < 0.999f) // testAlphaCutout
     {
-        if (baseColor.a == 0.f || payload.rng.nextFloat() > baseColor.a)
+        if (baseColor.a == 0.f)
         {
             IgnoreHit();
+            return;
+        }
+
+        // If path splitting is enabled, we will split for fractional opacity, so we don't want to ignore those hits here.
+        const bool checkFractionalOpacity =
+            !bool(renderParams.doPathSplitting) || !bool(payload.flags & PAYLOAD_FLAG_IS_GBUFFER);
+        if (checkFractionalOpacity && payload.rng.nextFloat() > baseColor.a)
+        {
+            IgnoreHit();
+            return;
         }
     }
 }
