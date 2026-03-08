@@ -795,14 +795,26 @@ static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
-    rtStaticSamplers.push_back({
-        .Filter = voxelMode ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
-        .RegisterSpace = RT_REGISTER_SPACE,
-    });
+    // TODO: mip bias either here or in shaders
+    D3D12_STATIC_SAMPLER_DESC staticSampler = {};
+    staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.MinLOD = 0.f;
+    staticSampler.ShaderRegister = RT_REGISTER_TEX_SAMPLER;
+    staticSampler.RegisterSpace = RT_REGISTER_SPACE;
+    if (voxelMode)
+    {
+        staticSampler.Filter = D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+        staticSampler.MaxLOD = 4.f;
+    }
+    else
+    {
+        staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+        staticSampler.MaxLOD = 0.f;
+    }
+
+    rtStaticSamplers.push_back(staticSampler);
 
     // ===================================
     // GBUFFER
