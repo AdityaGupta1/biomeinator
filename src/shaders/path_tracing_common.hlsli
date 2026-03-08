@@ -203,7 +203,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
             return;
         }
 
-        // If path splitting is enabled, we will split for fractional opacity, so we don't want to ignore those hits here.
+        // If path splitting is enabled, we will split for fractional opacity, so we don't want to ignore those hits in the gbuffer pass.
         const bool checkFractionalOpacity =
             !bool(renderParams.doPathSplitting) || !bool(payload.flags & PAYLOAD_FLAG_IS_GBUFFER);
         if (checkFractionalOpacity && payload.rng.nextFloat() > baseColor.a)
