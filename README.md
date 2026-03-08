@@ -22,7 +22,11 @@ Or, you can:
 
 For voxel terrain, run with the command line argument `--voxelMode`. Otherwise, you can open glTF scenes with <kbd>Ctrl</kbd> + <kbd>O</kbd>. Some example scenes are available in `test_scenes/`.
 
-Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. You can also press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu, hold <kbd>C</kbd> to zoom, or press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`).
+Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. Additional controls include:
+- Hold <kbd>C</kbd> to zoom
+- Press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu
+- Press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`)
+- Press <kbd>H</kbd> to toggle GUI visibility
 
 ## Third-Party Licenses
 
