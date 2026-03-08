@@ -133,9 +133,9 @@ void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline
 
 void placeLeafCap(std::vector<Block>& blocks,
                   glm::ivec3 centerPos_CS,
-                  float maxHeight,
                   float minRadius,
                   float maxRadius,
+                  float maxHeight,
                   RandomNumberGenerator& rng,
                   Block block)
 {

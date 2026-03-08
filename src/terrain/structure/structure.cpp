@@ -204,7 +204,7 @@ fillStructureBlocksHeader(ACACIA_TREE)
     primaryBranchEnd.y += rng.nextFloat(4.5f, 5.5f);
 
     fillLine(blocks, glm::floor(primaryBranchStart), glm::floor(primaryBranchEnd), Block::ACACIA_LOG);
-    placeLeafCap(blocks, glm::floor(primaryBranchEnd), 2.f, 2.5f, 4.5f, rng, Block::ACACIA_LEAVES);
+    placeLeafCap(blocks, glm::floor(primaryBranchEnd), 2.5f, 4.5f, 2.f, rng, Block::ACACIA_LEAVES);
 
     if (!rng.chance(0.5f))
     {
@@ -219,7 +219,7 @@ fillStructureBlocksHeader(ACACIA_TREE)
     secondaryBranchEnd.y += rng.nextFloat(3.f, 4.f);
 
     fillLine(blocks, glm::floor(secondaryBranchStart), glm::floor(secondaryBranchEnd), Block::ACACIA_LOG);
-    placeLeafCap(blocks, secondaryBranchEnd, 2.f, 2.f, 4.f, rng, Block::ACACIA_LEAVES);
+    placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
 StructureBounds::StructureBounds(int diff)
