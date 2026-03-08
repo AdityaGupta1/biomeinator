@@ -170,7 +170,8 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    const float4 baseColor = getMaterialBaseColor(material, uv, 0.f);
+    const float mipLevel = computeTerrainMipLevel(payload.coneWidth + payload.coneSurfaceSpreadAngle * RayTCurrent());
+    const float4 baseColor = getMaterialBaseColor(material, uv, mipLevel);
 
     if (testRefractionPassthrough)
     {
