@@ -255,7 +255,7 @@ void init()
     STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 12;
 
     SET_FILL_STRUCTURE_FUNC(ACACIA_TREE);
-    STRUCTURE_BOUNDS_BY_NAME(ACACIA_TREE) = 8;
+    STRUCTURE_BOUNDS_BY_NAME(ACACIA_TREE) = 12;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {
