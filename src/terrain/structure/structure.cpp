@@ -188,7 +188,14 @@ fillStructureBlocksHeader(ACACIA_TREE)
     const int trunkBaseHeight = (int)(4.f + 3.f * rng.nextFloat());
     vec3 trunkTopPos = structurePos_CS;
     trunkTopPos.y += trunkBaseHeight;
-    fillLine(blocks, structurePos_CS, ivec3(trunkTopPos), Block::ACACIA_LOG); // TODO: replace with simple for loop
+    if (Chunk::isInChunkXZ(structurePos_CS))
+    {
+        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
+        for (int dy = 0; dy <= trunkBaseHeight; ++dy)
+        {
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::ACACIA_LOG);
+        }
+    }
 
     const float branchAngle = rng.nextFloat(glm::two_pi<float>());
     const vec3 primaryBranchDir(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
