@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <glm/glm.hpp>
 
-#define DEBUG_BIOME_OVERRIDE Biome::SAVANNA
+//#define DEBUG_BIOME_OVERRIDE Biome::SAVANNA
 
 float BiomeNoise::distance2(const BiomeNoise& other) const
 {

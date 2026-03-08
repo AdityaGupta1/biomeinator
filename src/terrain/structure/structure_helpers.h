@@ -24,9 +24,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <vector>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/norm.hpp>
-
 namespace StructureHelpers
 {
 
@@ -144,36 +141,29 @@ void placeLeafCap(std::vector<Block>& blocks,
 {
     const float radiusMultiplier = rng.nextFloat(0.9f, 1.1f);
     const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
-    const int centerX = (int)glm::floor(centerPos_CS.x);
-    const int centerZ = (int)glm::floor(centerPos_CS.z);
-    // posY = y - centerPos_CS.y + 0.5 must be in [0, maxHeight]
-    const int yMin = (int)glm::floor(centerPos_CS.y - 0.5f);
-    const int yMax = (int)glm::floor(centerPos_CS.y - 0.5f + maxHeight);
+    const int yMax = centerPos_CS.y + (int)glm::floor(maxHeight - 0.5f);
 
-    for (int y = yMin; y <= yMax; ++y)
+    for (int y = centerPos_CS.y; y <= yMax; ++y)
     {
         const float posY = y - centerPos_CS.y + 0.5f;
-        if (posY < 0.f || posY > maxHeight)
-        {
-            continue;
-        }
-        float leavesRadius2 = glm::mix(maxRadius, minRadius, posY / maxHeight) * radiusMultiplier;
-        leavesRadius2 *= leavesRadius2;
+        const float leavesRadius = glm::mix(maxRadius, minRadius, posY / maxHeight) * radiusMultiplier;
+        const float leavesRadius2 = leavesRadius * leavesRadius;
 
         for (int dz = -maxRadiusCeil; dz <= maxRadiusCeil; ++dz)
         {
             for (int dx = -maxRadiusCeil; dx <= maxRadiusCeil; ++dx)
             {
-                const glm::ivec3 pos_CS(centerX + dx, y, centerZ + dz);
+                if (dx * dx + dz * dz >= leavesRadius2)
+                {
+                    continue;
+                }
+                const glm::ivec3 pos_CS(centerPos_CS.x + dx, y, centerPos_CS.z + dz);
                 if (!Chunk::isInChunk(pos_CS))
                 {
                     continue;
                 }
-                const float distXZ2 = glm::length2(glm::vec2(pos_CS.x - centerPos_CS.x, pos_CS.z - centerPos_CS.z));
-                if (distXZ2 < leavesRadius2)
-                {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
-                }
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+
             }
         }
     }
