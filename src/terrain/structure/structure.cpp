@@ -185,7 +185,34 @@ fillStructureBlocksHeader(PALM_TREE)
 
 fillStructureBlocksHeader(ACACIA_TREE)
 {
+    const int trunkBaseHeight = (int)(4.f + 3.f * rng.nextFloat());
+    vec3 trunkTopPos = structurePos_CS;
+    trunkTopPos.y += trunkBaseHeight;
+    fillLine(blocks, structurePos_CS, ivec3(trunkTopPos), Block::ACACIA_LOG); // TODO: replace with simple for loop
 
+    const float branchAngle = rng.nextFloat(glm::two_pi<float>());
+    const vec3 primaryBranchDir(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
+    const vec3 primaryBranchStart = trunkTopPos;
+    vec3 primaryBranchEnd = primaryBranchStart + primaryBranchDir * rng.nextFloat(4.f, 5.5f);
+    primaryBranchEnd.y += rng.nextFloat(5.f, 7.f);
+
+    fillLine(blocks, glm::floor(primaryBranchStart), glm::floor(primaryBranchEnd), Block::ACACIA_LOG);
+    placeLeafCap(blocks, glm::floor(primaryBranchEnd), 2.f, 3.5f, 4.5f, rng, Block::ACACIA_LEAVES);
+
+    if (!rng.chance(0.5f))
+    {
+        return;
+    }
+
+    const float secondaryBranchAngle = branchAngle + rng.nextFloat(glm::half_pi<float>(), glm::three_over_two_pi<float>());
+    const vec3 secondaryBranchDir(glm::cos(secondaryBranchAngle), 0.f, glm::sin(secondaryBranchAngle));
+    vec3 secondaryBranchStart = trunkTopPos;
+    secondaryBranchStart.y -= rng.nextFloat(0.8f, 1.6f);
+    vec3 secondaryBranchEnd = secondaryBranchStart + secondaryBranchDir * rng.nextFloat(2.5f, 3.5f);
+    secondaryBranchEnd.y += rng.nextFloat(3.f, 4.f);
+
+    fillLine(blocks, glm::floor(secondaryBranchStart), glm::floor(secondaryBranchEnd), Block::ACACIA_LOG);
+    placeLeafCap(blocks, secondaryBranchEnd, 2.f, 3.f, 4.f, rng, Block::ACACIA_LEAVES);
 }
 
 StructureBounds::StructureBounds(int diff)

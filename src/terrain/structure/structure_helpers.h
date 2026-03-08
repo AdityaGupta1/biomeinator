@@ -20,8 +20,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../block.h"
 #include "../chunk.h"
+#include "util/rng.h"
 
 #include <vector>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/norm.hpp>
 
 namespace StructureHelpers
 {
@@ -127,6 +131,51 @@ void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline
     for (int i = 0; i < spline.size() - 1; ++i)
     {
         fillLine(blocks, glm::ivec3(glm::floor(spline[i])), glm::ivec3(glm::floor(spline[i + 1])), block);
+    }
+}
+
+void placeLeafCap(std::vector<Block>& blocks,
+                  glm::ivec3 centerPos_CS,
+                  float maxHeight,
+                  float minRadius,
+                  float maxRadius,
+                  RandomNumberGenerator& rng,
+                  Block block)
+{
+    const float radiusMultiplier = rng.nextFloat(0.9f, 1.1f);
+    const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
+    const int centerX = (int)glm::floor(centerPos_CS.x);
+    const int centerZ = (int)glm::floor(centerPos_CS.z);
+    // posY = y - centerPos_CS.y + 0.5 must be in [0, maxHeight]
+    const int yMin = (int)glm::floor(centerPos_CS.y - 0.5f);
+    const int yMax = (int)glm::floor(centerPos_CS.y - 0.5f + maxHeight);
+
+    for (int y = yMin; y <= yMax; ++y)
+    {
+        const float posY = y - centerPos_CS.y + 0.5f;
+        if (posY < 0.f || posY > maxHeight)
+        {
+            continue;
+        }
+        float leavesRadius2 = glm::mix(maxRadius, minRadius, posY / maxHeight) * radiusMultiplier;
+        leavesRadius2 *= leavesRadius2;
+
+        for (int dz = -maxRadiusCeil; dz <= maxRadiusCeil; ++dz)
+        {
+            for (int dx = -maxRadiusCeil; dx <= maxRadiusCeil; ++dx)
+            {
+                const glm::ivec3 pos_CS(centerX + dx, y, centerZ + dz);
+                if (!Chunk::isInChunk(pos_CS))
+                {
+                    continue;
+                }
+                const float distXZ2 = glm::length2(glm::vec2(pos_CS.x - centerPos_CS.x, pos_CS.z - centerPos_CS.z));
+                if (distXZ2 < leavesRadius2)
+                {
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+                }
+            }
+        }
     }
 }
 

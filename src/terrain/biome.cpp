@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <glm/glm.hpp>
 
+#define DEBUG_BIOME_OVERRIDE Biome::SAVANNA
+
 float BiomeNoise::distance2(const BiomeNoise& other) const
 {
     return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
@@ -219,6 +221,9 @@ void init()
             .humidity = -0.6f,
             .peak = -0.2f,
         };
+        data.structureGens = {
+            { StructureType::ACACIA_TREE, 48, 20.f },
+        };
         data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 2.f, { Block::GRASS_BLOCK });
@@ -263,6 +268,13 @@ const BiomeData& getBiomeData(Biome biome)
 
 Biome getClosestBiome(const BiomeNoise& biomeNoise)
 {
+#ifdef DEBUG_BIOME_OVERRIDE
+    if (true)
+    {
+        return DEBUG_BIOME_OVERRIDE;
+    }
+#endif
+
     std::vector<Biome>* closestBiomeCandidates;
     if (biomeNoise.inland < -0.15f)
     {
