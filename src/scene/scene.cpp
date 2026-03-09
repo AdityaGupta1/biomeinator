@@ -418,7 +418,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
     {
-        InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
+        InstanceData instanceData;
         instanceData.vertsBufferOffset =
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
@@ -451,6 +451,8 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instance->transformOffset.y,
             instance->transformOffset.z,
         };
+
+        this->mappedInstanceDatasArray[instance->id] = instanceData;
         this->mappedInstanceDatasArray.markDirty(instance->id);
 
         if (instance->isVisible)
