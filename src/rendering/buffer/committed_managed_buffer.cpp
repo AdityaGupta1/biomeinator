@@ -37,11 +37,6 @@ void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t si
 
     this->bufferSizeBytes = sizeBytes;
 
-    if (this->options.hasSrvDescriptor)
-    {
-        this->allocSrvDescriptor(toFreeList);
-    }
-
     this->setBufferName();
 }
 

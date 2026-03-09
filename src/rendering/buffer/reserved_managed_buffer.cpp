@@ -58,12 +58,6 @@ void ReservedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t siz
     const size_t heapSize = mapNewHeap(0 /*virtualStartTile*/, sizeBytes);
     this->bufferSizeBytes = heapSize;
 
-    if (this->options.hasSrvDescriptor)
-    {
-        // allocated only once, so it doesn't need a ToFreeList
-        this->allocSrvDescriptor(nullptr, maxReservedSizeBytes);
-    }
-
     this->setBufferName();
 }
 
@@ -129,8 +123,6 @@ void ReservedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
     this->bufferSizeBytes += heapSize;
 
     this->extendFreelistCapacity(oldBufferSizeBytes, this->bufferSizeBytes, useBackFreeSection);
-
-    // no need to recreate SRV here since it already covers the entire virtual memory range
 }
 
 void ReservedManagedBuffer::onReset()

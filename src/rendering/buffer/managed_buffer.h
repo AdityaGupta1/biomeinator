@@ -55,8 +55,6 @@ struct ManagedBufferOptions
 {
     bool isResizable{ false };
     bool isMapped{ false };
-    bool hasSrvDescriptor{ false };
-    uint32_t srvElementByteSize{ 0 };
     BufferHelper::BufferCreationFlags bufferCreationFlags{};
 };
 
@@ -77,9 +75,6 @@ protected:
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
     size_t bufferSizeBytes{ 0 }; // actual physical allocated memory (i.e. not virtual memory in case of ReservedManagedBuffer)
 
-    uint32_t srvDescriptorIdx{ ~0u };
-    D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
-
     struct FreeNode;
     using OffsetMap = std::map<size_t, FreeNode>;
     using OffsetIter = OffsetMap::iterator;
@@ -95,8 +90,6 @@ protected:
 
     void insertFreeNode(size_t offsetBytes, size_t sizeBytes);
     void eraseFreeNode(OffsetIter offsetIter);
-
-    void allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSizeBytes = 0);
 
     void extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection);
 
@@ -158,8 +151,6 @@ public:
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const;
-    bool hasValidSrvDescriptor() const;
-    uint32_t getSrvDescriptorIdx() const;
     size_t getSizeBytes() const;
 
     void setName(const std::wstring& name);
