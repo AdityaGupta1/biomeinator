@@ -56,22 +56,25 @@ private:
 
     void insertDirtyRange(uint32_t newRangeBegin, uint32_t newRangeEnd)
     {
-        // skip binary search if new range is at or after all existing ranges
-        if (!this->dirtyRanges.empty())
+        if (this->dirtyRanges.empty())
         {
-            DirtyRange& last = this->dirtyRanges.back();
-            if (newRangeBegin >= last.end)
+            this->dirtyRanges.emplace_back(newRangeBegin, newRangeEnd);
+            return;
+        }
+
+        // skip binary search if new range is at or after all existing ranges
+        DirtyRange& last = this->dirtyRanges.back();
+        if (newRangeBegin >= last.end)
+        {
+            if (newRangeBegin == last.end)
             {
-                if (newRangeBegin == last.end)
-                {
-                    last.end = newRangeEnd; // adjacent to last range, extend it
-                }
-                else
-                {
-                    this->dirtyRanges.push_back({ newRangeBegin, newRangeEnd }); // after last range, append new one
-                }
-                return;
+                last.end = newRangeEnd; // adjacent to last range, extend it
             }
+            else
+            {
+                this->dirtyRanges.push_back({ newRangeBegin, newRangeEnd }); // after last range, append new one
+            }
+            return;
         }
 
         // find first existing range whose .end >= newRangeBegin (might overlap or be adjacent)
