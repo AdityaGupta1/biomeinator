@@ -92,6 +92,10 @@ void ThreadPool::shutdown()
     {
         std::unique_lock<std::mutex> lock(this->mutex);
         this->stop = true;
+        while (!this->queue.empty())
+        {
+            this->queue.pop();
+        }
     }
 
     cv.notify_all();
