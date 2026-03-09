@@ -155,7 +155,7 @@ private:
     glm::ivec3 prevGlobalInstanceOffset{};
 
     uint32_t nextMaterialIdx{ 0 };
-    MappedArray<::Material> mappedMaterialsArray{ {} };
+    MappedArray<::Material> mappedMaterialsArray;
 
     std::vector<ComPtr<ID3D12Resource>> textures{};
     struct PendingTexture
@@ -175,7 +175,7 @@ private:
         },
     };
     uint32_t numAreaLights{ 0 };
-    MappedArray<uint32_t> areaLightSamplingStructure{ {} };
+    MappedArray<uint32_t> areaLightSamplingStructure;
 
     void freeInstance(Instance* instance);
 

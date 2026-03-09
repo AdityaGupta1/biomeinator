@@ -177,7 +177,7 @@ void Scene::init()
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
         this->mappedInstanceDescsArrays[i].setName(L"scene instanceDescs frame " + std::to_wstring(i));
-        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances);
+        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances, MappedArrayOptions{ .uploadOnly = true });
     }
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
@@ -301,6 +301,7 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 
     const uint32_t materialIdx = this->nextMaterialIdx++;
     this->mappedMaterialsArray[materialIdx] = *material;
+    this->mappedMaterialsArray.markDirty(materialIdx);
 
     return materialIdx;
 }
@@ -450,6 +451,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instance->transformOffset.y,
             instance->transformOffset.z,
         };
+        this->mappedInstanceDatasArray.markDirty(instance->id);
 
         if (instance->isVisible)
         {
@@ -509,6 +511,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     }
 
     this->numAreaLights = nextAreaLightSamplingIdx;
+    this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
