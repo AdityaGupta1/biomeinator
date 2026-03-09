@@ -54,34 +54,42 @@ private:
         this->dirtyRanges.clear();
     }
 
-    void insertDirtyRange(uint32_t begin, uint32_t end)
+    void insertDirtyRange(uint32_t newRangeBegin, uint32_t newRangeEnd)
     {
-        // find first existing range whose .end >= begin (might overlap or be adjacent)
-        auto it = std::lower_bound(this->dirtyRanges.begin(),
-                                   this->dirtyRanges.end(),
-                                   begin,
-                                   [](const DirtyRange& r, uint32_t val) { return r.end < val; });
-
-        // check predecessor: if its .end >= begin, use it as the merge start
-        if (it != this->dirtyRanges.begin())
+        // skip binary search if new range is at or after all existing ranges
+        if (!this->dirtyRanges.empty())
         {
-            auto prev = std::prev(it);
-            if (prev->end >= begin)
+            DirtyRange& last = this->dirtyRanges.back();
+            if (newRangeBegin >= last.end)
             {
-                it = prev;
+                if (newRangeBegin == last.end)
+                {
+                    last.end = newRangeEnd; // adjacent to last range, extend it
+                }
+                else
+                {
+                    this->dirtyRanges.push_back({ newRangeBegin, newRangeEnd }); // after last range, append new one
+                }
+                return;
             }
         }
 
+        // find first existing range whose .end >= newRangeBegin (might overlap or be adjacent)
+        auto it = std::lower_bound(this->dirtyRanges.begin(),
+                                   this->dirtyRanges.end(),
+                                   newRangeBegin,
+                                   [](const DirtyRange& r, uint32_t val) { return r.end < val; });
+
         // no overlapping or adjacent range found, so insert a new one
-        if (it == this->dirtyRanges.end() || it->begin > end)
+        if (it == this->dirtyRanges.end() || it->begin > newRangeEnd)
         {
-            this->dirtyRanges.insert(it, { begin, end });
+            this->dirtyRanges.insert(it, { newRangeBegin, newRangeEnd });
             return;
         }
 
         // merge into found range
-        it->begin = std::min(it->begin, begin);
-        it->end = std::max(it->end, end);
+        it->begin = std::min(it->begin, newRangeBegin);
+        it->end = std::max(it->end, newRangeEnd);
 
         // absorb any subsequent overlapping ranges
         auto next = std::next(it);
