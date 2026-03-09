@@ -579,11 +579,11 @@ void Chunk::createInstances()
     std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
 
-    constexpr size_t numTerrainVertsToReserve = 1 << 15;
+    constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
     terrainIdxs.reserve(numTerrainVertsToReserve * 6 / 4);
 
-    constexpr size_t numWaterVertsToReserve = 1 << 7;
+    constexpr size_t numWaterVertsToReserve = 1 << 8;
     waterVerts.reserve(numWaterVertsToReserve);
     waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
 
