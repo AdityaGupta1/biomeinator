@@ -131,7 +131,7 @@ public:
         this->init(size, nullptr);
     }
 
-    inline void init(MappedArrayOptions options, uint32_t size)
+    inline void init(uint32_t size, MappedArrayOptions options)
     {
         this->options = options;
         this->init(size, nullptr);

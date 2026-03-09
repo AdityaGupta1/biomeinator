@@ -177,7 +177,7 @@ void Scene::init()
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
         this->mappedInstanceDescsArrays[i].setName(L"scene instanceDescs frame " + std::to_wstring(i));
-        this->mappedInstanceDescsArrays[i].init(MappedArrayOptions{ .uploadOnly = true }, this->maxNumInstances);
+        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances, MappedArrayOptions{ .uploadOnly = true });
     }
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
