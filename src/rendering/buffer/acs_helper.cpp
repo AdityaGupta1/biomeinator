@@ -150,7 +150,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE, // TODO: sacrifice some tracing perf for better building perf?
+        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
@@ -210,7 +210,7 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
     buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
         .Flags = allowUpdates ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
         .NumDescs = inputs.numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress(),
