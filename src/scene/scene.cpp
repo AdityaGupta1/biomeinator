@@ -346,6 +346,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 }
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
+static constexpr uint32_t maxNumWaitingBlases = 64;
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
@@ -465,7 +466,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
     this->managedAreaLightsBuffer.endBatchCopy(cmdList);
 
-    return true;
+    const bool thresholdReached = this->numVisibleBlasesWaitingForTlas >= maxNumWaitingBlases;
+    const bool queueDrained =
+        this->instancesReadyForBlasBuild.empty() && this->numVisibleBlasesWaitingForTlas > 0;
+    return thresholdReached || queueDrained;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
