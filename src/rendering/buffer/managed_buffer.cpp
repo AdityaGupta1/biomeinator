@@ -266,16 +266,39 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
 {
     const ManagedBufferSection& freeSection = this->findFreeSection(cmdList, &toFreeList, srcSizeBytes);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    if (!this->batchCopyActive)
+    {
+        BufferHelper::stateTransitionResourceBarrier(
+            cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    }
 
     cmdList->CopyBufferRegion(
         this->dev_buffer.Get(), freeSection.offsetBytes, dev_srcBuffer, srcOffsetBytes, srcSizeBytes);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    if (!this->batchCopyActive)
+    {
+        BufferHelper::stateTransitionResourceBarrier(
+            cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    }
 
     return freeSection;
+}
+
+void ManagedBuffer::beginBatchCopy(ID3D12GraphicsCommandList* cmdList)
+{
+    ASSERT(!this->options.isMapped, "beginBatchCopy is not valid for mapped buffers");
+    ASSERT(!this->batchCopyActive);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    this->batchCopyActive = true;
+}
+
+void ManagedBuffer::endBatchCopy(ID3D12GraphicsCommandList* cmdList)
+{
+    ASSERT(this->batchCopyActive);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    this->batchCopyActive = false;
 }
 
 ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,

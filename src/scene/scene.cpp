@@ -395,12 +395,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         ASSERT(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
-        blasInputs.dev_verts = &this->managedVertsBuffer;
 
         if (instance->host_idxs.size() > 0)
         {
             blasInputs.host_idxs = &instance->host_idxs;
-            blasInputs.dev_idxs = &this->managedIdxsBuffer;
         }
 
         blasInputs.outGeoWrapper = &instance->geoWrapper;
@@ -413,7 +411,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         numAreaLights += instance->host_areaLights.size();
     }
 
-    AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
+    AcsHelper::makeBlases(cmdList, toFreeList, &this->managedVertsBuffer, &this->managedIdxsBuffer, allBlasInputs);
+
+    this->managedPerTriDatasBuffer.beginBatchCopy(cmdList);
+    this->managedAreaLightsBuffer.beginBatchCopy(cmdList);
 
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
@@ -460,6 +461,9 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             ++numVisibleBlasesWaitingForTlas;
         }
     }
+
+    this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
+    this->managedAreaLightsBuffer.endBatchCopy(cmdList);
 
     return true;
 }

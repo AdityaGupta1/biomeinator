@@ -88,6 +88,8 @@ protected:
     OffsetMap freeByOffset;
     SizeMap freeBySize;
 
+    bool batchCopyActive{ false };
+
     void insertFreeNode(size_t offsetBytes, size_t sizeBytes);
     void eraseFreeNode(OffsetIter offsetIter);
 
@@ -148,6 +150,9 @@ public:
                                                ToFreeList& toFreeList,
                                                const ManagedBuffer& srcBuffer,
                                                ManagedBufferSection srcBufferSection);
+
+    void beginBatchCopy(ID3D12GraphicsCommandList* cmdList);
+    void endBatchCopy(ID3D12GraphicsCommandList* cmdList);
 
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const;

@@ -163,19 +163,23 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
+                ManagedBuffer* dev_verts,
+                ManagedBuffer* dev_idxs,
                 const std::vector<BlasBuildInputs>& allInputs)
 {
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
+
+    dev_verts->beginBatchCopy(cmdList);
+    dev_idxs->beginBatchCopy(cmdList);
 
     for (const auto& inputs : allInputs)
     {
         const ManagedBufferSection vertsUploadBufferSection =
             sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
-        ASSERT(inputs.dev_verts != nullptr);
-        inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-            cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
+        inputs.outGeoWrapper->vertsBufferSection =
+            dev_verts->copyFromManagedBuffer(cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
@@ -184,9 +188,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         {
             idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
-            ASSERT(inputs.dev_idxs != nullptr);
-            inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
+            inputs.outGeoWrapper->idxsBufferSection =
+                dev_idxs->copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
 
             toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
         }
@@ -197,6 +200,9 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                           vertsUploadBufferSection,
                           idxsUploadBufferSection);
     }
+
+    dev_verts->endBatchCopy(cmdList);
+    dev_idxs->endBatchCopy(cmdList);
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
