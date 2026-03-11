@@ -989,7 +989,7 @@ static ComPtr<ID3D12PipelineState> collectPso;
 
 static ComPtr<ID3D12PipelineState> postprocessPso;
 
-static constexpr uint32_t maxPayloadSizeBytes = 112;
+static constexpr uint32_t maxPayloadSizeBytes = 96;
 
 static void initPipeline()
 {

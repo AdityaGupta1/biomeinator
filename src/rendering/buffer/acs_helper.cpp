@@ -123,11 +123,10 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
-static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
-                              ManagedBufferSection* outBlas,
-                              ManagedBufferSection vertsBufferSection,
-                              ManagedBufferSection idxsBufferSection)
+static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper)
 {
+    const ManagedBufferSection vertsBufferSection = geoWrapper->vertsBufferSection;
+    const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
     const bool hasIdxs = (idxsBufferSection.sizeBytes > 0);
 
     buildInfo->geometryDesc = {
@@ -158,7 +157,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
-    buildInfo->outAcs = outBlas;
+    buildInfo->outAcs = &geoWrapper->blasBufferSection;
 }
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
@@ -195,10 +194,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         }
 
         buildInfos.emplace_back();
-        makeBlasBuildInfo(&buildInfos.back(),
-                          &inputs.outGeoWrapper->blasBufferSection,
-                          vertsUploadBufferSection,
-                          idxsUploadBufferSection);
+        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper);
     }
 
     dev_verts->endBatchCopy(cmdList);
@@ -212,6 +208,8 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
     AcsBuildInfo buildInfo;
 
     const bool allowUpdates = (inputs.updateScratchSizePtr != nullptr);
+
+    BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer()); // ensure BLAS writes are completed before building TLAS
 
     buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
