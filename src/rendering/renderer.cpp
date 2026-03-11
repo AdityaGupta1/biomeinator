@@ -803,7 +803,7 @@ static void initRootSignature()
     staticSampler.RegisterSpace = RT_REGISTER_SPACE;
     if (voxelMode)
     {
-        staticSampler.Filter = D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+        staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
         staticSampler.MaxLOD = 4.f;
     }
     else
