@@ -24,9 +24,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "scene/scene.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <numeric>
 #include <shlobj.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -36,8 +38,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace TerrainMaterials
 {
-
-static uint32_t loadTexture(Scene* scene, const std::filesystem::path& path);
 
 static void createMaterials(Scene* scene);
 
@@ -56,6 +56,123 @@ static uint8_t srgbEncode(float linear)
 {
     const float c = linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.f / 2.4f) - 0.055f;
     return static_cast<uint8_t>(std::clamp(c * 255.f + 0.5f, 0.f, 255.f));
+}
+
+static size_t texelIdx(uint32_t x, uint32_t y, uint32_t width)
+{
+    return (static_cast<size_t>(y) * width + x) * 4;
+}
+
+static bool tileHasTransparency(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+{
+    for (uint32_t y = 0; y < tileSize; ++y)
+    {
+        for (uint32_t x = 0; x < tileSize; ++x)
+        {
+            if (mip[texelIdx(tileX + x, tileY + y, width) + 3] < 255)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+{
+    const uint32_t texelCount = tileSize * tileSize;
+    if (texelCount == 0)
+    {
+        return 0.f;
+    }
+
+    uint32_t opaqueCount = 0;
+    for (uint32_t y = 0; y < tileSize; ++y)
+    {
+        for (uint32_t x = 0; x < tileSize; ++x)
+        {
+            opaqueCount += mip[texelIdx(tileX + x, tileY + y, width) + 3] > 0 ? 1u : 0u;
+        }
+    }
+    return static_cast<float>(opaqueCount) / static_cast<float>(texelCount);
+}
+
+template<bool premutliplyAlpha>
+static void downsample2x2Tile(
+    const std::vector<uint8_t>& src, uint32_t srcWidth, std::vector<uint8_t>& dst, uint32_t dstWidth, uint32_t srcTileX,
+    uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize)
+{
+    constexpr float alphaEpsilon = 1e-6f;
+    for (uint32_t y = 0; y < dstTileSize; ++y)
+    {
+        for (uint32_t x = 0; x < dstTileSize; ++x)
+        {
+            const uint32_t sx = srcTileX + x * 2;
+            const uint32_t sy = srcTileY + y * 2;
+            const uint8_t* p00 = src.data() + texelIdx(sx, sy, srcWidth);
+            const uint8_t* p10 = src.data() + texelIdx(sx + 1, sy, srcWidth);
+            const uint8_t* p01 = src.data() + texelIdx(sx, sy + 1, srcWidth);
+            const uint8_t* p11 = src.data() + texelIdx(sx + 1, sy + 1, srcWidth);
+            uint8_t* out = dst.data() + texelIdx(dstTileX + x, dstTileY + y, dstWidth);
+
+            for (uint32_t ch = 0; ch < 3; ++ch)
+            {
+                if constexpr (premutliplyAlpha)
+                {
+                    const float a00 = p00[3] / 255.f;
+                    const float a10 = p10[3] / 255.f;
+                    const float a01 = p01[3] / 255.f;
+                    const float a11 = p11[3] / 255.f;
+                    const float avgA = (a00 + a10 + a01 + a11) * 0.25f;
+                    const float avgPremultiplied = (linearize(p00[ch]) * a00 + linearize(p10[ch]) * a10
+                                                   + linearize(p01[ch]) * a01 + linearize(p11[ch]) * a11)
+                        * 0.25f;
+                    const float avg = avgA > alphaEpsilon ? (avgPremultiplied / avgA) : 0.f;
+                    out[ch] = srgbEncode(avg);
+                    out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
+                    continue;
+                }
+
+                const float avg = (linearize(p00[ch]) + linearize(p10[ch]) + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
+                out[ch] = srgbEncode(avg);
+            }
+            if constexpr (!premutliplyAlpha)
+            {
+                out[3] = 255;
+            }
+        }
+    }
+}
+
+static void quantizeAlphaToCoverageTile(
+    std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize, float sourceCoverage)
+{
+    const uint32_t texelCount = tileSize * tileSize;
+    const uint32_t targetOpaque = static_cast<uint32_t>(std::clamp(
+        static_cast<int64_t>(std::llround(sourceCoverage * static_cast<float>(texelCount))),
+        int64_t(0),
+        static_cast<int64_t>(texelCount)));
+
+    std::vector<uint32_t> order(texelCount);
+    std::iota(order.begin(), order.end(), 0u);
+    const auto alphaAt = [&](uint32_t i) {
+        const uint32_t x = i % tileSize;
+        const uint32_t y = i / tileSize;
+        return mip[texelIdx(tileX + x, tileY + y, width) + 3];
+    };
+    std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
+        const uint8_t alphaA = alphaAt(a);
+        const uint8_t alphaB = alphaAt(b);
+        return alphaA == alphaB ? a < b : alphaA > alphaB;
+    });
+
+    for (uint32_t rank = 0; rank < texelCount; ++rank)
+    {
+        const uint32_t i = order[rank];
+        const uint32_t x = i % tileSize;
+        const uint32_t y = i / tileSize;
+        mip[texelIdx(tileX + x, tileY + y, width) + 3] = rank < targetOpaque ? 255 : 0;
+    }
 }
 
 static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
@@ -77,7 +194,10 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
 
     const uint32_t w0 = static_cast<uint32_t>(width);
     const uint32_t h0 = static_cast<uint32_t>(height);
+    constexpr uint32_t textureSize = 512;
+    constexpr uint32_t tileSizeMip0 = 16;
     constexpr uint32_t numMips = 5;
+    assert(w0 == textureSize && h0 == textureSize);
 
     std::vector<std::vector<uint8_t>> mipData(numMips);
 
@@ -86,133 +206,46 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
     std::memcpy(mipData[0].data(), data, mipData[0].size());
     stbi_image_free(data);
 
-    constexpr float alphaTestThreshold = 0.999f;
-    constexpr float alphaEpsilon = 1e-6f;
-    const uint8_t alphaTestThresholdByte = static_cast<uint8_t>(std::ceil(alphaTestThreshold * 255.f));
-
-    const size_t texelCountMip0 = mipData[0].size() / 4;
-    uint32_t numPassingMip0 = 0;
-    bool hasTransparency = false;
-    for (size_t i = 0; i < texelCountMip0; ++i)
-    {
-        const uint8_t a = mipData[0][i * 4 + 3];
-        hasTransparency |= (a < 255);
-        numPassingMip0 += (a >= alphaTestThresholdByte) ? 1u : 0u;
-    }
-
-    const float targetAlphaCoverage = texelCountMip0 > 0
-        ? static_cast<float>(numPassingMip0) / static_cast<float>(texelCountMip0)
-        : 0.f;
-
-    const auto preserveAlphaCoverage = [alphaTestThresholdByte, targetAlphaCoverage](std::vector<uint8_t>& mip) {
-        const size_t texelCount = mip.size() / 4;
-        if (texelCount == 0)
-        {
-            return;
-        }
-
-        std::array<uint32_t, 256> histogram{};
-        for (size_t i = 0; i < texelCount; ++i)
-        {
-            ++histogram[mip[i * 4 + 3]];
-        }
-
-        const uint32_t targetPassing = static_cast<uint32_t>(std::clamp(
-            static_cast<int64_t>(std::llround(targetAlphaCoverage * static_cast<float>(texelCount))),
-            int64_t(0),
-            static_cast<int64_t>(texelCount)));
-
-        uint32_t passing = 0;
-        uint32_t bestDiff = ~0u;
-        uint8_t sourceThresholdByte = 0;
-        for (int t = 255; t >= 0; --t)
-        {
-            passing += histogram[static_cast<size_t>(t)];
-            const uint32_t diff = (passing > targetPassing) ? (passing - targetPassing) : (targetPassing - passing);
-            if (diff < bestDiff)
-            {
-                bestDiff = diff;
-                sourceThresholdByte = static_cast<uint8_t>(t);
-            }
-        }
-
-        if (sourceThresholdByte == alphaTestThresholdByte)
-        {
-            return;
-        }
-
-        const float scale = (255.f - alphaTestThresholdByte)
-            / std::max(1.f, 255.f - static_cast<float>(sourceThresholdByte));
-        const float bias = alphaTestThresholdByte - scale * static_cast<float>(sourceThresholdByte);
-
-        for (size_t i = 0; i < texelCount; ++i)
-        {
-            const size_t alphaIdx = i * 4 + 3;
-            const float remapped = scale * static_cast<float>(mip[alphaIdx]) + bias;
-            mip[alphaIdx] = static_cast<uint8_t>(std::clamp(remapped + 0.5f, 0.f, 255.f));
-        }
-    };
-
-    // Mips 1–4: sRGB-correct 2×2 box filter
     for (uint32_t m = 1; m < numMips; ++m)
     {
-        const uint32_t wSrc = w0 >> (m - 1);
-        const uint32_t hSrc = h0 >> (m - 1);
         const uint32_t wDst = w0 >> m;
         const uint32_t hDst = h0 >> m;
         mipData[m].resize(static_cast<size_t>(wDst) * hDst * 4);
+    }
 
-        const uint8_t* src = mipData[m - 1].data();
-        uint8_t* dst = mipData[m].data();
-
-        for (uint32_t y = 0; y < hDst; ++y)
+    const uint32_t tilesPerAxis = textureSize / tileSizeMip0;
+    for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
+    {
+        for (uint32_t tileX = 0; tileX < tilesPerAxis; ++tileX)
         {
-            for (uint32_t x = 0; x < wDst; ++x)
+            const uint32_t mip0TileX = tileX * tileSizeMip0;
+            const uint32_t mip0TileY = tileY * tileSizeMip0;
+            const bool hasTransparency = tileHasTransparency(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
+
+            for (uint32_t m = 1; m < numMips; ++m)
             {
-                const uint32_t sx = x * 2;
-                const uint32_t sy = y * 2;
-                const uint8_t* p00 = src + (sy * wSrc + sx) * 4;
-                const uint8_t* p10 = src + (sy * wSrc + sx + 1) * 4;
-                const uint8_t* p01 = src + ((sy + 1) * wSrc + sx) * 4;
-                const uint8_t* p11 = src + ((sy + 1) * wSrc + sx + 1) * 4;
+                const uint32_t srcWidth = w0 >> (m - 1);
+                const uint32_t dstWidth = w0 >> m;
+                const uint32_t srcTileSize = tileSizeMip0 >> (m - 1);
+                const uint32_t dstTileSize = tileSizeMip0 >> m;
+                const uint32_t srcTileX = tileX * srcTileSize;
+                const uint32_t srcTileY = tileY * srcTileSize;
+                const uint32_t dstTileX = tileX * dstTileSize;
+                const uint32_t dstTileY = tileY * dstTileSize;
 
-                uint8_t* out = dst + (y * wDst + x) * 4;
-                if (hasTransparency)
+                if (!hasTransparency)
                 {
-                    const float a00 = p00[3] / 255.f;
-                    const float a10 = p10[3] / 255.f;
-                    const float a01 = p01[3] / 255.f;
-                    const float a11 = p11[3] / 255.f;
-                    const float avgA = (a00 + a10 + a01 + a11) * 0.25f;
-
-                    for (int ch = 0; ch < 3; ++ch)
-                    {
-                        const float avgPremultiplied =
-                            (linearize(p00[ch]) * a00 + linearize(p10[ch]) * a10
-                             + linearize(p01[ch]) * a01 + linearize(p11[ch]) * a11) * 0.25f;
-                        const float avg = avgA > alphaEpsilon ? (avgPremultiplied / avgA) : 0.f;
-                        out[ch] = srgbEncode(avg);
-                    }
-
-                    out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
+                    downsample2x2Tile<false /*premutliplyAlpha*/>(
+                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                    continue;
                 }
-                else
-                {
-                    for (int ch = 0; ch < 3; ++ch) // RGB: linearize, average, re-encode
-                    {
-                        const float avg = (linearize(p00[ch]) + linearize(p10[ch])
-                                           + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
-                        out[ch] = srgbEncode(avg);
-                    }
-                    // Alpha: linear average
-                    out[3] = static_cast<uint8_t>((p00[3] + p10[3] + p01[3] + p11[3] + 2) / 4);
-                }
+
+                const float sourceCoverage =
+                    computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
+                downsample2x2Tile<true /*premutliplyAlpha*/>(
+                    mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
             }
-        }
-
-        if (hasTransparency)
-        {
-            preserveAlphaCoverage(mipData[m]);
         }
     }
 
