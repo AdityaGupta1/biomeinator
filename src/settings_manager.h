@@ -32,6 +32,7 @@ float getAsFloat(const std::string& name);
 std::string getAsString(const std::string& name);
 
 void setAsBool(const std::string& name, bool value);
+void toggleBool(const std::string& name);
 void setAsInt(const std::string& name, int value);
 void setAsUint(const std::string& name, uint32_t value);
 void setAsFloat(const std::string& name, float value);

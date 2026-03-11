@@ -2,9 +2,9 @@
 
 Real-time path traced voxel engine
 
-<img width="2560" height="1440" alt="2026 01 31_18-19-07" src="https://github.com/user-attachments/assets/d4d95199-c33d-4b8c-9429-f32fd10f8d30" />
+![](img/title.png)
 
-Video demo: https://youtu.be/eoOcb3PMwJM
+Video demo: https://youtu.be/6ehg5h1aBRI
 
 ## Building
 
@@ -22,7 +22,11 @@ Or, you can:
 
 For voxel terrain, run with the command line argument `--voxelMode`. Otherwise, you can open glTF scenes with <kbd>Ctrl</kbd> + <kbd>O</kbd>. Some example scenes are available in `test_scenes/`.
 
-Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. You can also press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu, hold <kbd>C</kbd> to zoom, or press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`).
+Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. Additional controls include:
+- Hold <kbd>C</kbd> to zoom
+- Press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu
+- Press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`)
+- Press <kbd>H</kbd> to toggle GUI visibility
 
 ## Third-Party Licenses
 

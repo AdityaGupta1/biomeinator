@@ -525,6 +525,19 @@
             ],
             "golden": "fractional_opacity/golden_blender_no_tonemap.png",
             "threshold": 0.006
+        },
+        {
+            "name": "diffuse_albedo_modulation_fractional_opacity",
+            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=0",
+                "--maxPathDepth=2",
+                "--debugView=\"diffuseAlbedo\""
+            ],
+            "golden": "fractional_opacity/golden_diffuseAlbedo.png",
+            "threshold": 0.0001
         }
     ]
 }

@@ -21,14 +21,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "rendering/buffer/buffer_helper.h"
-#include "rendering/buffer/descriptor_heap_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 
 #include "debug.h"
 
 struct MappedArrayOptions
 {
-    bool hasSrvDescriptor{ false };
+    bool uploadOnly{ false }; // only allocate upload_buffer; dev_buffer is unused
 };
 
 template<typename T> class MappedArray
@@ -36,42 +35,72 @@ template<typename T> class MappedArray
 private:
     std::wstring name{ L"MappedArray" };
 
-    const MappedArrayOptions options;
+    MappedArrayOptions options{};
 
     uint32_t size{ 0 };
     T* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> upload_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
 
-    uint32_t dirtyBeginIdx{ 0 };
-    uint32_t dirtyEndIdx{ 0 };
-
-    uint32_t srvDescriptorIdx{ ~0u };
-    D3D12_CPU_DESCRIPTOR_HANDLE srvDescriptorCpuHandle{};
+    struct DirtyRange
+    {
+        uint32_t begin;
+        uint32_t end; // exclusive
+    };
+    std::vector<DirtyRange> dirtyRanges;
 
     void setNotDirty()
     {
-        this->dirtyBeginIdx = this->size;
-        this->dirtyEndIdx = 0;
+        this->dirtyRanges.clear();
     }
 
-    void allocSrvDescriptor(ToFreeList* toFreeList)
+    void insertDirtyRange(uint32_t newRangeBegin, uint32_t newRangeEnd)
     {
-        ASSERT(this->options.hasSrvDescriptor);
-        ASSERT(toFreeList != nullptr || !this->hasValidSrvDescriptor());
-
-        if (toFreeList != nullptr && this->hasValidSrvDescriptor())
+        if (this->dirtyRanges.empty())
         {
-            toFreeList->pushDescriptor(this->srvDescriptorIdx);
+            this->dirtyRanges.emplace_back(newRangeBegin, newRangeEnd);
+            return;
         }
 
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
-        srvDesc.Buffer = {
-            .NumElements = this->size,
-            .StructureByteStride = sizeof(T),
-        };
-        this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
-        Renderer::getDevice()->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
+        // skip binary search if new range is at or after all existing ranges
+        DirtyRange& last = this->dirtyRanges.back();
+        if (newRangeBegin >= last.end)
+        {
+            if (newRangeBegin == last.end)
+            {
+                last.end = newRangeEnd; // adjacent to last range, extend it
+            }
+            else
+            {
+                this->dirtyRanges.push_back({ newRangeBegin, newRangeEnd }); // after last range, append new one
+            }
+            return;
+        }
+
+        // find first existing range whose .end >= newRangeBegin (might overlap or be adjacent)
+        auto it = std::lower_bound(this->dirtyRanges.begin(),
+                                   this->dirtyRanges.end(),
+                                   newRangeBegin,
+                                   [](const DirtyRange& r, uint32_t val) { return r.end < val; });
+
+        // no overlapping or adjacent range found, so insert a new one
+        if (it == this->dirtyRanges.end() || it->begin > newRangeEnd)
+        {
+            this->dirtyRanges.insert(it, { newRangeBegin, newRangeEnd });
+            return;
+        }
+
+        // merge into found range
+        it->begin = std::min(it->begin, newRangeBegin);
+        it->end = std::max(it->end, newRangeEnd);
+
+        // absorb any subsequent overlapping ranges
+        auto next = std::next(it);
+        while (next != this->dirtyRanges.end() && next->begin <= it->end)
+        {
+            it->end = std::max(it->end, next->end);
+            next = this->dirtyRanges.erase(next);
+        }
     }
 
     void init(uint32_t size, ToFreeList* toFreeList)
@@ -86,55 +115,65 @@ private:
         const std::wstring uploadBufferNameWithSize = this->name + L" upload_buffer" + sizeStr;
         this->upload_buffer->SetName(uploadBufferNameWithSize.c_str());
 
-        this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
-        const std::wstring devBufferNameWithSize = this->name + L" dev_buffer" + sizeStr;
-        this->dev_buffer->SetName(devBufferNameWithSize.c_str());
+        if (!this->options.uploadOnly)
+        {
+            this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
+            const std::wstring devBufferNameWithSize = this->name + L" dev_buffer" + sizeStr;
+            this->dev_buffer->SetName(devBufferNameWithSize.c_str());
+        }
 
         this->setNotDirty();
-
-        if (this->options.hasSrvDescriptor)
-        {
-            this->allocSrvDescriptor(toFreeList);
-        }
     }
 
 public:
-    MappedArray()
-        : options({})
-    {}
-
-    MappedArray(MappedArrayOptions options)
-        : options(options)
-    {}
-
     inline void init(uint32_t size)
     {
+        this->init(size, nullptr);
+    }
+
+    inline void init(uint32_t size, MappedArrayOptions options)
+    {
+        this->options = options;
         this->init(size, nullptr);
     }
 
     T& operator[](uint32_t idx)
     {
         ASSERT(idx < this->size);
-        this->dirtyBeginIdx = std::min(this->dirtyBeginIdx, idx);
-        this->dirtyEndIdx = std::max(this->dirtyEndIdx, idx + 1);
         return host_buffer[idx];
+    }
+
+    inline void markDirty(uint32_t idx)
+    {
+        this->insertDirtyRange(idx, idx + 1);
+    }
+
+    inline void markDirtyRange(uint32_t begin, uint32_t end)
+    {
+        this->insertDirtyRange(begin, end);
     }
 
     bool copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
     {
+        ASSERT(!this->options.uploadOnly);
         if (!this->getIsDirty())
         {
             return false;
         }
 
-        const uint32_t startBytes = sizeof(T) * this->dirtyBeginIdx;
-        const uint32_t sizeBytes = sizeof(T) * (this->dirtyEndIdx - this->dirtyBeginIdx);
-
         BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                      this->dev_buffer.Get(),
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                      D3D12_RESOURCE_STATE_COPY_DEST);
-        cmdList->CopyBufferRegion(this->dev_buffer.Get(), startBytes, this->upload_buffer.Get(), startBytes, sizeBytes);
+
+        for (const DirtyRange& range : this->dirtyRanges)
+        {
+            const uint32_t startBytes = sizeof(T) * range.begin;
+            const uint32_t sizeBytes = sizeof(T) * (range.end - range.begin);
+            cmdList->CopyBufferRegion(
+                this->dev_buffer.Get(), startBytes, this->upload_buffer.Get(), startBytes, sizeBytes);
+        }
+
         BufferHelper::stateTransitionResourceBarrier(cmdList,
                                                      this->dev_buffer.Get(),
                                                      D3D12_RESOURCE_STATE_COPY_DEST,
@@ -150,15 +189,18 @@ public:
         T* host_oldBuffer = this->host_buffer;
 
         toFreeList.pushResource(this->upload_buffer, true);
-        toFreeList.pushResource(this->dev_buffer, false);
+        if (!this->options.uploadOnly)
+        {
+            toFreeList.pushResource(this->dev_buffer, false);
+        }
 
         this->init(newSize, &toFreeList);
 
         const uint32_t copyCount = std::min(oldSize, newSize);
         memcpy(this->host_buffer, host_oldBuffer, sizeof(T) * copyCount);
 
-        this->dirtyBeginIdx = 0;
-        this->dirtyEndIdx = newSize;
+        this->dirtyRanges.clear();
+        this->insertDirtyRange(0, newSize);
     }
 
     inline void reset()
@@ -175,7 +217,7 @@ public:
 
     inline bool getIsDirty() const
     {
-        return this->dirtyBeginIdx < this->dirtyEndIdx;
+        return !this->dirtyRanges.empty();
     }
 
     inline ID3D12Resource* getUploadBuffer() const
@@ -185,24 +227,14 @@ public:
 
     inline ID3D12Resource* getBuffer() const
     {
+        ASSERT(!this->options.uploadOnly);
         return this->dev_buffer.Get();
     }
 
     inline D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const
     {
+        ASSERT(!this->options.uploadOnly);
         return this->dev_buffer->GetGPUVirtualAddress();
-    }
-
-    inline bool hasValidSrvDescriptor() const
-    {
-        return this->srvDescriptorIdx != ~0u;
-    }
-
-    inline uint32_t getSrvDescriptorIdx() const
-    {
-        ASSERT(this->options.hasSrvDescriptor);
-        ASSERT(this->hasValidSrvDescriptor());
-        return this->srvDescriptorIdx;
     }
 
     inline void setName(const std::wstring& name)

@@ -122,29 +122,6 @@ void ManagedBuffer::eraseFreeNode(OffsetIter offsetIter)
     this->freeByOffset.erase(offsetIter);
 }
 
-void ManagedBuffer::allocSrvDescriptor(ToFreeList* toFreeList, size_t explicitSizeBytes)
-{
-    ASSERT(this->options.hasSrvDescriptor);
-    ASSERT(toFreeList != nullptr || !this->hasValidSrvDescriptor());
-
-    if (toFreeList != nullptr && this->hasValidSrvDescriptor())
-    {
-        toFreeList->pushDescriptor(this->srvDescriptorIdx);
-    }
-
-    ASSERT(this->options.srvElementByteSize > 0);
-
-    const size_t srvSizeBytes = (explicitSizeBytes > 0) ? explicitSizeBytes : this->bufferSizeBytes;
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = BASIC_SRV_DESC;
-    srvDesc.Buffer = {
-        .NumElements = static_cast<uint32_t>(srvSizeBytes / this->options.srvElementByteSize),
-        .StructureByteStride = this->options.srvElementByteSize,
-    };
-    this->srvDescriptorIdx = Renderer::sharedDescHeapAlloc.alloc(&this->srvDescriptorCpuHandle);
-    Renderer::getDevice()->CreateShaderResourceView(this->dev_buffer.Get(), &srvDesc, this->srvDescriptorCpuHandle);
-}
-
 void ManagedBuffer::extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection)
 {
     const size_t diffSizeBytes = newSizeBytes - oldSizeBytes;
@@ -289,16 +266,39 @@ ManagedBufferSection ManagedBuffer::copyFromDeviceBuffer(ID3D12GraphicsCommandLi
 {
     const ManagedBufferSection& freeSection = this->findFreeSection(cmdList, &toFreeList, srcSizeBytes);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    if (!this->batchCopyActive)
+    {
+        BufferHelper::stateTransitionResourceBarrier(
+            cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    }
 
     cmdList->CopyBufferRegion(
         this->dev_buffer.Get(), freeSection.offsetBytes, dev_srcBuffer, srcOffsetBytes, srcSizeBytes);
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    if (!this->batchCopyActive)
+    {
+        BufferHelper::stateTransitionResourceBarrier(
+            cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    }
 
     return freeSection;
+}
+
+void ManagedBuffer::beginBatchCopy(ID3D12GraphicsCommandList* cmdList)
+{
+    ASSERT(!this->options.isMapped, "beginBatchCopy is not valid for mapped buffers");
+    ASSERT(!this->batchCopyActive);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, this->dev_buffer.Get(), this->initialResourceState, D3D12_RESOURCE_STATE_COPY_DEST);
+    this->batchCopyActive = true;
+}
+
+void ManagedBuffer::endBatchCopy(ID3D12GraphicsCommandList* cmdList)
+{
+    ASSERT(this->batchCopyActive);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, this->dev_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, this->initialResourceState);
+    this->batchCopyActive = false;
 }
 
 ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandList* cmdList,
@@ -321,18 +321,6 @@ ID3D12Resource* ManagedBuffer::getBuffer() const
 D3D12_GPU_VIRTUAL_ADDRESS ManagedBuffer::getGpuVirtualAddress() const
 {
     return this->dev_buffer->GetGPUVirtualAddress();
-}
-
-bool ManagedBuffer::hasValidSrvDescriptor() const
-{
-    return this->srvDescriptorIdx != ~0u;
-}
-
-uint32_t ManagedBuffer::getSrvDescriptorIdx() const
-{
-    ASSERT(this->options.hasSrvDescriptor);
-    ASSERT(this->hasValidSrvDescriptor());
-    return this->srvDescriptorIdx;
 }
 
 size_t ManagedBuffer::getSizeBytes() const

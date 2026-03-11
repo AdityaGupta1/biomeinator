@@ -169,13 +169,11 @@ static Scene scene;
 
 static bool testMode = false;
 static bool voxelMode = false;
-static bool showGui = true;
 
 void init()
 {
     testMode = (SettingsManager::getAsString("testOutput") != "");
     voxelMode = SettingsManager::getAsBool("voxelMode");
-    showGui = SettingsManager::getAsBool("showGui");
 
     initStreamline();
 
@@ -1467,6 +1465,7 @@ void render()
         needsResize = false;
     }
 
+    const bool showGui = SettingsManager::getAsBool("showGui");
     if (showGui)
     {
         imguiBeginFrame();

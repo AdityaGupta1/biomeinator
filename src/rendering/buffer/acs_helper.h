@@ -43,9 +43,6 @@ struct BlasBuildInputs
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
 
-    ManagedBuffer* dev_verts{ nullptr };
-    ManagedBuffer* dev_idxs{ nullptr };
-
     GeometryWrapper* outGeoWrapper{ nullptr };
 };
 
@@ -53,6 +50,8 @@ void init();
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
+                ManagedBuffer* dev_verts,
+                ManagedBuffer* dev_idxs,
                 const std::vector<BlasBuildInputs>& allInputs);
 
 struct TlasBuildInputs

@@ -145,6 +145,9 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
         case VK_ESCAPE:
             PostMessage(hwnd, WM_CLOSE, 0, 0);
             break;
+        case 'H':
+            SettingsManager::toggleBool("showGui");
+            break;
         case 'O':
             if (ctrlHeld && !SettingsManager::getAsBool("voxelMode"))
             {

@@ -164,7 +164,7 @@ fillStructureBlocksHeader(PALM_TREE)
     }
 
     constexpr float maxAngleJitterRadians = 5.0f * glm::pi<float>() / 180.0f;
-    const int numLeaves = rng.nextInt(7, 10);
+    const int numLeaves = rng.nextInt(7, 11);
 
     for (int i = 0; i < numLeaves; ++i)
     {
@@ -181,6 +181,45 @@ fillStructureBlocksHeader(PALM_TREE)
         fillLine(blocks, ivec3(glm::floor(trunkTip)), ivec3(glm::floor(segment1End)), Block::PALM_LEAVES);
         fillLine(blocks, ivec3(glm::floor(segment1End)), ivec3(glm::floor(segment2End)), Block::PALM_LEAVES);
     }
+}
+
+fillStructureBlocksHeader(ACACIA_TREE)
+{
+    const int trunkBaseHeight = (int)(3.5f + 2.5f * rng.nextFloat());
+    vec3 trunkTopPos = structurePos_CS;
+    trunkTopPos.y += trunkBaseHeight;
+    if (Chunk::isInChunkXZ(structurePos_CS))
+    {
+        uint blockIdx = Chunk::blockPosToIdx(structurePos_CS);
+        for (int dy = 0; dy <= trunkBaseHeight; ++dy)
+        {
+            tryPlaceStructureBlock(blocks, blockIdx++, Block::ACACIA_LOG);
+        }
+    }
+
+    const float branchAngle = rng.nextFloat(glm::two_pi<float>());
+    const vec3 primaryBranchDir(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
+    const vec3 primaryBranchStart = trunkTopPos;
+    vec3 primaryBranchEnd = primaryBranchStart + primaryBranchDir * rng.nextFloat(3.5f, 4.5f);
+    primaryBranchEnd.y += rng.nextFloat(4.5f, 5.5f);
+
+    fillLine(blocks, glm::floor(primaryBranchStart), glm::floor(primaryBranchEnd), Block::ACACIA_LOG);
+    placeLeafCap(blocks, glm::floor(primaryBranchEnd), 2.5f, 4.5f, 2.f, rng, Block::ACACIA_LEAVES);
+
+    if (!rng.chance(0.5f))
+    {
+        return;
+    }
+
+    const float secondaryBranchAngle = branchAngle + rng.nextFloat(glm::half_pi<float>(), glm::three_over_two_pi<float>());
+    const vec3 secondaryBranchDir(glm::cos(secondaryBranchAngle), 0.f, glm::sin(secondaryBranchAngle));
+    vec3 secondaryBranchStart = trunkTopPos;
+    secondaryBranchStart.y -= rng.nextFloat(0.8f, 1.6f);
+    vec3 secondaryBranchEnd = secondaryBranchStart + secondaryBranchDir * rng.nextFloat(2.5f, 3.5f);
+    secondaryBranchEnd.y += rng.nextFloat(3.f, 4.f);
+
+    fillLine(blocks, glm::floor(secondaryBranchStart), glm::floor(secondaryBranchEnd), Block::ACACIA_LOG);
+    placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
 StructureBounds::StructureBounds(int diff)
@@ -214,6 +253,9 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(PALM_TREE);
     STRUCTURE_BOUNDS_BY_NAME(PALM_TREE) = 12;
+
+    SET_FILL_STRUCTURE_FUNC(ACACIA_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(ACACIA_TREE) = 12;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {

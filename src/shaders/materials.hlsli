@@ -271,6 +271,7 @@ bool trySplitMaterial(inout Material surfMaterial,
             else
             {
                 // transparent
+                // TODO: use a special passthrough material type instead of co-opting specular transmission
                 surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
                 surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
                 surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;

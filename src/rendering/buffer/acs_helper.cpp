@@ -150,7 +150,7 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE, // TODO: sacrifice some tracing perf for better building perf?
+        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
@@ -163,19 +163,23 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
+                ManagedBuffer* dev_verts,
+                ManagedBuffer* dev_idxs,
                 const std::vector<BlasBuildInputs>& allInputs)
 {
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
+
+    dev_verts->beginBatchCopy(cmdList);
+    dev_idxs->beginBatchCopy(cmdList);
 
     for (const auto& inputs : allInputs)
     {
         const ManagedBufferSection vertsUploadBufferSection =
             sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
-        ASSERT(inputs.dev_verts != nullptr);
-        inputs.outGeoWrapper->vertsBufferSection = inputs.dev_verts->copyFromManagedBuffer(
-            cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
+        inputs.outGeoWrapper->vertsBufferSection =
+            dev_verts->copyFromManagedBuffer(cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
@@ -184,9 +188,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         {
             idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
 
-            ASSERT(inputs.dev_idxs != nullptr);
-            inputs.outGeoWrapper->idxsBufferSection = inputs.dev_idxs->copyFromManagedBuffer(
-                cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
+            inputs.outGeoWrapper->idxsBufferSection =
+                dev_idxs->copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
 
             toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
         }
@@ -197,6 +200,9 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                           vertsUploadBufferSection,
                           idxsUploadBufferSection);
     }
+
+    dev_verts->endBatchCopy(cmdList);
+    dev_idxs->endBatchCopy(cmdList);
 
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
@@ -210,7 +216,7 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
     buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
         .Flags = allowUpdates ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
         .NumDescs = inputs.numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress(),

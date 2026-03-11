@@ -189,6 +189,11 @@ void setAsBool(const std::string& name, bool value)
     settings[name] = value;
 }
 
+void toggleBool(const std::string& name)
+{
+    settings[name] = !std::get<bool>(settings[name]);
+}
+
 void setAsInt(const std::string& name, int value)
 {
     settings[name] = value;

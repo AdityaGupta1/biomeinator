@@ -177,7 +177,7 @@ void Scene::init()
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
         this->mappedInstanceDescsArrays[i].setName(L"scene instanceDescs frame " + std::to_wstring(i));
-        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances);
+        this->mappedInstanceDescsArrays[i].init(this->maxNumInstances, MappedArrayOptions{ .uploadOnly = true });
     }
     this->mappedInstanceDatasArray.setName(L"scene instanceDatas");
     this->mappedInstanceDatasArray.init(this->maxNumInstances);
@@ -301,6 +301,7 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 
     const uint32_t materialIdx = this->nextMaterialIdx++;
     this->mappedMaterialsArray[materialIdx] = *material;
+    this->mappedMaterialsArray.markDirty(materialIdx);
 
     return materialIdx;
 }
@@ -345,6 +346,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 }
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
+static constexpr uint32_t maxNumWaitingBlases = 64;
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
@@ -394,12 +396,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         ASSERT(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
-        blasInputs.dev_verts = &this->managedVertsBuffer;
 
         if (instance->host_idxs.size() > 0)
         {
             blasInputs.host_idxs = &instance->host_idxs;
-            blasInputs.dev_idxs = &this->managedIdxsBuffer;
         }
 
         blasInputs.outGeoWrapper = &instance->geoWrapper;
@@ -412,12 +412,15 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         numAreaLights += instance->host_areaLights.size();
     }
 
-    AcsHelper::makeBlases(cmdList, toFreeList, allBlasInputs);
+    AcsHelper::makeBlases(cmdList, toFreeList, &this->managedVertsBuffer, &this->managedIdxsBuffer, allBlasInputs);
+
+    this->managedPerTriDatasBuffer.beginBatchCopy(cmdList);
+    this->managedAreaLightsBuffer.beginBatchCopy(cmdList);
 
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
     {
-        InstanceData& instanceData = this->mappedInstanceDatasArray[instance->id];
+        InstanceData instanceData;
         instanceData.vertsBufferOffset =
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
@@ -451,13 +454,22 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instance->transformOffset.z,
         };
 
+        this->mappedInstanceDatasArray[instance->id] = instanceData;
+        this->mappedInstanceDatasArray.markDirty(instance->id);
+
         if (instance->isVisible)
         {
             ++numVisibleBlasesWaitingForTlas;
         }
     }
 
-    return true;
+    this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
+    this->managedAreaLightsBuffer.endBatchCopy(cmdList);
+
+    const bool thresholdReached = this->numVisibleBlasesWaitingForTlas >= maxNumWaitingBlases;
+    const bool queueDrained =
+        this->instancesReadyForBlasBuild.empty() && this->numVisibleBlasesWaitingForTlas > 0;
+    return thresholdReached || queueDrained;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -509,6 +521,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     }
 
     this->numAreaLights = nextAreaLightSamplingIdx;
+    this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
