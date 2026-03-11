@@ -82,6 +82,73 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
     std::memcpy(mipData[0].data(), data, mipData[0].size());
     stbi_image_free(data);
 
+    constexpr float alphaTestThreshold = 0.999f;
+    constexpr float alphaEpsilon = 1e-6f;
+    const uint8_t alphaTestThresholdByte = static_cast<uint8_t>(std::ceil(alphaTestThreshold * 255.f));
+
+    const size_t texelCountMip0 = mipData[0].size() / 4;
+    uint32_t numPassingMip0 = 0;
+    bool hasTransparency = false;
+    for (size_t i = 0; i < texelCountMip0; ++i)
+    {
+        const uint8_t a = mipData[0][i * 4 + 3];
+        hasTransparency |= (a < 255);
+        numPassingMip0 += (a >= alphaTestThresholdByte) ? 1u : 0u;
+    }
+
+    const float targetAlphaCoverage = texelCountMip0 > 0
+        ? static_cast<float>(numPassingMip0) / static_cast<float>(texelCountMip0)
+        : 0.f;
+
+    const auto preserveAlphaCoverage = [alphaTestThresholdByte, targetAlphaCoverage](std::vector<uint8_t>& mip) {
+        const size_t texelCount = mip.size() / 4;
+        if (texelCount == 0)
+        {
+            return;
+        }
+
+        std::array<uint32_t, 256> histogram{};
+        for (size_t i = 0; i < texelCount; ++i)
+        {
+            ++histogram[mip[i * 4 + 3]];
+        }
+
+        const uint32_t targetPassing = static_cast<uint32_t>(std::clamp(
+            static_cast<int64_t>(std::llround(targetAlphaCoverage * static_cast<float>(texelCount))),
+            int64_t(0),
+            static_cast<int64_t>(texelCount)));
+
+        uint32_t passing = 0;
+        uint32_t bestDiff = ~0u;
+        uint8_t sourceThresholdByte = 0;
+        for (int t = 255; t >= 0; --t)
+        {
+            passing += histogram[static_cast<size_t>(t)];
+            const uint32_t diff = (passing > targetPassing) ? (passing - targetPassing) : (targetPassing - passing);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                sourceThresholdByte = static_cast<uint8_t>(t);
+            }
+        }
+
+        if (sourceThresholdByte == alphaTestThresholdByte)
+        {
+            return;
+        }
+
+        const float scale = (255.f - alphaTestThresholdByte)
+            / std::max(1.f, 255.f - static_cast<float>(sourceThresholdByte));
+        const float bias = alphaTestThresholdByte - scale * static_cast<float>(sourceThresholdByte);
+
+        for (size_t i = 0; i < texelCount; ++i)
+        {
+            const size_t alphaIdx = i * 4 + 3;
+            const float remapped = scale * static_cast<float>(mip[alphaIdx]) + bias;
+            mip[alphaIdx] = static_cast<uint8_t>(std::clamp(remapped + 0.5f, 0.f, 255.f));
+        }
+    };
+
     // Mips 1–4: sRGB-correct 2×2 box filter
     for (uint32_t m = 1; m < numMips; ++m)
     {
@@ -106,15 +173,42 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
                 const uint8_t* p11 = src + ((sy + 1) * wSrc + sx + 1) * 4;
 
                 uint8_t* out = dst + (y * wDst + x) * 4;
-                for (int ch = 0; ch < 3; ++ch) // RGB: linearize, average, re-encode
+                if (hasTransparency)
                 {
-                    const float avg = (linearize(p00[ch]) + linearize(p10[ch])
-                                       + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
-                    out[ch] = srgbEncode(avg);
+                    const float a00 = p00[3] / 255.f;
+                    const float a10 = p10[3] / 255.f;
+                    const float a01 = p01[3] / 255.f;
+                    const float a11 = p11[3] / 255.f;
+                    const float avgA = (a00 + a10 + a01 + a11) * 0.25f;
+
+                    for (int ch = 0; ch < 3; ++ch)
+                    {
+                        const float avgPremultiplied =
+                            (linearize(p00[ch]) * a00 + linearize(p10[ch]) * a10
+                             + linearize(p01[ch]) * a01 + linearize(p11[ch]) * a11) * 0.25f;
+                        const float avg = avgA > alphaEpsilon ? (avgPremultiplied / avgA) : 0.f;
+                        out[ch] = srgbEncode(avg);
+                    }
+
+                    out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
                 }
-                // Alpha: linear average
-                out[3] = static_cast<uint8_t>((p00[3] + p10[3] + p01[3] + p11[3] + 2) / 4);
+                else
+                {
+                    for (int ch = 0; ch < 3; ++ch) // RGB: linearize, average, re-encode
+                    {
+                        const float avg = (linearize(p00[ch]) + linearize(p10[ch])
+                                           + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
+                        out[ch] = srgbEncode(avg);
+                    }
+                    // Alpha: linear average
+                    out[3] = static_cast<uint8_t>((p00[3] + p10[3] + p01[3] + p11[3] + 2) / 4);
+                }
             }
+        }
+
+        if (hasTransparency)
+        {
+            preserveAlphaCoverage(mipData[m]);
         }
     }
 
