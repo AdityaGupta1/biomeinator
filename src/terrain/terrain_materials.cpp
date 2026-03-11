@@ -23,12 +23,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "rendering/buffer/to_free_list.h"
 #include "scene/scene.h"
 
-#include <stb_image.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <shlobj.h>
+#include <stb_image.h>
+#include <stb_image_write.h>
 #include <vector>
+
+#define DEBUG_EXPORT_MIPMAPS 1
 
 namespace TerrainMaterials
 {
@@ -211,6 +215,61 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
             preserveAlphaCoverage(mipData[m]);
         }
     }
+
+#if DEBUG_EXPORT_MIPMAPS
+    {
+        std::vector<uint32_t> mipWidths(numMips);
+        std::vector<uint32_t> mipHeights(numMips);
+        uint32_t atlasWidth = 0;
+        uint32_t atlasHeight = 0;
+        for (uint32_t m = 0; m < numMips; ++m)
+        {
+            const uint32_t w = std::max(1u, w0 >> m);
+            const uint32_t h = std::max(1u, h0 >> m);
+            mipWidths[m] = w;
+            mipHeights[m] = h;
+            atlasWidth += w;
+            atlasHeight = std::max(atlasHeight, h);
+        }
+
+        std::vector<uint8_t> atlasData(static_cast<size_t>(atlasWidth) * atlasHeight * 4, 0);
+        uint32_t xOffset = 0;
+        for (uint32_t m = 0; m < numMips; ++m)
+        {
+            const uint32_t w = mipWidths[m];
+            const uint32_t h = mipHeights[m];
+            const uint8_t* src = mipData[m].data();
+            for (uint32_t y = 0; y < h; ++y)
+            {
+                uint8_t* dstRow = atlasData.data() + (static_cast<size_t>(y) * atlasWidth + xOffset) * 4;
+                const uint8_t* srcRow = src + static_cast<size_t>(y) * w * 4;
+                std::memcpy(dstRow, srcRow, static_cast<size_t>(w) * 4);
+            }
+            xOffset += w;
+        }
+
+        fs::path downloadsPath = fs::current_path();
+        PWSTR downloadsPathWide = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, KF_FLAG_DEFAULT, nullptr, &downloadsPathWide)))
+        {
+            downloadsPath = fs::path(downloadsPathWide);
+            CoTaskMemFree(downloadsPathWide);
+        }
+
+        const fs::path debugOutputPath = downloadsPath / (filename.stem().string() + "_mipmap.png");
+        const int writeResult = stbi_write_png(
+            debugOutputPath.generic_string().c_str(),
+            static_cast<int>(atlasWidth),
+            static_cast<int>(atlasHeight),
+            4,
+            atlasData.data(),
+            static_cast<int>(atlasWidth * 4));
+        if (writeResult == 0)
+        {
+            Logger::logError("Failed to write mip debug texture to: %s", debugOutputPath.generic_string().c_str());
+        }
+    }
+#endif
 
     return scene->addTexture(std::move(mipData), w0, h0);
 }
