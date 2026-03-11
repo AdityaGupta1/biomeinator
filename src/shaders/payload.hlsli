@@ -28,6 +28,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
 
+struct RayCone
+{
+    float width;
+    float angle;
+};
+
 struct Payload
 {
     uint flags;
@@ -39,6 +45,10 @@ struct Payload
     RandomNumberGenerator rng;
     float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
     float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
+    uint pad0;
+
+    RayCone rayCone;
+    uint pad1;
     uint pad2;
 
     HitInfo hitInfo;

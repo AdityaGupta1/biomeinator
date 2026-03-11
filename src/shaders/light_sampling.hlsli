@@ -77,6 +77,7 @@ bool traceToLight(const float3 surfPos_WS,
                   const float3 wi_WS,
                   const float3 pointOnLight_WS,
                   const AreaLight light,
+                  const RayCone rayCone,
                   const bool canPassthrough,
                   const bool startUnderwater,
                   inout RandomNumberGenerator rng,
@@ -95,6 +96,7 @@ bool traceToLight(const float3 surfPos_WS,
     lightPayload.rng = rng;
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
+    lightPayload.rayCone = rayCone;
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
     if (!bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT) || lightPayload.hitInfo.instanceId != light.instanceId || lightPayload.hitInfo.triangleIdx != light.triangleIdx)
@@ -104,12 +106,15 @@ bool traceToLight(const float3 surfPos_WS,
 
     const Material material = materials[light.materialIdx];
     const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, distance(ray.Origin, lightPayload.hitInfo.hitPos_WS));
-    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv) * lightPayload.pathWeight * passthroughAbsorption;
+    const float lightHitDistance = distance(ray.Origin, lightPayload.hitInfo.hitPos_WS);
+    const float lightMipLevel = computeTerrainMipLevel(getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance));
+    Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv, lightMipLevel) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }
 
 DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
                                                  const float3 surfNor_WS,
+                                                 const RayCone rayCone,
                                                  const bool canPassthrough,
                                                  const bool startUnderwater,
                                                  inout RandomNumberGenerator rng)
@@ -127,7 +132,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 
     float3 Le;
     const bool didHitLight = traceToLight(
-        surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHitLight)
     {
         return result;
