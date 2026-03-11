@@ -43,7 +43,7 @@ float balanceHeuristic(const float pdfA, const float pdfB)
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
+void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     const uint2 pixelIdx = getPixelIdx();
 
@@ -62,7 +62,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        payload.pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
+        pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
         return;
     }
 
@@ -102,7 +102,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         {
             const float3 emissiveContrib =
                 payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
-            payload.pathColor += emissiveContrib;
+            pathColor += emissiveContrib;
 
             if (pathDepth == 0)
             {
@@ -238,7 +238,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                         contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                     }
 
-                    payload.pathColor += contribution;
+                    pathColor += contribution;
                 }
 
                 // ------------------------------
@@ -263,7 +263,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
                         contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
 
-                        payload.pathColor += contribution;
+                        pathColor += contribution;
                     }
                 }
             }
@@ -368,7 +368,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 payload.pathWeight *= balanceHeuristicWeight;
             }
 
-            payload.pathColor += payload.pathWeight * getDomeLightColor(ray.Direction);
+            pathColor += payload.pathWeight * getDomeLightColor(ray.Direction);
             return;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
@@ -423,23 +423,22 @@ void RayGeneration()
     payload.materialIdx = gbufferData.materialIdx;
     payload.flags = gbufferData.payloadFlags;
     payload.pathWeight = float3(1.f, 1.f, 1.f);
-    payload.pathColor = float3(0.f, 0.f, 0.f);
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
 
-    float3 outPtDiffuseAlbedo;
-    pathTraceRay(payload, outPtDiffuseAlbedo);
+    float3 pathColor = 0.f;
+    float3 outPtDiffuseAlbedo = 0.f;
+    pathTraceRay(payload, pathColor, outPtDiffuseAlbedo);
 
-    const float3 colorPreTonemap = payload.pathColor;
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
-        pathTracingRawBufferOut[writePixelIdx].xyz += colorPreTonemap;
+        pathTracingRawBufferOut[writePixelIdx].xyz += pathColor;
     }
     else
     {
-        pathTracingRawBufferOut[writePixelIdx].xyz = colorPreTonemap;
+        pathTracingRawBufferOut[writePixelIdx].xyz = pathColor;
     }
 
     ptDiffuseAlbedoRawBufferOut[writePixelIdx] = float4(outPtDiffuseAlbedo, 0.f);
