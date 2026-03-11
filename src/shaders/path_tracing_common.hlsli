@@ -27,7 +27,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RAY_DEFAULT_TMAX 10000.f
 #define RAY_ORIGIN_OFFSET_EPSILON 0.0001f
-#define TERRAIN_TILE_SIZE_TEXELS 16.f
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
@@ -98,26 +97,6 @@ float3 getPrevPrimaryRayDirection(const uint2 pixelIdx)
         + cameraParams.prevUp_WS * ndc.y * yScale
         + cameraParams.prevForward_WS;
     return normalize(targetPos_WS - cameraParams.prevPos_WS);
-}
-
-float computeTerrainMipLevel(const float coneWidth)
-{
-    return log2(coneWidth * TERRAIN_TILE_SIZE_TEXELS);
-}
-
-float getRayConePixelAngle()
-{
-    return 2.f * atan(cameraParams.tanHalfFovY) / float(renderParams.renderSize.y);
-}
-
-float getRayConeWidthAtDistance(const RayCone rayCone, const float distanceTraveled)
-{
-    return rayCone.width + rayCone.angle * distanceTraveled;
-}
-
-float getPayloadConeWidthAtCurrentHit(const Payload payload)
-{
-    return getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
 }
 
 void setRayOriginAndDirection(inout RayDesc ray, const float3 origin_WS, float3 normal_WS, const float3 wi_WS, bool faceforwardNormal)
@@ -191,7 +170,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    const float coneWidth = getPayloadConeWidthAtCurrentHit(payload);
+    const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
     const float mipLevel = computeTerrainMipLevel(coneWidth);
     const float4 baseColor = getMaterialBaseColor(material, uv, mipLevel);
 

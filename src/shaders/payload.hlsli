@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../rendering/common/common_structs.h"
 
+#include "mipmap.hlsli"
 #include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
@@ -27,12 +28,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
 #define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
-
-struct RayCone
-{
-    float width;
-    float angle;
-};
 
 struct Payload
 {
