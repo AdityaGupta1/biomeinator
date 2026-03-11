@@ -314,6 +314,13 @@ uint32_t Scene::addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t
     return texId;
 }
 
+uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t height)
+{
+    std::vector<std::vector<uint8_t>> mipData;
+    mipData.emplace_back(std::move(mip0));
+    return this->addTexture(std::move(mipData), width, height);
+}
+
 bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
@@ -547,6 +554,15 @@ const glm::ivec3& Scene::getPrevGlobalInstanceOffset() const
     return this->prevGlobalInstanceOffset;
 }
 
+struct MipLayout
+{
+    uint32_t offset;
+    uint32_t rowPitchBytes;
+    uint32_t rowPitchBytesAligned;
+    uint32_t width;
+    uint32_t height;
+};
+
 void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     for (const auto& pendingTex : this->pendingTextures)
@@ -571,15 +587,6 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                                                                      IID_PPV_ARGS(&dev_texture)));
         dev_texture->SetName(L"scene texture");
 
-        // Compute per-mip upload layout
-        struct MipLayout
-        {
-            uint32_t offset;
-            uint32_t rowPitchBytes;
-            uint32_t rowPitchBytesAligned;
-            uint32_t width;
-            uint32_t height;
-        };
         std::vector<MipLayout> mipLayouts(numMips);
         uint32_t totalUploadSizeBytes = 0;
         for (uint32_t m = 0; m < numMips; ++m)
