@@ -56,7 +56,7 @@ float walterFresnel(const float eta, const float cosThetaWo)
 // tileSizeTexels = 16 (16x16 pixels per tile at mip 0), voxelSize = 1 world unit
 float computeTerrainMipLevel(const float coneWidth)
 {
-    return clamp(log2(coneWidth * 16.f), 0.f, 4.f);
+    return log2(coneWidth * 16.f);
 }
 
 float4 getMaterialBaseColor(const Material material, const float2 uv, const float mipLevel)
