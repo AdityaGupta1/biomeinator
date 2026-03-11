@@ -20,7 +20,7 @@
 namespace TerrainMaterials
 {
 
-inline constexpr bool DEBUG_EXPORT_MIPMAPS = true;
+inline constexpr bool DEBUG_EXPORT_MIPMAPS = false;
 
 static float linearize(uint8_t srgb)
 {
