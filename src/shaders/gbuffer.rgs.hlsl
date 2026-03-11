@@ -122,8 +122,6 @@ void RayGeneration()
     payload.rng = initRng(constantParams.rngSeed, 123909203, linearPixelIdx, renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
-    payload.coneWidth = 0.f;
-    payload.coneSurfaceSpreadAngle = 0.f;
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
 

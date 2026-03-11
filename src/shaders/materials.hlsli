@@ -53,30 +53,24 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-// tileSizeTexels = 16 (16x16 pixels per tile at mip 0), voxelSize = 1 world unit
-float computeTerrainMipLevel(const float coneWidth)
-{
-    return log2(coneWidth * 16.f);
-}
-
-float4 getMaterialBaseColor(const Material material, const float2 uv, const float mipLevel)
+float4 getMaterialBaseColor(const Material material, const float2 uv)
 {
     float4 baseColor = float4(material.baseColor, 1.f);
     if (material.baseColorTextureId != TEXTURE_ID_INVALID)
     {
         Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-        baseColor = tex.SampleLevel(texSampler, uv, mipLevel);
+        baseColor = tex.SampleLevel(texSampler, uv, 0);
     }
     return baseColor;
 }
 
-float3 getMaterialEmissiveColor(const Material material, const float2 uv, const float mipLevel)
+float3 getMaterialEmissiveColor(const Material material, const float2 uv)
 {
     float3 emissiveColor = material.emissiveColor;
     if (material.emissiveColorTextureId != TEXTURE_ID_INVALID)
     {
         Texture2D<float4> tex = ResourceDescriptorHeap[material.emissiveColorTextureId];
-        emissiveColor = tex.SampleLevel(texSampler, uv, mipLevel).rgb;
+        emissiveColor = tex.SampleLevel(texSampler, uv, 0).rgb;
     }
     return emissiveColor * material.emissiveStrength;
 }
@@ -111,7 +105,6 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
 float3 evaluateBsdf(
     const Material material,
     const float2 uv,
-    const float mipLevel,
     const float3 wo_WS,
     const float3 wi_WS,
     const float3 surfNor_WS)
@@ -121,7 +114,7 @@ float3 evaluateBsdf(
         return 0;
     }
 
-    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, mipLevel).rgb;
+    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv).rgb;
 
     float fresnelReflectance = 0.f;
     if (material.hasGlossyReflection())
@@ -143,7 +136,6 @@ struct BsdfSample
 BsdfSample sampleBsdf(
     const Material material,
     const float2 uv,
-    const float mipLevel,
     const float3 wo_WS,
     const float3 surfNor_WS,
     inout RandomNumberGenerator rng)
@@ -196,14 +188,14 @@ BsdfSample sampleBsdf(
             // e.g. 1.f / 1.5f for going from air to glass
             result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
-            result.bsdfValue = getMaterialBaseColor(material, uv, mipLevel).rgb * oneMinusFresnelReflectance;
+            result.bsdfValue = getMaterialBaseColor(material, uv).rgb * oneMinusFresnelReflectance;
             result.wasSpecular = true;
         }
         else
         {
             result.wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
             result.pdf = absCosTheta(result.wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
-            result.bsdfValue = evaluateBsdf(material, uv, mipLevel, wo_WS, result.wi_WS, surfNor_WS);
+            result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS);
         }
     }
 
@@ -249,7 +241,6 @@ Material getMaterialFromPayload(const Payload payload)
 // applies; the caller should then early-out for pathSplitIdx == 1.
 bool trySplitMaterial(inout Material surfMaterial,
                       const float2 uv,
-                      const float mipLevel,
                       const float3 surfNor_WS,
                       const float3 wo_WS,
                       const uint pathSplitIdx,
@@ -257,7 +248,7 @@ bool trySplitMaterial(inout Material surfMaterial,
 {
     if (surfMaterial.hasDiffuse() && surfMaterial.baseColorTextureId != TEXTURE_ID_INVALID)
     {
-        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv, mipLevel);
+        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv);
         if (baseColorSample.a < 0.999f)
         {
             const float alpha = baseColorSample.a;

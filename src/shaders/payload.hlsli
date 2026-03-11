@@ -39,11 +39,6 @@ struct Payload
     RandomNumberGenerator rng;
     float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
     float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
-    float coneWidth;   // ray cone width at the current hit, in world units
-
-    float coneSurfaceSpreadAngle; // cone spread angle in radians; widened after diffuse bounces
-    uint pad0;
-    uint pad1;
     uint pad2;
 
     HitInfo hitInfo;

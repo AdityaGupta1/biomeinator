@@ -89,8 +89,6 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const float mipLevel = computeTerrainMipLevel(payload.coneWidth);
-
         Material surfMaterial = getMaterialFromPayload(payload);
 
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
@@ -103,7 +101,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             const float3 emissiveContrib =
-                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, mipLevel);
+                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv);
             payload.pathColor += emissiveContrib;
 
             if (pathDepth == 0)
@@ -117,7 +115,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
-                surfMaterial, payload.hitInfo.uv, mipLevel, payload.hitInfo.hitNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
+                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, pathSplitIdx, payload.pathWeight);
             if (!didSplitMaterial && pathSplitIdx == 1)
             {
                 return;
@@ -154,7 +152,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
 
         if (isPassthrough)
         {
-            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, mipLevel).rgb;
+            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv).rgb;
             if (hitWasWater)
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
@@ -210,7 +208,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
                     const float3 bsdfVal = evaluateBsdf(
-                        surfMaterial, payload.hitInfo.uv, mipLevel, wo_WS, lightSample.wi_WS, surfNor_WS);
+                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS);
 
                     float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
@@ -255,7 +253,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
-                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, mipLevel, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS);
 
                         float3 contribution = payload.pathWeight * bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
 
@@ -275,7 +273,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                 hasEncounteredNonDeltaSurface = true;
             }
 
-            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, mipLevel, wo_WS, surfNor_WS, payload.rng);
+            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, payload.rng);
 
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
@@ -291,11 +289,6 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
             if (pathDepth == 0)
             {
                 ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
-            }
-
-            if (!surfBsdfSample.wasSpecular)
-            {
-                payload.coneSurfaceSpreadAngle += 0.5f;
             }
 
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
@@ -331,11 +324,10 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
-                        const float secondHitMipLevel = computeTerrainMipLevel(payload.coneWidth);
                         const Material secondHitMaterial = getMaterialFromPayload(payload);
                         if (secondHitMaterial.hasDiffuse())
                         {
-                            const float3 baseColor = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv, secondHitMipLevel).rgb;
+                            const float3 baseColor = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv).rgb;
                             if (any(baseColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = baseColor;
@@ -344,7 +336,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                         }
                         if (!secondHitHasDiffuseAlbedo && secondHitMaterial.hasEmission())
                         {
-                            const float3 emissiveColor = getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv, secondHitMipLevel);
+                            const float3 emissiveColor = getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv);
                             if (any(emissiveColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = applyReinhard(emissiveColor);
@@ -435,12 +427,6 @@ void RayGeneration()
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
-
-    const float spreadAngle = 2.f * atan(cameraParams.tanHalfFovY) / float(renderParams.renderSize.y);
-    payload.coneWidth = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? spreadAngle * length(payload.hitInfo.hitPos_WS - cameraParams.pos_WS)
-        : 0.f;
-    payload.coneSurfaceSpreadAngle = spreadAngle;
 
     float3 outPtDiffuseAlbedo;
     pathTraceRay(payload, outPtDiffuseAlbedo);
