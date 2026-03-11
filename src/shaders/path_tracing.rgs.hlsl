@@ -87,9 +87,9 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         payload.pathWeight *= chunkColor;
     }
 
+    Material surfMaterial = getMaterialFromPayload(payload);
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        Material surfMaterial = getMaterialFromPayload(payload);
         const float surfMipLevel = computeTerrainMipLevel(payload.rayCone.width);
 
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
@@ -305,13 +305,15 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
+            surfMaterial = getMaterialFromPayload(payload);
+
             const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
             payload.rayCone.width = getRayConeWidthAtDistance(payload.rayCone, hitDistance);
 
-            const Material hitMaterial = getMaterialFromPayload(payload);
-            if (hitMaterial.hasDiffuse())
+            if (surfMaterial.hasDiffuse())
             {
                 payload.rayCone.angle += 0.5f;
             }
@@ -336,21 +338,20 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
-                        const Material secondHitMaterial = getMaterialFromPayload(payload);
-                        if (secondHitMaterial.hasDiffuse())
+                        if (surfMaterial.hasDiffuse())
                         {
                             const float secondHitMipLevel = computeTerrainMipLevel(payload.rayCone.width);
-                            const float3 baseColor = getMaterialBaseColor(secondHitMaterial, payload.hitInfo.uv, secondHitMipLevel).rgb;
+                            const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel).rgb;
                             if (any(baseColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = baseColor;
                                 secondHitHasDiffuseAlbedo = true;
                             }
                         }
-                        if (!secondHitHasDiffuseAlbedo && secondHitMaterial.hasEmission())
+                        if (!secondHitHasDiffuseAlbedo && surfMaterial.hasEmission())
                         {
                             const float secondHitMipLevel = computeTerrainMipLevel(payload.rayCone.width);
-                            const float3 emissiveColor = getMaterialEmissiveColor(secondHitMaterial, payload.hitInfo.uv, secondHitMipLevel);
+                            const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel);
                             if (any(emissiveColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = applyReinhard(emissiveColor);
@@ -408,9 +409,7 @@ void pathTraceRay(inout Payload payload, out float3 ptDiffuseAlbedo)
         {
             // no need to consider dome light pdf here because dome light sampling can't hit area lights
 
-            const Material hitMaterial = getMaterialFromPayload(payload);
-
-            if (hitMaterial.hasEmission() && !bounceWasSpecular)
+            if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
 
