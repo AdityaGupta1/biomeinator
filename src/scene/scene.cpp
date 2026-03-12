@@ -568,6 +568,8 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
     for (const auto& pendingTex : this->pendingTextures)
     {
         const uint32_t numMips = static_cast<uint32_t>(pendingTex.mipData.size());
+        ASSERT(pendingTex.width > 0 && pendingTex.height > 0);
+        ASSERT(numMips > 0);
 
         D3D12_RESOURCE_DESC texDesc = {};
         texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -594,6 +596,8 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
             const uint32_t mipWidth = std::max(1u, pendingTex.width >> m);
             const uint32_t mipHeight = std::max(1u, pendingTex.height >> m);
             const uint32_t rowPitch = mipWidth * 4;
+            const size_t expectedMipSizeBytes = static_cast<size_t>(rowPitch) * mipHeight;
+            ASSERT(pendingTex.mipData[m].size() == expectedMipSizeBytes);
             const uint32_t rowPitchAligned = MathUtil::roundUp(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
             totalUploadSizeBytes = MathUtil::roundUp(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
             mipLayouts[m] = { totalUploadSizeBytes, rowPitch, rowPitchAligned, mipWidth, mipHeight };

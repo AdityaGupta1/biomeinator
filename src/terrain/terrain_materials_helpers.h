@@ -73,7 +73,7 @@ static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t
     return static_cast<float>(opaqueCount) / static_cast<float>(texelCount);
 }
 
-template<bool premutliplyAlpha>
+template<bool premultiplyAlpha>
 static void downsample2x2Tile(
     const std::vector<uint8_t>& src, uint32_t srcWidth, std::vector<uint8_t>& dst, uint32_t dstWidth, uint32_t srcTileX,
     uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize)
@@ -90,29 +90,32 @@ static void downsample2x2Tile(
             const uint8_t* p01 = src.data() + texelIdx(sx, sy + 1, srcWidth);
             const uint8_t* p11 = src.data() + texelIdx(sx + 1, sy + 1, srcWidth);
             uint8_t* out = dst.data() + texelIdx(dstTileX + x, dstTileY + y, dstWidth);
+            const float a00 = p00[3] / 255.f;
+            const float a10 = p10[3] / 255.f;
+            const float a01 = p01[3] / 255.f;
+            const float a11 = p11[3] / 255.f;
+            const float avgA = (a00 + a10 + a01 + a11) * 0.25f;
 
             for (uint32_t ch = 0; ch < 3; ++ch)
             {
-                if constexpr (premutliplyAlpha)
+                if constexpr (premultiplyAlpha)
                 {
-                    const float a00 = p00[3] / 255.f;
-                    const float a10 = p10[3] / 255.f;
-                    const float a01 = p01[3] / 255.f;
-                    const float a11 = p11[3] / 255.f;
-                    const float avgA = (a00 + a10 + a01 + a11) * 0.25f;
                     const float avgPremultiplied = (linearize(p00[ch]) * a00 + linearize(p10[ch]) * a10
                                                    + linearize(p01[ch]) * a01 + linearize(p11[ch]) * a11)
                         * 0.25f;
                     const float avg = avgA > alphaEpsilon ? (avgPremultiplied / avgA) : 0.f;
                     out[ch] = srgbEncode(avg);
-                    out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
                     continue;
                 }
 
                 const float avg = (linearize(p00[ch]) + linearize(p10[ch]) + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
                 out[ch] = srgbEncode(avg);
             }
-            if constexpr (!premutliplyAlpha)
+            if constexpr (premultiplyAlpha)
+            {
+                out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
+            }
+            else
             {
                 out[3] = 255;
             }
@@ -211,14 +214,14 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
 
                 if (!hasTransparency)
                 {
-                    downsample2x2Tile<false /*premutliplyAlpha*/>(
+                    downsample2x2Tile<false /*premultiplyAlpha*/>(
                         mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
                     continue;
                 }
 
                 const float sourceCoverage =
                     computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
-                downsample2x2Tile<true /*premutliplyAlpha*/>(
+                downsample2x2Tile<true /*premultiplyAlpha*/>(
                     mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
                 quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
             }
