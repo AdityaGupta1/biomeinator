@@ -135,7 +135,7 @@ static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
-inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 6;
+inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
 
 void update(ToFreeList& toFreeList)
 {
