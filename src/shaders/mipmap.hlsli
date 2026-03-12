@@ -26,9 +26,9 @@ struct RayCone
     float angle;
 };
 
-float computeTerrainMipLevel(const float coneWidth)
+float computeMipLevel(const float coneWidth)
 {
-    return log2(coneWidth * TERRAIN_TILE_SIZE_TEXELS);
+    return log2(coneWidth * TERRAIN_TILE_SIZE_TEXELS) + renderParams.mipBias;
 }
 
 float getRayConePixelAngle()

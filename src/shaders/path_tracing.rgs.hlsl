@@ -90,7 +90,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
     Material surfMaterial = getMaterialFromPayload(payload);
     for (uint pathDepth = 0; pathDepth < renderParams.maxPathDepth; ++pathDepth)
     {
-        const float surfMipLevel = computeTerrainMipLevel(payload.rayCone.width);
+        const float surfMipLevel = computeMipLevel(payload.rayCone.width);
 
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData =
@@ -338,9 +338,9 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
+                        const float secondHitMipLevel = computeMipLevel(payload.rayCone.width);
                         if (surfMaterial.hasDiffuse())
                         {
-                            const float secondHitMipLevel = computeTerrainMipLevel(payload.rayCone.width);
                             const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel).rgb;
                             if (any(baseColor > 0.f))
                             {
@@ -350,7 +350,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                         }
                         if (!secondHitHasDiffuseAlbedo && surfMaterial.hasEmission())
                         {
-                            const float secondHitMipLevel = computeTerrainMipLevel(payload.rayCone.width);
                             const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel);
                             if (any(emissiveColor > 0.f))
                             {

@@ -48,6 +48,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -501,6 +502,7 @@ static D3D12_RECT scissor;
 
 static uint32_t renderWidth;
 static uint32_t renderHeight;
+static float mipBias = 0.f;
 
 static sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
 static sl::Extent slRenderExtent;
@@ -557,6 +559,8 @@ void resize()
 
         renderWidth = dlssdSettings.optimalRenderWidth;
         renderHeight = dlssdSettings.optimalRenderHeight;
+        const float dlssScale = static_cast<float>(renderWidth) / static_cast<float>(viewportWidth);
+        mipBias = std::log2(dlssScale) - 1.f;
 
         slRenderExtent = { 0, 0, renderWidth, renderHeight };
 
@@ -576,6 +580,7 @@ void resize()
     {
         renderWidth = viewportWidth;
         renderHeight = viewportHeight;
+        mipBias = 0.f;
     }
 
     flush();
@@ -793,7 +798,6 @@ static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
-    // TODO: mip bias either here or in shaders
     D3D12_STATIC_SAMPLER_DESC staticSampler = {};
     staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -1597,6 +1601,7 @@ void render()
     renderParams->doPathSplitting = doPathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
+    renderParams->mipBias = mipBias;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

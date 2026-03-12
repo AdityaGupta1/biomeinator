@@ -107,7 +107,7 @@ bool traceToLight(const float3 surfPos_WS,
     const Material material = materials[light.materialIdx];
     const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, distance(ray.Origin, lightPayload.hitInfo.hitPos_WS));
     const float lightHitDistance = distance(ray.Origin, lightPayload.hitInfo.hitPos_WS);
-    const float lightMipLevel = computeTerrainMipLevel(getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance));
+    const float lightMipLevel = computeMipLevel(getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance));
     Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv, lightMipLevel) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }
