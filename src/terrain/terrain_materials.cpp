@@ -17,52 +17,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "terrain_materials.h"
+#include "terrain_materials_helpers.h"
 
-#include "logger.h"
-#include "rendering/common/common_structs.h"
 #include "rendering/buffer/to_free_list.h"
-#include "scene/scene.h"
-
-#include <stb_image.h>
-#include <cstring>
-#include <filesystem>
-#include <vector>
 
 namespace TerrainMaterials
 {
-
-static uint32_t loadTexture(Scene* scene, const std::filesystem::path& path);
 
 static void createMaterials(Scene* scene);
 
 void init(Scene* scene)
 {
     createMaterials(scene);
-}
-
-static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
-{
-    namespace fs = std::filesystem;
-
-    const fs::path fullPath = fs::path(TARGET_FILE_DIR) / fs::path("assets/textures/") / filename;
-
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    unsigned char* data = stbi_load(fullPath.generic_string().c_str(), &width, &height, &channels, 4);
-
-    if (data == nullptr)
-    {
-        Logger::logError("Failed to load texture from: %s", fullPath.generic_string().c_str());
-        return TEXTURE_ID_INVALID;
-    }
-
-    const size_t size = static_cast<size_t>(width) * height * 4;
-    std::vector<uint8_t> textureData(size);
-    std::memcpy(textureData.data(), data, size);
-    stbi_image_free(data);
-
-    return scene->addTexture(std::move(textureData), static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 }
 
 static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;

@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../rendering/common/common_structs.h"
 
+#include "mipmap.hlsli"
 #include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)
@@ -37,6 +38,10 @@ struct Payload
     RandomNumberGenerator rng;
     float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
     float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
+
+    RayCone rayCone;
+    uint pad0;
+    uint pad1;
 
     HitInfo hitInfo;
 };

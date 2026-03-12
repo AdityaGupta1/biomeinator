@@ -48,6 +48,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -501,6 +502,7 @@ static D3D12_RECT scissor;
 
 static uint32_t renderWidth;
 static uint32_t renderHeight;
+static float mipBias = 0.f;
 
 static sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
 static sl::Extent slRenderExtent;
@@ -557,6 +559,7 @@ void resize()
 
         renderWidth = dlssdSettings.optimalRenderWidth;
         renderHeight = dlssdSettings.optimalRenderHeight;
+        mipBias = std::log2(static_cast<float>(renderWidth) / static_cast<float>(viewportWidth)) - 1.f;
 
         slRenderExtent = { 0, 0, renderWidth, renderHeight };
 
@@ -576,6 +579,7 @@ void resize()
     {
         renderWidth = viewportWidth;
         renderHeight = viewportHeight;
+        mipBias = 0.f;
     }
 
     flush();
@@ -793,14 +797,25 @@ static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
-    rtStaticSamplers.push_back({
-        .Filter = voxelMode ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        .ShaderRegister = RT_REGISTER_TEX_SAMPLER,
-        .RegisterSpace = RT_REGISTER_SPACE,
-    });
+    D3D12_STATIC_SAMPLER_DESC staticSampler = {};
+    staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    staticSampler.MinLOD = 0.f;
+    staticSampler.ShaderRegister = RT_REGISTER_TEX_SAMPLER;
+    staticSampler.RegisterSpace = RT_REGISTER_SPACE;
+    if (voxelMode)
+    {
+        staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+        staticSampler.MaxLOD = 4.f;
+    }
+    else
+    {
+        staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+        staticSampler.MaxLOD = 0.f;
+    }
+
+    rtStaticSamplers.push_back(staticSampler);
 
     // ===================================
     // GBUFFER
@@ -977,7 +992,7 @@ static ComPtr<ID3D12PipelineState> collectPso;
 
 static ComPtr<ID3D12PipelineState> postprocessPso;
 
-static constexpr uint32_t maxPayloadSizeBytes = 80;
+static constexpr uint32_t maxPayloadSizeBytes = 96;
 
 static void initPipeline()
 {
@@ -1585,6 +1600,7 @@ void render()
     renderParams->doPathSplitting = doPathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
+    renderParams->mipBias = mipBias;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

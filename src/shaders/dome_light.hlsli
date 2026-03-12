@@ -100,6 +100,7 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGen
 
 DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const float3 surfNor_WS,
+                                const RayCone rayCone,
                                 const bool canPassthrough,
                                 const bool startUnderwater,
                                 inout RandomNumberGenerator rng)
@@ -129,6 +130,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     domeLightPayload.rng = rng;
     domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
+    domeLightPayload.rayCone = rayCone;
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
