@@ -161,8 +161,8 @@ private:
     struct PendingTexture
     {
         std::vector<std::vector<uint8_t>> mipData; // mipData[0] = full-res, mipData[1] = half-res, etc.
-        uint32_t width;                            // mip 0 width
-        uint32_t height;
+        uint32_t width;  // mip 0 width
+        uint32_t height; // mip 0 height
         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     };
     std::vector<PendingTexture> pendingTextures;
