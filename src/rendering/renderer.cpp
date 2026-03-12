@@ -559,8 +559,7 @@ void resize()
 
         renderWidth = dlssdSettings.optimalRenderWidth;
         renderHeight = dlssdSettings.optimalRenderHeight;
-        const float dlssScale = static_cast<float>(renderWidth) / static_cast<float>(viewportWidth);
-        mipBias = std::log2(dlssScale) - 1.f;
+        mipBias = std::log2(static_cast<float>(renderWidth) / static_cast<float>(viewportWidth)) - 1.f;
 
         slRenderExtent = { 0, 0, renderWidth, renderHeight };
 
