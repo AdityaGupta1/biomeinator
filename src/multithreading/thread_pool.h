@@ -66,14 +66,12 @@ public:
 template<class Iter>
 void ThreadPool::bulkEnqueue(Iter first, Iter last)
 {
-    bool wasEmpty;
     uint32_t numTasksEnqueued = 0;
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         ASSERT(!stop);
 
-        wasEmpty = queue.empty();
         for (; first != last; ++first)
         {
             queue.push(*first);
@@ -81,16 +79,12 @@ void ThreadPool::bulkEnqueue(Iter first, Iter last)
         }
     }
 
-    // if queue was not empty, all workers are currently busy
-    if (wasEmpty)
+    if (numTasksEnqueued == 1)
     {
-        if (numTasksEnqueued == 1)
-        {
-            cv.notify_one();
-        }
-        else
-        {
-            cv.notify_all();
-        }
+        cv.notify_one();
+    }
+    else
+    {
+        cv.notify_all();
     }
 }

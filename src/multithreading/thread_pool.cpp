@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "thread_memory_allocator.h"
 
-#define MAX_NUM_LOCAL_TASKS 4
+#define MAX_NUM_LOCAL_TASKS 8
 
 ThreadPool::ThreadPool()
 {}
@@ -70,21 +70,15 @@ void ThreadPool::worker()
 
 void ThreadPool::enqueue(Task task)
 {
-    bool wasEmpty;
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         ASSERT(!stop);
 
-        wasEmpty = queue.empty();
         queue.push(task);
     }
 
-    // if queue was not empty, all workers are currently busy
-    if (wasEmpty)
-    {
-        cv.notify_one();
-    }
+    cv.notify_one();
 }
 
 void ThreadPool::shutdown()

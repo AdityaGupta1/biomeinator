@@ -447,7 +447,10 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
                 }
 
                 prevSegments[segmentIdx++] = segment; // used for easier condition checking for future segments in this function
-                this->segmentsToGenerate.push_back(chunkSegmentPos);
+                if (segment != ChunkSegment::AIR && segment != ChunkSegment::SOLID_SURROUNDED)
+                {
+                    this->segmentsToGenerate.push_back(chunkSegmentPos);
+                }
             }
         }
     }

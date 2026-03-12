@@ -148,7 +148,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
         const uint coherenceHint =
             (pathDepth == 0 ? (1 << 2) : 0) |
             (isPassthrough ? (1 << 1) : 0) |
-            (!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0;
+            ((!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0);
         NvReorderThread(coherenceHint, 3 /*numCoherenceHintBits*/);
 
         if (isPassthrough)
