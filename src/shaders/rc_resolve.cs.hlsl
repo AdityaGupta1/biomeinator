@@ -38,7 +38,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const uint2 key = rcHashEntries[slot];
 
-    if (!any(key != 0))
+    if (all(key == 0))
     {
         return;
     }
