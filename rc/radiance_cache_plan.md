@@ -36,13 +36,13 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
 
 The cache uses three parallel arrays, all indexed by hash slot:
 
-**`dev_rcHashEntries`** — one `uint2` (8 bytes) per slot. Key storage for collision detection. When a position is hashed to a slot, the stored key is compared against the expected key to confirm it's a real match and not a collision. Each entry stores a packed 64-bit representation of the `int3` grid coordinate:
-- `.x` (uint32): low 16 bits of `gridPos.x` in the bottom half, low 16 bits of `gridPos.y` in the top half
-- `.y` (uint32): low 16 bits of `gridPos.z`
+**`dev_rcHashEntries`** — `RWByteAddressBuffer`, 8 bytes per slot. Key storage for collision detection. When a position is hashed to a slot, the stored key is compared against the expected key to confirm it's a real match and not a collision. Each entry stores a packed 64-bit representation of the `int3` grid coordinate via `rcPackKey`:
+- first uint32: 24 bits of `gridPos.x` | low 8 bits of `gridPos.y` shifted to bits 24–31
+- second uint32: high 8 bits of `gridPos.y` in bits 0–7 | 24 bits of `gridPos.z` shifted to bits 8–31
 
-A value of `uint2(0, 0)` means the slot is empty. Grid position (0,0,0) maps to this sentinel, which is a single cell that's unlikely to matter — use `uint2(0xFFFFFFFF, 0xFFFFFFFF)` as the empty sentinel instead if it does.
+A value of `uint2(RC_EMPTY_SENTINEL, RC_EMPTY_SENTINEL)` (i.e. `0xFFFFFFFF`) means the slot is empty. Uses `RWByteAddressBuffer` (not `RWStructuredBuffer<uint2>`) so that `InterlockedCompareExchange` works for atomic slot insertion.
 
-**`dev_rcAccumulation`** — one `uint4` (16 bytes) per slot. Per-frame scratch buffer that collects new radiance samples via atomic adds. Zeroed at the start of every frame by the eviction pass and written to only by the update pass:
+**`dev_rcAccumulation`** — `RWByteAddressBuffer`, 16 bytes per slot. Per-frame scratch buffer that collects new radiance samples via atomic adds. Zeroed at the start of every frame by the eviction pass and written to only by the update pass:
 - `.x` (uint32): accumulated red, stored as fixed-point (`radiance.r * RC_RADIANCE_SCALE`, cast to uint)
 - `.y` (uint32): accumulated green, same encoding
 - `.z` (uint32): accumulated blue, same encoding
@@ -213,8 +213,8 @@ This buffer is never zeroed wholesale — it persists across frames and represen
    - `rcInsertOrFind(int3 gridPos, RWByteAddressBuffer hashEntries)` → `uint` slot or `~0u`
      - Use `RWByteAddressBuffer` with `InterlockedCompareExchange` for atomic CAS on the first uint of each entry. This is more reliable than `RWStructuredBuffer<uint2>` for atomics.
    - `rcLookup(int3 gridPos, ByteAddressBuffer hashEntries)` → `uint` (read-only version, no insertion)
-   - `rcJitterPos(float3 pos_WS, float voxelSize, inout Rng rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * voxelSize` to blur voxel boundaries when querying
-     - You will have to add `RC_JITTER_SCALE` as a new setting, with value 0.1f
+   - `rcJitterPos(float3 pos_WS, float voxelSize, inout RandomNumberGenerator rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * voxelSize` to blur voxel boundaries when querying
+     - `RC_JITTER_SCALE` (0.1f) and `RC_EMPTY_SENTINEL` (0xFFFFFFFFu) added as constants in `common_settings.h`
    - `rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer)` — atomic adds of quantized radiance + sample count
 
 Hash function:

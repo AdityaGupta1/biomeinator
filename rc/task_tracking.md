@@ -8,7 +8,7 @@
 | 2 | Create GPU Buffers | Done |
 | 3 | Eviction/Clear Compute Shader + Pipeline | Done |
 | 4 | Resolve Compute Shader + Pipeline | Done |
-| 5 | Radiance Cache Utility Header (HLSL) | Not Started |
+| 5 | Radiance Cache Utility Header (HLSL) | Done |
 | 6 | RC Update Pass (Cache Training) | Not Started |
 | 7 | Debug Visualization | Not Started |
 | 8 | Cache Read in Main Render Pass | Not Started |
@@ -50,6 +50,15 @@
 - [x] Add UAV barrier after resolve dispatch
 - [x] Add `.Reset()` call in `destroy()` for `rcResolvePso`
 - [x] Add `#include "rc_resolve.cs.fxh"` for shader bytecode
+
+## Step 5: Radiance Cache Utility Header (HLSL)
+
+- [x] Add `RC_JITTER_SCALE` and `RC_EMPTY_SENTINEL` constants to `common_settings.h`
+- [x] Create `radiance_cache.hlsli` with utility functions (`rcWorldToGrid`, `rcSpatialHash`, `rcPackKey`, `rcInsertOrFind`, `rcLookup`, `rcJitterPos`, `rcWriteRadiance`)
+- [x] Switch `rcHashEntries` from `RWStructuredBuffer<uint2>` to `RWByteAddressBuffer` in `rc_evict.cs.hlsl` and `rc_resolve.cs.hlsl`
+- [x] Switch `rcAccumulation` from `RWStructuredBuffer<uint4>` to `RWByteAddressBuffer` in `rc_evict.cs.hlsl` and `rc_resolve.cs.hlsl`
+- [x] Update all reads/writes to use `.Load2`/`.Store2`/`.Load4`/`.Store4`
+- [x] Change empty sentinel from `uint2(0, 0)` to `uint2(RC_EMPTY_SENTINEL, RC_EMPTY_SENTINEL)`
 
 ## Findings
 
