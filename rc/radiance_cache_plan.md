@@ -32,6 +32,34 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
 
 ---
 
+## Buffer Layout Reference
+
+The cache uses three parallel arrays, all indexed by hash slot:
+
+**`dev_rcHashEntries`** — one `uint2` (8 bytes) per slot. Key storage for collision detection. When a position is hashed to a slot, the stored key is compared against the expected key to confirm it's a real match and not a collision. Each entry stores a packed 64-bit representation of the `int3` grid coordinate:
+- `.x` (uint32): low 16 bits of `gridPos.x` in the bottom half, low 16 bits of `gridPos.y` in the top half
+- `.y` (uint32): low 16 bits of `gridPos.z`
+
+A value of `uint2(0, 0)` means the slot is empty. Grid position (0,0,0) maps to this sentinel, which is a single cell that's unlikely to matter — use `uint2(0xFFFFFFFF, 0xFFFFFFFF)` as the empty sentinel instead if it does.
+
+**`dev_rcAccumulation`** — one `uint4` (16 bytes) per slot. Per-frame scratch buffer that collects new radiance samples via atomic adds. Zeroed at the start of every frame by the eviction pass and written to only by the update pass:
+- `.x` (uint32): accumulated red, stored as fixed-point (`radiance.r * RC_RADIANCE_SCALE`, cast to uint)
+- `.y` (uint32): accumulated green, same encoding
+- `.z` (uint32): accumulated blue, same encoding
+- `.w` (uint32): accumulated sample count (each sample adds `RC_SAMPLE_MULTIPLIER` for sub-sample precision)
+
+Uses uints because `InterlockedAdd` works on integers but not floats in HLSL. Multiple threads from the update pass can write to the same cell simultaneously and the atomics ensure the values sum correctly. The resolve pass reads this, divides out the scale factors to recover the average radiance for the frame, then blends it into the resolved buffer.
+
+**`dev_rcResolved`** — one `float4` (16 bytes) per slot. Persistent, temporally blended radiance estimate that the main render pass reads from:
+- `.x` (float): resolved red radiance (exponential moving average across frames)
+- `.y` (float): resolved green radiance
+- `.z` (float): resolved blue radiance
+- `.w` (float): total accumulated sample weight — used for the EMA blend factor calculation, and also serves as a quality indicator (the render pass checks if this exceeds `rcMinSamplesForQuery` before using the cached value)
+
+This buffer is never zeroed wholesale — it persists across frames and represents the cache's current best estimate. Individual entries get cleared only when the eviction pass determines they're stale. The resolve pass updates it each frame by blending in the new accumulation data. The `.w` weight decays each frame via `previousWeight * RC_DECAY`, so entries that stop receiving samples gradually lose confidence and eventually get evicted.
+
+---
+
 ## Step 1: Add RC Constants, Params, and Settings
 
 **Goal:** Define all shared constants and GPU parameters so they compile and are accessible from both C++ and HLSL. No GPU work yet.
@@ -40,7 +68,7 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
 1. In [common_settings.h](src/rendering/common/common_settings.h), add:
    - `#define RC_TABLE_SIZE (1u << 22)` (4M entries)
    - `#define RC_WORKGROUP_SIZE 256`
-   - `#define RC_STALE_FRAME_THRESHOLD 32`
+   - `#define RC_STALE_WEIGHT_THRESHOLD 0.1` (entries with `.w` below this are evicted)
    - `#define RC_RADIANCE_SCALE 1024.0`
    - `#define RC_SAMPLE_MULTIPLIER 1024`
    - `#define RC_DECAY 0.97`
@@ -121,8 +149,8 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
 4. Create shader file [rc_evict.cs.hlsl](src/shaders/rc_evict.cs.hlsl):
    - Include `global_params.hlsli` and `common_settings.h`
    - Declare the three UAV buffers with RC register macros
-   - Thread per entry: if key != 0, check `dev_rcResolved[slot].w` for last-updated frame (pack frame number into `.w` — details in step 5's resolve shader). If stale, zero all three buffers at that slot.
-   - Unconditionally zero `dev_rcAccumulation[slot]`.
+   - Thread per entry: if key != 0, check `dev_rcResolved[slot].w` (the accumulated sample weight). If it has decayed below a staleness threshold (e.g., close to zero), the entry has stopped receiving samples and is stale — zero all three buffers at that slot to free it for reuse.
+   - Unconditionally zero `dev_rcAccumulation[slot]` (this is the per-frame scratch buffer that must be clean before the update pass writes to it).
 
 5. Create `rcEvictPso` in `initPipeline()` following the collect PSO pattern.
 
@@ -148,12 +176,16 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
 
 2. Create shader file [rc_resolve.cs.hlsl](src/shaders/rc_resolve.cs.hlsl):
    - Thread per entry. If key != 0 and `accumulation[slot].w > 0`:
-     - Compute `currentRadiance` from accumulation (divide by sample count, unscale)
-     - Read `previousRadiance` from `resolved[slot].rgb`
-     - Blend with EMA: track total weight in a way that encodes the frame number for stale detection
-     - **Frame tracking approach:** Use `asuint()`/`asfloat()` to pack `rcFrameNumber` into `resolved[slot].w` after blending. The eviction pass reads this to detect staleness. The "total weight" for EMA blending can be tracked separately — simplest: use a fixed blend factor per frame (e.g., `blendFactor = currentSamples / (currentSamples + previousWeight * RC_DECAY)`) where `previousWeight` is derived from a separate counter, OR just use a simple fixed alpha like `lerp(previous, current, 0.05)` for the initial implementation.
-     - **Simplification for first pass:** Use `resolved.w` to store `asfloat(rcFrameNumber)` for staleness. Use a fixed EMA alpha for blending (e.g., `lerp(prev, curr, 0.1)`). This can be refined later.
-   - Write `resolved[slot] = float4(newRadiance, asfloat(rcParams.rcFrameNumber))`.
+     - Compute `currentRadiance` from accumulation: divide `.xyz` by (`.w / RC_SAMPLE_MULTIPLIER`) to get average radiance, then divide by `RC_RADIANCE_SCALE` to undo the fixed-point encoding
+     - Read `previousRadiance` from `resolved[slot].rgb` and `previousWeight` from `resolved[slot].w`
+     - Decay the previous weight: `previousWeight *= RC_DECAY`
+     - Compute current sample count: `currentSamples = accumulation[slot].w / RC_SAMPLE_MULTIPLIER`
+     - Blend with EMA: `newWeight = previousWeight + currentSamples`, `blendFactor = currentSamples / newWeight`, `newRadiance = lerp(previousRadiance, currentRadiance, blendFactor)`
+     - Write `resolved[slot] = float4(newRadiance, newWeight)`
+   - If key != 0 but `accumulation[slot].w == 0` (entry exists but received no new samples this frame):
+     - Decay the weight: `resolved[slot].w *= RC_DECAY`
+     - Leave `.xyz` unchanged
+   - The eviction pass will clear entries whose `.w` has decayed below a staleness threshold
 
 3. Create `rcResolvePso` in `initPipeline()`.
 
@@ -272,7 +304,7 @@ GBuffer → barrier → RC Evict → barrier → RC Update → barrier → RC Re
      - Check `payload.rayCone.width >= rcParams.rcVoxelSize`
      - **Jitter the query position** to blur voxel boundaries and break up structured noise: offset the hit position by a random vector within `[-0.5, 0.5] * rcVoxelSize` per axis (using the existing RNG) before computing the grid cell. This smooths transitions between adjacent cache cells.
      - `rcLookup` the jittered grid cell
-     - If found and `resolved.w` indicates sufficient freshness: `pathColor += payload.pathWeight * resolved.rgb; return;`
+     - If found and `resolved.w >= rcParams.rcMinSamplesForQuery` (sufficient accumulated sample weight): `pathColor += payload.pathWeight * resolved.rgb; return;`
 
 3. In the render loop, bind the resolved buffer and hash entries as SRVs when setting up the main PT dispatch. Add a state transition for `dev_rcResolved` from UAV to `NON_PIXEL_SHADER_RESOURCE` before the main PT dispatch, and transition back to UAV state before the next frame's eviction pass (or rely on implicit promotion/decay since the buffer starts in COMMON state).
 
