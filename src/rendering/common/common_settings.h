@@ -32,7 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_TABLE_SIZE (1u << 22)
 #define RC_WORKGROUP_SIZE 256
 #define RC_STALE_FRAME_THRESHOLD 32
-#define RC_RADIANCE_SCALE 1024.0
+#define RC_RADIANCE_SCALE 1024.f
 #define RC_SAMPLE_MULTIPLIER 1024
-#define RC_DECAY 0.97
+#define RC_DECAY 0.97f
 #define RC_UPDATE_SCALE 5

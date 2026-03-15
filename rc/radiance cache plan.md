@@ -181,7 +181,7 @@ Add a spatially hashed radiance cache to the path tracer. The cache stores per-v
    - `rcInsertOrFind(int3 gridPos, RWByteAddressBuffer hashEntries)` → `uint` slot or `~0u`
      - Use `RWByteAddressBuffer` with `InterlockedCompareExchange` for atomic CAS on the first uint of each entry. This is more reliable than `RWStructuredBuffer<uint2>` for atomics.
    - `rcLookup(int3 gridPos, ByteAddressBuffer hashEntries)` → `uint` (read-only version, no insertion)
-   - `rcJitterPos(float3 pos_WS, float voxelSize, inout Rng rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5) * voxelSize` to blur voxel boundaries when querying
+   - `rcJitterPos(float3 pos_WS, float voxelSize, inout Rng rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5f) * 0.1f * voxelSize` to blur voxel boundaries when querying
    - `rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer)` — atomic adds of quantized radiance + sample count
 
 2. If using `RWByteAddressBuffer` for hash entries: update the buffer creation in step 2 if needed (byte address buffers may need `D3D12_BUFFER_UAV_FLAG_RAW` or simply be bound differently). Also update the evict/resolve shaders to use `RWByteAddressBuffer` for hash entries instead of `RWStructuredBuffer<uint2>`.
