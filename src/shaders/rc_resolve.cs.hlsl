@@ -21,8 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "global_params.hlsli"
 
-RWStructuredBuffer<uint2> rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
-RWStructuredBuffer<uint4> rcAccumulation : REGISTER_U(RC, ACCUMULATION);
+RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
+RWByteAddressBuffer rcAccumulation : REGISTER_U(RC, ACCUMULATION);
 RWStructuredBuffer<float4> rcResolved : REGISTER_U(RC, RESOLVED);
 
 [shader("compute")]
@@ -36,14 +36,14 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const uint2 key = rcHashEntries[slot];
+    const uint2 key = rcHashEntries.Load2(slot * 8);
 
-    if (all(key == 0))
+    if (all(key == RC_EMPTY_SENTINEL))
     {
         return;
     }
 
-    const uint4 accum = rcAccumulation[slot];
+    const uint4 accum = rcAccumulation.Load4(slot * 16);
 
     if (accum.w > 0)
     {
