@@ -146,6 +146,14 @@ struct RenderParams
     float mipBias;
 };
 
+struct RadianceCacheParams
+{
+    uint rcFrameNumber;
+    float rcVoxelSize;
+    uint rcEnabled;
+    uint rcMinSamplesForQuery;
+};
+
 struct DebugParams
 {
     uint debugOutputSrvIdx;

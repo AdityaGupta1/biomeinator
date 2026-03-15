@@ -1345,6 +1345,13 @@ static void imguiEndFrame(double deltaTime)
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
 
         SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("Radiance Cache");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("RC voxel size", "rcVoxelSize", 0.25f, 4.0f);
+        SettingsGuiHelpers::SliderFloat("RC decay", "rcDecay", 0.9f, 0.999f);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
+
+        SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
         const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
         needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
@@ -1636,6 +1643,13 @@ void render()
     debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
     debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
     debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
+
+    auto& rcParams = paramBlockManager.rcParams;
+    static uint32_t rcFrameNumber = 0;
+    rcParams->rcFrameNumber = rcFrameNumber++;
+    rcParams->rcVoxelSize = SettingsManager::getAsFloat("rcVoxelSize");
+    rcParams->rcEnabled = (SettingsManager::getAsBool("rcEnabled") && voxelMode) ? 1 : 0;
+    rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
