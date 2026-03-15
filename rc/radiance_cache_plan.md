@@ -278,8 +278,10 @@ uint rcSpatialHash(int3 gridPos)
 
 **Revised render loop order:**
 ```
-GBuffer → barrier → RC Evict → barrier → RC Update → barrier → RC Resolve → barrier → Main PT → ...
+GBuffer → RC Evict → barrier → RC Update → barrier → RC Resolve → state transition → Main PT → ...
 ```
+
+RC Evict should not have any dependency on gbuffer data, but double check this to be sure.
 
 **Verify:** Project compiles and runs. Add temporary debug output: in the evict or resolve shader, count non-zero entries and write to a debug buffer, or use the debug visualization (next step) to confirm entries are being populated. The rendered image should look the same (main PT hasn't changed yet).
 
@@ -342,6 +344,7 @@ GBuffer → barrier → RC Evict → barrier → RC Update → barrier → RC Re
 5. Consider whether the `RC_UPDATE_SCALE` of 5 gives enough training coverage.
 6. Profile the frame time impact of the three new passes.
 7. Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB of VRAM. Reallocate them when the radiance cache is re-enabled.
+8. Use a jitter pattern instead of uniform RNG for shooting rays in the RC update pass, for better coverage of the entire screen.
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 
