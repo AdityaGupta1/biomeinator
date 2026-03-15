@@ -291,6 +291,7 @@ GBuffer → barrier → RC Evict → barrier → RC Update → barrier → RC Re
 4. Add firefly clamping in the resolve pass if needed.
 5. Consider whether the `RC_UPDATE_SCALE` of 5 gives enough training coverage.
 6. Profile the frame time impact of the three new passes.
+7. Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB of VRAM. Reallocate them when the radiance cache is re-enabled.
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 

@@ -137,6 +137,7 @@ static void initCommand();
 static void initConstantParams();
 static void initRootSignature();
 static void initPipeline();
+static void initRadianceCache();
 
 static void initImgui();
 
@@ -207,6 +208,8 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    initRadianceCache();
 
     initImgui();
 
@@ -494,6 +497,10 @@ static void initRtTargets()
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 static ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+
+static ComPtr<ID3D12Resource> dev_rcHashEntries;
+static ComPtr<ID3D12Resource> dev_rcAccumulation;
+static ComPtr<ID3D12Resource> dev_rcResolved;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
@@ -1104,6 +1111,21 @@ static void initPipeline()
         CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
         postprocessPso->SetName(L"postprocessPso");
     }
+}
+
+static void initRadianceCache()
+{
+    dev_rcHashEntries = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 8, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcHashEntries->SetName(L"dev_rcHashEntries");
+
+    dev_rcAccumulation = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 16, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcAccumulation->SetName(L"dev_rcAccumulation");
+
+    dev_rcResolved = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 16, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcResolved->SetName(L"dev_rcResolved");
 }
 
 static void initImgui()
@@ -1952,6 +1974,10 @@ void destroy()
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
     dev_ptDiffuseAlbedoRawBuffer.Reset();
+
+    dev_rcHashEntries.Reset();
+    dev_rcAccumulation.Reset();
+    dev_rcResolved.Reset();
 
     screenshotRequest.readbackBuffer.Reset();
 
