@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../rendering/common/common_settings.h"
 
+#include "util/rng.hlsli"
+
 int3 rcWorldToGrid(float3 pos_WS, float voxelSize)
 {
     return int3(floor(pos_WS / voxelSize));

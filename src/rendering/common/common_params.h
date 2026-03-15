@@ -152,6 +152,11 @@ struct RadianceCacheParams
     float rcVoxelSize;
     uint rcEnabled;
     uint rcMinSamplesForQuery;
+
+    uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct DebugParams

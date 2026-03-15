@@ -21,14 +21,74 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "global_params.hlsli"
 #include "util/color.hlsli"
+#include "radiance_cache.hlsli"
+#include "path_tracing_common.hlsli" // TODO: move getPrimaryRayDirection() out of this header so we don't have to include the entire thing here
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
+
+ByteAddressBuffer        rcHashEntries : REGISTER_T(RC, HASH_ENTRIES);
+StructuredBuffer<float4> rcResolved    : REGISTER_T(RC, RESOLVED);
 
 struct PsIn
 {
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;
 };
+
+float3 reconstructWorldPos(float2 uv)
+{
+    Texture2D<float> linearDepthTex = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
+    const float linearDepth = linearDepthTex.SampleLevel(texSampler, uv, 0);
+
+    const float2 ndcXY = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    const float aspectRatio = (float)renderParams.renderSize.x / (float)renderParams.renderSize.y;
+    const float3 rayDir = normalize(
+        cameraParams.forward_WS
+        + ndcXY.x * aspectRatio * cameraParams.tanHalfFovY * cameraParams.right_WS
+        + ndcXY.y * cameraParams.tanHalfFovY * cameraParams.up_WS
+    );
+
+    const float t = linearDepth / dot(rayDir, cameraParams.forward_WS);
+    return cameraParams.pos_WS + rayDir * t;
+}
+
+float4 getRcDebugColor(float2 uv)
+{
+    if (!rcParams.rcEnabled)
+    {
+        return float4(0, 0, 0, 1);
+    }
+
+    const float3 worldPos = reconstructWorldPos(uv);
+    const int3 gridPos = rcWorldToGrid(worldPos, rcParams.rcVoxelSize);
+
+    if (rcParams.rcDebugView == 1)
+    {
+        const uint h = rcSpatialHash(gridPos);
+        return float4(
+            float(h & 0xFF) / 255.0,
+            float((h >> 8) & 0xFF) / 255.0,
+            float((h >> 16) & 0xFF) / 255.0,
+            1.0
+        );
+    }
+    else // rcDebugView == 2
+    {
+        const uint slot = rcLookup(gridPos, rcHashEntries);
+        if (slot == ~0u)
+        {
+            return float4(0, 0, 0, 1);
+        }
+
+        const float4 resolved = rcResolved[slot];
+        if (resolved.w < (float)rcParams.rcMinSamplesForQuery)
+        {
+            return float4(0.1, 0, 0.1, 1); // dim magenta = populated but under-sampled
+        }
+
+        return float4(resolved.rgb * debugParams.debugOutputScale, 1);
+    }
+}
 
 float4 getPathTracingFinalColor(float2 uv)
 {
@@ -82,6 +142,12 @@ float4 getDebugOutputColor(float2 uv)
 
 float4 psMain(PsIn psIn) : SV_Target
 {
+    // TODO: Move all debug view logic to a dedicated debug pass rather than co-opting the postprocessing pass.
+    if (rcParams.rcDebugView != 0)
+    {
+        return getRcDebugColor(psIn.uv);
+    }
+
     float4 finalColor = 0;
 
     if (debugParams.debugOutputSrvIdx == ~0u)

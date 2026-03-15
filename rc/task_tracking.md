@@ -10,7 +10,7 @@
 | 4 | Resolve Compute Shader + Pipeline | Done |
 | 5 | Radiance Cache Utility Header (HLSL) | Done |
 | 6 | RC Update Pass (Cache Training) | Done |
-| 7 | Debug Visualization | Not Started |
+| 7 | Debug Visualization | Done |
 | 8 | Cache Read in Main Render Pass | Not Started |
 | 9 | Tuning and Polish | Not Started |
 
@@ -77,6 +77,21 @@
 - [x] Restructure render loop: evict → update (raytracing) → resolve (moved after update)
 - [x] Rebind rcCompute root sig and resources before resolve (since rcUpdate changed the root sig)
 - [x] Add `.Reset()` calls in `destroy()` for `rcUpdatePso`, `rcUpdateRootSig`, `dev_rcUpdateShaderIds`
+
+## Step 7: Debug Visualization
+
+- [x] Add `rcDebugView` + 3 padding uints to `RadianceCacheParams` in `common_params.h` (keeps struct 32 bytes)
+- [x] Add `rcDebugView` setting to `settings_manager.cpp`
+- [x] Extend `PostprocessParam` enum with `RC_HASH_ENTRIES` and `RC_RESOLVED`
+- [x] Add two SRV root params to `postprocessRootSig` in `initRootSignature()` (reuses `RC_REGISTER_SPACE`, `t0`/`t2`)
+- [x] Sync `rcDebugView` from settings to `rcParams` in `render()`
+- [x] Add pre-draw state transitions (UAV→SRV) + `SetGraphicsRootShaderResourceView` bindings, guarded by `rcParams->rcEnabled`
+- [x] Add post-draw state transitions (SRV→UAV), guarded by `rcParams->rcEnabled`
+- [x] Add `rcDebugViewComboOptions` and `ComboUint("RC debug view", ...)` to ImGui RC section
+- [x] Include `radiance_cache.hlsli` in `postprocess.ps.hlsl`, declare `rcHashEntries` and `rcResolved` SRVs
+- [x] Add `reconstructWorldPos` helper (linear depth + camera basis vectors)
+- [x] Add `getRcDebugColor` helper (mode 1 = grid cell hash color, mode 2 = cached radiance lookup)
+- [x] Add early-out in `psMain` for `rcParams.rcDebugView != 0` with TODO comment for future debug pass extraction
 
 ## Findings
 

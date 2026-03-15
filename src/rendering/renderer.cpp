@@ -765,6 +765,9 @@ enum class PostprocessParam
 {
     GLOBAL_PARAMS,
 
+    RC_HASH_ENTRIES,
+    RC_RESOLVED,
+
     COUNT
 };
 
@@ -1086,6 +1089,9 @@ static void initRootSignature()
         std::array<D3D12_ROOT_PARAMETER1, POSTPROCESS_PARAM_IDX(COUNT)> postprocessParams;
 
         postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        postprocessParams[POSTPROCESS_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, RC, HASH_ENTRIES);
+        postprocessParams[POSTPROCESS_PARAM_IDX(RC_RESOLVED)]     = MAKE_PARAM(SRV, RC, RESOLVED);
 
         std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
 
@@ -1517,6 +1523,11 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "AgX",
     "Khronos PBR neutral",
 };
+static const std::vector<const char*> rcDebugViewComboOptions = {
+    "off",
+    "grid cells",
+    "cached radiance",
+};
 static const std::vector<const char*> debugViewComboOptions = {
     "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularHitDistance", "normals", "debug",
 };
@@ -1570,6 +1581,7 @@ static void imguiEndFrame(double deltaTime)
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("RC voxel size", "rcVoxelSize", 0.25f, 4.0f);
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
+        SettingsGuiHelpers::ComboUint("RC debug view", "rcDebugView", rcDebugViewComboOptions);
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
@@ -1870,6 +1882,7 @@ void render()
     rcParams->rcVoxelSize = SettingsManager::getAsFloat("rcVoxelSize");
     rcParams->rcEnabled = (SettingsManager::getAsBool("rcEnabled") && voxelMode) ? 1 : 0;
     rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
+    rcParams->rcDebugView = SettingsManager::getAsUint("rcDebugView");
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
@@ -2110,6 +2123,19 @@ void render()
     cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
                                                paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
 
+    if (rcParams->rcEnabled)
+    {
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(), dev_rcHashEntries.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(), dev_rcResolved.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+        cmdList->SetGraphicsRootShaderResourceView(POSTPROCESS_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(POSTPROCESS_PARAM_IDX(RC_RESOLVED),     dev_rcResolved->GetGPUVirtualAddress());
+    }
+
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);
 
@@ -2123,6 +2149,16 @@ void render()
 
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->DrawInstanced(3, 1, 0, 0);
+
+    if (rcParams->rcEnabled)
+    {
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(), dev_rcHashEntries.Get(),
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(), dev_rcResolved.Get(),
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
 
     if (screenshotRequest.active)
     {
