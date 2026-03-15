@@ -7,7 +7,7 @@
 | 1 | Add RC Constants, Params, and Settings | Done |
 | 2 | Create GPU Buffers | Done |
 | 3 | Eviction/Clear Compute Shader + Pipeline | Done |
-| 4 | Resolve Compute Shader + Pipeline | Not Started |
+| 4 | Resolve Compute Shader + Pipeline | Done |
 | 5 | Radiance Cache Utility Header (HLSL) | Not Started |
 | 6 | RC Update Pass (Cache Training) | Not Started |
 | 7 | Debug Visualization | Not Started |
@@ -40,6 +40,16 @@
 - [x] Add eviction dispatch in render loop (between GBuffer barrier and path tracing)
 - [x] Add UAV barrier after dispatch
 - [x] Add `.Reset()` calls in `destroy()` for `rcEvictPso` and `rcEvictRootSig`
+
+## Step 4: Resolve Compute Shader + Pipeline
+
+- [x] Add `RC_RESOLVE_PARAM_IDX` macro (reuses `RcEvictParam` enum since layout is identical)
+- [x] Create `rc_resolve.cs.hlsl` shader (blends accumulation into resolved buffer with EMA)
+- [x] Create `rcResolvePso` in `initPipeline()` (reuses `rcEvictRootSig`)
+- [x] Add resolve dispatch in render loop (after evict barrier, before path tracing)
+- [x] Add UAV barrier after resolve dispatch
+- [x] Add `.Reset()` call in `destroy()` for `rcResolvePso`
+- [x] Add `#include "rc_resolve.cs.fxh"` for shader bytecode
 
 ## Findings
 
