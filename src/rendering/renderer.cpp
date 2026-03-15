@@ -1438,7 +1438,6 @@ static void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Radiance Cache");
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("RC voxel size", "rcVoxelSize", 0.25f, 4.0f);
-        SettingsGuiHelpers::SliderFloat("RC decay", "rcDecay", 0.9f, 0.999f);
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
 
         SettingsGuiHelpers::VerticalSpacing();
@@ -1820,28 +1819,31 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        cmdList->SetComputeRootSignature(rcComputeRootSig.Get());
+        if (rcParams->rcEnabled)
+        {
+            cmdList->SetComputeRootSignature(rcComputeRootSig.Get());
 
-        cmdList->SetComputeRootConstantBufferView(RC_COMPUTE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+            cmdList->SetComputeRootConstantBufferView(RC_COMPUTE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
 
-        const uint32_t rcComputeDispatchSize = Util::caclulateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
+            const uint32_t rcComputeDispatchSize = Util::caclulateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
 
-        cmdList->SetPipelineState(rcEvictPso.Get());
-        cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
+            cmdList->SetPipelineState(rcEvictPso.Get());
+            cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
 
-        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 
-        // ===================================
-        // RC RESOLVE
-        // ===================================
+            // ===================================
+            // RC RESOLVE
+            // ===================================
 
-        cmdList->SetPipelineState(rcResolvePso.Get());
-        cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
+            cmdList->SetPipelineState(rcResolvePso.Get());
+            cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
 
-        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+        }
 
         // ===================================
         // PATH TRACING

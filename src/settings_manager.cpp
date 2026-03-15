@@ -67,7 +67,6 @@ void parseArgs(const int argc, const char* const* argv)
 
     ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "true");
     ADD_OPTION("rcVoxelSize", "Radiance cache voxel size", float, "1.0");
-    ADD_OPTION("rcDecay", "Radiance cache EMA decay", float, "0.97");
     ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
@@ -129,7 +128,6 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("rcEnabled", bool);
     COPY_SETTING("rcVoxelSize", float);
-    COPY_SETTING("rcDecay", float);
     COPY_SETTING("rcMinSamplesForQuery", uint32_t);
 
     COPY_SETTING("debugView", std::string);

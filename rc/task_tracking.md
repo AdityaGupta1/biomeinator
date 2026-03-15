@@ -55,3 +55,5 @@
 
 - **Do not build or test.** The user will build and test themselves. Future agents must not attempt to run cmake or build commands.
 - RC buffers are resolution-independent (fixed at `RC_TABLE_SIZE`), so they are created once in `init()` rather than in `resize()`.
+- Removed `rcDecay` setting — decay is controlled by the compile-time `RC_DECAY` constant in `common_settings.h`. No need for a runtime setting since the shader uses the constant directly.
+- Evict and resolve dispatches are guarded by `if (rcParams->rcEnabled)` to skip GPU work when the radiance cache is disabled.
