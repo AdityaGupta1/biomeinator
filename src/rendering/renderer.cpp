@@ -64,6 +64,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "gbuffer.rgs.fxh"
 #include "path_tracing.rgs.fxh"
 #include "collect.cs.fxh"
+#include "rc_evict.cs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
 
@@ -775,10 +776,22 @@ enum class CollectParam
     COUNT
 };
 
+enum class RcEvictParam
+{
+    GLOBAL_PARAMS,
+
+    HASH_ENTRIES,
+    ACCUMULATION,
+    RESOLVED,
+
+    COUNT
+};
+
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
+#define RC_EVICT_PARAM_IDX(param) static_cast<uint32_t>(RcEvictParam::param)
 
 static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
                                        const uint32_t reg,
@@ -800,6 +813,7 @@ static ComPtr<ID3D12RootSignature> gbufferRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
 static ComPtr<ID3D12RootSignature> postprocessRootSig;
+static ComPtr<ID3D12RootSignature> rcEvictRootSig;
 static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
@@ -950,6 +964,35 @@ static void initRootSignature()
     }
 
     // ===================================
+    // RC EVICT
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, RC_EVICT_PARAM_IDX(COUNT)> rcEvictParams;
+
+        rcEvictParams[RC_EVICT_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        rcEvictParams[RC_EVICT_PARAM_IDX(HASH_ENTRIES)] = MAKE_PARAM(UAV, RC, HASH_ENTRIES);
+        rcEvictParams[RC_EVICT_PARAM_IDX(ACCUMULATION)] = MAKE_PARAM(UAV, RC, ACCUMULATION);
+        rcEvictParams[RC_EVICT_PARAM_IDX(RESOLVED)] = MAKE_PARAM(UAV, RC, RESOLVED);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rcEvictRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(rcEvictParams.size()),
+                .pParameters = rcEvictParams.data(),
+                .NumStaticSamplers = 0,
+                .pStaticSamplers = nullptr,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rcEvictRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rcEvictRootSig)));
+    }
+
+    // ===================================
     // POSTPROCESSING
     // ===================================
     {
@@ -996,6 +1039,7 @@ static ComPtr<ID3D12Resource> dev_ptShaderIds;
 static D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
 
 static ComPtr<ID3D12PipelineState> collectPso;
+static ComPtr<ID3D12PipelineState> rcEvictPso;
 
 static ComPtr<ID3D12PipelineState> postprocessPso;
 
@@ -1086,6 +1130,17 @@ static void initPipeline()
         psoDesc.CS = makeShaderBytecode(collect_cs_shaderBytecode);
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&collectPso)));
         collectPso->SetName(L"collectPso");
+    }
+
+    // ===================================
+    // RC EVICT
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = rcEvictRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(rc_evict_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcEvictPso)));
+        rcEvictPso->SetName(L"rcEvictPso");
     }
 
     // ===================================
@@ -1742,7 +1797,7 @@ void render()
         cmdList->DispatchRays(&gbufferDispatchDesc);
 
         // ===================================
-        // PATH TRACING
+        // RC EVICT
         // ===================================
 
         // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
@@ -1751,6 +1806,23 @@ void render()
                                                      dev_gbuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        cmdList->SetPipelineState(rcEvictPso.Get());
+        cmdList->SetComputeRootSignature(rcEvictRootSig.Get());
+
+        cmdList->SetComputeRootConstantBufferView(RC_EVICT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(RC_EVICT_PARAM_IDX(HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(RC_EVICT_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
+        cmdList->SetComputeRootUnorderedAccessView(RC_EVICT_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+
+        const uint32_t rcEvictDispatchSize = Util::caclulateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
+        cmdList->Dispatch(rcEvictDispatchSize, 1, 1);
+
+        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+
+        // ===================================
+        // PATH TRACING
+        // ===================================
 
         cmdList->SetPipelineState1(ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
@@ -1984,11 +2056,13 @@ void destroy()
     gbufferPso.Reset();
     ptPso.Reset();
     collectPso.Reset();
+    rcEvictPso.Reset();
     postprocessPso.Reset();
 
     gbufferRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();
+    rcEvictRootSig.Reset();
     postprocessRootSig.Reset();
 
     dev_gbufferShaderIds.Reset();

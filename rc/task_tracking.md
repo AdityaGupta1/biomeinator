@@ -6,7 +6,7 @@
 |------|-------------|--------|
 | 1 | Add RC Constants, Params, and Settings | Done |
 | 2 | Create GPU Buffers | Done |
-| 3 | Eviction/Clear Compute Shader + Pipeline | Not Started |
+| 3 | Eviction/Clear Compute Shader + Pipeline | Done |
 | 4 | Resolve Compute Shader + Pipeline | Not Started |
 | 5 | Radiance Cache Utility Header (HLSL) | Not Started |
 | 6 | RC Update Pass (Cache Training) | Not Started |
@@ -29,6 +29,17 @@
 - [x] Add static `ComPtr<ID3D12Resource>` declarations for `dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`
 - [x] Create buffers in `init()` using `createBasicBuffer` with UAV flag (after `initPipeline()`)
 - [x] Add `.Reset()` calls in `destroy()`
+
+## Step 3: Eviction/Clear Compute Shader + Pipeline
+
+- [x] Add `RC_REGISTER_SPACE`, `RC_REGISTER_HASH_ENTRIES`, `RC_REGISTER_ACCUMULATION`, `RC_REGISTER_RESOLVED` to `common_registers.h` (space 4, u0/u1/u2)
+- [x] Create `RcEvictParam` enum and `RC_EVICT_PARAM_IDX` macro in `renderer.cpp`
+- [x] Build `rcEvictRootSig` in `initRootSignature()` (CBV + 3 UAVs)
+- [x] Create `rc_evict.cs.hlsl` shader (evicts stale entries, zeros accumulation)
+- [x] Create `rcEvictPso` in `initPipeline()`
+- [x] Add eviction dispatch in render loop (between GBuffer barrier and path tracing)
+- [x] Add UAV barrier after dispatch
+- [x] Add `.Reset()` calls in `destroy()` for `rcEvictPso` and `rcEvictRootSig`
 
 ## Findings
 
