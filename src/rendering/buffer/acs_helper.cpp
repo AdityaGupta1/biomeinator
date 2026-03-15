@@ -238,6 +238,7 @@ void reset()
     sharedIdxsUploadBuffer.reset();
 
     sharedAcsScratchBuffer.reset();
+    sharedAcsBuffer.reset();
 }
 
 } // namespace AcsHelper
