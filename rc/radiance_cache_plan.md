@@ -350,6 +350,7 @@ RC Evict should not have any dependency on gbuffer data, but double check this t
 11. Add contribution from all paths starting from diffuse, not just the first one
 12. Increase RC update path depth beyond main PT pass path depth?
 13. Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff
+14. Ensure that jitter is only being used for querying the cache, not for writing to it (just to be absolutely sure)
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 
