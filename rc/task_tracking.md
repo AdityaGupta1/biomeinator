@@ -89,7 +89,7 @@
 - [x] Add post-draw state transitions (SRV→UAV), guarded by `rcParams->rcEnabled`
 - [x] Add `rcDebugViewComboOptions` and `ComboUint("RC debug view", ...)` to ImGui RC section
 - [x] Include `radiance_cache.hlsli` in `postprocess.ps.hlsl`, declare `rcHashEntries` and `rcResolved` SRVs
-- [x] Add `reconstructWorldPos` helper (linear depth + camera basis vectors)
+- [x] Add `reconstructWorldPos` helper (linear depth + `getPrimaryRayDirection`)
 - [x] Add `getRcDebugColor` helper (mode 1 = grid cell hash color, mode 2 = cached radiance lookup)
 - [x] Add early-out in `psMain` for `rcParams.rcDebugView != 0` with TODO comment for future debug pass extraction
 

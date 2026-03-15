@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "global_params.hlsli"
 #include "util/color.hlsli"
 #include "radiance_cache.hlsli"
-#include "path_tracing_common.hlsli" // TODO: move getPrimaryRayDirection() out of this header so we don't have to include the entire thing here
+#include "util/ray.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
 
@@ -40,16 +40,9 @@ float3 reconstructWorldPos(float2 uv)
     Texture2D<float> linearDepthTex = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
     const float linearDepth = linearDepthTex.SampleLevel(texSampler, uv, 0);
 
-    const float2 ndcXY = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
-    const float aspectRatio = (float)renderParams.renderSize.x / (float)renderParams.renderSize.y;
-    const float3 rayDir = normalize(
-        cameraParams.forward_WS
-        + ndcXY.x * aspectRatio * cameraParams.tanHalfFovY * cameraParams.right_WS
-        + ndcXY.y * cameraParams.tanHalfFovY * cameraParams.up_WS
-    );
-
-    const float t = linearDepth / dot(rayDir, cameraParams.forward_WS);
-    return cameraParams.pos_WS + rayDir * t;
+    const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
+    const float3 rayDir = getPrimaryRayDirection(pixelIdx);
+    return cameraParams.pos_WS + rayDir * linearDepth;
 }
 
 float4 getRcDebugColor(float2 uv)
