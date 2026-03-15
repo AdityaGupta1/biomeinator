@@ -77,6 +77,7 @@ void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {
             .pResource = resource,
+            .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
             .StateBefore = stateBefore,
             .StateAfter = stateAfter,
         },
