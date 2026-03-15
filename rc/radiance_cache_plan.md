@@ -345,6 +345,11 @@ RC Evict should not have any dependency on gbuffer data, but double check this t
 6. Profile the frame time impact of the three new passes.
 7. Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB of VRAM. Reallocate them when the radiance cache is re-enabled.
 8. Use a jitter pattern instead of uniform RNG for shooting rays in the RC update pass, for better coverage of the entire screen.
+9. Reproject grid cells when camera moves or global instance offset changes
+10. Cascading voxel size, roughly proportional to footprint on screen (closer to camera or more zoomed in = finer cell size)
+11. Add contribution from all paths starting from diffuse, not just the first one
+12. Increase RC update path depth beyond main PT pass path depth?
+13. Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 

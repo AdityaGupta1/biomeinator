@@ -34,7 +34,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_STALE_WEIGHT_THRESHOLD 0.1f
 #define RC_RADIANCE_SCALE 1024.f
 #define RC_SAMPLE_MULTIPLIER 1024
-#define RC_DECAY 0.97f
+#define RC_DECAY 0.98f
 #define RC_UPDATE_SCALE 5
-#define RC_JITTER_SCALE 0.1f
+#define RC_JITTER_SCALE 0.2f
 #define RC_EMPTY_SENTINEL 0xFFFFFFFFu
