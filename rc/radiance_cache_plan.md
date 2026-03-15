@@ -213,8 +213,26 @@ This buffer is never zeroed wholesale — it persists across frames and represen
    - `rcInsertOrFind(int3 gridPos, RWByteAddressBuffer hashEntries)` → `uint` slot or `~0u`
      - Use `RWByteAddressBuffer` with `InterlockedCompareExchange` for atomic CAS on the first uint of each entry. This is more reliable than `RWStructuredBuffer<uint2>` for atomics.
    - `rcLookup(int3 gridPos, ByteAddressBuffer hashEntries)` → `uint` (read-only version, no insertion)
-   - `rcJitterPos(float3 pos_WS, float voxelSize, inout Rng rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5f) * 0.1f * voxelSize` to blur voxel boundaries when querying
+   - `rcJitterPos(float3 pos_WS, float voxelSize, inout Rng rng)` → `float3` — offsets position by `(rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * voxelSize` to blur voxel boundaries when querying
+     - You will have to add `RC_JITTER_SCALE` as a new setting, with value 0.1f
    - `rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer)` — atomic adds of quantized radiance + sample count
+
+Hash function:
+
+```
+uint rcSpatialHash(int3 gridPos)
+{
+    uint h = (uint)gridPos.x * 73856093u
+           ^ (uint)gridPos.y * 19349663u
+           ^ (uint)gridPos.z * 83492791u;
+    h = (h ^ 61u) ^ (h >> 16u);
+    h *= 9u;
+    h ^= h >> 4u;
+    h *= 0x27d4eb2du;
+    h ^= h >> 15u;
+    return h & (RC_TABLE_SIZE - 1u);
+}
+```
 
 2. If using `RWByteAddressBuffer` for hash entries: update the buffer creation in step 2 if needed (byte address buffers may need `D3D12_BUFFER_UAV_FLAG_RAW` or simply be bound differently). Also update the evict/resolve shaders to use `RWByteAddressBuffer` for hash entries instead of `RWStructuredBuffer<uint2>`.
 
