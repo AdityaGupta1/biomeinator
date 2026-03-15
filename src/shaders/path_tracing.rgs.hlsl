@@ -35,19 +35,35 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
+
+#ifdef RC_UPDATE
+#include "radiance_cache.hlsli"
+RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
+RWByteAddressBuffer rcAccumulation : REGISTER_U(RC, ACCUMULATION);
+#else
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
+#endif
 
 float balanceHeuristic(const float pdfA, const float pdfB)
 {
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDiffuseAlbedo)
+void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDiffuseAlbedo
+#ifdef RC_UPDATE
+    , out float3 firstDiffusePos_WS, out bool hasFirstDiffusePos
+#endif
+)
 {
     const uint2 pixelIdx = getPixelIdx();
 
     const uint pathSplitIdx = getPathSplitIdx();
+
+#ifdef RC_UPDATE
+    firstDiffusePos_WS = 0;
+    hasFirstDiffusePos = false;
+#endif
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = (samplingMode == SamplingMode::RIS);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRis);
@@ -113,6 +129,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
         const float3 wo_WS = -ray.Direction;
 
+#ifndef RC_UPDATE
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
@@ -122,6 +139,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                 return;
             }
         }
+#endif
 
         const bool isLastBounce = pathDepth == renderParams.maxPathDepth - 1;
         if (!surfMaterial.canScatter() || isLastBounce)
@@ -271,6 +289,18 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
             if (!isDeltaSurface)
             {
+#ifdef RC_UPDATE
+                if (!hasEncounteredNonDeltaSurface)
+                {
+                    firstDiffusePos_WS = surfPos_WS;
+                    hasFirstDiffusePos = true;
+                    // Reset to track path contribution from this diffuse surface onward.
+                    // Any prior contributions (emission, refraction through water, etc.) are discarded
+                    // so the cache stores incident radiance at this surface.
+                    pathColor = 0.f;
+                    payload.pathWeight = float3(1.f, 1.f, 1.f);
+                }
+#endif
                 hasEncounteredNonDeltaSurface = true;
             }
 
@@ -424,6 +454,47 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 [shader("raygeneration")]
 void RayGeneration()
 {
+#ifdef RC_UPDATE
+    const uint2 tileIdx = DispatchRaysIndex().xy;
+    RandomNumberGenerator tileRng = initRng(constantParams.rngSeed, 555777333, tileIdx.y * DispatchRaysDimensions().x + tileIdx.x, renderParams.frameNumber);
+
+    const uint2 tileOrigin = tileIdx * RC_UPDATE_SCALE;
+    const uint2 tileEnd = min(tileOrigin + RC_UPDATE_SCALE, uint2(renderParams.renderSize));
+    const uint2 pixelIdx = tileOrigin + uint2(tileRng.nextFloat() * (tileEnd.x - tileOrigin.x),
+                                               tileRng.nextFloat() * (tileEnd.y - tileOrigin.y));
+
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+
+    const GbufferData gbufferData = gbufferIn[linearPixelIdx];
+    Payload payload;
+    payload.hitInfo = gbufferData.hitInfo;
+    payload.materialIdx = gbufferData.materialIdx;
+    payload.flags = gbufferData.payloadFlags;
+    payload.pathWeight = float3(1.f, 1.f, 1.f);
+    payload.rng = initRng(constantParams.rngSeed, 876543210, linearPixelIdx, renderParams.frameNumber);
+    payload.waterEntryT = RAY_DEFAULT_TMAX;
+    payload.waterExitT = RAY_DEFAULT_TMAX;
+    payload.rayCone.angle = getRayConePixelAngle();
+    payload.rayCone.width = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? payload.rayCone.angle * distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
+        : 0.f;
+
+    float3 pathColor = 0.f;
+    float3 outPtDiffuseAlbedo = 0.f;
+    float3 firstDiffusePos_WS;
+    bool hasFirstDiffusePos;
+    pathTraceRay(payload, pathColor, outPtDiffuseAlbedo, firstDiffusePos_WS, hasFirstDiffusePos);
+
+    if (hasFirstDiffusePos && any(pathColor > 0.f))
+    {
+        const int3 gridPos = rcWorldToGrid(firstDiffusePos_WS, rcParams.rcVoxelSize);
+        const uint slot = rcInsertOrFind(gridPos, rcHashEntries);
+        if (slot != ~0u)
+        {
+            rcWriteRadiance(slot, pathColor, rcAccumulation);
+        }
+    }
+#else
     const uint2 pixelIdx = getPixelIdx();
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
@@ -458,4 +529,5 @@ void RayGeneration()
     }
 
     ptDiffuseAlbedoRawBufferOut[writePixelIdx] = float4(outPtDiffuseAlbedo, 0.f);
+#endif
 }

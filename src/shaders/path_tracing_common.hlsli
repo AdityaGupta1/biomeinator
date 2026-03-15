@@ -40,6 +40,9 @@ ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {
+#ifdef RC_UPDATE
+    return 0;
+#else
     if (bool(renderParams.doPathSplitting))
     {
         return DispatchRaysIndex().x % 2;
@@ -48,6 +51,7 @@ uint getPathSplitIdx()
     {
         return 0;
     }
+#endif
 }
 
 uint2 getPixelIdx()

@@ -9,7 +9,7 @@
 | 3 | Eviction/Clear Compute Shader + Pipeline | Done |
 | 4 | Resolve Compute Shader + Pipeline | Done |
 | 5 | Radiance Cache Utility Header (HLSL) | Done |
-| 6 | RC Update Pass (Cache Training) | Not Started |
+| 6 | RC Update Pass (Cache Training) | Done |
 | 7 | Debug Visualization | Not Started |
 | 8 | Cache Read in Main Render Pass | Not Started |
 | 9 | Tuning and Polish | Not Started |
@@ -59,6 +59,24 @@
 - [x] Switch `rcAccumulation` from `RWStructuredBuffer<uint4>` to `RWByteAddressBuffer` in `rc_evict.cs.hlsl` and `rc_resolve.cs.hlsl`
 - [x] Update all reads/writes to use `.Load2`/`.Store2`/`.Load4`/`.Store4`
 - [x] Change empty sentinel from `uint2(0, 0)` to `uint2(RC_EMPTY_SENTINEL, RC_EMPTY_SENTINEL)`
+
+## Step 6: RC Update Pass (Cache Training)
+
+- [x] Create `rc_update.rgs.hlsl` (defines `RC_UPDATE 1`, includes `path_tracing.rgs.hlsl`)
+- [x] Add `#include "rc_update.rgs.fxh"` in `renderer.cpp`
+- [x] Guard PT output UAVs with `#ifndef RC_UPDATE`, add RC UAVs with `#ifdef RC_UPDATE` in `path_tracing.rgs.hlsl`
+- [x] Add `firstDiffusePos_WS` and `hasFirstDiffusePos` out params to `pathTraceRay` under `#ifdef RC_UPDATE`
+- [x] Reset `pathColor` and `pathWeight` at first diffuse bounce under `#ifdef RC_UPDATE`
+- [x] Guard path splitting block with `#ifndef RC_UPDATE`
+- [x] Override `getPathSplitIdx()` to return 0 under `#ifdef RC_UPDATE` in `path_tracing_common.hlsli`
+- [x] Add RC_UPDATE `RayGeneration()` branch: tile-based dispatch, random pixel selection, cache write via `rcInsertOrFind`/`rcWriteRadiance`
+- [x] Add `RcUpdateParam` enum and `RC_UPDATE_PARAM_IDX` macro
+- [x] Add `rcUpdateRootSig` (same as PT but with RC UAVs instead of PT output UAVs)
+- [x] Add `rcUpdatePso`, `dev_rcUpdateShaderIds`, `rcUpdateDispatchDesc` static declarations
+- [x] Create RC update PSO in `initPipeline()` with 3 hit groups
+- [x] Restructure render loop: evict → update (raytracing) → resolve (moved after update)
+- [x] Rebind rcCompute root sig and resources before resolve (since rcUpdate changed the root sig)
+- [x] Add `.Reset()` calls in `destroy()` for `rcUpdatePso`, `rcUpdateRootSig`, `dev_rcUpdateShaderIds`
 
 ## Findings
 
