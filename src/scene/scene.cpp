@@ -218,11 +218,13 @@ void Scene::reset()
     }
     this->mappedInstanceDatasArray.reset();
 
-    this->nextMaterialIdx = 0;
+    this->sharedBlasUploadBuffer.reset();
 
     this->isTlasDirty = false;
     this->tlasBufferSection.free();
     this->numVisibleBlasesWaitingForTlas = 0;
+
+    this->nextMaterialIdx = 0;
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
     {
