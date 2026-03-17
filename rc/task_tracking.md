@@ -12,7 +12,8 @@
 | 6 | RC Update Pass (Cache Training) | Done |
 | 7 | Debug Visualization | Done |
 | 8 | Cache Read in Main Render Pass | Not Started |
-| 9 | Tuning and Polish | Not Started |
+| 9 | Cascading Voxel Sizes | Done |
+| 10 | Tuning and Polish | Not Started |
 
 ## Step 1: Add RC Constants, Params, and Settings
 
@@ -92,6 +93,22 @@
 - [x] Add `reconstructWorldPos` helper (linear depth + `getPrimaryRayDirection`)
 - [x] Add `getRcDebugColor` helper (mode 1 = grid cell hash color, mode 2 = cached radiance lookup)
 - [x] Add early-out in `psMain` for `rcParams.rcDebugView != 0` with TODO comment for future debug pass extraction
+
+## Step 9: Cascading Voxel Sizes
+
+- [x] Add `RC_TARGET_PIXEL_WIDTH`, `RC_MIN_LEVEL`, `RC_MAX_LEVEL`, `RC_LEVEL_OFFSET` to `common_settings.h`
+- [x] Replace `float rcVoxelSize` with `float rcCascadeScale` in `RadianceCacheParams` (`common_params.h`)
+- [x] Add `rcGetLevel(pos_WS)` helper — `clamp(floor(log2(dist * rcCascadeScale)), RC_MIN_LEVEL, RC_MAX_LEVEL)`
+- [x] Add `rcGetVoxelSize(level)` helper — `exp2(float(level))`
+- [x] Update `rcWorldToGrid` to take `int level`; use `floor(pos / voxelSize + 0.5)` to center cells at multiples of `voxelSize`
+- [x] Update `rcSpatialHash` to take `int level` and XOR it into the hash
+- [x] Update `rcPackKey` to encode level in 4 bits (new layout: 20+12 / 4+20+4+4 bits across `key.x`/`key.y`)
+- [x] Update `rcInsertOrFind`, `rcLookup`, `rcJitterPos` signatures to take `int level`
+- [x] Update RC_UPDATE branch in `path_tracing.rgs.hlsl` to call `rcGetLevel` and pass level
+- [x] Update both debug views in `postprocess.ps.hlsl` to call `rcGetLevel` and pass level
+- [x] Remove `rcVoxelSize` setting from `settings_manager.cpp`
+- [x] Remove "RC voxel size" ImGui slider from `renderer.cpp`
+- [x] Compute `rcCascadeScale = RC_TARGET_PIXEL_WIDTH * 2 * atan(tanHalfFovY) / renderHeight` each frame in `renderer.cpp`
 
 ## Findings
 

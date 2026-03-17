@@ -38,3 +38,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_UPDATE_SCALE 5
 #define RC_JITTER_SCALE 0.2f
 #define RC_EMPTY_SENTINEL 0xFFFFFFFFu
+
+#define RC_TARGET_PIXEL_WIDTH 10
+#define RC_MIN_LEVEL (-4)
+#define RC_MAX_LEVEL 11
+#define RC_LEVEL_OFFSET 4   // = -RC_MIN_LEVEL, maps level to unsigned for packing

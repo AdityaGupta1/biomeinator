@@ -56,8 +56,9 @@ float4 getRcDebugColor(float2 uv)
 
     if (rcParams.rcDebugView == 1)
     {
-        const int3 gridPos = rcWorldToGrid(worldPos, rcParams.rcVoxelSize);
-        const uint h = rcSpatialHash(gridPos);
+        const int level = rcGetLevel(worldPos);
+        const int3 gridPos = rcWorldToGrid(worldPos, level);
+        const uint h = rcSpatialHash(gridPos, level);
         return float4(
             float(h & 0xFF) / 255.0,
             float((h >> 8) & 0xFF) / 255.0,
@@ -69,8 +70,9 @@ float4 getRcDebugColor(float2 uv)
     {
         const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
         RandomNumberGenerator rng = initRng(pixelIdx.x, pixelIdx.y, rcParams.rcFrameNumber);
-        const int3 gridPos = rcWorldToGrid(rcJitterPos(worldPos, rcParams.rcVoxelSize, rng), rcParams.rcVoxelSize);
-        const uint slot = rcLookup(gridPos, rcHashEntries);
+        const int level = rcGetLevel(worldPos);
+        const int3 gridPos = rcWorldToGrid(rcJitterPos(worldPos, level, rng), level);
+        const uint slot = rcLookup(gridPos, level, rcHashEntries);
         if (slot == ~0u)
         {
             return float4(0, 0, 0, 1);

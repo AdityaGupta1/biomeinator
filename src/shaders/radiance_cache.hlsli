@@ -22,16 +22,28 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "util/rng.hlsli"
 
-int3 rcWorldToGrid(float3 pos_WS, float voxelSize)
+int rcGetLevel(float3 pos_WS)
 {
-    return int3(floor(pos_WS / voxelSize));
+    const float dist = length(pos_WS - cameraParams.pos_WS);
+    return clamp(int(floor(log2(dist * rcParams.rcCascadeScale))), RC_MIN_LEVEL, RC_MAX_LEVEL);
 }
 
-uint rcSpatialHash(int3 gridPos)
+float rcGetVoxelSize(int level)
+{
+    return exp2(float(level));
+}
+
+int3 rcWorldToGrid(float3 pos_WS, int level)
+{
+    return int3(floor(pos_WS / rcGetVoxelSize(level) + 0.5f));
+}
+
+uint rcSpatialHash(int3 gridPos, int level)
 {
     uint h = (uint)gridPos.x * 73856093u
            ^ (uint)gridPos.y * 19349663u
-           ^ (uint)gridPos.z * 83492791u;
+           ^ (uint)gridPos.z * 83492791u
+           ^ (uint)(level + RC_LEVEL_OFFSET) * 2654435761u;
     h = (h ^ 61u) ^ (h >> 16u);
     h *= 9u;
     h ^= h >> 4u;
@@ -40,18 +52,23 @@ uint rcSpatialHash(int3 gridPos)
     return h & (RC_TABLE_SIZE - 1u);
 }
 
-uint2 rcPackKey(int3 gridPos)
+// Key bit layout:
+//   key.x: [0..19]  x (20 bits), [20..31] y low (12 bits)
+//   key.y: [0..3]   y high (4 bits), [4..23] z (20 bits), [24..27] level (4 bits), [28..31] unused (zeroed)
+uint2 rcPackKey(int3 gridPos, int level)
 {
     uint2 key;
-    key.x = (uint(gridPos.x) & 0xFFFFFF) | ((uint(gridPos.y) & 0xFF) << 24);
-    key.y = ((uint(gridPos.y) >> 8) & 0xFF) | ((uint(gridPos.z) & 0xFFFFFF) << 8);
+    key.x = (uint(gridPos.x) & 0xFFFFF) | ((uint(gridPos.y) & 0xFFF) << 20);
+    key.y = ((uint(gridPos.y) >> 12) & 0xF)
+          | ((uint(gridPos.z) & 0xFFFFF) << 4)
+          | ((uint(level + RC_LEVEL_OFFSET) & 0xF) << 24);
     return key;
 }
 
-uint rcInsertOrFind(int3 gridPos, RWByteAddressBuffer hashEntries)
+uint rcInsertOrFind(int3 gridPos, int level, RWByteAddressBuffer hashEntries)
 {
-    uint slot = rcSpatialHash(gridPos);
-    const uint2 key = rcPackKey(gridPos);
+    uint slot = rcSpatialHash(gridPos, level);
+    const uint2 key = rcPackKey(gridPos, level);
 
     for (uint probe = 0; probe < 8; ++probe)
     {
@@ -79,10 +96,10 @@ uint rcInsertOrFind(int3 gridPos, RWByteAddressBuffer hashEntries)
     return ~0u;
 }
 
-uint rcLookup(int3 gridPos, ByteAddressBuffer hashEntries)
+uint rcLookup(int3 gridPos, int level, ByteAddressBuffer hashEntries)
 {
-    uint slot = rcSpatialHash(gridPos);
-    const uint2 key = rcPackKey(gridPos);
+    uint slot = rcSpatialHash(gridPos, level);
+    const uint2 key = rcPackKey(gridPos, level);
 
     for (uint probe = 0; probe < 8; ++probe)
     {
@@ -104,9 +121,9 @@ uint rcLookup(int3 gridPos, ByteAddressBuffer hashEntries)
     return ~0u;
 }
 
-float3 rcJitterPos(float3 pos_WS, float voxelSize, inout RandomNumberGenerator rng)
+float3 rcJitterPos(float3 pos_WS, int level, inout RandomNumberGenerator rng)
 {
-    return pos_WS + (rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * voxelSize;
+    return pos_WS + (rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * rcGetVoxelSize(level);
 }
 
 void rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer)

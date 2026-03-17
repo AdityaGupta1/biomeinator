@@ -149,7 +149,7 @@ struct RenderParams
 struct RadianceCacheParams
 {
     uint rcFrameNumber;
-    float rcVoxelSize;
+    float rcCascadeScale;
     uint rcEnabled;
     uint rcMinSamplesForQuery;
 

@@ -487,8 +487,9 @@ void RayGeneration()
 
     if (hasFirstDiffusePos && any(pathColor > 0.f))
     {
-        const int3 gridPos = rcWorldToGrid(firstDiffusePos_WS, rcParams.rcVoxelSize);
-        const uint slot = rcInsertOrFind(gridPos, rcHashEntries);
+        const int level = rcGetLevel(firstDiffusePos_WS);
+        const int3 gridPos = rcWorldToGrid(firstDiffusePos_WS, level);
+        const uint slot = rcInsertOrFind(gridPos, level, rcHashEntries);
         if (slot != ~0u)
         {
             rcWriteRadiance(slot, pathColor, rcAccumulation);

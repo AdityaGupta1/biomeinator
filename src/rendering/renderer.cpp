@@ -1579,7 +1579,6 @@ static void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Radiance Cache");
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("RC voxel size", "rcVoxelSize", 0.25f, 4.0f);
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
         SettingsGuiHelpers::ComboUint("RC debug view", "rcDebugView", rcDebugViewComboOptions);
 
@@ -1879,7 +1878,9 @@ void render()
     auto& rcParams = paramBlockManager.rcParams;
     static uint32_t rcFrameNumber = 0;
     rcParams->rcFrameNumber = rcFrameNumber++;
-    rcParams->rcVoxelSize = SettingsManager::getAsFloat("rcVoxelSize");
+    const float pixelAngle = 2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY)
+                            / static_cast<float>(renderHeight);
+    rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
     rcParams->rcEnabled = (SettingsManager::getAsBool("rcEnabled") && voxelMode) ? 1 : 0;
     rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
     rcParams->rcDebugView = SettingsManager::getAsUint("rcDebugView");
