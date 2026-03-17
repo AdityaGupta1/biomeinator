@@ -15,6 +15,7 @@
 | 9 | Cascading Voxel Sizes | Done |
 | 10 | Offset-Aware Grid Invalidation Fix | Done |
 | 11 | Tuning and Polish | Not Started |
+| 12 | Dedicated Debug View Pass + Unified Debug View Dropdown | Done |
 
 ## Step 1: Add RC Constants, Params, and Settings
 
@@ -117,6 +118,21 @@
 - [x] For level > 0: decompose offset into integer grid offset (`offset >> level`) and small fractional correction (`offset & mask / voxelSize`)
 - [x] For level <= 0: use exact integer shift (`offset << (-level)`) with no fractional part needed
 - [x] All callers (`path_tracing.rgs.hlsl`, `postprocess.ps.hlsl`) automatically get the fix via `rcWorldToGrid`
+
+## Step 12: Dedicated Debug View Pass + Unified Debug View Dropdown
+
+- [x] Create `debug_view.ps.hlsl` with `getRcDebugColor`, `getDebugOutputColor`, and `psMain` dispatching between them; references `debugParams.rcDebugView` instead of `rcParams.rcDebugView`
+- [x] Simplify `postprocess.ps.hlsl` to only `getPathTracingFinalColor` + NaN-guard `psMain`; remove RC includes, SRV declarations, and debug view logic
+- [x] Move `rcDebugView` from `RadianceCacheParams` to `DebugParams` in `common_params.h`
+- [x] Remove `rcDebugView` setting from `settings_manager.cpp`
+- [x] Simplify `PostprocessParam` enum to `{ GLOBAL_PARAMS, COUNT }`; add `DebugViewParam` enum with RC SRV params and `DEBUG_VIEW_PARAM_IDX` macro
+- [x] Add `debugViewRootSig` (CBV + RC SRVs + static sampler) and simplify `postprocessRootSig` (CBV + static sampler only)
+- [x] Add `debugViewPso` (same VS as postprocess, new `debug_view.ps` PS)
+- [x] Remove RC debug view ImGui combo from Radiance Cache section; extend `debugViewComboOptions` with `"rcGridCells"` and `"rcCachedRadiance"`; add both to `debugViewComboMap` mapping to `nullptr`
+- [x] Derive `debugParams->rcDebugView` from the unified `debugView` setting string in `render()`
+- [x] Replace single unconditional postprocess draw with conditional: debug view PSO when `isAnyDebugViewActive`, postprocess PSO otherwise
+- [x] RC buffer transitions (UAV↔SRV) now guarded by `rcDebugActive` only (not `rcEnabled`), using `D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE` only
+- [x] Add `debugViewPso.Reset()` and `debugViewRootSig.Reset()` in `destroy()`
 
 ## Findings
 

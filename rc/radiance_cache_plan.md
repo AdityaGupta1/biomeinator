@@ -354,6 +354,7 @@ NOTE: this may be out of date since I did some stuff from step 9 before doing th
 - Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass -probably only use a few total bounces
 - Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff
 - Ensure that cache is being written to for hits under the ocean when camera is above ocean (maybe even consider enabling path splitting for RC update pass)
+- Maybe jitter across cascade levels?
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 

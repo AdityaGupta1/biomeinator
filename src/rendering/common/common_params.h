@@ -152,11 +152,6 @@ struct RadianceCacheParams
     float rcCascadeScale;
     uint rcEnabled;
     uint rcMinSamplesForQuery;
-
-    uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
-    uint pad0;
-    uint pad1;
-    uint pad2;
 };
 
 struct DebugParams
@@ -175,6 +170,11 @@ struct DebugParams
     float debugFloat1;
     float debugFloat2;
     float debugFloat3;
+
+    uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 #ifdef __cplusplus
