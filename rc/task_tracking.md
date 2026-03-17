@@ -13,7 +13,8 @@
 | 7 | Debug Visualization | Done |
 | 8 | Cache Read in Main Render Pass | Not Started |
 | 9 | Cascading Voxel Sizes | Done |
-| 10 | Tuning and Polish | Not Started |
+| 10 | Offset-Aware Grid Invalidation Fix | Done |
+| 11 | Tuning and Polish | Not Started |
 
 ## Step 1: Add RC Constants, Params, and Settings
 
@@ -109,6 +110,13 @@
 - [x] Remove `rcVoxelSize` setting from `settings_manager.cpp`
 - [x] Remove "RC voxel size" ImGui slider from `renderer.cpp`
 - [x] Compute `rcCascadeScale = RC_TARGET_PIXEL_WIDTH * 2 * atan(tanHalfFovY) / renderHeight` each frame in `renderer.cpp`
+
+## Step 10: Offset-Aware Grid Invalidation Fix
+
+- [x] Modify `rcWorldToGrid` in `radiance_cache.hlsli` to produce absolute grid positions using `globalInstanceOffset`
+- [x] For level > 0: decompose offset into integer grid offset (`offset >> level`) and small fractional correction (`offset & mask / voxelSize`)
+- [x] For level <= 0: use exact integer shift (`offset << (-level)`) with no fractional part needed
+- [x] All callers (`path_tracing.rgs.hlsl`, `postprocess.ps.hlsl`) automatically get the fix via `rcWorldToGrid`
 
 ## Findings
 
