@@ -311,6 +311,8 @@ RC Evict should not have any dependency on gbuffer data, but double check this t
 
 **Goal:** The main path tracer reads the cache for early termination at diffuse bounces.
 
+NOTE: this may be out of date since I did some stuff from step 9 before doing this step.
+
 ### Tasks:
 1. Add RC resolved buffer + hash entries as SRVs to the main PT root signature. Add new register definitions for reading:
    - In `common_registers.h`, add `PT_REGISTER_RC_RESOLVED` and `PT_REGISTER_RC_HASH_ENTRIES` as `t` registers in `PT_REGISTER_SPACE`
@@ -337,21 +339,20 @@ RC Evict should not have any dependency on gbuffer data, but double check this t
 **Goal:** Refine parameters and fix artifacts.
 
 ### Tasks:
-1. Test different `rcVoxelSize` values — too small causes hash collisions, too large causes light leaking.
+1. ~~Test different `rcVoxelSize` values — too small causes hash collisions, too large causes light leaking.~~
 2. Adjust `RC_DECAY` for temporal stability vs. responsiveness.
 3. Adjust `rcMinSamplesForQuery` — too low causes noise from undersampled cache entries.
-4. Add firefly clamping in the resolve pass if needed.
+4. ~~Add firefly clamping in the resolve pass if needed.~~
 5. Consider whether the `RC_UPDATE_SCALE` of 5 gives enough training coverage.
 6. Profile the frame time impact of the three new passes.
 7. Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB of VRAM. Reallocate them when the radiance cache is re-enabled.
 8. Use a jitter pattern instead of uniform RNG for shooting rays in the RC update pass, for better coverage of the entire screen.
-9. Reproject grid cells when camera moves or global instance offset changes
-10. Cascading voxel size, roughly proportional to footprint on screen (closer to camera or more zoomed in = finer cell size)
+9. ~~Reproject grid cells when camera moves or global instance offset changes~~
+10. ~~Cascading voxel size, roughly proportional to footprint on screen (closer to camera or more zoomed in = finer cell size)~~
 11. Add contribution from all paths starting from diffuse, not just the first one
-12. Increase RC update path depth beyond main PT pass path depth?
+12. Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass will probably only use a few total bounces
 13. Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff
 14. Ensure that jitter is only being used for querying the cache, not for writing to it (just to be absolutely sure)
-15. Add a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass will probably only use a few total bounces
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 
