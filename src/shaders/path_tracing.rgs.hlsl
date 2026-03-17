@@ -192,6 +192,19 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                 payload.pathWeight /= survivalProbability;
             }
 
+#ifdef RC_UPDATE
+            if (!isDeltaSurface && !hasEncounteredNonDeltaSurface)
+            {
+                firstDiffusePos_WS = surfPos_WS;
+                hasFirstDiffusePos = true;
+                // Reset to track path contribution from this diffuse surface onward.
+                // Any prior contributions (emission, refraction through water, etc.) are discarded
+                // so the cache stores incident radiance at this surface.
+                pathColor = 0.f;
+                payload.pathWeight = float3(1.f, 1.f, 1.f);
+            }
+#endif
+
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
                 // ------------------------------
@@ -289,18 +302,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
             if (!isDeltaSurface)
             {
-#ifdef RC_UPDATE
-                if (!hasEncounteredNonDeltaSurface)
-                {
-                    firstDiffusePos_WS = surfPos_WS;
-                    hasFirstDiffusePos = true;
-                    // Reset to track path contribution from this diffuse surface onward.
-                    // Any prior contributions (emission, refraction through water, etc.) are discarded
-                    // so the cache stores incident radiance at this surface.
-                    pathColor = 0.f;
-                    payload.pathWeight = float3(1.f, 1.f, 1.f);
-                }
-#endif
                 hasEncounteredNonDeltaSurface = true;
             }
 
