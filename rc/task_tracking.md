@@ -138,6 +138,10 @@
 
 See struck-through items in `radiance_cache_plan.md` Step 9 for completed tasks.
 
+- [x] Multi-vertex backpropagation: RC update now writes to cache for ALL diffuse vertices along a path (not just the first). Per-thread arrays (`rcSlots`, `rcThroughputs`) track cache slots and cumulative throughputs. pathWeight is reset at each diffuse vertex; throughputs are extended by the accumulated pathWeight at insertion. Lighting contributions (direct, dome, emission, BSDF-path) are written to all cached vertices via throughputs.
+- [x] RC path depth cap: added `RC_MAX_PATH_DEPTH 6` define. RC update loop uses `min(renderParams.maxPathDepth, RC_MAX_PATH_DEPTH)`.
+- [x] `rcEmissionMisWeight` tracks emission MIS weight separately from `pathWeight` to avoid contaminating throughputs at diffuse vertex insertion.
+
 ## Findings
 
 - **Do not build or test.** The user will build and test themselves. Future agents must not attempt to run cmake or build commands.

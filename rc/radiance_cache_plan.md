@@ -351,8 +351,8 @@ NOTE: this may be out of date since I did some stuff from step 9 before doing th
 - Adjust `rcMinSamplesForQuery` — too low causes noise from undersampled cache entries.
 - Profile the frame time impact of the three new passes.
 - Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB -VRAM. Reallocate them when the radiance cache is re-enabled.
-- Add contribution from all paths starting from diffuse, not just the first one
-- Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass -probably only use a few total bounces
+- ~~Add contribution from all paths starting from diffuse, not just the first one~~
+- ~~Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass probably only use a few total bounces~~
 - Ensure that cache is being written to for hits under the ocean when camera is above ocean (maybe even consider enabling path splitting for RC update pass)
 - Maybe jitter across cascade levels?
 - Include directional component in hash?
