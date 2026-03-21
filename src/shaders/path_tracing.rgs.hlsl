@@ -233,6 +233,10 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                 const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
                 rcSlots[rcNumVertices] = rcInsertOrFind(gridPos, level, rcHashEntries);
                 rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
+                if (rcSlots[rcNumVertices] != ~0u)
+                {
+                    rcWriteSampleCount(rcSlots[rcNumVertices], rcAccumulation);
+                }
                 ++rcNumVertices;
 
                 // Reset so pathWeight tracks from this vertex onward.
@@ -411,7 +415,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
         payload.pathWeight *= segmentAbsorption;
 
 #ifndef RC_UPDATE
-        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && !surfMaterial.isDelta())
+        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && !surfMaterial.isDelta())
         {
             const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
             const int level = rcGetLevel(payload.hitInfo.hitPos_WS);
