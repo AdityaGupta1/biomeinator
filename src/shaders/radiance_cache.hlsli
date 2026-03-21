@@ -25,7 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_STALE_WEIGHT_THRESHOLD 0.1f
 #define RC_RADIANCE_SCALE 128.f
 #define RC_SAMPLE_MULTIPLIER 1024
-#define RC_DECAY 0.9f
+#define RC_DECAY 0.95f
 #define RC_JITTER_SCALE 0.2f
 #define RC_MIN_LEVEL (-4)
 #define RC_MAX_LEVEL 11
@@ -126,11 +126,6 @@ uint rcLookup(int3 gridPos, int level, ByteAddressBuffer hashEntries)
     for (uint probe = 0; probe < 8; ++probe)
     {
         const uint2 stored = hashEntries.Load2(slot * 8);
-
-        if (stored.x == RC_EMPTY_SENTINEL && stored.y == RC_EMPTY_SENTINEL)
-        {
-            return ~0u;
-        }
 
         if (stored.x == key.x && stored.y == key.y)
         {
