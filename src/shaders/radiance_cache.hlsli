@@ -136,7 +136,8 @@ uint rcLookup(int3 gridPos, int level, ByteAddressBuffer hashEntries)
 
 float3 rcJitterPos(float3 pos_WS, int level, inout RandomNumberGenerator rng)
 {
-    return pos_WS + (rng.nextFloat3() - 0.5f) * RC_JITTER_SCALE * rcGetVoxelSize(level);
+    const float3 jitter = (rng.nextFloat3() - 0.5f) * 2.f * RC_JITTER_SCALE;
+    return pos_WS + jitter * rcGetVoxelSize(level);
 }
 
 void rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer)
