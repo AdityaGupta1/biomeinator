@@ -46,6 +46,10 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 #else
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
+
+    #include "radiance_cache.hlsli"
+    ByteAddressBuffer rcHashEntries : REGISTER_T(PT, RC_HASH_ENTRIES);
+    StructuredBuffer<float4> rcResolved : REGISTER_T(PT, RC_RESOLVED);
 #endif
 
 float balanceHeuristic(const float pdfA, const float pdfB)
@@ -405,6 +409,33 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
         payload.pathWeight *= segmentAbsorption;
+
+#ifndef RC_UPDATE
+        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && !surfMaterial.isDelta())
+        {
+            const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
+            const int level = rcGetLevel(payload.hitInfo.hitPos_WS);
+            const float voxelSize = rcGetVoxelSize(level);
+
+            if (hitDistance >= voxelSize && payload.rayCone.width >= voxelSize)
+            {
+                const float3 jitteredPos = rcJitterPos(payload.hitInfo.hitPos_WS, level, payload.rng);
+                const int3 gridPos = rcWorldToGrid(jitteredPos, level);
+                const uint slot = rcLookup(gridPos, level, rcHashEntries);
+
+                if (slot != ~0u)
+                {
+                    const float4 resolved = rcResolved[slot];
+                    if (resolved.w >= rcParams.rcMinSamplesForQuery)
+                    {
+                        pathColor += payload.pathWeight * resolved.rgb;
+                        debugTexture()[pixelIdx] = float4(payload.pathWeight * resolved.rgb, 1);
+                        return;
+                    }
+                }
+            }
+        }
+#endif
 
         if (pathDepth == 0)
         {

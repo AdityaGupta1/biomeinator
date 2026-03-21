@@ -759,6 +759,9 @@ enum class PtParam
     PATH_TRACING_RAW_BUFFER_OUT,
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
 
+    RC_HASH_ENTRIES,
+    RC_RESOLVED,
+
     COUNT
 };
 
@@ -936,6 +939,9 @@ static void initRootSignature()
 
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
+
+        ptParams[PT_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, PT, RC_HASH_ENTRIES);
+        ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, PT, RC_RESOLVED);
 
         if (useSer)
         {
@@ -2098,6 +2104,18 @@ void render()
         // PATH TRACING
         // ===================================
 
+        if (rcParams->rcEnabled)
+        {
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcHashEntries.Get(),
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcResolved.Get(),
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+
         cmdList->SetPipelineState1(ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
 
@@ -2117,11 +2135,26 @@ void render()
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
+
+        if (rcParams->rcEnabled)
+        {
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcHashEntries.Get(),
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcResolved.Get(),
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
 
         // ===================================
         // COLLECT
