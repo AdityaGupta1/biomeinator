@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(find /c/Users/SDOAJ/code/biomeinator -name *.md -type f)",
-      "Bash(xargs grep:*)"
-    ]
-  }
-}
