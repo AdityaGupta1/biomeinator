@@ -344,12 +344,12 @@ NOTE: this may be out of date since I did some stuff from step 9 before doing th
 - ~~Reproject grid cells when camera moves or global instance offset changes~~
 - ~~Cascading voxel size, roughly proportional to footprint on screen (closer to camera or more zoomed in = finer cell size)~~
 - ~~Ensure that jitter is only being used for querying the cache, not for writing to it (just to be absolutely sure)~~
+- ~~Use a jitter pattern instead of uniform RNG for shooting rays in the RC update pass, for better coverage of the entire screen.~~
 - Adjust `RC_DECAY` for temporal stability vs. responsiveness.
 - Adjust `rcMinSamplesForQuery` — too low causes noise from undersampled cache entries.
 - Consider whether the `RC_UPDATE_SCALE` of 5 gives enough training coverage.
 - Profile the frame time impact of the three new passes.
 - Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB -VRAM. Reallocate them when the radiance cache is re-enabled.
-- Use a jitter pattern instead of uniform RNG for shooting rays in the RC update pass, for better coverage of the entire screen.
 - Add contribution from all paths starting from diffuse, not just the first one
 - Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass -probably only use a few total bounces
 - Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff

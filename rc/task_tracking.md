@@ -14,7 +14,7 @@
 | 8 | Cache Read in Main Render Pass | Not Started |
 | 9 | Cascading Voxel Sizes | Done |
 | 10 | Offset-Aware Grid Invalidation Fix | Done |
-| 11 | Tuning and Polish | Not Started |
+| 11 | Tuning and Polish | In Progress |
 | 12 | Dedicated Debug View Pass + Unified Debug View Dropdown | Done |
 
 ## Step 1: Add RC Constants, Params, and Settings
@@ -133,6 +133,10 @@
 - [x] Replace single unconditional postprocess draw with conditional: debug view PSO when `isAnyDebugViewActive`, postprocess PSO otherwise
 - [x] RC buffer transitions (UAV↔SRV) now guarded by `rcDebugActive` only (not `rcEnabled`), using `D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE` only
 - [x] Add `debugViewPso.Reset()` and `debugViewRootSig.Reset()` in `destroy()`
+
+## Step 11: Tuning and Polish
+
+See struck-through items in `radiance_cache_plan.md` Step 9 for completed tasks.
 
 ## Findings
 

@@ -457,12 +457,15 @@ void RayGeneration()
 {
 #ifdef RC_UPDATE
     const uint2 tileIdx = DispatchRaysIndex().xy;
-    RandomNumberGenerator tileRng = initRng(constantParams.rngSeed, 555777333, tileIdx.y * DispatchRaysDimensions().x + tileIdx.x, renderParams.frameNumber);
-
     const uint2 tileOrigin = tileIdx * RC_UPDATE_SCALE;
     const uint2 tileEnd = min(tileOrigin + RC_UPDATE_SCALE, uint2(renderParams.renderSize));
-    const uint2 pixelIdx = tileOrigin + uint2(tileRng.nextFloat() * (tileEnd.x - tileOrigin.x),
-                                               tileRng.nextFloat() * (tileEnd.y - tileOrigin.y));
+    const uint2 pixelIdx = tileOrigin + uint2(
+        (uint)(cameraParams.jitter.x * (tileEnd.x - tileOrigin.x)),
+        (uint)(cameraParams.jitter.y * (tileEnd.y - tileOrigin.y)));
+#else
+    const uint2 pixelIdx = getPixelIdx();
+    const uint pathSplitIdx = getPathSplitIdx();
+#endif
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
@@ -472,7 +475,11 @@ void RayGeneration()
     payload.materialIdx = gbufferData.materialIdx;
     payload.flags = gbufferData.payloadFlags;
     payload.pathWeight = float3(1.f, 1.f, 1.f);
+#ifdef RC_UPDATE
     payload.rng = initRng(constantParams.rngSeed, 876543210, linearPixelIdx, renderParams.frameNumber);
+#else
+    payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
+#endif
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
     payload.rayCone.angle = getRayConePixelAngle();
@@ -482,6 +489,8 @@ void RayGeneration()
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
+
+#ifdef RC_UPDATE
     float3 firstDiffusePos_WS;
     bool hasFirstDiffusePos;
     pathTraceRay(payload, pathColor, outPtDiffuseAlbedo, firstDiffusePos_WS, hasFirstDiffusePos);
@@ -497,27 +506,6 @@ void RayGeneration()
         }
     }
 #else
-    const uint2 pixelIdx = getPixelIdx();
-    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
-
-    const uint pathSplitIdx = getPathSplitIdx();
-
-    const GbufferData gbufferData = gbufferIn[linearPixelIdx];
-    Payload payload;
-    payload.hitInfo = gbufferData.hitInfo;
-    payload.materialIdx = gbufferData.materialIdx;
-    payload.flags = gbufferData.payloadFlags;
-    payload.pathWeight = float3(1.f, 1.f, 1.f);
-    payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
-    payload.waterEntryT = RAY_DEFAULT_TMAX;
-    payload.waterExitT = RAY_DEFAULT_TMAX;
-    payload.rayCone.angle = getRayConePixelAngle();
-    payload.rayCone.width = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? payload.rayCone.angle * distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
-        : 0.f;
-
-    float3 pathColor = 0.f;
-    float3 outPtDiffuseAlbedo = 0.f;
     pathTraceRay(payload, pathColor, outPtDiffuseAlbedo);
 
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
