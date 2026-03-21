@@ -219,6 +219,29 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                 payload.pathWeight /= survivalProbability;
             }
 
+#ifdef RC_UPDATE
+            if (!isDeltaSurface && rcNumVertices < RC_MAX_PATH_DEPTH)
+            {
+                // Extend existing throughputs: they tracked up to the previous diffuse vertex,
+                // now extend them through to this one by multiplying by the accumulated pathWeight.
+                for (uint i = 0; i < rcNumVertices; ++i)
+                {
+                    rcThroughputs[i] *= payload.pathWeight;
+                }
+
+                const int level = rcGetLevel(surfPos_WS);
+                const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
+                rcSlots[rcNumVertices] = rcInsertOrFind(gridPos, level, rcHashEntries);
+                rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
+                ++rcNumVertices;
+
+                // Reset so pathWeight tracks from this vertex onward.
+                // Specular throughput between diffuse vertices is folded into the
+                // throughputs array via the multiplication above.
+                payload.pathWeight = float3(1.f, 1.f, 1.f);
+            }
+#endif
+
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
                 // ------------------------------
@@ -346,29 +369,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
             {
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
             }
-
-#ifdef RC_UPDATE
-            if (!isDeltaSurface && !surfBsdfSample.wasSpecular && rcNumVertices < RC_MAX_PATH_DEPTH)
-            {
-                // Extend existing throughputs: they tracked up to the previous diffuse vertex,
-                // now extend them through to this one by multiplying by the accumulated pathWeight.
-                for (uint i = 0; i < rcNumVertices; ++i)
-                {
-                    rcThroughputs[i] *= payload.pathWeight;
-                }
-
-                const int level = rcGetLevel(surfPos_WS);
-                const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
-                rcSlots[rcNumVertices] = rcInsertOrFind(gridPos, level, rcHashEntries);
-                rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
-                ++rcNumVertices;
-
-                // Reset so pathWeight tracks from this vertex onward.
-                // Specular throughput between diffuse vertices is folded into the
-                // throughputs array via the multiplication above.
-                payload.pathWeight = float3(1.f, 1.f, 1.f);
-            }
-#endif
 
             if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f) // apply only for rays that will transmit through the water
             {
