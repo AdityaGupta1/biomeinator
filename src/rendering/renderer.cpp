@@ -2225,11 +2225,11 @@ void render()
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcResolved.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
 
     if (isAnyDebugViewActive)
@@ -2270,11 +2270,11 @@ void render()
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
-                                                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcResolved.Get(),
-                                                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
