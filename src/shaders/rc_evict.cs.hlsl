@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_settings.h"
 
 #include "global_params.hlsli"
+#include "radiance_cache.hlsli"
 
 RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
 RWByteAddressBuffer rcAccumulation : REGISTER_U(RC, ACCUMULATION);

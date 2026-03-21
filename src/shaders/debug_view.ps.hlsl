@@ -58,13 +58,9 @@ float4 getRcDebugColor(float2 uv)
     {
         const int level = rcGetLevel(worldPos);
         const int3 gridPos = rcWorldToGrid(worldPos, level);
-        const uint h = rcSpatialHash(gridPos, level);
-        return float4(
-            float(h & 0xFF) / 255.0,
-            float((h >> 8) & 0xFF) / 255.0,
-            float((h >> 16) & 0xFF) / 255.0,
-            1.0
-        );
+        const uint rcHash = rcSpatialHash(gridPos, level);
+        RandomNumberGenerator rng = initRng(rcHash, 105691202);
+        return float4(0.2f + 0.8f * rng.nextFloat3(), 1.f);
     }
     else // rcDebugView == 2
     {
