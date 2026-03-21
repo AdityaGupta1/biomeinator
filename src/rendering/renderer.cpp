@@ -1954,7 +1954,7 @@ void render()
     const float pixelAngle = 2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY)
                             / static_cast<float>(renderHeight);
     rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
-    rcParams->rcEnabled = (SettingsManager::getAsBool("rcEnabled") && voxelMode) ? 1 : 0;
+    rcParams->rcEnabled = SettingsManager::getAsBool("rcEnabled") ? 1 : 0;
     rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
 
     auto& sceneParams = paramBlockManager.sceneParams;
