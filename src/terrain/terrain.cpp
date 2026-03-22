@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "settings_manager.h"
 #include "structure/structure.h"
 #include "util/glm_util.h"
 #include "util/rng.h"
@@ -40,10 +41,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define DEBUG_SINGLE_THREAD 0
 
-inline constexpr int renderDistance = 30;
-inline constexpr int createBlasDistance = renderDistance + 1;
-inline constexpr int fillStructuresDistance = createBlasDistance + 1;
-inline constexpr int generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius;
 
 namespace Terrain
 {
@@ -139,6 +136,11 @@ inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
 
 void update(ToFreeList& toFreeList)
 {
+    const int renderDistance = SettingsManager::getAsInt("renderDistance");
+    const int createBlasDistance = renderDistance + 1;
+    const int fillStructuresDistance = createBlasDistance + 1;
+    const int generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius;
+
     const Camera& camera = Renderer::getCamera();
     const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
     const glm::ivec2 currentChunkPos = glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / static_cast<int>(chunkSizeXZ);

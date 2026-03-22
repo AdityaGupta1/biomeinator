@@ -64,6 +64,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
+    ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
     ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "true");
     ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
@@ -124,6 +125,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("useWaitableSwapChain", bool);
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
+    COPY_SETTING("renderDistance", int);
 
     COPY_SETTING("rcEnabled", bool);
     COPY_SETTING("rcMinSamplesForQuery", uint32_t);
