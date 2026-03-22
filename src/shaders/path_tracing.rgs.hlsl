@@ -433,7 +433,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                     if (resolved.w >= rcParams.rcMinSamplesForQuery)
                     {
                         pathColor += payload.pathWeight * resolved.rgb;
-                        debugTexture()[pixelIdx] = float4(payload.pathWeight * resolved.rgb, 1);
                         return;
                     }
                 }
