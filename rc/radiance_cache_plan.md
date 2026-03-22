@@ -348,14 +348,14 @@ NOTE: this may be out of date since I did some stuff from step 9 before doing th
 - ~~Refactor debug view logic so it's not so convoluted - separate it into a different pass, maybe try to bind less stuff~~
 - ~~Adjust `RC_DECAY` for temporal stability vs. responsiveness.~~
 - ~~Consider whether the `RC_UPDATE_SCALE` of 5 gives enough training coverage.~~
-- Adjust `rcMinSamplesForQuery` — too low causes noise from undersampled cache entries.
-- Profile the frame time impact of the three new passes.
-- Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB -VRAM. Reallocate them when the radiance cache is re-enabled.
+- ~~Adjust `rcMinSamplesForQuery` — too low causes noise from undersampled cache entries.~~
 - ~~Add contribution from all paths starting from diffuse, not just the first one~~
 - ~~Increase RC update path depth beyond main PT pass path depth? i.e. dd a few max bounces (maybe 2?) in RC_UPDATE mode, since main PT pass probably only use a few total bounces~~
+- ~~Include directional component in hash?~~ (not doing this because it doesn't seem very useful)
+- Deallocate the RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) when the radiance cache is disabled to free ~160MB -VRAM. Reallocate them when the radiance cache is re-enabled.
+- Profile the frame time impact of the three new passes.
 - Ensure that cache is being written to for hits under the ocean when camera is above ocean (maybe even consider enabling path splitting for RC update pass)
 - Maybe jitter across cascade levels?
-- Include directional component in hash?
 
 **Verify:** Visually compare cached vs. uncached renders for quality. Check frame time impact. Ensure no light leaking at voxel boundaries.
 
