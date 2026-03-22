@@ -64,6 +64,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
+    ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
     ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
@@ -121,6 +122,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("useWaitableSwapChain", bool);
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
+    COPY_SETTING("renderDistance", int);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
