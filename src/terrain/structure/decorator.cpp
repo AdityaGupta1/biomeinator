@@ -41,7 +41,8 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
 
     rndSample *= this->totalWeight;
     int entryIdx = -1;
-    while (rndSample > 0.f)
+    const int maxEntryIdx = this->entries.size() - 1;
+    while (rndSample > 0.f && entryIdx < maxEntryIdx)
     {
         rndSample -= this->entries[++entryIdx].weight;
     }
