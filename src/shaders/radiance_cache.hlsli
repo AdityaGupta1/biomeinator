@@ -30,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_MIN_LEVEL (-4)
 #define RC_MAX_LEVEL 11
 #define RC_LEVEL_OFFSET 4 // = -RC_MIN_LEVEL, maps level to unsigned for packing
+#define RC_GRID_OFFSET 0.37f
 
 int rcGetLevel(float3 pos_WS)
 {
@@ -51,12 +52,12 @@ int3 rcWorldToGrid(float3 pos_WS, int level)
     {
         const int3 offsetGrid = offset >> level;
         const float3 offsetFrac = float3(offset & ((1u << level) - 1)) / voxelSize;
-        return int3(floor(pos_WS / voxelSize + offsetFrac + 0.5f)) + offsetGrid;
+        return int3(floor(pos_WS / voxelSize + offsetFrac + RC_GRID_OFFSET)) + offsetGrid;
     }
     else
     {
         const int3 offsetGrid = offset << (-level);
-        return int3(floor(pos_WS / voxelSize + 0.5f)) + offsetGrid;
+        return int3(floor(pos_WS / voxelSize + RC_GRID_OFFSET)) + offsetGrid;
     }
 }
 
