@@ -66,7 +66,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
-    ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "true");
+    ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "false");
     ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");

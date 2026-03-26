@@ -213,7 +213,10 @@ void init()
     initRootSignature();
     initPipeline();
 
-    initRadianceCache();
+    if (SettingsManager::getAsBool("rcEnabled"))
+    {
+        initRadianceCache();
+    }
 
     initImgui();
 
@@ -1954,8 +1957,23 @@ void render()
     const float pixelAngle = 2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY)
                             / static_cast<float>(renderHeight);
     rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
-    rcParams->rcEnabled = SettingsManager::getAsBool("rcEnabled") ? 1 : 0;
+    const bool rcEnabled = SettingsManager::getAsBool("rcEnabled");
+    rcParams->rcEnabled = rcEnabled ? 1 : 0;
     rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
+
+    static bool rcPrevEnabled = false;
+    if (rcEnabled && !rcPrevEnabled)
+    {
+        initRadianceCache();
+    }
+    else if (!rcEnabled && rcPrevEnabled)
+    {
+        flush();
+        dev_rcHashEntries.Reset();
+        dev_rcAccumulation.Reset();
+        dev_rcResolved.Reset();
+    }
+    rcPrevEnabled = rcEnabled;
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
@@ -2032,7 +2050,7 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        if (rcParams->rcEnabled)
+        if (rcEnabled)
         {
             // ===================================
             // RC EVICT
@@ -2104,7 +2122,7 @@ void render()
         // PATH TRACING
         // ===================================
 
-        if (rcParams->rcEnabled)
+        if (rcEnabled)
         {
             BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                          dev_rcHashEntries.Get(),
@@ -2136,15 +2154,18 @@ void render()
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+        if (rcEnabled)
+        {
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+        }
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
 
-        if (rcParams->rcEnabled)
+        if (rcEnabled)
         {
             BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                          dev_rcHashEntries.Get(),
@@ -2220,7 +2241,7 @@ void render()
     const bool rcDebugActive = (debugParams->rcDebugView != 0);
     const bool isAnyDebugViewActive = (debugOutputTarget != nullptr) || rcDebugActive;
 
-    if (rcDebugActive)
+    if (rcDebugActive && rcEnabled)
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
@@ -2238,7 +2259,7 @@ void render()
         cmdList->SetGraphicsRootSignature(debugViewRootSig.Get());
         cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS),
                                                    paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        if (rcDebugActive)
+        if (rcDebugActive && rcEnabled)
         {
             cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
             cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
@@ -2266,7 +2287,7 @@ void render()
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->DrawInstanced(3, 1, 0, 0);
 
-    if (rcDebugActive)
+    if (rcDebugActive && rcEnabled)
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
