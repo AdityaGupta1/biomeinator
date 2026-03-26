@@ -47,6 +47,8 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
         rndSample -= this->entries[++entryIdx].weight;
     }
 
+    ASSERT(entryIdx >= 0 && entryIdx < this->entries.size());
+
     const DecoratorEntry& entry = this->entries[entryIdx];
     const bool groundBlockValid = entry.groundBlocks.empty() || entry.groundBlocks.contains(bottomBlock);
     return groundBlockValid ? entry.block : Block::AIR;
