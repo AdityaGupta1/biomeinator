@@ -176,6 +176,8 @@ static Scene scene;
 static bool testMode = false;
 static bool voxelMode = false;
 
+static ComPtr<ID3D12Resource> dev_rcStub;
+
 void init()
 {
     testMode = (SettingsManager::getAsString("testOutput") != "");
@@ -212,6 +214,9 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    dev_rcStub = BufferHelper::createBasicBuffer(16, &DEFAULT_HEAP);
+    dev_rcStub->SetName(L"dev_rcStub");
 
     if (SettingsManager::getAsBool("rcEnabled"))
     {
@@ -2163,11 +2168,10 @@ void render()
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        if (rcEnabled)
-        {
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
-        }
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES),
+            (rcEnabled ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED),
+            (rcEnabled ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
@@ -2268,11 +2272,11 @@ void render()
         cmdList->SetGraphicsRootSignature(debugViewRootSig.Get());
         cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS),
                                                    paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        if (rcDebugActive && rcEnabled)
-        {
-            cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
-            cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
-        }
+        const bool bindRcBuffers = rcDebugActive && rcEnabled;
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES),
+            (bindRcBuffers ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED),
+            (bindRcBuffers ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
     }
     else
     {
@@ -2428,6 +2432,7 @@ void destroy()
     dev_rcHashEntries.Reset();
     dev_rcAccumulation.Reset();
     dev_rcResolved.Reset();
+    dev_rcStub.Reset();
 
     screenshotRequest.readbackBuffer.Reset();
 
