@@ -2063,7 +2063,7 @@ void render()
             cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
             cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
 
-            const uint32_t rcComputeDispatchSize = Util::caclulateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
+            const uint32_t rcComputeDispatchSize = Util::calculateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
 
             cmdList->SetPipelineState(rcEvictPso.Get());
             cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
@@ -2095,8 +2095,8 @@ void render()
             cmdList->SetComputeRootUnorderedAccessView(RC_UPDATE_PARAM_IDX(RC_ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
             // clang-format on
 
-            rcUpdateDispatchDesc.Width = Util::caclulateDispatchSize(gbufferDispatchDesc.Width, RC_UPDATE_SCALE);
-            rcUpdateDispatchDesc.Height = Util::caclulateDispatchSize(gbufferDispatchDesc.Height, RC_UPDATE_SCALE);
+            rcUpdateDispatchDesc.Width = Util::calculateDispatchSize(gbufferDispatchDesc.Width, RC_UPDATE_SCALE);
+            rcUpdateDispatchDesc.Height = Util::calculateDispatchSize(gbufferDispatchDesc.Height, RC_UPDATE_SCALE);
             cmdList->DispatchRays(&rcUpdateDispatchDesc);
 
             BufferHelper::uavBarrier(cmdList.Get(), nullptr);
@@ -2197,8 +2197,8 @@ void render()
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
-        const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        const uint32_t dispatchWidth = Util::calculateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::calculateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
         cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
         // ===================================
