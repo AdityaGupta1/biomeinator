@@ -1350,42 +1350,45 @@ static void initPipeline()
         collectPso->SetName(L"collectPso");
     }
 
-    // ===================================
-    // POSTPROCESSING
-    // ===================================
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocessPsoDescBase{};
-    postprocessPsoDescBase.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    postprocessPsoDescBase.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    postprocessPsoDescBase.DepthStencilState = {
-        .DepthEnable = FALSE,
-        .StencilEnable = FALSE,
-    };
-    postprocessPsoDescBase.SampleMask = UINT_MAX;
-    postprocessPsoDescBase.InputLayout = { nullptr, 0 }; // no verts/idxs
-    postprocessPsoDescBase.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    postprocessPsoDescBase.NumRenderTargets = 1;
-    postprocessPsoDescBase.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    postprocessPsoDescBase.SampleDesc = SAMPLE_DESC_NO_AA;
-
     {
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
-        psoDesc.pRootSignature = postprocessRootSig.Get();
-        psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
-        psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
-        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
-        postprocessPso->SetName(L"postprocessPso");
-    }
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocessPsoDescBase{};
 
-    // ===================================
-    // DEBUG VIEW
-    // ===================================
-    {
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
-        psoDesc.pRootSignature = debugViewRootSig.Get();
-        psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
-        psoDesc.PS = makeShaderBytecode(debug_view_ps_shaderBytecode);
-        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&debugViewPso)));
-        debugViewPso->SetName(L"debugViewPso");
+        // ===================================
+        // POSTPROCESSING
+        // ===================================
+        postprocessPsoDescBase.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        postprocessPsoDescBase.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        postprocessPsoDescBase.DepthStencilState = {
+            .DepthEnable = FALSE,
+            .StencilEnable = FALSE,
+        };
+        postprocessPsoDescBase.SampleMask = UINT_MAX;
+        postprocessPsoDescBase.InputLayout = { nullptr, 0 }; // no verts/idxs
+        postprocessPsoDescBase.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        postprocessPsoDescBase.NumRenderTargets = 1;
+        postprocessPsoDescBase.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        postprocessPsoDescBase.SampleDesc = SAMPLE_DESC_NO_AA;
+
+        {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
+            psoDesc.pRootSignature = postprocessRootSig.Get();
+            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
+            psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
+            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+            postprocessPso->SetName(L"postprocessPso");
+        }
+
+        // ===================================
+        // DEBUG VIEW
+        // ===================================
+        {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
+            psoDesc.pRootSignature = debugViewRootSig.Get();
+            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
+            psoDesc.PS = makeShaderBytecode(debug_view_ps_shaderBytecode);
+            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&debugViewPso)));
+            debugViewPso->SetName(L"debugViewPso");
+        }
     }
 }
 
