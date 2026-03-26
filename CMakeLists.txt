@@ -211,7 +211,7 @@ add_custom_command(TARGET Biomeinator POST_BUILD
 
 set(AGILITY_SDK_DLLS
     "${EXT}/AgilitySDK/bin/D3D12Core.dll"
-    "${EXT}/AgilitySDK/bin/d3d12SDKLayers.dll"
+    "$<$<NOT:$<CONFIG:Release>>:${EXT}/AgilitySDK/bin/d3d12SDKLayers.dll>"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD

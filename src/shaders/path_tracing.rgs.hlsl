@@ -48,8 +48,8 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
     #include "radiance_cache.hlsli"
-    ByteAddressBuffer rcHashEntries : REGISTER_T(PT, RC_HASH_ENTRIES);
-    StructuredBuffer<float4> rcResolved : REGISTER_T(PT, RC_RESOLVED);
+    ByteAddressBuffer rcHashEntries : REGISTER_T(RC, HASH_ENTRIES);
+    StructuredBuffer<float4> rcResolved : REGISTER_T(RC, RESOLVED);
 #endif
 
 float balanceHeuristic(const float pdfA, const float pdfB)

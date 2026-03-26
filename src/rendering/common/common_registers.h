@@ -56,10 +56,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
 
-// t#
-#define PT_REGISTER_RC_HASH_ENTRIES 1
-#define PT_REGISTER_RC_RESOLVED 2
-
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
 #define PT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT 1
@@ -83,7 +79,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_REGISTER_SPACE 4
 // =============================================
 
-// u#
+// u#/t#
 #define RC_REGISTER_HASH_ENTRIES 0
 #define RC_REGISTER_ACCUMULATION 1
 #define RC_REGISTER_RESOLVED 2

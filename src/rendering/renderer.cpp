@@ -258,7 +258,6 @@ static void initStreamline()
     if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
     {
         Logger::logError("Could not verify signature of sl.interposer.dll");
-        Logger::log("Exiting...");
         exit(1);
     }
 
@@ -312,17 +311,24 @@ static void initDevice()
     if (SettingsManager::getAsBool("gpuValidation"))
     {
         ComPtr<ID3D12Debug> debug;
-        CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
-        Logger::log("Enabled debug layer");
-        debug->EnableDebugLayer();
-
-        ComPtr<ID3D12Debug1> debug1;
-        if (SUCCEEDED(debug.As(&debug1)))
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
         {
-            debug1->SetEnableGPUBasedValidation(true);
-        }
+            Logger::log("Enabled debug layer");
+            debug->EnableDebugLayer();
 
-        dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+            ComPtr<ID3D12Debug1> debug1;
+            if (SUCCEEDED(debug.As(&debug1)))
+            {
+                debug1->SetEnableGPUBasedValidation(true);
+            }
+
+            dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+        }
+        else
+        {
+            Logger::logError("Failed to enable debug layer");
+            exit(1);
+        }
     }
 
     static ComPtr<IDXGIFactory2> factory2;
@@ -943,8 +949,8 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
-        ptParams[PT_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, PT, RC_HASH_ENTRIES);
-        ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, PT, RC_RESOLVED);
+        ptParams[PT_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, RC, HASH_ENTRIES);
+        ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, RC, RESOLVED);
 
         if (useSer)
         {
