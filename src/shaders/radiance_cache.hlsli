@@ -75,9 +75,14 @@ uint rcSpatialHash(int3 gridPos, int level)
     return h & (RC_TABLE_SIZE - 1u);
 }
 
-// Key bit layout:
-//   key.x: [0..19]  x (20 bits), [20..31] y low (12 bits)
-//   key.y: [0..3]   y high (4 bits), [4..23] z (20 bits), [24..27] level (4 bits), [28..31] unused (zeroed)
+// key.x:
+// - bit 0:  x (20 bits)
+// - bit 20: y low (12 bits)
+// key.y:
+// - bit 0:  y high (4 bits)
+// - bit 4:  z (20 bits)
+// - bit 24: level (4 bits)
+// - bit 28: unused (4 bits)
 uint2 rcPackKey(int3 gridPos, int level)
 {
     uint2 key;
@@ -104,6 +109,8 @@ uint rcInsertOrFind(int3 gridPos, int level, RWByteAddressBuffer hashEntries)
             return slot;
         }
 
+        // Note that there can be a race condition between two threads with the same key.x,
+        // but it seems like a minor problem so I'm just gonna ignore it.
         if (originalX == key.x)
         {
             const uint storedY = hashEntries.Load(slot * 8 + 4);
