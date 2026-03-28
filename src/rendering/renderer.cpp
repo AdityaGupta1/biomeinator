@@ -1968,14 +1968,15 @@ void render()
     debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
 
     auto& rcParams = paramBlockManager.rcParams;
-    static uint32_t rcFrameNumber = 0;
-    rcParams->rcFrameNumber = rcFrameNumber++;
-    const float pixelAngle = 2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY)
-                            / static_cast<float>(renderHeight);
-    rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
     const bool rcEnabled = SettingsManager::getAsBool("rcEnabled");
     rcParams->rcEnabled = rcEnabled ? 1 : 0;
-    rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
+    if (rcEnabled)
+    {
+        const float pixelAngle =
+            2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY) / static_cast<float>(renderHeight);
+        rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
+        rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
+    }
 
     static bool rcPrevEnabled = false;
     if (rcEnabled && !rcPrevEnabled)

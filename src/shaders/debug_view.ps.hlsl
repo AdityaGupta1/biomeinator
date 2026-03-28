@@ -66,7 +66,7 @@ float4 getRcDebugColor(float2 uv)
     else // rcDebugView == 2
     {
         const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
-        RandomNumberGenerator rng = initRng(pixelIdx.x, pixelIdx.y, rcParams.rcFrameNumber);
+        RandomNumberGenerator rng = initRng(pixelIdx.x, pixelIdx.y, renderParams.frameNumber);
         const int level = rcGetLevel(worldPos);
         const int3 gridPos = rcWorldToGrid(rcJitterPos(worldPos, level, rng), level);
         const uint slot = rcLookup(gridPos, level, rcHashEntries);

@@ -148,10 +148,10 @@ struct RenderParams
 
 struct RadianceCacheParams
 {
-    uint rcFrameNumber;
-    float rcCascadeScale;
     uint rcEnabled;
+    float rcCascadeScale;
     uint rcMinSamplesForQuery;
+    uint pad0;
 };
 
 struct DebugParams
