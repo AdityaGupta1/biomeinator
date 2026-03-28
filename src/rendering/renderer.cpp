@@ -61,15 +61,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
+#include "collect.cs.fxh"
+#include "debug_view.ps.fxh"
 #include "gbuffer.rgs.fxh"
 #include "path_tracing.rgs.fxh"
-#include "collect.cs.fxh"
+#include "postprocess.vs.fxh"
+#include "postprocess.ps.fxh"
 #include "rc_evict.cs.fxh"
 #include "rc_resolve.cs.fxh"
 #include "rc_update.rgs.fxh"
-#include "postprocess.vs.fxh"
-#include "postprocess.ps.fxh"
-#include "debug_view.ps.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 

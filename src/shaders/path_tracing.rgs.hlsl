@@ -560,9 +560,7 @@ void RayGeneration()
     const uint2 tileIdx = DispatchRaysIndex().xy;
     const uint2 tileOrigin = tileIdx * RC_UPDATE_SCALE;
     const uint2 tileEnd = min(tileOrigin + RC_UPDATE_SCALE, uint2(renderParams.renderSize));
-    const uint2 pixelIdx = tileOrigin + uint2(
-        (uint)(cameraParams.jitter.x * (tileEnd.x - tileOrigin.x)),
-        (uint)(cameraParams.jitter.y * (tileEnd.y - tileOrigin.y)));
+    const uint2 pixelIdx = tileOrigin + uint2(cameraParams.jitter * (tileEnd - tileOrigin));
 #else
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
@@ -577,7 +575,7 @@ void RayGeneration()
     payload.flags = gbufferData.payloadFlags;
     payload.pathWeight = float3(1.f, 1.f, 1.f);
 #ifdef RC_UPDATE
-    payload.rng = initRng(constantParams.rngSeed, 876543210, linearPixelIdx, renderParams.frameNumber);
+    payload.rng = initRng(constantParams.rngSeed, 781291012, linearPixelIdx, renderParams.frameNumber);
 #else
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 #endif
@@ -590,7 +588,6 @@ void RayGeneration()
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
-
     pathTraceRay(payload, pathColor, outPtDiffuseAlbedo);
 
 #ifndef RC_UPDATE
