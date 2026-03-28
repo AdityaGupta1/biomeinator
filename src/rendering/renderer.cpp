@@ -1685,8 +1685,9 @@ static void imguiEndFrame(double deltaTime)
         if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
         {
             SettingsGuiHelpers::SectionTitle("Debug view");
-            didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+            SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+            SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+            SettingsGuiHelpers::Checkbox("Debug view apply tonemap", "debugViewApplyTonemap");
 
             SettingsGuiHelpers::VerticalSpacing();
 
@@ -1946,6 +1947,7 @@ void render()
     debugParams->debugBool1 = SettingsManager::getAsBool("debugBool1");
     debugParams->debugBool2 = SettingsManager::getAsBool("debugBool2");
     debugParams->debugBool3 = SettingsManager::getAsBool("debugBool3");
+    debugParams->debugViewApplyTonemap = SettingsManager::getAsBool("debugViewApplyTonemap") ? 1 : 0;
 
     debugParams->debugFloat0 = SettingsManager::getAsFloat("debugFloat0");
     debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");

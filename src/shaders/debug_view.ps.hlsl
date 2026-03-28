@@ -117,21 +117,28 @@ float4 getDebugColor(float2 uv)
         }
     }
 
-    if (debugParams.debugOutputSrvIdx == heapIndices.srv.pathTracingTargetIdx)
-    {
-        debugColor.rgb = applyTonemapping(debugColor.rgb);
-    }
-
-    debugColor.rgb *= debugParams.debugOutputScale;
     return debugColor;
 }
 
 float4 psMain(PsIn psIn) : SV_Target
 {
+    float4 debugColor;
+
     if (debugParams.rcDebugView != 0)
     {
-        return getRcDebugColor(psIn.uv);
+        debugColor = getRcDebugColor(psIn.uv);
+    }
+    else
+    {
+        debugColor = getDebugColor(psIn.uv);
     }
 
-    return getDebugColor(psIn.uv);
+    if (debugParams.debugViewApplyTonemap)
+    {
+        debugColor.rgb = applyTonemapping(debugColor.rgb);
+    }
+
+    debugColor.rgb *= debugParams.debugOutputScale;
+
+    return debugColor;
 }

@@ -172,7 +172,7 @@ struct DebugParams
     float debugFloat3;
 
     uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
-    uint pad0;
+    uint debugViewApplyTonemap;
     uint pad1;
     uint pad2;
 };
