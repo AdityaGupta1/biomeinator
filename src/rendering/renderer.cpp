@@ -1937,22 +1937,7 @@ void render()
         debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
-
-    if (voxelMode)
-    {
-        debugParams->colorChunks = SettingsManager::getAsBool("debugColorChunks") ? 1 : 0;
-    }
-
-    debugParams->debugBool0 = SettingsManager::getAsBool("debugBool0");
-    debugParams->debugBool1 = SettingsManager::getAsBool("debugBool1");
-    debugParams->debugBool2 = SettingsManager::getAsBool("debugBool2");
-    debugParams->debugBool3 = SettingsManager::getAsBool("debugBool3");
     debugParams->debugViewApplyTonemap = SettingsManager::getAsBool("debugViewApplyTonemap") ? 1 : 0;
-
-    debugParams->debugFloat0 = SettingsManager::getAsFloat("debugFloat0");
-    debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
-    debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
-    debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
 
     if (debugViewSettingStr == "rcGridCells")
     {
@@ -1966,6 +1951,21 @@ void render()
     {
         debugParams->rcDebugView = 0;
     }
+
+    if (voxelMode)
+    {
+        debugParams->colorChunks = SettingsManager::getAsBool("debugColorChunks") ? 1 : 0;
+    }
+
+    debugParams->debugBool0 = SettingsManager::getAsBool("debugBool0");
+    debugParams->debugBool1 = SettingsManager::getAsBool("debugBool1");
+    debugParams->debugBool2 = SettingsManager::getAsBool("debugBool2");
+    debugParams->debugBool3 = SettingsManager::getAsBool("debugBool3");
+
+    debugParams->debugFloat0 = SettingsManager::getAsFloat("debugFloat0");
+    debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
+    debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
+    debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
 
     auto& rcParams = paramBlockManager.rcParams;
     static uint32_t rcFrameNumber = 0;

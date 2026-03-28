@@ -159,7 +159,7 @@ struct DebugParams
     uint debugOutputSrvIdx;
     uint debugOutputNumChannels;
     float debugOutputScale;
-    uint colorChunks;
+    uint debugViewApplyTonemap;
 
     uint debugBool0;
     uint debugBool1;
@@ -172,7 +172,7 @@ struct DebugParams
     float debugFloat3;
 
     uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
-    uint debugViewApplyTonemap;
+    uint colorChunks;
     uint pad1;
     uint pad2;
 };
