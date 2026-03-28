@@ -173,8 +173,8 @@ struct DebugParams
 
     uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
     uint colorChunks;
+    uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #ifdef __cplusplus

@@ -81,7 +81,7 @@ float4 getRcDebugColor(float2 uv)
             return float4(0.1, 0, 0.1, 1); // dim magenta = populated but under-sampled
         }
 
-        return float4(resolved.rgb * debugParams.debugOutputScale, 1);
+        return float4(resolved.rgb, 1);
     }
 }
 

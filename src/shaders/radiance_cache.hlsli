@@ -29,7 +29,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_JITTER_SCALE 0.2f
 #define RC_MIN_LEVEL (-4)
 #define RC_MAX_LEVEL 11
-#define RC_LEVEL_OFFSET 4 // = -RC_MIN_LEVEL, maps level to unsigned for packing
 #define RC_GRID_OFFSET 0.37f
 
 int rcGetLevel(float3 pos_WS)
@@ -66,7 +65,7 @@ uint rcSpatialHash(int3 gridPos, int level)
     uint h = (uint)gridPos.x * 73856093u
            ^ (uint)gridPos.y * 19349663u
            ^ (uint)gridPos.z * 83492791u
-           ^ (uint)(level + RC_LEVEL_OFFSET) * 2654435761u;
+           ^ (uint)(level - RC_MIN_LEVEL) * 2654435761u;
     h = (h ^ 61u) ^ (h >> 16u);
     h *= 9u;
     h ^= h >> 4u;
@@ -89,7 +88,7 @@ uint2 rcPackKey(int3 gridPos, int level)
     key.x = (uint(gridPos.x) & 0xFFFFF) | ((uint(gridPos.y) & 0xFFF) << 20);
     key.y = ((uint(gridPos.y) >> 12) & 0xF)
           | ((uint(gridPos.z) & 0xFFFFF) << 4)
-          | ((uint(level + RC_LEVEL_OFFSET) & 0xF) << 24);
+          | ((uint(level - RC_MIN_LEVEL) & 0xF) << 24);
     return key;
 }
 
