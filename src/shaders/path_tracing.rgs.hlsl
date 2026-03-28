@@ -137,7 +137,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
             const float3 rcEmissiveContrib = payload.pathWeight * emissiveColor * rcEmissionMisWeight;
             for (uint i = 0; i < rcNumVertices; ++i)
             {
-                if (rcSlots[i] != ~0u)
+                if (rcSlots[i] != RC_INVALID_SLOT)
                 {
                     rcWriteRadiance(rcSlots[i], rcThroughputs[i] * rcEmissiveContrib, rcAccumulation);
                 }
@@ -231,11 +231,12 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
                 const int level = rcGetLevel(surfPos_WS);
                 const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
-                rcSlots[rcNumVertices] = rcInsertOrFind(gridPos, level, rcHashEntries);
+                const uint rcSlot = rcInsertOrFind(gridPos, level, rcHashEntries);
+                rcSlots[rcNumVertices] = rcSlot;
                 rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
-                if (rcSlots[rcNumVertices] != ~0u)
+                if (rcSlot != RC_INVALID_SLOT)
                 {
-                    rcWriteSampleCount(rcSlots[rcNumVertices], rcAccumulation);
+                    rcWriteSampleCount(rcSlot, rcAccumulation);
                 }
                 ++rcNumVertices;
 
@@ -314,7 +315,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 #ifdef RC_UPDATE
                     for (uint i = 0; i < rcNumVertices; ++i)
                     {
-                        if (rcSlots[i] != ~0u)
+                        if (rcSlots[i] != RC_INVALID_SLOT)
                         {
                             rcWriteRadiance(rcSlots[i], rcThroughputs[i] * payload.pathWeight * contribution, rcAccumulation);
                         }
@@ -349,7 +350,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 #ifdef RC_UPDATE
                         for (uint i = 0; i < rcNumVertices; ++i)
                         {
-                            if (rcSlots[i] != ~0u)
+                            if (rcSlots[i] != RC_INVALID_SLOT)
                             {
                                 rcWriteRadiance(rcSlots[i], rcThroughputs[i] * payload.pathWeight * contribution, rcAccumulation);
                             }
@@ -415,6 +416,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
         payload.pathWeight *= segmentAbsorption;
 
 #ifndef RC_UPDATE
+        // terminate path early by reading radiance cache if possible
         if (bool(rcParams.rcEnabled) && pathDepth >= 1 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && !surfMaterial.isDelta())
         {
             const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
@@ -427,7 +429,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                 const int3 gridPos = rcWorldToGrid(jitteredPos, level);
                 const uint slot = rcLookup(gridPos, level, rcHashEntries);
 
-                if (slot != ~0u)
+                if (slot != RC_INVALID_SLOT)
                 {
                     const float4 resolved = rcResolved[slot];
                     if (resolved.w >= rcParams.rcMinSamplesForQuery)
@@ -504,7 +506,7 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 #ifdef RC_UPDATE
             for (uint i = 0; i < rcNumVertices; ++i)
             {
-                if (rcSlots[i] != ~0u)
+                if (rcSlots[i] != RC_INVALID_SLOT)
                 {
                     rcWriteRadiance(rcSlots[i], rcThroughputs[i] * domeLightContrib, rcAccumulation);
                 }

@@ -70,7 +70,7 @@ float4 getRcDebugColor(float2 uv)
         const int level = rcGetLevel(worldPos);
         const int3 gridPos = rcWorldToGrid(rcJitterPos(worldPos, level, rng), level);
         const uint slot = rcLookup(gridPos, level, rcHashEntries);
-        if (slot == ~0u)
+        if (slot == RC_INVALID_SLOT)
         {
             return float4(0, 0, 0, 1);
         }

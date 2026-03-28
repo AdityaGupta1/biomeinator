@@ -31,6 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_MAX_LEVEL 11
 #define RC_GRID_OFFSET 0.37f
 
+#define RC_EMPTY_SENTINEL (~0u)
+#define RC_INVALID_SLOT (~0u)
+
 int rcGetLevel(float3 pos_WS)
 {
     const float dist = length(pos_WS - cameraParams.pos_WS);
@@ -85,7 +88,8 @@ uint rcSpatialHash(int3 gridPos, int level)
 uint2 rcPackKey(int3 gridPos, int level)
 {
     uint2 key;
-    key.x = (uint(gridPos.x) & 0xFFFFF) | ((uint(gridPos.y) & 0xFFF) << 20);
+    key.x = (uint(gridPos.x) & 0xFFFFF)
+          | ((uint(gridPos.y) & 0xFFF) << 20);
     key.y = ((uint(gridPos.y) >> 12) & 0xF)
           | ((uint(gridPos.z) & 0xFFFFF) << 4)
           | ((uint(level - RC_MIN_LEVEL) & 0xF) << 24);
@@ -122,7 +126,7 @@ uint rcInsertOrFind(int3 gridPos, int level, RWByteAddressBuffer hashEntries)
         slot = (slot + 1) & (RC_TABLE_SIZE - 1u);
     }
 
-    return ~0u;
+    return RC_INVALID_SLOT;
 }
 
 uint rcLookup(int3 gridPos, int level, ByteAddressBuffer hashEntries)
@@ -142,7 +146,7 @@ uint rcLookup(int3 gridPos, int level, ByteAddressBuffer hashEntries)
         slot = (slot + 1) & (RC_TABLE_SIZE - 1u);
     }
 
-    return ~0u;
+    return RC_INVALID_SLOT;
 }
 
 float3 rcJitterPos(float3 pos_WS, int level, inout RandomNumberGenerator rng)

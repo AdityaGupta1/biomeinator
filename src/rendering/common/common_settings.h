@@ -33,4 +33,3 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define RC_WORKGROUP_SIZE 256
 #define RC_UPDATE_SCALE 5
 #define RC_TARGET_PIXEL_WIDTH 12
-#define RC_EMPTY_SENTINEL 0xFFFFFFFFu
