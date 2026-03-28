@@ -71,7 +71,12 @@ void setRayOriginAndDirection(inout RayDesc ray, const float3 origin_WS, float3 
     ray.Direction = wi_WS;
 }
 
+float3 evalRayPos(const float3 origin, const float3 direction, const float t)
+{
+    return mad(direction, t, origin);
+}
+
 float3 evalRayPos(const RayDesc ray, const float t)
 {
-    return mad(ray.Direction, t, ray.Origin);
+    return evalRayPos(ray.Origin, ray.Direction, t);
 }

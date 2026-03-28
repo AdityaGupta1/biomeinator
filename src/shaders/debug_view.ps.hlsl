@@ -20,8 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"
-#include "util/color.hlsli"
 #include "radiance_cache.hlsli"
+#include "util/color.hlsli"
 #include "util/ray.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
@@ -42,7 +42,8 @@ float3 reconstructWorldPos(float2 uv)
 
     const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
     const float3 rayDir = getPrimaryRayDirection(pixelIdx);
-    return cameraParams.pos_WS + rayDir * linearDepth;
+
+    return evalRayPos(cameraParams.pos_WS, rayDir, linearDepth);
 }
 
 float4 getRcDebugColor(float2 uv)
@@ -84,7 +85,7 @@ float4 getRcDebugColor(float2 uv)
     }
 }
 
-float4 getDebugOutputColor(float2 uv)
+float4 getDebugColor(float2 uv)
 {
     float4 debugColor = 0;
 
@@ -132,5 +133,5 @@ float4 psMain(PsIn psIn) : SV_Target
         return getRcDebugColor(psIn.uv);
     }
 
-    return getDebugOutputColor(psIn.uv);
+    return getDebugColor(psIn.uv);
 }
