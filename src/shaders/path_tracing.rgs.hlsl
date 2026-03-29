@@ -214,8 +214,10 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
                 payload.pathWeight /= survivalProbability;
             }
 
+            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfMipLevel, payload.rng);
+
 #ifdef RC_UPDATE
-            if (!isDeltaSurface && rcNumVertices < RC_MAX_PATH_DEPTH)
+            if (!surfBsdfSample.wasSpecular && rcNumVertices < RC_MAX_PATH_DEPTH)
             {
                 for (uint i = 0; i < rcNumVertices; ++i)
                 {
@@ -359,8 +361,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
             {
                 hasEncounteredNonDeltaSurface = true;
             }
-
-            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfMipLevel, payload.rng);
 
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
