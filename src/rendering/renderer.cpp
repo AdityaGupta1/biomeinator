@@ -817,7 +817,6 @@ enum class RcComputeParam
     COUNT
 };
 
-// TODO: combine with existing param enums if possible
 enum class RcUpdateParam
 {
     GLOBAL_PARAMS,
@@ -894,6 +893,15 @@ static void initRootSignature()
 
     rtStaticSamplers.push_back(staticSampler);
 
+    const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+        .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
+        .OffsetInDescriptorsFromTableStart = 0,
+    };
+
     // ===================================
     // GBUFFER
     // ===================================
@@ -959,14 +967,6 @@ static void initRootSignature()
 
         if (useSer)
         {
-            const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
-                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                .NumDescriptors = 1,
-                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-                .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
-                .OffsetInDescriptorsFromTableStart = 0,
-            };
             ptParams.push_back({
                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                 .DescriptorTable = {
@@ -1077,14 +1077,6 @@ static void initRootSignature()
 
         if (useSer)
         {
-            const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
-                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                .NumDescriptors = 1,
-                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-                .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
-                .OffsetInDescriptorsFromTableStart = 0,
-            };
             rcUpdateParams.push_back({
                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                 .DescriptorTable = {
@@ -1256,7 +1248,6 @@ static void initPipeline()
     // RC UPDATE
     // ===================================
     {
-        // TODO: combine with main PT pass if possible
         RtPipelineInputs rcUpdatePipelineInputs = {
             .name = L"rcUpdate",
             .pso = rcUpdatePso,
@@ -1979,16 +1970,19 @@ void render()
     }
 
     static bool rcPrevEnabled = false;
-    if (rcEnabled && !rcPrevEnabled)
+    if (rcEnabled != rcPrevEnabled)
     {
-        initRadianceCache();
-    }
-    else if (!rcEnabled && rcPrevEnabled)
-    {
-        flush();
-        dev_rcHashEntries.Reset();
-        dev_rcAccumulation.Reset();
-        dev_rcResolved.Reset();
+        if (rcEnabled)
+        {
+            initRadianceCache();
+        }
+        else
+        {
+            flush();
+            dev_rcHashEntries.Reset();
+            dev_rcAccumulation.Reset();
+            dev_rcResolved.Reset();
+        }
     }
     rcPrevEnabled = rcEnabled;
 
@@ -2256,8 +2250,8 @@ void render()
 
     const bool rcDebugActive = (debugParams->rcDebugView != 0);
     const bool isAnyDebugViewActive = (debugOutputTarget != nullptr) || rcDebugActive;
-
-    if (rcDebugActive && rcEnabled)
+    const bool showRcDebugView = rcEnabled && rcDebugActive;
+    if (showRcDebugView)
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
@@ -2273,13 +2267,9 @@ void render()
     {
         cmdList->SetPipelineState(debugViewPso.Get());
         cmdList->SetGraphicsRootSignature(debugViewRootSig.Get());
-        cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS),
-                                                   paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
-        const bool bindRcBuffers = rcDebugActive && rcEnabled;
-        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES),
-            (bindRcBuffers ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
-        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED),
-            (bindRcBuffers ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES), (showRcDebugView ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED), (showRcDebugView ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
     }
     else
     {
@@ -2303,7 +2293,7 @@ void render()
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->DrawInstanced(3, 1, 0, 0);
 
-    if (rcDebugActive && rcEnabled)
+    if (showRcDebugView)
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_rcHashEntries.Get(),
