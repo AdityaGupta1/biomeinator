@@ -30,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "radiance_cache.hlsli"
 #include "ris.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
@@ -37,8 +38,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
 #ifdef RC_UPDATE
-    #include "radiance_cache.hlsli"
-
     #define RC_MAX_PATH_DEPTH 6
 
     RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
@@ -47,7 +46,6 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
-    #include "radiance_cache.hlsli"
     ByteAddressBuffer rcHashEntries : REGISTER_T(RC, HASH_ENTRIES);
     StructuredBuffer<float4> rcResolved : REGISTER_T(RC, RESOLVED);
 #endif
@@ -57,10 +55,14 @@ float balanceHeuristic(const float pdfA, const float pdfB)
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDiffuseAlbedo)
+void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
-    const uint2 pixelIdx = getPixelIdx();
+#ifndef RC_UPDATE
+    pathColor = 0.f;
+    ptDiffuseAlbedo = 0.f;
+#endif
 
+    const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
@@ -69,8 +71,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
-
-    ptDiffuseAlbedo = 0.f;
 
     const float3 segmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
     payload.pathWeight *= segmentAbsorption;
@@ -132,9 +132,10 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
+            const float3 emissiveContrib =
+                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
 #ifdef RC_UPDATE
-            const float3 rcEmissiveContrib = payload.pathWeight * emissiveColor * rcEmissionMisWeight;
+            const float3 rcEmissiveContrib = emissiveContrib * rcEmissionMisWeight;
             for (uint i = 0; i < rcNumVertices; ++i)
             {
                 if (rcSlots[i] != RC_INVALID_SLOT)
@@ -144,7 +145,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
             }
             rcEmissionMisWeight = 1.f;
 #else
-            const float3 emissiveContrib = payload.pathWeight * emissiveColor;
             pathColor += emissiveContrib;
 
             if (pathDepth == 0)
@@ -222,8 +222,6 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 #ifdef RC_UPDATE
             if (!isDeltaSurface && rcNumVertices < RC_MAX_PATH_DEPTH)
             {
-                // Extend existing throughputs: they tracked up to the previous diffuse vertex,
-                // now extend them through to this one by multiplying by the accumulated pathWeight.
                 for (uint i = 0; i < rcNumVertices; ++i)
                 {
                     rcThroughputs[i] *= payload.pathWeight;
@@ -231,18 +229,16 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
                 const int level = rcGetLevel(surfPos_WS);
                 const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
-                const uint rcSlot = rcInsertOrFind(gridPos, level, rcHashEntries);
-                rcSlots[rcNumVertices] = rcSlot;
+                const uint slot = rcInsertOrFind(gridPos, level, rcHashEntries);
+                rcSlots[rcNumVertices] = slot;
                 rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
-                if (rcSlot != RC_INVALID_SLOT)
+                if (slot != RC_INVALID_SLOT)
                 {
-                    rcWriteSampleCount(rcSlot, rcAccumulation);
+                    rcWriteSampleCount(slot, rcAccumulation);
                 }
                 ++rcNumVertices;
 
-                // Reset so pathWeight tracks from this vertex onward.
-                // Specular throughput between diffuse vertices is folded into the
-                // throughputs array via the multiplication above.
+                // reset so pathWeight tracks from this vertex onward
                 payload.pathWeight = float3(1.f, 1.f, 1.f);
             }
 #endif
@@ -284,7 +280,8 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                     const float3 bsdfVal = evaluateBsdf(
                         surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfMipLevel);
 
-                    float3 contribution = bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+                    float3 contribution =
+                        payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                     const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
                     if (useRis)
@@ -317,11 +314,11 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                     {
                         if (rcSlots[i] != RC_INVALID_SLOT)
                         {
-                            rcWriteRadiance(rcSlots[i], rcThroughputs[i] * payload.pathWeight * contribution, rcAccumulation);
+                            rcWriteRadiance(rcSlots[i], rcThroughputs[i] * contribution, rcAccumulation);
                         }
                     }
 #else
-                    pathColor += payload.pathWeight * contribution;
+                    pathColor += contribution;
 #endif
                 }
 
@@ -339,7 +336,8 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
                         const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfMipLevel);
 
-                        float3 contribution = bsdfVal * absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
+                        float3 contribution = payload.pathWeight * bsdfVal *
+                                              absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
 
                         const float domeLightPdf = domeLightSample.pdf;
                         const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
@@ -352,11 +350,11 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
                         {
                             if (rcSlots[i] != RC_INVALID_SLOT)
                             {
-                                rcWriteRadiance(rcSlots[i], rcThroughputs[i] * payload.pathWeight * contribution, rcAccumulation);
+                                rcWriteRadiance(rcSlots[i], rcThroughputs[i] * contribution, rcAccumulation);
                             }
                         }
 #else
-                        pathColor += payload.pathWeight * contribution;
+                        pathColor += contribution;
 #endif
                     }
                 }
@@ -417,7 +415,9 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
 #ifndef RC_UPDATE
         // terminate path early by reading radiance cache if possible
-        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && !surfMaterial.isDelta())
+        const bool surfMaterialCanUseRadianceCache = surfMaterial.canScatter() && !surfMaterial.isDelta();
+        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) &&
+            surfMaterialCanUseRadianceCache)
         {
             const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
             const int level = rcGetLevel(payload.hitInfo.hitPos_WS);
@@ -495,13 +495,12 @@ void pathTraceRay(inout Payload payload, inout float3 pathColor, out float3 ptDi
 
         if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
         {
-            float3 domeLightContrib = getDomeLightColor(ray.Direction);
+            float3 domeLightContrib = payload.pathWeight * getDomeLightColor(ray.Direction);
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
                 domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);
             }
-            domeLightContrib *= payload.pathWeight;
 
 #ifdef RC_UPDATE
             for (uint i = 0; i < rcNumVertices; ++i)
