@@ -61,15 +61,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
-#include "collect.cs.fxh"
-#include "debug_view.ps.fxh"
-#include "gbuffer.rgs.fxh"
-#include "path_tracing.rgs.fxh"
-#include "postprocess.vs.fxh"
-#include "postprocess.ps.fxh"
-#include "rc_evict.cs.fxh"
-#include "rc_resolve.cs.fxh"
-#include "rc_update.rgs.fxh"
+#include "shaders.h"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -1212,7 +1204,7 @@ static void initPipeline()
             .dispatchDesc = gbufferDispatchDesc,
         };
 
-        gbufferPipelineInputs.shaderBytecode = gbuffer_rgs_shaderBytecode;
+        gbufferPipelineInputs.shaderBytecode = getShader("gbuffer_rgs");
         gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
 
@@ -1239,7 +1231,7 @@ static void initPipeline()
     {
         D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
         psoDesc.pRootSignature = rcComputeRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(rc_evict_cs_shaderBytecode);
+        psoDesc.CS = makeShaderBytecode(getShader("rc_evict_cs"));
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcEvictPso)));
         rcEvictPso->SetName(L"rcEvictPso");
     }
@@ -1257,7 +1249,7 @@ static void initPipeline()
             .dispatchDesc = rcUpdateDispatchDesc,
         };
 
-        rcUpdatePipelineInputs.shaderBytecode = rc_update_rgs_shaderBytecode;
+        rcUpdatePipelineInputs.shaderBytecode = getShader("rc_update_rgs");
         rcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         rcUpdatePipelineInputs.rootSig = rcUpdateRootSig.Get();
 
@@ -1290,7 +1282,7 @@ static void initPipeline()
     {
         D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
         psoDesc.pRootSignature = rcComputeRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(rc_resolve_cs_shaderBytecode);
+        psoDesc.CS = makeShaderBytecode(getShader("rc_resolve_cs"));
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcResolvePso)));
         rcResolvePso->SetName(L"rcResolvePso");
     }
@@ -1308,7 +1300,7 @@ static void initPipeline()
             .dispatchDesc = ptDispatchDesc,
         };
 
-        ptPipelineInputs.shaderBytecode = path_tracing_rgs_shaderBytecode;
+        ptPipelineInputs.shaderBytecode = getShader("path_tracing_rgs");
         ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         ptPipelineInputs.rootSig = ptRootSig.Get();
 
@@ -1341,17 +1333,13 @@ static void initPipeline()
     {
         D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
         psoDesc.pRootSignature = collectRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(collect_cs_shaderBytecode);
+        psoDesc.CS = makeShaderBytecode(getShader("collect_cs"));
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&collectPso)));
         collectPso->SetName(L"collectPso");
     }
 
     {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocessPsoDescBase{};
-
-        // ===================================
-        // POSTPROCESSING
-        // ===================================
         postprocessPsoDescBase.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         postprocessPsoDescBase.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         postprocessPsoDescBase.DepthStencilState = {
@@ -1365,11 +1353,16 @@ static void initPipeline()
         postprocessPsoDescBase.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         postprocessPsoDescBase.SampleDesc = SAMPLE_DESC_NO_AA;
 
+        const D3D12_SHADER_BYTECODE postprocessVsShaderBytecode = makeShaderBytecode(getShader("postprocess_vs"));
+
+        // ===================================
+        // POSTPROCESSING
+        // ===================================
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
             psoDesc.pRootSignature = postprocessRootSig.Get();
-            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
-            psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
+            psoDesc.VS = postprocessVsShaderBytecode;
+            psoDesc.PS = makeShaderBytecode(getShader("postprocess_ps"));
             CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
             postprocessPso->SetName(L"postprocessPso");
         }
@@ -1380,8 +1373,8 @@ static void initPipeline()
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
             psoDesc.pRootSignature = debugViewRootSig.Get();
-            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
-            psoDesc.PS = makeShaderBytecode(debug_view_ps_shaderBytecode);
+            psoDesc.VS = postprocessVsShaderBytecode;
+            psoDesc.PS = makeShaderBytecode(getShader("debug_view_ps"));
             CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&debugViewPso)));
             debugViewPso->SetName(L"debugViewPso");
         }
