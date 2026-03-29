@@ -99,9 +99,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
     uint rcSlots[RC_MAX_PATH_DEPTH];
     float3 rcThroughputs[RC_MAX_PATH_DEPTH];
     uint rcNumVertices = 0;
-    // Emission MIS weight is stored separately rather than baked into pathWeight because
-    // pathWeight gets folded into rcThroughputs at diffuse vertex insertion.
-    float rcEmissionMisWeight = 1.f;
 #endif
 
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
@@ -135,15 +132,13 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
             const float3 emissiveContrib =
                 payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
 #ifdef RC_UPDATE
-            const float3 rcEmissiveContrib = emissiveContrib * rcEmissionMisWeight;
             for (uint i = 0; i < rcNumVertices; ++i)
             {
                 if (rcSlots[i] != RC_INVALID_SLOT)
                 {
-                    rcWriteRadiance(rcSlots[i], rcThroughputs[i] * rcEmissiveContrib, rcAccumulation);
+                    rcWriteRadiance(rcSlots[i], rcThroughputs[i] * emissiveContrib, rcAccumulation);
                 }
             }
-            rcEmissionMisWeight = 1.f;
 #else
             pathColor += emissiveContrib;
 
@@ -542,11 +537,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
             {
                 const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
-#ifdef RC_UPDATE
-                rcEmissionMisWeight = emissionMisWeight;
-#else
                 payload.pathWeight *= emissionMisWeight;
-#endif
             }
 
             // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
