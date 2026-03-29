@@ -31,14 +31,16 @@ RWStructuredBuffer<float4> rcResolved : REGISTER_U(RC, RESOLVED);
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint slot = dispatchThreadId.x;
-
     if (slot >= RC_TABLE_SIZE)
     {
         return;
     }
 
-    const uint2 key = rcHashEntries.Load2(slot * 8);
+    // clear accumulation buffer
+    rcAccumulation.Store4(slot * 16, uint4(0, 0, 0, 0));
 
+    // evict resolved entries that have fallen below the stale weight threshold
+    const uint2 key = rcHashEntries.Load2(slot * 8);
     if (any(key != RC_EMPTY_SENTINEL))
     {
         if (rcResolved[slot].w < RC_STALE_WEIGHT_THRESHOLD)
@@ -47,6 +49,4 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             rcResolved[slot] = float4(0, 0, 0, 0);
         }
     }
-
-    rcAccumulation.Store4(slot * 16, uint4(0, 0, 0, 0));
 }

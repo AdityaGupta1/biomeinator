@@ -31,21 +31,18 @@ RWStructuredBuffer<float4> rcResolved : REGISTER_U(RC, RESOLVED);
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint slot = dispatchThreadId.x;
-
     if (slot >= RC_TABLE_SIZE)
     {
         return;
     }
 
     const uint2 key = rcHashEntries.Load2(slot * 8);
-
     if (all(key == RC_EMPTY_SENTINEL))
     {
         return;
     }
 
     const uint4 accum = rcAccumulation.Load4(slot * 16);
-
     if (accum.w > 0)
     {
         const float currentSamples = float(accum.w) / float(RC_SAMPLE_MULTIPLIER);
