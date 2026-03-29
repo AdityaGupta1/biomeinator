@@ -61,11 +61,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stb_image_write.h>
 
+#include "collect.cs.fxh"
+#include "debug_view.ps.fxh"
 #include "gbuffer.rgs.fxh"
 #include "path_tracing.rgs.fxh"
-#include "collect.cs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
+#include "rc_evict.cs.fxh"
+#include "rc_resolve.cs.fxh"
+#include "rc_update.rgs.fxh"
 
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
@@ -137,6 +141,7 @@ static void initCommand();
 static void initConstantParams();
 static void initRootSignature();
 static void initPipeline();
+static void initRadianceCache();
 
 static void initImgui();
 
@@ -170,6 +175,8 @@ static Scene scene;
 
 static bool testMode = false;
 static bool voxelMode = false;
+
+static ComPtr<ID3D12Resource> dev_rcStub;
 
 void init()
 {
@@ -207,6 +214,14 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    dev_rcStub = BufferHelper::createBasicBuffer(16, &DEFAULT_HEAP);
+    dev_rcStub->SetName(L"dev_rcStub");
+
+    if (SettingsManager::getAsBool("rcEnabled"))
+    {
+        initRadianceCache();
+    }
 
     initImgui();
 
@@ -248,7 +263,6 @@ static void initStreamline()
     if (!sl::security::verifyEmbeddedSignature(slInterposerDllPath.c_str()))
     {
         Logger::logError("Could not verify signature of sl.interposer.dll");
-        Logger::log("Exiting...");
         exit(1);
     }
 
@@ -302,17 +316,24 @@ static void initDevice()
     if (SettingsManager::getAsBool("gpuValidation"))
     {
         ComPtr<ID3D12Debug> debug;
-        CHECK_HRESULT(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
-        Logger::log("Enabled debug layer");
-        debug->EnableDebugLayer();
-
-        ComPtr<ID3D12Debug1> debug1;
-        if (SUCCEEDED(debug.As(&debug1)))
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
         {
-            debug1->SetEnableGPUBasedValidation(true);
-        }
+            Logger::log("Enabled debug layer");
+            debug->EnableDebugLayer();
 
-        dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+            ComPtr<ID3D12Debug1> debug1;
+            if (SUCCEEDED(debug.As(&debug1)))
+            {
+                debug1->SetEnableGPUBasedValidation(true);
+            }
+
+            dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+        }
+        else
+        {
+            Logger::logError("Failed to enable debug layer");
+            exit(1);
+        }
     }
 
     static ComPtr<IDXGIFactory2> factory2;
@@ -494,6 +515,10 @@ static void initRtTargets()
 static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 static ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+
+static ComPtr<ID3D12Resource> dev_rcHashEntries;
+static ComPtr<ID3D12Resource> dev_rcAccumulation;
+static ComPtr<ID3D12Resource> dev_rcResolved;
 
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
@@ -748,12 +773,25 @@ enum class PtParam
     PATH_TRACING_RAW_BUFFER_OUT,
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
 
+    RC_HASH_ENTRIES,
+    RC_RESOLVED,
+
     COUNT
 };
 
 enum class PostprocessParam
 {
     GLOBAL_PARAMS,
+
+    COUNT
+};
+
+enum class DebugViewParam
+{
+    GLOBAL_PARAMS,
+
+    RC_HASH_ENTRIES,
+    RC_RESOLVED,
 
     COUNT
 };
@@ -768,10 +806,45 @@ enum class CollectParam
     COUNT
 };
 
+enum class RcComputeParam
+{
+    GLOBAL_PARAMS,
+
+    HASH_ENTRIES,
+    ACCUMULATION,
+    RESOLVED,
+
+    COUNT
+};
+
+enum class RcUpdateParam
+{
+    GLOBAL_PARAMS,
+
+    RAYTRACING_ACS,
+    VERTS,
+    IDXS,
+    INSTANCE_DATAS,
+    MATERIALS,
+    PER_TRI_DATAS,
+    AREA_LIGHTS,
+    AREA_LIGHT_SAMPLING_STRUCTURE,
+
+    GBUFFER_IN,
+
+    RC_HASH_ENTRIES,
+    RC_ACCUMULATION,
+
+    COUNT
+};
+
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
+#define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
+#define RC_COMPUTE_PARAM_IDX(param) static_cast<uint32_t>(RcComputeParam::param)
+#define RC_UPDATE_PARAM_IDX(param) static_cast<uint32_t>(RcUpdateParam::param)
 
 static D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
                                        const uint32_t reg,
@@ -793,6 +866,9 @@ static ComPtr<ID3D12RootSignature> gbufferRootSig;
 static ComPtr<ID3D12RootSignature> ptRootSig;
 static ComPtr<ID3D12RootSignature> collectRootSig;
 static ComPtr<ID3D12RootSignature> postprocessRootSig;
+static ComPtr<ID3D12RootSignature> debugViewRootSig;
+static ComPtr<ID3D12RootSignature> rcComputeRootSig;
+static ComPtr<ID3D12RootSignature> rcUpdateRootSig;
 static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
@@ -816,6 +892,15 @@ static void initRootSignature()
     }
 
     rtStaticSamplers.push_back(staticSampler);
+
+    const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
+        .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
+        .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
+        .OffsetInDescriptorsFromTableStart = 0,
+    };
 
     // ===================================
     // GBUFFER
@@ -877,16 +962,11 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
+        ptParams[PT_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, RC, HASH_ENTRIES);
+        ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, RC, RESOLVED);
+
         if (useSer)
         {
-            const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
-                .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                .NumDescriptors = 1,
-                .BaseShaderRegister = NV_SHADER_EXTN_SLOT,
-                .RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE,
-                .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
-                .OffsetInDescriptorsFromTableStart = 0,
-            };
             ptParams.push_back({
                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                 .DescriptorTable = {
@@ -943,8 +1023,99 @@ static void initRootSignature()
     }
 
     // ===================================
+    // RC COMPUTE (shared by evict + resolve)
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, RC_COMPUTE_PARAM_IDX(COUNT)> rcComputeParams;
+
+        rcComputeParams[RC_COMPUTE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        rcComputeParams[RC_COMPUTE_PARAM_IDX(HASH_ENTRIES)] = MAKE_PARAM(UAV, RC, HASH_ENTRIES);
+        rcComputeParams[RC_COMPUTE_PARAM_IDX(ACCUMULATION)] = MAKE_PARAM(UAV, RC, ACCUMULATION);
+        rcComputeParams[RC_COMPUTE_PARAM_IDX(RESOLVED)] = MAKE_PARAM(UAV, RC, RESOLVED);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rcComputeRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(rcComputeParams.size()),
+                .pParameters = rcComputeParams.data(),
+                .NumStaticSamplers = 0,
+                .pStaticSamplers = nullptr,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rcComputeRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rcComputeRootSig)));
+    }
+
+    // ===================================
+    // RC UPDATE
+    // ===================================
+    {
+        // TODO: see if this logic can be combined with main PT pass
+        std::vector<D3D12_ROOT_PARAMETER1> rcUpdateParams;
+        rcUpdateParams.resize(RC_UPDATE_PARAM_IDX(COUNT));
+
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(RAYTRACING_ACS)] = MAKE_PARAM(SRV, RT, RAYTRACING_ACS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(VERTS)] = MAKE_PARAM(SRV, RT, VERTS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(IDXS)] = MAKE_PARAM(SRV, RT, IDXS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(INSTANCE_DATAS)] = MAKE_PARAM(SRV, RT, INSTANCE_DATAS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(PER_TRI_DATAS)] = MAKE_PARAM(SRV, RT, PER_TRI_DATAS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE)] = MAKE_PARAM(SRV, RT, AREA_LIGHT_SAMPLING_STRUCTURE);
+
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(GBUFFER_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_IN);
+
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(UAV, RC, HASH_ENTRIES);
+        rcUpdateParams[RC_UPDATE_PARAM_IDX(RC_ACCUMULATION)] = MAKE_PARAM(UAV, RC, ACCUMULATION);
+
+        if (useSer)
+        {
+            rcUpdateParams.push_back({
+                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                .DescriptorTable = {
+                    .NumDescriptorRanges = 1,
+                    .pDescriptorRanges = &serDescriptorRange,
+                },
+            });
+        }
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rcUpdateRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(rcUpdateParams.size()),
+                .pParameters = rcUpdateParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
+                .pStaticSamplers = rtStaticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rcUpdateRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rcUpdateRootSig)));
+    }
+
+    // ===================================
     // POSTPROCESSING
     // ===================================
+    const D3D12_STATIC_SAMPLER_DESC postprocessSamplerDesc = {
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .ShaderRegister = POSTPROCESS_REGISTER_TEX_SAMPLER,
+        .RegisterSpace = POSTPROCESS_REGISTER_SPACE,
+    };
+
     {
         std::array<D3D12_ROOT_PARAMETER1, POSTPROCESS_PARAM_IDX(COUNT)> postprocessParams;
 
@@ -952,14 +1123,7 @@ static void initRootSignature()
 
         std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
 
-        staticSamplers.push_back({
-            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            .ShaderRegister = POSTPROCESS_REGISTER_TEX_SAMPLER,
-            .RegisterSpace = POSTPROCESS_REGISTER_SPACE,
-        });
+        staticSamplers.push_back(postprocessSamplerDesc);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC postprocessRootSigDesc = {
             .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -978,6 +1142,38 @@ static void initRootSignature()
         CHECK_HRESULT(device->CreateRootSignature(
             0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&postprocessRootSig)));
     }
+
+    // ===================================
+    // DEBUG VIEW
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, DEBUG_VIEW_PARAM_IDX(COUNT)> debugViewParams;
+
+        debugViewParams[DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        debugViewParams[DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, RC, HASH_ENTRIES);
+        debugViewParams[DEBUG_VIEW_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, RC, RESOLVED);
+
+        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
+
+        staticSamplers.push_back(postprocessSamplerDesc);
+
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC debugViewRootSigDesc = {
+            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+            .Desc_1_1 = {
+                .NumParameters = static_cast<uint32_t>(debugViewParams.size()),
+                .pParameters = debugViewParams.data(),
+                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
+                .pStaticSamplers = staticSamplers.data(),
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+            },
+        };
+
+        ComPtr<ID3DBlob> blob, errorBlob;
+        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&debugViewRootSigDesc, &blob, &errorBlob),
+                                      errorBlob);
+        CHECK_HRESULT(device->CreateRootSignature(
+            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&debugViewRootSig)));
+    }
 }
 
 static ComPtr<ID3D12StateObject> gbufferPso;
@@ -989,8 +1185,15 @@ static ComPtr<ID3D12Resource> dev_ptShaderIds;
 static D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
 
 static ComPtr<ID3D12PipelineState> collectPso;
+static ComPtr<ID3D12PipelineState> rcEvictPso;
+static ComPtr<ID3D12PipelineState> rcResolvePso;
+
+static ComPtr<ID3D12StateObject> rcUpdatePso;
+static ComPtr<ID3D12Resource> dev_rcUpdateShaderIds;
+static D3D12_DISPATCH_RAYS_DESC rcUpdateDispatchDesc;
 
 static ComPtr<ID3D12PipelineState> postprocessPso;
+static ComPtr<ID3D12PipelineState> debugViewPso;
 
 static constexpr uint32_t maxPayloadSizeBytes = 96;
 
@@ -1028,6 +1231,68 @@ static void initPipeline()
         };
 
         makeRtPipeline(gbufferPipelineInputs);
+    }
+
+    // ===================================
+    // RC EVICT
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = rcComputeRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(rc_evict_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcEvictPso)));
+        rcEvictPso->SetName(L"rcEvictPso");
+    }
+
+    // ===================================
+    // RC UPDATE
+    // ===================================
+    {
+        RtPipelineInputs rcUpdatePipelineInputs = {
+            .name = L"rcUpdate",
+            .pso = rcUpdatePso,
+            .dev_shaderIds = dev_rcUpdateShaderIds,
+            .rgsShaderName = L"RayGeneration",
+            .missShaderName = L"Miss",
+            .dispatchDesc = rcUpdateDispatchDesc,
+        };
+
+        rcUpdatePipelineInputs.shaderBytecode = rc_update_rgs_shaderBytecode;
+        rcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+        rcUpdatePipelineInputs.rootSig = rcUpdateRootSig.Get();
+
+        rcUpdatePipelineInputs.hitGroups.resize(3);
+        rcUpdatePipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"rcUpdate_HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        rcUpdatePipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"rcUpdate_HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+        rcUpdatePipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
+            .HitGroupExport = L"rcUpdate_HitGroup_DomeLight",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
+        };
+
+        makeRtPipeline(rcUpdatePipelineInputs);
+    }
+
+    // ===================================
+    // RC RESOLVE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = rcComputeRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(rc_resolve_cs_shaderBytecode);
+        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcResolvePso)));
+        rcResolvePso->SetName(L"rcResolvePso");
     }
 
     // ===================================
@@ -1081,29 +1346,61 @@ static void initPipeline()
         collectPso->SetName(L"collectPso");
     }
 
-    // ===================================
-    // POSTPROCESSING
-    // ===================================
     {
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = postprocessRootSig.Get();
-        psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
-        psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
-        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-        psoDesc.DepthStencilState = {
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocessPsoDescBase{};
+
+        // ===================================
+        // POSTPROCESSING
+        // ===================================
+        postprocessPsoDescBase.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        postprocessPsoDescBase.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        postprocessPsoDescBase.DepthStencilState = {
             .DepthEnable = FALSE,
             .StencilEnable = FALSE,
         };
-        psoDesc.SampleMask = UINT_MAX;
-        psoDesc.InputLayout = { nullptr, 0 }; // no verts/idxs
-        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.NumRenderTargets = 1;
-        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        psoDesc.SampleDesc = SAMPLE_DESC_NO_AA;
-        CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
-        postprocessPso->SetName(L"postprocessPso");
+        postprocessPsoDescBase.SampleMask = UINT_MAX;
+        postprocessPsoDescBase.InputLayout = { nullptr, 0 }; // no verts/idxs
+        postprocessPsoDescBase.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        postprocessPsoDescBase.NumRenderTargets = 1;
+        postprocessPsoDescBase.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        postprocessPsoDescBase.SampleDesc = SAMPLE_DESC_NO_AA;
+
+        {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
+            psoDesc.pRootSignature = postprocessRootSig.Get();
+            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
+            psoDesc.PS = makeShaderBytecode(postprocess_ps_shaderBytecode);
+            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
+            postprocessPso->SetName(L"postprocessPso");
+        }
+
+        // ===================================
+        // DEBUG VIEW
+        // ===================================
+        {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
+            psoDesc.pRootSignature = debugViewRootSig.Get();
+            psoDesc.VS = makeShaderBytecode(postprocess_vs_shaderBytecode);
+            psoDesc.PS = makeShaderBytecode(debug_view_ps_shaderBytecode);
+            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&debugViewPso)));
+            debugViewPso->SetName(L"debugViewPso");
+        }
     }
+}
+
+static void initRadianceCache()
+{
+    dev_rcHashEntries = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 8, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcHashEntries->SetName(L"dev_rcHashEntries");
+
+    dev_rcAccumulation = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 16, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcAccumulation->SetName(L"dev_rcAccumulation");
+
+    dev_rcResolved = BufferHelper::createBasicBuffer(
+        RC_TABLE_SIZE * 16, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    dev_rcResolved->SetName(L"dev_rcResolved");
 }
 
 static void initImgui()
@@ -1298,6 +1595,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
 };
 static const std::vector<const char*> debugViewComboOptions = {
     "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularHitDistance", "normals", "debug",
+    "rcGridCells", "rcCachedRadiance",
 };
 static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "off", nullptr },
@@ -1311,6 +1609,9 @@ static const std::unordered_map<std::string, RtTarget*> debugViewComboMap = {
     { "normals", &normalsAndRoughnessTarget },
 
     { "debug", &debugTarget },
+
+    { "rcGridCells", nullptr },
+    { "rcCachedRadiance", nullptr },
 };
 
 static void imguiBeginFrame()
@@ -1345,6 +1646,11 @@ static void imguiEndFrame(double deltaTime)
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
 
         SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("Radiance Cache");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
+        didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
+
+        SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
         const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
         needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
@@ -1370,8 +1676,9 @@ static void imguiEndFrame(double deltaTime)
         if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
         {
             SettingsGuiHelpers::SectionTitle("Debug view");
-            didPathTracingSettingsChange |= SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+            SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+            SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+            SettingsGuiHelpers::Checkbox("Debug view apply tonemap", "debugViewApplyTonemap");
 
             SettingsGuiHelpers::VerticalSpacing();
 
@@ -1621,6 +1928,20 @@ void render()
         debugParams->debugOutputNumChannels = debugOutputTarget->debugOutputNumChannels;
     }
     debugParams->debugOutputScale = SettingsManager::getAsFloat("debugViewScale");
+    debugParams->debugViewApplyTonemap = SettingsManager::getAsBool("debugViewApplyTonemap") ? 1 : 0;
+
+    if (debugViewSettingStr == "rcGridCells")
+    {
+        debugParams->rcDebugView = 1;
+    }
+    else if (debugViewSettingStr == "rcCachedRadiance")
+    {
+        debugParams->rcDebugView = 2;
+    }
+    else
+    {
+        debugParams->rcDebugView = 0;
+    }
 
     if (voxelMode)
     {
@@ -1636,6 +1957,34 @@ void render()
     debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
     debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
     debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
+
+    auto& rcParams = paramBlockManager.rcParams;
+    const bool rcEnabled = SettingsManager::getAsBool("rcEnabled");
+    rcParams->rcEnabled = rcEnabled ? 1 : 0;
+    if (rcEnabled)
+    {
+        const float pixelAngle =
+            2.0f * atanf(paramBlockManager.cameraParams->tanHalfFovY) / static_cast<float>(renderHeight);
+        rcParams->rcCascadeScale = RC_TARGET_PIXEL_WIDTH * pixelAngle;
+        rcParams->rcMinSamplesForQuery = SettingsManager::getAsUint("rcMinSamplesForQuery");
+    }
+
+    static bool rcPrevEnabled = false;
+    if (rcEnabled != rcPrevEnabled)
+    {
+        if (rcEnabled)
+        {
+            initRadianceCache();
+        }
+        else
+        {
+            flush();
+            dev_rcHashEntries.Reset();
+            dev_rcAccumulation.Reset();
+            dev_rcResolved.Reset();
+        }
+    }
+    rcPrevEnabled = rcEnabled;
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
@@ -1705,16 +2054,96 @@ void render()
         gbufferDispatchDesc.Height = pathTracingTargetDesc.Height;
         cmdList->DispatchRays(&gbufferDispatchDesc);
 
-        // ===================================
-        // PATH TRACING
-        // ===================================
-
         // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
                                                      dev_gbuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        if (rcEnabled)
+        {
+            // ===================================
+            // RC EVICT
+            // ===================================
+
+            cmdList->SetComputeRootSignature(rcComputeRootSig.Get());
+
+            cmdList->SetComputeRootConstantBufferView(RC_COMPUTE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+
+            const uint32_t rcComputeDispatchSize = Util::calculateDispatchSize(RC_TABLE_SIZE, RC_WORKGROUP_SIZE);
+
+            cmdList->SetPipelineState(rcEvictPso.Get());
+            cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
+
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+
+            // ===================================
+            // RC UPDATE
+            // ===================================
+
+            cmdList->SetPipelineState1(rcUpdatePso.Get());
+            cmdList->SetComputeRootSignature(rcUpdateRootSig.Get());
+
+            // clang-format off
+            cmdList->SetComputeRootConstantBufferView(RC_UPDATE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+            cmdList->SetComputeRootShaderResourceView(RC_UPDATE_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+
+            cmdList->SetComputeRootUnorderedAccessView(RC_UPDATE_PARAM_IDX(RC_HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_UPDATE_PARAM_IDX(RC_ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
+            // clang-format on
+
+            rcUpdateDispatchDesc.Width = Util::calculateDispatchSize(gbufferDispatchDesc.Width, RC_UPDATE_SCALE);
+            rcUpdateDispatchDesc.Height = Util::calculateDispatchSize(gbufferDispatchDesc.Height, RC_UPDATE_SCALE);
+            cmdList->DispatchRays(&rcUpdateDispatchDesc);
+
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+
+            // ===================================
+            // RC RESOLVE
+            // ===================================
+
+            cmdList->SetComputeRootSignature(rcComputeRootSig.Get());
+
+            cmdList->SetComputeRootConstantBufferView(RC_COMPUTE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(HASH_ENTRIES), dev_rcHashEntries->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(ACCUMULATION), dev_rcAccumulation->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(RC_COMPUTE_PARAM_IDX(RESOLVED), dev_rcResolved->GetGPUVirtualAddress());
+
+            cmdList->SetPipelineState(rcResolvePso.Get());
+            cmdList->Dispatch(rcComputeDispatchSize, 1, 1);
+
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+        }
+
+        // ===================================
+        // PATH TRACING
+        // ===================================
+
+        if (rcEnabled)
+        {
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcHashEntries.Get(),
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcResolved.Get(),
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
 
         cmdList->SetPipelineState1(ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
@@ -1735,11 +2164,28 @@ void render()
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_HASH_ENTRIES),
+            (rcEnabled ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED),
+            (rcEnabled ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
         ptDispatchDesc.Height = gbufferDispatchDesc.Height;
         cmdList->DispatchRays(&ptDispatchDesc);
+
+        if (rcEnabled)
+        {
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcHashEntries.Get(),
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                         dev_rcResolved.Get(),
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
 
         // ===================================
         // COLLECT
@@ -1761,8 +2207,8 @@ void render()
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        const uint32_t dispatchWidth = Util::caclulateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
-        const uint32_t dispatchHeight = Util::caclulateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        const uint32_t dispatchWidth = Util::calculateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::calculateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
         cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
         // ===================================
@@ -1802,11 +2248,36 @@ void render()
         }
     }
 
-    cmdList->SetPipelineState(postprocessPso.Get());
-    cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
+    const bool rcDebugActive = (debugParams->rcDebugView != 0);
+    const bool isAnyDebugViewActive = (debugOutputTarget != nullptr) || rcDebugActive;
+    const bool showRcDebugView = rcEnabled && rcDebugActive;
+    if (showRcDebugView)
+    {
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_rcHashEntries.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_rcResolved.Get(),
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
 
-    cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
-                                               paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+    if (isAnyDebugViewActive)
+    {
+        cmdList->SetPipelineState(debugViewPso.Get());
+        cmdList->SetGraphicsRootSignature(debugViewRootSig.Get());
+        cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_HASH_ENTRIES), (showRcDebugView ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(DEBUG_VIEW_PARAM_IDX(RC_RESOLVED), (showRcDebugView ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
+    }
+    else
+    {
+        cmdList->SetPipelineState(postprocessPso.Get());
+        cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
+        cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
+                                                   paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+    }
 
     cmdList->RSSetViewports(1, &viewport);
     cmdList->RSSetScissorRects(1, &scissor);
@@ -1821,6 +2292,18 @@ void render()
 
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->DrawInstanced(3, 1, 0, 0);
+
+    if (showRcDebugView)
+    {
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_rcHashEntries.Get(),
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
+                                                     dev_rcResolved.Get(),
+                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
 
     if (screenshotRequest.active)
     {
@@ -1939,20 +2422,33 @@ void destroy()
     dev_pathTracingRawBuffer.Reset();
     dev_ptDiffuseAlbedoRawBuffer.Reset();
 
+    dev_rcHashEntries.Reset();
+    dev_rcAccumulation.Reset();
+    dev_rcResolved.Reset();
+    dev_rcStub.Reset();
+
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
     ptPso.Reset();
     collectPso.Reset();
+    rcEvictPso.Reset();
+    rcResolvePso.Reset();
+    rcUpdatePso.Reset();
     postprocessPso.Reset();
+    debugViewPso.Reset();
 
     gbufferRootSig.Reset();
     ptRootSig.Reset();
     collectRootSig.Reset();
+    rcComputeRootSig.Reset();
+    rcUpdateRootSig.Reset();
     postprocessRootSig.Reset();
+    debugViewRootSig.Reset();
 
     dev_gbufferShaderIds.Reset();
     dev_ptShaderIds.Reset();
+    dev_rcUpdateShaderIds.Reset();
 
     swapChain.Reset();
     rtvHeap.Reset();

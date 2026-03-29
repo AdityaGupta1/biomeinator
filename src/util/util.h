@@ -38,7 +38,7 @@ inline std::wstring to_wstring(const char* str)
     return std::wstring(str, str + std::strlen(str));
 }
 
-inline uint32_t caclulateDispatchSize(const uint32_t size, const uint32_t threadGroupSize)
+inline uint32_t calculateDispatchSize(const uint32_t size, const uint32_t threadGroupSize)
 {
     return (size + threadGroupSize - 1) / threadGroupSize;
 }

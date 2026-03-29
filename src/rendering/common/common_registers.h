@@ -76,6 +76,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define POSTPROCESS_REGISTER_TEX_SAMPLER 0
 
 // =============================================
+#define RC_REGISTER_SPACE 4
+// =============================================
+
+// u#/t#
+#define RC_REGISTER_HASH_ENTRIES 0
+#define RC_REGISTER_ACCUMULATION 1
+#define RC_REGISTER_RESOLVED 2
+
+// =============================================
 // fake UAV slot for SER
 // =============================================
 

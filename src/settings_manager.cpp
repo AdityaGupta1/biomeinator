@@ -66,8 +66,12 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
+    ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "false");
+    ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
+
     ADD_OPTION("debugView", "Debug view", std::string, "off");
     ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
+    ADD_OPTION("debugViewApplyTonemap", "Apply tonemapping to debug output", bool, "true");
     ADD_OPTION("debugColorChunks", "Color chunks", bool, "false");
     ADD_OPTION("debugBool0", "Debug bool 0", bool, "false");
     ADD_OPTION("debugBool1", "Debug bool 1", bool, "false");
@@ -124,8 +128,12 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
 
+    COPY_SETTING("rcEnabled", bool);
+    COPY_SETTING("rcMinSamplesForQuery", uint32_t);
+
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);
+    COPY_SETTING("debugViewApplyTonemap", bool);
     COPY_SETTING("debugColorChunks", bool);
     COPY_SETTING("debugBool0", bool);
     COPY_SETTING("debugBool1", bool);

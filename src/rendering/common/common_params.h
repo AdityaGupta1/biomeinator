@@ -146,12 +146,20 @@ struct RenderParams
     float mipBias;
 };
 
+struct RadianceCacheParams
+{
+    uint rcEnabled;
+    float rcCascadeScale;
+    uint rcMinSamplesForQuery;
+    uint pad0;
+};
+
 struct DebugParams
 {
     uint debugOutputSrvIdx;
     uint debugOutputNumChannels;
     float debugOutputScale;
-    uint colorChunks;
+    uint debugViewApplyTonemap;
 
     uint debugBool0;
     uint debugBool1;
@@ -162,6 +170,11 @@ struct DebugParams
     float debugFloat1;
     float debugFloat2;
     float debugFloat3;
+
+    uint rcDebugView;   // 0 = off, 1 = grid cells, 2 = cached radiance
+    uint colorChunks;
+    uint pad0;
+    uint pad1;
 };
 
 #ifdef __cplusplus

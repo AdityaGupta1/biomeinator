@@ -33,65 +33,14 @@ struct PsIn
 float4 getPathTracingFinalColor(float2 uv)
 {
     Texture2D<float4> preTonemappedColorTarget = ResourceDescriptorHeap[renderParams.preTonemappedColorSrvIdx];
-    const float4 preTonemappedColor = preTonemappedColorTarget.Sample(texSampler, uv);
-
-    const float3 tonemappedColor = applyTonemapping(preTonemappedColor.rgb);
+    const float3 preTonemappedColor = preTonemappedColorTarget.Sample(texSampler, uv).rgb;
+    const float3 tonemappedColor = applyTonemapping(preTonemappedColor);
     return float4(tonemappedColor, 1);
-}
-
-float4 getDebugOutputColor(float2 uv)
-{
-    float4 debugColor = 0;
-
-    switch (debugParams.debugOutputNumChannels)
-    {
-        case 4:
-        {
-            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            debugColor = debugTexture.Sample(texSampler, uv).rgba;
-            break;
-        }
-        case 3:
-        {
-            Texture2D<float4> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            debugColor = float4(debugTexture.Sample(texSampler, uv).rgb, 1);
-            break;
-        }
-        case 2:
-        {
-            Texture2D<float2> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            debugColor = float4(debugTexture.Sample(texSampler, uv).rg, 0, 1);
-            break;
-        }
-        case 1:
-        {
-            Texture2D<float> debugTexture = ResourceDescriptorHeap[debugParams.debugOutputSrvIdx];
-            debugColor = float4(debugTexture.Sample(texSampler, uv).rrr, 1);
-            break;
-        }
-    }
-
-    if (debugParams.debugOutputSrvIdx == heapIndices.srv.pathTracingTargetIdx)
-    {
-        debugColor.rgb = applyTonemapping(debugColor.rgb);
-    }
-
-    debugColor.rgb *= debugParams.debugOutputScale;
-    return debugColor;
 }
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    float4 finalColor = 0;
-
-    if (debugParams.debugOutputSrvIdx == ~0u)
-    {
-        finalColor = getPathTracingFinalColor(psIn.uv);
-    }
-    else
-    {
-        finalColor = getDebugOutputColor(psIn.uv);
-    }
+    float4 finalColor = getPathTracingFinalColor(psIn.uv);
 
     if (any(isnan(finalColor)))
     {
