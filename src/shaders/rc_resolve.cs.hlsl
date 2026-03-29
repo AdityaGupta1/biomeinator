@@ -45,16 +45,16 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const uint4 accum = rcAccumulation.Load4(slot * 16);
     if (accum.w > 0)
     {
-        const float currentSamples = float(accum.w) / float(RC_SAMPLE_MULTIPLIER);
-        const float3 currentRadiance = float3(accum.xyz) / (currentSamples * RC_RADIANCE_SCALE);
+        const uint currentNumSamples = accum.w;
+        const float3 currentRadiance = float3(accum.rgb) / (currentNumSamples * RC_RADIANCE_SCALE);
 
         const float3 previousRadiance = rcResolved[slot].rgb;
         float previousWeight = rcResolved[slot].w;
 
         previousWeight *= RC_DECAY;
 
-        const float newWeight = previousWeight + currentSamples;
-        const float blendFactor = currentSamples / newWeight;
+        const float newWeight = previousWeight + currentNumSamples;
+        const float blendFactor = currentNumSamples / newWeight;
         const float3 newRadiance = lerp(previousRadiance, currentRadiance, blendFactor);
 
         rcResolved[slot] = float4(newRadiance, newWeight);

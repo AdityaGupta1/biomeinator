@@ -24,7 +24,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define RC_STALE_WEIGHT_THRESHOLD 0.1f
 #define RC_RADIANCE_SCALE 128.f
-#define RC_SAMPLE_MULTIPLIER 1024
 #define RC_DECAY 0.95f
 #define RC_JITTER_SCALE 0.2f
 #define RC_MIN_LEVEL (-4)
@@ -165,5 +164,5 @@ void rcWriteRadiance(uint slot, float3 radiance, RWByteAddressBuffer accumBuffer
 
 void rcWriteSampleCount(uint slot, RWByteAddressBuffer accumBuffer)
 {
-    accumBuffer.InterlockedAdd(slot * 16 + 12, RC_SAMPLE_MULTIPLIER);
+    accumBuffer.InterlockedAdd(slot * 16 + 12, 1);
 }
