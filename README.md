@@ -53,3 +53,5 @@ Third-party license text files are available in their respective folders in `ext
 Block textures come from
 - [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) by Acaitart
 - [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore
+
+This project is not sponsored by, endorsed by, or affiliated with NVIDIA Corporation.
