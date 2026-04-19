@@ -44,7 +44,7 @@ This project uses various third-party libraries:
 - [Minimal AgX implementation](https://iolite-engine.com/blog_posts/minimal_agx_implementation) - MIT
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
-- [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT
+- [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT (DLSS binaries are under the [NVIDIA RTX SDKs License](external/streamline/bin/x64/nvngx_dlss.license.txt))
 - [GLM](https://github.com/g-truc/glm/tree/master) - MIT
 - [FastNoise2](https://github.com/Auburn/FastNoise2) - MIT
 
