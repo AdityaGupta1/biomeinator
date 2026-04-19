@@ -71,7 +71,7 @@ void parseArgs(const int argc, const char* const* argv)
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
     ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
-    ADD_OPTION("debugViewApplyTonemap", "Apply tonemapping to debug output", bool, "true");
+    ADD_OPTION("debugViewApplyTonemap", "Apply tonemapping to debug output", bool, "false");
     ADD_OPTION("debugColorChunks", "Color chunks", bool, "false");
     ADD_OPTION("debugBool0", "Debug bool 0", bool, "false");
     ADD_OPTION("debugBool1", "Debug bool 1", bool, "false");
