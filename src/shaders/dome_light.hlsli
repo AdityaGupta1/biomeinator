@@ -26,8 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "util/sampling.hlsli"
 
 static const float3 sunDir_WS = normalize(float3(1.f, 2.f, 4.f));
-static const float sunCosTheta = 0.999f;
-static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 1600.f;
+static const float sunCosTheta = 0.9999f;
+static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 16000.f;
 
 static const float3 zenithColor = float3(0.15f, 0.40f, 0.80f) * 1.5f;
 static const float3 horizonColor = float3(0.45f, 0.55f, 0.65f) * 1.2f;
