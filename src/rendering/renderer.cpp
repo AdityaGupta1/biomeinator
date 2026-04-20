@@ -1402,7 +1402,8 @@ static void initRadianceCache()
 static void configureNrc()
 {
     nrc::ContextSettings cs;
-    cs.frameDimensions = { renderWidth, renderHeight };
+    const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
+    cs.frameDimensions = { renderWidth * (doPathSplitting ? 2u : 1u), renderHeight };
     cs.trainingDimensions = nrc::ComputeIdealTrainingDimensions(cs.frameDimensions, 0);
     cs.maxPathVertices = SettingsManager::getAsUint("maxPathDepth");
     cs.samplesPerPixel = 1;

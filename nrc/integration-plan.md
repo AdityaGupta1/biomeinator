@@ -34,11 +34,39 @@ shader API (`Nrc.hlsli`). Buffers are managed internally by the library.
   3. `nrc_query.rgs.hlsl` (`#define NRC_QUERY 1`, then `#include "path_tracing.rgs.hlsl"`)
      -- used for the full-res query pass when NRC is on.
 
-- **Resolve approach**: Use NRC's built-in `Resolve()` initially. The built-in resolve
-  adds query radiance to a combined output buffer. Path splitting (`doPathSplitting`)
-  should be disabled when NRC is active (the two features are mutually exclusive for now),
-  since NRC's resolve writes to a single buffer. A custom resolve can be added later if
-  path splitting + NRC is needed.
+- **Resolve approach**: Use a custom resolve compute shader instead of NRC's built-in
+  `Resolve()`. The built-in resolve almost certainly expects a 2D texture as its output
+  buffer — the Vulkan API makes this explicit (`VkImageView`), and the D3D12 version
+  likely creates a `RWTexture2D` UAV internally despite accepting a generic
+  `ID3D12Resource*`. Our path tracing output (`dev_pathTracingRawBuffer`) is a structured
+  buffer, not a texture, so the built-in resolve would fail or produce incorrect results.
+
+  The custom resolve is straightforward (~15 lines of HLSL — the NRC guide provides an
+  example in its Step 7). It reads NRC's `QueryPathInfo` and `QueryRadiance` buffers,
+  multiplies by the path's prefix throughput, and adds the result to
+  `dev_pathTracingRawBuffer` at the correct buffer index.
+
+  The custom resolve also supports path splitting. When path splitting is active, each
+  split thread creates its own NRC query at the doubled dispatch resolution. The
+  interleaved buffer layout (`linearPixelIdx * 2 + pathSplitIdx`) is numerically
+  equivalent to linear indexing at the doubled width (`dy * renderWidth*2 + dx`), so the
+  custom resolve just indexes linearly using the doubled `frameDimensions`. No additional
+  buffer infrastructure changes are needed.
+
+- **Path splitting + NRC**: Path splitting remains active when NRC is enabled. NRC's
+  `frameDimensions` is set to `(renderWidth * 2, renderHeight)` when `doPathSplitting` is
+  on, matching the doubled dispatch width. Each split thread traces its own BSDF lobe and
+  creates its own NRC query point; the custom resolve writes each result to the correct
+  interleaved slot. The NRC update pass is unaffected — it always runs at
+  `trainingDimensions` without path splitting.
+
+  This doubles NRC query buffer memory compared to non-split mode (NRC allocates based on
+  `frameDimensions`), but the cost is acceptable given the signal quality benefit of path
+  splitting. `configureNrc()` must read `doPathSplitting` and reconfigure when it changes.
+
+  For debug visualizations (heatmaps, direct cache view, etc.), use NRC's built-in
+  `Resolve()` with a temporary `RWTexture2D<float4>` debug texture and display it through
+  the existing debug view pipeline.
 
 - **NRC include path**: The shader compiler needs `-I external/NRC/Include` added to its
   DXC invocation so that `#include "Nrc.hlsli"` resolves correctly. The NRC shader headers
@@ -94,7 +122,9 @@ not dispatched.
      debug resolve modes), and `maxNumFramesInFlight` to match your triple buffering count.
    - Call `nrc::d3d12::Context::Create(device5, nrcContext)`.
    - Call `nrcContext->Configure(contextSettings)` with:
-     - `frameDimensions` = render resolution.
+     - `frameDimensions` = `(renderWidth * (doPathSplitting ? 2 : 1), renderHeight)`.
+       When path splitting is on, the query dispatch width is doubled, so
+       `frameDimensions` must match.
      - `trainingDimensions` = `nrc::ComputeIdealTrainingDimensions(frameDimensions, 0)`.
      - `maxPathVertices` = 8 (or `renderParams.maxPathDepth`).
      - `samplesPerPixel` = 1.
@@ -114,8 +144,11 @@ not dispatched.
    - On enable: call `initNrc()` (replaces `initRadianceCache()`).
    - On disable: call `destroyNrc()` (replaces `flush()` + buffer `.Reset()` calls).
 
-6. Handle reconfiguration: if the render resolution changes while NRC is active, call
-   `nrcContext->Configure(newContextSettings)` again. (this can likely be done in the resize() method)
+6. Handle reconfiguration: if the render resolution or `doPathSplitting` changes while NRC
+   is active, call `nrcContext->Configure(newContextSettings)` again (since both affect
+   `frameDimensions`). Resolution changes can be handled in the resize() method;
+   `doPathSplitting` changes also trigger a resize of `dev_pathTracingRawBuffer`, so the
+   same code path works.
 
 ### Verification
 
@@ -273,16 +306,31 @@ enabled.
    nrcContext->QueryAndTrain(cmdList, nullptr); // nullptr = don't track training loss
    ```
 
-2. Determine the output buffer for `Resolve`:
-   - The current path tracer writes to `dev_pathTracingRawBuffer`. NRC's `Resolve` adds
-     the predicted radiance to an output buffer.
-   - `Resolve` should write to the same `dev_pathTracingRawBuffer` so that the existing
-     Collect pass picks it up. Verify that the buffer format is compatible (NRC expects a
-     UAV it can write `float4` to; the raw buffer is `float4` per pixel).
-   - Call:
-     ```cpp
-     nrcContext->Resolve(cmdList, dev_pathTracingRawBuffer.Get());
-     ```
+2. Create a custom resolve compute shader (`nrc_resolve.cs.hlsl`):
+   - NRC's built-in `Resolve()` expects a 2D texture output, but our
+     `dev_pathTracingRawBuffer` is a structured buffer. A custom resolve writes to it
+     directly.
+   - The shader dispatches at `frameDimensions` (which equals the query dispatch size —
+     `renderWidth * (doPathSplitting ? 2 : 1)` by `renderHeight`). For each dispatch
+     thread:
+     1. Computes `pathIndex` via `NrcGetPathInfoIndex(frameDimensions, dispatchIdx, 0, 1)`.
+     2. Unpacks the `NrcQueryPathInfo` from the `QueryPathInfo` buffer.
+     3. If `queryBufferIndex < 0xFFFFFFFF`, unpacks the predicted radiance from the
+        `QueryRadiance` buffer, multiplies by `prefixThroughput`, and adds to
+        `dev_pathTracingRawBuffer[bufferIdx]` where
+        `bufferIdx = dispatchIdx.y * frameDimensions.x + dispatchIdx.x`. This linear
+        index matches the interleaved path-split layout because
+        `(pixelY * renderWidth + pixelX) * 2 + splitIdx` equals
+        `pixelY * (renderWidth * 2) + (pixelX * 2 + splitIdx)` equals
+        `dispatchY * frameDimensions.x + dispatchX`.
+   - The shader needs access to: `NrcConstants` (from the param block), `QueryPathInfo`
+     (SRV), `QueryRadiance` (SRV), `dev_pathTracingRawBuffer` (UAV).
+   - Create a root signature, PSO, and dispatch for this pass.
+   - Dispatch after `QueryAndTrain`, before Collect.
+
+   For debug resolve modes, use NRC's built-in `Resolve()` with a temporary
+   `RWTexture2D<float4>` debug texture (created alongside the other NRC resources).
+   Display it through the existing debug view pipeline.
 
 3. After the command list is submitted, call:
    ```cpp
@@ -308,10 +356,6 @@ enabled.
    - Remove RC-specific settings (`rcCascadeScale`, `rcMinSamplesForQuery`) from
      `settings_manager.cpp`.
 
-7. Disable path splitting when NRC is on:
-   - In the UI or in the per-frame logic, force `doPathSplitting = false` when `rcEnabled`
-     is true. Add a note or grayed-out UI state so it's clear why.
-
 ### Verification
 
 - With NRC enabled, the scene should render with noticeably less noise than the plain path
@@ -326,6 +370,8 @@ enabled.
 - Check for energy conservation: the NRC image should not be systematically brighter or
   darker than the non-NRC accumulated reference. Adjust
   `frameSettings.maxExpectedAverageRadianceValue` if needed.
+- Toggle path splitting on/off with NRC active — both produce correct images, no crash.
+  With path splitting on, the NRC query buffer count should be roughly double.
 - No validation layer errors, no GPU hangs on toggle.
 
 ---
@@ -340,6 +386,9 @@ removed, and the toggle is polished.
 1. Replace the old RC debug view (which visualized hash entries / resolved radiance) with
    NRC resolve mode selection. Add an ImGui combo box using
    `nrc::GetImGuiResolveModeComboString()` that sets `frameSettings.resolveMode`.
+   When a debug resolve mode is selected, use the built-in `Resolve()` with the debug
+   texture (created in Step 5) instead of the custom resolve, and display the debug
+   texture through the debug view pipeline.
 
 2. Remove old RC debug view code from `debug_view.ps.hlsl` (the `RC_HASH_ENTRIES` and
    `RC_RESOLVED` SRV bindings and any visualization logic).
