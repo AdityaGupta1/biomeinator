@@ -48,6 +48,8 @@
 
 #include "shaders.h"
 
+#include "NrcD3d12.h"
+
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
 #include <imgui.h>
