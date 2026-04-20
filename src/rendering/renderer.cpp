@@ -771,6 +771,8 @@ enum class PtParam
     RC_HASH_ENTRIES,
     RC_RESOLVED,
 
+    NRC_CONSTANTS,
+
     COUNT
 };
 
@@ -959,6 +961,8 @@ static void initRootSignature()
 
         ptParams[PT_PARAM_IDX(RC_HASH_ENTRIES)] = MAKE_PARAM(SRV, RC, HASH_ENTRIES);
         ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, RC, RESOLVED);
+
+        ptParams[PT_PARAM_IDX(NRC_CONSTANTS)] = MAKE_PARAM(CBV, NRC, NRC_CONSTANTS);
 
         if (useSer)
         {
@@ -2056,6 +2060,21 @@ void render()
     }
     nrcPrevMaxPathDepth = maxPathDepth;
 
+    if (nrcContext != nullptr)
+    {
+        nrc::FrameSettings frameSettings;
+        frameSettings.maxExpectedAverageRadianceValue = 1.0f;
+        frameSettings.terminationHeuristicThreshold = 0.1f;
+        frameSettings.trainingTerminationHeuristicThreshold = 0.1f;
+        frameSettings.resolveMode = NrcResolveMode::AddQueryResultToOutput;
+        nrcContext->BeginFrame(cmdList.Get(), frameSettings);
+        nrcContext->PopulateShaderConstants(*paramBlockManager.nrcConstants);
+    }
+    else
+    {
+        memset(paramBlockManager.nrcConstants, 0, sizeof(NrcConstants));
+    }
+
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
     sceneParams->cameraUnderwater = 0;
@@ -2239,6 +2258,8 @@ void render()
             (rcEnabled ? dev_rcHashEntries : dev_rcStub)->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED),
             (rcEnabled ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
+
+        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);

@@ -51,9 +51,9 @@ implementation.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 3.1 Add `NrcConstants` to param block / constant buffer layout | pending | Must be 16-byte aligned |
-| 3.2 Call `BeginFrame` + `PopulateShaderConstants` each frame | pending | |
-| 3.3 Declare `NrcConstants` on the shader side | pending | |
+| 3.1 Add `NrcConstants` to param block / constant buffer layout | done | Placed after `debugParams` in the upload buffer (outside `GlobalParams` cbuffer). `getNrcConstantsGpuAddress()` returns its GPU VA. |
+| 3.2 Call `BeginFrame` + `PopulateShaderConstants` each frame | done | Called after NRC toggle/reconfigure logic. Zero-initialized when NRC is disabled. |
+| 3.3 Bind as separate root CBV in path tracing root signature | done | Added `NRC_CONSTANTS` to `PtParam` enum, root sig, and bind call. Register space 5, b0. Shader-side cbuffer declaration deferred to step 4. |
 
 ### Step 4: Shader-side NRC integration
 
