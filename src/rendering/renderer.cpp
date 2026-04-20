@@ -121,6 +121,8 @@ static void initConstantParams();
 static void initRootSignature();
 static void initPipeline();
 static void initRadianceCache();
+static void initNrc();
+static void destroyNrc();
 
 static void initImgui();
 
@@ -200,6 +202,11 @@ void init()
     if (SettingsManager::getAsBool("rcEnabled"))
     {
         initRadianceCache();
+    }
+
+    if (SettingsManager::getAsBool("nrcEnabled"))
+    {
+        initNrc();
     }
 
     initImgui();
@@ -499,6 +506,8 @@ static ComPtr<ID3D12Resource> dev_rcHashEntries;
 static ComPtr<ID3D12Resource> dev_rcAccumulation;
 static ComPtr<ID3D12Resource> dev_rcResolved;
 
+static nrc::d3d12::Context* nrcContext = nullptr;
+
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
@@ -531,6 +540,8 @@ struct FrameTimeMeasurement
     float timeMs;
 };
 static RingBuffer<FrameTimeMeasurement, 600> frameTimeBuffer{};
+
+static void configureNrc();
 
 void resize()
 {
@@ -688,6 +699,11 @@ void resize()
     camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 
     frameTimeBuffer.clear();
+
+    if (nrcContext != nullptr)
+    {
+        configureNrc();
+    }
 }
 
 static void initCommand()
@@ -1383,6 +1399,55 @@ static void initRadianceCache()
     dev_rcResolved->SetName(L"dev_rcResolved");
 }
 
+static void configureNrc()
+{
+    nrc::ContextSettings cs;
+    cs.frameDimensions = { renderWidth, renderHeight };
+    cs.trainingDimensions = nrc::ComputeIdealTrainingDimensions(cs.frameDimensions, 0);
+    cs.maxPathVertices = SettingsManager::getAsUint("maxPathDepth");
+    cs.samplesPerPixel = 1;
+    cs.includeDirectLighting = false;
+    cs.learnIrradiance = false;
+    if (voxelMode)
+    {
+        const glm::ivec3 boundsMin = Terrain::getVoxelRenderBoundsMin_WS();
+        const glm::ivec3 boundsMax = Terrain::getVoxelRenderBoundsMax_WS();
+        cs.sceneBoundsMin = { static_cast<float>(boundsMin.x), static_cast<float>(boundsMin.y), static_cast<float>(boundsMin.z) };
+        cs.sceneBoundsMax = { static_cast<float>(boundsMax.x), static_cast<float>(boundsMax.y), static_cast<float>(boundsMax.z) };
+    }
+    else
+    {
+        // TODO: replace with loaded scene AABB when Scene exposes it
+        cs.sceneBoundsMin = { -10000.f, -10000.f, -10000.f };
+        cs.sceneBoundsMax = {  10000.f,  10000.f,  10000.f };
+    }
+    nrcContext->Configure(cs);
+}
+
+static void initNrc()
+{
+    nrc::GlobalSettings globalSettings;
+    globalSettings.enableGPUMemoryAllocation = true;
+    globalSettings.enableDebugBuffers = true;
+    globalSettings.maxNumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
+    nrc::d3d12::Initialize(globalSettings);
+
+    nrc::d3d12::Context::Create(device.Get(), nrcContext);
+    configureNrc();
+}
+
+static void destroyNrc()
+{
+    if (nrcContext == nullptr)
+    {
+        return;
+    }
+    flush();
+    nrc::d3d12::Context::Destroy(*nrcContext);
+    nrcContext = nullptr;
+    nrc::d3d12::Shutdown();
+}
+
 static void initImgui()
 {
     IMGUI_CHECKVERSION();
@@ -1629,6 +1694,7 @@ static void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Radiance Cache");
         didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable radiance cache", "rcEnabled");
         didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("RC min samples for query", "rcMinSamplesForQuery", 1, 32);
+        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable NRC", "nrcEnabled");
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
@@ -1965,6 +2031,29 @@ void render()
         }
     }
     rcPrevEnabled = rcEnabled;
+
+    const bool nrcEnabled = SettingsManager::getAsBool("nrcEnabled");
+    static bool nrcPrevEnabled = false;
+    if (nrcEnabled != nrcPrevEnabled)
+    {
+        if (nrcEnabled)
+        {
+            initNrc();
+        }
+        else
+        {
+            destroyNrc();
+        }
+    }
+    nrcPrevEnabled = nrcEnabled;
+
+    static uint32_t nrcPrevMaxPathDepth = 0;
+    const uint32_t maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
+    if (nrcContext != nullptr && maxPathDepth != nrcPrevMaxPathDepth)
+    {
+        configureNrc();
+    }
+    nrcPrevMaxPathDepth = maxPathDepth;
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = scene.getNumAreaLights();
@@ -2401,6 +2490,8 @@ void destroy()
     dev_gbuffer.Reset();
     dev_pathTracingRawBuffer.Reset();
     dev_ptDiffuseAlbedoRawBuffer.Reset();
+
+    destroyNrc();
 
     dev_rcHashEntries.Reset();
     dev_rcAccumulation.Reset();

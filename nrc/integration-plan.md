@@ -76,7 +76,7 @@ to the output directory. No runtime behavior changes yet.
 
 ---
 
-## Step 2: NRC context lifecycle (init / destroy / toggle)
+## Step 2: NRC context lifecycle (init / destroy / toggle) — DONE
 
 **Goal**: The NRC context is created at startup (or when the toggle is flipped on) and
 destroyed on shutdown (or when flipped off). No rendering changes yet -- NRC passes are
@@ -115,7 +115,7 @@ not dispatched.
    - On disable: call `destroyNrc()` (replaces `flush()` + buffer `.Reset()` calls).
 
 6. Handle reconfiguration: if the render resolution changes while NRC is active, call
-   `nrcContext->Configure(newContextSettings)` again.
+   `nrcContext->Configure(newContextSettings)` again. (this can likely be done in the resize() method)
 
 ### Verification
 
@@ -123,6 +123,28 @@ not dispatched.
 - The app still renders the same image (NRC passes aren't dispatched yet, so the path
   tracer runs without a cache, which is the expected fallback).
 - Startup and shutdown are clean (no leaked resources, no validation layer errors).
+
+### Deviations from plan
+
+- **`nrcInitialized` not added.** The plan called for a separate `nrcInitialized` flag,
+  but `nrcContext != nullptr` already serves as the "is NRC active" check, so the extra
+  bool was unnecessary.
+
+- **Separate `nrcEnabled` setting instead of reusing `rcEnabled`.** NRC init/destroy is
+  gated on `nrcEnabled` rather than `rcEnabled`, so both cache implementations can coexist
+  during the migration. The old RC still uses `rcEnabled`. These will be consolidated once
+  the old RC code is removed in step 5.
+
+- **`configureNrc()` instead of raw `buildNrcContextSettings()` + `Configure()`.** The
+  plan had `Configure(contextSettings)` called inline at each site. These were consolidated
+  into a single `configureNrc()` function that builds the settings and calls `Configure()`
+  internally, reducing duplication across the three call sites (init, resize, and
+  per-frame `maxPathDepth` change).
+
+- **Per-frame reconfiguration on `maxPathDepth` change.** The plan only mentioned
+  reconfiguration on resolution change (item 6). The implementation also reconfigures when
+  `maxPathDepth` changes at runtime, since that value feeds into
+  `ContextSettings::maxPathVertices`.
 
 ---
 

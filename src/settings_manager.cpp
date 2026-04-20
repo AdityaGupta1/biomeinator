@@ -53,6 +53,7 @@ void parseArgs(const int argc, const char* const* argv)
 
     ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "false");
     ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
+    ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
     ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
@@ -115,6 +116,7 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("rcEnabled", bool);
     COPY_SETTING("rcMinSamplesForQuery", uint32_t);
+    COPY_SETTING("nrcEnabled", bool);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);

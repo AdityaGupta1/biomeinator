@@ -40,12 +40,12 @@ implementation.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 2.1 Add NRC state variables (`nrcContext`, `nrcInitialized`) | pending | |
-| 2.2 Implement `initNrc()` (Initialize + Create + Configure) | pending | |
-| 2.3 Implement `destroyNrc()` (flush + Destroy + Shutdown) | pending | |
-| 2.4 Wire `initNrc()` / `destroyNrc()` to the `rcEnabled` toggle | pending | Replaces `initRadianceCache()` |
-| 2.5 Handle reconfiguration on resolution change | pending | |
-| 2.6 Wire `initNrc()` into startup, `destroyNrc()` into `destroy()` | pending | |
+| 2.1 Add NRC state variables (`nrcContext`, `nrcInitialized`) | done | `nrcInitialized` skipped — `nrcContext != nullptr` serves the same purpose |
+| 2.2 Implement `initNrc()` (Initialize + Create + Configure) | done | Configure call consolidated into `configureNrc()` helper |
+| 2.3 Implement `destroyNrc()` (flush + Destroy + Shutdown) | done | |
+| 2.4 Wire `initNrc()` / `destroyNrc()` to the `rcEnabled` toggle | done | Uses separate `nrcEnabled` setting so old RC can coexist during migration |
+| 2.5 Handle reconfiguration on resolution change | done | Also reconfigures on `maxPathDepth` change (feeds `maxPathVertices`) |
+| 2.6 Wire `initNrc()` into startup, `destroyNrc()` into `destroy()` | done | |
 
 ### Step 3: NrcConstants in constant buffer
 
