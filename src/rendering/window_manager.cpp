@@ -221,7 +221,7 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
         case WM_SIZE:
             if (isInitialized)
             {
-                Renderer::resize();
+                Renderer::queueResize();
             }
             break;
         case WM_KEYDOWN:

@@ -19,6 +19,7 @@ void init();
 void loadScene(const std::string& filePathStr);
 
 void resize();
+void queueResize();
 
 void render();
 

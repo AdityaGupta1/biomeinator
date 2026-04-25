@@ -994,8 +994,8 @@ static void initRootSignature()
         std::array<D3D12_ROOT_PARAMETER1, NRC_RESOLVE_PARAM_IDX(COUNT)> nrcResolveParams;
 
         nrcResolveParams[NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS)] = MAKE_PARAM(CBV, NRC, NRC_CONSTANTS);
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO)] = MAKE_PARAM(UAV, NRC, QUERY_PATH_INFO);
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE);
+        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO)] = MAKE_PARAM(SRV, NRC, QUERY_PATH_INFO);
+        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE)] = MAKE_PARAM(SRV, NRC, QUERY_RADIANCE);
         nrcResolveParams[NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC nrcResolveRootSigDesc = {
@@ -1603,6 +1603,11 @@ static void imguiBeginFrame()
 static bool needsResize = false;
 static bool didPathTracingSettingsChange = false;
 
+void queueResize()
+{
+    needsResize = true;
+}
+
 static void imguiEndFrame(double deltaTime)
 {
     didPathTracingSettingsChange = false;
@@ -1626,7 +1631,9 @@ static void imguiEndFrame(double deltaTime)
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Radiance Cache");
-        didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable NRC", "nrcEnabled");
+        const bool didNrcChange = SettingsGuiHelpers::Checkbox("Enable NRC", "nrcEnabled");
+        didPathTracingSettingsChange |= didNrcChange;
+        needsResize |= didNrcChange;
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
@@ -2127,15 +2134,26 @@ void render()
 
             BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 
+            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
+            BufferHelper::stateTransitionResourceBarrier(
+                cmdList.Get(),
+                (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            BufferHelper::stateTransitionResourceBarrier(
+                cmdList.Get(),
+                (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
             cmdList->SetPipelineState(nrcResolvePso.Get());
             cmdList->SetComputeRootSignature(nrcResolveRootSig.Get());
 
-            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
             cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-            cmdList->SetComputeRootUnorderedAccessView(
+            cmdList->SetComputeRootShaderResourceView(
                 NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
                 (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(
+            cmdList->SetComputeRootShaderResourceView(
                 NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
                 (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
             cmdList->SetComputeRootUnorderedAccessView(
@@ -2149,6 +2167,16 @@ void render()
             cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
 
             BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+            BufferHelper::stateTransitionResourceBarrier(
+                cmdList.Get(),
+                (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            BufferHelper::stateTransitionResourceBarrier(
+                cmdList.Get(),
+                (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
 
         // ===================================

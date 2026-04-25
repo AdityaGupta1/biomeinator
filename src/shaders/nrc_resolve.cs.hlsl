@@ -4,7 +4,6 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_settings.h"
 
-#define NRC_USE_CUSTOM_BUFFER_ACCESSORS 1
 #define NRC_RW_STRUCTURED_BUFFER(T) RWStructuredBuffer<T>
 
 #include "NrcHelpers.hlsli"
@@ -14,8 +13,8 @@ cbuffer NrcConstantBuffer : REGISTER_B(NRC, NRC_CONSTANTS)
     NrcConstants nrcConstants;
 };
 
-RWStructuredBuffer<NrcPackedQueryPathInfo> nrcQueryPathInfo : REGISTER_U(NRC, QUERY_PATH_INFO);
-RWStructuredBuffer<float3> nrcQueryRadiance : REGISTER_U(NRC, QUERY_RADIANCE);
+StructuredBuffer<NrcPackedQueryPathInfo> nrcQueryPathInfo : REGISTER_T(NRC, QUERY_PATH_INFO);
+StructuredBuffer<float3> nrcQueryRadiance : REGISTER_T(NRC, QUERY_RADIANCE);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 
 [shader("compute")]
