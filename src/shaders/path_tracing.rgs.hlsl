@@ -87,8 +87,11 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
     const uint pathSplitIdx = getPathSplitIdx();
 
 #if NRC_UPDATE || NRC_QUERY
+    // NRC frameDimensions match full dispatch (e.g. doubled width when path splitting).
+    // Do not use getPixelIdx() here — it collapses split lanes to the same coordinate.
+    const uint2 nrcPixelIdx = DispatchRaysIndex().xy;
     NrcBuffers nrcBufs = (NrcBuffers)0;
-    NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBufs, pixelIdx);
+    NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBufs, nrcPixelIdx);
     NrcPathState nrcPathState = NrcCreatePathState(nrcConstants, payload.rng.nextFloat());
 #endif
 
@@ -116,6 +119,10 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 
     if (payload.materialIdx == MATERIAL_IDX_INVALID)
     {
+#if NRC_UPDATE || NRC_QUERY
+        NrcUpdateOnMiss(nrcPathState);
+        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
+#endif
         return;
     }
 
@@ -216,7 +223,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
                 surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfMipLevel, pathSplitIdx, payload.pathWeight);
             if (!didSplitMaterial && pathSplitIdx == 1)
             {
-                return;
+                break;
             }
         }
 #endif

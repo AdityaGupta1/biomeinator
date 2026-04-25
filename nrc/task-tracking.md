@@ -17,7 +17,7 @@ implementation.
 | # | Assumption | Status |
 |---|-----------|--------|
 | A1 | NRC SDK manages its own GPU buffers (`enableGPUMemoryAllocation = true`) | active |
-| A2 | Path splitting works with NRC. `frameDimensions` is set to `(renderWidth * (doPathSplitting ? 2 : 1), renderHeight)` to match the doubled query dispatch. The custom resolve indexes linearly at the doubled width, which matches the interleaved buffer layout. | active |
+| A2 | Path splitting works with NRC. `frameDimensions` is set to `(renderWidth * (doPathSplitting ? 2 : 1), renderHeight)` to match the doubled query dispatch. NRC context creation uses raw `DispatchRaysIndex().xy`, while normal shading still uses `getPixelIdx()` for path-split pixel semantics. The custom resolve indexes linearly at the doubled width, which matches the interleaved buffer layout. | active |
 | A3 | ~~Built-in `Resolve()` is used~~ — **revised**: custom resolve compute shader needed because built-in resolve expects a texture output (Vulkan API requires `VkImageView`; D3D12 likely same internally), but our output is a structured buffer | revised |
 | A4 | `dev_pathTracingRawBuffer` is format-compatible with NRC's `Resolve` output | N/A — bypassed by custom resolve |
 | A5 | `flush()` is acceptable when toggling NRC off at runtime | active |
@@ -41,7 +41,7 @@ implementation.
 | Task | Status | Notes |
 |------|--------|-------|
 | 2.1 Add NRC state variables (`nrcContext`, `nrcInitialized`) | done | `nrcInitialized` skipped — `nrcContext != nullptr` serves the same purpose |
-| 2.2 Implement `initNrc()` (Initialize + Create + Configure) | done | Configure call consolidated into `configureNrc()` helper |
+| 2.2 Implement `initNrc()` (Initialize + Create + Configure) | done | Configure call consolidated into `configureNrc()` helper. Guarded against duplicate init if NRC starts enabled. |
 | 2.3 Implement `destroyNrc()` (flush + Destroy + Shutdown) | done | |
 | 2.4 Wire `initNrc()` / `destroyNrc()` to the `rcEnabled` toggle | done | Uses separate `nrcEnabled` setting so old RC can coexist during migration |
 | 2.5 Handle reconfiguration on resolution change | done | Also reconfigures on `maxPathDepth` and `doPathSplitting` changes. `doPathSplitting` triggers resize → `configureNrc()`, which now reads `doPathSplitting` to set `frameDimensions`. |
@@ -55,22 +55,22 @@ implementation.
 | 3.2 Call `BeginFrame` + `PopulateShaderConstants` each frame | done | Called after NRC toggle/reconfigure logic. Zero-initialized when NRC is disabled. |
 | 3.3 Bind as separate root CBV in path tracing root signature | done | Added `NRC_CONSTANTS` to `PtParam` enum, root sig, and bind call. Register space 5, b0. Shader-side cbuffer declaration deferred to step 4. |
 
-### Step 4: Shader-side NRC integration
+### Step 4: Shader-side NRC integration — done
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 4.1 Create `nrc_update.rgs.hlsl` and `nrc_query.rgs.hlsl` | pending | |
-| 4.2 Add NRC buffer bindings (root params / UAVs) to PT root sig | pending | 5 buffers: QueryPathInfo, TrainingPathInfo, TrainingPathVertices, QueryRadianceParams, Counter |
-| 4.3 Replace `#ifdef RC_UPDATE` blocks with NRC API calls in `path_tracing.rgs.hlsl` | pending | Largest single task |
-| 4.4 Replace RC lookup termination with `NrcProgressState` handling | pending | |
-| 4.5 Add `NrcSurfaceAttributes` population from decoded material | pending | Map existing material fields to NRC's expected inputs |
-| 4.6 Add `NrcSetBrdfPdf` call after BSDF sampling | pending | |
-| 4.7 Gate Russian roulette with `NrcCanUseRussianRoulette` | pending | |
-| 4.8 Add `NrcWriteFinalPathInfo` after bounce loop | pending | |
-| 4.9 Delete `rc_update.rgs.hlsl` | pending | |
-| 4.10 Update `shaders.cpp` (remove old RC shaders, add NRC shaders) | pending | |
-| 4.11 Build new PSOs for NRC update and query variants | pending | |
-| 4.12 Bind NRC buffers from C++ before DispatchRays | pending | Use `nrcContext->GetBuffers()` |
+| 4.1 Create `nrc_update.rgs.hlsl` and `nrc_query.rgs.hlsl` | done | Thin wrapper variants around `path_tracing.rgs.hlsl` |
+| 4.2 Add NRC buffer bindings (root params / UAVs) to PT root sig | done | 5 buffers: QueryPathInfo, TrainingPathInfo, TrainingPathVertices, QueryRadianceParams, Counter |
+| 4.3 Replace `#ifdef RC_UPDATE` blocks with NRC API calls in `path_tracing.rgs.hlsl` | done | NRC variants use SDK shader API; old RC code remains for `RC_UPDATE` during coexistence |
+| 4.4 Replace RC lookup termination with `NrcProgressState` handling | done | `TerminateImmediately` and `TerminateAfterDirectLighting` handled in the bounce loop |
+| 4.5 Add `NrcSurfaceAttributes` population from decoded material | done | Position, normal, roughness, F0, diffuse reflectance, view vector, and delta-lobe state populated |
+| 4.6 Add `NrcSetBrdfPdf` call after BSDF sampling | done | |
+| 4.7 Gate Russian roulette with `NrcCanUseRussianRoulette` | done | |
+| 4.8 Add `NrcWriteFinalPathInfo` after bounce loop | done | Early NRC exits were tightened so created path states reach final path info writes |
+| 4.9 Defer old RC shader deletion | done | `rc_update.rgs.hlsl` and old RC shaders intentionally remain while `rcEnabled` and `nrcEnabled` coexist |
+| 4.10 Update `shaders.cpp` for NRC shader variants | done | NRC shaders added; old RC shader registrations retained for coexistence |
+| 4.11 Build new PSOs for NRC update and query variants | done | Query dispatch now uses `nrcQueryDispatchDesc` instead of the plain PT shader table |
+| 4.12 Bind NRC buffers from C++ before DispatchRays | done | Uses `nrcContext->GetBuffers()` for update and query dispatches |
 
 ### Step 5: QueryAndTrain and Resolve
 

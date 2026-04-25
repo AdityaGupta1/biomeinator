@@ -1533,6 +1533,11 @@ static void configureNrc()
 
 static void initNrc()
 {
+    if (nrcContext != nullptr)
+    {
+        return;
+    }
+
     nrc::GlobalSettings globalSettings;
     globalSettings.enableGPUMemoryAllocation = true;
     globalSettings.enableDebugBuffers = true;
@@ -2140,7 +2145,7 @@ void render()
     rcPrevEnabled = rcEnabled;
 
     const bool nrcEnabled = SettingsManager::getAsBool("nrcEnabled");
-    static bool nrcPrevEnabled = false;
+    static bool nrcPrevEnabled = SettingsManager::getAsBool("nrcEnabled");
     if (nrcEnabled != nrcPrevEnabled)
     {
         if (nrcEnabled)
@@ -2415,9 +2420,10 @@ void render()
         }
         // clang-format on
 
-        ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
-        ptDispatchDesc.Height = gbufferDispatchDesc.Height;
-        cmdList->DispatchRays(&ptDispatchDesc);
+        D3D12_DISPATCH_RAYS_DESC& activePtDispatchDesc = useNrcQuery ? nrcQueryDispatchDesc : ptDispatchDesc;
+        activePtDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+        activePtDispatchDesc.Height = gbufferDispatchDesc.Height;
+        cmdList->DispatchRays(&activePtDispatchDesc);
 
         if (rcEnabled)
         {
@@ -2451,8 +2457,8 @@ void render()
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        const uint32_t dispatchWidth = Util::calculateDispatchSize(ptDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
-        const uint32_t dispatchHeight = Util::calculateDispatchSize(ptDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        const uint32_t dispatchWidth = Util::calculateDispatchSize(activePtDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::calculateDispatchSize(activePtDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
         cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
         // ===================================

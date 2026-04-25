@@ -179,6 +179,11 @@ not dispatched.
   `maxPathDepth` changes at runtime, since that value feeds into
   `ContextSettings::maxPathVertices`.
 
+- **Startup double-init guarded.** `initNrc()` now returns early if a context already
+  exists, and the per-frame `nrcPrevEnabled` state is initialized from the current
+  `nrcEnabled` setting. This prevents calling `Initialize`/`Create` twice when NRC starts
+  enabled from CLI or persisted settings.
+
 ---
 
 ## Step 3: Add NrcConstants to the constant buffer
@@ -214,7 +219,7 @@ via the global constant buffer.
 
 ---
 
-## Step 4: Shader-side NRC integration (update and query variants)
+## Step 4: Shader-side NRC integration (update and query variants) — DONE
 
 **Goal**: The path tracing shader is modified to use NRC's shader API. Three shader
 variants are compiled. NRC buffers are bound and written to.
@@ -224,10 +229,12 @@ variants are compiled. NRC buffers are bound and written to.
 1. **Create new shader entry files**:
    - `nrc_update.rgs.hlsl`: `#define NRC_UPDATE 1` then `#include "path_tracing.rgs.hlsl"`.
    - `nrc_query.rgs.hlsl`: `#define NRC_QUERY 1` then `#include "path_tracing.rgs.hlsl"`.
-   - Delete `rc_update.rgs.hlsl`.
+   - Keep `rc_update.rgs.hlsl` for now because the old RC path still coexists with NRC
+     during the migration. Old RC shader deletion is deferred to Step 5/Step 7 cleanup.
 
 2. **Modify `path_tracing.rgs.hlsl`**:
-   - Replace `#include "radiance_cache.hlsli"` with NRC includes:
+   - Add NRC includes for the NRC variants while keeping `radiance_cache.hlsli` for the
+     non-NRC / old-RC variants:
      ```hlsl
      #define NRC_USE_CUSTOM_BUFFER_ACCESSORS 1
      #include "Nrc.hlsli"
@@ -242,9 +249,13 @@ variants are compiled. NRC buffers are bound and written to.
        path state:
        ```hlsl
        NrcBuffers nrcBuffers = { ... };
-       NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBuffers, pixelIdx);
+       NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBuffers, nrcPixelIdx);
        NrcPathState nrcPathState = NrcCreatePathState(nrcConstants, rng.nextFloat());
        ```
+      `nrcPixelIdx` is `DispatchRaysIndex().xy`, not `getPixelIdx()`, because NRC
+      `frameDimensions` match the full dispatch dimensions. With path splitting enabled,
+      `getPixelIdx()` intentionally divides X by two for normal shading, but NRC needs the
+      unique doubled-width path coordinate.
      - At each hit (before BSDF sampling), populate `NrcSurfaceAttributes` from the
        decoded material and call `NrcUpdateOnHit(...)`. Check the returned
        `NrcProgressState`:
@@ -267,11 +278,12 @@ variants are compiled. NRC buffers are bound and written to.
      `TrainingPathInfo`, `TrainingPathVertices`, `QueryRadianceParams`, `Counter`.
    - Bind them before each DispatchRays call.
 
-4. **Delete old RC shader files**: `rc_evict.cs.hlsl`, `rc_resolve.cs.hlsl`,
-   `radiance_cache.hlsli`.
+4. **Defer old RC shader deletion**: `rc_evict.cs.hlsl`, `rc_resolve.cs.hlsl`,
+   `rc_update.rgs.hlsl`, and `radiance_cache.hlsli` remain while both cache
+   implementations coexist. Their deletion is tracked in Step 5/Step 7.
 
-5. **Update `shaders.cpp`**: Remove the old RC shader registrations, add the new NRC
-   update/query shader registrations.
+5. **Update `shaders.cpp`**: Add the new NRC update/query shader registrations while
+   retaining the old RC shader registrations for coexistence.
 
 6. **Update `CMakeLists.txt`**: The new `.rgs.hlsl` files will be auto-discovered by the
    existing glob. The deleted files will be auto-removed. No manual changes needed unless
@@ -289,6 +301,33 @@ variants are compiled. NRC buffers are bound and written to.
   - `QueryRadianceParams` contains plausible position/direction data.
 - The image will look wrong at this point because `QueryAndTrain` and `Resolve` haven't
   been called yet -- that's expected.
+
+### Verification status
+
+- Project builds in `RelWithDebInfo`.
+- Enabling NRC no longer causes the first-frame GPU hang that occurred during Step 4
+  bring-up.
+- The crash root cause was dispatching `nrcQueryPso` with the plain path tracing shader
+  table (`ptDispatchDesc`). The render loop now selects the active dispatch descriptor:
+  `nrcQueryDispatchDesc` for `nrcQueryPso`, `ptDispatchDesc` for `ptPso`.
+- NRC path coordinates now use raw `DispatchRaysIndex().xy` for `NrcCreateContext()`, so
+  query/update records match NRC `frameDimensions`, including doubled-width path-splitting
+  dispatches.
+- Early NRC shader exits were tightened so created NRC path states reach
+  `NrcWriteFinalPathInfo()` before leaving the shader.
+
+### Deviations from plan
+
+- **Old RC is still present.** Step 4 originally called for deleting old RC shader files
+  and registrations, but the branch currently keeps `rcEnabled` and `nrcEnabled` separate
+  so both implementations can coexist during migration. Deletion remains part of the Step
+  5/Step 7 cleanup.
+- **NRC query uses a separate dispatch descriptor.** The initial Step 4 implementation
+  created a query PSO and shader table but accidentally dispatched it with `ptDispatchDesc`.
+  This was fixed by using `nrcQueryDispatchDesc` whenever `nrcQueryPso` is active.
+- **NRC indexing is separate from shading pixel indexing.** Normal path tracing still uses
+  `getPixelIdx()` for gbuffer/shading semantics, but NRC context creation uses the raw
+  dispatch index to avoid path-split coordinate aliasing.
 
 ---
 
