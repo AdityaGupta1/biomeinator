@@ -445,7 +445,7 @@ enabled.
 
 ---
 
-## Step 6: Debug views and UI polish
+## Step 6: Debug views and UI polish — done
 
 **Goal**: The NRC debug resolve modes are accessible from the UI, the old RC debug view is
 removed, and the toggle is polished.

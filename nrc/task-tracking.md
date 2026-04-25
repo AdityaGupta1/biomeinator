@@ -89,15 +89,27 @@ implementation.
 | 5.10 Update `configureNrc()` to set `frameDimensions` based on `doPathSplitting` | done | `frameDimensions = { renderWidth * (doPathSplitting ? 2 : 1), renderHeight }` |
 | 5.11 Wire up the full NRC pass sequence in the render loop | done | BeginFrame -> G-Buffer -> NRC Update -> NRC Query -> QueryAndTrain -> restore app descriptor heap -> Custom Resolve -> Collect -> EndFrame. |
 
-### Step 6: Debug views and UI polish
+### Step 6: Debug views and UI polish — done
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 6.1 Add NRC resolve mode combo box to ImGui | pending | Use `GetImGuiResolveModeComboString()` |
-| 6.2 Switch between custom resolve (normal mode) and built-in resolve + debug texture (debug modes) | pending | Built-in `Resolve()` targets a temp `RWTexture2D<float4>` for debug visualization |
-| 6.3 Remove old RC debug view from `debug_view.ps.hlsl` | pending | |
-| 6.4 Add NRC tuning sliders (threshold, radiance scale, etc.) | pending | Runtime currently hardcodes `terminationHeuristicThreshold`, `trainingTerminationHeuristicThreshold`, and `maxExpectedAverageRadianceValue` in `renderer.cpp`; expose these through settings/UI. |
-| 6.5 Ensure accumulation resets on NRC toggle / setting change | pending | |
+| 6.1 Add NRC resolve mode combo box to ImGui | done | Uses raw `ImGui::Combo` with `nrc::GetImGuiResolveModeComboString()`. Stored as uint setting `nrcResolveMode`. Only shown when NRC is enabled. |
+| 6.2 Switch between custom resolve (normal mode) and built-in resolve + debug texture (debug modes) | done | `nrcDebugTarget` RtTarget created at `frameDimensions` (path-splitting-aware). Built-in `Resolve()` used for debug modes; custom resolve for normal mode. Debug texture overrides the debug view target when active. Descriptor heap restored after SDK `Resolve()` call. |
+| 6.3 Remove old RC debug view from `debug_view.ps.hlsl` | done | No-op — no old RC debug view references found in `debug_view.ps.hlsl` or the debug view pass. Already cleaned up during Step 5. |
+| 6.4 Add NRC tuning sliders (threshold, radiance scale, etc.) | done | Added 7 settings: `nrcResolveMode`, `nrcMaxRadiance`, `nrcTerminationThreshold`, `nrcTrainingTerminationThreshold`, `nrcSkipDeltaVertices`, `nrcTrainTheCache`, `nrcLearningRate`. All exposed through ImGui when NRC is enabled. |
+| 6.5 Ensure accumulation resets on NRC toggle / setting change | done | All NRC setting changes OR into `didPathTracingSettingsChange`, which drives `resetAccumulation`. Covered by construction from 6.1 and 6.4. |
+
+### Step 6 deviations from plan
+
+- **NRC context destroyed and recreated on resize instead of just reconfigured.** Calling
+  `configureNrc()` alone after a resize (e.g. path splitting toggle) caused crashes when a
+  debug resolve mode was active. The SDK's built-in `Resolve()` for debug modes uses
+  internal debug buffers that are not properly reallocated by `Configure()` alone. The fix
+  is to call `destroyNrc()` + `initNrc()` in `resize()`, which fully recreates the context
+  and its debug buffers at the correct `frameDimensions`.
+
+- **Task 6.3 was a no-op.** No old RC debug view references existed in `debug_view.ps.hlsl`
+  or the debug view pass — already cleaned up during Step 5.
 
 ### Step 7: Cleanup and knowledgebase
 

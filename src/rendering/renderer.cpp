@@ -460,6 +460,8 @@ static RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FO
 static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
 static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+
+static RtTarget nrcDebugTarget{ L"nrcDebugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4 };
 // clang-format on
 
 static std::vector<RtTarget*> allRtTargets;
@@ -483,6 +485,8 @@ static void initRtTargets()
     {
         allRtTargets.push_back(rtTarget);
     }
+
+    autoTransitionRtTargets.push_back(&nrcDebugTarget);
 
     resize();
 }
@@ -642,6 +646,10 @@ void resize()
         rtTarget->init();
     }
 
+    nrcDebugTarget.reset();
+    nrcDebugTarget.setDimensions(renderWidth * (doPathSplitting ? 2 : 1), renderHeight);
+    nrcDebugTarget.init();
+
     for (auto& frame : frameCtxs)
     {
         frame.paramBlockManager.heapIndices->uav = {
@@ -687,7 +695,9 @@ void resize()
 
     if (nrcContext != nullptr)
     {
-        configureNrc();
+        // TODO: try to avoid fully destroying and recreating NRC on resize
+        destroyNrc();
+        initNrc();
     }
 }
 
@@ -1635,6 +1645,27 @@ static void imguiEndFrame(double deltaTime)
         didPathTracingSettingsChange |= didNrcChange;
         needsResize |= didNrcChange;
 
+        const bool nrcEnabled = SettingsManager::getAsBool("nrcEnabled");
+        if (nrcEnabled)
+        {
+            {
+                int nrcResolveModeInt = static_cast<int>(SettingsManager::getAsUint("nrcResolveMode"));
+                SettingsGuiHelpers::ScopedItemWidth width(SettingsGuiHelpers::comboWidth);
+                if (ImGui::Combo("NRC resolve mode", &nrcResolveModeInt, nrc::GetImGuiResolveModeComboString()))
+                {
+                    SettingsManager::setAsUint("nrcResolveMode", static_cast<uint32_t>(nrcResolveModeInt));
+                    didPathTracingSettingsChange = true;
+                }
+            }
+
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Max radiance", "nrcMaxRadiance", 0.01f, 100.0f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Termination threshold", "nrcTerminationThreshold", 0.001f, 1.0f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Training termination threshold", "nrcTrainingTerminationThreshold", 0.001f, 1.0f);
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Skip delta vertices", "nrcSkipDeltaVertices");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Train the cache", "nrcTrainTheCache");
+            didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Learning rate", "nrcLearningRate", 0.0001f, 0.1f);
+        }
+
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Antialiasing");
         const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
@@ -1956,16 +1987,28 @@ void render()
     if (nrcContext != nullptr)
     {
         nrc::FrameSettings frameSettings;
-        frameSettings.maxExpectedAverageRadianceValue = 1.0f;
-        frameSettings.terminationHeuristicThreshold = 0.1f;
-        frameSettings.trainingTerminationHeuristicThreshold = 0.1f;
-        frameSettings.resolveMode = NrcResolveMode::AddQueryResultToOutput;
+        frameSettings.maxExpectedAverageRadianceValue = SettingsManager::getAsFloat("nrcMaxRadiance");
+        frameSettings.terminationHeuristicThreshold = SettingsManager::getAsFloat("nrcTerminationThreshold");
+        frameSettings.trainingTerminationHeuristicThreshold = SettingsManager::getAsFloat("nrcTrainingTerminationThreshold");
+        frameSettings.resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
+        frameSettings.skipDeltaVertices = SettingsManager::getAsBool("nrcSkipDeltaVertices");
+        frameSettings.trainTheCache = SettingsManager::getAsBool("nrcTrainTheCache");
+        frameSettings.learningRate = SettingsManager::getAsFloat("nrcLearningRate");
         nrcContext->BeginFrame(cmdList.Get(), frameSettings);
         nrcContext->PopulateShaderConstants(*paramBlockManager.nrcConstants);
     }
     else
     {
         memset(paramBlockManager.nrcConstants, 0, sizeof(NrcConstants));
+    }
+
+    const bool nrcDebugModeActive = (nrcContext != nullptr) &&
+        (static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode")) != NrcResolveMode::AddQueryResultToOutput);
+    if (nrcDebugModeActive)
+    {
+        debugOutputTarget = &nrcDebugTarget;
+        debugParams->debugOutputSrvIdx = nrcDebugTarget.getSrvIdx();
+        debugParams->debugOutputNumChannels = nrcDebugTarget.debugOutputNumChannels;
     }
 
     auto& sceneParams = paramBlockManager.sceneParams;
@@ -2135,26 +2178,38 @@ void render()
             cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
             BufferHelper::uavBarrier(cmdList.Get(), nullptr);
 
-            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
-            cmdList->SetPipelineState(nrcResolvePso.Get());
-            cmdList->SetComputeRootSignature(nrcResolveRootSig.Get());
+            const NrcResolveMode resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
+            const bool useBuiltinResolve = (resolveMode != NrcResolveMode::AddQueryResultToOutput);
 
-            cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-            cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
-                (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
-                (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
-                dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+            if (useBuiltinResolve)
+            {
+                nrcDebugTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                nrcContext->Resolve(cmdList.Get(), nrcDebugTarget.getTarget());
+                cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
+            }
+            else
+            {
+                const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
+                cmdList->SetPipelineState(nrcResolvePso.Get());
+                cmdList->SetComputeRootSignature(nrcResolveRootSig.Get());
 
-            const uint32_t nrcResolveDispatchWidth =
-                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
-            const uint32_t nrcResolveDispatchHeight =
-                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.y, NRC_RESOLVE_WORKGROUP_SIZE_Y);
-            cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
+                cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+                cmdList->SetComputeRootUnorderedAccessView(
+                    NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
+                    (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
+                cmdList->SetComputeRootUnorderedAccessView(
+                    NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
+                    (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
+                cmdList->SetComputeRootUnorderedAccessView(
+                    NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
+                    dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+
+                const uint32_t nrcResolveDispatchWidth =
+                    Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
+                const uint32_t nrcResolveDispatchHeight =
+                    Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.y, NRC_RESOLVE_WORKGROUP_SIZE_Y);
+                cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
+            }
 
             BufferHelper::uavBarrier(cmdList.Get(), nullptr);
         }
