@@ -186,6 +186,18 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 
         const float3 wo_WS = -ray.Direction;
 
+#if !defined(RC_UPDATE) && !NRC_UPDATE
+        if (pathDepth == 0 && bool(renderParams.doPathSplitting))
+        {
+            const bool didSplitMaterial = trySplitMaterial(
+                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfMipLevel, pathSplitIdx, payload.pathWeight);
+            if (!didSplitMaterial && pathSplitIdx == 1)
+            {
+                break;
+            }
+        }
+#endif
+
 #if NRC_UPDATE || NRC_QUERY
         NrcSurfaceAttributes nrcSurfAttr;
         nrcSurfAttr.encodedPosition = NrcEncodePosition(payload.hitInfo.hitPos_WS, nrcConstants);
@@ -210,18 +222,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
         if (nrcProgress == NrcProgressState::TerminateImmediately)
         {
             break;
-        }
-#endif
-
-#if !defined(RC_UPDATE) && !NRC_UPDATE
-        if (pathDepth == 0 && bool(renderParams.doPathSplitting))
-        {
-            const bool didSplitMaterial = trySplitMaterial(
-                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfMipLevel, pathSplitIdx, payload.pathWeight);
-            if (!didSplitMaterial && pathSplitIdx == 1)
-            {
-                break;
-            }
         }
 #endif
 
@@ -293,6 +293,9 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 
 #if NRC_UPDATE || NRC_QUERY
             NrcSetBrdfPdf(nrcPathState, surfBsdfSample.pdf);
+            // NRC updates this flag before BSDF sampling, but mixed materials only reveal
+            // whether the outgoing lobe is delta after sampling.
+            NrcSetFlag(nrcPathState.packedData, nrcPathFlagPreviousHitWasDeltaLobe, surfBsdfSample.wasSpecular);
 #endif
 
 #ifdef RC_UPDATE

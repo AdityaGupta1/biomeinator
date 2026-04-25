@@ -64,8 +64,8 @@ implementation.
 | 4.2 Add NRC buffer bindings (root params / UAVs) to PT root sig | done | 5 buffers: QueryPathInfo, TrainingPathInfo, TrainingPathVertices, QueryRadianceParams, Counter |
 | 4.3 Replace `#ifdef RC_UPDATE` blocks with NRC API calls in `path_tracing.rgs.hlsl` | done | NRC variants use SDK shader API; old RC code remains for `RC_UPDATE` during coexistence |
 | 4.4 Replace RC lookup termination with `NrcProgressState` handling | done | `TerminateImmediately` and `TerminateAfterDirectLighting` handled in the bounce loop |
-| 4.5 Add `NrcSurfaceAttributes` population from decoded material | done | Position, normal, roughness, F0, diffuse reflectance, view vector, and delta-lobe state populated |
-| 4.6 Add `NrcSetBrdfPdf` call after BSDF sampling | done | |
+| 4.5 Add `NrcSurfaceAttributes` population from decoded material | done | Position, normal, roughness, F0, diffuse reflectance, view vector, and delta-lobe state populated. Query pass applies first-bounce path splitting before `NrcUpdateOnHit()` so NRC sees the actual split lobe and adjusted throughput. |
+| 4.6 Add `NrcSetBrdfPdf` call after BSDF sampling | done | Also updates NRC's previous-hit delta flag from the sampled BSDF lobe so mixed diffuse+glossy materials do not let specular reflection paths trigger premature NRC queries. |
 | 4.7 Gate Russian roulette with `NrcCanUseRussianRoulette` | done | |
 | 4.8 Add `NrcWriteFinalPathInfo` after bounce loop | done | Early NRC exits were tightened so created path states reach final path info writes |
 | 4.9 Defer old RC shader deletion | done | `rc_update.rgs.hlsl` and old RC shaders intentionally remain while `rcEnabled` and `nrcEnabled` coexist |
@@ -96,7 +96,7 @@ implementation.
 | 6.1 Add NRC resolve mode combo box to ImGui | pending | Use `GetImGuiResolveModeComboString()` |
 | 6.2 Switch between custom resolve (normal mode) and built-in resolve + debug texture (debug modes) | pending | Built-in `Resolve()` targets a temp `RWTexture2D<float4>` for debug visualization |
 | 6.3 Remove old RC debug view from `debug_view.ps.hlsl` | pending | |
-| 6.4 Add NRC tuning sliders (threshold, radiance scale, etc.) | pending | |
+| 6.4 Add NRC tuning sliders (threshold, radiance scale, etc.) | pending | Runtime currently hardcodes `terminationHeuristicThreshold`, `trainingTerminationHeuristicThreshold`, and `maxExpectedAverageRadianceValue` in `renderer.cpp`; expose these through settings/UI. |
 | 6.5 Ensure accumulation resets on NRC toggle / setting change | pending | |
 
 ### Step 7: Cleanup and knowledgebase

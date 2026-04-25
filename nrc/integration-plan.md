@@ -315,6 +315,10 @@ variants are compiled. NRC buffers are bound and written to.
   dispatches.
 - Early NRC shader exits were tightened so created NRC path states reach
   `NrcWriteFinalPathInfo()` before leaving the shader.
+- Mixed diffuse+glossy materials now report the actual traced lobe to NRC. The query pass
+  applies first-bounce path splitting before `NrcUpdateOnHit()`, and after BSDF sampling it
+  updates NRC's previous-hit delta flag from `surfBsdfSample.wasSpecular`. This prevents
+  specular reflection paths from being treated as non-delta and querying NRC too early.
 
 ### Deviations from plan
 
@@ -462,7 +466,10 @@ removed, and the toggle is polished.
 
 4. Add NRC-specific settings to the UI:
    - `terminationHeuristicThreshold` slider (controls bias vs noise tradeoff).
+   - `trainingTerminationHeuristicThreshold` slider, or keep it paired with
+     `terminationHeuristicThreshold`.
    - `maxExpectedAverageRadianceValue` slider.
+   - `skipDeltaVertices` checkbox (useful when debugging mirror/specular paths).
    - `learningRate` slider (advanced, optional).
    - `trainTheCache` checkbox (useful for debugging -- freezes the cache).
 
