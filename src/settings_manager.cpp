@@ -51,8 +51,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
-    ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "false");
-    ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
@@ -114,8 +112,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
 
-    COPY_SETTING("rcEnabled", bool);
-    COPY_SETTING("rcMinSamplesForQuery", uint32_t);
     COPY_SETTING("nrcEnabled", bool);
 
     COPY_SETTING("debugView", std::string);

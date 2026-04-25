@@ -46,7 +46,7 @@
     #include "Nrc.hlsli"
 #endif
 
-#if !NRC_UPDATE && !NRC_QUERY
+#if defined(RC_UPDATE)
     #include "radiance_cache.hlsli"
 #endif
 
@@ -66,9 +66,6 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
     RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
     RWByteAddressBuffer rcAccumulation : REGISTER_U(RC, ACCUMULATION);
-#elif !NRC_UPDATE && !NRC_QUERY
-    ByteAddressBuffer rcHashEntries : REGISTER_T(RC, HASH_ENTRIES);
-    StructuredBuffer<float4> rcResolved : REGISTER_T(RC, RESOLVED);
 #endif
 
 float balanceHeuristic(const float pdfA, const float pdfB)
@@ -497,35 +494,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
         payload.pathWeight *= segmentAbsorption;
 
-#if !defined(RC_UPDATE) && !NRC_UPDATE && !NRC_QUERY
-        // terminate path early by reading radiance cache if possible
-        const bool surfMaterialCanUseRadianceCache = surfMaterial.canScatter() && !surfMaterial.isDelta();
-        if (bool(rcParams.rcEnabled) && pathDepth >= 1 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) &&
-            surfMaterialCanUseRadianceCache)
-        {
-            const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-            const int level = rcGetLevel(payload.hitInfo.hitPos_WS);
-            const float voxelSize = rcGetVoxelSize(level);
-
-            if (hitDistance >= voxelSize && payload.rayCone.width >= voxelSize)
-            {
-                const float3 jitteredPos = rcJitterPos(payload.hitInfo.hitPos_WS, level, payload.rng);
-                const int3 gridPos = rcWorldToGrid(jitteredPos, level);
-                const uint slot = rcLookup(gridPos, level, rcHashEntries);
-
-                if (slot != RC_INVALID_SLOT)
-                {
-                    const float4 resolved = rcResolved[slot];
-                    if (resolved.w >= rcParams.rcMinSamplesForQuery)
-                    {
-                        pathColor += payload.pathWeight * resolved.rgb;
-                        break;
-                    }
-                }
-            }
-        }
-#endif
-
         if (pathDepth == 0)
         {
             // at this point, ptDiffuseAlbedo = first bounce path weight or emission
@@ -646,7 +614,10 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 void RayGeneration()
 {
 #if NRC_UPDATE
-    const uint2 pixelIdx = DispatchRaysIndex().xy;
+    const uint2 trainingPixelIdx = DispatchRaysIndex().xy;
+    const uint2 pixelIdx = min(
+        uint2(trainingPixelIdx * uint2(renderParams.renderSize) / nrcConstants.trainingDimensions),
+        uint2(renderParams.renderSize) - 1);
 #elif defined(RC_UPDATE)
     const uint2 tileIdx = DispatchRaysIndex().xy;
     const uint2 tileOrigin = tileIdx * RC_UPDATE_SCALE;
