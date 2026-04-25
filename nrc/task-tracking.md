@@ -7,6 +7,7 @@ See [integration-plan.md](integration-plan.md) for full details on each step.
 - **pending** -- not yet started
 - **in progress** -- actively being worked on
 - **blocked** -- waiting on something
+- **deferred** -- intentionally moved to a later step
 - **done** -- complete and verified
 
 ## Assumptions
@@ -72,21 +73,21 @@ implementation.
 | 4.11 Build new PSOs for NRC update and query variants | done | Query dispatch now uses `nrcQueryDispatchDesc` instead of the plain PT shader table |
 | 4.12 Bind NRC buffers from C++ before DispatchRays | done | Uses `nrcContext->GetBuffers()` for update and query dispatches |
 
-### Step 5: QueryAndTrain and Resolve
+### Step 5: QueryAndTrain and Resolve -- done
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 5.1 Call `QueryAndTrain` after query dispatch | pending | |
-| 5.2 Create custom resolve compute shader (`nrc_resolve.cs.hlsl`) | pending | ~15 lines HLSL; reads QueryPathInfo + QueryRadiance, writes to `dev_pathTracingRawBuffer` |
-| 5.3 Create root signature and PSO for custom resolve | pending | Needs: NrcConstants (CBV), QueryPathInfo (SRV), QueryRadiance (SRV), raw buffer (UAV) |
-| 5.4 Dispatch custom resolve after QueryAndTrain, before Collect | pending | Dispatch at `frameDimensions` (doubled width when path splitting is on) |
-| 5.5 Create debug resolve texture + use built-in `Resolve()` for debug modes | pending | Temporary `RWTexture2D<float4>` for heatmaps, cache view, etc. |
-| 5.6 Call `EndFrame` after command list submission | pending | |
-| 5.7 Remove old RC sub-passes (evict, update, resolve dispatches) | pending | |
-| 5.8 Remove old RC resources and root signatures | pending | |
-| 5.9 Remove old RC params from param block and settings | pending | |
+| 5.1 Call `QueryAndTrain` after query dispatch | done | App descriptor heap is restored immediately after the SDK call because NRC binds its own heap internally. |
+| 5.2 Create custom resolve compute shader (`nrc_resolve.cs.hlsl`) | done | Reads QueryPathInfo + QueryRadiance and writes to `dev_pathTracingRawBuffer`. NRC SDK buffers stay bound as UAV root descriptors. |
+| 5.3 Create root signature and PSO for custom resolve | done | Uses NrcConstants (CBV), QueryPathInfo (UAV), QueryRadiance (UAV), raw buffer (UAV). |
+| 5.4 Dispatch custom resolve after QueryAndTrain, before Collect | done | Dispatches at `frameDimensions` (doubled width when path splitting is on). |
+| 5.5 Create debug resolve texture + use built-in `Resolve()` for debug modes | deferred | Moved to Step 6 debug/UI work; normal NRC rendering uses the custom resolve. |
+| 5.6 Call `EndFrame` after command list submission | done | Called after `submitCmd()` while the frame's NRC context is still active. |
+| 5.7 Remove old RC sub-passes (evict, update, resolve dispatches) | done | Old RC runtime passes and transitions were removed from the render loop. |
+| 5.8 Remove old RC resources and root signatures | done | Removed old RC GPU resources, root signatures, PSOs, shader table, and param enums from `renderer.cpp`. |
+| 5.9 Remove old RC params from param block and settings | done | Removed `rcEnabled`, `rcMinSamplesForQuery`, and RC debug settings; only padding remains in the shared struct layout. |
 | 5.10 Update `configureNrc()` to set `frameDimensions` based on `doPathSplitting` | done | `frameDimensions = { renderWidth * (doPathSplitting ? 2 : 1), renderHeight }` |
-| 5.11 Wire up the full NRC pass sequence in the render loop | pending | BeginFrame -> G-Buffer -> NRC Update -> NRC Query -> QueryAndTrain -> Custom Resolve -> Collect -> ... -> EndFrame |
+| 5.11 Wire up the full NRC pass sequence in the render loop | done | BeginFrame -> G-Buffer -> NRC Update -> NRC Query -> QueryAndTrain -> restore app descriptor heap -> Custom Resolve -> Collect -> EndFrame. |
 
 ### Step 6: Debug views and UI polish
 

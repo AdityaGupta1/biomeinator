@@ -331,7 +331,7 @@ variants are compiled. NRC buffers are bound and written to.
 
 ---
 
-## Step 5: QueryAndTrain and Resolve passes
+## Step 5: QueryAndTrain and Resolve passes -- done
 
 **Goal**: The NRC neural network is trained and queried each frame, and the predicted
 radiance is resolved into the output buffer. The image should look correct with NRC
@@ -363,13 +363,14 @@ enabled.
         `pixelY * (renderWidth * 2) + (pixelX * 2 + splitIdx)` equals
         `dispatchY * frameDimensions.x + dispatchX`.
    - The shader needs access to: `NrcConstants` (from the param block), `QueryPathInfo`
-     (SRV), `QueryRadiance` (SRV), `dev_pathTracingRawBuffer` (UAV).
+     (UAV), `QueryRadiance` (UAV), `dev_pathTracingRawBuffer` (UAV). The SDK-owned NRC
+     buffers are read-only in the shader, but they stay bound as UAV root descriptors to
+     match the buffers' SDK usage and current resource state.
    - Create a root signature, PSO, and dispatch for this pass.
    - Dispatch after `QueryAndTrain`, before Collect.
 
-   For debug resolve modes, use NRC's built-in `Resolve()` with a temporary
-   `RWTexture2D<float4>` debug texture (created alongside the other NRC resources).
-   Display it through the existing debug view pipeline.
+   Debug resolve modes are deferred to Step 6. Normal rendering uses the custom
+   structured-buffer resolve.
 
 3. After the command list is submitted, call:
    ```cpp
@@ -413,6 +414,31 @@ enabled.
   With path splitting on, the NRC query buffer count should be roughly double.
 - No validation layer errors, no GPU hangs on toggle.
 
+### Verification status
+
+- Project builds in `RelWithDebInfo`.
+- Runtime check: enabling NRC renders correctly, and resizing with NRC enabled no longer
+  crashes.
+- The render loop now runs:
+  `BeginFrame -> G-buffer -> NRC update -> NRC query -> QueryAndTrain -> restore app descriptor heap -> custom resolve -> Collect -> EndFrame`.
+- `QueryAndTrain()` internally binds the NRC descriptor heap. The app descriptor heap is
+  rebound immediately afterward so the custom resolve, Collect, and later passes index the
+  expected `ResourceDescriptorHeap`.
+- The custom resolve writes directly into `dev_pathTracingRawBuffer`; raw PT buffers are
+  transitioned back to UAV after Collect so following frames do not depend on implicit
+  buffer state decay.
+- Old RC runtime passes/resources/settings have been removed from the active renderer path.
+
+### Deviations from plan
+
+- **Debug resolve modes moved to Step 6.** The temporary debug texture and built-in
+  `nrcContext->Resolve()` path are UI/debug tooling, not required for normal Step 5
+  rendering. They remain tracked under Step 6.
+- **NRC query buffers are bound as UAVs in custom resolve.** Although the resolve shader
+  only reads `QueryPathInfo` and `QueryRadiance`, they are SDK-owned buffers used through
+  UAV root descriptors elsewhere in the frame. Keeping the custom resolve bindings as UAVs
+  avoids mismatched resource/descriptor expectations.
+
 ---
 
 ## Step 6: Debug views and UI polish
@@ -426,8 +452,8 @@ removed, and the toggle is polished.
    NRC resolve mode selection. Add an ImGui combo box using
    `nrc::GetImGuiResolveModeComboString()` that sets `frameSettings.resolveMode`.
    When a debug resolve mode is selected, use the built-in `Resolve()` with the debug
-   texture (created in Step 5) instead of the custom resolve, and display the debug
-   texture through the debug view pipeline.
+   texture instead of the custom resolve, and display the debug texture through the debug
+   view pipeline.
 
 2. Remove old RC debug view code from `debug_view.ps.hlsl` (the `RC_HASH_ENTRIES` and
    `RC_RESOLVED` SRV bindings and any visualization logic).
