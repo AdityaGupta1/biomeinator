@@ -16,6 +16,8 @@
 #include "rc_evict.cs.fxh"
 #include "rc_resolve.cs.fxh"
 #include "rc_update.rgs.fxh"
+#include "nrc_update.rgs.fxh"
+#include "nrc_query.rgs.fxh"
 
 #define REGISTER_SHADER(name) { #name, name##_shaderBytecode }
 
@@ -29,6 +31,8 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(rc_evict_cs),
     REGISTER_SHADER(rc_resolve_cs),
     REGISTER_SHADER(rc_update_rgs),
+    REGISTER_SHADER(nrc_update_rgs),
+    REGISTER_SHADER(nrc_query_rgs),
 };
 
 std::span<const unsigned char> getShader(std::string_view name)

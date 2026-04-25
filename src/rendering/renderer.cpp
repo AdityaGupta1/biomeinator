@@ -159,6 +159,7 @@ static bool voxelMode = false;
 
 static ComPtr<ID3D12Resource> dev_rcStub;
 
+
 void init()
 {
     testMode = (SettingsManager::getAsString("testOutput") != "");
@@ -198,6 +199,7 @@ void init()
 
     dev_rcStub = BufferHelper::createBasicBuffer(16, &DEFAULT_HEAP);
     dev_rcStub->SetName(L"dev_rcStub");
+
 
     if (SettingsManager::getAsBool("rcEnabled"))
     {
@@ -773,6 +775,12 @@ enum class PtParam
 
     NRC_CONSTANTS,
 
+    NRC_QUERY_PATH_INFO,
+    NRC_TRAINING_PATH_INFO,
+    NRC_TRAINING_PATH_VERTICES,
+    NRC_QUERY_RADIANCE_PARAMS,
+    NRC_COUNTERS_DATA,
+
     COUNT
 };
 
@@ -963,6 +971,12 @@ static void initRootSignature()
         ptParams[PT_PARAM_IDX(RC_RESOLVED)] = MAKE_PARAM(SRV, RC, RESOLVED);
 
         ptParams[PT_PARAM_IDX(NRC_CONSTANTS)] = MAKE_PARAM(CBV, NRC, NRC_CONSTANTS);
+
+        ptParams[PT_PARAM_IDX(NRC_QUERY_PATH_INFO)] = MAKE_PARAM(UAV, NRC, QUERY_PATH_INFO);
+        ptParams[PT_PARAM_IDX(NRC_TRAINING_PATH_INFO)] = MAKE_PARAM(UAV, NRC, TRAINING_PATH_INFO);
+        ptParams[PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES)] = MAKE_PARAM(UAV, NRC, TRAINING_PATH_VERTICES);
+        ptParams[PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE_PARAMS);
+        ptParams[PT_PARAM_IDX(NRC_COUNTERS_DATA)] = MAKE_PARAM(UAV, NRC, COUNTERS_DATA);
 
         if (useSer)
         {
@@ -1191,6 +1205,14 @@ static ComPtr<ID3D12StateObject> rcUpdatePso;
 static ComPtr<ID3D12Resource> dev_rcUpdateShaderIds;
 static D3D12_DISPATCH_RAYS_DESC rcUpdateDispatchDesc;
 
+static ComPtr<ID3D12StateObject> nrcUpdatePso;
+static ComPtr<ID3D12Resource> dev_nrcUpdateShaderIds;
+static D3D12_DISPATCH_RAYS_DESC nrcUpdateDispatchDesc;
+
+static ComPtr<ID3D12StateObject> nrcQueryPso;
+static ComPtr<ID3D12Resource> dev_nrcQueryShaderIds;
+static D3D12_DISPATCH_RAYS_DESC nrcQueryDispatchDesc;
+
 static ComPtr<ID3D12PipelineState> postprocessPso;
 static ComPtr<ID3D12PipelineState> debugViewPso;
 
@@ -1292,6 +1314,86 @@ static void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("rc_resolve_cs"));
         CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&rcResolvePso)));
         rcResolvePso->SetName(L"rcResolvePso");
+    }
+
+    // ===================================
+    // NRC UPDATE
+    // ===================================
+    {
+        RtPipelineInputs nrcUpdatePipelineInputs = {
+            .name = L"nrcUpdate",
+            .pso = nrcUpdatePso,
+            .dev_shaderIds = dev_nrcUpdateShaderIds,
+            .rgsShaderName = L"RayGeneration",
+            .missShaderName = L"Miss",
+            .dispatchDesc = nrcUpdateDispatchDesc,
+        };
+
+        nrcUpdatePipelineInputs.shaderBytecode = getShader("nrc_update_rgs");
+        nrcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+        nrcUpdatePipelineInputs.rootSig = ptRootSig.Get();
+
+        nrcUpdatePipelineInputs.hitGroups.resize(3);
+        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"nrcUpdate_HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"nrcUpdate_HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
+            .HitGroupExport = L"nrcUpdate_HitGroup_DomeLight",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
+        };
+
+        makeRtPipeline(nrcUpdatePipelineInputs);
+    }
+
+    // ===================================
+    // NRC QUERY
+    // ===================================
+    {
+        RtPipelineInputs nrcQueryPipelineInputs = {
+            .name = L"nrcQuery",
+            .pso = nrcQueryPso,
+            .dev_shaderIds = dev_nrcQueryShaderIds,
+            .rgsShaderName = L"RayGeneration",
+            .missShaderName = L"Miss",
+            .dispatchDesc = nrcQueryDispatchDesc,
+        };
+
+        nrcQueryPipelineInputs.shaderBytecode = getShader("nrc_query_rgs");
+        nrcQueryPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+        nrcQueryPipelineInputs.rootSig = ptRootSig.Get();
+
+        nrcQueryPipelineInputs.hitGroups.resize(3);
+        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
+            .HitGroupExport = L"nrcQuery_HitGroup_Primary",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Primary",
+        };
+        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
+            .HitGroupExport = L"nrcQuery_HitGroup_Lights",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_Lights",
+        };
+        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
+            .HitGroupExport = L"nrcQuery_HitGroup_DomeLight",
+            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+            .AnyHitShaderImport = L"AnyHit",
+            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
+        };
+
+        makeRtPipeline(nrcQueryPipelineInputs);
     }
 
     // ===================================
@@ -2219,7 +2321,47 @@ void render()
         }
 
         // ===================================
-        // PATH TRACING
+        // NRC UPDATE
+        // ===================================
+
+        if (nrcContext != nullptr)
+        {
+            cmdList->SetPipelineState1(nrcUpdatePso.Get());
+            cmdList->SetComputeRootSignature(ptRootSig.Get());
+
+            // clang-format off
+            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
+
+            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+
+            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+
+            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES), (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS), (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_COUNTERS_DATA), (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
+            // clang-format on
+
+            nrcUpdateDispatchDesc.Width = paramBlockManager.nrcConstants->trainingDimensions.x;
+            nrcUpdateDispatchDesc.Height = paramBlockManager.nrcConstants->trainingDimensions.y;
+            cmdList->DispatchRays(&nrcUpdateDispatchDesc);
+
+            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+        }
+
+        // ===================================
+        // PATH TRACING (or NRC QUERY)
         // ===================================
 
         if (rcEnabled)
@@ -2234,7 +2376,8 @@ void render()
                                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
 
-        cmdList->SetPipelineState1(ptPso.Get());
+        const bool useNrcQuery = (nrcContext != nullptr);
+        cmdList->SetPipelineState1(useNrcQuery ? nrcQueryPso.Get() : ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
 
         // clang-format off
@@ -2259,7 +2402,17 @@ void render()
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RC_RESOLVED),
             (rcEnabled ? dev_rcResolved : dev_rcStub)->GetGPUVirtualAddress());
 
-        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+        if (useNrcQuery)
+        {
+            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+
+            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES), (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS), (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_COUNTERS_DATA), (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
+        }
         // clang-format on
 
         ptDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
@@ -2520,6 +2673,7 @@ void destroy()
     dev_rcResolved.Reset();
     dev_rcStub.Reset();
 
+
     screenshotRequest.readbackBuffer.Reset();
 
     gbufferPso.Reset();
@@ -2528,6 +2682,8 @@ void destroy()
     rcEvictPso.Reset();
     rcResolvePso.Reset();
     rcUpdatePso.Reset();
+    nrcUpdatePso.Reset();
+    nrcQueryPso.Reset();
     postprocessPso.Reset();
     debugViewPso.Reset();
 
@@ -2542,6 +2698,8 @@ void destroy()
     dev_gbufferShaderIds.Reset();
     dev_ptShaderIds.Reset();
     dev_rcUpdateShaderIds.Reset();
+    dev_nrcUpdateShaderIds.Reset();
+    dev_nrcQueryShaderIds.Reset();
 
     swapChain.Reset();
     rtvHeap.Reset();

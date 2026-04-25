@@ -17,9 +17,12 @@ static_assert(sizeof(DebugParams) % 16 == 0, "DebugParams size must be a multipl
 
 void ParamBlockManager::init()
 {
-    constexpr uint32_t bufferSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
-                                    sizeof(SceneParams) + sizeof(RenderParams) + sizeof(RadianceCacheParams) +
-                                    sizeof(DebugParams) + sizeof(NrcConstants);
+    constexpr uint32_t unalignedSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
+                                       sizeof(SceneParams) + sizeof(RenderParams) + sizeof(RadianceCacheParams) +
+                                       sizeof(DebugParams);
+    constexpr uint32_t nrcConstantsOffset = (unalignedSize + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) &
+                                            ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
+    constexpr uint32_t bufferSize = nrcConstantsOffset + sizeof(NrcConstants);
     this->dev_paramBuffer = BufferHelper::createBasicBuffer(bufferSize, &UPLOAD_HEAP);
     this->dev_paramBuffer->Map(0, nullptr, &this->host_paramBuffer);
 
@@ -32,7 +35,7 @@ void ParamBlockManager::init()
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
     this->rcParams = reinterpret_cast<RadianceCacheParams*>(this->renderParams + 1);
     this->debugParams = reinterpret_cast<DebugParams*>(this->rcParams + 1);
-    this->nrcConstants = reinterpret_cast<NrcConstants*>(this->debugParams + 1);
+    this->nrcConstants = reinterpret_cast<NrcConstants*>(hostBufferStartPtr + nrcConstantsOffset);
 }
 
 void ParamBlockManager::reset()

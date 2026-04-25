@@ -11,6 +11,13 @@
 #include "payload.hlsli"
 #include "util/ray.hlsli"
 
+#ifndef NRC_QUERY
+    #define NRC_QUERY 0
+#endif
+#ifndef NRC_UPDATE
+    #define NRC_UPDATE 0
+#endif
+
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
@@ -23,7 +30,7 @@ ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {
-#ifdef RC_UPDATE
+#if defined(RC_UPDATE) || NRC_UPDATE
     return 0;
 #else
     if (bool(renderParams.doPathSplitting))

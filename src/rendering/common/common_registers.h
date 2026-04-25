@@ -76,6 +76,13 @@
 // b#
 #define NRC_REGISTER_NRC_CONSTANTS 0
 
+// u#
+#define NRC_REGISTER_QUERY_PATH_INFO 1
+#define NRC_REGISTER_TRAINING_PATH_INFO 2
+#define NRC_REGISTER_TRAINING_PATH_VERTICES 3
+#define NRC_REGISTER_QUERY_RADIANCE_PARAMS 4
+#define NRC_REGISTER_COUNTERS_DATA 5
+
 // =============================================
 // fake UAV slot for SER
 // =============================================
