@@ -19,7 +19,6 @@ public:
     CameraParams* cameraParams{ nullptr };
     SceneParams* sceneParams{ nullptr };
     RenderParams* renderParams{ nullptr };
-    RadianceCacheParams* rcParams{ nullptr };
     DebugParams* debugParams{ nullptr };
     NrcConstants* nrcConstants{ nullptr };
 

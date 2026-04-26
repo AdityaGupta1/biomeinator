@@ -111,11 +111,11 @@ implementation.
 - **Task 6.3 was a no-op.** No old RC debug view references existed in `debug_view.ps.hlsl`
   or the debug view pass — already cleaned up during Step 5.
 
-### Step 7: Cleanup and knowledgebase
+### Step 7: Cleanup and knowledgebase — done
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 7.1 Delete `radiance_cache.hlsli`, `rc_evict.cs.hlsl`, `rc_resolve.cs.hlsl` | pending | |
-| 7.2 Remove RC defines from `common_settings.h` | pending | `RC_TABLE_SIZE`, `RC_WORKGROUP_SIZE`, `RC_UPDATE_SCALE` |
-| 7.3 Grep for leftover RC references in `src/` | pending | |
-| 7.4 Update knowledgebase entries | pending | `radiance_cache.md`, `render_passes.md`, `path_tracing.md`, `index.md` |
+| 7.1 Delete `radiance_cache.hlsli`, `rc_evict.cs.hlsl`, `rc_resolve.cs.hlsl` | done | Also deleted `rc_update.rgs.hlsl` |
+| 7.2 Remove RC defines from `common_settings.h` | done | `RC_TABLE_SIZE`, `RC_WORKGROUP_SIZE`, `RC_UPDATE_SCALE`, `RC_TARGET_PIXEL_WIDTH` |
+| 7.3 Grep for leftover RC references in `src/` | done | Removed all `#ifdef RC_UPDATE` blocks from `path_tracing.rgs.hlsl`, `RadianceCacheParams` from `common_params.h`/`global_params.hlsli`/`param_block_manager`, `defined(RC_UPDATE)` from `path_tracing_common.hlsli` |
+| 7.4 Update knowledgebase entries | done | Rewrote `radiance_cache.md` for NRC, updated `render_passes.md`, `path_tracing.md`, shader and rendering `index.md` files |

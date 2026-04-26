@@ -11,15 +11,13 @@ static_assert(sizeof(ConstantParams) % 16 == 0, "ConstantParams size must be a m
 static_assert(sizeof(CameraParams) % 16 == 0, "CameraParams size must be a multiple of 16 bytes");
 static_assert(sizeof(SceneParams) % 16 == 0, "SceneParams size must be a multiple of 16 bytes");
 static_assert(sizeof(RenderParams) % 16 == 0, "RenderParams size must be a multiple of 16 bytes");
-static_assert(sizeof(RadianceCacheParams) % 16 == 0, "RadianceCacheParams size must be a multiple of 16 bytes");
 static_assert(sizeof(NrcConstants) % 16 == 0, "NrcConstants size must be a multiple of 16 bytes");
 static_assert(sizeof(DebugParams) % 16 == 0, "DebugParams size must be a multiple of 16 bytes");
 
 void ParamBlockManager::init()
 {
     constexpr uint32_t unalignedSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
-                                       sizeof(SceneParams) + sizeof(RenderParams) + sizeof(RadianceCacheParams) +
-                                       sizeof(DebugParams);
+                                       sizeof(SceneParams) + sizeof(RenderParams) + sizeof(DebugParams);
     constexpr uint32_t nrcConstantsOffset = (unalignedSize + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) &
                                             ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
     constexpr uint32_t bufferSize = nrcConstantsOffset + sizeof(NrcConstants);
@@ -33,8 +31,7 @@ void ParamBlockManager::init()
     this->cameraParams = reinterpret_cast<CameraParams*>(this->constantParams + 1);
     this->sceneParams = reinterpret_cast<SceneParams*>(this->cameraParams + 1);
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
-    this->rcParams = reinterpret_cast<RadianceCacheParams*>(this->renderParams + 1);
-    this->debugParams = reinterpret_cast<DebugParams*>(this->rcParams + 1);
+    this->debugParams = reinterpret_cast<DebugParams*>(this->renderParams + 1);
     this->nrcConstants = reinterpret_cast<NrcConstants*>(hostBufferStartPtr + nrcConstantsOffset);
 }
 

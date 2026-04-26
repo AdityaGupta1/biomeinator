@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-04-25_
 
 # Shaders Knowledgebase
 
@@ -6,9 +6,9 @@ HLSL ray tracing and compute shaders, shared utility libraries, and the build-ti
 
 | Entry | Description |
 |---|---|
-| [path_tracing.md](path_tracing.md) | Main path tracer: MIS/RIS, path splitting, radiance cache integration |
+| [path_tracing.md](path_tracing.md) | Main path tracer: MIS/RIS, path splitting, NRC integration |
 | [gbuffer.md](gbuffer.md) | G-buffer ray generation shader, DLSS input outputs |
-| [radiance_cache.md](radiance_cache.md) | rc_update / rc_resolve / rc_evict shaders and hash-probe scheme |
+| [radiance_cache.md](radiance_cache.md) | Neural Radiance Cache (NRC): shader variants, buffers, custom resolve |
 | [collect.md](collect.md) | Temporal accumulation compute shader, tonemapping (AGX, Khronos) |
 | [common_structs.md](common_structs.md) | CPU/GPU shared structs, params, registers, enums, hit groups |
 | [hlsli_libraries.md](hlsli_libraries.md) | Utility .hlsli headers: math, rng, sampling, material, ris, dome |

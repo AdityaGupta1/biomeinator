@@ -46,26 +46,15 @@
     #include "Nrc.hlsli"
 #endif
 
-#if defined(RC_UPDATE)
-    #include "radiance_cache.hlsli"
-#endif
-
 #include "ris.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
-#if !defined(RC_UPDATE) && !NRC_UPDATE
+#if !NRC_UPDATE
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
-#endif
-
-#if defined(RC_UPDATE)
-    #define RC_MAX_PATH_DEPTH 6
-
-    RWByteAddressBuffer rcHashEntries : REGISTER_U(RC, HASH_ENTRIES);
-    RWByteAddressBuffer rcAccumulation : REGISTER_U(RC, ACCUMULATION);
 #endif
 
 float balanceHeuristic(const float pdfA, const float pdfB)
@@ -75,10 +64,8 @@ float balanceHeuristic(const float pdfA, const float pdfB)
 
 void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
-#ifndef RC_UPDATE
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
-#endif
 
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
@@ -108,9 +95,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
         NrcUpdateOnMiss(nrcPathState);
         NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, getDomeLightColor(ray.Direction));
 #endif
-#ifndef RC_UPDATE
         pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
-#endif
         return;
     }
 
@@ -130,12 +115,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 
     bool hasEncounteredNonDeltaSurface = false;
 
-#ifdef RC_UPDATE
-    uint rcSlots[RC_MAX_PATH_DEPTH];
-    float3 rcThroughputs[RC_MAX_PATH_DEPTH];
-    uint rcNumVertices = 0;
-#endif
-
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
         float3 surfPos_WS = payload.hitInfo.hitPos_WS;
@@ -146,11 +125,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
     }
 
     Material surfMaterial = getMaterialFromPayload(payload);
-#ifdef RC_UPDATE
-    const uint effectiveMaxPathDepth = min(renderParams.maxPathDepth, RC_MAX_PATH_DEPTH);
-#else
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
-#endif
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
     {
         const float surfMipLevel = computeMipLevel(payload.rayCone.width);
@@ -166,27 +141,17 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
         {
             const float3 emissiveContrib =
                 payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
-#ifdef RC_UPDATE
-            for (uint i = 0; i < rcNumVertices; ++i)
-            {
-                if (rcSlots[i] != RC_INVALID_SLOT)
-                {
-                    rcWriteRadiance(rcSlots[i], rcThroughputs[i] * emissiveContrib, rcAccumulation);
-                }
-            }
-#else
             pathColor += emissiveContrib;
 
             if (pathDepth == 0)
             {
                 ptDiffuseAlbedo += applyReinhard(emissiveContrib);
             }
-#endif
         }
 
         const float3 wo_WS = -ray.Direction;
 
-#if !defined(RC_UPDATE) && !NRC_UPDATE
+#if !NRC_UPDATE
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
@@ -298,30 +263,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
             NrcSetFlag(nrcPathState.packedData, nrcPathFlagPreviousHitWasDeltaLobe, surfBsdfSample.wasSpecular);
 #endif
 
-#ifdef RC_UPDATE
-            if (!surfBsdfSample.wasSpecular && rcNumVertices < RC_MAX_PATH_DEPTH)
-            {
-                for (uint i = 0; i < rcNumVertices; ++i)
-                {
-                    rcThroughputs[i] *= payload.pathWeight;
-                }
-
-                const int level = rcGetLevel(surfPos_WS);
-                const int3 gridPos = rcWorldToGrid(surfPos_WS, level);
-                const uint slot = rcInsertOrFind(gridPos, level, rcHashEntries);
-                rcSlots[rcNumVertices] = slot;
-                rcThroughputs[rcNumVertices] = float3(1.f, 1.f, 1.f);
-                if (slot != RC_INVALID_SLOT)
-                {
-                    rcWriteSampleCount(slot, rcAccumulation);
-                }
-                ++rcNumVertices;
-
-                // reset so pathWeight tracks from this vertex onward
-                payload.pathWeight = float3(1.f, 1.f, 1.f);
-            }
-#endif
-
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
                 // ------------------------------
@@ -388,17 +329,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
                         contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                     }
 
-#ifdef RC_UPDATE
-                    for (uint i = 0; i < rcNumVertices; ++i)
-                    {
-                        if (rcSlots[i] != RC_INVALID_SLOT)
-                        {
-                            rcWriteRadiance(rcSlots[i], rcThroughputs[i] * contribution, rcAccumulation);
-                        }
-                    }
-#else
                     pathColor += contribution;
-#endif
                 }
 
                 // ------------------------------
@@ -424,17 +355,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 
                         contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
 
-#ifdef RC_UPDATE
-                        for (uint i = 0; i < rcNumVertices; ++i)
-                        {
-                            if (rcSlots[i] != RC_INVALID_SLOT)
-                            {
-                                rcWriteRadiance(rcSlots[i], rcThroughputs[i] * contribution, rcAccumulation);
-                            }
-                        }
-#else
                         pathColor += contribution;
-#endif
                     }
                 }
             }
@@ -561,17 +482,7 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
             NrcUpdateOnMiss(nrcPathState);
 #endif
 
-#ifdef RC_UPDATE
-            for (uint i = 0; i < rcNumVertices; ++i)
-            {
-                if (rcSlots[i] != RC_INVALID_SLOT)
-                {
-                    rcWriteRadiance(rcSlots[i], rcThroughputs[i] * domeLightContrib, rcAccumulation);
-                }
-            }
-#else
             pathColor += domeLightContrib;
-#endif
             break;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
@@ -621,11 +532,6 @@ void RayGeneration()
     const uint2 pixelIdx = min(
         uint2(trainingPixelIdx * uint2(renderParams.renderSize) / nrcConstants.trainingDimensions),
         uint2(renderParams.renderSize) - 1);
-#elif defined(RC_UPDATE)
-    const uint2 tileIdx = DispatchRaysIndex().xy;
-    const uint2 tileOrigin = tileIdx * RC_UPDATE_SCALE;
-    const uint2 tileEnd = min(tileOrigin + RC_UPDATE_SCALE, uint2(renderParams.renderSize));
-    const uint2 pixelIdx = tileOrigin + uint2(cameraParams.jitter * (tileEnd - tileOrigin));
 #else
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
@@ -641,8 +547,6 @@ void RayGeneration()
     payload.pathWeight = float3(1.f, 1.f, 1.f);
 #if NRC_UPDATE
     payload.rng = initRng(constantParams.rngSeed, 391827465, linearPixelIdx, renderParams.frameNumber);
-#elif defined(RC_UPDATE)
-    payload.rng = initRng(constantParams.rngSeed, 781291012, linearPixelIdx, renderParams.frameNumber);
 #else
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
 #endif
@@ -657,7 +561,7 @@ void RayGeneration()
     float3 outPtDiffuseAlbedo = 0.f;
     pathTraceRay(payload, pathColor, outPtDiffuseAlbedo);
 
-#if !defined(RC_UPDATE) && !NRC_UPDATE
+#if !NRC_UPDATE
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {

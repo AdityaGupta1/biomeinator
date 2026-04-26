@@ -30,7 +30,7 @@ ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 uint getPathSplitIdx()
 {
-#if defined(RC_UPDATE) || NRC_UPDATE
+#if NRC_UPDATE
     return 0;
 #else
     if (bool(renderParams.doPathSplitting))

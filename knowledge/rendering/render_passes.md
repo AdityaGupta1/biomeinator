@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-04-25_
 
 # Render Passes
 
@@ -9,9 +9,13 @@ All passes are recorded into a single command list per frame and submitted toget
 ```
 G-Buffer
   ↓
-[RC Evict → RC Update → RC Resolve]  (only if rcEnabled)
+[NRC BeginFrame]               (only if nrcEnabled)
   ↓
-Path Tracing
+[NRC Update dispatch]          (only if nrcEnabled)
+  ↓
+Path Tracing / NRC Query
+  ↓
+[QueryAndTrain → Custom Resolve]  (only if nrcEnabled)
   ↓
 Collect
   ↓
@@ -34,17 +38,23 @@ The G-buffer also outputs the per-pixel data that DLSS needs: motion vectors, li
 
 ---
 
-## Radiance Cache (optional, three sub-passes)
+## NRC (Neural Radiance Cache, optional)
 
-Runs between G-buffer and path tracing only when `rcEnabled`. The RC buffers (`dev_rcHashEntries`, `dev_rcAccumulation`, `dev_rcResolved`) are lazily created when RC is first enabled and destroyed when it's disabled.
+Runs when `nrcEnabled`. Uses NVIDIA's NRC SDK to train a neural network each frame that predicts indirect radiance. See [shaders → radiance_cache.md](../shaders/radiance_cache.md) for shader-side details.
 
-**RC Evict** (compute) — ages/clears stale cache entries before new data is written.
+**BeginFrame** — called before any NRC GPU work. Populates `NrcConstants`.
 
-**RC Update** (ray generation) — dispatches at `1/RC_UPDATE_SCALE` of render resolution. Traces rays from G-buffer hit points to gather indirect radiance into the hash table.
+**NRC Update** (ray generation) — dispatches at `trainingDimensions` (smaller than render resolution). Traces paths from G-buffer hits and writes training data (path vertices + radiance) for the neural network.
 
-**RC Resolve** (compute) — finalizes hash entries into the `dev_rcResolved` buffer so the path tracing pass can read it as an SRV.
+**NRC Query** (ray generation) — dispatches at `frameDimensions` (render resolution, doubled width if path splitting). Paths terminate early when NRC determines it can predict the remaining radiance, writing a query point.
 
-The RC buffers are transitioned UAV → SRV before path tracing reads them, then back to UAV afterward. When RC is disabled, `dev_rcStub` (a tiny dummy buffer) is bound in its place so the path tracing shader always has valid SRVs.
+**QueryAndTrain** — SDK call after the query dispatch. Trains the network and fills the `QueryRadiance` buffer.
+
+**Custom Resolve** (compute) — reads `QueryPathInfo` and `QueryRadiance`, multiplies by prefix throughput, writes to `dev_pathTracingRawBuffer`. Dispatches at `frameDimensions`.
+
+**EndFrame** — called after command list submission.
+
+When NRC is disabled, a single plain path tracing dispatch runs instead.
 
 ---
 

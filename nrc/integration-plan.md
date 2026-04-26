@@ -484,7 +484,7 @@ removed, and the toggle is polished.
 
 ---
 
-## Step 7: Cleanup and knowledgebase update
+## Step 7: Cleanup and knowledgebase update — done
 
 **Goal**: Dead code is removed, the knowledgebase reflects the new architecture.
 

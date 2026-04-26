@@ -13,7 +13,6 @@ cbuffer GlobalParams : REGISTER_B(COMMON, GLOBAL_PARAMS)
     CameraParams cameraParams;
     SceneParams sceneParams;
     RenderParams renderParams;
-    RadianceCacheParams rcParams;
     DebugParams debugParams;
 };
 

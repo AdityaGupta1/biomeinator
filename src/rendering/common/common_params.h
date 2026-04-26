@@ -131,14 +131,6 @@ struct RenderParams
     float mipBias;
 };
 
-struct RadianceCacheParams
-{
-    float rcCascadeScale;
-    uint pad0;
-    uint pad1;
-    uint pad2;
-};
-
 struct DebugParams
 {
     uint debugOutputSrvIdx;
