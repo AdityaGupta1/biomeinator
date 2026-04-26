@@ -40,16 +40,16 @@ void ParamBlockManager::reset()
     this->dev_paramBuffer.Reset();
 }
 
-ID3D12Resource* ParamBlockManager::getDevBuffer() const
+D3D12_GPU_VIRTUAL_ADDRESS ParamBlockManager::getParamBufferGpuAddress() const
 {
-    return this->dev_paramBuffer.Get();
+    return this->dev_paramBuffer->GetGPUVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS ParamBlockManager::getNrcConstantsGpuAddress() const
 {
     const size_t offset = reinterpret_cast<const uint8_t*>(this->nrcConstants)
                         - static_cast<const uint8_t*>(this->host_paramBuffer);
-    return this->dev_paramBuffer->GetGPUVirtualAddress() + offset;
+    return this->getParamBufferGpuAddress() + offset;
 }
 
 void ParamBlockManager::setName(const std::wstring& name)

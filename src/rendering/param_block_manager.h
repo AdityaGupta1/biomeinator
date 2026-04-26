@@ -25,7 +25,7 @@ public:
     void init();
     void reset();
 
-    ID3D12Resource* getDevBuffer() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getParamBufferGpuAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getNrcConstantsGpuAddress() const;
 
     void setName(const std::wstring& name);

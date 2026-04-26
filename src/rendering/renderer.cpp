@@ -2078,7 +2078,7 @@ void render()
         cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
         // clang-format off
-        cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
 
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
@@ -2114,7 +2114,7 @@ void render()
             cmdList->SetComputeRootSignature(ptRootSig.Get());
 
             // clang-format off
-            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
 
             cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
             cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
@@ -2153,7 +2153,7 @@ void render()
         cmdList->SetComputeRootSignature(ptRootSig.Get());
 
         // clang-format off
-        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
 
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
@@ -2248,7 +2248,7 @@ void render()
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
 
-        cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
@@ -2308,14 +2308,15 @@ void render()
     {
         cmdList->SetPipelineState(debugViewPso.Get());
         cmdList->SetGraphicsRootSignature(debugViewRootSig.Get());
-        cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS),
+                                                   paramBlockManager.getParamBufferGpuAddress());
     }
     else
     {
         cmdList->SetPipelineState(postprocessPso.Get());
         cmdList->SetGraphicsRootSignature(postprocessRootSig.Get());
         cmdList->SetGraphicsRootConstantBufferView(POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS),
-                                                   paramBlockManager.getDevBuffer()->GetGPUVirtualAddress());
+                                                   paramBlockManager.getParamBufferGpuAddress());
     }
 
     cmdList->RSSetViewports(1, &viewport);
