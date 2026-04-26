@@ -13,3 +13,6 @@
 [submodule "external/FastNoise2"]
 	path = external/FastNoise2
 	url = https://github.com/Auburn/FastNoise2.git
+[submodule "external/NRC"]
+	path = external/NRC
+	url = https://github.com/NVIDIA-RTX/NRC.git

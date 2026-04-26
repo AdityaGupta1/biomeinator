@@ -209,6 +209,10 @@ void Scene::reset()
     this->tlasBufferSection.free();
     this->numVisibleBlasesWaitingForTlas = 0;
 
+    this->hasSceneBounds = false;
+    this->sceneBoundsMin_WS = {};
+    this->sceneBoundsMax_WS = {};
+
     this->nextMaterialIdx = 0;
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
@@ -306,6 +310,35 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t
     std::vector<std::vector<uint8_t>> mipData;
     mipData.emplace_back(std::move(mip0));
     return this->addTexture(std::move(mipData), width, height);
+}
+
+void Scene::expandBounds(const glm::vec3& pos_WS)
+{
+    if (!this->hasSceneBounds)
+    {
+        this->sceneBoundsMin_WS = pos_WS;
+        this->sceneBoundsMax_WS = pos_WS;
+        this->hasSceneBounds = true;
+        return;
+    }
+
+    this->sceneBoundsMin_WS = glm::min(this->sceneBoundsMin_WS, pos_WS);
+    this->sceneBoundsMax_WS = glm::max(this->sceneBoundsMax_WS, pos_WS);
+}
+
+bool Scene::hasBounds() const
+{
+    return this->hasSceneBounds;
+}
+
+const glm::vec3& Scene::getBoundsMin_WS() const
+{
+    return this->sceneBoundsMin_WS;
+}
+
+const glm::vec3& Scene::getBoundsMax_WS() const
+{
+    return this->sceneBoundsMax_WS;
 }
 
 bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)

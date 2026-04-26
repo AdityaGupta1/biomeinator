@@ -11,10 +11,9 @@
 #define COLLECT_WORKGROUP_SIZE_Y 16
 
 // =============================================
-// RADIANCE CACHE
+// NRC RESOLVE
 // =============================================
 
-#define RC_TABLE_SIZE (1u << 22)
-#define RC_WORKGROUP_SIZE 256
-#define RC_UPDATE_SCALE 5
-#define RC_TARGET_PIXEL_WIDTH 12
+#define NRC_RESOLVE_WORKGROUP_SIZE_X 16
+#define NRC_RESOLVE_WORKGROUP_SIZE_Y 16
+

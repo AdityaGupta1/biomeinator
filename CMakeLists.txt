@@ -112,6 +112,8 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /Fh ${FXH_OUT}
                 /Vn ${NAME_SAFE}_shaderBytecode
                 /HV 2021
+                -enable-16bit-types
+                /I "${CMAKE_SOURCE_DIR}/external/NRC/Include"
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
@@ -183,15 +185,17 @@ target_include_directories(Biomeinator PRIVATE
     "${EXT}/stb/include"
     "${EXT}/streamline/include"
     "${EXT}/tinygltf/include"
+    "${EXT}/NRC/Include"
 )
 
 target_link_directories(Biomeinator PRIVATE
     "${EXT}/dxc/lib"
     "${EXT}/nvapi/amd64"
     "${EXT}/streamline/lib/x64"
+    "${EXT}/NRC/Lib"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 glm::glm-header-only FastNoise)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 NRC_D3D12 glm::glm-header-only FastNoise)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
@@ -202,6 +206,10 @@ set(RUNTIME_DLLS
     "${STREAMLINE_DLL_DIR}/sl.dlss_d.dll"
     "${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
     #"${STREAMLINE_DLL_DIR}/development/nvngx_dlssd.dll"
+    "${EXT}/NRC/Bin/NRC_D3D12.dll"
+    "${EXT}/NRC/Bin/cudart64_12.dll"
+    "${EXT}/NRC/Bin/nvrtc64_120_0.dll"
+    "${EXT}/NRC/Bin/nvrtc-builtins64_128.dll"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD

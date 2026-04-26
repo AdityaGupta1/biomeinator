@@ -5,14 +5,10 @@
 #include "../rendering/common/common_structs.h"
 
 #include "global_params.hlsli"
-#include "radiance_cache.hlsli"
 #include "util/color.hlsli"
 #include "util/ray.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
-
-ByteAddressBuffer rcHashEntries : REGISTER_T(RC, HASH_ENTRIES);
-StructuredBuffer<float4> rcResolved : REGISTER_T(RC, RESOLVED);
 
 struct PsIn
 {
@@ -29,45 +25,6 @@ float3 reconstructWorldPos(float2 uv)
     const float3 rayDir = getPrimaryRayDirection(pixelIdx);
 
     return evalRayPos(cameraParams.pos_WS, rayDir, linearDepth);
-}
-
-float4 getRcDebugColor(float2 uv)
-{
-    if (!rcParams.rcEnabled)
-    {
-        return float4(0, 0, 0, 1);
-    }
-
-    const float3 worldPos = reconstructWorldPos(uv);
-
-    if (debugParams.rcDebugView == 1)
-    {
-        const int level = rcGetLevel(worldPos);
-        const int3 gridPos = rcWorldToGrid(worldPos, level);
-        const uint rcHash = rcSpatialHash(gridPos, level);
-        RandomNumberGenerator rng = initRng(rcHash, 105691202);
-        return float4(0.2f + 0.8f * rng.nextFloat3(), 1.f);
-    }
-    else // rcDebugView == 2
-    {
-        const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
-        RandomNumberGenerator rng = initRng(pixelIdx.x, pixelIdx.y, renderParams.frameNumber);
-        const int level = rcGetLevel(worldPos);
-        const int3 gridPos = rcWorldToGrid(rcJitterPos(worldPos, level, rng), level);
-        const uint slot = rcLookup(gridPos, level, rcHashEntries);
-        if (slot == RC_INVALID_SLOT)
-        {
-            return float4(0, 0, 0, 1);
-        }
-
-        const float4 resolved = rcResolved[slot];
-        if (resolved.w < (float)rcParams.rcMinSamplesForQuery)
-        {
-            return float4(0.1, 0, 0.1, 1); // dim magenta = populated but under-sampled
-        }
-
-        return float4(resolved.rgb, 1);
-    }
 }
 
 float4 getDebugColor(float2 uv)
@@ -107,16 +64,7 @@ float4 getDebugColor(float2 uv)
 
 float4 psMain(PsIn psIn) : SV_Target
 {
-    float4 debugColor;
-
-    if (debugParams.rcDebugView != 0)
-    {
-        debugColor = getRcDebugColor(psIn.uv);
-    }
-    else
-    {
-        debugColor = getDebugColor(psIn.uv);
-    }
+    float4 debugColor = getDebugColor(psIn.uv);
 
     if (debugParams.debugViewApplyTonemap)
     {

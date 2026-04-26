@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-04-25_
 
 # Rendering Knowledgebase
 
@@ -9,7 +9,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 |---|---|
 | [render_loop.md](render_loop.md) | Main game loop, render pass sequence, frame pacing |
 | [frame_contexts.md](frame_contexts.md) | Triple buffering, per-frame resources, CPU-GPU pipelining |
-| [render_passes.md](render_passes.md) | G-buffer → path trace → radiance cache → collect → present |
+| [render_passes.md](render_passes.md) | G-buffer → NRC → path trace → collect → present |
 | [pipeline.md](pipeline.md) | DXR pipeline state object, PipelineBuilder, shader tables |
 | [param_blocks.md](param_blocks.md) | ParamBlockManager, constant buffer layout and upload |
 | [rt_targets.md](rt_targets.md) | RtTarget, UAV/SRV descriptor pairs, G-buffer output textures |

@@ -61,13 +61,19 @@
 #define POSTPROCESS_REGISTER_TEX_SAMPLER 0
 
 // =============================================
-#define RC_REGISTER_SPACE 4
+#define NRC_REGISTER_SPACE 5
 // =============================================
 
-// u#/t#
-#define RC_REGISTER_HASH_ENTRIES 0
-#define RC_REGISTER_ACCUMULATION 1
-#define RC_REGISTER_RESOLVED 2
+// b#
+#define NRC_REGISTER_NRC_CONSTANTS 0
+
+// u#
+#define NRC_REGISTER_QUERY_PATH_INFO 0
+#define NRC_REGISTER_TRAINING_PATH_INFO 1
+#define NRC_REGISTER_TRAINING_PATH_VERTICES 2
+#define NRC_REGISTER_QUERY_RADIANCE_PARAMS 3
+#define NRC_REGISTER_COUNTERS_DATA 4
+#define NRC_REGISTER_QUERY_RADIANCE 5
 
 // =============================================
 // fake UAV slot for SER

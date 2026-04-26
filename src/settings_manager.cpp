@@ -51,8 +51,14 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
 
-    ADD_OPTION("rcEnabled", "Enable radiance cache", bool, "false");
-    ADD_OPTION("rcMinSamplesForQuery", "Min samples before querying radiance cache", uint32_t, "4");
+    ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
+    ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
+    ADD_OPTION("nrcMaxRadiance", "NRC max expected average radiance value", float, "10.0");
+    ADD_OPTION("nrcTerminationThreshold", "NRC termination heuristic threshold", float, "0.05");
+    ADD_OPTION("nrcTrainingTerminationThreshold", "NRC training termination heuristic threshold", float, "0.05");
+    ADD_OPTION("nrcSkipDeltaVertices", "NRC skip delta vertices", bool, "false");
+    ADD_OPTION("nrcTrainTheCache", "NRC train the cache", bool, "true");
+    ADD_OPTION("nrcLearningRate", "NRC learning rate", float, "0.01");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
     ADD_OPTION("debugViewScale", "Debug view scale", float, "1.f");
@@ -113,8 +119,14 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
 
-    COPY_SETTING("rcEnabled", bool);
-    COPY_SETTING("rcMinSamplesForQuery", uint32_t);
+    COPY_SETTING("nrcEnabled", bool);
+    COPY_SETTING("nrcResolveMode", uint32_t);
+    COPY_SETTING("nrcMaxRadiance", float);
+    COPY_SETTING("nrcTerminationThreshold", float);
+    COPY_SETTING("nrcTrainingTerminationThreshold", float);
+    COPY_SETTING("nrcSkipDeltaVertices", bool);
+    COPY_SETTING("nrcTrainTheCache", bool);
+    COPY_SETTING("nrcLearningRate", float);
 
     COPY_SETTING("debugView", std::string);
     COPY_SETTING("debugViewScale", float);

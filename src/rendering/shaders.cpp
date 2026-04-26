@@ -13,9 +13,9 @@
 #include "path_tracing.rgs.fxh"
 #include "postprocess.vs.fxh"
 #include "postprocess.ps.fxh"
-#include "rc_evict.cs.fxh"
-#include "rc_resolve.cs.fxh"
-#include "rc_update.rgs.fxh"
+#include "nrc_resolve.cs.fxh"
+#include "nrc_update.rgs.fxh"
+#include "nrc_query.rgs.fxh"
 
 #define REGISTER_SHADER(name) { #name, name##_shaderBytecode }
 
@@ -26,9 +26,9 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(path_tracing_rgs),
     REGISTER_SHADER(postprocess_vs),
     REGISTER_SHADER(postprocess_ps),
-    REGISTER_SHADER(rc_evict_cs),
-    REGISTER_SHADER(rc_resolve_cs),
-    REGISTER_SHADER(rc_update_rgs),
+    REGISTER_SHADER(nrc_resolve_cs),
+    REGISTER_SHADER(nrc_update_rgs),
+    REGISTER_SHADER(nrc_query_rgs),
 };
 
 std::span<const unsigned char> getShader(std::string_view name)
