@@ -233,8 +233,6 @@ void imguiEndFrame(double deltaTime);
 void updateFps(double deltaTime);
 void captureQueuedScreenshot();
 void finalizeQueuedScreenshot();
-void beginFrame();
-void submitCmd();
 
 // =============================================
 // Shared state

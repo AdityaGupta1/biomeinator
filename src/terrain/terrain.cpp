@@ -208,8 +208,6 @@ void update(ToFreeList& toFreeList)
         const glm::ivec2 minRegionPos = glmUtil::floorDiv(minChunkPos, glm::ivec2(regionSideLength));
         const glm::ivec2 maxRegionPos = glmUtil::floorDiv(maxChunkPos, glm::ivec2(regionSideLength));
 
-        uint32_t numGenerateTerrainTasksThisFrame = 0;
-
         for (int regionZ = minRegionPos.y; regionZ <= maxRegionPos.y; ++regionZ)
         {
             for (int regionX = minRegionPos.x; regionX <= maxRegionPos.x; ++regionX)

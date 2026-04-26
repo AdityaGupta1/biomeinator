@@ -129,7 +129,6 @@ void finalizeQueuedScreenshot()
 
     Logger::log("Saved screenshot to %s", path.generic_string().c_str());
 
-    screenshotRequest.readbackBuffer.Reset();
     screenshotRequest = ScreenshotRequest();
 }
 

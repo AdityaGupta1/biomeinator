@@ -14,6 +14,28 @@ namespace Renderer
 
 static constexpr uint32_t maxPayloadSizeBytes = 96;
 
+static void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
+                                            uint32_t numParams,
+                                            const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
+                                            uint32_t numStaticSamplers,
+                                            ComPtr<ID3D12RootSignature>& outRootSig)
+{
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc = {
+        .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+        .Desc_1_1 = {
+            .NumParameters = numParams,
+            .pParameters = params,
+            .NumStaticSamplers = numStaticSamplers,
+            .pStaticSamplers = staticSamplers,
+            .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+        },
+    };
+
+    ComPtr<ID3DBlob> blob, errorBlob;
+    CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&desc, &blob, &errorBlob), errorBlob);
+    CHECK_HRESULT(device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&outRootSig)));
+}
+
 void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
@@ -66,22 +88,9 @@ void initRootSignature()
 
         gbufferParams[GBUFFER_PARAM_IDX(GBUFFER_OUT)] = MAKE_PARAM(UAV, GBUFFER, GBUFFER_OUT);
 
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC gbufferRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(gbufferParams.size()),
-                .pParameters = gbufferParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
-                .pStaticSamplers = rtStaticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&gbufferRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&gbufferRootSig)));
+        serializeAndCreateRootSignature(gbufferParams.data(), static_cast<uint32_t>(gbufferParams.size()),
+                                        rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
+                                        gbufferRootSig);
     }
 
     // ===================================
@@ -126,22 +135,9 @@ void initRootSignature()
             });
         }
 
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rtRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(ptParams.size()),
-                .pParameters = ptParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(rtStaticSamplers.size()),
-                .pStaticSamplers = rtStaticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&rtRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(
-            device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&ptRootSig)));
+        serializeAndCreateRootSignature(ptParams.data(), static_cast<uint32_t>(ptParams.size()),
+                                        rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
+                                        ptRootSig);
     }
 
     // ===================================
@@ -154,22 +150,8 @@ void initRootSignature()
         collectParams[COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PATH_TRACING_RAW_BUFFER_IN);
         collectParams[COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
 
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC collectRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(collectParams.size()),
-                .pParameters = collectParams.data(),
-                .NumStaticSamplers = 0,
-                .pStaticSamplers = nullptr,
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&collectRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&collectRootSig)));
+        serializeAndCreateRootSignature(collectParams.data(), static_cast<uint32_t>(collectParams.size()),
+                                        nullptr, 0, collectRootSig);
     }
 
     // ===================================
@@ -183,22 +165,8 @@ void initRootSignature()
         nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE);
         nrcResolveParams[NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC nrcResolveRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(nrcResolveParams.size()),
-                .pParameters = nrcResolveParams.data(),
-                .NumStaticSamplers = 0,
-                .pStaticSamplers = nullptr,
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&nrcResolveRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&nrcResolveRootSig)));
+        serializeAndCreateRootSignature(nrcResolveParams.data(), static_cast<uint32_t>(nrcResolveParams.size()),
+                                        nullptr, 0, nrcResolveRootSig);
     }
 
     // ===================================
@@ -218,26 +186,8 @@ void initRootSignature()
 
         postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
-        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
-
-        staticSamplers.push_back(postprocessSamplerDesc);
-
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC postprocessRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(postprocessParams.size()),
-                .pParameters = postprocessParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
-                .pStaticSamplers = staticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&postprocessRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&postprocessRootSig)));
+        serializeAndCreateRootSignature(postprocessParams.data(), static_cast<uint32_t>(postprocessParams.size()),
+                                        &postprocessSamplerDesc, 1, postprocessRootSig);
     }
 
     // ===================================
@@ -248,26 +198,8 @@ void initRootSignature()
 
         debugViewParams[DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
-        std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers;
-
-        staticSamplers.push_back(postprocessSamplerDesc);
-
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC debugViewRootSigDesc = {
-            .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-            .Desc_1_1 = {
-                .NumParameters = static_cast<uint32_t>(debugViewParams.size()),
-                .pParameters = debugViewParams.data(),
-                .NumStaticSamplers = static_cast<uint32_t>(staticSamplers.size()),
-                .pStaticSamplers = staticSamplers.data(),
-                .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
-            },
-        };
-
-        ComPtr<ID3DBlob> blob, errorBlob;
-        CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&debugViewRootSigDesc, &blob, &errorBlob),
-                                      errorBlob);
-        CHECK_HRESULT(device->CreateRootSignature(
-            0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&debugViewRootSig)));
+        serializeAndCreateRootSignature(debugViewParams.data(), static_cast<uint32_t>(debugViewParams.size()),
+                                        &postprocessSamplerDesc, 1, debugViewRootSig);
     }
 }
 

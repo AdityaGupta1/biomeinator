@@ -330,6 +330,30 @@ static inline sl::Resource makeSlResource(RtTarget* target,
     };
 }
 
+static void bindSceneSrvs(uint32_t baseIdx)
+{
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 0, scene.getDevTlasAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 1, scene.getDevVertsBufferAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 2, scene.getDevIdxsBufferAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 3, scene.getDevInstanceDatasAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 4, scene.getDevMaterialsAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 5, scene.getDevPerTriDatasBufferAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 6, scene.getDevAreaLightsBufferAddress());
+    cmdList->SetComputeRootShaderResourceView(baseIdx + 7, scene.getDevAreaLightSamplingStructureAddress());
+}
+
+static void bindNrcBuffers(const nrc::d3d12::Buffers* nrcBuffers, uint32_t baseIdx)
+{
+    cmdList->SetComputeRootUnorderedAccessView(baseIdx + 0, (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
+    cmdList->SetComputeRootUnorderedAccessView(baseIdx + 1, (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
+    cmdList->SetComputeRootUnorderedAccessView(baseIdx + 2, (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
+    cmdList->SetComputeRootUnorderedAccessView(baseIdx + 3, (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
+    cmdList->SetComputeRootUnorderedAccessView(baseIdx + 4, (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
+}
+
+static void beginFrame();
+static void submitCmd();
+
 static auto lastTimePoint = std::chrono::high_resolution_clock::now();
 static bool stopAccumulating = false;
 
@@ -609,20 +633,9 @@ void render()
         cmdList->SetPipelineState1(gbufferPso.Get());
         cmdList->SetComputeRootSignature(gbufferRootSig.Get());
 
-        // clang-format off
         cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
-
+        bindSceneSrvs(GBUFFER_PARAM_IDX(RAYTRACING_ACS));
         cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
-        // clang-format on
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = pathTracingTarget.getTarget()->GetDesc();
         gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -645,29 +658,11 @@ void render()
             cmdList->SetPipelineState1(nrcUpdatePso.Get());
             cmdList->SetComputeRootSignature(ptRootSig.Get());
 
-            // clang-format off
             cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
-
+            bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
             cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
-
             cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-
-            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES), (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS), (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_COUNTERS_DATA), (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
-            // clang-format on
+            bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
 
             nrcUpdateDispatchDesc.Width = paramBlockManager.nrcConstants->trainingDimensions.x;
             nrcUpdateDispatchDesc.Height = paramBlockManager.nrcConstants->trainingDimensions.y;
@@ -684,18 +679,8 @@ void render()
         cmdList->SetPipelineState1(useNrcQuery ? nrcQueryPso.Get() : ptPso.Get());
         cmdList->SetComputeRootSignature(ptRootSig.Get());
 
-        // clang-format off
         cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RAYTRACING_ACS), scene.getDevTlasAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(VERTS), scene.getDevVertsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(IDXS), scene.getDevIdxsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(INSTANCE_DATAS), scene.getDevInstanceDatasAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(MATERIALS), scene.getDevMaterialsAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PER_TRI_DATAS), scene.getDevPerTriDatasBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHTS), scene.getDevAreaLightsBufferAddress());
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(AREA_LIGHT_SAMPLING_STRUCTURE), scene.getDevAreaLightSamplingStructureAddress());
-
+        bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
         cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
 
         cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
@@ -704,15 +689,8 @@ void render()
         if (useNrcQuery)
         {
             cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-
-            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_INFO), (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES), (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS), (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
-            cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(NRC_COUNTERS_DATA), (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
+            bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
         }
-        // clang-format on
 
         D3D12_DISPATCH_RAYS_DESC& activePtDispatchDesc = useNrcQuery ? nrcQueryDispatchDesc : ptDispatchDesc;
         activePtDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
