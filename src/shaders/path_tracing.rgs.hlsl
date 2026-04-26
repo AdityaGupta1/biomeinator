@@ -15,6 +15,10 @@
 #include "materials.hlsli"
 #include "path_tracing_common.hlsli"
 #include "payload.hlsli"
+#include "ris.hlsli"
+#include "util/color.hlsli"
+#include "util/math.hlsli"
+
 #if NRC_UPDATE || NRC_QUERY
     #define NRC_USE_CUSTOM_BUFFER_ACCESSORS 1
     #define NRC_BUFFER_QUERY_PATH_INFO nrcQueryPathInfo
@@ -36,19 +40,8 @@
     RWStructuredBuffer<NrcRadianceParams> nrcQueryRadianceParams : REGISTER_U(NRC, QUERY_RADIANCE_PARAMS);
     RWStructuredBuffer<uint> nrcCountersData : REGISTER_U(NRC, COUNTERS_DATA);
 
-    #if !NRC_UPDATE
-        #undef NRC_UPDATE
-    #endif
-    #if !NRC_QUERY
-        #undef NRC_QUERY
-    #endif
-
     #include "Nrc.hlsli"
 #endif
-
-#include "ris.hlsli"
-#include "util/color.hlsli"
-#include "util/math.hlsli"
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
@@ -134,16 +127,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
+        float3 emissiveContrib = 0.f;
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            const float3 emissiveContrib =
-                payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
-            pathColor += emissiveContrib;
-
-            if (pathDepth == 0)
-            {
-                ptDiffuseAlbedo += applyReinhard(emissiveContrib);
-            }
+            emissiveContrib = payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
         }
 
         const float3 wo_WS = -ray.Direction;
@@ -186,6 +173,15 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             break;
         }
 #endif
+
+        if (any(emissiveContrib > 0))
+        {
+            pathColor += emissiveContrib;
+            if (pathDepth == 0)
+            {
+                ptDiffuseAlbedo += applyReinhard(emissiveContrib);
+            }
+        }
 
         const bool isLastBounce = (pathDepth == effectiveMaxPathDepth - 1);
         if (!surfMaterial.canScatter() || isLastBounce)
@@ -483,6 +479,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
         {
+#if NRC_UPDATE || NRC_QUERY
+            NrcUpdateOnMiss(nrcPathState);
+#endif
             break;
         }
 
