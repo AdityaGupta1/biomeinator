@@ -72,8 +72,8 @@ shader API (`Nrc.hlsli`). Buffers are managed internally by the library.
   also need the include path for `common_settings.h` etc. to work.
 
 - **Scene bounds**: NRC requires `ContextSettings::sceneBoundsMin/Max`. For voxel mode,
-  these come from `voxelBoundsMin/Max_WS`. glTF mode currently uses broad placeholder
-  bounds until `Scene` exposes the loaded scene's AABB.
+  these come from `voxelBoundsMin/Max_WS`. glTF mode uses `Scene`'s loaded world-space
+  bounds, recorded from transformed glTF vertices during import.
 
 ---
 
@@ -127,7 +127,7 @@ not dispatched.
      - `trainingDimensions` = `nrc::ComputeIdealTrainingDimensions(frameDimensions, 0)`.
      - `maxPathVertices` = 8 (or `renderParams.maxPathDepth`).
      - `samplesPerPixel` = 1.
-     - `sceneBoundsMin/Max` = voxel bounds in voxel mode, or broad placeholder bounds in glTF mode until `Scene` exposes an AABB.
+     - `sceneBoundsMin/Max` = voxel bounds in voxel mode, or recorded glTF scene bounds in glTF mode.
      - `includeDirectLighting` = false (we add direct lighting ourselves in the path
        tracer; NRC only provides indirect).
      - `learnIrradiance` = false.

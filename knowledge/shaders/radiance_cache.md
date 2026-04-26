@@ -62,5 +62,6 @@ resolve modes.
 `NrcConstants` lives in a separate root CBV (register space 5, b0), outside
 the main `GlobalParams` cbuffer. `BeginFrame` and `PopulateShaderConstants`
 are called each frame before NRC dispatches. Scene bounds come from
-`voxelBoundsMin/Max_WS` in voxel mode. glTF mode currently uses a broad
-placeholder bounds cube until `Scene` exposes a loaded-scene AABB.
+`voxelBoundsMin/Max_WS` in voxel mode and from `Scene`'s loaded glTF
+world-space bounds in glTF mode. The broad fallback cube is only used if a
+glTF scene has no recorded bounds.

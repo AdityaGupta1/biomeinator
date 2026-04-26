@@ -120,6 +120,7 @@ static void initCommand();
 static void initConstantParams();
 static void initRootSignature();
 static void initPipeline();
+static void configureNrc();
 static void initNrc();
 static void destroyNrc();
 
@@ -152,6 +153,7 @@ static Camera camera;
 static ComPtr<ID3D12GraphicsCommandList4> cmdList;
 
 static Scene scene;
+static nrc::d3d12::Context* nrcContext = nullptr;
 
 static bool testMode = false;
 static bool voxelMode = false;
@@ -225,6 +227,10 @@ void loadScene(const std::string& filePathStr)
 {
     flush();
     GltfLoader::loadGltf(filePathStr, scene);
+    if (nrcContext != nullptr)
+    {
+        configureNrc();
+    }
     dlssNeedsReset = true;
 }
 
@@ -495,8 +501,6 @@ static ComPtr<ID3D12Resource> dev_gbuffer;
 static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
 static ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
 
-static nrc::d3d12::Context* nrcContext = nullptr;
-
 static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
 
 static D3D12_VIEWPORT viewport;
@@ -529,8 +533,6 @@ struct FrameTimeMeasurement
     float timeMs;
 };
 static RingBuffer<FrameTimeMeasurement, 600> frameTimeBuffer{};
-
-static void configureNrc();
 
 void resize()
 {
@@ -1360,10 +1362,27 @@ static void configureNrc()
     }
     else
     {
-        // TODO: replace with loaded scene AABB when Scene exposes it
-        cs.sceneBoundsMin = { -10000.f, -10000.f, -10000.f };
-        cs.sceneBoundsMax = {  10000.f,  10000.f,  10000.f };
+        if (scene.hasBounds())
+        {
+            const glm::vec3& boundsMin = scene.getBoundsMin_WS();
+            const glm::vec3& boundsMax = scene.getBoundsMax_WS();
+            cs.sceneBoundsMin = { boundsMin.x, boundsMin.y, boundsMin.z };
+            cs.sceneBoundsMax = { boundsMax.x, boundsMax.y, boundsMax.z };
+        }
+        else
+        {
+            Logger::logWarning("Scene has no bounds, using fallback");
+            cs.sceneBoundsMin = { -10000.f, -10000.f, -10000.f };
+            cs.sceneBoundsMax = {  10000.f,  10000.f,  10000.f };
+        }
     }
+    Logger::log("NRC scene bounds: (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+                cs.sceneBoundsMin.x,
+                cs.sceneBoundsMin.y,
+                cs.sceneBoundsMin.z,
+                cs.sceneBoundsMax.x,
+                cs.sceneBoundsMax.y,
+                cs.sceneBoundsMax.z);
     nrcContext->Configure(cs);
 }
 
@@ -1645,8 +1664,7 @@ static void imguiEndFrame(double deltaTime)
         didPathTracingSettingsChange |= didNrcChange;
         needsResize |= didNrcChange;
 
-        const bool nrcEnabled = SettingsManager::getAsBool("nrcEnabled");
-        if (nrcEnabled)
+        if (ImGui::CollapsingHeader("NRC Settings"))
         {
             {
                 int nrcResolveModeInt = static_cast<int>(SettingsManager::getAsUint("nrcResolveMode"));

@@ -22,7 +22,7 @@ implementation.
 | A3 | ~~Built-in `Resolve()` is used~~ — **revised**: custom resolve compute shader needed because built-in resolve expects a texture output (Vulkan API requires `VkImageView`; D3D12 likely same internally), but our output is a structured buffer | revised |
 | A4 | `dev_pathTracingRawBuffer` is format-compatible with NRC's `Resolve` output | N/A — bypassed by custom resolve |
 | A5 | `flush()` is acceptable when toggling NRC off at runtime | active |
-| A6 | Scene bounds are available from `voxelBoundsMin/Max_WS` in voxel mode. glTF mode still uses broad placeholder bounds until `Scene` exposes a loaded-scene AABB. | revised |
+| A6 | Scene bounds are available from `voxelBoundsMin/Max_WS` in voxel mode and from `Scene`'s glTF world-space bounds in glTF mode. The broad fallback cube is only used when no glTF bounds were recorded. | active |
 | A7 | Three shader variants (no-NRC, NRC update, NRC query) compiled at build time; runtime toggle selects which PSO to dispatch | active |
 
 ## Tasks
