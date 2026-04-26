@@ -11,4 +11,19 @@ file.
 Entries may link to other entries using relative markdown links, e.g.
 `[shaders → common_structs.md](../shaders/common_structs.md)`.
 
-When writing an entry, focus on **rationale and categorisation** — why things are designed the way they are, what role a file or system plays, and what is non-obvious. Do not restate what is already clear from reading the source. Avoid listing every field or function; instead, explain what makes a group of fields or functions coherent, and only call out individual members when their behavior is surprising or easy to misuse.
+When writing an entry, focus on **rationale and categorisation** — why things
+are designed the way they are, what role a file or system plays, and what is
+non-obvious. Do not restate what is already clear from reading the source.
+
+**Do not:**
+- List enum variants, struct fields, or function signatures that are plain data
+  readable from the header (e.g. listing all block types or all biomes).
+- Describe what a function does when the name already says it.
+- Write tables that mirror data definitions in the code.
+
+**Do:**
+- Explain non-obvious design decisions (why two instances per chunk, why
+  regions are never destroyed, why the surface multiplier is asymmetric).
+- Call out gotchas, invariants, and ordering dependencies that would surprise a
+  reader or cause bugs if violated.
+- Describe the *role* of a group of things, not each member individually.
