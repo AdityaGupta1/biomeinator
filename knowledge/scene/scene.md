@@ -41,4 +41,6 @@ support is added, bounds expansion should follow.
 
 ## Reset
 
-After `reset()`, `init()` does not need to be called again — arrays are re-created in-place.
+`reset()` clears all arrays and empties the `availableInstanceIds` queue, so
+`init()` must be called again afterward to repopulate it. The glTF loader does
+exactly this: `scene.reset(); scene.init();`.

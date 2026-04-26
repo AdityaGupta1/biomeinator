@@ -23,14 +23,15 @@ The defines gate NRC-specific code in `path_tracing/path_tracing.rgs.hlsl`: `Nrc
 ## NRC Buffers
 
 Five SDK-owned buffers are bound as UAVs to the path tracing root signature:
-`QueryPathInfo`, `TrainingPathInfo`, `TrainingPathVertices`,
-`QueryRadianceParams`, `CountersData`. These are obtained from
-`nrcContext->GetBuffers()` each frame.
+`nrcQueryPathInfo`, `nrcTrainingPathInfo`, `nrcTrainingPathVertices`,
+`nrcQueryRadianceParams`, `nrcCountersData`. These are obtained from
+`nrcContext->GetBuffers()` each frame. The `NRC_BUFFER_*` macros map SDK names
+to these shader variable names.
 
 ## Custom Resolve
 
 NRC's built-in `Resolve()` expects a 2D texture output, but the path tracer
-writes to a structured buffer (`dev_pathTracingRawBuffer`). A custom resolve
+writes to a structured buffer (`pathTracingRawBufferOut`). A custom resolve
 compute shader (`nrc/nrc_resolve.cs.hlsl`) reads `QueryPathInfo` and
 `QueryRadiance`, multiplies by the path's prefix throughput, and adds to the
 raw buffer. This also handles path splitting — linear indexing at

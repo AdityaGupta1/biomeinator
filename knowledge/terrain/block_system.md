@@ -8,7 +8,7 @@ _Last edited: 2026-04-26_
 
 The non-obvious culling rules in `shouldGenerateFace`:
 - **TRANSPARENT_CUTOUT** between two cutout blocks: only the one at the lower/equal position generates the face. This prevents double-rendering the shared boundary (both quads would be coplanar and z-fight).
-- **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it).
+- **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it). Exception: `LIQUID_TOP` blocks always generate the +Y (top) face regardless of neighbor, so the water surface is always visible.
 
 ## BlockShape
 

@@ -6,7 +6,7 @@ Material and texture management in `src/scene/scene.h/cpp`.
 
 ## Materials
 
-`Material` is a GPU-shared struct (defined in `common_structs.h`) with flags indicating which BxDF lobes are active (diffuse, glossy reflection, glossy transmission), plus base color, roughness, IOR, and optional texture IDs. Materials are stored in a `MappedArray` that auto-resizes.
+`Material` is a GPU-shared struct (defined in `common_structs.h`) with flags indicating which BxDF lobes are active (diffuse, glossy reflection, glossy transmission), plus base color, IOR, emissive color/strength, and optional texture IDs. Roughness is not yet implemented (there is a TODO for it). Materials are stored in a `MappedArray` that auto-resizes.
 
 `Scene::addMaterial()` appends to the array and returns an index. Instances reference materials by index (`setMaterialIdx`). The terrain system pre-registers two materials (DEFAULT and WATER) at init; the glTF loader creates materials per-mesh.
 

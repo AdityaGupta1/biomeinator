@@ -8,7 +8,7 @@ The terrain system uses five task types, all dispatched through the same thread 
 
 1. **generateTerrain** — 3D noise sampling, block fill, structure candidate creation. Heaviest task. Throttled to 12/frame.
 2. **checkStructureNeighbors** — builds the 3×3 neighbor list and increments atomic counters. Lightweight. Enqueued immediately when a chunk reaches `HAS_TERRAIN` within fill distance.
-3. **fillStructures** — reads neighbors' structure lists, writes structure blocks + decorators. Medium weight. Only runs once all structure neighbors are ready.
+3. **fillStructuresAndDecorators** — reads neighbors' structure lists, writes structure blocks + decorators. Medium weight. Only runs once all structure neighbors are ready.
 4. **generateSegments** — classifies 4×8×4 segments as AIR/SOLID_SURROUNDED/MIXED. Requires neighbor block data. Uses scratch memory from the allocator.
 5. **createInstances** — per-face mesh generation into Instance vertex/index buffers. Requires pre-allocated Instances from the main thread.
 
