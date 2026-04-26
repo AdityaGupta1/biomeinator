@@ -3,9 +3,9 @@
 
 #include "rt_target.h"
 
-#include "dxr_common.h"
-#include "renderer.h"
-#include "buffer/buffer_helper.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
+#include "rendering/buffer/buffer_helper.h"
 
 #include "debug.h"
 

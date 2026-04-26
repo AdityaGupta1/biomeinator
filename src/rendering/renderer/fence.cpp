@@ -3,8 +3,8 @@
 
 #include "fence.h"
 
-#include "dxr_common.h"
-#include "renderer.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
 
 void Fence::init()
 {

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "dxr_includes.h"
-#include "common/common_params.h"
+#include "rendering/dxr_includes.h"
+#include "rendering/common/common_params.h"
 #include "NrcStructures.h"
 
 class ParamBlockManager

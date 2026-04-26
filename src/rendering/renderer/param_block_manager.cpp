@@ -3,8 +3,8 @@
 
 #include "param_block_manager.h"
 
-#include "dxr_common.h"
-#include "buffer/buffer_helper.h"
+#include "rendering/dxr_common.h"
+#include "rendering/buffer/buffer_helper.h"
 
 static_assert(sizeof(HeapIndices) % 16 == 0, "HeapIndices size must be a multiple of 16 bytes");
 static_assert(sizeof(ConstantParams) % 16 == 0, "ConstantParams size must be a multiple of 16 bytes");

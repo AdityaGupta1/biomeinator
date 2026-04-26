@@ -2,3 +2,4 @@ build/
 out/
 .vs/
 .cursor/plans/
+.claude/settings.local.json
