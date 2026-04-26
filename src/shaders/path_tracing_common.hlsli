@@ -11,13 +11,6 @@
 #include "payload.hlsli"
 #include "util/ray.hlsli"
 
-#ifndef NRC_QUERY
-    #define NRC_QUERY 0
-#endif
-#ifndef NRC_UPDATE
-    #define NRC_UPDATE 0
-#endif
-
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
