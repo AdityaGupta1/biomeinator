@@ -467,7 +467,7 @@ static RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_
 
 static RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
-static RtTarget nrcDebugTarget{ L"nrcDebugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4 };
+static RtTarget nrcDebugTarget{ L"nrcDebugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
 // clang-format on
 
 static std::vector<RtTarget*> allRtTargets;
