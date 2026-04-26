@@ -81,11 +81,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
+        const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
 #if NRC_UPDATE || NRC_QUERY
         NrcUpdateOnMiss(nrcPathState);
-        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, getDomeLightColor(ray.Direction));
+        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
 #endif
-        pathColor = payload.pathWeight * getDomeLightColor(ray.Direction);
+        pathColor = payload.pathWeight * domeLightColor;
         return;
     }
 
