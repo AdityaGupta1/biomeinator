@@ -7,9 +7,9 @@ All passes are recorded into a single command list per frame and submitted toget
 ## Pass Sequence
 
 ```
-G-Buffer
-  ↓
 [NRC BeginFrame]               (only if nrcEnabled)
+  ↓
+G-Buffer
   ↓
 [NRC Update dispatch]          (only if nrcEnabled)
   ↓
@@ -42,7 +42,7 @@ The G-buffer also outputs the per-pixel data that DLSS needs: motion vectors, li
 
 Runs when `nrcEnabled`. Uses NVIDIA's NRC SDK to train a neural network each frame that predicts indirect radiance. See [shaders → radiance_cache.md](../shaders/radiance_cache.md) for shader-side details.
 
-**BeginFrame** — called before any NRC GPU work. Populates `NrcConstants`.
+**BeginFrame** — called before the frame's ray tracing work. Populates `NrcConstants` used by update, query, and resolve.
 
 **NRC Update** (ray generation) — dispatches at `trainingDimensions` (smaller than render resolution). Traces paths from G-buffer hits and writes training data (path vertices + radiance) for the neural network.
 
@@ -82,7 +82,7 @@ The raw buffers exist because accumulation needs to work in linear HDR — you c
 
 ## Postprocess / Debug View (rasterization)
 
-A full-screen triangle (3 vertices, no vertex buffer) draws to the swap chain back buffer. Normally uses the postprocess pipeline, which samples `preTonemappedColorSrvIdx` (already tonemapped by collect) and outputs it. If a debug view is active, the debug view pipeline is used instead, which visualises a selected `RtTarget` or RC buffer with optional scale and tonemapping.
+A full-screen triangle (3 vertices, no vertex buffer) draws to the swap chain back buffer. Normally uses the postprocess pipeline, which samples `preTonemappedColorSrvIdx` (already tonemapped by collect) and outputs it. If a debug view is active, the debug view pipeline is used instead, which visualises a selected `RtTarget` with optional scale and tonemapping. NRC debug resolve modes redirect the debug view to the NRC debug target.
 
 ImGui is rendered on top of the postprocess output before the back buffer transitions back to `PRESENT`.
 

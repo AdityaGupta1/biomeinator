@@ -20,8 +20,7 @@ shader API (`Nrc.hlsli`). Buffers are managed internally by the library.
   (`enableGPUMemoryAllocation = true`). This avoids having to replicate the allocation
   logic from `NrcCommon.h` / `BuffersAllocationInfo`.
 
-- **Runtime toggle**: The UI checkbox "Enable radiance cache" (`rcEnabled`) will be
-  repurposed to toggle NRC. When disabled, the path tracer runs a single full-res dispatch
+- **Runtime toggle**: The UI checkbox "Enable NRC" (`nrcEnabled`) toggles NRC. When disabled, the path tracer runs a single full-res dispatch
   with no NRC calls. When enabled, the full NRC pipeline runs (update dispatch, query
   dispatch, QueryAndTrain, Resolve). Toggling on requires creating the NRC context +
   calling `Configure`. Toggling off requires `flush()` + `nrc::d3d12::Context::Destroy`.
@@ -73,8 +72,8 @@ shader API (`Nrc.hlsli`). Buffers are managed internally by the library.
   also need the include path for `common_settings.h` etc. to work.
 
 - **Scene bounds**: NRC requires `ContextSettings::sceneBoundsMin/Max`. For voxel mode,
-  these come from `voxelBoundsMin/Max_WS`. For glTF mode, they should come from the
-  loaded scene's AABB.
+  these come from `voxelBoundsMin/Max_WS`. glTF mode currently uses broad placeholder
+  bounds until `Scene` exposes the loaded scene's AABB.
 
 ---
 
@@ -128,7 +127,7 @@ not dispatched.
      - `trainingDimensions` = `nrc::ComputeIdealTrainingDimensions(frameDimensions, 0)`.
      - `maxPathVertices` = 8 (or `renderParams.maxPathDepth`).
      - `samplesPerPixel` = 1.
-     - `sceneBoundsMin/Max` = scene AABB.
+     - `sceneBoundsMin/Max` = voxel bounds in voxel mode, or broad placeholder bounds in glTF mode until `Scene` exposes an AABB.
      - `includeDirectLighting` = false (we add direct lighting ourselves in the path
        tracer; NRC only provides indirect).
      - `learnIrradiance` = false.
@@ -137,10 +136,10 @@ not dispatched.
    - `flush()`, then `nrc::d3d12::Context::Destroy(*nrcContext)`, then
      `nrc::d3d12::Shutdown()`. Set `nrcContext = nullptr`.
 
-4. Call `initNrc()` from the existing `init()` if `rcEnabled` is true at startup, mirroring
-   the current `initRadianceCache()` call. Call `destroyNrc()` from `destroy()`.
+4. Call `initNrc()` from the existing `init()` if `nrcEnabled` is true at startup. Call
+   `destroyNrc()` from `destroy()`.
 
-5. In the per-frame section where `rcEnabled` is toggled:
+5. In the per-frame section where `nrcEnabled` is toggled:
    - On enable: call `initNrc()` (replaces `initRadianceCache()`).
    - On disable: call `destroyNrc()` (replaces `flush()` + buffer `.Reset()` calls).
 
@@ -164,9 +163,8 @@ not dispatched.
   bool was unnecessary.
 
 - **Separate `nrcEnabled` setting instead of reusing `rcEnabled`.** NRC init/destroy is
-  gated on `nrcEnabled` rather than `rcEnabled`, so both cache implementations can coexist
-  during the migration. The old RC still uses `rcEnabled`. These will be consolidated once
-  the old RC code is removed in step 5.
+  gated on `nrcEnabled`. During the migration this allowed old RC and NRC to coexist;
+  after Step 7 cleanup, `rcEnabled` and the old RC path were removed.
 
 - **`configureNrc()` instead of raw `buildNrcContextSettings()` + `Configure()`.** The
   plan had `Configure(contextSettings)` called inline at each site. These were consolidated
@@ -322,10 +320,9 @@ variants are compiled. NRC buffers are bound and written to.
 
 ### Deviations from plan
 
-- **Old RC is still present.** Step 4 originally called for deleting old RC shader files
-  and registrations, but the branch currently keeps `rcEnabled` and `nrcEnabled` separate
-  so both implementations can coexist during migration. Deletion remains part of the Step
-  5/Step 7 cleanup.
+- **Old RC deletion was deferred.** Step 4 kept the old RC shader files and registrations
+  so both implementations could coexist during migration. Step 7 later removed the old RC
+  files, settings, params, registers, and renderer bindings.
 - **NRC query uses a separate dispatch descriptor.** The initial Step 4 implementation
   created a query PSO and shader table but accidentally dispatched it with `ptDispatchDesc`.
   This was fixed by using `nrcQueryDispatchDesc` whenever `nrcQueryPso` is active.
@@ -502,6 +499,8 @@ removed, and the toggle is polished.
 
 ### Verification
 
-- `grep -r "rcHash\|rcAccum\|rcResolved\|rcInsert\|rcLookup\|rcWrite\|RC_UPDATE\|rc_evict\|rc_resolve\|radiance_cache\.hlsli"` finds no hits in `src/`.
+- Search for legacy RC symbols (`rcHash`, `rcAccum`, `rcResolved`, `rcInsert`,
+  `rcLookup`, `rcWrite`, `\bRC_UPDATE\b`, `rc_evict`, `rc_resolve`,
+  `radiance_cache.hlsli`) finds no hits in `src/`.
 - The knowledgebase accurately describes the current state.
 - The app builds and runs cleanly in both NRC-on and NRC-off states.

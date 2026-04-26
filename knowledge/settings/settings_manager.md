@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-04-25_
 
 # Settings Manager
 
@@ -24,7 +24,7 @@ getWorldSeed()          // fast path, no map lookup
 
 // Writing (from GUI or runtime code)
 setAsBool / setAsInt / setAsUint / setAsFloat / setAsString
-toggleBool("rcEnabled") // convenience flip
+toggleBool("nrcEnabled") // convenience flip
 ```
 
 ## How Settings Reach the GPU

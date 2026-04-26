@@ -22,7 +22,7 @@ implementation.
 | A3 | ~~Built-in `Resolve()` is used~~ — **revised**: custom resolve compute shader needed because built-in resolve expects a texture output (Vulkan API requires `VkImageView`; D3D12 likely same internally), but our output is a structured buffer | revised |
 | A4 | `dev_pathTracingRawBuffer` is format-compatible with NRC's `Resolve` output | N/A — bypassed by custom resolve |
 | A5 | `flush()` is acceptable when toggling NRC off at runtime | active |
-| A6 | Scene bounds are available from the scene AABB (glTF) or `voxelBoundsMin/Max_WS` (voxel mode) | active |
+| A6 | Scene bounds are available from `voxelBoundsMin/Max_WS` in voxel mode. glTF mode still uses broad placeholder bounds until `Scene` exposes a loaded-scene AABB. | revised |
 | A7 | Three shader variants (no-NRC, NRC update, NRC query) compiled at build time; runtime toggle selects which PSO to dispatch | active |
 
 ## Tasks
@@ -44,7 +44,7 @@ implementation.
 | 2.1 Add NRC state variables (`nrcContext`, `nrcInitialized`) | done | `nrcInitialized` skipped — `nrcContext != nullptr` serves the same purpose |
 | 2.2 Implement `initNrc()` (Initialize + Create + Configure) | done | Configure call consolidated into `configureNrc()` helper. Guarded against duplicate init if NRC starts enabled. |
 | 2.3 Implement `destroyNrc()` (flush + Destroy + Shutdown) | done | |
-| 2.4 Wire `initNrc()` / `destroyNrc()` to the `rcEnabled` toggle | done | Uses separate `nrcEnabled` setting so old RC can coexist during migration |
+| 2.4 Wire `initNrc()` / `destroyNrc()` to the cache toggle | done | Uses `nrcEnabled`; old `rcEnabled` was removed with the legacy RC path. |
 | 2.5 Handle reconfiguration on resolution change | done | Also reconfigures on `maxPathDepth` and `doPathSplitting` changes. `doPathSplitting` triggers resize → `configureNrc()`, which now reads `doPathSplitting` to set `frameDimensions`. |
 | 2.6 Wire `initNrc()` into startup, `destroyNrc()` into `destroy()` | done | |
 
@@ -62,14 +62,14 @@ implementation.
 |------|--------|-------|
 | 4.1 Create `nrc_update.rgs.hlsl` and `nrc_query.rgs.hlsl` | done | Thin wrapper variants around `path_tracing.rgs.hlsl` |
 | 4.2 Add NRC buffer bindings (root params / UAVs) to PT root sig | done | 5 buffers: QueryPathInfo, TrainingPathInfo, TrainingPathVertices, QueryRadianceParams, Counter |
-| 4.3 Replace `#ifdef RC_UPDATE` blocks with NRC API calls in `path_tracing.rgs.hlsl` | done | NRC variants use SDK shader API; old RC code remains for `RC_UPDATE` during coexistence |
+| 4.3 Replace old RC update blocks with NRC API calls in `path_tracing.rgs.hlsl` | done | NRC variants use SDK shader API; legacy `RC_UPDATE` code was removed during cleanup. |
 | 4.4 Replace RC lookup termination with `NrcProgressState` handling | done | `TerminateImmediately` and `TerminateAfterDirectLighting` handled in the bounce loop |
 | 4.5 Add `NrcSurfaceAttributes` population from decoded material | done | Position, normal, roughness, F0, diffuse reflectance, view vector, and delta-lobe state populated. Query pass applies first-bounce path splitting before `NrcUpdateOnHit()` so NRC sees the actual split lobe and adjusted throughput. |
 | 4.6 Add `NrcSetBrdfPdf` call after BSDF sampling | done | Also updates NRC's previous-hit delta flag from the sampled BSDF lobe so mixed diffuse+glossy materials do not let specular reflection paths trigger premature NRC queries. |
 | 4.7 Gate Russian roulette with `NrcCanUseRussianRoulette` | done | |
 | 4.8 Add `NrcWriteFinalPathInfo` after bounce loop | done | Early NRC exits were tightened so created path states reach final path info writes |
-| 4.9 Defer old RC shader deletion | done | `rc_update.rgs.hlsl` and old RC shaders intentionally remain while `rcEnabled` and `nrcEnabled` coexist |
-| 4.10 Update `shaders.cpp` for NRC shader variants | done | NRC shaders added; old RC shader registrations retained for coexistence |
+| 4.9 Defer old RC shader deletion | done | Historical Step 4 staging choice; old RC shaders were deleted in Step 7. |
+| 4.10 Update `shaders.cpp` for NRC shader variants | done | NRC shaders added; old RC shader registrations removed in cleanup. |
 | 4.11 Build new PSOs for NRC update and query variants | done | Query dispatch now uses `nrcQueryDispatchDesc` instead of the plain PT shader table |
 | 4.12 Bind NRC buffers from C++ before DispatchRays | done | Uses `nrcContext->GetBuffers()` for update and query dispatches |
 
@@ -81,7 +81,7 @@ implementation.
 | 5.2 Create custom resolve compute shader (`nrc_resolve.cs.hlsl`) | done | Reads QueryPathInfo + QueryRadiance and writes to `dev_pathTracingRawBuffer`. NRC SDK buffers stay bound as UAV root descriptors. |
 | 5.3 Create root signature and PSO for custom resolve | done | Uses NrcConstants (CBV), QueryPathInfo (UAV), QueryRadiance (UAV), raw buffer (UAV). |
 | 5.4 Dispatch custom resolve after QueryAndTrain, before Collect | done | Dispatches at `frameDimensions` (doubled width when path splitting is on). |
-| 5.5 Create debug resolve texture + use built-in `Resolve()` for debug modes | deferred | Moved to Step 6 debug/UI work; normal NRC rendering uses the custom resolve. |
+| 5.5 Create debug resolve texture + use built-in `Resolve()` for debug modes | done | Completed in Step 6 debug/UI work; normal NRC rendering uses the custom resolve. |
 | 5.6 Call `EndFrame` after command list submission | done | Called after `submitCmd()` while the frame's NRC context is still active. |
 | 5.7 Remove old RC sub-passes (evict, update, resolve dispatches) | done | Old RC runtime passes and transitions were removed from the render loop. |
 | 5.8 Remove old RC resources and root signatures | done | Removed old RC GPU resources, root signatures, PSOs, shader table, and param enums from `renderer.cpp`. |
@@ -117,5 +117,5 @@ implementation.
 |------|--------|-------|
 | 7.1 Delete `radiance_cache.hlsli`, `rc_evict.cs.hlsl`, `rc_resolve.cs.hlsl` | done | Also deleted `rc_update.rgs.hlsl` |
 | 7.2 Remove RC defines from `common_settings.h` | done | `RC_TABLE_SIZE`, `RC_WORKGROUP_SIZE`, `RC_UPDATE_SCALE`, `RC_TARGET_PIXEL_WIDTH` |
-| 7.3 Grep for leftover RC references in `src/` | done | Removed all `#ifdef RC_UPDATE` blocks from `path_tracing.rgs.hlsl`, `RadianceCacheParams` from `common_params.h`/`global_params.hlsli`/`param_block_manager`, `defined(RC_UPDATE)` from `path_tracing_common.hlsli` |
+| 7.3 Grep for leftover RC references in `src/` | done | Removed legacy RC shader code, params, settings, resources, and register definitions. Remaining `NRC_*` symbols are the active NRC implementation. |
 | 7.4 Update knowledgebase entries | done | Rewrote `radiance_cache.md` for NRC, updated `render_passes.md`, `path_tracing.md`, shader and rendering `index.md` files |

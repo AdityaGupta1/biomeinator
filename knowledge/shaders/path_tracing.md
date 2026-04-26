@@ -2,7 +2,7 @@ _Last edited: 2026-04-25_
 
 # Path Tracing Shader
 
-`src/shaders/path_tracing.rgs.hlsl` — the main rendering shader. Compiled in three variants: plain (no cache), NRC update (`NRC_UPDATE`), and NRC query (`NRC_QUERY`). The same `pathTraceRay()` function drives all three, with `#if NRC_UPDATE || NRC_QUERY` blocks controlling NRC API calls. See [radiance_cache.md](radiance_cache.md) for details on the NRC shader integration.
+`src/shaders/path_tracing.rgs.hlsl` — the main rendering shader. Compiled in three variants: plain (no cache), NRC update (`NRC_UPDATE`), and NRC query (`NRC_QUERY`). `RayGeneration()` chooses the variant-specific pixel coordinate, then `pathTraceRay()` drives the shared path loop with `#if NRC_UPDATE || NRC_QUERY` blocks controlling NRC API calls. See [radiance_cache.md](radiance_cache.md) for details on the NRC shader integration.
 
 This shader does NOT trace primary rays. It reads the G-buffer to get the primary hit, then traces secondary rays from there. See [render_passes.md](../rendering/render_passes.md) for the full pass sequence.
 
@@ -72,7 +72,7 @@ Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser inpu
 
 ## NRC Shader Variants
 
-When compiled with `NRC_UPDATE`, the shader runs at reduced `trainingDimensions`. When compiled with `NRC_QUERY`, it runs at full `frameDimensions`. Both variants:
+When compiled with `NRC_UPDATE`, the shader runs at reduced `trainingDimensions`; each training thread maps back to a render-resolution G-buffer pixel before entering the shared path loop. When compiled with `NRC_QUERY`, it runs at full `frameDimensions`. Both variants:
 
 - Create an `NrcContext` and `NrcPathState` at the start of `pathTraceRay()`.
 - Call `NrcUpdateOnHit()` at each hit with `NrcSurfaceAttributes` and check the returned `NrcProgressState`.

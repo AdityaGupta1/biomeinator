@@ -62,17 +62,14 @@ float balanceHeuristic(const float pdfA, const float pdfB)
     return pdfA / (pdfA + pdfB);
 }
 
-void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiffuseAlbedo)
+void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
 
-    const uint2 pixelIdx = getPixelIdx();
-    const uint pathSplitIdx = getPathSplitIdx();
-
 #if NRC_UPDATE || NRC_QUERY
     // NRC frameDimensions match full dispatch (e.g. doubled width when path splitting).
-    // Do not use getPixelIdx() here — it collapses split lanes to the same coordinate.
+    // Do not use getPixelIdx() here - it collapses split lanes to the same coordinate.
     const uint2 nrcPixelIdx = DispatchRaysIndex().xy;
     NrcBuffers nrcBufs = (NrcBuffers)0;
     NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBufs, nrcPixelIdx);
@@ -481,7 +478,6 @@ void pathTraceRay(inout Payload payload, out float3 pathColor, out float3 ptDiff
 #if NRC_UPDATE || NRC_QUERY
             NrcUpdateOnMiss(nrcPathState);
 #endif
-
             pathColor += domeLightContrib;
             break;
         }
@@ -532,6 +528,7 @@ void RayGeneration()
     const uint2 pixelIdx = min(
         uint2(trainingPixelIdx * uint2(renderParams.renderSize) / nrcConstants.trainingDimensions),
         uint2(renderParams.renderSize) - 1);
+    const uint pathSplitIdx = 0;
 #else
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
@@ -559,7 +556,7 @@ void RayGeneration()
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
-    pathTraceRay(payload, pathColor, outPtDiffuseAlbedo);
+    pathTraceRay(payload, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo);
 
 #if !NRC_UPDATE
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;

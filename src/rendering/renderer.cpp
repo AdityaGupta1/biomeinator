@@ -193,11 +193,6 @@ void init()
     initRootSignature();
     initPipeline();
 
-    if (SettingsManager::getAsBool("nrcEnabled"))
-    {
-        initNrc();
-    }
-
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
@@ -211,6 +206,11 @@ void init()
         {
             loadScene(defaultScene);
         }
+    }
+
+    if (SettingsManager::getAsBool("nrcEnabled"))
+    {
+        initNrc();
     }
 
     if (!testMode)
