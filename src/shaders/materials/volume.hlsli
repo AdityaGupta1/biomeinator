@@ -6,8 +6,8 @@
 // NOTE: this file is intended to be included from path_tracing_common.hlsli, after instanceDatas
 // and perTriDatas are declared.
 
-#include "global_params.hlsli"
-#include "payload.hlsli"
+#include "common/global_params.hlsli"
+#include "common/payload.hlsli"
 
 static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
 

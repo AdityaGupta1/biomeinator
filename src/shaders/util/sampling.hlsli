@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "math.hlsli"
-#include "rng.hlsli"
+#include "util/math.hlsli"
+#include "util/rng.hlsli"
 
 float3 sampleHemisphereCosineWeighted(const float3 surfNor_WS, inout RandomNumberGenerator rng)
 {

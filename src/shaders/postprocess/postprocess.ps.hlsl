@@ -4,7 +4,7 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
-#include "global_params.hlsli"
+#include "common/global_params.hlsli"
 #include "util/color.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);

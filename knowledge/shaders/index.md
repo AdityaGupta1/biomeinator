@@ -1,8 +1,10 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-04-26_
 
 # Shaders Knowledgebase
 
 HLSL ray tracing and compute shaders, shared utility libraries, and the build-time compilation pipeline.
+
+Shaders are organized into subdirectories under `src/shaders/`: `common/` (shared headers), `light/` (lighting/RIS), `materials/` (material evaluation, mipmap, volume), `nrc/` (Neural Radiance Cache variants), `path_tracing/` (main path tracer, G-buffer, collect), `postprocess/` (tonemapping, debug view), and `util/` (math, RNG, sampling). All cross-directory includes use root-relative paths via a `-I` flag pointing at the shader root.
 
 | Entry | Description |
 |---|---|

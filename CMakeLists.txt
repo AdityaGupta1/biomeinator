@@ -113,6 +113,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /Vn ${NAME_SAFE}_shaderBytecode
                 /HV 2021
                 -enable-16bit-types
+                /I "${SHADER_DIR}"
                 /I "${CMAKE_SOURCE_DIR}/external/NRC/Include"
         DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"

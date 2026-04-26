@@ -7,15 +7,15 @@
 
 #include <unordered_map>
 
-#include "collect.cs.fxh"
-#include "debug_view.ps.fxh"
-#include "gbuffer.rgs.fxh"
-#include "path_tracing.rgs.fxh"
-#include "postprocess.vs.fxh"
-#include "postprocess.ps.fxh"
-#include "nrc_resolve.cs.fxh"
-#include "nrc_update.rgs.fxh"
-#include "nrc_query.rgs.fxh"
+#include "nrc/nrc_query.rgs.fxh"
+#include "nrc/nrc_resolve.cs.fxh"
+#include "nrc/nrc_update.rgs.fxh"
+#include "path_tracing/collect.cs.fxh"
+#include "path_tracing/gbuffer.rgs.fxh"
+#include "path_tracing/path_tracing.rgs.fxh"
+#include "postprocess/debug_view.ps.fxh"
+#include "postprocess/postprocess.ps.fxh"
+#include "postprocess/postprocess.vs.fxh"
 
 #define REGISTER_SHADER(name) { #name, name##_shaderBytecode }
 

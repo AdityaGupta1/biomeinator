@@ -6,7 +6,7 @@
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#include "payload.hlsli"
+#include "common/payload.hlsli"
 #include "util/sampling.hlsli"
 
 StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);

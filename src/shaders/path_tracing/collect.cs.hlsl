@@ -6,7 +6,7 @@
 #include "../rendering/common/common_settings.h"
 #include "../rendering/common/common_structs.h"
 
-#include "global_params.hlsli"
+#include "common/global_params.hlsli"
 #include "util/packing.hlsli"
 
 StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT, PATH_TRACING_RAW_BUFFER_IN);

@@ -6,10 +6,10 @@
 #include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_structs.h"
 
-#include "global_params.hlsli"
-#include "materials.hlsli"
-#include "path_tracing_common.hlsli"
-#include "payload.hlsli"
+#include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
+#include "common/payload.hlsli"
+#include "materials/materials.hlsli"
 #include "util/math.hlsli"
 
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);

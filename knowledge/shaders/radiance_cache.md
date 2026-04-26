@@ -1,4 +1,4 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-04-26_
 
 # Neural Radiance Cache (NRC)
 
@@ -8,15 +8,15 @@ indirect radiance given position + direction.
 
 ## Shader Variants
 
-Three variants of `path_tracing.rgs.hlsl` are compiled:
+Three variants of `path_tracing/path_tracing.rgs.hlsl` are compiled:
 
 | Variant | Define | Purpose |
 |---|---|---|
-| `path_tracing.rgs.hlsl` | (none) | Plain path tracer, no cache. Used when NRC is disabled. |
-| `nrc_update.rgs.hlsl` | `NRC_UPDATE 1` | Training pass at reduced resolution (`trainingDimensions`). Writes path vertices + radiance for the neural network to learn from. |
-| `nrc_query.rgs.hlsl` | `NRC_QUERY 1` | Query pass at full `frameDimensions`. Paths terminate early when NRC determines it can predict the remaining radiance, writing a query point for later resolve. |
+| `path_tracing/path_tracing.rgs.hlsl` | (none) | Plain path tracer, no cache. Used when NRC is disabled. |
+| `nrc/nrc_update.rgs.hlsl` | `NRC_UPDATE 1` | Training pass at reduced resolution (`trainingDimensions`). Writes path vertices + radiance for the neural network to learn from. |
+| `nrc/nrc_query.rgs.hlsl` | `NRC_QUERY 1` | Query pass at full `frameDimensions`. Paths terminate early when NRC determines it can predict the remaining radiance, writing a query point for later resolve. |
 
-The defines gate NRC-specific code in `path_tracing.rgs.hlsl`: `NrcUpdateOnHit`,
+The defines gate NRC-specific code in `path_tracing/path_tracing.rgs.hlsl`: `NrcUpdateOnHit`,
 `NrcUpdateOnMiss`, `NrcSetBrdfPdf`, `NrcCanUseRussianRoulette`,
 `NrcWriteFinalPathInfo`.
 
@@ -31,7 +31,7 @@ Five SDK-owned buffers are bound as UAVs to the path tracing root signature:
 
 NRC's built-in `Resolve()` expects a 2D texture output, but the path tracer
 writes to a structured buffer (`dev_pathTracingRawBuffer`). A custom resolve
-compute shader (`nrc_resolve.cs.hlsl`) reads `QueryPathInfo` and
+compute shader (`nrc/nrc_resolve.cs.hlsl`) reads `QueryPathInfo` and
 `QueryRadiance`, multiplies by the path's prefix throughput, and adds to the
 raw buffer. This also handles path splitting — linear indexing at
 `frameDimensions` matches the interleaved buffer layout.

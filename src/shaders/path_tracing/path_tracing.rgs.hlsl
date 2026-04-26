@@ -7,15 +7,15 @@
 
 #define HITGROUP_LIGHTS PT_HITGROUP_LIGHTS
 
-#include "nvapi_includes.hlsli"
+#include "common/nvapi_includes.hlsli"
 
-#include "dome_light.hlsli"
-#include "global_params.hlsli"
-#include "light_sampling.hlsli"
-#include "materials.hlsli"
-#include "path_tracing_common.hlsli"
-#include "payload.hlsli"
-#include "ris.hlsli"
+#include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
+#include "common/payload.hlsli"
+#include "light/dome_light.hlsli"
+#include "light/light_sampling.hlsli"
+#include "light/ris.hlsli"
+#include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 

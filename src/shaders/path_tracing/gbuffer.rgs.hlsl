@@ -7,11 +7,11 @@
 
 #define HITGROUP_LIGHTS GBUFFER_HITGROUP_LIGHTS
 
-#include "global_params.hlsli"
-#include "materials.hlsli"
-#include "path_tracing_common.hlsli"
-#include "payload.hlsli"
-#include "ris.hlsli"
+#include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
+#include "common/payload.hlsli"
+#include "light/ris.hlsli"
+#include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 

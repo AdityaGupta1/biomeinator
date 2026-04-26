@@ -6,9 +6,9 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
-#include "global_params.hlsli"
-#include "materials.hlsli"
-#include "payload.hlsli"
+#include "common/global_params.hlsli"
+#include "common/payload.hlsli"
+#include "materials/materials.hlsli"
 #include "util/ray.hlsli"
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
@@ -19,7 +19,7 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
-#include "volume.hlsli"
+#include "materials/volume.hlsli"
 
 uint getPathSplitIdx()
 {

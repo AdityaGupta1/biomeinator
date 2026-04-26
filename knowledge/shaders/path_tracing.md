@@ -1,8 +1,8 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-04-26_
 
 # Path Tracing Shader
 
-`src/shaders/path_tracing.rgs.hlsl` — the main rendering shader. Compiled in three variants: plain (no cache), NRC update (`NRC_UPDATE`), and NRC query (`NRC_QUERY`). `RayGeneration()` chooses the variant-specific pixel coordinate, then `pathTraceRay()` drives the shared path loop with `#if NRC_UPDATE || NRC_QUERY` blocks controlling NRC API calls. See [radiance_cache.md](radiance_cache.md) for details on the NRC shader integration.
+`src/shaders/path_tracing/path_tracing.rgs.hlsl` — the main rendering shader. Compiled in three variants: plain (no cache), NRC update (`NRC_UPDATE`), and NRC query (`NRC_QUERY`). `RayGeneration()` chooses the variant-specific pixel coordinate, then `pathTraceRay()` drives the shared path loop with `#if NRC_UPDATE || NRC_QUERY` blocks controlling NRC API calls. See [radiance_cache.md](radiance_cache.md) for details on the NRC shader integration.
 
 This shader does NOT trace primary rays. It reads the G-buffer to get the primary hit, then traces secondary rays from there. See [render_passes.md](../rendering/render_passes.md) for the full pass sequence.
 
@@ -10,7 +10,7 @@ This shader does NOT trace primary rays. It reads the G-buffer to get the primar
 
 ## Shared Code
 
-`path_tracing_common.hlsli` is shared by this shader, the G-buffer shader, and the light sampling code. It declares the TLAS, vertex/index/instance/per-tri buffers, and provides:
+`common/path_tracing_common.hlsli` is shared by this shader, the G-buffer shader, and the light sampling code. It declares the TLAS, vertex/index/instance/per-tri buffers, and provides:
 
 - `getPixelIdx()` / `getPathSplitIdx()` — when path splitting is enabled, the dispatch width is doubled, and even/odd X dispatch indices map to split index 0/1 for the same pixel.
 - `AnyHit` — handles two things: (1) alpha cutout via stochastic alpha testing, and (2) refraction passthrough, where transmissive delta surfaces are skipped via `IgnoreHit()` while accumulating path weight and tracking water entry/exit T values.

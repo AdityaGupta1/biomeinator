@@ -5,8 +5,8 @@
 
 #include "../rendering/common/common_hitgroups.h"
 
-#include "global_params.hlsli"
-#include "path_tracing_common.hlsli"
+#include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 

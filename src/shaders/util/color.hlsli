@@ -5,10 +5,10 @@
 
 #include "../rendering/common/common_enums.h"
 
-#include "tonemapping/agx.hlsli"
-#include "tonemapping/khronos_pbr_neutral.hlsli"
+#include "util/tonemapping/agx.hlsli"
+#include "util/tonemapping/khronos_pbr_neutral.hlsli"
 
-#include "global_params.hlsli"
+#include "common/global_params.hlsli"
 
 float luminance(const float3 color)
 {

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "global_params.hlsli"
-#include "light_sampling.hlsli"
+#include "common/global_params.hlsli"
+#include "light/light_sampling.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 

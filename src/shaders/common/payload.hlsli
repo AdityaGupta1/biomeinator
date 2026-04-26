@@ -5,7 +5,7 @@
 
 #include "../rendering/common/common_structs.h"
 
-#include "mipmap.hlsli"
+#include "materials/mipmap.hlsli"
 #include "util/rng.hlsli"
 
 #define PAYLOAD_FLAG_DID_HIT (1 << 0)

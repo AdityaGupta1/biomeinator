@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "global_params.hlsli"
+#include "common/global_params.hlsli"
 #include "util/math.hlsli"
 
 #define RAY_DEFAULT_TMAX 10000.f
