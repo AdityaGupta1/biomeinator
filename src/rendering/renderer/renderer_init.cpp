@@ -53,6 +53,7 @@ void initStreamline()
     prefs.applicationId = 1738; // TODO: not sure what to put here lol
 
     prefs.flags |= sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+    prefs.flags |= sl::PreferenceFlags::eUseManualHooking;
 
     CHECK_SL_RESULT(slInit(prefs));
 }
@@ -99,9 +100,11 @@ void initDevice()
         }
     }
 
-    static ComPtr<IDXGIFactory2> factory2;
-    CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory2)));
-    CHECK_HRESULT(factory2.As(&renderState.factory));
+    ComPtr<IDXGIFactory2> proxyFactory2;
+    CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&proxyFactory2)));
+    CHECK_HRESULT(proxyFactory2.As(&renderState.proxyFactory));
+    CHECK_SL_RESULT(slGetNativeInterface(renderState.proxyFactory.Get(),
+                                         reinterpret_cast<void**>(renderState.factory.GetAddressOf())));
 
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; renderState.factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
@@ -114,8 +117,10 @@ void initDevice()
             continue;
         }
 
-        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&renderState.device))))
+        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&renderState.proxyDevice))))
         {
+            CHECK_SL_RESULT(slGetNativeInterface(renderState.proxyDevice.Get(),
+                                                 reinterpret_cast<void**>(renderState.device.GetAddressOf())));
             CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get()));
 
             sl::AdapterInfo adapterInfo{};
@@ -134,7 +139,7 @@ void initDevice()
     D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
-    CHECK_HRESULT(renderState.device->CreateCommandQueue(&graphicsCmdQueueDesc, IID_PPV_ARGS(&renderState.graphicsCmdQueue)));
+    CHECK_HRESULT(renderState.proxyDevice->CreateCommandQueue(&graphicsCmdQueueDesc, IID_PPV_ARGS(&renderState.graphicsCmdQueue)));
 
     renderState.fence.init();
 }
@@ -213,13 +218,16 @@ void initSwapChain()
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
         .Flags = renderState.swapChainFlags,
     };
-    ComPtr<IDXGISwapChain1> swapChain1;
-    CHECK_HRESULT(renderState.factory->CreateSwapChainForHwnd(renderState.graphicsCmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
-    CHECK_HRESULT(swapChain1.As(&renderState.swapChain));
+    ComPtr<IDXGISwapChain1> proxySwapChain1;
+    CHECK_HRESULT(renderState.proxyFactory->CreateSwapChainForHwnd(renderState.graphicsCmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &proxySwapChain1));
+    CHECK_HRESULT(proxySwapChain1.As(&renderState.proxySwapChain));
+    CHECK_SL_RESULT(slGetNativeInterface(renderState.proxySwapChain.Get(),
+                                         reinterpret_cast<void**>(renderState.swapChain.GetAddressOf())));
 
     CHECK_HRESULT(renderState.factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
 
     renderState.factory.Reset();
+    renderState.proxyFactory.Reset();
 }
 
 void initRtTargets()

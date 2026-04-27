@@ -182,7 +182,7 @@ void resize()
 
     flush();
 
-    CHECK_HRESULT(renderState.swapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, renderState.swapChainFlags));
+    CHECK_HRESULT(renderState.proxySwapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, renderState.swapChainFlags));
     if (renderState.useWaitableSwapChain)
     {
         CHECK_HRESULT(renderState.swapChain->SetMaximumFrameLatency(2));
@@ -217,7 +217,7 @@ void resize()
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
         ComPtr<ID3D12Resource> backBuffer;
-        CHECK_HRESULT(renderState.swapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer)));
+        CHECK_HRESULT(renderState.proxySwapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer)));
         D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = renderState.rtvHeapCpuHandles[frameIdx];
         cpuHandle = renderState.rtvHeap->GetCPUDescriptorHandleForHeapStart();
         cpuHandle.ptr += frameIdx * rtvIncrementSize;
@@ -799,8 +799,8 @@ void render()
     renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
     ComPtr<ID3D12Resource> backBuffer;
-    const uint32_t currentBackBufferIndex = renderState.swapChain->GetCurrentBackBufferIndex();
-    CHECK_HRESULT(renderState.swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
+    const uint32_t currentBackBufferIndex = renderState.proxySwapChain->GetCurrentBackBufferIndex();
+    CHECK_HRESULT(renderState.proxySwapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
 
     {
         BufferHelper::TransitionBatch batch;
@@ -883,7 +883,7 @@ void render()
         presentFlags = (renderState.allowTearing && isFullscreen) ? DXGI_PRESENT_ALLOW_TEARING : 0;
     }
 
-    CHECK_HRESULT(renderState.swapChain->Present(syncInterval, presentFlags));
+    CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
 
     ++renderState.frameNumber;
     renderState.frameCtxIdx = (renderState.frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -994,6 +994,7 @@ void destroy()
     renderState.dev_nrcUpdateShaderIds.Reset();
     renderState.dev_nrcQueryShaderIds.Reset();
 
+    renderState.proxySwapChain.Reset();
     renderState.swapChain.Reset();
     renderState.rtvHeap.Reset();
     renderState.sharedDescriptorHeap.Reset();
@@ -1014,7 +1015,6 @@ void destroy()
     }
 
     renderState.graphicsCmdQueue.Reset();
-    renderState.factory.Reset();
 
 #if ENABLE_ASSERTS
     ComPtr<ID3D12DebugDevice> debugDevice;
@@ -1024,6 +1024,7 @@ void destroy()
     }
 #endif
 
+    renderState.proxyDevice.Reset();
     renderState.device.Reset();
 }
 

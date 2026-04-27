@@ -44,7 +44,7 @@ void captureQueuedScreenshot()
     renderState.screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
     ComPtr<ID3D12Resource> backBuffer;
-    CHECK_HRESULT(renderState.swapChain->GetBuffer(renderState.swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer)));
+    CHECK_HRESULT(renderState.proxySwapChain->GetBuffer(renderState.proxySwapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer)));
 
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
         .pResource = backBuffer.Get(),
