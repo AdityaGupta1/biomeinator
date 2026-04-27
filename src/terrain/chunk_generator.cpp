@@ -28,7 +28,8 @@ static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
-static FN::SmartNode<FN::Generator> fnCaves;
+static FN::SmartNode<FN::Generator> fnCavesWorley;
+static FN::SmartNode<FN::Generator> fnCavesSimplex;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -138,7 +139,23 @@ void init()
         fnAdd->SetLHS(fnDomainWarp);
         fnAdd->SetRHS(fnSimplex);
 
-        fnCaves = fnAdd;
+        fnCavesWorley = fnAdd;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetScale(100.f);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(0.8f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
+        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
+        fnDomainWarp->SetSource(fnFractal);
+        fnDomainWarp->SetSeedOffset(5099201123);
+        fnDomainWarp->SetWarpAmplitude(20.f);
+
+        fnCavesSimplex = fnDomainWarp;
     }
 }
 
@@ -253,7 +270,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     constexpr uint maxCaveHeight = 160;
     float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
     fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight, terrainNoiseMinY);
-    fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
+    fillNoiseArray3D(caveNoise, fnCavesSimplex, chunkPosBlocksXZ_WS, maxCaveHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
@@ -320,11 +337,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const uint caveNoiseIdx = baseCaveNoiseIdx + y;
                         ASSERT(caveNoiseIdx < caveNoiseSize, "cave noise index out of bounds");
 
-                        const float caveSurfaceMixFactor =
-                            smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
-                        const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
-                        //isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
-                        isCave = false; // temporary until caves look less ugly (see #241)
+                        //const float caveSurfaceMixFactor =
+                        //    smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
+                        //const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
+
+                        const float caveSurfaceVal = 0.6f;
+
+                        isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
                     }
 
                     if (!isCave)
@@ -332,7 +351,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
+                        block = rng.nextFloat() < 0.04f ? Block::LAMP : Block::STONE;
                     }
                 }
                 else if (y <= seaLevel)
