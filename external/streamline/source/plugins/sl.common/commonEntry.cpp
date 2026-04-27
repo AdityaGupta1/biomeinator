@@ -23,6 +23,8 @@
 #include <dxgi1_6.h>
 #include <d3d11_4.h>
 
+#include <optional>
+
 #include "include/sl.h"
 #include "source/core/sl.api/internal.h"
 #include "include/sl_consts.h"
@@ -568,6 +570,41 @@ sl::Result slEvaluateFeature(sl::Feature feature, const sl::FrameToken& frame, c
     return slEvaluateFeatureInternal(feature, frame, inputs, numInputs, cmdBuffer);
 }
 
+bool getStringFromModule(const char* moduleName, const char* stringName, std::string& value)
+{
+    TCHAR filename[MAX_PATH + 1]{};
+    //if (GetModuleFileName(GetModuleHandle(moduleName), filename, MAX_PATH) == 0)
+    {
+        wchar_t* slPluginPathUtf16{};
+        param::getPointerParam(api::getContext()->parameters, param::global::kPluginPath, &slPluginPathUtf16);
+        if (!slPluginPathUtf16) return false;
+        std::string path = extra::utf16ToUtf8(slPluginPathUtf16) + std::string("\\") + moduleName;
+        strcpy_s(filename, MAX_PATH + 1, path.c_str());
+    }
+
+    DWORD dummy;
+    auto size = GetFileVersionInfoSize(filename, &dummy);
+    if (size == 0)
+    {
+        return false;
+    }
+    std::vector<BYTE> data(size);
+
+    if (!GetFileVersionInfo(filename, NULL, size, &data[0]))
+    {
+        return false;
+    }
+
+    LPVOID stringValue = NULL;
+    uint32_t stringValueLen = 0;
+    if (!VerQueryValueA(&data[0], (std::string("\\StringFileInfo\\040904e4\\") + stringName).c_str(), &stringValue, &stringValueLen))
+    {
+        return false;
+    }
+    value = (const char*)stringValue;
+    return true;
+}
+
 namespace ngx
 {
 
@@ -576,7 +613,64 @@ namespace ngx
 //! Common spot for all NGX functionality, create/eval/release feature
 //! 
 //! Shared with all other plugins as NGXContext
-//! 
+//!
+
+// Workaround (bug 5911849): nvngx_dlssg.dll versions prior to 310.2.2 will
+// crash if NVSDK_NGX_VULKAN_CreateFeature1 is used. Query the DLL's FileVersion
+// on first call and cache the result so we only pay the lookup cost once.
+bool shouldSkipVulkanCreateFeature1(NVSDK_NGX_Feature feature)
+{
+    if (feature != NVSDK_NGX_Feature_FrameGeneration)
+    {
+        return false;
+    }
+
+    static std::optional<bool> cachedShouldSkipCreateFeature1 = std::nullopt;
+    if (cachedShouldSkipCreateFeature1.has_value())
+    {
+        return cachedShouldSkipCreateFeature1.value();
+    }
+
+    std::string productNameStr;
+    if (!getStringFromModule("nvngx_dlssg.dll", "ProductName", productNameStr))
+    {
+        // Can't access nvngx_dlssg.dll, assume CreateFeature1 is supported
+        cachedShouldSkipCreateFeature1 = false;
+        return false;
+    }
+
+    if (productNameStr == "NVIDIA DLSS-G")
+    {
+        // DLLs with product name exactly equal to "NVIDIA DLSS-G" don't have
+        // the bug that causes the crash, so we can use CreateFeature1
+        cachedShouldSkipCreateFeature1 = false;
+        return false;
+    }
+
+    // Version 310.2.2 and above support CreateFeature1
+    const Version kMinDlssgVersionForCreateFeature1(310, 2, 2);
+
+    std::string versionStr;
+    if (getStringFromModule("nvngx_dlssg.dll", "FileVersion", versionStr))
+    {
+        std::replace(versionStr.begin(), versionStr.end(), ',', '.');
+        Version dllVersion;
+        if (sscanf_s(versionStr.c_str(), "%u.%u.%u", &dllVersion.major, &dllVersion.minor, &dllVersion.build) == 3)
+        {
+            if (dllVersion < kMinDlssgVersionForCreateFeature1)
+            {
+                SL_LOG_INFO("nvngx_dlssg.dll version %s < %s - skipping VULKAN_CreateFeature1 for FrameGeneration",
+                    dllVersion.toStr().c_str(), kMinDlssgVersionForCreateFeature1.toStr().c_str());
+                cachedShouldSkipCreateFeature1 = true;
+                return true;
+            }
+        }
+    }
+
+    cachedShouldSkipCreateFeature1 = false;
+    return false;
+}
+
 bool createNGXFeature(void* cmdList, NVSDK_NGX_Feature feature, NVSDK_NGX_Handle** handle, const char* id)
 {
     auto& ctx = (*common::getContext());
@@ -593,7 +687,23 @@ bool createNGXFeature(void* cmdList, NVSDK_NGX_Feature feature, NVSDK_NGX_Handle
     }
     else
     {
-        CHECK_NGX_RETURN_ON_ERROR(NVSDK_NGX_VULKAN_CreateFeature((VkCommandBuffer)cmdList, feature, ctx.ngxContext.params, handle));
+        NVSDK_NGX_Result result = NVSDK_NGX_Result_FAIL_NotImplemented;
+
+        if (!shouldSkipVulkanCreateFeature1(feature))
+        {
+            // Vulkan can't query device from command buffer, so we provide it ourselves.
+            chi::Device device;
+            CHI_CHECK_RF(ctx.compute->getDevice(device));
+            result = NVSDK_NGX_VULKAN_CreateFeature1((VkDevice)device, (VkCommandBuffer)cmdList, feature, ctx.ngxContext.params, handle);
+        }
+
+        // Some old features don't support CreateFeature1, so fall back to CreateFeature.
+        if (result == NVSDK_NGX_Result_FAIL_NotImplemented || result == NVSDK_NGX_Result_FAIL_UnableToInitializeFeature)
+        {
+            result = NVSDK_NGX_VULKAN_CreateFeature((VkCommandBuffer)cmdList, feature, ctx.ngxContext.params, handle);
+        }
+
+        CHECK_NGX_RETURN_ON_ERROR(result);
     }
     return true;
 }
@@ -1042,41 +1152,6 @@ void ngxLog(const char* message, NVSDK_NGX_Logging_Level loggingLevel, NVSDK_NGX
 };
 
 } // namespace ngx
-
-bool getStringFromModule(const char* moduleName, const char* stringName, std::string& value)
-{
-    TCHAR filename[MAX_PATH + 1]{};
-    //if (GetModuleFileName(GetModuleHandle(moduleName), filename, MAX_PATH) == 0)
-    {
-        wchar_t* slPluginPathUtf16{};
-        param::getPointerParam(api::getContext()->parameters, param::global::kPluginPath, &slPluginPathUtf16);
-        if (!slPluginPathUtf16) return false;
-        std::string path = extra::utf16ToUtf8(slPluginPathUtf16) + std::string("\\") + moduleName;
-        strcpy_s(filename, MAX_PATH + 1, path.c_str());
-    }
-
-    DWORD dummy;
-    auto size = GetFileVersionInfoSize(filename, &dummy);
-    if (size == 0)
-    {
-        return false;
-    }
-    std::vector<BYTE> data(size);
-
-    if (!GetFileVersionInfo(filename, NULL, size, &data[0]))
-    {
-        return false;
-    }
-
-    LPVOID stringValue = NULL;
-    uint32_t stringValueLen = 0;
-    if (!VerQueryValueA(&data[0], (std::string("\\StringFileInfo\\040904e4\\") + stringName).c_str(), &stringValue, &stringValueLen))
-    {
-        return false;
-    }
-    value = (const char*)stringValue;
-    return true;
-}
 
 //! Common JSON configuration containing OS version, driver version, GPU architecture, supported adapters, plugin's SHA etc.
 //! 

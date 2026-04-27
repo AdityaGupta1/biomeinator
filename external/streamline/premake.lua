@@ -28,6 +28,8 @@ nvcfg.SL_DLSS_DN_PUBLIC_SDK = true
 
 
 
+
+
 nvcfg.SL_BUILD_LATEWARP = true
 
 
@@ -35,9 +37,9 @@ nvcfg.SL_BUILD_LATEWARP = true
 
 
 
-nvcfg.SL_DIRECTSR_PUBLIC_SDK = true
 -- SL DirectSR plugin build config option. Enabling this will enable the DirectSR plugin build
 nvcfg.SL_BUILD_DIRECTSR = true
+
 
 
 newoption {
@@ -303,6 +305,8 @@ project "sl.interposer"
 		"./source/core/sl.log/**.cpp",
 		"./source/core/sl.exception/**.h",
 		"./source/core/sl.exception/**.cpp",
+		"./source/core/sl.ota/**.h",
+		"./source/core/sl.ota/**.cpp",
 		"./source/core/sl.security/**.h",
 		"./source/core/sl.security/**.cpp",
 		"./source/core/sl.plugin-manager/**.h",
@@ -331,6 +335,7 @@ project "sl.interposer"
 	vpaths { ["security"] = {"./source/core/sl.security/**.h","./source/core/sl.security/**.cpp"}}
 	vpaths { ["version"] = {"./source/core/sl.interposer/versions.h","./source/core/sl.interposer/resource.h","./source/core/sl.interposer/**.rc"}}
 	vpaths { ["plugin"] = {"./source/core/sl.plugin/inter_plugin_communication.h",}}
+	vpaths { ["ota"] = {"./source/core/sl.ota/**.h", "./source/core/sl.ota/**.cpp" }}
 
 	removefiles
 	{
@@ -405,6 +410,7 @@ function pluginBasicSetup(name)
 
 	filter { filter_platforms }
 		includedirs { "./external/nvapi" }
+		links {EXTERNAL .. "nvapi/amd64/nvapi64.lib"}
 	filter{}
 
 	implibdir (out_static_lib_dir())
@@ -418,6 +424,8 @@ function pluginBasicSetup(name)
 		"./source/core/sl.file/**.h",
 		"./source/core/sl.file/**.cpp",
 		"./source/core/sl.extra/**.h",
+		"./source/core/sl.ota/**.h",
+		"./source/core/sl.ota/**.cpp",
 		"./source/core/sl.plugin/**.h",
 		"./source/core/sl.plugin/**.cpp",
 		"./source/plugins/sl." .. name .. "/versions.h",

@@ -64,6 +64,7 @@ struct KernelDataBase
     std::string name = {};
     std::string entryPoint = {};
     std::vector<uint8_t> kernelBlob = {};
+    std::atomic<uint32_t> refcounter = 0;
 };
 
 struct TimestampedResource
@@ -242,7 +243,7 @@ public:
     virtual ComputeStatus getDebugName(Resource res, std::wstring& name) { name = getDebugName(res); return ComputeStatus::eOk; }
     virtual ComputeStatus setDebugName(Resource res, const char friendlyName[]) override { return ComputeStatus::eNoImplementation; }
         
-    virtual ComputeStatus getRefreshRate(SwapChain chain, float& refreshRate) override { return ComputeStatus::eNoImplementation; }
+    virtual ComputeStatus getRefreshRate(WindowHandle window, float& refreshRate) override;
     virtual ComputeStatus getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer) override { return ComputeStatus::eNoImplementation; }
 
     virtual ComputeStatus pushState(CommandList cmdList) override { return ComputeStatus::eOk; }

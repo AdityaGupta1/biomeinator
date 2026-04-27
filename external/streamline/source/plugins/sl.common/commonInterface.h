@@ -557,6 +557,8 @@ struct ResourceTaggingBase
         uint32_t,
         bool) = 0;
 
+    virtual ~ResourceTaggingBase() = default;
+
 protected:
     std::unordered_set<BufferTagInfo, BufferTagInfoHash> requiredTags{};
 };
@@ -580,7 +582,7 @@ struct ResourceTaggingGeneral : public ResourceTaggingBase
         uint32_t numInputs,
         bool optional) override final;
 
-    ~ResourceTaggingGeneral();
+    ~ResourceTaggingGeneral() override final;
 
 private:
     std::map<uint64_t, CommonResource> idToResourceMap;

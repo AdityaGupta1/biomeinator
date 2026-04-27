@@ -53,7 +53,7 @@ struct ResourceTaggingForFrame : public ResourceTaggingBase
 
     void recycleTags();
 
-    ~ResourceTaggingForFrame();
+    ~ResourceTaggingForFrame() override final;
 
   private:
     void recycleTagsForFrame(ScopedResourceTagContainerWriteAccess &frameAccess);

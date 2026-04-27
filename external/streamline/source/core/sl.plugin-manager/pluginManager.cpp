@@ -29,6 +29,7 @@
 #include <unistd.h>
 #endif
 
+#include <set>
 #include <sstream>
 #include <random>
 
@@ -37,8 +38,8 @@
 #include "source/core/sl.api/internal.h"
 #include "source/core/sl.log/log.h"
 #include "source/core/sl.file/file.h"
+#include "source/core/sl.ota/iota.h"
 #include "source/core/sl.param/parameters.h"
-#include "source/core/sl.plugin-manager/iota.h"
 #include "source/core/sl.plugin-manager/pluginManager.h"
 #include "source/core/sl.security/secureLoadLibrary.h"
 #include "source/core/sl.interposer/versions.h"
@@ -104,6 +105,7 @@ public:
         
         // Allow override for features to load
 #ifndef SL_PRODUCTION
+#if !defined(SL_UNITTEST_ONLY_CODE)
         auto interposerConfig = sl::interposer::getInterface()->getConfig();
 
         //! NOTE: There is no need build a list of available plugins, we don't want unnecessary dependencies
@@ -130,6 +132,7 @@ public:
                 SL_LOG_ERROR( "Failed to parse JSON file - %s", e.what());
             }
         }
+#endif
 #endif
 
         // This could be already populated from JSON config in development builds
@@ -272,6 +275,19 @@ public:
         return !featureList.empty();
     }
 
+    virtual bool getLoadedFeatureVersion(Feature feature, sl::Version& version) const override final
+    {
+        for (auto plugin : m_plugins)
+        {
+            if (plugin->id == feature)
+            {
+                version = plugin->version;
+                return true;
+            }
+        }
+        return false;
+    }
+
     void populateLoaderJSON(uint32_t deviceType, json& config);
 
     std::mutex m_mtxPluginConfig;
@@ -282,6 +298,7 @@ private:
 
     Result mapPlugins(std::vector<fs::path>& files);
     Result findPlugins(const fs::path& path, std::vector<fs::path>& files);
+    bool findAllOTAPlugins(std::vector<fs::path>& outList, bool loadOptionalUpdates, bool useOverride);
     
 
     struct Plugin
@@ -294,6 +311,7 @@ private:
         HMODULE lib{};
         std::string name{};
         std::string sha{};
+        std::string buildConfig{};
 
         fs::path filename{};
         fs::path fullpath{};
@@ -368,6 +386,8 @@ private:
     Preferences m_pref{};
 
     sl::ota::IOTA* m_ota{};
+
+    std::set<std::wstring> m_otaOverridePaths;
 };
 
 IPluginManager* getInterface()
@@ -381,8 +401,11 @@ IPluginManager* getInterface()
 
 void destroyInterface()
 {
-    delete PluginManager::s_manager;
-    PluginManager::s_manager = {};
+    if (PluginManager::s_manager)
+    {
+        delete PluginManager::s_manager;
+        PluginManager::s_manager = {};
+    }
 }
 
 Result PluginManager::setHostSDKVersion(uint64_t sdkVersion)
@@ -553,6 +576,33 @@ Result PluginManager::findPlugins(const fs::path& directory, std::vector<fs::pat
     return files.empty() ? Result::eErrorNoPlugins : Result::eOk;
 }
 
+bool PluginManager::findAllOTAPlugins(std::vector<fs::path>& outList, bool loadOptionalUpdates, bool useOverride)
+{
+    for (Feature f : m_featuresToLoad)
+    {
+        fs::path pluginPath;
+        if (m_ota->getOTAPluginForFeature(f, m_api, pluginPath, loadOptionalUpdates, useOverride))
+        {
+            SL_LOG_INFO("Found %sOTA plugin: %ls", useOverride ? "override " : "", pluginPath.c_str());
+            if (f == kFeatureCommon)
+            {
+                // Push kFeatureCommon OTA to front of list so sl.common is
+                // loaded first+foremost.
+                outList.insert(outList.begin(), pluginPath);
+            }
+            else
+            {
+                outList.push_back(pluginPath);
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool PluginManager::loadPlugin(const fs::path pluginFullPath, Plugin **ppPlugin)
 {
     auto freePlugin = [](Plugin** plugin)->void
@@ -627,6 +677,15 @@ bool PluginManager::loadPlugin(const fs::path pluginFullPath, Plugin **ppPlugin)
         plugin->config.at("api").at("major").get_to(plugin->api.major);
         plugin->config.at("api").at("minor").get_to(plugin->api.minor);
         plugin->config.at("api").at("build").get_to(plugin->api.build);
+
+        if (plugin->config.contains("build_config")) // Added later, some plugins might not set
+        {
+            plugin->config.at("build_config").get_to(plugin->buildConfig);
+        }
+        else
+        {
+            plugin->buildConfig = "";
+        }
 
         // Let the host know about API, priority etc. 
         // Plugin has already populated OS, driver and other custom requirements.
@@ -705,9 +764,15 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
                 // one in the meantime.
                 if (plugin->api.major == m_api.major)
                 {
-                    // Compare the versions of these two plugins, if
-                    // pluginIsNewer then we should load it instead of p.
-                    if (plugin->version > duplicatedPluginById->version)
+                    // OTA override plugins are never replaced by bundled ones
+                    // regardless of version number.
+                    bool duplicateIsOtaOverride = m_otaOverridePaths.count(duplicatedPluginById->fullpath.wstring()) > 0;
+                    if (duplicateIsOtaOverride)
+                    {
+                        // We know that the OTA override plugins are always at the front of the list, so the precedence is already handled.
+                        SL_LOG_INFO("Plugin %s is an OTA override, keeping it over %s", duplicatedPluginById->name.c_str(), plugin->name.c_str());
+                    }
+                    else if (plugin->version > duplicatedPluginById->version)
                     {
                         SL_LOG_INFO("Plugin %s is newer (%s) will choose that", plugin->name.c_str(), plugin->version.toStr().c_str());
                         newerVersion = true;
@@ -741,7 +806,7 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
                 //
                 // Loop over our plugin list to find the duplicated plugin that
                 // we want to reload
-                for (auto it = m_plugins.begin(); it != m_plugins.end(); it++)
+                for (auto it = m_plugins.begin(); it != m_plugins.end(); )
                 {
                     if (*it == duplicatedPluginById)
                     {
@@ -751,12 +816,12 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
                         if (!loadPlugin(fullPath, &duplicatedPluginById))
                         {
                             SL_LOG_ERROR("Failed to reload plugin file: %ls it loaded before, so what happened!?", fullPath.wstring().c_str());
-                            m_plugins.erase(it);
+                            it = m_plugins.erase(it);
                             continue;
                         }
                         *it = duplicatedPluginById;
-                        continue;
                     }
+                    it++;
                 }
             }
             else
@@ -824,8 +889,8 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
 
             if (plugin)
             {
-                SL_LOG_INFO("Loaded plugin '%s' - version %u.%u.%u.%s - id %u - priority %u - adapter mask 0x%x - interposer '%s'", plugin->name.c_str(), plugin->version.major, plugin->version.minor, plugin->version.build, 
-                    plugin->sha.c_str(), plugin->id, plugin->priority, plugin->context.supportedAdapters, pluginNeedsInterposer ? "yes" : "no");
+                SL_LOG_INFO("Loaded plugin '%s' - version %u.%u.%u.%s %s - id %u - priority %u - adapter mask 0x%x - interposer '%s'", plugin->name.c_str(), plugin->version.major, plugin->version.minor, plugin->version.build,
+                    plugin->sha.c_str(), plugin->buildConfig.c_str(), plugin->id, plugin->priority, plugin->context.supportedAdapters, pluginNeedsInterposer ? "yes" : "no");
             }
 
             if (plugin)
@@ -862,6 +927,7 @@ Result PluginManager::loadPlugins()
     // Here we know that we are either in eUnknown or ePluginsUnloaded state which are valid to restart
 
 #ifndef SL_PRODUCTION
+#if !defined(SL_UNITTEST_ONLY_CODE)
     auto interposerConfig = sl::interposer::getInterface()->getConfig();
     if (!interposerConfig.pathToPlugins.empty())
     {
@@ -874,18 +940,18 @@ Result PluginManager::loadPlugins()
         }
     }
 #endif
+#endif
 
     s_status = PluginManagerStatus::ePluginsLoaded;
 
-#if defined(SL_PRODUCTION)
+#if defined(SL_PRODUCTION) || defined(SL_UNITTEST_ONLY_CODE)
     // On production builds kickoff OTA update, this function internally will
     // check OTA preferences
     m_ota->readServerManifest();
+#endif
+#if defined(SL_PRODUCTION)
     bool requestOptionalUpdates = (m_pref.flags & PreferenceFlags::eAllowOTA);
-    for (Feature f : m_featuresToLoad)
-    {
-        m_ota->checkForOTA(f, m_api, requestOptionalUpdates);
-    }
+    m_ota->checkForOTA(m_api, requestOptionalUpdates);
 #endif
 
     //! Now let's enumerate SL plugins!
@@ -909,46 +975,58 @@ Result PluginManager::loadPlugins()
         }
     }
 
-#if defined(SL_PRODUCTION)
+#if defined(SL_PRODUCTION) || defined(SL_UNITTEST_ONLY_CODE)
     // Only load plugins from OTA on production builds.
-    if (m_pref.flags & PreferenceFlags::eLoadDownloadedPlugins)
+    bool loadDownloadedPlugins = (m_pref.flags & PreferenceFlags::eLoadDownloadedPlugins);
+    bool otaOverride = m_ota->isOTAOverrideEnabled();
+
+    if (loadDownloadedPlugins || otaOverride)
     {
         std::vector<fs::path> otaPluginList;
-        bool foundAllRequestedFeatures = true;
 
-        SL_LOG_INFO("Searching for OTA'd plugins...");
-        for (Feature f : m_featuresToLoad)
+        // Pass 1: if override is on, try override plugins (all-or-nothing)
+        if (otaOverride)
         {
-            fs::path pluginPath;
-            if (m_ota->getOTAPluginForFeature(f, m_api, pluginPath, m_pref.flags & PreferenceFlags::eLoadDownloadedPlugins))
+            SL_LOG_INFO("OTA override DRS key is set, searching for override OTA'd plugins...");
+            if (findAllOTAPlugins(otaPluginList, true, true))
             {
-                SL_LOG_INFO("Found plugin: %ls", pluginPath.c_str());
-                if (f == kFeatureCommon)
+                for (const auto& p : otaPluginList)
                 {
-                    // Push kFeatureCommon OTA to front of list so sl.common is
-                    // loaded first+foremost
-                    otaPluginList.insert(otaPluginList.begin(), pluginPath);
-                }
-                else
-                {
-                    otaPluginList.push_back(pluginPath);
+                    m_otaOverridePaths.insert(p.wstring());
                 }
             }
             else
             {
-                foundAllRequestedFeatures = false;
+                if (loadDownloadedPlugins)
+                {
+                    SL_LOG_INFO("Not all override plugins available, falling back to non-override OTA plugins");
+                }
+                else
+                {
+                    SL_LOG_INFO("Not all override plugins available, OTA'd plugins will not be loaded");
+                }
+                otaPluginList.clear();
             }
         }
 
-        // Only if we were able to find all of the requested features, should we
-        // actually paths from OTA to be loaded.
-        if (foundAllRequestedFeatures)
+        // Pass 2: if we don't have override plugins, try non-override (all-or-nothing).
+        // Only attempt this if eLoadDownloadedPlugins was actually set by the game.
+        if (otaPluginList.empty() && loadDownloadedPlugins)
         {
-            pluginList.insert(pluginList.begin(), otaPluginList.begin(), otaPluginList.end());
+            SL_LOG_INFO("Searching for OTA'd plugins...");
+            if (!findAllOTAPlugins(otaPluginList, loadDownloadedPlugins, false))
+            {
+                SL_LOG_INFO("Unable to find all requested plugins in OTA cache, OTA'd plugins will not be loaded!");
+                otaPluginList.clear();
+            }
         }
-        else
+
+        if (!otaPluginList.empty())
         {
-            SL_LOG_INFO("Unable to find all requested plugins in OTA cache, OTA'd plugins will not be loaded!");
+            // Prepend OTA plugins so they appear before bundled plugins in the
+            // candidate list.  mapPlugins processes entries in order and keeps
+            // the first loaded copy of each feature, so earlier entries win.
+            pluginList.insert(pluginList.begin(), otaPluginList.begin(), otaPluginList.end());
         }
     }
     else
@@ -1227,8 +1305,13 @@ void PluginManager::populateLoaderJSON(uint32_t deviceType, json& config)
         config["ngx"]["projectId"] = m_projectId;
 
         config["preferences"]["flags"] = m_pref.flags;
+#if !defined(SL_UNITTEST_ONLY_CODE)
         config["interposerEnabled"] = sl::interposer::getInterface()->isEnabled();
         config["forceNonNVDA"] = sl::interposer::getInterface()->getConfig().forceNonNVDA;
+#else
+        config["interposerEnabled"] = false;
+        config["forceNonNVDA"] = false;
+#endif
     }
     catch (std::exception& e)
     {

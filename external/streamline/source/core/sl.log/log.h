@@ -30,6 +30,7 @@
 #endif
 #include <string>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 
 template <typename T, size_t N>
@@ -105,6 +106,12 @@ void destroyInterface();
 // If an older interposer is detected, use the old ABI.
 extern bool g_slEnableLogPreMetaDataUniqueWAR;
 
+// Tracks whether g_slEnableLogPreMetaDataUniqueWAR has been resolved. Any
+// SL_LOG call before this flag is set risks using the wrong ABI and crashing
+// with a pre-2.3.0 interposer. The macros below assert on this flag so that
+// future code changes that introduce early log calls are caught immediately.
+extern bool g_slLogABIWARChecked;
+
 struct ILogPreMetaDataUnique
 {
     virtual void logva(uint32_t level, ConsoleForeground color, const char *file, int line, const char *func, int type, const char *fmt,...) = 0;
@@ -112,45 +119,27 @@ struct ILogPreMetaDataUnique
 
 // Note: the SL logger uses a log duplication check when non-verbose logging is used. In those cases, note that
 // SL_LOG_HINT and SL_LOG_INFO may cause some of your logs to drop
-#define SL_LOG_HINT(fmt,...) { \
-    if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
-        ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(2, sl::log::GREEN, __FILE__,__LINE__,__func__, 0,fmt,##__VA_ARGS__); \
-    } else { \
-        sl::log::getInterface()->logva(2, sl::log::GREEN, __FILE__,__LINE__,__func__, 0,false,fmt,##__VA_ARGS__); \
+
+// Common implementation for all SL_LOG_* macros. Asserts (debug) that the log
+// ABI WAR has been resolved and silently skips the log call (release) if it has
+// not, to prevent a null-pointer crash with pre-2.3.0 interposers (bug 4654661).
+#define SL_LOG_IMPL(level, color, type, isMetaDataUnique, fmt, ...) { \
+    assert(sl::log::g_slLogABIWARChecked && \
+           "SL_LOG called before log ABI WAR was resolved (bug 4654661)"); \
+    if (sl::log::g_slLogABIWARChecked) { \
+        if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
+            ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(level, color, __FILE__,__LINE__,__func__, type,fmt,##__VA_ARGS__); \
+        } else { \
+            sl::log::getInterface()->logva(level, color, __FILE__,__LINE__,__func__, type,isMetaDataUnique,fmt,##__VA_ARGS__); \
+        } \
     } \
 }
 
-#define SL_LOG_INFO(fmt,...) { \
-    if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
-        ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(1, sl::log::WHITE, __FILE__,__LINE__,__func__, 0,fmt,##__VA_ARGS__); \
-    } else { \
-        sl::log::getInterface()->logva(1, sl::log::WHITE, __FILE__,__LINE__,__func__, 0,false,fmt,##__VA_ARGS__); \
-    } \
-}
-
-#define SL_LOG_WARN(fmt,...) { \
-    if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
-        ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(1, sl::log::YELLOW, __FILE__,__LINE__,__func__, 1,fmt,##__VA_ARGS__); \
-    } else { \
-        sl::log::getInterface()->logva(1, sl::log::YELLOW, __FILE__,__LINE__,__func__, 1,false,fmt,##__VA_ARGS__); \
-    } \
-}
-
-#define SL_LOG_ERROR(fmt,...) { \
-    if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
-        ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(1, sl::log::RED, __FILE__,__LINE__,__func__, 2,fmt,##__VA_ARGS__); \
-    } else { \
-        sl::log::getInterface()->logva(1, sl::log::RED, __FILE__,__LINE__,__func__, 2,true,fmt,##__VA_ARGS__); \
-    } \
-}
-
-#define SL_LOG_VERBOSE(fmt,...) { \
-    if (sl::log::g_slEnableLogPreMetaDataUniqueWAR) { \
-        ((sl::log::ILogPreMetaDataUnique*)sl::log::getInterface())->logva(2, sl::log::WHITE, __FILE__,__LINE__,__func__, 0,fmt,##__VA_ARGS__); \
-    } else { \
-        sl::log::getInterface()->logva(2, sl::log::WHITE, __FILE__,__LINE__,__func__, 0,true,fmt,##__VA_ARGS__); \
-    } \
-}
+#define SL_LOG_HINT(fmt,...)    SL_LOG_IMPL(2, sl::log::GREEN,  0, false, fmt, ##__VA_ARGS__)
+#define SL_LOG_INFO(fmt,...)    SL_LOG_IMPL(1, sl::log::WHITE,  0, false, fmt, ##__VA_ARGS__)
+#define SL_LOG_WARN(fmt,...)    SL_LOG_IMPL(1, sl::log::YELLOW, 1, false, fmt, ##__VA_ARGS__)
+#define SL_LOG_ERROR(fmt,...)   SL_LOG_IMPL(1, sl::log::RED,    2, true,  fmt, ##__VA_ARGS__)
+#define SL_LOG_VERBOSE(fmt,...) SL_LOG_IMPL(2, sl::log::WHITE,  0, true,  fmt, ##__VA_ARGS__)
 
 #define SL_LOG_HINT_ONCE(fmt,...) SL_RUN_ONCE { SL_LOG_HINT(fmt,__VA_ARGS__); }
 #define SL_LOG_INFO_ONCE(fmt,...) SL_RUN_ONCE { SL_LOG_INFO(fmt,__VA_ARGS__); }

@@ -45,6 +45,9 @@ namespace log
 
 #ifdef SL_WINDOWS
 extern bool g_slEnableLogPreMetaDataUniqueWAR = false;
+// The interposer always calls its own logva — no ABI mismatch is possible, so
+// the WAR check is always considered resolved.
+extern bool g_slLogABIWARChecked = true;
 
 HMONITOR g_otherMonitor = {};
 

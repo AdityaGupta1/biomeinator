@@ -47,6 +47,9 @@ using namespace std::chrono_literals;
 // DEPRECATED (reflex-pcl):
 #include "source/core/sl.plugin-manager/pluginManager.h"
 
+//! Number of frames to keep in simulation timing history
+constexpr size_t kSimulationTimingHistorySize = 120;
+
 namespace sl
 {
 
@@ -196,6 +199,11 @@ struct LatencyContext
     sl::chi::Fence gameWaitFence{};
     uint32_t gameWaitSyncValue{};
     chi::ICommandListContext* gameWaitCmdList{};
+
+    //! Circular buffer to store simulation start timestamps
+    std::array<std::pair<uint32_t, std::chrono::high_resolution_clock::time_point>, kSimulationTimingHistorySize> simulationStartTimes{};
+    //! Mutex for thread-safe access to simulation timing data
+    std::mutex simulationTimingMutex;
 };
 }
 
@@ -207,6 +215,7 @@ void updateEmbeddedJSON(json& config);
 sl::Result slReflexSetMarker(sl::PCLMarker marker, const sl::FrameToken& frame);
 sl::Result slReflexGetCameraDataInternal(const sl::ViewportHandle& viewport, const uint32_t frame, sl::ReflexCameraData& outCameraData);
 sl::Result slReflexSetCameraDataFenceInternal(const sl::ViewportHandle& viewport, sl::chi::Fence fence, const uint32_t syncValue, chi::ICommandListContext* cmdList);
+sl::Result slReflexGetSimulationDeltaUsInternal(uint32_t frameId, uint64_t& outDeltaTimeUs);
 
 //! Define our plugin, make sure to update version numbers in versions.h
 SL_PLUGIN_DEFINE("sl.reflex", Version(VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH), Version(0, 0, 1), JSON.c_str(), updateEmbeddedJSON, reflex, LatencyContext)
@@ -481,11 +490,15 @@ internal::shared::Status getSharedData(BaseStructure* requestedData, const BaseS
     // v3
     remote->slReflexSetCameraDataFence = slReflexSetCameraDataFenceInternal;
 
+    remote->reservedV4 = nullptr;
+
+    // v5
+    remote->slReflexGetSimulationDeltaUs = slReflexGetSimulationDeltaUsInternal;
 
     // Let newer requester know that we are older
-    if (remote->structVersion > kStructVersion3)
+    if (remote->structVersion > kStructVersion5)
     {
-        remote->structVersion = kStructVersion3;
+        remote->structVersion = kStructVersion5;
     }
 
     return internal::shared::Status::eOk;
@@ -592,6 +605,40 @@ sl::Result slReflexGetPredictedCameraData(const sl::ViewportHandle& viewport, co
 
     outCameraData = cameraData.value();
     return sl::Result::eOk;
+}
+
+Result slReflexGetSimulationDeltaUsInternal(uint32_t frameId, uint64_t& outDeltaTimeUs)
+{
+    auto& ctx = (*reflex::getContext());
+
+    if (frameId <= 1)
+    {
+        // 0 is invalid, 1 is the first frame (so no delta can be calculated)
+        return Result::eErrorInvalidState;
+    }
+
+    std::lock_guard<std::mutex> lock(ctx.simulationTimingMutex);
+
+    // Look up current frame
+    const auto& [currentFrameId, currentTimestamp] = ctx.simulationStartTimes[frameId % kSimulationTimingHistorySize];
+    if (currentFrameId != frameId)
+    {
+        // Frame not found or overwritten
+        return Result::eErrorInvalidState;
+    }
+
+    // Look up previous frame
+    const auto& [previousFrameId, previousTimestamp] = ctx.simulationStartTimes[(frameId - 1) % kSimulationTimingHistorySize];
+    if (previousFrameId != (frameId - 1))
+    {
+        // Previous frame not found (skipped or overwritten)
+        return Result::eErrorInvalidState;
+    }
+
+    // Calculate delta in microseconds
+    outDeltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(currentTimestamp - previousTimestamp).count();
+
+    return Result::eOk;
 }
 
 //! Main entry point - starting our plugin
@@ -726,6 +773,15 @@ sl::Result slReflexSetMarker(sl::PCLMarker marker, const sl::FrameToken& frame)
     sl::ReflexHelper inputs(marker);
     inputs.next = (BaseStructure*)&frame;
 
+
+    // Track simulation start timing
+    if (marker == sl::PCLMarker::eSimulationStart)
+    {
+        std::lock_guard<std::mutex> lock(ctx.simulationTimingMutex);
+
+        auto timestamp = std::chrono::high_resolution_clock::now();
+        ctx.simulationStartTimes[frame % kSimulationTimingHistorySize] = {frame, timestamp};
+    }
 
     if (marker == sl::PCLMarker::eRenderSubmitStart && ctx.gameWaitCmdList && ctx.gameWaitFence && ctx.gameWaitSyncValue && ctx.compute->getCompletedValue(ctx.gameWaitFence) < ctx.gameWaitSyncValue)
     {

@@ -30,6 +30,7 @@
 #include <functional>
 #include <mutex>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <atomic>
@@ -97,6 +98,14 @@ inline std::string toStr(const std::wstring& s)
 inline std::string toStr(const wchar_t* s)
 {
     return utf16ToUtf8(s);
+}
+
+inline std::string toUpper(const std::string& s)
+{
+    std::string result = s;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    return result;
 }
 
 template <typename I>

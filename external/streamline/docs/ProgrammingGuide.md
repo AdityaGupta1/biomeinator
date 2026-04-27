@@ -2,7 +2,7 @@
 Streamline - SL
 =======================
 
-Version 2.10.0
+Version 2.11.1
 =======
 
 1 SETTING UP

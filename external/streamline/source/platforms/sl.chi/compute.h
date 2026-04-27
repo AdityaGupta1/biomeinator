@@ -69,6 +69,7 @@ using SwapChain = void*;
 using Fence = void*;
 using Handle = void*;
 using Output = void*;
+using WindowHandle = void*;
 
 constexpr uint32_t kAllSubResources = 0xffffffff;
 constexpr uint64_t kBinarySemaphoreValue = 0xcafec0de;
@@ -234,40 +235,16 @@ struct ResourceTransition
 
 struct ResourceDescription
 {
-    ResourceDescription() {};
+    ResourceDescription() {}
     ResourceDescription(uint32_t w, uint32_t h, uint32_t f, uint32_t mps, ResourceState s = ResourceState::eUnknown) : 
         width(w), height(h), nativeFormat(f), mips(mps), state(s) 
-    {
-        updateStateAndFlags();        
-    };
+    {}
     ResourceDescription(uint32_t w, uint32_t h, uint32_t f, HeapType ht = eHeapTypeDefault, ResourceState s = ResourceState::eUnknown, ResourceFlags fl = ResourceFlags::eShaderResourceStorage) :
         width(w), height(h), nativeFormat(f), heapType(ht), state(s), flags(fl)
-    {
-        updateStateAndFlags();
-    };
+    {}
     ResourceDescription(uint32_t w, uint32_t h, Format f, HeapType ht = eHeapTypeDefault, ResourceState s = ResourceState::eUnknown, ResourceFlags fl = ResourceFlags::eShaderResourceStorage) : 
         width(w), height(h), format(f), heapType(ht), state(s), flags(fl)
-    {
-        updateStateAndFlags();
-    };
-
-    inline void updateStateAndFlags()
-    {
-        if (state == ResourceState::eUnknown)
-        {
-            switch (heapType)
-            {
-                case eHeapTypeUpload:
-                    state = ResourceState::eGenericRead;
-                    break;
-                case eHeapTypeReadback:
-                    state = ResourceState::eCopyDestination;
-                    break;
-                case eHeapTypeDefault:
-                    state = ResourceState::eCopyDestination;
-            }
-        }
-    }
+    {}
 
     inline bool operator==(const ResourceDescription& rhs) const { return !memcmp(this, &rhs, sizeof(ResourceDescription)); }
     inline bool operator!=(const ResourceDescription& rhs) const { return !operator==(rhs); }
@@ -697,7 +674,7 @@ public:
 
     virtual ComputeStatus getFullscreenState(SwapChain chain, bool& fullscreen) = 0;
     virtual ComputeStatus setFullscreenState(SwapChain chain, bool fullscreen, Output out = nullptr) = 0;
-    virtual ComputeStatus getRefreshRate(SwapChain chain, float& refreshRate) = 0;
+    virtual ComputeStatus getRefreshRate(WindowHandle window, float& refreshRate) = 0;
     virtual ComputeStatus getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer) = 0;
         
     virtual ComputeStatus beginPerfSection(CommandList cmdList, const char *section, uint32_t node = 0, bool reset = false) = 0;

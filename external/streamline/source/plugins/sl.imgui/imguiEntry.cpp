@@ -20,6 +20,7 @@
 * SOFTWARE.
 */
 
+#include <array>
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <future>
@@ -52,7 +53,7 @@
 
 using json = nlohmann::json;
 
-constexpr uint32_t NUM_BACK_BUFFERS = 4;
+constexpr uint32_t MAX_BACK_BUFFERS = 16;
 
 namespace sl
 {
@@ -103,16 +104,16 @@ struct IMGUIContext
     float uiSmallFontSize = DEFAULT_SMALL_FONT_SIZE;
     float uiMediumFontSize = DEFAULT_MEDIUM_FONT_SIZE;
 
-    std::array<void*, NUM_BACK_BUFFERS> backBuffers = {};
+    std::array<void*, MAX_BACK_BUFFERS> backBuffers = {};
     BOOL  dxgiFullscreenState{};
 
     ID3D12Device* device{};
     ID3D12DescriptorHeap* pd3dRtvDescHeap{};
     ID3D12DescriptorHeap* pd3dSrvDescHeap{};
-    D3D12_CPU_DESCRIPTOR_HANDLE  mainRenderTargetDescriptor[NUM_BACK_BUFFERS]{};
+    std::array<D3D12_CPU_DESCRIPTOR_HANDLE, MAX_BACK_BUFFERS>  mainRenderTargetDescriptor{};
 
-    VkImageView                                vkImageViews[NUM_BACK_BUFFERS]{};
-    VkFramebuffer                              vkFrameBuffers[NUM_BACK_BUFFERS]{};
+    std::array<VkImageView, MAX_BACK_BUFFERS>    vkImageViews{};
+    std::array<VkFramebuffer, MAX_BACK_BUFFERS> vkFrameBuffers{};
     ImGui_ImplVulkan_InitInfo                  vkInfo{};
     std::vector<std::pair<VkSurfaceKHR, HWND>> surfaceWindows{};
     VkSwapchainCreateInfoKHR                   vkSwapChainParams{};
@@ -304,16 +305,16 @@ Context* createContext(const ContextDesc& desc)
         {
             D3D12_DESCRIPTOR_HEAP_DESC desc = {};
             desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-            desc.NumDescriptors = NUM_BACK_BUFFERS;
+            desc.NumDescriptors = MAX_BACK_BUFFERS;
             desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
             desc.NodeMask = 1;
             if (d3d12Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&ctx.pd3dRtvDescHeap)) != S_OK) return nullptr;
 
             SIZE_T rtvDescriptorSize = d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = ctx.pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
-            for (UINT i = 0; i < NUM_BACK_BUFFERS; i++)
+            for (UINT i = 0; i < MAX_BACK_BUFFERS; i++)
             {
-                ctx.mainRenderTargetDescriptor[i] = rtvHandle;
+                ctx.mainRenderTargetDescriptor.at(i) = rtvHandle;
                 rtvHandle.ptr += rtvDescriptorSize;
             }
         }
@@ -327,7 +328,7 @@ Context* createContext(const ContextDesc& desc)
             if (d3d12Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&ctx.pd3dSrvDescHeap)) != S_OK)  return nullptr;
         }
 
-        ImGui_ImplDX12_Init(d3d12Device, NUM_BACK_BUFFERS,
+        ImGui_ImplDX12_Init(d3d12Device, MAX_BACK_BUFFERS,
             (DXGI_FORMAT)desc.backBufferFormat, ctx.pd3dSrvDescHeap,
             ctx.pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
             ctx.pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
@@ -346,8 +347,8 @@ Context* createContext(const ContextDesc& desc)
         info.Device = (VkDevice)device;
         info.PhysicalDevice = (VkPhysicalDevice)pdevice;
         info.Format = (VkFormat)desc.backBufferFormat;
-        info.ImageCount = NUM_BACK_BUFFERS;
-        info.MinImageCount = NUM_BACK_BUFFERS;
+        info.ImageCount = MAX_BACK_BUFFERS;
+        info.MinImageCount = MAX_BACK_BUFFERS;
 
         // Create the Render Pass
         VkRenderPass renderPass{};
@@ -405,12 +406,12 @@ void destroyContext(Context* ctx)
     {
         if (pluginCtx.vkInfo.Device != NULL)
         {
-            for (uint32_t i = 0; i < NUM_BACK_BUFFERS; i++)
+            for (uint32_t i = 0; i < MAX_BACK_BUFFERS; i++)
             {
-                vkDestroyFramebuffer(pluginCtx.vkInfo.Device, pluginCtx.vkFrameBuffers[i], nullptr);
-                pluginCtx.vkFrameBuffers[i] = VK_NULL_HANDLE;
-                vkDestroyImageView(pluginCtx.vkInfo.Device, pluginCtx.vkImageViews[i], nullptr);
-                pluginCtx.vkImageViews[i] = VK_NULL_HANDLE;
+                vkDestroyFramebuffer(pluginCtx.vkInfo.Device, pluginCtx.vkFrameBuffers.at(i), nullptr);
+                pluginCtx.vkFrameBuffers.at(i) = VK_NULL_HANDLE;
+                vkDestroyImageView(pluginCtx.vkInfo.Device, pluginCtx.vkImageViews.at(i), nullptr);
+                pluginCtx.vkImageViews.at(i) = VK_NULL_HANDLE;
             }
             vkDestroyRenderPass(pluginCtx.vkInfo.Device, (VkRenderPass)(g_ctx->apiData), NULL);
             g_ctx->apiData = VK_NULL_HANDLE;
@@ -442,9 +443,7 @@ void destroyContext(Context* ctx)
     delete g_ctx;
     g_ctx = {};
 
-    pluginCtx.backBuffers[0] = {};
-    pluginCtx.backBuffers[1] = {};
-    pluginCtx.backBuffers[2] = {};
+    pluginCtx.backBuffers.fill({});
 
     pluginCtx.currentFrame = 0;
 }
@@ -504,15 +503,15 @@ void render(void* commandList, void* backBuffer, uint32_t index)
 
         //ImVec4 clearColor = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-        if (ctx.backBuffers[index] != backBuffer)
+        if (ctx.backBuffers.at(index) != backBuffer)
         {
-            ctx.backBuffers[index] = backBuffer;
-            ctx.device->CreateRenderTargetView(resource, nullptr, ctx.mainRenderTargetDescriptor[index]);
+            ctx.backBuffers.at(index) = backBuffer;
+            ctx.device->CreateRenderTargetView(resource, nullptr, ctx.mainRenderTargetDescriptor.at(index));
         }
 
         cmdList->ResourceBarrier(1, &barrier);
-        //cmdList->ClearRenderTargetView(ctx.mainRenderTargetDescriptor[index], (float*)&clearColor, 0, NULL);
-        cmdList->OMSetRenderTargets(1, &ctx.mainRenderTargetDescriptor[index], FALSE, NULL);
+        //cmdList->ClearRenderTargetView(ctx.mainRenderTargetDescriptor.at(index), (float*)&clearColor, 0, NULL);
+        cmdList->OMSetRenderTargets(1, &ctx.mainRenderTargetDescriptor.at(index), FALSE, NULL);
         cmdList->SetDescriptorHeaps(1, &ctx.pd3dSrvDescHeap);
 
         ImGui::Render();
@@ -528,9 +527,9 @@ void render(void* commandList, void* backBuffer, uint32_t index)
         
         ImGuiIO& io = ImGui::GetIO();
 
-        if (ctx.backBuffers[index] != backBuffer)
+        if (ctx.backBuffers.at(index) != backBuffer)
         {
-            ctx.backBuffers[index] = backBuffer;
+            ctx.backBuffers.at(index) = backBuffer;
 
             // Create The Image Views
             {
@@ -545,8 +544,8 @@ void render(void* commandList, void* backBuffer, uint32_t index)
                 VkImageSubresourceRange image_range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
                 info.subresourceRange = image_range;
                 info.image = (VkImage)backBuffer;
-                assert(ctx.vkImageViews[index] == nullptr);
-                vkCreateImageView(ctx.vkInfo.Device, &info, nullptr, &ctx.vkImageViews[index]);
+                assert(ctx.vkImageViews.at(index) == nullptr);
+                vkCreateImageView(ctx.vkInfo.Device, &info, nullptr, &ctx.vkImageViews.at(index));
             }
 
             // Create Framebuffer
@@ -560,9 +559,9 @@ void render(void* commandList, void* backBuffer, uint32_t index)
                 info.width = (uint32_t)io.DisplaySize.x;
                 info.height = (uint32_t)io.DisplaySize.y;
                 info.layers = 1;
-                attachment[0] = ctx.vkImageViews[index];
-                assert(ctx.vkFrameBuffers[index] == nullptr);
-                vkCreateFramebuffer(ctx.vkInfo.Device, &info, nullptr, &ctx.vkFrameBuffers[index]);
+                attachment[0] = ctx.vkImageViews.at(index);
+                assert(ctx.vkFrameBuffers.at(index) == nullptr);
+                vkCreateFramebuffer(ctx.vkInfo.Device, &info, nullptr, &ctx.vkFrameBuffers.at(index));
             }
         }
 
@@ -573,7 +572,7 @@ void render(void* commandList, void* backBuffer, uint32_t index)
         VkRenderPassBeginInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         info.renderPass = (VkRenderPass)g_ctx->apiData;
-        info.framebuffer = ctx.vkFrameBuffers[index];
+        info.framebuffer = ctx.vkFrameBuffers.at(index);
         info.renderArea.extent.width = (uint32_t)io.DisplaySize.x;
         info.renderArea.extent.height = (uint32_t)io.DisplaySize.y;
         info.clearValueCount = 0;

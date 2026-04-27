@@ -1,3 +1,87 @@
+======== Release 2.11.0 Entries ========
+
+    * Added support for application-controlled VSync with DLSS Frame Generation.
+      Applications using D3D12 can now enable VSync while using Frame Generation
+      for tear-free presentation with frame interpolation. Check
+      `sl::DLSSGState::bIsVsyncSupportAvailable` before exposing VSync controls
+      in the UI. See section 24.0 "VSYNC WITH FRAME GENERATION" in
+      `ProgrammingGuideDLSS_G.md` for more information.
+
+    * Added support for DLSS Dynamic Multi Frame Generation with a new
+      `sl::DLSSGOptions::dynamicTargetFrameRate` field for specifying the target
+      frame rate when `DLSSGMode::eDynamic` is enabled. See section 14.2 "HOW TO
+      CHECK FOR DYNAMIC MULTI FRAME SUPPORT" in `ProgrammingGuideDLSS_G.md` for
+      more information.
+
+    * Added support for DLSS Frame Generation User Interface Recomposition with
+      a new `sl::DLSSGOptions::enableUserInterfaceRecomposition` field. When
+      enabled, DLSS-G allocates a codepath that supports interpolating HUDless
+      and UI Color & Alpha buffers separately from the Color Backbuffer. See
+      section 6.6 "ENABLING USER INTERFACE RECOMPOSITION" in
+      `ProgrammingGuideDLSS_G.md` for more information.
+
+    * Updated `slIsFeatureSupported()` to provide more detailed error reporting
+      instead of always returning `sl::Result::eErrorFeatureMissing`.
+
+    * Fixed a memory leak in `sl.common` where tagged resources were not properly
+      released.
+      Reported on GitHub by @anyiscsak as issue #89
+
+    * Fixed a memory leak in `sl.nis` where viewports were not properly released
+      when `slFreeResources()` was called.
+
+    * Fixed a memory leak in `sl.common` where `requiredTags` were not properly
+      released.
+
+    * Fixed a bug in `sl.common` where D3D12 buffers were created with an
+      incorrect initial state. Buffers are now created in
+      `D3D12_RESOURCE_STATE_COMMON` instead of `D3D12_RESOURCE_STATE_COPY_DEST`.
+
+    * Fixed a bug in `sl.interposer` where OTA updates could fail if the
+      DriverStore path did not exist.
+
+    * Fixed a bug in `sl.dlss_g` where mode keybinds could override the Off
+      state.
+
+    * Fixed a bug in `sl.plugin-manager` where `mapPlugins()` used an invalidated
+      iterator.
+
+    * Fixed a bug in `sl.dlss_g` where swapchain null pointer handling could lead
+      to unexpected behavior.
+
+    * Fixed a bug in DLSS Super Resolution where a crash could occur during
+      feature creation when clearing the autoexposure texture on Vulkan.
+
+    * Fixed a bug in DLSS Super Resolution where Dynamic Resolution Scaling
+      could cause unnecessary resource reallocation when input dimensions
+      exceeded the creation-time dimensions.
+
+    * Fixed a bug in DLSS Super Resolution where internal state was incorrectly
+      shared across multiple feature instances, causing incorrect behavior.
+
+    * Fixed a bug in DLSS-FG where unnecessary copies from input to output buffer
+      were performed when both buffers pointed to the same resource.
+
+    * Fixed a bug in `sl.common` which could cause excessive debug log spam when
+      `slSetTagForFrame()` was called with DLSS-FG disabled.
+
+    * Improved `sl.common` to detect when `presentCommon()` is not being called
+      and log appropriate warnings. See section 2.2.2.3 "MEMORY MANAGEMENT" in
+      `ProgrammingGuide.md` for more information.
+
+    * Demoted zero-width/height errors from `getOptimalSettings` in `sl.dlss` and
+      `sl.dlss_d` to warnings.
+
+    * Updated the DLSS-FG debug visualization to include distortion offset in the
+      MV/Depth alignment mode.
+
+
+======== Release 2.10.3 Entries ========
+
+    * Fixed a bug in `sl.dlss_g` which could lead to a crash during
+      transitions between frame generation states.
+
+
 ======== Release 2.10.0 Entries ========
 
     * Added support for two additional DLSS Super Resolution Transformer

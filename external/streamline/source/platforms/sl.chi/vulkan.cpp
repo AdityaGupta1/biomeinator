@@ -1370,7 +1370,13 @@ ComputeStatus Vulkan::createKernel(void *blob, unsigned int blobSize, const char
         {
             data = new KernelDataVK{};
             data->hash = hash;
+            data->refcounter.store(1);
             m_kernels[hash] = data;
+        }
+        else
+        {
+            auto kernelData = (*it).second;
+            kernelData->refcounter.fetch_add(1);
         }
     }
     if (missing)
@@ -1412,11 +1418,20 @@ ComputeStatus Vulkan::destroyKernel(Kernel& kernel)
     }
 
     KernelDataVK *cubinVk = (KernelDataVK *)(*cubin).second;
-    cubinVk->destroy(m_ddt, m_device);
+    auto prev_count = cubinVk->refcounter.fetch_sub(1);
+    if (prev_count == 1)  // Was 1 before decrement, now 0
+    {
+        SL_LOG_VERBOSE("Destroying kernel %s", cubinVk->name.c_str());
+        cubinVk->destroy(m_ddt, m_device);
     
-    delete (*cubin).second;
-    m_kernels.erase(cubin);
-    kernel = {};
+        delete (*cubin).second;
+        m_kernels.erase(cubin);
+        kernel = {};
+    }
+    else
+    {
+        SL_LOG_VERBOSE("Destroying kernel %s doesn't really happen since other contexts still refer to it. Decreasing refcounter to %d.", cubinVk->name.c_str(), cubinVk->refcounter.load());
+    }
     return ComputeStatus::eOk;
 }
 

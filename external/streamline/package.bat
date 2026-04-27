@@ -189,6 +189,7 @@ copy %src%\external\reflex-sdk-vk\lib\NvLowLatencyVk.dll %copy_dest% /Y
 :: Profiling Binary
 IF "%copy_cfg%"=="Develop" (
     copy %src%\external\pix\bin\WinPixEventRuntime.dll %copy_dest% /Y
+    copy %src%\external\pix\PACKAGE_LICENSES\winpixeventruntime-LICENSE.md %copy_dest% /Y
 )
 
 exit /b 0
@@ -406,8 +407,12 @@ IF "%include_source%"=="True" (
 
     xcopy %src%\external\ngx-sdk\lib\Windows_%arch_vs_ex%                    %dest%\external\ngx-sdk\lib\Windows_%arch_vs_ex% /S
 
+    :: Copy RTX SDKs EULA for NGX SDK bits
+    copy %src%\features\nvngx_dlss.license.txt %dest%\external\ngx-sdk\license.txt
+
     mkdir %dest%\external\reflex-sdk-vk
     xcopy %src%\external\reflex-sdk-vk\ %dest%\external\reflex-sdk-vk /S
+    copy %src%\features\reflex.license.txt %dest%\external\reflex-sdk-vk /Y
 
     :: Shader Source
     copy %src%\shaders\copy.hlsl                       %dest%\shaders

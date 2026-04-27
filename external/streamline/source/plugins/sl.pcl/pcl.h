@@ -25,3 +25,4 @@
 #include "include/sl_pcl.h"
 
 using PFunSetPCLStatsMarker = void(sl::PCLMarker marker, uint32_t frameId);
+using PFunSetPCLStatsMarkerV3 = void(sl::PCLMarker marker, uint32_t frameId, int32_t value);
