@@ -3,8 +3,9 @@
 
 #include "fence.h"
 
-#include "dxr_common.h"
-#include "renderer.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
+#include "logger.h"
 
 void Fence::init()
 {
@@ -24,7 +25,17 @@ void Fence::waitFor(uint64_t waitFenceValue)
     if (this->fence->GetCompletedValue() < waitFenceValue)
     {
         CHECK_HRESULT(fence->SetEventOnCompletion(waitFenceValue, this->fenceEvent));
-        WaitForSingleObjectEx(this->fenceEvent, 1000 /*ms*/, true);
+        const DWORD waitResult = WaitForSingleObjectEx(this->fenceEvent, 1000 /*ms*/, true);
+        if (waitResult == WAIT_TIMEOUT)
+        {
+            Logger::logError("GPU fence wait timed out (possible GPU hang), fence value: %llu", waitFenceValue);
+            __debugbreak();
+        }
+        else if (waitResult == WAIT_FAILED)
+        {
+            Logger::logError("GPU fence wait failed, error: 0x%08X", GetLastError());
+            __debugbreak();
+        }
     }
 }
 

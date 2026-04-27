@@ -3,9 +3,11 @@
 
 #pragma once
 
-#include "dxr_includes.h"
+#include "rendering/dxr_includes.h"
 
 #include <string>
+
+namespace BufferHelper { struct TransitionBatch; }
 
 struct RtTarget
 {
@@ -49,6 +51,7 @@ public:
     void reset();
 
     void transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
+    void addTransitionTo(BufferHelper::TransitionBatch& batch, D3D12_RESOURCE_STATES newState);
 
     ID3D12Resource* getTarget() const;
 

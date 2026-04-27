@@ -3,9 +3,9 @@
 
 #include "rt_target.h"
 
-#include "dxr_common.h"
-#include "renderer.h"
-#include "buffer/buffer_helper.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
+#include "rendering/buffer/buffer_helper.h"
 
 #include "debug.h"
 
@@ -118,6 +118,15 @@ void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOU
     if (newState != this->targetResourceState)
     {
         BufferHelper::stateTransitionResourceBarrier(cmdList, this->target.Get(), this->targetResourceState, newState);
+        this->targetResourceState = newState;
+    }
+}
+
+void RtTarget::addTransitionTo(BufferHelper::TransitionBatch& batch, D3D12_RESOURCE_STATES newState)
+{
+    if (newState != this->targetResourceState)
+    {
+        batch.add(this->target.Get(), this->targetResourceState, newState);
         this->targetResourceState = newState;
     }
 }

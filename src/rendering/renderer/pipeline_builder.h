@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "dxr_common.h"
+#include "rendering/dxr_common.h"
 
 #include "debug.h"
-#include "renderer.h"
-#include "buffer/buffer_helper.h"
+#include "rendering/renderer.h"
+#include "rendering/buffer/buffer_helper.h"
 
 #include <vector>
 #include <span>
@@ -36,7 +36,7 @@ struct RtPipelineInputs
     D3D12_DISPATCH_RAYS_DESC& dispatchDesc;
 };
 
-void makeRtPipeline(const RtPipelineInputs& inputs)
+inline void makeRtPipeline(const RtPipelineInputs& inputs)
 {
     D3D12_DXIL_LIBRARY_DESC lib = {
         .DXILLibrary = makeShaderBytecode(inputs.shaderBytecode),

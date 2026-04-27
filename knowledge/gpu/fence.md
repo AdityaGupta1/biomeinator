@@ -2,7 +2,7 @@ _Last edited: 2026-04-26_
 
 # Fence
 
-`src/rendering/fence.h/cpp` — thin wrapper around `ID3D12Fence` for CPU/GPU
+`src/rendering/renderer/fence.h/cpp` — thin wrapper around `ID3D12Fence` for CPU/GPU
 synchronization.
 
 ## Role
