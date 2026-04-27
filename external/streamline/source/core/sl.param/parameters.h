@@ -49,6 +49,7 @@ constexpr const char* kDebugMode = "sl.param.global.dbgMode";
 constexpr const char* kPFunGetTag = "sl.param.global.getTag";
 constexpr const char* kVulkanTable = "sl.param.global.vulkanTable";
 constexpr const char* kPreferenceFlags = "sl.param.global.prefFlags";
+constexpr const char* kOtaDenylistDenied = "sl.param.global.otaDenylistDenied";
 }
 
 namespace interposer
@@ -113,6 +114,7 @@ constexpr const char* kPFunSetLatencyStatsMarker = "sl.param.latency.setLatencyS
 namespace pcl
 {
 constexpr const char* kPFunSetPCLStatsMarker = "sl.param.pcl.setPCLStatsMarker";
+constexpr const char* kPFunSetPCLStatsMarkerV3 = "sl.param.pcl.setPCLStatsMarkerV3";
 }
 
 //! DEPRECATED (reflex-pcl):

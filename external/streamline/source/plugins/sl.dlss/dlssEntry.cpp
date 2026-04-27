@@ -875,7 +875,7 @@ Result slGetData(const BaseStructure *inputs, BaseStructure *output, CommandBuff
         ctx.ngxContext->params->Get(NVSDK_NGX_Parameter_DLSS_Get_Dynamic_Min_Render_Height, &settings->renderHeightMin);
         if (settings->optimalRenderWidth == 0 || settings->optimalRenderHeight == 0)
         {
-            SL_LOG_ERROR("DLSSContext 'getOptimalSettings' returns invalid size (%d x %d), due to unsupported mode or output size", settings->optimalRenderWidth, settings->optimalRenderHeight);
+            SL_LOG_WARN("DLSSContext 'getOptimalSettings' returns invalid size (%d x %d), due to unsupported mode or output size", settings->optimalRenderWidth, settings->optimalRenderHeight);
             return Result::eErrorInvalidParameter;
         }
     }

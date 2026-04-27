@@ -117,6 +117,7 @@ struct IPluginManager
     virtual Result getFeatureSupportedExternalConfig(Feature feature) = 0;
     virtual bool getLoadedFeatureConfigs(std::vector<json>& configList) const = 0;
     virtual bool getLoadedFeatures(std::vector<Feature>& featureList) const = 0;
+    virtual bool getLoadedFeatureVersion(Feature feature, sl::Version& version) const = 0;
 };
 
 IPluginManager* getInterface();

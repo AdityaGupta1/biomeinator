@@ -22,6 +22,7 @@
 
 #include <sstream>
 
+#include "source/core/sl.ota/iota.h"
 #include "source/core/sl.plugin/plugin.h"
 #include "source/core/sl.api/internal.h"
 #include "include/sl.h"
@@ -29,6 +30,7 @@
 #include "source/core/sl.file/file.h"
 #include "source/core/sl.extra/extra.h"
 #include "source/core/sl.param/parameters.h"
+#include "source/shared/sharedVersions.h"
 #include "external/json/include/nlohmann/json.hpp"
 #include <unordered_set>
 
@@ -55,6 +57,7 @@ IKeyboard* getInterface()
 namespace log
 {
 extern bool g_slEnableLogPreMetaDataUniqueWAR = false;
+extern bool g_slLogABIWARChecked = false;
 
 ILog* s_log = {};
 ILog* getInterface()
@@ -65,13 +68,87 @@ ILog* getInterface()
 
 #if defined(SL_PRODUCTION)
 #define ENABLE_DISALLOW_NEWER_PLUGINS_WAR 1
+#define ENABLE_SL_OTA_DENYLIST 1
 #else
 #define ENABLE_DISALLOW_NEWER_PLUGINS_WAR 0
+#define ENABLE_SL_OTA_DENYLIST 0
 #endif
 
 namespace plugin
 {
-static bool isLoadingAllowed(const json& loader)
+
+static bool isAppDenylisted(api::Context* ctx)
+{
+    json& loader = *(json*)ctx->loaderConfig;
+
+    uint32_t appId = loader.at("appId");
+
+    // Get the path of THIS plugin DLL using the existing file utility
+    const std::filesystem::path pluginPath = file::getModulePath();
+
+    SL_LOG_INFO("Plugin path: %s", pluginPath.u8string().c_str());
+
+    std::filesystem::path otaCachePath;
+    bool otaCacheFound = ota::getInterface()->getNGXPath(otaCachePath);
+
+    auto relative = std::filesystem::relative(pluginPath, otaCachePath);
+    if (relative.empty() ||
+        (relative.u8string().length() > 1 && relative.u8string()[0] == '.' && relative.u8string()[1] == '.'))
+    {
+        SL_LOG_INFO("Plugin is not from OTA - denylist does not apply");
+        return false;
+    }
+
+    // Get-or-compute: first OTA plugin to run this sets the result in shared parameters; later plugins reuse it.
+    bool denied = false;
+    if (ctx->parameters->get(sl::param::global::kOtaDenylistDenied, &denied)){
+        SL_LOG_INFO("Plugin is already checked for OTA denylist - returning cached result: %d", denied);
+        return denied;
+    }
+
+    // If NGX config is present with engine info and projectId, use those to resolve appId
+    EngineType engineType{};
+    std::string projectId{};
+    std::string engineVersion{};
+    if (loader.contains("ngx"))
+    {
+        loader.at("ngx").at("engineType").get_to(engineType);
+        loader.at("ngx").at("projectId").get_to(projectId);
+        loader.at("ngx").at("engineVersion").get_to(engineVersion);
+    }
+
+    // Resolve app ID from project ID and engine type if defined
+    // Mirrors NGX app ID resolution in source/plugins/sl.common/commonEntry.cpp (see updateNGXFeature)
+    if (!projectId.empty() && !engineVersion.empty())
+    {
+        if (ota::getInterface()->readServerMappings())
+        {
+            if (auto mappedAppId = ota::getInterface()->appIdForProjectId(engineType, engineVersion, projectId))
+            {
+                appId = *mappedAppId;
+                SL_LOG_INFO("Resolved project ID %s (engine v%s) to app ID 0x%x", projectId.c_str(), engineVersion.c_str(), appId);
+            }
+            else
+            {
+                SL_LOG_VERBOSE("No mapping found for project ID %s (engine v%s)", projectId.c_str(), engineVersion.c_str());
+            }
+        }
+        else
+        {
+            SL_LOG_WARN("Failed to read server mappings");
+        }
+    }
+
+    SL_LOG_INFO("Checking SL OTA denylist for appid=0x%x", appId);
+
+    ota::getInterface()->readServerDenylist();
+
+    denied = ota::getInterface()->isAppIdDenied(appId);
+    ctx->parameters->set(sl::param::global::kOtaDenylistDenied, denied);
+    return denied;
+}
+
+static bool isLoadingAllowed(api::Context* ctx)
 {
 #if ENABLE_DISALLOW_NEWER_PLUGINS_WAR
     // This WAR is used to disallow SL ota cached plugins for some game titles like COD black ops 6.
@@ -99,6 +176,7 @@ static bool isLoadingAllowed(const json& loader)
         APP_ID_BF_6_OPEN_BETA
     };
 
+    json& loader = *(json*)ctx->loaderConfig;
     uint32_t appId = loader.at("appId");
     if (disallow_newer_plugins_apps.find(appId) != disallow_newer_plugins_apps.end())
     {
@@ -117,6 +195,13 @@ static bool isLoadingAllowed(const json& loader)
                 host_ver_major, host_ver_minor, host_ver_build);
             return false;
         }
+    }
+#endif
+#if ENABLE_SL_OTA_DENYLIST
+    if (isAppDenylisted(ctx))
+    {
+        SL_LOG_WARN("appId=0x%x doesn't allow loading from OTA: plugin=%s", appId, api::getContext()->pluginName.c_str());
+        return false;
     }
 #endif
     return true;
@@ -140,7 +225,24 @@ bool onLoad(api::Context* ctx, const char* loaderJSON, const char* embeddedJSON)
             stream >> loader;
         }
 
-        if (!isLoadingAllowed(loader))
+        // If being loaded by an sl.interposer that is before version 2.3.0,
+        // then we need to enable the ABI compatibility WAR. This must be done
+        // before any logging to avoid an ABI mismatch crash with old
+        // interposers (bug 4654661).
+        if (Version(loader["version"]["major"],
+                    loader["version"]["minor"],
+                    loader["version"]["build"]) < Version(2, 3, 0))
+        {
+            sl::log::g_slEnableLogPreMetaDataUniqueWAR = true;
+        }
+        sl::log::g_slLogABIWARChecked = true;
+
+        if (sl::log::g_slEnableLogPreMetaDataUniqueWAR)
+        {
+            SL_LOG_INFO("Enabling WAR for LogPreMetaDataUnique ABI Breakage");
+        }
+
+        if (!isLoadingAllowed(ctx))
         {
             return false;
         }
@@ -153,19 +255,10 @@ bool onLoad(api::Context* ctx, const char* loaderJSON, const char* embeddedJSON)
         config["version"]["major"] = pluginVersion.major;
         config["version"]["minor"] = pluginVersion.minor;
         config["version"]["build"] = pluginVersion.build;
+        config["build_config"] = BUILD_CONFIG_INFO;
         config["api"]["major"] = apiVersion.major;
         config["api"]["minor"] = apiVersion.minor;
         config["api"]["build"] = apiVersion.build;
-
-        /* If being loaded by an sl.interposer that is before version 2.3.0,
-         * then we need to enable the ABI compatibility WAR. */
-        if (Version(loader["version"]["major"],
-                    loader["version"]["minor"],
-                    loader["version"]["build"]) < Version(2, 3, 0))
-        {
-            sl::log::g_slEnableLogPreMetaDataUniqueWAR = true;
-            SL_LOG_INFO("Enabling WAR for LogPreMetaDataUnique ABI Breakage");
-        }
 
 #ifndef SL_PRODUCTION
         // Search for "sl.$(plugin_name).json" with extra settings

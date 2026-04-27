@@ -24,20 +24,24 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include "include/sl_version.h"
+#include "include/sl_appidentity.h"
 
 namespace sl
 {
 
 using Feature = uint32_t;
 
-// Used by unit-tests
+#if defined(SL_UNITTEST_ONLY_CODE)
 namespace test
 {
 class SlOtaParserUnitTest;
+class SlPluginManagerUnitTest;
 }
+#endif
 
 namespace ota
 {
@@ -49,10 +53,25 @@ class IOTA
     //! which have an OTA available
     virtual bool readServerManifest() = 0;
 
+    //! Reads denylist downloaded from the server
+    virtual bool readServerDenylist() = 0;
+
+    //! Reads Project ID to Application ID mappings from server
+    virtual bool readServerMappings() = 0;
+
+    //! Checks whether the current application ID is on the server
+    //! denylist.
+    virtual bool isAppIdDenied(const uint32_t appId) const = 0;
+
+    //! Returns an Application ID for a given Engine Type, Engine Version, and Project ID
+    //! from the server mapping list.
+    //! Returns the app ID if found, std::nullopt if not found.
+    virtual std::optional<uint32_t> appIdForProjectId(EngineType engineType, const std::string& engineVersion, const std::string& projectId) const = 0;
+
     //! Pings server and downloads OTA config file then
     //! compares it to the local version (if any) and downloads
     //! new plugins if there is an update on the server
-    virtual bool checkForOTA(Feature featureID, const Version& apiVersion, bool requestOptionalUpdates) = 0;
+    virtual bool checkForOTA(const Version& apiVersion, bool requestOptionalUpdates) = 0;
 
     //! Fetches the path to the latest plugin matching the feature ID + API
     //! Version combination.
@@ -66,14 +85,32 @@ class IOTA
     virtual bool getOTAPluginForFeature(Feature featureID,
                                         const Version& apiVersion,
                                         std::filesystem::path& filePath,
-                                        bool loadOptionalUpdates) = 0;
+                                        bool loadOptionalUpdates,
+                                        bool useOverride) = 0;
 
+    //! Returns true if the SL_OTA_OVERRIDE_ENABLE DRS key is set to TRUE,
+    //! indicating that OTA plugin loading should be forced on regardless of
+    //! whether eLoadDownloadedPlugins was passed in preferences.
+    virtual bool isOTAOverrideEnabled() = 0;
+
+    //! Fetches the path to the OTA cache on the local filesystem.
+    //!
+    //! If a cache path override is in place, then this returns the overridden path.
+    virtual bool getNGXPath(std::filesystem::path& ngxPath) const = 0;
   protected:
     virtual bool parseServerManifest(std::ifstream& manifest,
                                      std::map<std::string, Version>& versionMap,
-                                     std::vector<std::string>& optionalDownloadPresent) = 0;
+                                     std::vector<std::string>& optionalDownloadPresent,
+                                     bool useOverride) = 0;
+    virtual bool parseServerDenylist(std::ifstream& denylist) = 0;
+    virtual bool parseMappingFile(std::ifstream& file) = 0;
 
+    virtual void setNGXPathOverride(const std::optional<std::filesystem::path> ngxPath) = 0;
+
+#if defined(SL_UNITTEST_ONLY_CODE)
     friend class sl::test::SlOtaParserUnitTest;
+    friend class sl::test::SlPluginManagerUnitTest;
+#endif
 };
 
 IOTA* getInterface();

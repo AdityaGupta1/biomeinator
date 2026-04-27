@@ -32,6 +32,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_set>
+#include <vector>
 
 struct IDXGIAdapter;
 struct IDXGISwapChain;
@@ -764,7 +765,27 @@ ComputeStatus Generic::createBuffer(const ResourceDescription& CreateResourceDes
     {
         ResourceDesc.sName = InFriendlyName;
     }
-    CHI_CHECK(createBufferResourceImpl(ResourceDesc, OutResource, ResourceDesc.state, InFriendlyName));
+    
+    // Determine default buffer state if not explicitly provided
+    ResourceState state = ResourceDesc.state;
+    if (state == ResourceState::eUnknown)
+    {
+        switch (ResourceDesc.heapType)
+        {
+            case eHeapTypeUpload:
+                state = ResourceState::eGenericRead;
+                break;
+            case eHeapTypeReadback:
+                state = ResourceState::eCopyDestination;
+                break;
+            case eHeapTypeDefault:
+                // Buffers in default heap should start in Common state (D3D12) or General (Vulkan)
+                state = ResourceState::eGeneral;
+                break;
+        }
+    }
+    
+    CHI_CHECK(createBufferResourceImpl(ResourceDesc, OutResource, state, InFriendlyName));
 
     manageVRAM(OutResource, VRAMOperation::eAlloc);
 
@@ -801,7 +822,26 @@ ComputeStatus Generic::createTexture2DResourceShared(const ResourceDescription& 
     {
         resourceDesc.sName = InFriendlyName;
     }
-    CHI_CHECK(createTexture2DResourceSharedImpl(resourceDesc, OutResource, UseNativeFormat, resourceDesc.state, InFriendlyName));
+    
+    // Determine default texture state if not explicitly provided
+    ResourceState state = resourceDesc.state;
+    if (state == ResourceState::eUnknown)
+    {
+        switch (resourceDesc.heapType)
+        {
+            case eHeapTypeUpload:
+                state = ResourceState::eGenericRead;
+                break;
+            case eHeapTypeReadback:
+                state = ResourceState::eCopyDestination;
+                break;
+            case eHeapTypeDefault:
+                state = ResourceState::eCopyDestination;
+                break;
+        }
+    }
+    
+    CHI_CHECK(createTexture2DResourceSharedImpl(resourceDesc, OutResource, UseNativeFormat, state, InFriendlyName));
 
     manageVRAM(OutResource, VRAMOperation::eAlloc);
 
@@ -1402,6 +1442,91 @@ ComputeStatus Generic::fetchTranslatedResourceFromCache(ICompute* compute, Resou
     }
     shared.source = resource;
     return ComputeStatus::eOk;
+}
+
+ComputeStatus Generic::getRefreshRate(WindowHandle window, float& refreshRate)
+{
+#if defined(SL_WINDOWS)
+    if (!window)
+    {
+        return ComputeStatus::eInvalidArgument;
+    }
+
+    HWND hwnd = (HWND)window;
+
+    // Make sure the window actually exists
+    if (!IsWindow(hwnd))
+    {
+        SL_LOG_ERROR("Window handle 0x%llx is not a valid window", window);
+        return ComputeStatus::eError;
+    }
+    
+    // Get the monitor that contains the window
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor)
+    {
+        SL_LOG_ERROR("Failed to get monitor from window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    // Get monitor info
+    MONITORINFOEXW monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(hMonitor, &monitorInfo))
+    {
+        SL_LOG_ERROR("Failed to get monitor info for window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    // Query display configuration for precise refresh rate
+    UINT32 pathCount, modeCount;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
+    {
+        SL_LOG_ERROR("Failed to get display config buffer sizes for window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), 
+                           &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
+    {
+        SL_LOG_ERROR("Failed to query display config for window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    // Find the path that matches our monitor
+    for (const auto& path : paths)
+    {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+        sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        sourceName.header.size = sizeof(sourceName);
+        sourceName.header.adapterId = path.sourceInfo.adapterId;
+        sourceName.header.id = path.sourceInfo.id;
+
+        if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS)
+        {
+            continue;
+        }
+
+        if (wcscmp(monitorInfo.szDevice, sourceName.viewGdiDeviceName) != 0)
+        {
+            continue;
+        }
+
+        // Get precise refresh rate from rational number
+        // (numerator/denominator). Divide as double for maximum precision.
+        const DISPLAYCONFIG_RATIONAL& rationalRate = path.targetInfo.refreshRate;
+        refreshRate = (float)((double)rationalRate.Numerator / rationalRate.Denominator);
+        return ComputeStatus::eOk;
+    }
+
+    SL_LOG_ERROR("Failed to get refresh rate from window handle 0x%llx", window);
+    return ComputeStatus::eError;
+#else
+    return ComputeStatus::eNoImplementation;
+#endif
 }
 
 ComputeStatus Generic::createResourcePool(IResourcePool** pool, const char* vramSegment)

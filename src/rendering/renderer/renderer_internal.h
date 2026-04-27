@@ -277,7 +277,9 @@ struct RendererState
 
     // -- Device and infrastructure --
     ComPtr<IDXGIFactory5> factory;
+    ComPtr<IDXGIFactory5> proxyFactory;
     ComPtr<ID3D12Device5> device;
+    ComPtr<ID3D12Device5> proxyDevice;
     ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
     Fence fence;
     ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
@@ -299,6 +301,7 @@ struct RendererState
 
     // -- Swap chain --
     ComPtr<IDXGISwapChain3> swapChain;
+    ComPtr<IDXGISwapChain3> proxySwapChain;
     UINT swapChainFlags{};
     bool useVsync{ false };
     bool allowTearing{ false };

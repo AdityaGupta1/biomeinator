@@ -55,10 +55,16 @@ void setPCLStatsMarker(PCLMarker marker, uint32_t frameId)
     PCLSTATS_MARKER(to_underlying(marker), frameId);
 }
 
+void setPCLStatsMarkerV3(PCLMarker marker, uint32_t frameId, int32_t value)
+{
+    PCLSTATS_MARKER_V3(to_underlying(marker), frameId, value);
+}
+
 void implOnPluginStartup(sl::param::IParameters* parameters, plugin_manager::PFun_slGetDataInternal* getter, plugin_manager::PFun_slSetDataInternal* setter)
 {
 	//! Allow other plugins to set PCL stats
     parameters->set(param::pcl::kPFunSetPCLStatsMarker, setPCLStatsMarker);
+    parameters->set(param::pcl::kPFunSetPCLStatsMarkerV3, setPCLStatsMarkerV3);
     // DEPRECATED (reflex-pcl):
     parameters->set(param::latency::kPFunSetLatencyStatsMarker, setPCLStatsMarker);
 
@@ -76,6 +82,7 @@ void implOnPluginShutdown(sl::param::IParameters* parameters)
     PCLSTATS_SHUTDOWN();
 
     parameters->set(param::pcl::kPFunSetPCLStatsMarker, nullptr);
+    parameters->set(param::pcl::kPFunSetPCLStatsMarkerV3, nullptr);
     // DEPRECATED (reflex-pcl):
     parameters->set(param::latency::kPFunSetLatencyStatsMarker, nullptr);
     parameters->set(param::_deprecated_reflex_pcl::kSlGetData, nullptr);

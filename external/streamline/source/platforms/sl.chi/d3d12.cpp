@@ -372,8 +372,11 @@ public:
     void waitForVblank(SwapChain chain) override
     {
         IDXGIOutput* output = nullptr;
-        ((IDXGISwapChain*)chain)->GetContainingOutput(&output);
-        output->WaitForVBlank();
+        if (SUCCEEDED(((IDXGISwapChain*)chain)->GetContainingOutput(&output)) && output)
+        {
+            output->WaitForVBlank();
+            output->Release();
+        }
     }
 
     void getFrameStats(SwapChain chain, void* frameStats) override
@@ -387,14 +390,17 @@ public:
         HRESULT hr = ((IDXGISwapChain*)chain)->GetLastPresentCount(&id);
     }
 
-    void init(const char* debugName, ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t count)
+    void init(const char* debugName, ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t count, bool useSharedFence)
     {
         m_name = extra::utf8ToUtf16(debugName);
         m_cmdQueue = queue;
         auto cmdQueueDesc = m_cmdQueue->GetDesc();
         m_bufferCount = count;
-        // To support DX11 fences have to be shared
-        device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&m_fence));
+        // Shared fences are needed for DX11 interop (DX11-on-DX12 scenario).
+        // For pure DX12 titles, non-shared fences avoid inefficient shared semaphore
+        // GPU waits in vkd3d-proton (Linux DX12-to-Vulkan translation layer).
+        D3D12_FENCE_FLAGS fenceFlags = useSharedFence ? D3D12_FENCE_FLAG_SHARED : D3D12_FENCE_FLAG_NONE;
+        device->CreateFence(0, fenceFlags, IID_PPV_ARGS(&m_fence));
         m_fenceValue.resize(count);
         for (uint32_t i = 0; i < count; i++)
         {
@@ -1159,11 +1165,13 @@ ComputeStatus D3D12::createKernel(void *blobData, uint32_t blobSize, const char*
         {
             data = new KernelDataBase;
             data->hash = hash;
+            data->refcounter.store(1);
             m_kernels[hash] = data;
         }
         else
         {
             data = (KernelDataBase*)(*it).second;
+            data->refcounter.fetch_add(1);
         }
     }
     if (missing)
@@ -1203,15 +1211,23 @@ ComputeStatus D3D12::destroyKernel(Kernel& InKernel)
     auto it = m_kernels.find(InKernel);
     if (it == m_kernels.end())
     {
-        SL_LOG_WARN("Kernel %llu missing in cache, most likely destroyed already", InKernel);
+        return ComputeStatus::eInvalidCall;
     }
     else
     {
         auto data = (KernelDataBase*)(it->second);
-        SL_LOG_VERBOSE("Destroying kernel %s", data->name.c_str());
-        delete it->second;
-        m_kernels.erase(it);
-        InKernel = {};
+        auto prev_count = data->refcounter.fetch_sub(1);
+        if (prev_count == 1)  // Was 1 before decrement, now 0
+        {
+            SL_LOG_VERBOSE("Destroying kernel %s", data->name.c_str());
+            delete it->second;
+            m_kernels.erase(it);
+            InKernel = {};
+        }
+        else
+        {
+            SL_LOG_VERBOSE("Destroying kernel %s doesn't really happen since other contexts still refer to it. Decreasing refcounter to %d", data->name.c_str(), data->refcounter.load());
+        }
     }
     return ComputeStatus::eOk;
 }
@@ -1219,7 +1235,7 @@ ComputeStatus D3D12::destroyKernel(Kernel& InKernel)
 ComputeStatus D3D12::createCommandListContext(ChiCommandQueue *queue, uint32_t count, ICommandListContext*& ctx, const char friendlyName[])
 {
     auto tmp = new CommandListContext();
-    tmp->init(friendlyName, m_device, (ID3D12CommandQueue*)queue, count);
+    tmp->init(friendlyName, m_device, (ID3D12CommandQueue*)queue, count, dx11On12);
     ctx = tmp;
     return ComputeStatus::eOk;
 }
@@ -1338,68 +1354,6 @@ ComputeStatus D3D12::setFullscreenState(SwapChain chain, bool fullscreen, Output
         SL_LOG_ERROR( "Failed to set fullscreen state");
     }
     return ComputeStatus::eOk;
-}
-
-ComputeStatus D3D12::getRefreshRate(SwapChain chain, float& refreshRate)
-{
-    if (!chain) return ComputeStatus::eInvalidArgument;
-    IDXGISwapChain* swapChain = (IDXGISwapChain*)chain;
-    IDXGIOutput* dxgiOutput;
-    HRESULT hr = swapChain->GetContainingOutput(&dxgiOutput);
-    // if swap chain get failed to get DXGIoutput then follow the below link get the details from remarks section
-    //https://docs.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getcontainingoutput
-    if (SUCCEEDED(hr))
-    {
-        // get the descriptor for current output
-        // from which associated mornitor will be fetched
-        DXGI_OUTPUT_DESC outputDes{};
-        hr = dxgiOutput->GetDesc(&outputDes);
-        dxgiOutput->Release();
-        if (SUCCEEDED(hr))
-        {
-            MONITORINFOEXW info;
-            info.cbSize = sizeof(info);
-            // get the associated monitor info
-            if (GetMonitorInfoW(outputDes.Monitor, &info) != 0)
-            {
-                // using the CCD get the associated path and display configuration
-                UINT32 requiredPaths, requiredModes;
-                if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, &requiredModes) == ERROR_SUCCESS)
-                {
-                    std::vector<DISPLAYCONFIG_PATH_INFO> paths(requiredPaths);
-                    std::vector<DISPLAYCONFIG_MODE_INFO> modes2(requiredModes);
-                    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, paths.data(), &requiredModes, modes2.data(), nullptr) == ERROR_SUCCESS)
-                    {
-                        // iterate through all the paths until find the exact source to match
-                        for (auto& p : paths) {
-                            DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
-                            sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-                            sourceName.header.size = sizeof(sourceName);
-                            sourceName.header.adapterId = p.sourceInfo.adapterId;
-                            sourceName.header.id = p.sourceInfo.id;
-                            if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS)
-                            {
-                                // find the matched device which is associated with current device 
-                                // there may be the possibility that display may be duplicated and windows may be one of them in such scenario
-                                // there may be two callback because source is same target will be different
-                                // as window is on both the display so either selecting either one is ok
-                                if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
-                                    // get the refresh rate
-                                    UINT numerator = p.targetInfo.refreshRate.Numerator;
-                                    UINT denominator = p.targetInfo.refreshRate.Denominator;
-                                    double refrate = (double)numerator / (double)denominator;
-                                    refreshRate = (float)refrate;
-                                    return ComputeStatus::eOk;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    SL_LOG_ERROR( "Failed to retrieve refresh rate from swapchain 0x%llx", chain);
-    return ComputeStatus::eError;
 }
 
 ComputeStatus D3D12::getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer)
@@ -2062,6 +2016,9 @@ ComputeStatus D3D12::createBufferResourceImpl(ResourceDescription &resourceDesc,
     D3D12_HEAP_TYPE NativeHeapType = (D3D12_HEAP_TYPE) resourceDesc.heapType; // TODO : proper conversion !
 
     D3D12_RESOURCE_STATES NativeInitialState = toD3D12States(initialState);
+    
+    // D3D12 buffers in default heap must be created in COMMON state
+    assert((resourceDesc.heapType != eHeapTypeDefault || NativeInitialState == D3D12_RESOURCE_STATE_COMMON) && "Default heap buffers must be created in COMMON state");
 
     CD3DX12_HEAP_PROPERTIES heapProp(NativeHeapType, resourceDesc.creationMask, resourceDesc.visibilityMask ? resourceDesc.visibilityMask : m_visibleNodeMask);
 
