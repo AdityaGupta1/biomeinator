@@ -53,6 +53,38 @@ ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
     return dev_buffer;
 }
 
+void TransitionBatch::add(ID3D12Resource* resource,
+                          D3D12_RESOURCE_STATES before,
+                          D3D12_RESOURCE_STATES after)
+{
+    barriers.push_back({
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+        .Transition = {
+            .pResource = resource,
+            .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            .StateBefore = before,
+            .StateAfter = after,
+        },
+    });
+}
+
+void TransitionBatch::addUavBarrier(ID3D12Resource* resource)
+{
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    barrier.UAV.pResource = resource;
+    barriers.push_back(barrier);
+}
+
+void TransitionBatch::submit(ID3D12GraphicsCommandList* cmdList)
+{
+    if (!barriers.empty())
+    {
+        cmdList->ResourceBarrier(static_cast<uint32_t>(barriers.size()), barriers.data());
+        barriers.clear();
+    }
+}
+
 void stateTransitionResourceBarrier(ID3D12GraphicsCommandList* cmdList,
                                     ID3D12Resource* resource,
                                     D3D12_RESOURCE_STATES stateBefore,

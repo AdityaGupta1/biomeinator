@@ -122,6 +122,15 @@ void RtTarget::transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOU
     }
 }
 
+void RtTarget::addTransitionTo(BufferHelper::TransitionBatch& batch, D3D12_RESOURCE_STATES newState)
+{
+    if (newState != this->targetResourceState)
+    {
+        batch.add(this->target.Get(), this->targetResourceState, newState);
+        this->targetResourceState = newState;
+    }
+}
+
 ID3D12Resource* RtTarget::getTarget() const
 {
     return this->target.Get();

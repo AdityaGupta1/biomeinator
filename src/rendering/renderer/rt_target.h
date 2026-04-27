@@ -7,6 +7,8 @@
 
 #include <string>
 
+namespace BufferHelper { struct TransitionBatch; }
+
 struct RtTarget
 {
 private:
@@ -49,6 +51,7 @@ public:
     void reset();
 
     void transitionToState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
+    void addTransitionTo(BufferHelper::TransitionBatch& batch, D3D12_RESOURCE_STATES newState);
 
     ID3D12Resource* getTarget() const;
 

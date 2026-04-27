@@ -5,8 +5,20 @@
 
 #include "rendering/dxr_includes.h"
 
+#include <vector>
+
 namespace BufferHelper
 {
+
+struct TransitionBatch
+{
+    void add(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+    void addUavBarrier(ID3D12Resource* resource = nullptr);
+    void submit(ID3D12GraphicsCommandList* cmdList);
+
+private:
+    std::vector<D3D12_RESOURCE_BARRIER> barriers;
+};
 
 struct BufferCreationFlags
 {

@@ -351,6 +351,110 @@ static void bindNrcBuffers(const nrc::d3d12::Buffers* nrcBuffers, uint32_t baseI
     cmdList->SetComputeRootUnorderedAccessView(baseIdx + 4, (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
 }
 
+static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
+{
+    cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+    bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
+    cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+}
+
+static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
+{
+    // ===================================
+    // NRC UPDATE
+    // ===================================
+
+    if (nrcContext != nullptr)
+    {
+        cmdList->SetPipelineState1(nrcUpdatePso.Get());
+        cmdList->SetComputeRootSignature(ptRootSig.Get());
+
+        bindPtCommonParams(paramBlockManager);
+        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+        bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
+
+        nrcUpdateDispatchDesc.Width = paramBlockManager.nrcConstants->trainingDimensions.x;
+        nrcUpdateDispatchDesc.Height = paramBlockManager.nrcConstants->trainingDimensions.y;
+        cmdList->DispatchRays(&nrcUpdateDispatchDesc);
+
+        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+    }
+
+    // ===================================
+    // PATH TRACING (or NRC QUERY)
+    // ===================================
+
+    const bool useNrcQuery = (nrcContext != nullptr);
+    cmdList->SetPipelineState1(useNrcQuery ? nrcQueryPso.Get() : ptPso.Get());
+    cmdList->SetComputeRootSignature(ptRootSig.Get());
+
+    bindPtCommonParams(paramBlockManager);
+
+    cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+    cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+
+    if (useNrcQuery)
+    {
+        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+        bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
+    }
+
+    D3D12_DISPATCH_RAYS_DESC& activePtDispatchDesc = useNrcQuery ? nrcQueryDispatchDesc : ptDispatchDesc;
+    activePtDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+    activePtDispatchDesc.Height = gbufferDispatchDesc.Height;
+    cmdList->DispatchRays(&activePtDispatchDesc);
+
+    // ===================================
+    // NRC RESOLVE
+    // ===================================
+
+    if (useNrcQuery)
+    {
+        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+
+        nrcContext->QueryAndTrain(cmdList.Get(), nullptr);
+
+        ID3D12DescriptorHeap* const descHeaps[] = { sharedDescriptorHeap.Get() };
+        cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
+        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+
+        const NrcResolveMode resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
+        const bool useBuiltinResolve = (resolveMode != NrcResolveMode::AddQueryResultToOutput);
+
+        if (useBuiltinResolve)
+        {
+            nrcDebugTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            nrcContext->Resolve(cmdList.Get(), nrcDebugTarget.getTarget());
+            cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
+        }
+        else
+        {
+            const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
+            cmdList->SetPipelineState(nrcResolvePso.Get());
+            cmdList->SetComputeRootSignature(nrcResolveRootSig.Get());
+
+            cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
+            cmdList->SetComputeRootUnorderedAccessView(
+                NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
+                (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(
+                NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
+                (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
+            cmdList->SetComputeRootUnorderedAccessView(
+                NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
+                dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+
+            const uint32_t nrcResolveDispatchWidth =
+                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
+            const uint32_t nrcResolveDispatchHeight =
+                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.y, NRC_RESOLVE_WORKGROUP_SIZE_Y);
+            cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
+        }
+
+        BufferHelper::uavBarrier(cmdList.Get(), nullptr);
+    }
+}
+
 static void beginFrame();
 static void submitCmd();
 
@@ -622,12 +726,16 @@ void render()
         // this isn't strictly necessary as the RtTargets should be promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
         // the before state doesn't match reality)
-        for (RtTarget* rtTarget : autoTransitionRtTargets)
         {
-            if (rtTarget->hasUav)
+            BufferHelper::TransitionBatch batch;
+            for (RtTarget* rtTarget : autoTransitionRtTargets)
             {
-                rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                if (rtTarget->hasUav)
+                {
+                    rtTarget->addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                }
             }
+            batch.submit(cmdList.Get());
         }
 
         cmdList->SetPipelineState1(gbufferPso.Get());
@@ -649,111 +757,22 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        // ===================================
-        // NRC UPDATE
-        // ===================================
-
-        if (nrcContext != nullptr)
-        {
-            cmdList->SetPipelineState1(nrcUpdatePso.Get());
-            cmdList->SetComputeRootSignature(ptRootSig.Get());
-
-            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-            bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
-            cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
-            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-            bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
-
-            nrcUpdateDispatchDesc.Width = paramBlockManager.nrcConstants->trainingDimensions.x;
-            nrcUpdateDispatchDesc.Height = paramBlockManager.nrcConstants->trainingDimensions.y;
-            cmdList->DispatchRays(&nrcUpdateDispatchDesc);
-
-            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
-        }
-
-        // ===================================
-        // PATH TRACING (or NRC QUERY)
-        // ===================================
-
-        const bool useNrcQuery = (nrcContext != nullptr);
-        cmdList->SetPipelineState1(useNrcQuery ? nrcQueryPso.Get() : ptPso.Get());
-        cmdList->SetComputeRootSignature(ptRootSig.Get());
-
-        cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-        bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
-        cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
-
-        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
-        cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
-
-        if (useNrcQuery)
-        {
-            cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-            bindNrcBuffers(nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
-        }
-
-        D3D12_DISPATCH_RAYS_DESC& activePtDispatchDesc = useNrcQuery ? nrcQueryDispatchDesc : ptDispatchDesc;
-        activePtDispatchDesc.Width = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
-        activePtDispatchDesc.Height = gbufferDispatchDesc.Height;
-        cmdList->DispatchRays(&activePtDispatchDesc);
-
-        if (useNrcQuery)
-        {
-            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
-
-            nrcContext->QueryAndTrain(cmdList.Get(), nullptr);
-
-            cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
-
-            const NrcResolveMode resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
-            const bool useBuiltinResolve = (resolveMode != NrcResolveMode::AddQueryResultToOutput);
-
-            if (useBuiltinResolve)
-            {
-                nrcDebugTarget.transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                nrcContext->Resolve(cmdList.Get(), nrcDebugTarget.getTarget());
-                cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-            }
-            else
-            {
-                const nrc::d3d12::Buffers* nrcBuffers = nrcContext->GetBuffers();
-                cmdList->SetPipelineState(nrcResolvePso.Get());
-                cmdList->SetComputeRootSignature(nrcResolveRootSig.Get());
-
-                cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-                cmdList->SetComputeRootUnorderedAccessView(
-                    NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
-                    (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-                cmdList->SetComputeRootUnorderedAccessView(
-                    NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
-                    (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
-                cmdList->SetComputeRootUnorderedAccessView(
-                    NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
-                    dev_pathTracingRawBuffer->GetGPUVirtualAddress());
-
-                const uint32_t nrcResolveDispatchWidth =
-                    Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
-                const uint32_t nrcResolveDispatchHeight =
-                    Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.y, NRC_RESOLVE_WORKGROUP_SIZE_Y);
-                cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
-            }
-
-            BufferHelper::uavBarrier(cmdList.Get(), nullptr);
-        }
+        dispatchPathTracing(paramBlockManager, doPathSplitting);
 
         // ===================================
         // COLLECT
         // ===================================
 
-        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                     dev_pathTracingRawBuffer.Get(),
-                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                     dev_ptDiffuseAlbedoRawBuffer.Get(),
-                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        {
+            BufferHelper::TransitionBatch batch;
+            batch.add(dev_pathTracingRawBuffer.Get(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            batch.add(dev_ptDiffuseAlbedoRawBuffer.Get(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            batch.submit(cmdList.Get());
+        }
 
         cmdList->SetPipelineState(collectPso.Get());
         cmdList->SetComputeRootSignature(collectRootSig.Get());
@@ -762,18 +781,22 @@ void render()
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
         cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-        const uint32_t dispatchWidth = Util::calculateDispatchSize(activePtDispatchDesc.Width, COLLECT_WORKGROUP_SIZE_X);
-        const uint32_t dispatchHeight = Util::calculateDispatchSize(activePtDispatchDesc.Height, COLLECT_WORKGROUP_SIZE_Y);
+        const uint32_t ptWidth = gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+        const uint32_t ptHeight = gbufferDispatchDesc.Height;
+        const uint32_t dispatchWidth = Util::calculateDispatchSize(ptWidth, COLLECT_WORKGROUP_SIZE_X);
+        const uint32_t dispatchHeight = Util::calculateDispatchSize(ptHeight, COLLECT_WORKGROUP_SIZE_Y);
         cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
-        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                     dev_pathTracingRawBuffer.Get(),
-                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        BufferHelper::stateTransitionResourceBarrier(cmdList.Get(),
-                                                     dev_ptDiffuseAlbedoRawBuffer.Get(),
-                                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        {
+            BufferHelper::TransitionBatch batch;
+            batch.add(dev_pathTracingRawBuffer.Get(),
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            batch.add(dev_ptDiffuseAlbedoRawBuffer.Get(),
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            batch.submit(cmdList.Get());
+        }
 
         // ===================================
         // DLSS
@@ -801,15 +824,17 @@ void render()
     const uint32_t currentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
     CHECK_HRESULT(swapChain->GetBuffer(currentBackBufferIndex, IID_PPV_ARGS(&backBuffer)));
 
-    BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-    for (RtTarget* rtTarget : autoTransitionRtTargets)
     {
-        if (rtTarget->hasSrv)
+        BufferHelper::TransitionBatch batch;
+        batch.add(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        for (RtTarget* rtTarget : autoTransitionRtTargets)
         {
-            rtTarget->transitionToState(cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            if (rtTarget->hasSrv)
+            {
+                rtTarget->addTransitionTo(batch, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            }
         }
+        batch.submit(cmdList.Get());
     }
 
     const bool isAnyDebugViewActive = (debugOutputTarget != nullptr);

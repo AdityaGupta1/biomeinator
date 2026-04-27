@@ -2,7 +2,7 @@ _Last edited: 2026-04-26_
 
 # Frame Contexts
 
-`FrameContext` in `renderer.cpp` — one per frame-in-flight (3). Each owns a command
+`FrameContext` in `renderer_internal.h` — one per frame-in-flight (3). Each owns a command
 allocator, a `ToFreeList`, and a `ParamBlockManager`.
 
 ## Why Per-Frame
