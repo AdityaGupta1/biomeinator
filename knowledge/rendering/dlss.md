@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-04-27_
 
 # DLSS
 
@@ -20,8 +20,8 @@ command list work that produces them. This is why resource tagging happens at th
 
 ## Reset Signal
 
-`dlssNeedsReset` is set on scene load and resize. Passes `reset = eTrue` in `sl::Constants`
-for one frame, telling DLSS to discard temporal history.
+`DlssState::needsReset` (in `renderState.dlss`) is set on scene load and resize. Passes
+`reset = eTrue` in `sl::Constants` for one frame, telling DLSS to discard temporal history.
 
 ## Mip Bias
 

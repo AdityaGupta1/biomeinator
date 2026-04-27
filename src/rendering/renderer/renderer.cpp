@@ -41,9 +41,6 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-static uint32_t frameCtxIdx = 0;
-static HANDLE frameLatencyWaitable;
-
 static constexpr float defaultFovYDegrees = 35;
 
 void init()
@@ -109,8 +106,6 @@ void init()
     }
 }
 
-static bool dlssNeedsReset = false;
-
 void loadScene(const std::string& filePathStr)
 {
     flush();
@@ -119,21 +114,9 @@ void loadScene(const std::string& filePathStr)
     {
         configureNrc();
     }
-    dlssNeedsReset = true;
+    renderState.dlss.needsReset = true;
 }
 
-
-static ComPtr<ID3D12Resource> dev_gbuffer;
-static ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
-static ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
-
-static std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles;
-
-static float mipBias = 0.f;
-
-static sl::ViewportHandle slViewportHandle{ 1738 }; // TODO: does this need to be a meaningful number?
-static sl::Extent slRenderExtent;
-static sl::Extent slViewportExtent;
 
 static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eDLAA,
@@ -142,8 +125,6 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eMaxPerformance,
     sl::DLSSMode::eUltraPerformance,
 };
-
-static sl::DLSSDOptions dlssdOptions;
 
 void resize()
 {
@@ -166,37 +147,37 @@ void resize()
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
     if (antialiasingMode == AntialiasingMode::DLSS)
     {
-        slViewportExtent = { 0, 0, viewportWidth, viewportHeight };
+        renderState.dlss.viewportExtent = { 0, 0, viewportWidth, viewportHeight };
 
         sl::DLSSDOptimalSettings dlssdSettings;
-        dlssdOptions.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
-        dlssdOptions.outputWidth = viewportWidth;
-        dlssdOptions.outputHeight = viewportHeight;
-        CHECK_SL_RESULT(slDLSSDGetOptimalSettings(dlssdOptions, dlssdSettings));
+        renderState.dlss.options.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
+        renderState.dlss.options.outputWidth = viewportWidth;
+        renderState.dlss.options.outputHeight = viewportHeight;
+        CHECK_SL_RESULT(slDLSSDGetOptimalSettings(renderState.dlss.options, dlssdSettings));
 
         renderState.renderWidth = dlssdSettings.optimalRenderWidth;
         renderState.renderHeight = dlssdSettings.optimalRenderHeight;
-        mipBias = std::log2(static_cast<float>(renderState.renderWidth) / static_cast<float>(viewportWidth)) - 1.f;
+        renderState.dlss.mipBias = std::log2(static_cast<float>(renderState.renderWidth) / static_cast<float>(viewportWidth)) - 1.f;
 
-        slRenderExtent = { 0, 0, renderState.renderWidth, renderState.renderHeight };
+        renderState.dlss.renderExtent = { 0, 0, renderState.renderWidth, renderState.renderHeight };
 
-        dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
-        dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
-        dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
-        dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
-        dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
-        dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
-        dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
-        dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
-        CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
+        renderState.dlss.options.dlaaPreset = sl::DLSSDPreset::ePresetD;
+        renderState.dlss.options.qualityPreset = sl::DLSSDPreset::ePresetD;
+        renderState.dlss.options.balancedPreset = sl::DLSSDPreset::ePresetD;
+        renderState.dlss.options.performancePreset = sl::DLSSDPreset::ePresetD;
+        renderState.dlss.options.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+        renderState.dlss.options.colorBuffersHDR = sl::Boolean::eTrue;
+        renderState.dlss.options.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+        renderState.dlss.options.alphaUpscalingEnabled = sl::Boolean::eFalse;
+        CHECK_SL_RESULT(slDLSSDSetOptions(renderState.dlss.viewportHandle, renderState.dlss.options));
 
-        dlssNeedsReset = true;
+        renderState.dlss.needsReset = true;
     }
     else
     {
         renderState.renderWidth = viewportWidth;
         renderState.renderHeight = viewportHeight;
-        mipBias = 0.f;
+        renderState.dlss.mipBias = 0.f;
     }
 
     flush();
@@ -205,31 +186,31 @@ void resize()
     if (renderState.useWaitableSwapChain)
     {
         CHECK_HRESULT(renderState.swapChain->SetMaximumFrameLatency(2));
-        if (frameLatencyWaitable)
+        if (renderState.frameLatencyWaitable)
         {
-            CloseHandle(frameLatencyWaitable);
+            CloseHandle(renderState.frameLatencyWaitable);
         }
-        frameLatencyWaitable = renderState.swapChain->GetFrameLatencyWaitableObject();
+        renderState.frameLatencyWaitable = renderState.swapChain->GetFrameLatencyWaitableObject();
     }
 
-    dev_gbuffer.Reset();
-    dev_gbuffer = BufferHelper::createBasicBuffer(renderState.renderWidth * renderState.renderHeight * sizeof(GbufferData),
-                                                  &DEFAULT_HEAP,
-                                                  { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_gbuffer->SetName(L"dev_gbuffer");
+    renderState.dev_gbuffer.Reset();
+    renderState.dev_gbuffer = BufferHelper::createBasicBuffer(renderState.renderWidth * renderState.renderHeight * sizeof(GbufferData),
+                                                              &DEFAULT_HEAP,
+                                                              { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_gbuffer->SetName(L"dev_gbuffer");
 
-    dev_pathTracingRawBuffer.Reset();
+    renderState.dev_pathTracingRawBuffer.Reset();
     const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
     const uint32_t pathTracingRawBufferSizeBytes =
         renderState.renderWidth * renderState.renderHeight * (doPathSplitting ? 2 : 1) * sizeof(float) * 4;
-    dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
+    renderState.dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
+    renderState.dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
 
-    dev_ptDiffuseAlbedoRawBuffer.Reset();
-    dev_ptDiffuseAlbedoRawBuffer = BufferHelper::createBasicBuffer(
+    renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
+    renderState.dev_ptDiffuseAlbedoRawBuffer = BufferHelper::createBasicBuffer(
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
+    renderState.dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
 
     const uint32_t rtvIncrementSize = renderState.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
@@ -237,7 +218,7 @@ void resize()
     {
         ComPtr<ID3D12Resource> backBuffer;
         CHECK_HRESULT(renderState.swapChain->GetBuffer(frameIdx, IID_PPV_ARGS(&backBuffer)));
-        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = rtvHeapCpuHandles[frameIdx];
+        D3D12_CPU_DESCRIPTOR_HANDLE& cpuHandle = renderState.rtvHeapCpuHandles[frameIdx];
         cpuHandle = renderState.rtvHeap->GetCPUDescriptorHandleForHeapStart();
         cpuHandle.ptr += frameIdx * rtvIncrementSize;
         renderState.device->CreateRenderTargetView(backBuffer.Get(), nullptr, cpuHandle);
@@ -355,7 +336,7 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 {
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
     bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
-    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), dev_gbuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), renderState.dev_gbuffer->GetGPUVirtualAddress());
 }
 
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
@@ -390,8 +371,8 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 
     bindPtCommonParams(paramBlockManager);
 
-    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
     if (useNrcQuery)
     {
@@ -442,7 +423,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
                 (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
             renderState.cmdList->SetComputeRootUnorderedAccessView(
                 NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
-                dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+                renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
 
             const uint32_t nrcResolveDispatchWidth =
                 Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
@@ -457,9 +438,6 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 
 static void beginFrame();
 static void submitCmd();
-
-static auto lastTimePoint = std::chrono::high_resolution_clock::now();
-static bool stopAccumulating = false;
 
 void render()
 {
@@ -476,8 +454,8 @@ void render()
     }
 
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
-    const double deltaTime = std::chrono::duration<double>(currentTimePoint - lastTimePoint).count();
-    lastTimePoint = currentTimePoint;
+    const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
+    renderState.lastTimePoint = currentTimePoint;
 
     beginFrame();
 
@@ -503,19 +481,19 @@ void render()
             sl::Resource specularHitDistanceResource = makeSlResource(&renderState.specularHitDistanceTarget);
 
             sl::ResourceTag resourceTags[] = {
-                {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &slViewportExtent},
-                {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
-                {&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &slRenderExtent},
+                {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.viewportExtent},
+                {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+                {&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
             };
             // clang-format on
 
             CHECK_SL_RESULT(
-                slSetTagForFrame(*frameToken, slViewportHandle, resourceTags, _countof(resourceTags), renderState.cmdList.Get()));
+                slSetTagForFrame(*frameToken, renderState.dlss.viewportHandle, resourceTags, _countof(resourceTags), renderState.cmdList.Get()));
         }
 
         slConstants = {};
@@ -526,10 +504,10 @@ void render()
         slConstants.motionVectorsDilated = sl::Boolean::eFalse;
         slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-        if (dlssNeedsReset)
+        if (renderState.dlss.needsReset)
         {
             slConstants.reset = sl::Boolean::eTrue;
-            dlssNeedsReset = false;
+            renderState.dlss.needsReset = false;
         }
         else
         {
@@ -537,7 +515,7 @@ void render()
         }
     }
 
-    auto& frameCtx = renderState.frameCtxs[frameCtxIdx];
+    auto& frameCtx = renderState.frameCtxs[renderState.frameCtxIdx];
 
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
 
@@ -560,10 +538,10 @@ void render()
     if (useDlss)
     {
         renderState.camera.copySlConstantsTo(&slConstants);
-        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, slViewportHandle));
+        CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, renderState.dlss.viewportHandle));
 
-        renderState.camera.copyMatricesToDlssOptions(&dlssdOptions.worldToCameraView, &dlssdOptions.cameraViewToWorld);
-        CHECK_SL_RESULT(slDLSSDSetOptions(slViewportHandle, dlssdOptions));
+        renderState.camera.copyMatricesToDlssOptions(&renderState.dlss.options.worldToCameraView, &renderState.dlss.options.cameraViewToWorld);
+        CHECK_SL_RESULT(slDLSSDSetOptions(renderState.dlss.viewportHandle, renderState.dlss.options));
     }
 
     renderState.camera.copyParamsTo(paramBlockManager.cameraParams);
@@ -576,13 +554,13 @@ void render()
     if (resetAccumulation)
     {
         renderState.accumulatedFrameNumber = 0;
-        stopAccumulating = false;
+        renderState.stopAccumulating = false;
     }
-    else if (!stopAccumulating)
+    else if (!renderState.stopAccumulating)
     {
         if (++renderState.accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {
-            stopAccumulating = true;
+            renderState.stopAccumulating = true;
 
             if (renderState.testMode)
             {
@@ -601,7 +579,7 @@ void render()
     renderParams->doPathSplitting = doPathSplitting ? 1 : 0;
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
-    renderParams->mipBias = mipBias;
+    renderParams->mipBias = renderState.dlss.mipBias;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -715,7 +693,7 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
 
-    if (renderState.scene.hasTlas() && (!stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
+    if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
@@ -743,7 +721,7 @@ void render()
 
         renderState.cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
         bindSceneSrvs(GBUFFER_PARAM_IDX(RAYTRACING_ACS));
-        renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), dev_gbuffer->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), renderState.dev_gbuffer->GetGPUVirtualAddress());
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = renderState.pathTracingTarget.getTarget()->GetDesc();
         renderState.gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -753,7 +731,7 @@ void render()
         // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
-                                                     dev_gbuffer.Get(),
+                                                     renderState.dev_gbuffer.Get(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -765,10 +743,10 @@ void render()
 
         {
             BufferHelper::TransitionBatch batch;
-            batch.add(dev_pathTracingRawBuffer.Get(),
+            batch.add(renderState.dev_pathTracingRawBuffer.Get(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            batch.add(dev_ptDiffuseAlbedoRawBuffer.Get(),
+            batch.add(renderState.dev_ptDiffuseAlbedoRawBuffer.Get(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             batch.submit(renderState.cmdList.Get());
@@ -778,8 +756,8 @@ void render()
         renderState.cmdList->SetComputeRootSignature(renderState.collectRootSig.Get());
 
         renderState.cmdList->SetComputeRootConstantBufferView(COLLECT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-        renderState.cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), dev_pathTracingRawBuffer->GetGPUVirtualAddress());
-        renderState.cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_IN), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootShaderResourceView(COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
         const uint32_t ptWidth = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
         const uint32_t ptHeight = renderState.gbufferDispatchDesc.Height;
@@ -789,10 +767,10 @@ void render()
 
         {
             BufferHelper::TransitionBatch batch;
-            batch.add(dev_pathTracingRawBuffer.Get(),
+            batch.add(renderState.dev_pathTracingRawBuffer.Get(),
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            batch.add(dev_ptDiffuseAlbedoRawBuffer.Get(),
+            batch.add(renderState.dev_ptDiffuseAlbedoRawBuffer.Get(),
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             batch.submit(renderState.cmdList.Get());
@@ -804,7 +782,7 @@ void render()
 
         if (useDlss)
         {
-            const sl::BaseStructure* inputs[] = { &slViewportHandle };
+            const sl::BaseStructure* inputs[] = { &renderState.dlss.viewportHandle };
             CHECK_SL_RESULT(
                 slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), renderState.cmdList.Get()));
         }
@@ -908,7 +886,7 @@ void render()
     CHECK_HRESULT(renderState.swapChain->Present(syncInterval, presentFlags));
 
     ++renderState.frameNumber;
-    frameCtxIdx = (frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
+    renderState.frameCtxIdx = (renderState.frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
 
     updateFps(deltaTime);
 
@@ -926,11 +904,11 @@ void render()
 
 static void beginFrame()
 {
-    FrameContext& frame = renderState.frameCtxs[frameCtxIdx];
+    FrameContext& frame = renderState.frameCtxs[renderState.frameCtxIdx];
 
     if (renderState.useWaitableSwapChain)
     {
-        WaitForSingleObjectEx(frameLatencyWaitable, 1000 /*ms*/, true);
+        WaitForSingleObjectEx(renderState.frameLatencyWaitable, 1000 /*ms*/, true);
     }
     renderState.fence.waitFor(frame.fenceValue);
 
@@ -958,7 +936,7 @@ void flush()
 
 uint32_t getFrameIndex()
 {
-    return frameCtxIdx;
+    return renderState.frameCtxIdx;
 }
 
 void destroy()
@@ -987,9 +965,9 @@ void destroy()
         rtTarget->reset();
     }
 
-    dev_gbuffer.Reset();
-    dev_pathTracingRawBuffer.Reset();
-    dev_ptDiffuseAlbedoRawBuffer.Reset();
+    renderState.dev_gbuffer.Reset();
+    renderState.dev_pathTracingRawBuffer.Reset();
+    renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
 
     destroyNrc();
 
@@ -1030,9 +1008,9 @@ void destroy()
 
     renderState.fence.reset();
 
-    if (renderState.useWaitableSwapChain && frameLatencyWaitable)
+    if (renderState.useWaitableSwapChain && renderState.frameLatencyWaitable)
     {
-        CloseHandle(frameLatencyWaitable);
+        CloseHandle(renderState.frameLatencyWaitable);
     }
 
     renderState.graphicsCmdQueue.Reset();

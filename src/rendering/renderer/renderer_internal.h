@@ -18,6 +18,7 @@
 #include "util/ring_buffer.h"
 
 #include <array>
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -239,6 +240,16 @@ void finalizeQueuedScreenshot();
 // Shared state
 // =============================================
 
+struct DlssState
+{
+    bool needsReset{ false };
+    float mipBias{ 0.f };
+    sl::ViewportHandle viewportHandle{ 1738 };
+    sl::Extent renderExtent{};
+    sl::Extent viewportExtent{};
+    sl::DLSSDOptions options{};
+};
+
 struct ScreenshotRequest
 {
     bool active{ false };
@@ -259,6 +270,10 @@ struct RendererState
     uint32_t frameNumber{ 0 };
     uint32_t accumulatedFrameNumber{ 0 };
     bool useWaitableSwapChain{ true };
+    uint32_t frameCtxIdx{ 0 };
+    HANDLE frameLatencyWaitable{ nullptr };
+    std::chrono::high_resolution_clock::time_point lastTimePoint{ std::chrono::high_resolution_clock::now() };
+    bool stopAccumulating{ false };
 
     // -- Device and infrastructure --
     ComPtr<IDXGIFactory5> factory;
@@ -309,11 +324,20 @@ struct RendererState
     std::vector<RtTarget*> allRtTargets;
     std::vector<RtTarget*> autoTransitionRtTargets;
 
+    // -- Intermediate buffers --
+    ComPtr<ID3D12Resource> dev_gbuffer;
+    ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
+    ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+    std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
+
     // -- Viewport and dimensions --
     D3D12_VIEWPORT viewport{};
     D3D12_RECT scissor{};
     uint32_t renderWidth{};
     uint32_t renderHeight{};
+
+    // -- DLSS --
+    DlssState dlss;
 
     // -- Root signatures --
     ComPtr<ID3D12RootSignature> gbufferRootSig;
