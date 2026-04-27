@@ -259,7 +259,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
     const uint caveNoiseSize = chunkSizeXZSquare * maxCaveHeight;
-    const uint maxFillY = max(terrainNoiseMaxY, seaLevel);
+    const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, seaLevel));
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
