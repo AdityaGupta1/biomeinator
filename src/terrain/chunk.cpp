@@ -230,7 +230,7 @@ bool Chunk::isRegionAllBlockType(const uvec3 startPos, const uvec3 endPos, Block
     {
         for (uint blockX = startPos.x; blockX <= endPos.x; ++blockX)
         {
-            uint blockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+            uint blockIdx = Chunk::blockPosToIdx(uvec3(blockX, startPos.y, blockZ));
 
             for (uint blockY = startPos.y; blockY <= endPos.y; ++blockY)
             {
@@ -277,7 +277,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
 
         if (check)
         {
-            const bool isSolid = !chunk->isRegionAllBlockType(
+            const bool isSolid = chunk->isRegionAllBlockType(
                 uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID);
             if (!isSolid)
             {
@@ -339,7 +339,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         else
         {
             chunk = this;
-            blockX = endPos.x;
+            blockX = endPos.x + 1;
         }
 
         const bool isSolid = chunk->isRegionAllBlockType(
@@ -373,7 +373,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         else
         {
             chunk = this;
-            blockZ = endPos.z;
+            blockZ = endPos.z + 1;
         }
 
         const bool isSolid = chunk->isRegionAllBlockType(

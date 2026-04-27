@@ -246,6 +246,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
     terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
+    ASSERT(terrainNoiseMinY < terrainNoiseMaxY, "terrain noise range is empty or inverted");
 
     const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
@@ -256,6 +257,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
+    const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
+    const uint caveNoiseSize = chunkSizeXZSquare * maxCaveHeight;
     const uint maxFillY = max(terrainNoiseMaxY, seaLevel);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -284,21 +287,29 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             {
                 Block block = Block::AIR;
                 const uint blockIdx = baseBlockIdx + y;
+                ASSERT(blockIdx < numChunkBlocks, "block index out of bounds");
 
                 bool isInTerrain;
                 if (y < terrainNoiseMinY)
                 {
                     isInTerrain = true;
                 }
+                else if (y >= static_cast<uint>(terrainNoiseMaxY))
+                {
+                    isInTerrain = false; // surfaceVal < -surfaceValBound here, so always air; also avoids out of bounds access when maxFillY > terrainNoiseMaxY (sea fill)
+                }
                 else
                 {
+                    const int terrainNoiseIdx = baseTerrainNoiseIdx + static_cast<int>(y);
+                    ASSERT(terrainNoiseIdx >= 0 && static_cast<uint>(terrainNoiseIdx) < terrainNoiseSize, "terrain noise index out of bounds");
+
                     float surfaceVal = (terrainBaseHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
                     if (y < terrainBaseHeight)
                     {
                         surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
                     }
 
-                    isInTerrain = terrainNoise[baseTerrainNoiseIdx + static_cast<int>(y)] < surfaceVal;
+                    isInTerrain = terrainNoise[terrainNoiseIdx] < surfaceVal;
                 }
 
                 bool isCave = false;
@@ -306,6 +317,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     if (y < maxCaveHeight)
                     {
+                        const uint caveNoiseIdx = baseCaveNoiseIdx + y;
+                        ASSERT(caveNoiseIdx < caveNoiseSize, "cave noise index out of bounds");
+
                         const float caveSurfaceMixFactor =
                             smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
                         const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
