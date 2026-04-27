@@ -250,6 +250,33 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                 }
             }
             break;
+        case WM_MOUSEWHEEL:
+        {
+            if (!isInCursorMode && !ImGui::GetIO().WantCaptureMouse)
+            {
+                const int delta = GET_WHEEL_DELTA_WPARAM(wparam);
+                const int notches = delta / WHEEL_DELTA;
+                constexpr float scaleFactor = 1.025f;
+                float speed = SettingsManager::getAsFloat("movementSpeed");
+                if (notches > 0)
+                {
+                    for (int i = 0; i < notches; ++i)
+                    {
+                        speed *= scaleFactor;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < -notches; ++i)
+                    {
+                        speed /= scaleFactor;
+                    }
+                }
+                speed = fmaxf(1.f, fminf(250.f, speed));
+                SettingsManager::setAsFloat("movementSpeed", speed);
+            }
+            break;
+        }
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
             if (isInCursorMode && !ImGui::GetIO().WantCaptureMouse)
