@@ -241,6 +241,8 @@ void initRtTargets()
         allRtTargets.push_back(rtTarget);
     }
 
+    // nrcDebugTarget is added after the copy so it's in autoTransitionRtTargets but NOT in
+    // allRtTargets — it has custom dimensions and is handled separately in resize().
     autoTransitionRtTargets.push_back(&nrcDebugTarget);
 
     resize();

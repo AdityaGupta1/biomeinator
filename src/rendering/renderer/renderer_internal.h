@@ -250,7 +250,7 @@ extern ComPtr<ID3D12Device5> device;
 extern ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
 extern Fence fence;
 extern ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
-extern DescriptorHeapAllocator sharedDescHeapAlloc;
+// sharedDescHeapAlloc is declared in rendering/renderer.h (public API)
 extern ComPtr<ID3D12DescriptorHeap> rtvHeap;
 
 // -- Command list --
