@@ -33,7 +33,7 @@ static void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
 
     ComPtr<ID3DBlob> blob, errorBlob;
     CHECK_HRESULT_WITH_ERROR_BLOB(D3D12SerializeVersionedRootSignature(&desc, &blob, &errorBlob), errorBlob);
-    CHECK_HRESULT(device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&outRootSig)));
+    CHECK_HRESULT(renderState.device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&outRootSig)));
 }
 
 void initRootSignature()
@@ -47,7 +47,7 @@ void initRootSignature()
     staticSampler.MinLOD = 0.f;
     staticSampler.ShaderRegister = RT_REGISTER_TEX_SAMPLER;
     staticSampler.RegisterSpace = RT_REGISTER_SPACE;
-    if (voxelMode)
+    if (renderState.voxelMode)
     {
         staticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
         staticSampler.MaxLOD = 4.f;
@@ -90,7 +90,7 @@ void initRootSignature()
 
         serializeAndCreateRootSignature(gbufferParams.data(), static_cast<uint32_t>(gbufferParams.size()),
                                         rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
-                                        gbufferRootSig);
+                                        renderState.gbufferRootSig);
     }
 
     // ===================================
@@ -124,7 +124,7 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE_PARAMS);
         ptParams[PT_PARAM_IDX(NRC_COUNTERS_DATA)] = MAKE_PARAM(UAV, NRC, COUNTERS_DATA);
 
-        if (useSer)
+        if (renderState.useSer)
         {
             ptParams.push_back({
                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
@@ -137,7 +137,7 @@ void initRootSignature()
 
         serializeAndCreateRootSignature(ptParams.data(), static_cast<uint32_t>(ptParams.size()),
                                         rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
-                                        ptRootSig);
+                                        renderState.ptRootSig);
     }
 
     // ===================================
@@ -151,7 +151,7 @@ void initRootSignature()
         collectParams[COLLECT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN)] = MAKE_PARAM(SRV, COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
 
         serializeAndCreateRootSignature(collectParams.data(), static_cast<uint32_t>(collectParams.size()),
-                                        nullptr, 0, collectRootSig);
+                                        nullptr, 0, renderState.collectRootSig);
     }
 
     // ===================================
@@ -166,7 +166,7 @@ void initRootSignature()
         nrcResolveParams[NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
 
         serializeAndCreateRootSignature(nrcResolveParams.data(), static_cast<uint32_t>(nrcResolveParams.size()),
-                                        nullptr, 0, nrcResolveRootSig);
+                                        nullptr, 0, renderState.nrcResolveRootSig);
     }
 
     // ===================================
@@ -187,7 +187,7 @@ void initRootSignature()
         postprocessParams[POSTPROCESS_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
         serializeAndCreateRootSignature(postprocessParams.data(), static_cast<uint32_t>(postprocessParams.size()),
-                                        &postprocessSamplerDesc, 1, postprocessRootSig);
+                                        &postprocessSamplerDesc, 1, renderState.postprocessRootSig);
     }
 
     // ===================================
@@ -199,7 +199,7 @@ void initRootSignature()
         debugViewParams[DEBUG_VIEW_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
 
         serializeAndCreateRootSignature(debugViewParams.data(), static_cast<uint32_t>(debugViewParams.size()),
-                                        &postprocessSamplerDesc, 1, debugViewRootSig);
+                                        &postprocessSamplerDesc, 1, renderState.debugViewRootSig);
     }
 }
 
@@ -211,16 +211,16 @@ void initPipeline()
     {
         RtPipelineInputs gbufferPipelineInputs = {
             .name = L"gbuffer",
-            .pso = gbufferPso,
-            .dev_shaderIds = dev_gbufferShaderIds,
+            .pso = renderState.gbufferPso,
+            .dev_shaderIds = renderState.dev_gbufferShaderIds,
             .rgsShaderName = L"RayGeneration",
             .missShaderName = L"Miss",
-            .dispatchDesc = gbufferDispatchDesc,
+            .dispatchDesc = renderState.gbufferDispatchDesc,
         };
 
         gbufferPipelineInputs.shaderBytecode = getShader("gbuffer_rgs");
         gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        gbufferPipelineInputs.rootSig = gbufferRootSig.Get();
+        gbufferPipelineInputs.rootSig = renderState.gbufferRootSig.Get();
 
         gbufferPipelineInputs.hitGroups.resize(2);
         gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_PRIMARY] = {
@@ -245,16 +245,16 @@ void initPipeline()
     {
         RtPipelineInputs nrcUpdatePipelineInputs = {
             .name = L"nrcUpdate",
-            .pso = nrcUpdatePso,
-            .dev_shaderIds = dev_nrcUpdateShaderIds,
+            .pso = renderState.nrcUpdatePso,
+            .dev_shaderIds = renderState.dev_nrcUpdateShaderIds,
             .rgsShaderName = L"RayGeneration",
             .missShaderName = L"Miss",
-            .dispatchDesc = nrcUpdateDispatchDesc,
+            .dispatchDesc = renderState.nrcUpdateDispatchDesc,
         };
 
         nrcUpdatePipelineInputs.shaderBytecode = getShader("nrc_update_rgs");
         nrcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        nrcUpdatePipelineInputs.rootSig = ptRootSig.Get();
+        nrcUpdatePipelineInputs.rootSig = renderState.ptRootSig.Get();
 
         nrcUpdatePipelineInputs.hitGroups.resize(3);
         nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
@@ -285,16 +285,16 @@ void initPipeline()
     {
         RtPipelineInputs nrcQueryPipelineInputs = {
             .name = L"nrcQuery",
-            .pso = nrcQueryPso,
-            .dev_shaderIds = dev_nrcQueryShaderIds,
+            .pso = renderState.nrcQueryPso,
+            .dev_shaderIds = renderState.dev_nrcQueryShaderIds,
             .rgsShaderName = L"RayGeneration",
             .missShaderName = L"Miss",
-            .dispatchDesc = nrcQueryDispatchDesc,
+            .dispatchDesc = renderState.nrcQueryDispatchDesc,
         };
 
         nrcQueryPipelineInputs.shaderBytecode = getShader("nrc_query_rgs");
         nrcQueryPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        nrcQueryPipelineInputs.rootSig = ptRootSig.Get();
+        nrcQueryPipelineInputs.rootSig = renderState.ptRootSig.Get();
 
         nrcQueryPipelineInputs.hitGroups.resize(3);
         nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
@@ -325,16 +325,16 @@ void initPipeline()
     {
         RtPipelineInputs ptPipelineInputs = {
             .name = L"pathTracing",
-            .pso = ptPso,
-            .dev_shaderIds = dev_ptShaderIds,
+            .pso = renderState.ptPso,
+            .dev_shaderIds = renderState.dev_ptShaderIds,
             .rgsShaderName = L"RayGeneration",
             .missShaderName = L"Miss",
-            .dispatchDesc = ptDispatchDesc,
+            .dispatchDesc = renderState.ptDispatchDesc,
         };
 
         ptPipelineInputs.shaderBytecode = getShader("path_tracing_rgs");
         ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        ptPipelineInputs.rootSig = ptRootSig.Get();
+        ptPipelineInputs.rootSig = renderState.ptRootSig.Get();
 
         ptPipelineInputs.hitGroups.resize(3);
         ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
@@ -364,10 +364,10 @@ void initPipeline()
     // ===================================
     {
         D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = collectRootSig.Get();
+        psoDesc.pRootSignature = renderState.collectRootSig.Get();
         psoDesc.CS = makeShaderBytecode(getShader("collect_cs"));
-        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&collectPso)));
-        collectPso->SetName(L"collectPso");
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.collectPso)));
+        renderState.collectPso->SetName(L"collectPso");
     }
 
     // ===================================
@@ -375,10 +375,10 @@ void initPipeline()
     // ===================================
     {
         D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = nrcResolveRootSig.Get();
+        psoDesc.pRootSignature = renderState.nrcResolveRootSig.Get();
         psoDesc.CS = makeShaderBytecode(getShader("nrc_resolve_cs"));
-        CHECK_HRESULT(device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&nrcResolvePso)));
-        nrcResolvePso->SetName(L"nrcResolvePso");
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.nrcResolvePso)));
+        renderState.nrcResolvePso->SetName(L"nrcResolvePso");
     }
 
     {
@@ -403,11 +403,11 @@ void initPipeline()
         // ===================================
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
-            psoDesc.pRootSignature = postprocessRootSig.Get();
+            psoDesc.pRootSignature = renderState.postprocessRootSig.Get();
             psoDesc.VS = postprocessVsShaderBytecode;
             psoDesc.PS = makeShaderBytecode(getShader("postprocess_ps"));
-            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&postprocessPso)));
-            postprocessPso->SetName(L"postprocessPso");
+            CHECK_HRESULT(renderState.device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&renderState.postprocessPso)));
+            renderState.postprocessPso->SetName(L"postprocessPso");
         }
 
         // ===================================
@@ -415,11 +415,11 @@ void initPipeline()
         // ===================================
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = postprocessPsoDescBase;
-            psoDesc.pRootSignature = debugViewRootSig.Get();
+            psoDesc.pRootSignature = renderState.debugViewRootSig.Get();
             psoDesc.VS = postprocessVsShaderBytecode;
             psoDesc.PS = makeShaderBytecode(getShader("debug_view_ps"));
-            CHECK_HRESULT(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&debugViewPso)));
-            debugViewPso->SetName(L"debugViewPso");
+            CHECK_HRESULT(renderState.device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&renderState.debugViewPso)));
+            renderState.debugViewPso->SetName(L"debugViewPso");
         }
     }
 }

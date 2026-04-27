@@ -25,8 +25,9 @@
 #include <sl.h>
 #include <sl_dlss_d.h>
 
-class Camera;
-class Scene;
+#include "rendering/camera.h"
+#include "scene/scene.h"
+
 namespace nrc { namespace d3d12 { class Context; } }
 
 namespace Renderer
@@ -238,98 +239,6 @@ void finalizeQueuedScreenshot();
 // Shared state
 // =============================================
 
-// -- Frame management --
-extern FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
-extern uint32_t frameNumber;
-extern uint32_t accumulatedFrameNumber;
-extern bool useWaitableSwapChain;
-
-// -- Device and infrastructure --
-extern ComPtr<IDXGIFactory5> factory;
-extern ComPtr<ID3D12Device5> device;
-extern ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
-extern Fence fence;
-extern ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
-// sharedDescHeapAlloc is declared in rendering/renderer.h (public API)
-extern ComPtr<ID3D12DescriptorHeap> rtvHeap;
-
-// -- Command list --
-extern ComPtr<ID3D12GraphicsCommandList4> cmdList;
-
-// -- Scene --
-extern Scene scene;
-extern Camera camera;
-extern nrc::d3d12::Context* nrcContext;
-
-// -- Mode flags --
-extern bool testMode;
-extern bool voxelMode;
-extern bool useSer;
-
-// -- Swap chain --
-extern ComPtr<IDXGISwapChain3> swapChain;
-extern UINT swapChainFlags;
-extern bool useVsync;
-extern bool allowTearing;
-
-// -- Render targets --
-extern RtTarget pathTracingTarget;
-extern RtTarget diffuseAlbedoTarget;
-extern RtTarget specularAlbedoTarget;
-extern RtTarget linearDepthTarget;
-extern RtTarget normalsAndRoughnessTarget;
-extern RtTarget motionTarget;
-extern RtTarget specularHitDistanceTarget;
-extern RtTarget dlssOutputTarget;
-extern RtTarget debugTarget;
-extern RtTarget nrcDebugTarget;
-extern std::vector<RtTarget*> allRtTargets;
-extern std::vector<RtTarget*> autoTransitionRtTargets;
-
-// -- Viewport and dimensions --
-extern D3D12_VIEWPORT viewport;
-extern D3D12_RECT scissor;
-extern uint32_t renderWidth;
-extern uint32_t renderHeight;
-
-// -- Root signatures --
-extern ComPtr<ID3D12RootSignature> gbufferRootSig;
-extern ComPtr<ID3D12RootSignature> ptRootSig;
-extern ComPtr<ID3D12RootSignature> collectRootSig;
-extern ComPtr<ID3D12RootSignature> nrcResolveRootSig;
-extern ComPtr<ID3D12RootSignature> postprocessRootSig;
-extern ComPtr<ID3D12RootSignature> debugViewRootSig;
-
-// -- Pipeline state objects --
-extern ComPtr<ID3D12StateObject> gbufferPso;
-extern ComPtr<ID3D12Resource> dev_gbufferShaderIds;
-extern D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc;
-
-extern ComPtr<ID3D12StateObject> ptPso;
-extern ComPtr<ID3D12Resource> dev_ptShaderIds;
-extern D3D12_DISPATCH_RAYS_DESC ptDispatchDesc;
-
-extern ComPtr<ID3D12PipelineState> collectPso;
-extern ComPtr<ID3D12PipelineState> nrcResolvePso;
-
-extern ComPtr<ID3D12StateObject> nrcUpdatePso;
-extern ComPtr<ID3D12Resource> dev_nrcUpdateShaderIds;
-extern D3D12_DISPATCH_RAYS_DESC nrcUpdateDispatchDesc;
-
-extern ComPtr<ID3D12StateObject> nrcQueryPso;
-extern ComPtr<ID3D12Resource> dev_nrcQueryShaderIds;
-extern D3D12_DISPATCH_RAYS_DESC nrcQueryDispatchDesc;
-
-extern ComPtr<ID3D12PipelineState> postprocessPso;
-extern ComPtr<ID3D12PipelineState> debugViewPso;
-
-// -- GUI shared state --
-extern bool needsResize;
-extern bool didPathTracingSettingsChange;
-extern RingBuffer<FrameTimeMeasurement, 600> frameTimeBuffer;
-extern const std::unordered_map<std::string, RtTarget*> debugViewComboMap;
-
-// -- Screenshot state --
 struct ScreenshotRequest
 {
     bool active{ false };
@@ -340,6 +249,113 @@ struct ScreenshotRequest
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
 };
-extern ScreenshotRequest screenshotRequest;
+
+struct RendererState
+{
+    RendererState();
+
+    // -- Frame management --
+    FrameContext frameCtxs[NUM_FRAMES_IN_FLIGHT];
+    uint32_t frameNumber{ 0 };
+    uint32_t accumulatedFrameNumber{ 0 };
+    bool useWaitableSwapChain{ true };
+
+    // -- Device and infrastructure --
+    ComPtr<IDXGIFactory5> factory;
+    ComPtr<ID3D12Device5> device;
+    ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
+    Fence fence;
+    ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
+    // sharedDescHeapAlloc is declared in rendering/renderer.h (public API)
+    ComPtr<ID3D12DescriptorHeap> rtvHeap;
+
+    // -- Command list --
+    ComPtr<ID3D12GraphicsCommandList4> cmdList;
+
+    // -- Scene --
+    Scene scene;
+    Camera camera;
+    nrc::d3d12::Context* nrcContext{ nullptr };
+
+    // -- Mode flags --
+    bool testMode{ false };
+    bool voxelMode{ false };
+    bool useSer{ false };
+
+    // -- Swap chain --
+    ComPtr<IDXGISwapChain3> swapChain;
+    UINT swapChainFlags{};
+    bool useVsync{ false };
+    bool allowTearing{ false };
+
+    // -- Render targets --
+    // clang-format off
+    RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+    RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+    RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+    RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    // should really be 4 debug channels but it would look funny that way
+    RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
+    RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
+    RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+
+    RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+
+    RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
+
+    RtTarget nrcDebugTarget{ L"nrcDebugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
+    // clang-format on
+
+    std::vector<RtTarget*> allRtTargets;
+    std::vector<RtTarget*> autoTransitionRtTargets;
+
+    // -- Viewport and dimensions --
+    D3D12_VIEWPORT viewport{};
+    D3D12_RECT scissor{};
+    uint32_t renderWidth{};
+    uint32_t renderHeight{};
+
+    // -- Root signatures --
+    ComPtr<ID3D12RootSignature> gbufferRootSig;
+    ComPtr<ID3D12RootSignature> ptRootSig;
+    ComPtr<ID3D12RootSignature> collectRootSig;
+    ComPtr<ID3D12RootSignature> nrcResolveRootSig;
+    ComPtr<ID3D12RootSignature> postprocessRootSig;
+    ComPtr<ID3D12RootSignature> debugViewRootSig;
+
+    // -- Pipeline state objects --
+    ComPtr<ID3D12StateObject> gbufferPso;
+    ComPtr<ID3D12Resource> dev_gbufferShaderIds;
+    D3D12_DISPATCH_RAYS_DESC gbufferDispatchDesc{};
+
+    ComPtr<ID3D12StateObject> ptPso;
+    ComPtr<ID3D12Resource> dev_ptShaderIds;
+    D3D12_DISPATCH_RAYS_DESC ptDispatchDesc{};
+
+    ComPtr<ID3D12PipelineState> collectPso;
+    ComPtr<ID3D12PipelineState> nrcResolvePso;
+
+    ComPtr<ID3D12StateObject> nrcUpdatePso;
+    ComPtr<ID3D12Resource> dev_nrcUpdateShaderIds;
+    D3D12_DISPATCH_RAYS_DESC nrcUpdateDispatchDesc{};
+
+    ComPtr<ID3D12StateObject> nrcQueryPso;
+    ComPtr<ID3D12Resource> dev_nrcQueryShaderIds;
+    D3D12_DISPATCH_RAYS_DESC nrcQueryDispatchDesc{};
+
+    ComPtr<ID3D12PipelineState> postprocessPso;
+    ComPtr<ID3D12PipelineState> debugViewPso;
+
+    // -- GUI shared state --
+    bool needsResize{ false };
+    bool didPathTracingSettingsChange{ false };
+    RingBuffer<FrameTimeMeasurement, 600> frameTimeBuffer{};
+    std::unordered_map<std::string, RtTarget*> debugViewComboMap;
+
+    // -- Screenshot state --
+    ScreenshotRequest screenshotRequest{};
+};
+
+extern RendererState renderState;
 
 } // namespace Renderer

@@ -19,13 +19,13 @@ void configureNrc()
 {
     nrc::ContextSettings cs;
     const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
-    cs.frameDimensions = { renderWidth * (doPathSplitting ? 2u : 1u), renderHeight };
+    cs.frameDimensions = { renderState.renderWidth * (doPathSplitting ? 2u : 1u), renderState.renderHeight };
     cs.trainingDimensions = nrc::ComputeIdealTrainingDimensions(cs.frameDimensions, 0);
     cs.maxPathVertices = SettingsManager::getAsUint("maxPathDepth");
     cs.samplesPerPixel = 1;
     cs.includeDirectLighting = false;
     cs.learnIrradiance = false;
-    if (voxelMode)
+    if (renderState.voxelMode)
     {
         const glm::ivec3 boundsMin = Terrain::getVoxelRenderBoundsMin_WS();
         const glm::ivec3 boundsMax = Terrain::getVoxelRenderBoundsMax_WS();
@@ -34,10 +34,10 @@ void configureNrc()
     }
     else
     {
-        if (scene.hasBounds())
+        if (renderState.scene.hasBounds())
         {
-            const glm::vec3& boundsMin = scene.getBoundsMin_WS();
-            const glm::vec3& boundsMax = scene.getBoundsMax_WS();
+            const glm::vec3& boundsMin = renderState.scene.getBoundsMin_WS();
+            const glm::vec3& boundsMax = renderState.scene.getBoundsMax_WS();
             cs.sceneBoundsMin = { boundsMin.x, boundsMin.y, boundsMin.z };
             cs.sceneBoundsMax = { boundsMax.x, boundsMax.y, boundsMax.z };
         }
@@ -55,12 +55,12 @@ void configureNrc()
                 cs.sceneBoundsMax.x,
                 cs.sceneBoundsMax.y,
                 cs.sceneBoundsMax.z);
-    nrcContext->Configure(cs);
+    renderState.nrcContext->Configure(cs);
 }
 
 void initNrc()
 {
-    if (nrcContext != nullptr)
+    if (renderState.nrcContext != nullptr)
     {
         return;
     }
@@ -71,19 +71,19 @@ void initNrc()
     globalSettings.maxNumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
     nrc::d3d12::Initialize(globalSettings);
 
-    nrc::d3d12::Context::Create(device.Get(), nrcContext);
+    nrc::d3d12::Context::Create(renderState.device.Get(), renderState.nrcContext);
     configureNrc();
 }
 
 void destroyNrc()
 {
-    if (nrcContext == nullptr)
+    if (renderState.nrcContext == nullptr)
     {
         return;
     }
     flush();
-    nrc::d3d12::Context::Destroy(*nrcContext);
-    nrcContext = nullptr;
+    nrc::d3d12::Context::Destroy(*renderState.nrcContext);
+    renderState.nrcContext = nullptr;
     nrc::d3d12::Shutdown();
 }
 

@@ -38,7 +38,7 @@ void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
+    prefs.logLevel = renderState.testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
     if (SettingsManager::getAsBool("verboseLogging"))
     {
@@ -101,10 +101,10 @@ void initDevice()
 
     static ComPtr<IDXGIFactory2> factory2;
     CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory2)));
-    CHECK_HRESULT(factory2.As(&factory));
+    CHECK_HRESULT(factory2.As(&renderState.factory));
 
     ComPtr<IDXGIAdapter1> adapter;
-    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+    for (UINT i = 0; renderState.factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
         DXGI_ADAPTER_DESC1 desc;
         CHECK_HRESULT(adapter->GetDesc1(&desc));
@@ -114,9 +114,9 @@ void initDevice()
             continue;
         }
 
-        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device))))
+        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&renderState.device))))
         {
-            CHECK_SL_RESULT(slSetD3DDevice(device.Get()));
+            CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get()));
 
             sl::AdapterInfo adapterInfo{};
             adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
@@ -134,9 +134,9 @@ void initDevice()
     D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
-    CHECK_HRESULT(device->CreateCommandQueue(&graphicsCmdQueueDesc, IID_PPV_ARGS(&graphicsCmdQueue)));
+    CHECK_HRESULT(renderState.device->CreateCommandQueue(&graphicsCmdQueueDesc, IID_PPV_ARGS(&renderState.graphicsCmdQueue)));
 
-    fence.init();
+    renderState.fence.init();
 }
 
 void initDescriptorHeaps()
@@ -146,17 +146,17 @@ void initDescriptorHeaps()
         .NumDescriptors = SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
-    CHECK_HRESULT(device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&sharedDescriptorHeap)));
-    sharedDescriptorHeap->SetName(L"sharedDescriptorHeap");
+    CHECK_HRESULT(renderState.device->CreateDescriptorHeap(&sharedHeapDesc, IID_PPV_ARGS(&renderState.sharedDescriptorHeap)));
+    renderState.sharedDescriptorHeap->SetName(L"sharedDescriptorHeap");
 
-    sharedDescHeapAlloc.init(device.Get(), sharedDescriptorHeap.Get());
+    sharedDescHeapAlloc.init(renderState.device.Get(), renderState.sharedDescriptorHeap.Get());
 
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
         .NumDescriptors = NUM_FRAMES_IN_FLIGHT,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
     };
-    CHECK_HRESULT(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)));
+    CHECK_HRESULT(renderState.device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&renderState.rtvHeap)));
 }
 
 void initNvapi()
@@ -165,17 +165,17 @@ void initNvapi()
     NvAPI_Unload();
 
     bool serSupported = false;
-    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(renderState.device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
     if (serSupported)
     {
         Logger::log("SER API supported");
-        useSer = true;
-        NvAPI_D3D12_SetNvShaderExtnSlotSpace(device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        renderState.useSer = true;
+        NvAPI_D3D12_SetNvShaderExtnSlotSpace(renderState.device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
     }
     else
     {
         Logger::logWarning("SER API not supported");
-        useSer = false;
+        renderState.useSer = false;
     }
 }
 
@@ -184,26 +184,26 @@ void initSwapChain()
     BOOL _allowTearing = FALSE;
     {
         CHECK_HRESULT(
-            factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &_allowTearing, sizeof(_allowTearing)));
+            renderState.factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &_allowTearing, sizeof(_allowTearing)));
     }
-    allowTearing = bool(_allowTearing);
+    renderState.allowTearing = bool(_allowTearing);
 
-    useVsync = SettingsManager::getAsBool("useVsync");
+    renderState.useVsync = SettingsManager::getAsBool("useVsync");
 
-    Logger::log("Use VSync: %s", useVsync ? "true" : "false");
-    if (!useVsync)
+    Logger::log("Use VSync: %s", renderState.useVsync ? "true" : "false");
+    if (!renderState.useVsync)
     {
-        Logger::log("Allow tearing: %s", allowTearing ? "true" : "false");
+        Logger::log("Allow tearing: %s", renderState.allowTearing ? "true" : "false");
     }
 
-    swapChainFlags = 0;
-    if (useWaitableSwapChain)
+    renderState.swapChainFlags = 0;
+    if (renderState.useWaitableSwapChain)
     {
-        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+        renderState.swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
     }
-    if (allowTearing)
+    if (renderState.allowTearing)
     {
-        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        renderState.swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
 
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
@@ -211,53 +211,53 @@ void initSwapChain()
         .SampleDesc = SAMPLE_DESC_NO_AA,
         .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .Flags = swapChainFlags,
+        .Flags = renderState.swapChainFlags,
     };
     ComPtr<IDXGISwapChain1> swapChain1;
-    CHECK_HRESULT(factory->CreateSwapChainForHwnd(graphicsCmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
-    CHECK_HRESULT(swapChain1.As(&swapChain));
+    CHECK_HRESULT(renderState.factory->CreateSwapChainForHwnd(renderState.graphicsCmdQueue.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain1));
+    CHECK_HRESULT(swapChain1.As(&renderState.swapChain));
 
-    CHECK_HRESULT(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
+    CHECK_HRESULT(renderState.factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
 
-    factory.Reset();
+    renderState.factory.Reset();
 }
 
 void initRtTargets()
 {
-    autoTransitionRtTargets.push_back(&pathTracingTarget);
-    autoTransitionRtTargets.push_back(&diffuseAlbedoTarget);
-    autoTransitionRtTargets.push_back(&specularAlbedoTarget);
-    autoTransitionRtTargets.push_back(&linearDepthTarget);
-    autoTransitionRtTargets.push_back(&normalsAndRoughnessTarget);
-    autoTransitionRtTargets.push_back(&motionTarget);
-    autoTransitionRtTargets.push_back(&specularHitDistanceTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.pathTracingTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.diffuseAlbedoTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.specularAlbedoTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.linearDepthTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.normalsAndRoughnessTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.motionTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.specularHitDistanceTarget);
 
-    autoTransitionRtTargets.push_back(&dlssOutputTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.dlssOutputTarget);
 
-    autoTransitionRtTargets.push_back(&debugTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.debugTarget);
 
-    for (RtTarget* rtTarget : autoTransitionRtTargets)
+    for (RtTarget* rtTarget : renderState.autoTransitionRtTargets)
     {
-        allRtTargets.push_back(rtTarget);
+        renderState.allRtTargets.push_back(rtTarget);
     }
 
     // nrcDebugTarget is added after the copy so it's in autoTransitionRtTargets but NOT in
     // allRtTargets — it has custom dimensions and is handled separately in resize().
-    autoTransitionRtTargets.push_back(&nrcDebugTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.nrcDebugTarget);
 
     resize();
 }
 
 void initCommand()
 {
-    for (auto& frame : frameCtxs)
+    for (auto& frame : renderState.frameCtxs)
     {
-        CHECK_HRESULT(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc)));
+        CHECK_HRESULT(renderState.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.cmdAlloc)));
     }
 
-    CHECK_HRESULT(device->CreateCommandList1(
-        0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&cmdList)));
-    cmdList->SetName(L"main cmdList");
+    CHECK_HRESULT(renderState.device->CreateCommandList1(
+        0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&renderState.cmdList)));
+    renderState.cmdList->SetName(L"main cmdList");
 }
 
 void initConstantParams()
@@ -267,7 +267,7 @@ void initConstantParams()
     std::uniform_int_distribution<uint32_t> dist(0, std::numeric_limits<uint32_t>::max());
     const uint32_t rngSeed = dist(gen);
 
-    for (auto& frame : frameCtxs)
+    for (auto& frame : renderState.frameCtxs)
     {
         auto& constantParams = frame.paramBlockManager.constantParams;
         constantParams->rngSeed = rngSeed;

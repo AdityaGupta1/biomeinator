@@ -22,8 +22,8 @@ namespace Renderer
 
 void queueScreenshot(const bool useTestOutputPath)
 {
-    screenshotRequest.active = true;
-    screenshotRequest.useTestOutputPath = useTestOutputPath;
+    renderState.screenshotRequest.active = true;
+    renderState.screenshotRequest.useTestOutputPath = useTestOutputPath;
 }
 
 void captureQueuedScreenshot()
@@ -33,18 +33,18 @@ void captureQueuedScreenshot()
     const uint32_t width = rect.right - rect.left;
     const uint32_t height = rect.bottom - rect.top;
 
-    screenshotRequest.width = width;
-    screenshotRequest.height = height;
+    renderState.screenshotRequest.width = width;
+    renderState.screenshotRequest.height = height;
 
-    screenshotRequest.rowPitchBytes = width * 4;
-    screenshotRequest.rowPitchBytesAligned =
-        MathUtil::roundUp(screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-    const uint32_t readbackSizeBytes = screenshotRequest.rowPitchBytesAligned * height;
+    renderState.screenshotRequest.rowPitchBytes = width * 4;
+    renderState.screenshotRequest.rowPitchBytesAligned =
+        MathUtil::roundUp(renderState.screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+    const uint32_t readbackSizeBytes = renderState.screenshotRequest.rowPitchBytesAligned * height;
 
-    screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
+    renderState.screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
 
     ComPtr<ID3D12Resource> backBuffer;
-    CHECK_HRESULT(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer)));
+    CHECK_HRESULT(renderState.swapChain->GetBuffer(renderState.swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer)));
 
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {
         .pResource = backBuffer.Get(),
@@ -53,7 +53,7 @@ void captureQueuedScreenshot()
     };
 
     D3D12_TEXTURE_COPY_LOCATION destLocation = {};
-    destLocation.pResource = screenshotRequest.readbackBuffer.Get();
+    destLocation.pResource = renderState.screenshotRequest.readbackBuffer.Get();
     destLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     destLocation.PlacedFootprint = {
         .Offset = 0,
@@ -62,34 +62,34 @@ void captureQueuedScreenshot()
             .Width = width,
             .Height = height,
             .Depth = 1,
-            .RowPitch = screenshotRequest.rowPitchBytesAligned,
+            .RowPitch = renderState.screenshotRequest.rowPitchBytesAligned,
         },
     };
 
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
+        renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    renderState.cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
     BufferHelper::stateTransitionResourceBarrier(
-        cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 }
 
 void finalizeQueuedScreenshot()
 {
     flush();
 
-    std::vector<uint8_t> pixels(screenshotRequest.width * screenshotRequest.height * 4);
+    std::vector<uint8_t> pixels(renderState.screenshotRequest.width * renderState.screenshotRequest.height * 4);
     uint8_t* mapped = nullptr;
-    screenshotRequest.readbackBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
-    for (uint32_t row = 0; row < screenshotRequest.height; ++row)
+    renderState.screenshotRequest.readbackBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+    for (uint32_t row = 0; row < renderState.screenshotRequest.height; ++row)
     {
-        memcpy(pixels.data() + screenshotRequest.rowPitchBytes * row,
-               mapped + screenshotRequest.rowPitchBytesAligned * row,
-               screenshotRequest.rowPitchBytes);
+        memcpy(pixels.data() + renderState.screenshotRequest.rowPitchBytes * row,
+               mapped + renderState.screenshotRequest.rowPitchBytesAligned * row,
+               renderState.screenshotRequest.rowPitchBytes);
     }
-    screenshotRequest.readbackBuffer->Unmap(0, nullptr);
+    renderState.screenshotRequest.readbackBuffer->Unmap(0, nullptr);
 
     std::filesystem::path path;
-    if (screenshotRequest.useTestOutputPath)
+    if (renderState.screenshotRequest.useTestOutputPath)
     {
         path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
     }
@@ -121,15 +121,15 @@ void finalizeQueuedScreenshot()
     std::filesystem::create_directories(path.parent_path());
 
     stbi_write_png(path.string().c_str(),
-                   screenshotRequest.width,
-                   screenshotRequest.height,
+                   renderState.screenshotRequest.width,
+                   renderState.screenshotRequest.height,
                    4,
                    pixels.data(),
-                   screenshotRequest.width * 4);
+                   renderState.screenshotRequest.width * 4);
 
     Logger::log("Saved screenshot to %s", path.generic_string().c_str());
 
-    screenshotRequest = ScreenshotRequest();
+    renderState.screenshotRequest = ScreenshotRequest();
 }
 
 } // namespace Renderer
