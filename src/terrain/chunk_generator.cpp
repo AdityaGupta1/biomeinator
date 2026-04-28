@@ -28,7 +28,14 @@ static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
-static FN::SmartNode<FN::Generator> fnCaves;
+
+inline constexpr float caveWorleyBoundFraction = 0.4f;
+inline constexpr float caveSimplexBoundFraction = 0.6f;
+// caves are fully suppressed by altitude squash well before this height
+inline constexpr int caveAbsoluteMaxY = 320;
+
+static FN::SmartNode<FN::Generator> fnCavesWorley;
+static FN::SmartNode<FN::Generator> fnCavesSimplex;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -138,7 +145,23 @@ void init()
         fnAdd->SetLHS(fnDomainWarp);
         fnAdd->SetRHS(fnSimplex);
 
-        fnCaves = fnAdd;
+        fnCavesWorley = fnAdd;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetScale(100.f);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(0.8f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
+        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
+        fnDomainWarp->SetSource(fnFractal);
+        fnDomainWarp->SetSeedOffset(509920112);
+        fnDomainWarp->SetWarpAmplitude(20.f);
+
+        fnCavesSimplex = fnDomainWarp;
     }
 }
 
@@ -196,6 +219,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
+    float terrainBaseHeightMin = std::numeric_limits<float>::max();
+    float terrainBaseHeightMax = std::numeric_limits<float>::lowest();
 
     std::set<Biome> biomeSet;
 
@@ -236,6 +261,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
+            terrainBaseHeightMin = std::min(terrainBaseHeightMin, terrainBaseHeight);
+            terrainBaseHeightMax = std::max(terrainBaseHeightMax, terrainBaseHeight);
 
             const int thisColumnTerrainMinY = static_cast<int>(std::floor(terrainBaseHeight - (surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier))));
             const int thisColumnTerrainMaxY = static_cast<int>(std::ceil(terrainBaseHeight + (surfaceValBound / terrainSurfaceMultiplier)));
@@ -249,16 +276,28 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     ASSERT(terrainNoiseMinY < terrainNoiseMaxY, "terrain noise range is empty or inverted");
 
     const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
+
+    // worley is read for y < caveSimplexBound, so max needed y across chunk is terrainBaseHeightMax * caveSimplexBoundFraction
+    // simplex is read for y >= caveWorleyBound, so min needed y across chunk is terrainBaseHeightMin * caveWorleyBoundFraction
+    const int caveNoiseMaxY = std::min(terrainNoiseMaxY, caveAbsoluteMaxY);
+    const uint caveWorleyNoiseHeight = static_cast<uint>(std::min(caveNoiseMaxY, static_cast<int>(std::ceil(terrainBaseHeightMax * caveSimplexBoundFraction)) + 2));
+    ASSERT(caveWorleyNoiseHeight > 0 && caveWorleyNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave worley noise height out of range");
+    const int caveSimplexNoiseMinY = std::max(0, static_cast<int>(std::floor(terrainBaseHeightMin * caveWorleyBoundFraction)) - 2);
+    const uint caveSimplexNoiseHeight = static_cast<uint>(caveNoiseMaxY - caveSimplexNoiseMinY);
+    ASSERT(caveSimplexNoiseHeight > 0 && caveSimplexNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave simplex noise height out of range");
+
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
-    constexpr uint maxCaveHeight = 160;
-    float* caveNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * maxCaveHeight);
+    float* caveNoiseWorley = threadMemoryAlloc.request<float>(chunkSizeXZSquare * caveWorleyNoiseHeight);
+    float* caveNoiseSimplex = threadMemoryAlloc.request<float>(chunkSizeXZSquare * caveSimplexNoiseHeight);
     fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight, terrainNoiseMinY);
-    fillNoiseArray3D(caveNoise, fnCaves, chunkPosBlocksXZ_WS, maxCaveHeight);
+    fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, chunkPosBlocksXZ_WS, caveWorleyNoiseHeight);
+    fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, chunkPosBlocksXZ_WS, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
-    const uint caveNoiseSize = chunkSizeXZSquare * maxCaveHeight;
+    const uint caveWorleyNoiseSize = chunkSizeXZSquare * caveWorleyNoiseHeight;
+    const uint caveSimplexNoiseSize = chunkSizeXZSquare * caveSimplexNoiseHeight;
     const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, seaLevel));
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -274,12 +313,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const int baseTerrainNoiseIdx = static_cast<int>(terrainNoiseHeight * columnIdx) - terrainNoiseMinY;
-            const uint baseCaveNoiseIdx = maxCaveHeight * columnIdx;
+            const uint baseCaveWorleyNoiseIdx = caveWorleyNoiseHeight * columnIdx;
+            const uint baseCaveSimplexNoiseIdx = caveSimplexNoiseHeight * columnIdx;
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
             const float terrainBaseHeight = terrainBaseHeightArray[columnIdx];
             const float terrainSurfaceMultiplier = terrainSurfaceMultiplierArray[columnIdx];
+
+            const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
+            const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
 
             uint topBlockY = 0;
             bool wasSolid = true;
@@ -315,16 +358,49 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 bool isCave = false;
                 if (isInTerrain)
                 {
-                    if (y < maxCaveHeight)
+                    if (y < static_cast<uint>(caveNoiseMaxY))
                     {
-                        const uint caveNoiseIdx = baseCaveNoiseIdx + y;
-                        ASSERT(caveNoiseIdx < caveNoiseSize, "cave noise index out of bounds");
+                        float caveNoiseVal;
+                        if (y < caveWorleyBound)
+                        {
+                            const uint caveWorleyNoiseIdx = baseCaveWorleyNoiseIdx + y;
+                            ASSERT(caveWorleyNoiseIdx < caveWorleyNoiseSize, "cave worley noise index out of bounds");
+                            caveNoiseVal = caveNoiseWorley[caveWorleyNoiseIdx];
+                        }
+                        else if (y < caveSimplexBound)
+                        {
+                            const uint caveWorleyNoiseIdx = baseCaveWorleyNoiseIdx + y;
+                            ASSERT(caveWorleyNoiseIdx < caveWorleyNoiseSize, "cave worley noise index out of bounds");
+                            const float caveNoiseWorleyVal = caveNoiseWorley[caveWorleyNoiseIdx];
 
-                        const float caveSurfaceMixFactor =
-                            smoothstep<float>(-8, 24, y) * smoothstep<float>(110, 48, y);
-                        const float caveSurfaceVal = mix(-0.1f, 0.6f, caveSurfaceMixFactor);
-                        //isCave = caveNoise[baseCaveNoiseIdx + y] < caveSurfaceVal;
-                        isCave = false; // temporary until caves look less ugly (see #241)
+                            const uint caveSimplexNoiseIdx = baseCaveSimplexNoiseIdx + (y - caveSimplexNoiseMinY);
+                            ASSERT(caveSimplexNoiseIdx < caveSimplexNoiseSize, "cave simplex noise index out of bounds");
+                            const float caveNoiseSimplexVal = caveNoiseSimplex[caveSimplexNoiseIdx];
+
+                            const float halfRange = (caveSimplexBound - caveWorleyBound) * 0.5f;
+                            const float midpoint = caveWorleyBound + halfRange;
+                            const float caveNoiseMinVal = glm::min(caveNoiseWorleyVal, caveNoiseSimplexVal);
+                            if (y < midpoint)
+                            {
+                                const float t = (y - caveWorleyBound) / halfRange;
+                                caveNoiseVal = glm::mix(caveNoiseWorleyVal, caveNoiseMinVal, glm::smoothstep(0.0f, 1.0f, t));
+                            }
+                            else
+                            {
+                                const float t = (y - midpoint) / halfRange;
+                                caveNoiseVal = glm::mix(caveNoiseMinVal, caveNoiseSimplexVal, glm::smoothstep(0.0f, 1.0f, t));
+                            }
+                        }
+                        else
+                        {
+                            const uint caveSimplexNoiseIdx = baseCaveSimplexNoiseIdx + (y - caveSimplexNoiseMinY);
+                            ASSERT(caveSimplexNoiseIdx < caveSimplexNoiseSize, "cave simplex noise index out of bounds");
+                            caveNoiseVal = caveNoiseSimplex[caveSimplexNoiseIdx];
+                        }
+
+                        float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
+                        caveSurfaceVal -= glm::smoothstep(240.0f, 320.0f, static_cast<float>(y)) * 0.8f;
+                        isCave = caveNoiseVal < caveSurfaceVal;
                     }
 
                     if (!isCave)
@@ -332,7 +408,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = rng.nextFloat() < 0.02f ? Block::LAMP : Block::STONE;
+                        block = rng.nextFloat() < 0.04f ? Block::LAMP : Block::STONE;
                     }
                 }
                 else if (y <= seaLevel)

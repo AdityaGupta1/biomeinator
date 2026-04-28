@@ -25,11 +25,16 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
     }
 
     rndSample *= this->totalWeight;
-    int entryIdx = -1;
+    int entryIdx = 0;
     const int maxEntryIdx = this->entries.size() - 1;
-    while (rndSample > 0.f && entryIdx < maxEntryIdx)
+    while (entryIdx < maxEntryIdx)
     {
-        rndSample -= this->entries[++entryIdx].weight;
+        rndSample -= this->entries[entryIdx].weight;
+        if (rndSample < 0.f)
+        {
+            break;
+        }
+        entryIdx++;
     }
 
     ASSERT(entryIdx >= 0 && entryIdx < this->entries.size());
