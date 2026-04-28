@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-04-27_
 
 # Chunk Generator
 
@@ -8,7 +8,13 @@ _Last edited: 2026-04-26_
 
 Six noise graphs, all using FastNoise2's node-graph API. Four are 2D (biome axes: temperature, humidity, peak, inland) and two are 3D (terrain surface, caves). A random `noiseOffsetXZ` derived from the world seed shifts all sample positions so different seeds produce different terrain even though node seed offsets are hardcoded.
 
-Caves are generated but currently disabled (`isCave = false`) pending visual improvements (see #241).
+## Cave Noise Design
+
+Two cave noise sources: **worley** (cellular, produces rounded tunnels) below `0.4 * terrainBaseHeight`, **simplex** (spaghetti-style) above `0.6 * terrainBaseHeight`. Between those bounds, blends through `min(worley, simplex)` at the midpoint — this avoids abrupt transitions and lets the more open of the two dominate in the overlap zone.
+
+Two mechanisms suppress caves near the surface:
+- **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
+- **Altitude squash**: above y=256 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
 
 ## Heightfield Design
 

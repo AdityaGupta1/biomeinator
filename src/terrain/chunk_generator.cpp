@@ -369,7 +369,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         caveNoiseVal = caveNoiseSimplexVal;
                     }
 
-                    const float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
+                    float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
+                    caveSurfaceVal -= glm::smoothstep(240.0f, 320.0f, static_cast<float>(y)) * 0.5f;
                     isCave = caveNoiseVal < caveSurfaceVal;
 
                     if (!isCave)
