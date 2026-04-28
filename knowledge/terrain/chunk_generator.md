@@ -10,11 +10,13 @@ Six noise graphs, all using FastNoise2's node-graph API. Four are 2D (biome axes
 
 ## Cave Noise Design
 
-Two cave noise sources: **worley** (cellular, produces rounded tunnels) below `0.4 * terrainBaseHeight`, **simplex** (spaghetti-style) above `0.6 * terrainBaseHeight`. Between those bounds, blends through `min(worley, simplex)` at the midpoint — this avoids abrupt transitions and lets the more open of the two dominate in the overlap zone.
+Two cave noise sources: **worley** (cellular, produces rounded tunnels) below `caveWorleyBoundFraction * terrainBaseHeight`, **simplex** (spaghetti-style) above `caveSimplexBoundFraction * terrainBaseHeight`. Between those bounds, blends through `min(worley, simplex)` at the midpoint — this avoids abrupt transitions and lets the more open of the two dominate in the overlap zone.
+
+Each noise source is only generated for its relevant y-range across the chunk (worley up to `max(terrainBaseHeight) * caveSimplexBoundFraction + 2`, simplex from `min(terrainBaseHeight) * caveWorleyBoundFraction - 2`), and both are capped at `caveAbsoluteMaxY`. This avoids generating noise where it will never be read.
 
 Two mechanisms suppress caves near the surface:
 - **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
-- **Altitude squash**: above y=256 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
+- **Altitude squash**: above y=240 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
 
 ## Heightfield Design
 
