@@ -16,3 +16,6 @@
 [submodule "external/NRC"]
 	path = external/NRC
 	url = https://github.com/NVIDIA-RTX/NRC.git
+[submodule "external/lz4"]
+	path = external/lz4
+	url = https://github.com/lz4/lz4.git

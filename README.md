@@ -48,6 +48,7 @@ This project uses various third-party libraries:
 - [NRC](https://github.com/NVIDIA-RTX/NRC) - NVIDIA RTX SDKs License
 - [GLM](https://github.com/g-truc/glm/tree/master) - MIT
 - [FastNoise2](https://github.com/Auburn/FastNoise2) - MIT
+- [LZ4](https://github.com/lz4/lz4) - BSD 2-Clause
 
 Third-party license text files are available in their respective folders in `external/`. Licenses without specific folders are in `external/_licenses`.
 

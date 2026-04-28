@@ -143,6 +143,10 @@ assign_source_group("generated_shaders" "${GENERATED_SHADER_HEADERS_DIR}" "${COM
 
 set(EXT "${CMAKE_SOURCE_DIR}/external")
 
+set(LZ4_BUILD_CLI OFF CACHE BOOL "Build lz4 CLI" FORCE)
+set(LZ4_BUILD_LEGACY_LZ4C OFF CACHE BOOL "Build lz4c CLI" FORCE)
+add_subdirectory("${EXT}/lz4/build/cmake" lz4)
+
 set(FASTNOISE2_TOOLS OFF CACHE BOOL "Build FastNoise2 tools (Node Editor)" FORCE)
 set(FASTNOISE2_TESTS OFF CACHE BOOL "Build FastNoise2 tests" FORCE)
 set(FASTNOISE2_UTILITY OFF CACHE BOOL "Build FastNoise2 utility tools" FORCE)
@@ -196,7 +200,7 @@ target_link_directories(Biomeinator PRIVATE
     "${EXT}/NRC/Lib"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 NRC_D3D12 glm::glm-header-only FastNoise)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 NRC_D3D12 glm::glm-header-only FastNoise lz4_static)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
