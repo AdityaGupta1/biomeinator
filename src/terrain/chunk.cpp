@@ -831,6 +831,21 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
     return true;
 }
 
+const std::vector<Block>& Chunk::getBlocks() const
+{
+    return this->blocks;
+}
+
+const std::vector<Biome>& Chunk::getBiomes() const
+{
+    return this->biomes;
+}
+
+const std::vector<glm::uvec3>& Chunk::getSegments() const
+{
+    return this->segmentsToGenerate;
+}
+
 // y changes fastest, then x, then z
 //
 // for loops should be written like this:

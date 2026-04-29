@@ -158,6 +158,10 @@ public:
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
 
+    const std::vector<Block>& getBlocks() const;
+    const std::vector<Biome>& getBiomes() const;
+    const std::vector<glm::uvec3>& getSegments() const;
+
     void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<glm::uvec3>&& segments, ChunkState state);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);

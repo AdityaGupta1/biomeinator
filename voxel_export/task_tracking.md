@@ -16,12 +16,12 @@
 - [x] window_manager.cpp: Ctrl+U keybind calls Terrain::exportWorld()
 - [x] Verify: build succeeds, --world=foo forces voxelMode
 
-## Step 3: Export
-- [ ] terrain.cpp: remove temporary Logger::log calls from exportWorld()/importWorld() stubs
-- [ ] terrain.cpp: implement exportWorld() — directory creation, timestamp naming
-- [ ] terrain.cpp: implement region file writing with LZ4 compression
-- [ ] terrain.cpp: implement scene.json writing
-- [ ] Verify: Ctrl+E in voxel mode produces valid export folder
+## Step 3: Export ✅
+- [x] chunk.h/cpp: add getBlocks(), getBiomes(), getSegments() const-ref getters
+- [x] util/file_util.h/cpp: extract getDocumentsDir() + getTimestampString() helpers
+- [x] renderer_screenshot.cpp: refactored to use FileUtil helpers
+- [x] terrain.cpp: implement exportWorld() — directory creation, region binary writing w/ LZ4, scene.json
+- [x] Verify: build succeeds, export produces valid region .bin files + scene.json
 
 ## Step 4: Import
 - [ ] terrain.cpp: implement importWorld() — JSON parsing, region file reading
