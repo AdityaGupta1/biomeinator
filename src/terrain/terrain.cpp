@@ -13,6 +13,7 @@
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 #include "settings_manager.h"
+#include "logger.h"
 #include "structure/structure.h"
 #include "util/glm_util.h"
 #include "util/rng.h"
@@ -115,6 +116,10 @@ static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 static bool cameraUnderwater = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
+
+static uint32_t expectedBlasBuildChunks{ 0 };
+static uint32_t completedBlasBuildChunks{ 0 };
+static bool worldImportActive{ false };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
@@ -416,6 +421,25 @@ void update(ToFreeList& toFreeList)
     {
         chunk->destroyInstances(toFreeList);
     }
+}
+
+void exportWorld()
+{
+    Logger::log("exportWorld() called");
+}
+
+void importWorld()
+{
+    Logger::log("importWorld() called");
+}
+
+bool isWorldFullyLoaded()
+{
+    if (!worldImportActive)
+    {
+        return true;
+    }
+    return completedBlasBuildChunks >= expectedBlasBuildChunks;
 }
 
 void shutdown()

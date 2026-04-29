@@ -1043,6 +1043,11 @@ const Camera& getCamera()
     return renderState.camera;
 }
 
+void restoreCamera(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
+{
+    renderState.camera.restoreState(posInt, posFloat, phi, theta);
+}
+
 const Scene& getScene()
 {
     return renderState.scene;

@@ -1,22 +1,23 @@
 # World Export/Import — Task Tracking
 
-## Step 1: Accessor scaffolding
-- [ ] camera.h: add getPhi(), getTheta(), restoreState() declarations
-- [ ] camera.cpp: implement restoreState()
-- [ ] chunk.h: add loadSerializedData() declaration
-- [ ] chunk.cpp: implement loadSerializedData()
-- [ ] renderer.h: add restoreCamera() declaration
-- [ ] renderer.cpp: implement restoreCamera() — wraps camera.restoreState()
-- [ ] Verify: build succeeds
+## Step 1: Accessor scaffolding ✅
+- [x] camera.h: add getPhi(), getTheta(), restoreState() declarations
+- [x] camera.cpp: implement restoreState()
+- [x] chunk.h: add loadSerializedData() declaration
+- [x] chunk.cpp: implement loadSerializedData()
+- [x] renderer.h: add restoreCamera() declaration
+- [x] renderer.cpp: implement restoreCamera() — wraps camera.restoreState()
+- [x] Verify: build succeeds
 
-## Step 2: Settings and keybind
-- [ ] settings_manager.cpp: register "world" option + voxelMode override
-- [ ] terrain.h: declare exportWorld(), importWorld(), isWorldFullyLoaded()
-- [ ] terrain.cpp: add empty stubs + BLAS tracking statics
-- [ ] window_manager.cpp: Ctrl+E keybind calls Terrain::exportWorld()
-- [ ] Verify: build succeeds, --world=foo forces voxelMode
+## Step 2: Settings and keybind ✅
+- [x] settings_manager.cpp: register "world" option + voxelMode override
+- [x] terrain.h: declare exportWorld(), importWorld(), isWorldFullyLoaded()
+- [x] terrain.cpp: add empty stubs + BLAS tracking statics
+- [x] window_manager.cpp: Ctrl+U keybind calls Terrain::exportWorld()
+- [x] Verify: build succeeds, --world=foo forces voxelMode
 
 ## Step 3: Export
+- [ ] terrain.cpp: remove temporary Logger::log calls from exportWorld()/importWorld() stubs
 - [ ] terrain.cpp: implement exportWorld() — directory creation, timestamp naming
 - [ ] terrain.cpp: implement region file writing with LZ4 compression
 - [ ] terrain.cpp: implement scene.json writing

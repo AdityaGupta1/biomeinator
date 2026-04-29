@@ -6,6 +6,7 @@
 #include "renderer.h"
 #include "settings_manager.h"
 #include "scene/gltf_loader.h"
+#include "terrain/terrain.h"
 
 #include <commdlg.h>
 #include <locale>
@@ -155,6 +156,12 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
                     const std::string filePathStrClean = std::string(filePathStr.c_str());
                     Renderer::loadScene(filePathStrClean);
                 }
+            }
+            break;
+        case 'U':
+            if (ctrlHeld && SettingsManager::getAsBool("voxelMode"))
+            {
+                Terrain::exportWorld();
             }
             break;
         case 'P':

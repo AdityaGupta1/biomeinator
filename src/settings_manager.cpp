@@ -50,6 +50,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
+    ADD_OPTION("world", "World to import", std::string, "");
 
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
     ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
@@ -118,6 +119,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
+    COPY_SETTING("world", std::string);
 
     COPY_SETTING("nrcEnabled", bool);
     COPY_SETTING("nrcResolveMode", uint32_t);
@@ -164,6 +166,11 @@ void parseArgs(const int argc, const char* const* argv)
     }
 
     worldSeed = getAsUint("worldSeed");
+
+    if (!getAsString("world").empty())
+    {
+        settings["voxelMode"] = true;
+    }
 }
 
 bool getAsBool(const std::string& name)

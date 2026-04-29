@@ -779,6 +779,14 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
+void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<glm::uvec3>&& segments, ChunkState state)
+{
+    this->blocks = std::move(blocks);
+    this->biomes = std::move(biomes);
+    this->segmentsToGenerate = std::move(segments);
+    this->setState(state);
+}
+
 bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);

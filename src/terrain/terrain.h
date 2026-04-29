@@ -22,6 +22,11 @@ void setDirty();
 void update(ToFreeList& toFreeList);
 
 bool isCameraUnderwater();
+
+void exportWorld();
+void importWorld();
+bool isWorldFullyLoaded();
+
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();
 
