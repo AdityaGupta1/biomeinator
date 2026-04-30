@@ -24,7 +24,7 @@ struct Structure
     glm::ivec3 pos_WS;
 };
 
-inline constexpr uint32_t structureMaxChunkRadius = 1;
+inline constexpr uint32_t structureMaxChunkRadius = 2;
 
 struct StructureBounds
 {
