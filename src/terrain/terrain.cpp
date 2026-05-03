@@ -453,7 +453,10 @@ void exportWorld()
     uint32_t totalChunksExported = 0;
     uint32_t totalRegionsExported = 0;
 
-    const int blockBiomePayloadSize = static_cast<int>(numChunkBlocks * sizeof(uint16_t) + chunkSizeXZSquare * sizeof(uint8_t));
+    static_assert(sizeof(Block) == sizeof(uint16_t), "Export format assumes 2-byte Block");
+    static_assert(sizeof(Biome) == sizeof(uint8_t), "Export format assumes 1-byte Biome");
+
+    const int blockBiomePayloadSize = static_cast<int>(numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome));
     const int maxCompressedSize = LZ4_compressBound(blockBiomePayloadSize);
     std::vector<char> compressBuffer(maxCompressedSize);
     std::vector<char> blockBiomeBuffer(blockBiomePayloadSize);
@@ -494,16 +497,7 @@ void exportWorld()
             continue;
         }
 
-        char regionFileName[64];
-        sprintf_s(regionFileName, "region_%d_%d.bin", regionPos.x, regionPos.y);
-        const std::filesystem::path regionFilePath = exportDir / regionFileName;
-
-        std::ofstream file(regionFilePath, std::ios::binary);
-        if (!file)
-        {
-            Logger::logError("exportWorld: failed to create %s", regionFilePath.generic_string().c_str());
-            continue;
-        }
+        std::vector<char> regionBuffer;
 
         const uint32_t magic = 0x42494F4D;
         const uint16_t version = 3;
@@ -511,11 +505,17 @@ void exportWorld()
         const int32_t regionZ = regionPos.y;
         const uint16_t numPopulatedChunks = static_cast<uint16_t>(populatedChunks.size());
 
-        file.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-        file.write(reinterpret_cast<const char*>(&version), sizeof(version));
-        file.write(reinterpret_cast<const char*>(&regionX), sizeof(regionX));
-        file.write(reinterpret_cast<const char*>(&regionZ), sizeof(regionZ));
-        file.write(reinterpret_cast<const char*>(&numPopulatedChunks), sizeof(numPopulatedChunks));
+        const auto appendBytes = [&regionBuffer](const void* src, size_t bytes)
+        {
+            const char* p = static_cast<const char*>(src);
+            regionBuffer.insert(regionBuffer.end(), p, p + bytes);
+        };
+
+        appendBytes(&magic, sizeof(magic));
+        appendBytes(&version, sizeof(version));
+        appendBytes(&regionX, sizeof(regionX));
+        appendBytes(&regionZ, sizeof(regionZ));
+        appendBytes(&numPopulatedChunks, sizeof(numPopulatedChunks));
 
         for (const ChunkEntry& entry : populatedChunks)
         {
@@ -527,33 +527,30 @@ void exportWorld()
                 : ChunkState::HAS_TERRAIN;
             const uint8_t importLevelValue = static_cast<uint8_t>(importLevel);
 
-            uint32_t compressedBlocksSize = 0;
+            const std::vector<Block>& blocks = chunk.getBlocks();
+            const std::vector<Biome>& biomes = chunk.getBiomes();
+
+            memcpy(blockBiomeBuffer.data(),
+                   blocks.data(),
+                   numChunkBlocks * sizeof(Block));
+            memcpy(blockBiomeBuffer.data() + numChunkBlocks * sizeof(Block),
+                   biomes.data(),
+                   chunkSizeXZSquare * sizeof(Biome));
+
+            const int compressedBlocks = LZ4_compress_default(
+                blockBiomeBuffer.data(),
+                compressBuffer.data(),
+                blockBiomePayloadSize,
+                maxCompressedSize);
+
+            if (compressedBlocks <= 0)
             {
-                const std::vector<Block>& blocks = chunk.getBlocks();
-                const std::vector<Biome>& biomes = chunk.getBiomes();
-
-                memcpy(blockBiomeBuffer.data(),
-                       blocks.data(),
-                       numChunkBlocks * sizeof(uint16_t));
-                memcpy(blockBiomeBuffer.data() + numChunkBlocks * sizeof(uint16_t),
-                       biomes.data(),
-                       chunkSizeXZSquare * sizeof(uint8_t));
-
-                const int compressed = LZ4_compress_default(
-                    blockBiomeBuffer.data(),
-                    compressBuffer.data(),
-                    blockBiomePayloadSize,
-                    maxCompressedSize);
-
-                if (compressed <= 0)
-                {
-                    Logger::logError("exportWorld: LZ4 block compression failed for chunk idx %u in region (%d, %d)",
-                                     entry.localIdx, regionPos.x, regionPos.y);
-                    continue;
-                }
-
-                compressedBlocksSize = static_cast<uint32_t>(compressed);
+                Logger::logError("exportWorld: LZ4 block compression failed for chunk idx %u in region (%d, %d); aborting export",
+                                 entry.localIdx, regionPos.x, regionPos.y);
+                return;
             }
+
+            const uint32_t compressedBlocksSize = static_cast<uint32_t>(compressedBlocks);
 
             uint32_t compressedStructuresSize = 0;
             std::vector<char> compressedStructuresData;
@@ -589,27 +586,40 @@ void exportWorld()
 
                 if (compressed <= 0)
                 {
-                    Logger::logError("exportWorld: LZ4 structure compression failed for chunk idx %u in region (%d, %d)",
+                    Logger::logError("exportWorld: LZ4 structure compression failed for chunk idx %u in region (%d, %d); aborting export",
                                      entry.localIdx, regionPos.x, regionPos.y);
-                    continue;
+                    return;
                 }
 
                 compressedStructuresSize = static_cast<uint32_t>(compressed);
             }
 
-            file.write(reinterpret_cast<const char*>(&entry.localIdx), sizeof(uint16_t));
-            file.write(reinterpret_cast<const char*>(&importLevelValue), sizeof(uint8_t));
-            file.write(reinterpret_cast<const char*>(&compressedBlocksSize), sizeof(uint32_t));
-            file.write(reinterpret_cast<const char*>(&compressedStructuresSize), sizeof(uint32_t));
+            appendBytes(&entry.localIdx, sizeof(uint16_t));
+            appendBytes(&importLevelValue, sizeof(uint8_t));
+            appendBytes(&compressedBlocksSize, sizeof(uint32_t));
+            appendBytes(&compressedStructuresSize, sizeof(uint32_t));
 
-            file.write(compressBuffer.data(), compressedBlocksSize);
+            appendBytes(compressBuffer.data(), compressedBlocksSize);
             if (compressedStructuresSize > 0)
             {
-                file.write(compressedStructuresData.data(), compressedStructuresSize);
+                appendBytes(compressedStructuresData.data(), compressedStructuresSize);
             }
 
             ++totalChunksExported;
         }
+
+        char regionFileName[64];
+        sprintf_s(regionFileName, "region_%d_%d.bin", regionPos.x, regionPos.y);
+        const std::filesystem::path regionFilePath = exportDir / regionFileName;
+
+        std::ofstream file(regionFilePath, std::ios::binary);
+        if (!file)
+        {
+            Logger::logError("exportWorld: failed to create %s; aborting export",
+                             regionFilePath.generic_string().c_str());
+            return;
+        }
+        file.write(regionBuffer.data(), regionBuffer.size());
 
         regionPositions.push_back(regionPos);
         ++totalRegionsExported;

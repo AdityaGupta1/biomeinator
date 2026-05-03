@@ -10,6 +10,7 @@
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
+#include "debug.h"
 #include "settings_manager.h"
 #include "util/rng.h"
 
@@ -150,7 +151,7 @@ void Chunk::checkStructureNeighbors()
 
 void Chunk::fillStructuresAndDecorators()
 {
-    for (Chunk* structureNeighbor : this->structureNeighbors)
+    for (const Chunk* structureNeighbor : this->structureNeighbors)
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
@@ -781,6 +782,10 @@ bool Chunk::advanceState(ChunkState newState)
 
 void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures, ChunkState importLevel)
 {
+    ASSERT(blocks.size() == numChunkBlocks);
+    ASSERT(biomes.size() == chunkSizeXZSquare);
+    ASSERT(importLevel == ChunkState::HAS_TERRAIN || importLevel == ChunkState::HAS_ALL_BLOCKS);
+
     this->blocks = std::move(blocks);
     this->biomes = std::move(biomes);
     this->structures = std::move(structures);

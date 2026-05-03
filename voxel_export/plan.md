@@ -123,11 +123,11 @@ Add getters/setters needed by serialization code. No behavioral changes — pure
 ### Step 2: Settings and keybind
 
 **settings_manager.cpp:** Register `--world` option (string, default ""). After COPY_SETTING block, if world is non-empty, force `voxelMode = true`.
-**window_manager.cpp:** Ctrl+E in `onKeyDown()` calls `Terrain::exportWorld()` (stub for now).
+**window_manager.cpp:** Ctrl+U in `onKeyDown()` calls `Terrain::exportWorld()` (stub for now).
 **terrain.h:** Declare `exportWorld()`, `importWorld()`, `isWorldFullyLoaded()`.
 **terrain.cpp:** Add empty stubs + BLAS tracking statics.
 
-**Verify:** Builds. `--world=foo` forces voxelMode on. Ctrl+E in voxel mode calls stub (log message).
+**Verify:** Builds. `--world=foo` forces voxelMode on. Ctrl+U in voxel mode calls stub (log message).
 
 ### Step 3: Export
 

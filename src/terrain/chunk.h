@@ -99,7 +99,7 @@ private:
     std::vector<Biome> biomes{};
 
     std::vector<Structure> structures{};
-    std::vector<Chunk*> structureNeighbors{};
+    std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
 
     std::array<Chunk*, 4> neighbors{};

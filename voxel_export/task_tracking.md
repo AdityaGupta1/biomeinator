@@ -14,7 +14,7 @@
 - [x] terrain.h: declare exportWorld(), importWorld(), isWorldFullyLoaded()
 - [x] terrain.cpp: add empty stubs + BLAS tracking statics
 - [x] window_manager.cpp: Ctrl+U keybind calls Terrain::exportWorld()
-- [x] Verify: build succeeds, --world=foo forces voxelMode
+- [x] Verify: build succeeds, --world=foo forces voxelMode, Ctrl+U in voxel mode triggers exportWorld stub
 
 ## Step 3: Export ✅
 - [x] chunk.h/cpp: add getBlocks(), getBiomes(), getSegments() const-ref getters
@@ -28,7 +28,7 @@
 - [x] terrain.cpp: bump region format version 1→2, add hasStructures flag bit, compressedStructuresSize field, LZ4-compressed structures payload (type + pos_WS per entry)
 
 ## Step 3c: Format v3 — checkpoint-based export ✅
-- [x] terrain.cpp: bump version 2→3, gate `state >= HAS_TERRAIN`, replace flags+chunkState+segments fields with single `importLevel` byte (1=HAS_TERRAIN, 2=HAS_ALL_BLOCKS), drop segments payload entirely
+- [x] terrain.cpp: bump version 2→3, gate `state >= HAS_TERRAIN`, replace flags+chunkState+segments fields with single `importLevel` byte (raw `ChunkState` enum value: 2=HAS_TERRAIN, 6=HAS_ALL_BLOCKS), drop segments payload entirely
 - [x] chunk.h/cpp: change loadSerializedData signature to `(blocks, biomes, structures, importLevel)` (drop segments + state args), add `importLevel` member field on Chunk, drop unused getSegments() getter
 
 ## Step 4: Import — chunk hooks + importWorld()
