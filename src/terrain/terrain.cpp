@@ -483,7 +483,7 @@ void exportWorld()
             }
 
             const ChunkState state = chunkPtr->getState();
-            if (state >= ChunkState::HAS_ALL_BLOCKS)
+            if (state >= ChunkState::HAS_TERRAIN)
             {
                 populatedChunks.push_back({ static_cast<uint16_t>(i), chunkPtr.get() });
             }
@@ -506,7 +506,7 @@ void exportWorld()
         }
 
         const uint32_t magic = 0x42494F4D;
-        const uint16_t version = 1;
+        const uint16_t version = 3;
         const int32_t regionX = regionPos.x;
         const int32_t regionZ = regionPos.y;
         const uint16_t numPopulatedChunks = static_cast<uint16_t>(populatedChunks.size());
@@ -522,14 +522,12 @@ void exportWorld()
             const Chunk& chunk = *entry.chunk;
             const ChunkState state = chunk.getState();
 
-            const bool hasBlocks = state >= ChunkState::HAS_ALL_BLOCKS;
-            const bool hasSegments = state >= ChunkState::NEEDS_GEOMETRY;
-
-            const uint8_t chunkStateValue = static_cast<uint8_t>(state);
-            const uint8_t flags = (hasBlocks ? 0x01 : 0x00) | (hasSegments ? 0x02 : 0x00);
+            const ChunkState importLevel = (state >= ChunkState::HAS_ALL_BLOCKS)
+                ? ChunkState::HAS_ALL_BLOCKS
+                : ChunkState::HAS_TERRAIN;
+            const uint8_t importLevelValue = static_cast<uint8_t>(importLevel);
 
             uint32_t compressedBlocksSize = 0;
-            if (hasBlocks)
             {
                 const std::vector<Block>& blocks = chunk.getBlocks();
                 const std::vector<Biome>& biomes = chunk.getBiomes();
@@ -557,56 +555,57 @@ void exportWorld()
                 compressedBlocksSize = static_cast<uint32_t>(compressed);
             }
 
-            uint32_t compressedSegmentsSize = 0;
-            std::vector<char> compressedSegmentsData;
-            if (hasSegments)
+            uint32_t compressedStructuresSize = 0;
+            std::vector<char> compressedStructuresData;
+            const std::vector<Structure>& structures = chunk.getStructures();
+            if (!structures.empty())
             {
-                const std::vector<glm::uvec3>& segments = chunk.getSegments();
-                const uint32_t numSegments = static_cast<uint32_t>(segments.size());
-                const int segmentsPayloadSize = static_cast<int>(
-                    sizeof(uint32_t) + numSegments * 3 * sizeof(uint32_t));
+                const uint32_t numStructures = static_cast<uint32_t>(structures.size());
+                constexpr uint32_t structureEntrySize = sizeof(uint8_t) + 3 * sizeof(int32_t);
+                const int structuresPayloadSize = static_cast<int>(
+                    sizeof(uint32_t) + numStructures * structureEntrySize);
 
-                std::vector<char> segmentsBuffer(segmentsPayloadSize);
-                memcpy(segmentsBuffer.data(), &numSegments, sizeof(uint32_t));
-                if (numSegments > 0)
+                std::vector<char> structuresBuffer(structuresPayloadSize);
+                memcpy(structuresBuffer.data(), &numStructures, sizeof(uint32_t));
+                char* writePtr = structuresBuffer.data() + sizeof(uint32_t);
+                for (const Structure& s : structures)
                 {
-                    memcpy(segmentsBuffer.data() + sizeof(uint32_t),
-                           segments.data(),
-                           numSegments * sizeof(glm::uvec3));
+                    const uint8_t typeByte = static_cast<uint8_t>(s.type);
+                    const int32_t posArr[3] = { s.pos_WS.x, s.pos_WS.y, s.pos_WS.z };
+                    memcpy(writePtr, &typeByte, sizeof(uint8_t));
+                    writePtr += sizeof(uint8_t);
+                    memcpy(writePtr, posArr, sizeof(posArr));
+                    writePtr += sizeof(posArr);
                 }
 
-                const int segmentsCompressBound = LZ4_compressBound(segmentsPayloadSize);
-                compressedSegmentsData.resize(segmentsCompressBound);
+                const int structuresCompressBound = LZ4_compressBound(structuresPayloadSize);
+                compressedStructuresData.resize(structuresCompressBound);
 
                 const int compressed = LZ4_compress_default(
-                    segmentsBuffer.data(),
-                    compressedSegmentsData.data(),
-                    segmentsPayloadSize,
-                    segmentsCompressBound);
+                    structuresBuffer.data(),
+                    compressedStructuresData.data(),
+                    structuresPayloadSize,
+                    structuresCompressBound);
 
                 if (compressed <= 0)
                 {
-                    Logger::logError("exportWorld: LZ4 segment compression failed for chunk idx %u in region (%d, %d)",
+                    Logger::logError("exportWorld: LZ4 structure compression failed for chunk idx %u in region (%d, %d)",
                                      entry.localIdx, regionPos.x, regionPos.y);
                     continue;
                 }
 
-                compressedSegmentsSize = static_cast<uint32_t>(compressed);
+                compressedStructuresSize = static_cast<uint32_t>(compressed);
             }
 
             file.write(reinterpret_cast<const char*>(&entry.localIdx), sizeof(uint16_t));
-            file.write(reinterpret_cast<const char*>(&chunkStateValue), sizeof(uint8_t));
-            file.write(reinterpret_cast<const char*>(&flags), sizeof(uint8_t));
+            file.write(reinterpret_cast<const char*>(&importLevelValue), sizeof(uint8_t));
             file.write(reinterpret_cast<const char*>(&compressedBlocksSize), sizeof(uint32_t));
-            file.write(reinterpret_cast<const char*>(&compressedSegmentsSize), sizeof(uint32_t));
+            file.write(reinterpret_cast<const char*>(&compressedStructuresSize), sizeof(uint32_t));
 
-            if (compressedBlocksSize > 0)
+            file.write(compressBuffer.data(), compressedBlocksSize);
+            if (compressedStructuresSize > 0)
             {
-                file.write(compressBuffer.data(), compressedBlocksSize);
-            }
-            if (compressedSegmentsSize > 0)
-            {
-                file.write(compressedSegmentsData.data(), compressedSegmentsSize);
+                file.write(compressedStructuresData.data(), compressedStructuresSize);
             }
 
             ++totalChunksExported;

@@ -23,12 +23,27 @@
 - [x] terrain.cpp: implement exportWorld() — directory creation, region binary writing w/ LZ4, scene.json
 - [x] Verify: build succeeds, export produces valid region .bin files + scene.json
 
-## Step 4: Import
-- [ ] terrain.cpp: implement importWorld() — JSON parsing, region file reading
-- [ ] terrain.cpp: implement LZ4 decompression + chunk population via loadSerializedData()
-- [ ] terrain.cpp: apply renderDistance/worldSeed from JSON
-- [ ] terrain.cpp: count expected BLAS chunks, restore camera, setDirty()
-- [ ] Verify: round-trip export→import renders correctly, no missing faces
+## Step 3b: Structure export ✅
+- [x] chunk.h/cpp: add getStructures() getter, extend loadSerializedData() to accept structures
+- [x] terrain.cpp: bump region format version 1→2, add hasStructures flag bit, compressedStructuresSize field, LZ4-compressed structures payload (type + pos_WS per entry)
+
+## Step 3c: Format v3 — checkpoint-based export ✅
+- [x] terrain.cpp: bump version 2→3, gate `state >= HAS_TERRAIN`, replace flags+chunkState+segments fields with single `importLevel` byte (1=HAS_TERRAIN, 2=HAS_ALL_BLOCKS), drop segments payload entirely
+- [x] chunk.h/cpp: change loadSerializedData signature to `(blocks, biomes, structures, importLevel)` (drop segments + state args), add `importLevel` member field on Chunk, drop unused getSegments() getter
+
+## Step 4: Import — chunk hooks + importWorld()
+### 4a: Chunk early-return hooks
+- [ ] chunk.cpp: `generateTerrain` early-return inner work if `importLevel >= HAS_TERRAIN`. Always advanceState + setDirty.
+- [ ] chunk.cpp: `fillStructuresAndDecorators` skip the structureNeighbors loop AND decorator pass if `importLevel >= HAS_ALL_BLOCKS`. Always advanceState + run numNeighborsWithBlocks.fetch_add loop.
+- [ ] chunk.cpp: `checkStructureNeighbors` unchanged (always runs)
+- [ ] chunk.cpp: `generateSegments` unchanged (always runs)
+
+### 4b: importWorld()
+- [ ] terrain.cpp: parse scene.json, fatal-exit on errors
+- [ ] terrain.cpp: apply renderDistance + worldSeed to SettingsManager BEFORE any terrain task runs
+- [ ] terrain.cpp: per region — read header, validate magic + version=3, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData with importLevel
+- [ ] terrain.cpp: count expected BLAS chunks (importLevel == HAS_ALL_BLOCKS within createBlasDistance of camera), restore camera, setDirty()
+- [ ] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters
 
 ## Step 5: Renderer init wiring + BLAS tracking
 - [ ] renderer.cpp: wire importWorld() call at init

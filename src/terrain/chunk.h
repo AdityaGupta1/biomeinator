@@ -106,6 +106,8 @@ private:
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
+    ChunkState importLevel{ ChunkState::NEEDS_TERRAIN };
+
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
     bool areInstancesVisible{ false };
@@ -160,9 +162,9 @@ public:
 
     const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
-    const std::vector<glm::uvec3>& getSegments() const;
+    const std::vector<Structure>& getStructures() const;
 
-    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<glm::uvec3>&& segments, ChunkState state);
+    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures, ChunkState importLevel);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);

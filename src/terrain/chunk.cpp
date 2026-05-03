@@ -779,12 +779,12 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<glm::uvec3>&& segments, ChunkState state)
+void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures, ChunkState importLevel)
 {
     this->blocks = std::move(blocks);
     this->biomes = std::move(biomes);
-    this->segmentsToGenerate = std::move(segments);
-    this->setState(state);
+    this->structures = std::move(structures);
+    this->importLevel = importLevel;
 }
 
 bool Chunk::getIsMarkedForDestruction() const
@@ -841,9 +841,9 @@ const std::vector<Biome>& Chunk::getBiomes() const
     return this->biomes;
 }
 
-const std::vector<glm::uvec3>& Chunk::getSegments() const
+const std::vector<Structure>& Chunk::getStructures() const
 {
-    return this->segmentsToGenerate;
+    return this->structures;
 }
 
 // y changes fastest, then x, then z
