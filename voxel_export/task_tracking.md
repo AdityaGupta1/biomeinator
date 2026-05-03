@@ -61,8 +61,9 @@ Discovered during 4b verify with `--lockCamera=true`: chunks at `D=renderDistanc
 
 ## Step 5: Renderer init wiring + BLAS tracking
 - [x] renderer.cpp: wire importWorld() call at init (done in 4b)
-- [ ] terrain.cpp: increment BLAS counter in addChunkToCreateBlas()
-- [ ] terrain.cpp: implement isWorldFullyLoaded()
+- [x] terrain.cpp: increment BLAS counter in addChunkToCreateBlas() (gated on worldImportActive && chunk->getWasImported())
+- [x] terrain.cpp: rename isWorldFullyLoaded → isImportComplete; add one-shot log + worldImportActive=false flip on first threshold hit
+- [x] chunk.h/cpp: add getWasImported() getter (wasImported is private)
 - [ ] Verify: log confirms all BLASes built after import (with 4c fix, `expectedBlasBuildChunks` now matches actual HG count exactly under locked camera)
 
 ## Step 6: Test loader integration

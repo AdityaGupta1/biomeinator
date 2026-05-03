@@ -190,7 +190,15 @@ The BLAS-tracking counter counts imported chunks within `createBlasDistance`. Al
 
 **test_loader.cpp:** Support optional `world` field in test JSON. If present, append `--world=<path>` instead of `--scene=<path>`.
 
-**Verify:** Add test entry with `world` field to tests.json. Run test harness, confirm it passes args correctly and golden comparison works.
+**Test-mode capture sequence:** `Terrain::isImportComplete()` polling + the `worldImportActive` gate are test-mode-only mechanisms. The normal interactive import path does not need to know when import finishes — frames just keep rendering. The test harness, however, must:
+
+1. Wait for `Terrain::isImportComplete()` → `true` (all imported chunks within `createBlasDistance` have built BLASes).
+2. Then wait for path-tracer accumulation to converge (existing accumulation-complete signal — same one used by current scene-based golden tests).
+3. Then capture the screenshot and run golden comparison.
+
+Step 1 must precede step 2 because accumulation reset is triggered by geometry changes; capturing during BLAS-build churn would yield non-deterministic golden images. Only call `isImportComplete()` from the test harness — interactive sessions should not depend on it.
+
+**Verify:** Add test entry with `world` field to tests.json. Run test harness, confirm it passes args correctly, waits for import + accumulation in order, and golden comparison passes.
 
 ---
 

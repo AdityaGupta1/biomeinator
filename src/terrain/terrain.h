@@ -28,7 +28,7 @@ bool isCameraUnderwater();
 void exportWorld();
 void importWorld();
 void reimportWorld(const std::filesystem::path& worldDir);
-bool isWorldFullyLoaded();
+bool isImportComplete();
 
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();

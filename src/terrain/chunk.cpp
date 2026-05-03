@@ -802,6 +802,11 @@ bool Chunk::getIsMarkedForDestruction() const
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
 }
 
+bool Chunk::getWasImported() const
+{
+    return this->wasImported;
+}
+
 void Chunk::setIsMarkedForDestruction(bool marked)
 {
     this->isMarkedForDestruction.store(marked, std::memory_order_release);

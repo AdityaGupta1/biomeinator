@@ -103,10 +103,18 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
+static uint32_t expectedBlasBuildChunks{ 0 };
+static uint32_t completedBlasBuildChunks{ 0 };
+static bool worldImportActive{ false };
+
 void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
+    if (worldImportActive && chunk->getWasImported())
+    {
+        ++completedBlasBuildChunks;
+    }
 }
 
 void addChunkToDestroy(Chunk* chunk)
@@ -126,10 +134,6 @@ static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 static bool cameraUnderwater = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
-
-static uint32_t expectedBlasBuildChunks{ 0 };
-static uint32_t completedBlasBuildChunks{ 0 };
-static bool worldImportActive{ false };
 
 inline constexpr uint32_t maxTasksPerFrame = 48;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
@@ -430,6 +434,11 @@ void update(ToFreeList& toFreeList)
     for (Chunk* chunk : chunksToDestroyNow)
     {
         chunk->destroyInstances(toFreeList);
+    }
+
+    if (worldImportActive)
+    {
+        isImportComplete();
     }
 }
 
@@ -1039,13 +1048,20 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool isWorldFullyLoaded()
+bool isImportComplete()
 {
     if (!worldImportActive)
     {
         return true;
     }
-    return completedBlasBuildChunks >= expectedBlasBuildChunks;
+    if (completedBlasBuildChunks >= expectedBlasBuildChunks)
+    {
+        Logger::log("importWorld: fully loaded, %u/%u BLASes built",
+                    completedBlasBuildChunks, expectedBlasBuildChunks);
+        worldImportActive = false;
+        return true;
+    }
+    return false;
 }
 
 void shutdown()
