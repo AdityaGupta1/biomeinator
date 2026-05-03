@@ -1,0 +1,4 @@
+[ERR][15:58:46] NRC SDK: Loading the default network config data.
+
+[ERR][15:58:46] NRC v0.14 (16 July 2025) Network is successfully initialized. 
+

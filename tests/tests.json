@@ -2,7 +2,7 @@
     "tests": [
         {
             "name": "two_triangles",
-            "scene": "two_triangles/two_triangles.gltf",
+            "scene": "gltf/two_triangles/two_triangles.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -10,12 +10,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "two_triangles/golden.png",
+            "golden": "gltf/two_triangles/golden.png",
             "threshold": 0.001
         },
         {
             "name": "occluded_light",
-            "scene": "occluded_light/occluded_light.gltf",
+            "scene": "gltf/occluded_light/occluded_light.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -23,12 +23,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "occluded_light/golden.png",
+            "golden": "gltf/occluded_light/golden.png",
             "threshold": 0.004
         },
         {
             "name": "emissive_cube",
-            "scene": "emissive_cube/emissive_cube.gltf",
+            "scene": "gltf/emissive_cube/emissive_cube.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -36,12 +36,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "emissive_cube/golden.png",
+            "golden": "gltf/emissive_cube/golden.png",
             "threshold": 0.003
         },
         {
             "name": "emissive_cube_blender_no_tonemap",
-            "scene": "emissive_cube/emissive_cube.gltf",
+            "scene": "gltf/emissive_cube/emissive_cube.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -50,12 +50,12 @@
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
-            "golden": "emissive_cube/golden_blender_no_tonemap.png",
+            "golden": "gltf/emissive_cube/golden_blender_no_tonemap.png",
             "threshold": 0.005
         },
         {
             "name": "many_monkeys",
-            "scene": "many_monkeys/many_monkeys.gltf",
+            "scene": "gltf/many_monkeys/many_monkeys.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -63,12 +63,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "many_monkeys/golden.png",
+            "golden": "gltf/many_monkeys/golden.png",
             "threshold": 0.01
         },
         {
             "name": "many_faces_emitter",
-            "scene": "many_faces_emitter/many_faces_emitter.gltf",
+            "scene": "gltf/many_faces_emitter/many_faces_emitter.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -76,12 +76,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "many_faces_emitter/golden.png",
+            "golden": "gltf/many_faces_emitter/golden.png",
             "threshold": 0.002
         },
         {
             "name": "textured_cube",
-            "scene": "textured_cube/textured_cube.gltf",
+            "scene": "gltf/textured_cube/textured_cube.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -89,12 +89,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "textured_cube/golden.png",
+            "golden": "gltf/textured_cube/golden.png",
             "threshold": 0.008
         },
         {
             "name": "penguin_gallery",
-            "scene": "penguin_gallery/penguin_gallery.gltf",
+            "scene": "gltf/penguin_gallery/penguin_gallery.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -102,12 +102,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "penguin_gallery/golden.png",
+            "golden": "gltf/penguin_gallery/golden.png",
             "threshold": 0.002
         },
         {
             "name": "penguin_gallery_blender_no_tonemap",
-            "scene": "penguin_gallery/penguin_gallery.gltf",
+            "scene": "gltf/penguin_gallery/penguin_gallery.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -116,12 +116,12 @@
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
-            "golden": "penguin_gallery/golden_blender_no_tonemap.png",
+            "golden": "gltf/penguin_gallery/golden_blender_no_tonemap.png",
             "threshold": 0.01
         },
         {
             "name": "cornell_box_ris",
-            "scene": "cornell_box/cornell_box.gltf",
+            "scene": "gltf/cornell_box/cornell_box.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -130,12 +130,12 @@
                 "--maxPathDepth=12",
                 "--samplingMode=2"
             ],
-            "golden": "cornell_box/golden.png",
+            "golden": "gltf/cornell_box/golden.png",
             "threshold": 0.015
         },
         {
             "name": "cornell_box_mis",
-            "scene": "cornell_box/cornell_box.gltf",
+            "scene": "gltf/cornell_box/cornell_box.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -144,12 +144,12 @@
                 "--maxPathDepth=12",
                 "--samplingMode=1"
             ],
-            "golden": "cornell_box/golden.png",
+            "golden": "gltf/cornell_box/golden.png",
             "threshold": 0.015
         },
         {
             "name": "cornell_box_naive",
-            "scene": "cornell_box/cornell_box.gltf",
+            "scene": "gltf/cornell_box/cornell_box.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -158,12 +158,12 @@
                 "--maxPathDepth=12",
                 "--samplingMode=0"
             ],
-            "golden": "cornell_box/golden.png",
+            "golden": "gltf/cornell_box/golden.png",
             "threshold": 0.02
         },
         {
             "name": "fancy_cornell_box",
-            "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
+            "scene": "gltf/fancy_cornell_box/fancy_cornell_box.gltf",
             "args": [
                 "--width=270",
                 "--height=270",
@@ -171,12 +171,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
-            "golden": "fancy_cornell_box/golden.png",
+            "golden": "gltf/fancy_cornell_box/golden.png",
             "threshold": 0.015
         },
         {
             "name": "fancy_cornell_box_blender_no_tonemap",
-            "scene": "fancy_cornell_box/fancy_cornell_box.gltf",
+            "scene": "gltf/fancy_cornell_box/fancy_cornell_box.gltf",
             "args": [
                 "--width=270",
                 "--height=270",
@@ -185,12 +185,12 @@
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
-            "golden": "fancy_cornell_box/golden_blender_no_tonemap.png",
+            "golden": "gltf/fancy_cornell_box/golden_blender_no_tonemap.png",
             "threshold": 0.012
         },
         {
             "name": "missing_materials_blender_no_tonemap",
-            "scene": "missing_materials/missing_materials.gltf",
+            "scene": "gltf/missing_materials/missing_materials.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -199,12 +199,12 @@
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
-            "golden": "missing_materials/golden_blender_no_tonemap.png",
+            "golden": "gltf/missing_materials/golden_blender_no_tonemap.png",
             "threshold": 0.005
         },
         {
             "name": "evil_room",
-            "scene": "evil_room/evil_room.gltf",
+            "scene": "gltf/evil_room/evil_room.gltf",
             "args": [
                 "--width=480",
                 "--height=270",
@@ -212,12 +212,12 @@
                 "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12"
             ],
-            "golden": "evil_room/golden.png",
+            "golden": "gltf/evil_room/golden.png",
             "threshold": 0.02
         },
         {
             "name": "evil_room_blender_no_tonemap",
-            "scene": "evil_room/evil_room.gltf",
+            "scene": "gltf/evil_room/evil_room.gltf",
             "args": [
                 "--width=480",
                 "--height=270",
@@ -226,12 +226,12 @@
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
-            "golden": "evil_room/golden_blender_no_tonemap.png",
+            "golden": "gltf/evil_room/golden_blender_no_tonemap.png",
             "threshold": 0.025
         },
         {
             "name": "cave",
-            "scene": "cave/cave.gltf",
+            "scene": "gltf/cave/cave.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -239,12 +239,12 @@
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
             ],
-            "golden": "cave/golden.png",
+            "golden": "gltf/cave/golden.png",
             "threshold": 0.015
         },
         {
             "name": "emissive_texture",
-            "scene": "emissive_texture/emissive_texture.gltf",
+            "scene": "gltf/emissive_texture/emissive_texture.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -252,12 +252,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=2"
             ],
-            "golden": "emissive_texture/golden.png",
+            "golden": "gltf/emissive_texture/golden.png",
             "threshold": 0.004
         },
         {
             "name": "cutout_opacity",
-            "scene": "cutout_opacity/cutout_opacity.gltf",
+            "scene": "gltf/cutout_opacity/cutout_opacity.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -265,12 +265,12 @@
                 "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12"
             ],
-            "golden": "cutout_opacity/golden.png",
+            "golden": "gltf/cutout_opacity/golden.png",
             "threshold": 0.01
         },
         {
             "name": "cutout_opacity_blender_no_tonemap",
-            "scene": "cutout_opacity/cutout_opacity.gltf",
+            "scene": "gltf/cutout_opacity/cutout_opacity.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -279,12 +279,12 @@
                 "--maxPathDepth=12",
                 "--tonemapping=0"
             ],
-            "golden": "cutout_opacity/golden_blender_no_tonemap.png",
+            "golden": "gltf/cutout_opacity/golden_blender_no_tonemap.png",
             "threshold": 0.006
         },
         {
             "name": "backfaces",
-            "scene": "backfaces/backfaces.gltf",
+            "scene": "gltf/backfaces/backfaces.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -292,12 +292,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=3"
             ],
-            "golden": "backfaces/golden.png",
+            "golden": "gltf/backfaces/golden.png",
             "threshold": 0.002
         },
         {
             "name": "cornell_box_glass_sphere",
-            "scene": "cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
+            "scene": "gltf/cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -305,12 +305,12 @@
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
             ],
-            "golden": "cornell_box_glass_sphere/golden.png",
+            "golden": "gltf/cornell_box_glass_sphere/golden.png",
             "threshold": 0.02
         },
         {
             "name": "cornell_box_glass_sphere_no_path_splitting",
-            "scene": "cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
+            "scene": "gltf/cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -319,12 +319,12 @@
                 "--maxPathDepth=12",
                 "--doPathSplitting=false"
             ],
-            "golden": "cornell_box_glass_sphere/golden.png",
+            "golden": "gltf/cornell_box_glass_sphere/golden.png",
             "threshold": 0.02
         },
         {
             "name": "cornell_box_glass_sphere_blender_no_tonemap",
-            "scene": "cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
+            "scene": "gltf/cornell_box_glass_sphere/cornell_box_glass_sphere.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -334,12 +334,12 @@
                 "--tonemapping=0",
                 "--refractionIndirectPassthrough=false"
             ],
-            "golden": "cornell_box_glass_sphere/golden_blender_no_tonemap.png",
+            "golden": "gltf/cornell_box_glass_sphere/golden_blender_no_tonemap.png",
             "threshold": 0.015
         },
         {
             "name": "different_ior",
-            "scene": "different_ior/different_ior.gltf",
+            "scene": "gltf/different_ior/different_ior.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -347,12 +347,12 @@
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
             ],
-            "golden": "different_ior/golden.png",
+            "golden": "gltf/different_ior/golden.png",
             "threshold": 0.015
         },
         {
             "name": "different_ior_blender_no_tonemap",
-            "scene": "different_ior/different_ior.gltf",
+            "scene": "gltf/different_ior/different_ior.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -362,12 +362,12 @@
                 "--tonemapping=0",
                 "--refractionIndirectPassthrough=false"
             ],
-            "golden": "different_ior/golden_blender_no_tonemap.png",
+            "golden": "gltf/different_ior/golden_blender_no_tonemap.png",
             "threshold": 0.015
         },
         {
             "name": "glass_diamonds",
-            "scene": "glass_diamonds/glass_diamonds.gltf",
+            "scene": "gltf/glass_diamonds/glass_diamonds.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -375,12 +375,12 @@
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
             ],
-            "golden": "glass_diamonds/golden.png",
+            "golden": "gltf/glass_diamonds/golden.png",
             "threshold": 0.01
         },
         {
             "name": "glass_diamonds_blender_no_tonemap",
-            "scene": "glass_diamonds/glass_diamonds.gltf",
+            "scene": "gltf/glass_diamonds/glass_diamonds.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -390,12 +390,12 @@
                 "--tonemapping=0",
                 "--refractionIndirectPassthrough=false"
             ],
-            "golden": "glass_diamonds/golden_blender_no_tonemap.png",
+            "golden": "gltf/glass_diamonds/golden_blender_no_tonemap.png",
             "threshold": 0.01
         },
         {
             "name": "refraction_passthrough_direct_lighting",
-            "scene": "refraction_passthrough_direct_lighting/refraction_passthrough_direct_lighting.gltf",
+            "scene": "gltf/refraction_passthrough_direct_lighting/refraction_passthrough_direct_lighting.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -403,12 +403,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
-            "golden": "refraction_passthrough_direct_lighting/golden.png",
+            "golden": "gltf/refraction_passthrough_direct_lighting/golden.png",
             "threshold": 0.001
         },
         {
             "name": "refraction_passthrough_mis_distance",
-            "scene": "refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
+            "scene": "gltf/refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -416,12 +416,12 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12"
             ],
-            "golden": "refraction_passthrough_mis_distance/golden.png",
+            "golden": "gltf/refraction_passthrough_mis_distance/golden.png",
             "threshold": 0.002
         },
         {
             "name": "refraction_passthrough_mis_distance_naive",
-            "scene": "refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
+            "scene": "gltf/refraction_passthrough_mis_distance/refraction_passthrough_mis_distance.gltf",
             "args": [
                 "--width=960",
                 "--height=540",
@@ -430,12 +430,12 @@
                 "--maxPathDepth=12",
                 "--samplingMode=0"
             ],
-            "golden": "refraction_passthrough_mis_distance/golden.png",
+            "golden": "gltf/refraction_passthrough_mis_distance/golden.png",
             "threshold": 0.002
         },
         {
             "name": "refraction_passthrough_specular_chain",
-            "scene": "refraction_passthrough_specular_chain/refraction_passthrough_specular_chain.gltf",
+            "scene": "gltf/refraction_passthrough_specular_chain/refraction_passthrough_specular_chain.gltf",
             "args": [
                 "--width=540",
                 "--height=675",
@@ -443,12 +443,12 @@
                 "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12"
             ],
-            "golden": "refraction_passthrough_specular_chain/golden.png",
+            "golden": "gltf/refraction_passthrough_specular_chain/golden.png",
             "threshold": 0.002
         },
         {
             "name": "diffuse_albedo_modulation",
-            "scene": "diffuse_albedo_modulation/diffuse_albedo_modulation.gltf",
+            "scene": "gltf/diffuse_albedo_modulation/diffuse_albedo_modulation.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -456,12 +456,12 @@
                 "--maxPathDepth=4",
                 "--debugView=\"diffuseAlbedo\""
             ],
-            "golden": "diffuse_albedo_modulation/golden_diffuseAlbedo.png",
+            "golden": "gltf/diffuse_albedo_modulation/golden_diffuseAlbedo.png",
             "threshold": 0.001
         },
         {
             "name": "diffuse_albedo_modulation_emission",
-            "scene": "emissive_texture/emissive_texture.gltf",
+            "scene": "gltf/emissive_texture/emissive_texture.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -469,12 +469,12 @@
                 "--maxPathDepth=4",
                 "--debugView=\"diffuseAlbedo\""
             ],
-            "golden": "emissive_texture/golden_diffuseAlbedo.png",
+            "golden": "gltf/emissive_texture/golden_diffuseAlbedo.png",
             "threshold": 0.0001
         },
         {
             "name": "non_uniform_scale",
-            "scene": "non_uniform_scale/non_uniform_scale.gltf",
+            "scene": "gltf/non_uniform_scale/non_uniform_scale.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -482,12 +482,12 @@
                 "--maxAccumulatedFrames=1024",
                 "--maxPathDepth=12"
             ],
-            "golden": "non_uniform_scale/golden.png",
+            "golden": "gltf/non_uniform_scale/golden.png",
             "threshold": 0.0001
         },
         {
             "name": "fractional_opacity",
-            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "scene": "gltf/fractional_opacity/fractional_opacity.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -495,12 +495,12 @@
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=2"
             ],
-            "golden": "fractional_opacity/golden.png",
+            "golden": "gltf/fractional_opacity/golden.png",
             "threshold": 0.0001
         },
         {
             "name": "fractional_opacity_no_path_splitting",
-            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "scene": "gltf/fractional_opacity/fractional_opacity.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -509,12 +509,12 @@
                 "--maxPathDepth=2",
                 "--doPathSplitting=false"
             ],
-            "golden": "fractional_opacity/golden.png",
+            "golden": "gltf/fractional_opacity/golden.png",
             "threshold": 0.01
         },
         {
             "name": "fractional_opacity_blender_no_tonemap",
-            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "scene": "gltf/fractional_opacity/fractional_opacity.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -523,12 +523,12 @@
                 "--maxPathDepth=2",
                 "--tonemapping=0"
             ],
-            "golden": "fractional_opacity/golden_blender_no_tonemap.png",
+            "golden": "gltf/fractional_opacity/golden_blender_no_tonemap.png",
             "threshold": 0.006
         },
         {
             "name": "diffuse_albedo_modulation_fractional_opacity",
-            "scene": "fractional_opacity/fractional_opacity.gltf",
+            "scene": "gltf/fractional_opacity/fractional_opacity.gltf",
             "args": [
                 "--width=540",
                 "--height=540",
@@ -536,7 +536,7 @@
                 "--maxPathDepth=2",
                 "--debugView=\"diffuseAlbedo\""
             ],
-            "golden": "fractional_opacity/golden_diffuseAlbedo.png",
+            "golden": "gltf/fractional_opacity/golden_diffuseAlbedo.png",
             "threshold": 0.0001
         }
     ]
