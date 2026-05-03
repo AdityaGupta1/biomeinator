@@ -137,7 +137,7 @@ void update(ToFreeList& toFreeList)
 {
     const int renderDistance = SettingsManager::getAsInt("renderDistance");
     const int createBlasDistance = renderDistance + 1;
-    const int fillStructuresDistance = createBlasDistance + 1;
+    const int fillStructuresDistance = createBlasDistance + 1 + structureMaxChunkRadius;
     const int generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius;
 
     const Camera& camera = Renderer::getCamera();
