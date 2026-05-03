@@ -31,18 +31,24 @@
 - [x] terrain.cpp: bump version 2→3, gate `state >= HAS_TERRAIN`, replace flags+chunkState+segments fields with single `importLevel` byte (raw `ChunkState` enum value: 2=HAS_TERRAIN, 6=HAS_ALL_BLOCKS), drop segments payload entirely
 - [x] chunk.h/cpp: change loadSerializedData signature to `(blocks, biomes, structures, importLevel)` (drop segments + state args), add `importLevel` member field on Chunk, drop unused getSegments() getter
 
+## Step 3d: Format v4 — fix export race + strip dead code ✅
+- [x] terrain.cpp: bump version 3→4, tighten gate to `state >= HAS_ALL_BLOCKS` (eliminates torn-read race documented in bug.md), drop `importLevel` byte from per-chunk record
+- [x] chunk.h/cpp: replace `ChunkState importLevel` member with `bool wasImported`, drop `importLevel` param from loadSerializedData
+- [x] voxel_export/plan.md: format spec v4, simplified Step 4a hooks (single `wasImported` flag)
+- [x] voxel_export/bug.md: marked resolved
+
 ## Step 4: Import — chunk hooks + importWorld()
 ### 4a: Chunk early-return hooks
-- [ ] chunk.cpp: `generateTerrain` early-return inner work if `importLevel >= HAS_TERRAIN`. Always advanceState + setDirty.
-- [ ] chunk.cpp: `fillStructuresAndDecorators` skip the structureNeighbors loop AND decorator pass if `importLevel >= HAS_ALL_BLOCKS`. Always advanceState + run numNeighborsWithBlocks.fetch_add loop.
+- [ ] chunk.cpp: `generateTerrain` early-return inner work if `wasImported`. Always advanceState + setDirty.
+- [ ] chunk.cpp: `fillStructuresAndDecorators` skip the structureNeighbors loop AND decorator pass if `wasImported`. Always advanceState + run numNeighborsWithBlocks.fetch_add loop.
 - [ ] chunk.cpp: `checkStructureNeighbors` unchanged (always runs)
 - [ ] chunk.cpp: `generateSegments` unchanged (always runs)
 
 ### 4b: importWorld()
 - [ ] terrain.cpp: parse scene.json, fatal-exit on errors
 - [ ] terrain.cpp: apply renderDistance + worldSeed to SettingsManager BEFORE any terrain task runs
-- [ ] terrain.cpp: per region — read header, validate magic + version=3, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData with importLevel
-- [ ] terrain.cpp: count expected BLAS chunks (importLevel == HAS_ALL_BLOCKS within createBlasDistance of camera), restore camera, setDirty()
+- [ ] terrain.cpp: per region — read header, validate magic + version=4, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData
+- [ ] terrain.cpp: count expected BLAS chunks (imported chunks within createBlasDistance of camera), restore camera, setDirty()
 - [ ] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters
 
 ## Step 5: Renderer init wiring + BLAS tracking

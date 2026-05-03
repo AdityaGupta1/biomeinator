@@ -11,14 +11,13 @@ Serialize entire terrain state to disk for voxel mode regression tests. Export c
 ```
 File header (16 bytes):
   uint32_t magic        = 0x42494F4D ("BIOM")
-  uint16_t version      = 3
+  uint16_t version      = 4
   int32_t  regionX
   int32_t  regionZ
   uint16_t numPopulatedChunks
 
 Per populated chunk (repeated numPopulatedChunks times):
   uint16_t chunkLocalIdx            (0..1023)
-  uint8_t  importLevel              (raw `ChunkState` enum value: HAS_TERRAIN=2, HAS_ALL_BLOCKS=6)
   uint32_t compressedBlocksSize     (always > 0)
   uint32_t compressedStructuresSize (0 if no structures)
   [compressedBlocksSize bytes]      LZ4-compressed block+biome payload
@@ -60,21 +59,21 @@ Segments are NOT serialized — they are deterministic from blocks and regenerat
 
 Imported chunks load their `blocks`, `biomes`, and `structures` vectors from disk, then start at `state = NEEDS_TERRAIN` like any fresh chunk. They traverse the **full** state machine: `NEEDS_TERRAIN` → `GENERATING_TERRAIN` → `HAS_TERRAIN` → `AWAITING_STRUCTURE_NEIGHBORS` → `NEEDS_FILL_STRUCTURES` → `FILLING_STRUCTURES` → `HAS_ALL_BLOCKS` → `NEEDS_SEGMENTS` → `GENERATING_SEGMENTS` → `NEEDS_GEOMETRY` → `GENERATING_GEOMETRY` → `HAS_GEOMETRY`.
 
-Each terrain task **early-returns its inner data work** when the imported checkpoint already covers it. The state advance + neighbor counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) **always** run — these distributed counters drive the state machine and must fire identically to fresh generation.
+Each terrain task that produced exported data **early-returns its inner data work** when the chunk was imported. The state advance + neighbor counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) **always** run — these distributed counters drive the state machine and must fire identically to fresh generation.
 
 **Early-return is a correctness requirement, not an optimization.** Re-running inner work would re-stamp blocks that are already final, and even if individual operations are idempotent on paper, we do not want any chance of divergence between imported and freshly-generated state.
 
 ### Per-task behavior
 
-`Chunk` gains a field `ChunkState importLevel` (default `NEEDS_TERRAIN`, set by `loadSerializedData` to either `HAS_TERRAIN` or `HAS_ALL_BLOCKS`).
+`Chunk` gains a field `bool wasImported` (default `false`, set to `true` by `loadSerializedData`). All exported chunks were captured at `state >= HAS_ALL_BLOCKS`, so a single flag suffices — no per-checkpoint level needed. (Boundary chunks at `HAS_TERRAIN` are intentionally excluded from export to avoid a torn-read race; they are regenerated on import.)
 
-| Task | If `importLevel >= HAS_TERRAIN` | If `importLevel >= HAS_ALL_BLOCKS` |
-|---|---|---|
-| `generateTerrain` (`task_generateTerrain`) | Skip `fillTerrainBlocksAndCreateStructures`. Only call `advanceState(HAS_TERRAIN)` + `setDirty()`. | Same — already covered by `>= HAS_TERRAIN`. |
-| `checkStructureNeighbors` (`task_checkStructureNeighbors`) | Always runs unchanged. Cheap pointer walk; the 5×5 counter increments on neighbors are required. | Same. |
-| `fillStructuresAndDecorators` (`task_fillStructures`) | Run inner work normally — imported blocks at `HAS_TERRAIN` lack neighbor-structure overlap and decorators. | Skip both the `fillStructureBlocks` loop over `structureNeighbors` AND the decorator pass. Still call `advanceState(HAS_ALL_BLOCKS)` and run the `numNeighborsWithBlocks.fetch_add` loop on the 4 cardinal neighbors. |
-| `generateSegments` (`task_generateSegments`) | Always runs. Segments are not serialized; they are deterministic from blocks. | Same. |
-| `task_generateGeometry` | Always runs (geometry is rebuilt from blocks + segments). | Same. |
+| Task | If `wasImported` |
+|---|---|
+| `generateTerrain` (`task_generateTerrain`) | Skip `fillTerrainBlocksAndCreateStructures`. Only call `advanceState(HAS_TERRAIN)` + `setDirty()`. |
+| `checkStructureNeighbors` (`task_checkStructureNeighbors`) | Always runs unchanged. Cheap pointer walk; the 5×5 counter increments on neighbors are required. |
+| `fillStructuresAndDecorators` (`task_fillStructures`) | Skip both the `fillStructureBlocks` loop over `structureNeighbors` AND the decorator pass. Still call `advanceState(HAS_ALL_BLOCKS)` and run the `numNeighborsWithBlocks.fetch_add` loop on the 4 cardinal neighbors. |
+| `generateSegments` (`task_generateSegments`) | Always runs. Segments are not serialized; they are deterministic from blocks. |
+| `task_generateGeometry` | Always runs (geometry is rebuilt from blocks + segments). |
 
 ### Why every counter side effect must still run
 
@@ -83,12 +82,6 @@ Each terrain task **early-returns its inner data work** when the imported checkp
 
 These counters are also untouched by `setNeighbors` (`chunk.cpp:69-70`) — the only place they advance is the task body. So early-return must wrap only the data-mutating section, not the counter section.
 
-### Why imported `HAS_TERRAIN` is safe
-
-A chunk at `HAS_TERRAIN` has terrain blocks + biomes + own-chunk `structures` populated, but **NOT** decorator blocks and **NOT** neighbor-structure overlap blocks. Re-running the fillStructures inner work on import-loaded `HAS_TERRAIN` blocks produces the same final state as fresh generation, because:
-- `fillStructureBlocks` reads `structures` lists from neighbors (which are also imported or freshly generated, both deterministic).
-- Decorators use a `worldSeed`-seeded RNG and reads/writes deterministically from terrain blocks.
-
 ### Import sequence
 
 1. Validate `--world` path exists, contains `scene.json`. Fatal exit if missing/malformed.
@@ -96,8 +89,8 @@ A chunk at `HAS_TERRAIN` has terrain blocks + biomes + own-chunk `structures` po
 3. For each region in `scene.json`:
    - Open `region_X_Z.bin`. Validate magic + version. Fatal on mismatch.
    - Insert `Region` into `regions` map. Region neighbor pointers are wired up by the normal update loop.
-   - For each chunk entry: LZ4-decompress block+biome payload (always present) and structures payload (if `compressedStructuresSize > 0`). Call `chunk->loadSerializedData(blocks, biomes, structures, importLevel)`. The chunk's `state` stays at `NEEDS_TERRAIN`; `importLevel` is set to the value from disk.
-4. Count chunks where `importLevel == HAS_ALL_BLOCKS` and the chunk position falls within `createBlasDistance` of the imported camera position → set `expectedBlasBuildChunks`. Set `worldImportActive = true`.
+   - For each chunk entry: LZ4-decompress block+biome payload (always present) and structures payload (if `compressedStructuresSize > 0`). Call `chunk->loadSerializedData(blocks, biomes, structures)`. The chunk's `state` stays at `NEEDS_TERRAIN`; `wasImported` is set to `true`.
+4. Count imported chunks whose position falls within `createBlasDistance` of the imported camera position → set `expectedBlasBuildChunks`. Set `worldImportActive = true`.
 5. Restore camera via `Renderer::restoreCamera(...)`.
 6. Call `Terrain::setDirty()`.
 
@@ -136,29 +129,26 @@ Implement `Terrain::exportWorld()` in terrain.cpp.
 1. Build output dir: `~/Documents/biomeinator/exports/YYYY.MM.DD_HH-MM-SS/` (reuse SHGetFolderPathW + SYSTEMTIME pattern from renderer_screenshot.cpp)
 2. Read camera state via `Renderer::getCamera()` (phi, theta, posInt, posFloat)
 3. Read renderDistance, worldSeed from SettingsManager
-4. Iterate `regions` map. For each region containing any chunk with `state >= HAS_TERRAIN`:
+4. Iterate `regions` map. For each region containing any chunk with `state >= HAS_ALL_BLOCKS`:
    - Write region binary file per format above
-   - Per chunk: gate `state >= HAS_TERRAIN`. Compute `importLevel`:
-     - `state >= HAS_ALL_BLOCKS` → `importLevel = HAS_ALL_BLOCKS`
-     - else → `importLevel = HAS_TERRAIN`
-   - LZ4-compress blocks+biomes (always). LZ4-compress structures (if non-empty).
+   - Per chunk: gate `state >= HAS_ALL_BLOCKS`. LZ4-compress blocks+biomes (always). LZ4-compress structures (if non-empty).
 5. Write `scene.json` using nlohmann::json
 
-Outer-ring stub chunks (created by `setNeighbors(true)` for pointer linkage, state == `NEEDS_TERRAIN`) are skipped by the gate. They will be re-created on import the same way during the normal update loop.
+Chunks below `HAS_ALL_BLOCKS` (including outer-ring stubs at `NEEDS_TERRAIN`, in-flight `GENERATING_TERRAIN` chunks, and `HAS_TERRAIN` boundary chunks) are skipped by the gate. The `HAS_ALL_BLOCKS` gate is required to avoid a torn-read race: past `HAS_ALL_BLOCKS`, no task ever mutates a chunk's `blocks`/`biomes`/`structures`, but at exactly `HAS_TERRAIN` the chunk may transition to `FILLING_STRUCTURES` mid-export. Skipped chunks get regenerated normally on import.
 
-**Verify:** Run voxel mode, fly somewhere, Ctrl+U. Check exports folder exists with scene.json + .bin files. Validate JSON. Hex-check .bin files for BIOM magic + version 3. Log compressed vs uncompressed sizes.
+**Verify:** Run voxel mode, fly somewhere, Ctrl+U. Check exports folder exists with scene.json + .bin files. Validate JSON. Hex-check .bin files for BIOM magic + version 4. Log compressed vs uncompressed sizes.
 
 ### Step 4: Import — chunk hooks + importWorld()
 
 Two parts:
 
-**4a. Chunk-side: add `importLevel` field and early-return hooks.**
+**4a. Chunk-side: add `wasImported` flag and early-return hooks.**
 
-- `chunk.h`: add `ChunkState importLevel{ ChunkState::NEEDS_TERRAIN };` member.
-- `chunk.h/cpp`: change `loadSerializedData` signature to take `(std::vector<Block>&&, std::vector<Biome>&&, std::vector<Structure>&&, ChunkState importLevel)`. (Drop the `state` param + the segments vector.) The function moves data in, sets `this->importLevel = importLevel`, leaves `this->state == NEEDS_TERRAIN`.
-- `Chunk::generateTerrain`: if `importLevel >= HAS_TERRAIN`, skip the body. Always call `advanceState(HAS_TERRAIN)` and `Terrain::setDirty()`. The `blocks.resize(numChunkBlocks)` / `biomes.resize(chunkSizeXZSquare)` calls become no-ops if vectors are already sized — keep them or guard, either is fine.
-- `Chunk::fillStructuresAndDecorators`: if `importLevel >= HAS_ALL_BLOCKS`, skip the entire `for (Chunk* structureNeighbor : this->structureNeighbors)` block AND the decorator double-loop. Always call `advanceState(HAS_ALL_BLOCKS)` and run the existing `for (Chunk* neighborChunk : this->neighbors)` `numNeighborsWithBlocks.fetch_add` loop.
-- `Chunk::checkStructureNeighbors`: unchanged. Must always run regardless of import level (drives 5×5 counter).
+- `chunk.h`: add `bool wasImported{ false };` member.
+- `chunk.h/cpp`: `loadSerializedData(std::vector<Block>&&, std::vector<Biome>&&, std::vector<Structure>&&)` moves data in, sets `this->wasImported = true`, leaves `this->state == NEEDS_TERRAIN`.
+- `Chunk::generateTerrain`: if `wasImported`, skip the body. Always call `advanceState(HAS_TERRAIN)` and `Terrain::setDirty()`. The `blocks.resize(numChunkBlocks)` / `biomes.resize(chunkSizeXZSquare)` calls become no-ops if vectors are already sized — keep them or guard, either is fine.
+- `Chunk::fillStructuresAndDecorators`: if `wasImported`, skip the entire `for (Chunk* structureNeighbor : this->structureNeighbors)` block AND the decorator double-loop. Always call `advanceState(HAS_ALL_BLOCKS)` and run the existing `for (Chunk* neighborChunk : this->neighbors)` `numNeighborsWithBlocks.fetch_add` loop.
+- `Chunk::checkStructureNeighbors`: unchanged. Must always run regardless of import (drives 5×5 counter).
 - `Chunk::generateSegments`: unchanged. Segments are not exported — always regenerate from blocks.
 
 **4b. `Terrain::importWorld()` in terrain.cpp.**
@@ -168,15 +158,15 @@ Two parts:
 3. Apply `renderDistance` and `worldSeed` to `SettingsManager` before any terrain task can run (decorators read `worldSeed`).
 4. For each region coord pair in `scene.json`:
    - Derive filename `region_X_Z.bin`. Fatal if missing.
-   - Read header, validate magic (`0x42494F4D`) + version (`3`). Fatal on mismatch.
+   - Read header, validate magic (`0x42494F4D`) + version (`4`). Fatal on mismatch.
    - `regions.emplace(regionPos, std::make_unique<Region>(regionPos))`.
    - For each chunk entry:
-     - Read `localIdx`, `importLevel`, `compressedBlocksSize`, `compressedStructuresSize`.
+     - Read `localIdx`, `compressedBlocksSize`, `compressedStructuresSize`.
      - LZ4-decompress block+biome payload (262400 bytes uncompressed). Split into `std::vector<Block> blocks(numChunkBlocks)` and `std::vector<Biome> biomes(chunkSizeXZSquare)`.
      - If `compressedStructuresSize > 0`: LZ4-decompress structures. Read `numStructures` then unpack each `(uint8_t type, int32_t pos[3])` into `std::vector<Structure>`.
      - `Chunk* chunk = region->createChunk(localChunkPos);`
-     - `chunk->loadSerializedData(std::move(blocks), std::move(biomes), std::move(structures), importLevel);`
-5. Count chunks where `importLevel == HAS_ALL_BLOCKS` AND `chebyshevDistance(chunkPos, cameraChunkPos) <= createBlasDistance` → set `expectedBlasBuildChunks`. Set `worldImportActive = true`.
+     - `chunk->loadSerializedData(std::move(blocks), std::move(biomes), std::move(structures));`
+5. Count imported chunks (all are HAS_ALL_BLOCKS-equivalent) where `chebyshevDistance(chunkPos, cameraChunkPos) <= createBlasDistance` → set `expectedBlasBuildChunks`. Set `worldImportActive = true`.
 6. Restore camera via `Renderer::restoreCamera(posInt, posFloat, phi, theta)`.
 7. Call `Terrain::setDirty()`.
 
@@ -190,9 +180,9 @@ Wire `Terrain::importWorld()` into renderer init (after `Terrain::init`, before 
 Modify `addChunkToCreateBlas()` to increment `completedBlasBuildChunks` when `worldImportActive`.
 Implement `Terrain::isWorldFullyLoaded()` returning `!worldImportActive || completedBlasBuildChunks >= expectedBlasBuildChunks`.
 
-The BLAS-tracking counter only counts chunks that were imported as `HAS_ALL_BLOCKS` within `createBlasDistance`. Imported `HAS_TERRAIN` chunks at the boundary do not get BLASes (they're outside `createBlasDistance` by construction, since `HAS_ALL_BLOCKS`-imported chunks are the ones inside the active BLAS ring at export time).
+The BLAS-tracking counter counts imported chunks within `createBlasDistance`. All imported chunks are `HAS_ALL_BLOCKS`-equivalent (boundary `HAS_TERRAIN` chunks are not exported), so no per-chunk classification is needed.
 
-**Verify:** Log when `isWorldFullyLoaded()` transitions true. Should fire after all imported `HAS_ALL_BLOCKS` chunks within `createBlasDistance` have completed BLAS builds.
+**Verify:** Log when `isWorldFullyLoaded()` transitions true. Should fire after all imported chunks within `createBlasDistance` have completed BLAS builds.
 
 ### Step 6: Test loader integration
 

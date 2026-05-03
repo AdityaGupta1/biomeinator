@@ -486,7 +486,7 @@ void exportWorld()
             }
 
             const ChunkState state = chunkPtr->getState();
-            if (state >= ChunkState::HAS_TERRAIN)
+            if (state >= ChunkState::HAS_ALL_BLOCKS)
             {
                 populatedChunks.push_back({ static_cast<uint16_t>(i), chunkPtr.get() });
             }
@@ -500,7 +500,7 @@ void exportWorld()
         std::vector<char> regionBuffer;
 
         const uint32_t magic = 0x42494F4D;
-        const uint16_t version = 3;
+        const uint16_t version = 4;
         const int32_t regionX = regionPos.x;
         const int32_t regionZ = regionPos.y;
         const uint16_t numPopulatedChunks = static_cast<uint16_t>(populatedChunks.size());
@@ -520,12 +520,6 @@ void exportWorld()
         for (const ChunkEntry& entry : populatedChunks)
         {
             const Chunk& chunk = *entry.chunk;
-            const ChunkState state = chunk.getState();
-
-            const ChunkState importLevel = (state >= ChunkState::HAS_ALL_BLOCKS)
-                ? ChunkState::HAS_ALL_BLOCKS
-                : ChunkState::HAS_TERRAIN;
-            const uint8_t importLevelValue = static_cast<uint8_t>(importLevel);
 
             const std::vector<Block>& blocks = chunk.getBlocks();
             const std::vector<Biome>& biomes = chunk.getBiomes();
@@ -595,7 +589,6 @@ void exportWorld()
             }
 
             appendBytes(&entry.localIdx, sizeof(uint16_t));
-            appendBytes(&importLevelValue, sizeof(uint8_t));
             appendBytes(&compressedBlocksSize, sizeof(uint32_t));
             appendBytes(&compressedStructuresSize, sizeof(uint32_t));
 

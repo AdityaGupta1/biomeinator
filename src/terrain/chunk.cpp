@@ -780,16 +780,15 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures, ChunkState importLevel)
+void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures)
 {
     ASSERT(blocks.size() == numChunkBlocks);
     ASSERT(biomes.size() == chunkSizeXZSquare);
-    ASSERT(importLevel == ChunkState::HAS_TERRAIN || importLevel == ChunkState::HAS_ALL_BLOCKS);
 
     this->blocks = std::move(blocks);
     this->biomes = std::move(biomes);
     this->structures = std::move(structures);
-    this->importLevel = importLevel;
+    this->wasImported = true;
 }
 
 bool Chunk::getIsMarkedForDestruction() const
