@@ -39,14 +39,14 @@
 
 ## Step 4: Import — chunk hooks + importWorld()
 ### 4a: Chunk early-return hooks
-- [ ] chunk.cpp: `generateTerrain` early-return inner work if `wasImported`. Always advanceState + setDirty.
-- [ ] chunk.cpp: `fillStructuresAndDecorators` skip the structureNeighbors loop AND decorator pass if `wasImported`. Always advanceState + run numNeighborsWithBlocks.fetch_add loop.
-- [ ] chunk.cpp: `checkStructureNeighbors` unchanged (always runs)
-- [ ] chunk.cpp: `generateSegments` unchanged (always runs)
+- [x] chunk.cpp: `generateTerrain` early-return inner work if `wasImported`. Always advanceState + setDirty.
+- [x] chunk.cpp: `fillStructuresAndDecorators` skip the structureNeighbors loop AND decorator pass if `wasImported`. Always advanceState + run numNeighborsWithBlocks.fetch_add loop.
+- [x] chunk.cpp: `checkStructureNeighbors` unchanged (always runs)
+- [x] chunk.cpp: `generateSegments` unchanged (always runs)
 
 ### 4b: importWorld()
 - [ ] terrain.cpp: parse scene.json, fatal-exit on errors
-- [ ] terrain.cpp: apply renderDistance + worldSeed to SettingsManager BEFORE any terrain task runs
+- [ ] terrain.cpp: apply worldSeed to SettingsManager BEFORE any terrain task runs; apply renderDistance only in test mode (normal import keeps user's current renderDistance)
 - [ ] terrain.cpp: per region — read header, validate magic + version=4, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData
 - [ ] terrain.cpp: count expected BLAS chunks (imported chunks within createBlasDistance of camera), restore camera, setDirty()
 - [ ] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters

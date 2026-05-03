@@ -86,12 +86,15 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    this->blocks.resize(numChunkBlocks);
-    this->biomes.resize(chunkSizeXZSquare);
+    if (!this->wasImported)
+    {
+        this->blocks.resize(numChunkBlocks);
+        this->biomes.resize(chunkSizeXZSquare);
 
-    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+        const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+        this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+    }
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
@@ -151,44 +154,47 @@ void Chunk::checkStructureNeighbors()
 
 void Chunk::fillStructuresAndDecorators()
 {
-    for (const Chunk* structureNeighbor : this->structureNeighbors)
+    if (!this->wasImported)
     {
-        const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
-        this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
-    }
-
-    const uint worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
-    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-    {
-        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
+        for (const Chunk* structureNeighbor : this->structureNeighbors)
         {
-            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+            const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
+            this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+        }
 
-            const Biome biome = this->biomes[columnIdx];
-            const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
-
-            if (decorator.isEmpty())
+        const uint worldSeed = SettingsManager::getWorldSeed();
+        RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
+        for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
+        {
+            for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
             {
-                continue;
-            }
+                const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            const uint baseBlockIdx = chunkSizeY * columnIdx;
-            Block bottomBlock = Block::BEDROCK;
-            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
-            {
-                Block& thisBlock = this->blocks[baseBlockIdx + blockY];
+                const Biome biome = this->biomes[columnIdx];
+                const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
 
-                if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
+                if (decorator.isEmpty())
                 {
-                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
-                    if (decoratorBlock != Block::AIR)
-                    {
-                        thisBlock = decoratorBlock;
-                    }
+                    continue;
                 }
 
-                bottomBlock = thisBlock;
+                const uint baseBlockIdx = chunkSizeY * columnIdx;
+                Block bottomBlock = Block::BEDROCK;
+                for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
+                {
+                    Block& thisBlock = this->blocks[baseBlockIdx + blockY];
+
+                    if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
+                    {
+                        const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                        if (decoratorBlock != Block::AIR)
+                        {
+                            thisBlock = decoratorBlock;
+                        }
+                    }
+
+                    bottomBlock = thisBlock;
+                }
             }
         }
     }

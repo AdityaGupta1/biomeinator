@@ -85,7 +85,7 @@ These counters are also untouched by `setNeighbors` (`chunk.cpp:69-70`) — the 
 ### Import sequence
 
 1. Validate `--world` path exists, contains `scene.json`. Fatal exit if missing/malformed.
-2. Parse `scene.json`. Apply `renderDistance` and `worldSeed` to `SettingsManager` **before any terrain code runs** (decorators depend on `worldSeed`).
+2. Parse `scene.json`. Apply `worldSeed` to `SettingsManager` **before any terrain code runs** (decorators depend on `worldSeed`). Apply `renderDistance` **only in test mode** (so golden comparison matches export exactly); in normal import, leave user's current `renderDistance` untouched.
 3. For each region in `scene.json`:
    - Open `region_X_Z.bin`. Validate magic + version. Fatal on mismatch.
    - Insert `Region` into `regions` map. Region neighbor pointers are wired up by the normal update loop.
@@ -155,7 +155,7 @@ Two parts:
 
 1. Validate `--world` path exists and contains `scene.json`. Fatal `exit(1)` if missing/malformed.
 2. Parse `scene.json`.
-3. Apply `renderDistance` and `worldSeed` to `SettingsManager` before any terrain task can run (decorators read `worldSeed`).
+3. Apply `worldSeed` to `SettingsManager` before any terrain task can run (decorators read `worldSeed`). Apply `renderDistance` only in test mode (golden comparison match); in normal import, keep user's current `renderDistance`.
 4. For each region coord pair in `scene.json`:
    - Derive filename `region_X_Z.bin`. Fatal if missing.
    - Read header, validate magic (`0x42494F4D`) + version (`4`). Fatal on mismatch.
