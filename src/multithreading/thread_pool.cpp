@@ -14,6 +14,11 @@ ThreadPool::ThreadPool()
 
 void ThreadPool::init(uint32_t numWorkers)
 {
+    {
+        std::lock_guard<std::mutex> lock(this->mutex);
+        this->stop = false;
+    }
+    ASSERT(this->workers.empty());
     for (int i = 0; i < numWorkers; ++i)
     {
         this->workers.emplace_back(&ThreadPool::worker, this);
@@ -82,4 +87,5 @@ void ThreadPool::shutdown()
     {
         worker.join();
     }
+    this->workers.clear();
 }

@@ -12,6 +12,7 @@
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "rendering/renderer.h"
 #include "settings_manager.h"
 #include "logger.h"
 #include "structure/structure.h"
@@ -654,22 +655,15 @@ void exportWorld()
                 exportDir.generic_string().c_str());
 }
 
-void importWorld()
+static int importWorldImpl(const std::filesystem::path& worldDir)
 {
-    const std::string worldPathStr = SettingsManager::getAsString("world");
-    if (worldPathStr.empty())
-    {
-        return;
-    }
-
-    const std::filesystem::path worldDir = worldPathStr;
     const std::filesystem::path worldJsonPath = worldDir / "world.json";
 
     if (!std::filesystem::exists(worldJsonPath))
     {
         Logger::logError("importWorld: world.json not found at %s",
                          worldJsonPath.generic_string().c_str());
-        exit(1);
+        return -1;
     }
 
     nlohmann::json worldJson;
@@ -679,7 +673,7 @@ void importWorld()
         {
             Logger::logError("importWorld: failed to open %s",
                              worldJsonPath.generic_string().c_str());
-            exit(1);
+            return -1;
         }
 
         try
@@ -690,16 +684,17 @@ void importWorld()
         {
             Logger::logError("importWorld: failed to parse %s: %s",
                              worldJsonPath.generic_string().c_str(), e.what());
-            exit(1);
+            return -1;
         }
     }
 
+    bool missingField = false;
     const auto requireField = [&](const char* name)
     {
         if (!worldJson.contains(name))
         {
             Logger::logError("importWorld: world.json missing required field '%s'", name);
-            exit(1);
+            missingField = true;
         }
     };
     requireField("version");
@@ -707,6 +702,10 @@ void importWorld()
     requireField("renderDistance");
     requireField("worldSeed");
     requireField("regions");
+    if (missingField)
+    {
+        return -1;
+    }
 
     const uint32_t worldSeed = worldJson["worldSeed"].get<uint32_t>();
     SettingsManager::setWorldSeed(worldSeed);
@@ -749,6 +748,11 @@ void importWorld()
 
     uint32_t totalChunksImported = 0;
 
+    struct ImportFailure {};
+
+    try
+    {
+
     for (const nlohmann::json& regionEntry : worldJson["regions"])
     {
         const int32_t regionX = regionEntry[0].get<int32_t>();
@@ -764,7 +768,7 @@ void importWorld()
         {
             Logger::logError("importWorld: failed to open %s",
                              regionFilePath.generic_string().c_str());
-            exit(1);
+            throw ImportFailure{};
         }
 
         const std::vector<char> fileBytes(
@@ -780,7 +784,7 @@ void importWorld()
             {
                 Logger::logError("importWorld: unexpected EOF in %s",
                                  regionFilePath.generic_string().c_str());
-                exit(1);
+                throw ImportFailure{};
             }
             memcpy(dest, readPtr, bytes);
             readPtr += bytes;
@@ -802,19 +806,19 @@ void importWorld()
         {
             Logger::logError("importWorld: bad magic 0x%08x in %s (expected 0x42494F4D)",
                              magic, regionFilePath.generic_string().c_str());
-            exit(1);
+            throw ImportFailure{};
         }
         if (version != 4)
         {
             Logger::logError("importWorld: unsupported version %u in %s (expected 4)",
                              version, regionFilePath.generic_string().c_str());
-            exit(1);
+            throw ImportFailure{};
         }
         if (fileRegionX != regionX || fileRegionZ != regionZ)
         {
             Logger::logError("importWorld: region mismatch in %s (header says %d,%d)",
                              regionFilePath.generic_string().c_str(), fileRegionX, fileRegionZ);
-            exit(1);
+            throw ImportFailure{};
         }
 
         const auto [regionIter, inserted] = regions.try_emplace(regionPos, nullptr);
@@ -836,7 +840,7 @@ void importWorld()
             {
                 Logger::logError("importWorld: blocks payload runs past EOF in %s",
                                  regionFilePath.generic_string().c_str());
-                exit(1);
+                throw ImportFailure{};
             }
             const int decompressedBlocks = LZ4_decompress_safe(
                 readPtr,
@@ -850,7 +854,7 @@ void importWorld()
                 Logger::logError("importWorld: LZ4 block decompression failed for chunk idx %u in %s (got %d, expected %zu)",
                                  localIdx, regionFilePath.generic_string().c_str(),
                                  decompressedBlocks, blockBiomePayloadSize);
-                exit(1);
+                throw ImportFailure{};
             }
 
             std::vector<Block> blocks(numChunkBlocks);
@@ -867,7 +871,7 @@ void importWorld()
                 {
                     Logger::logError("importWorld: structures payload runs past EOF in %s",
                                      regionFilePath.generic_string().c_str());
-                    exit(1);
+                    throw ImportFailure{};
                 }
                 const int decompressedStructures = LZ4_decompress_safe(
                     readPtr,
@@ -881,7 +885,7 @@ void importWorld()
                     Logger::logError("importWorld: LZ4 structure decompression failed for chunk idx %u in %s (got %d; scratch=%zu)",
                                      localIdx, regionFilePath.generic_string().c_str(),
                                      decompressedStructures, structuresScratchSize);
-                    exit(1);
+                    throw ImportFailure{};
                 }
 
                 uint32_t numStructures;
@@ -894,7 +898,7 @@ void importWorld()
                     Logger::logError("importWorld: structures payload size mismatch for chunk idx %u in %s (got %d, expected %u)",
                                      localIdx, regionFilePath.generic_string().c_str(),
                                      decompressedStructures, expectedSize);
-                    exit(1);
+                    throw ImportFailure{};
                 }
 
                 structures.resize(numStructures);
@@ -922,6 +926,12 @@ void importWorld()
 
             ++totalChunksImported;
         }
+    }
+
+    }
+    catch (const ImportFailure&)
+    {
+        return -1;
     }
 
     const glm::ivec2 cameraChunkPos{
@@ -960,6 +970,73 @@ void importWorld()
     Logger::log("importWorld: imported %u chunks across %zu regions from %s; expectedBlas=%u",
                 totalChunksImported, regions.size(),
                 worldDir.generic_string().c_str(), expectedBlasBuildChunks);
+
+    return 0;
+}
+
+void importWorld()
+{
+    const std::string worldPathStr = SettingsManager::getAsString("world");
+    if (worldPathStr.empty())
+    {
+        return;
+    }
+    if (importWorldImpl(worldPathStr) != 0)
+    {
+        exit(1);
+    }
+}
+
+void reimportWorld(const std::filesystem::path& worldDir)
+{
+    threadPool.shutdown();
+
+    Renderer::flush();
+
+    ToFreeList scratchToFree;
+    for (const auto& [regionPos, regionPtr] : regions)
+    {
+        if (!regionPtr)
+        {
+            continue;
+        }
+        for (const std::unique_ptr<Chunk>& chunkPtr : regionPtr->chunks)
+        {
+            if (chunkPtr && chunkPtr->getTerrainInstance() != nullptr)
+            {
+                chunkPtr->destroyInstances(scratchToFree);
+            }
+        }
+    }
+    scratchToFree.freeAll();
+
+    regions.clear();
+
+    chunksToGenerateTerrain.clear();
+    chunksToGenerateGeometry.clear();
+    {
+        std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
+        chunksToCreateBlas.clear();
+    }
+    {
+        std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
+        chunksToDestroy.clear();
+    }
+    tasksToEnqueue.clear();
+    thisFrameTasks.clear();
+    lastChunkPos = { INT_MAX, INT_MAX };
+    cameraUnderwater = false;
+    dirty.store(true, std::memory_order_release);
+    expectedBlasBuildChunks = 0;
+    completedBlasBuildChunks = 0;
+    worldImportActive = false;
+
+    threadPool.init();
+
+    if (importWorldImpl(worldDir) != 0)
+    {
+        Logger::logError("reimportWorld: import failed; terrain will regenerate from current settings");
+    }
 }
 
 bool isWorldFullyLoaded()

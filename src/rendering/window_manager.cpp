@@ -13,6 +13,8 @@
 #include <codecvt>
 
 #include <hidsdi.h>
+#include <shobjidl.h>
+#include <filesystem>
 #include <vector>
 
 #include "logger.h"
@@ -135,26 +137,67 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
             SettingsManager::toggleBool("showGui");
             break;
         case 'O':
-            if (ctrlHeld && !SettingsManager::getAsBool("voxelMode"))
+            if (ctrlHeld)
             {
-                OPENFILENAMEW ofn{};
-                wchar_t filePath[MAX_PATH] = L"";
-
-                ofn.lStructSize = sizeof(ofn);
-                ofn.hwndOwner = hwnd;
-                ofn.lpstrFile = filePath;
-                ofn.nMaxFile = MAX_PATH;
-                ofn.lpstrFilter = L"glTF Files (*.gltf; *.glb)\0*.gltf;*.glb\0";
-                ofn.lpstrTitle = L"Open glTF file";
-                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-
-                if (GetOpenFileNameW(&ofn))
+                if (SettingsManager::getAsBool("voxelMode"))
                 {
-                    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-                    const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
-                    // strip hidden characters which otherwise cause issues with file extension comparison
-                    const std::string filePathStrClean = std::string(filePathStr.c_str());
-                    Renderer::loadScene(filePathStrClean);
+                    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+                    IFileOpenDialog* dlg = nullptr;
+                    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
+                    {
+                        DWORD opts = 0;
+                        dlg->GetOptions(&opts);
+                        dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+                        dlg->SetTitle(L"Open world folder");
+                        if (SUCCEEDED(dlg->Show(hwnd)))
+                        {
+                            IShellItem* item = nullptr;
+                            if (SUCCEEDED(dlg->GetResult(&item)))
+                            {
+                                PWSTR pathW = nullptr;
+                                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pathW)))
+                                {
+                                    const std::filesystem::path worldDir = pathW;
+                                    CoTaskMemFree(pathW);
+                                    if (std::filesystem::exists(worldDir / "world.json"))
+                                    {
+                                        Terrain::reimportWorld(worldDir);
+                                    }
+                                    else
+                                    {
+                                        Logger::logError("%s missing world.json",
+                                                         worldDir.generic_string().c_str());
+                                    }
+                                }
+                                item->Release();
+                            }
+                        }
+                        dlg->Release();
+                    }
+                    CoUninitialize();
+                }
+                else
+                {
+                    OPENFILENAMEW ofn{};
+                    wchar_t filePath[MAX_PATH] = L"";
+
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hwnd;
+                    ofn.lpstrFile = filePath;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.lpstrFilter = L"glTF Files (*.gltf; *.glb)\0*.gltf;*.glb\0";
+                    ofn.lpstrTitle = L"Open glTF file";
+                    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+                    if (GetOpenFileNameW(&ofn))
+                    {
+                        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+                        const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
+                        // strip hidden characters which otherwise cause issues with file extension comparison
+                        const std::string filePathStrClean = std::string(filePathStr.c_str());
+                        Renderer::loadScene(filePathStrClean);
+                    }
                 }
             }
             break;
