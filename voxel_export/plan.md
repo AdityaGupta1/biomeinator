@@ -194,6 +194,32 @@ The BLAS-tracking counter counts imported chunks within `createBlasDistance`. Al
 
 ---
 
+## Pipeline distance fix (landed during Step 4b)
+
+`Terrain::update` defines three concentric distance gates around the camera:
+
+```
+createBlasDistance      = renderDistance + 1
+fillStructuresDistance  = createBlasDistance + 1 + structureMaxChunkRadius
+generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius
+```
+
+`fillStructuresDistance` previously omitted the `+ structureMaxChunkRadius` term. The bug only manifested under `--lockCamera=true` because moving cameras keep promoting outer rings into inner rings before the gap matters; locked-camera import exposed it.
+
+**Why the term is needed.** For a chunk at distance `D` from the camera to reach `HAS_GEOMETRY`:
+- self in `createBlasDistance` (gates `NEEDS_GEOMETRY → GENERATING_GEOMETRY`).
+- 4 cardinal neighbors at `D±1` must reach `HAS_ALL_BLOCKS` (so self's `numNeighborsWithBlocks` counter hits 4).
+- Each cardinal neighbor reaches `HAB` only after the cardinal's own 5×5 structure footprint (chunks at `D±1±structureMaxChunkRadius`) runs `checkStructureNeighbors`.
+- `checkStructureNeighbors` is enqueued only when a chunk advances `HT → ASN`, which is gated at `fillStructuresDistance`.
+
+So for self at the edge `D = createBlasDistance`, the worst footprint chunk sits at `D + 1 + structureMaxChunkRadius`. That must be `≤ fillStructuresDistance`. Hence the formula.
+
+`generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius` keeps the further invariant that the 5×5 footprint of any `fillStructuresDistance` chunk is materialised as `Chunk*` objects (`checkStructureNeighbors` walks neighbor pointers and asserts non-null).
+
+**Cost.** Work zone area `(2·generateTerrainDistance + 1)²` grows from `(2·(rd+4)+1)²` to `(2·(rd+6)+1)²` — ~12% more chunks generated. Acceptable trade for correct rendering at full `renderDistance` under any camera state.
+
+---
+
 ## Future: Ctrl+O mid-run import (not for initial impl)
 
 Add `.json` filter to the `Ctrl+O` open dialog (currently `gltf/glb` only — `window_manager.cpp:147`). When a `.json` is picked:

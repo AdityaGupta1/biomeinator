@@ -44,20 +44,26 @@
 - [x] chunk.cpp: `checkStructureNeighbors` unchanged (always runs)
 - [x] chunk.cpp: `generateSegments` unchanged (always runs)
 
-### 4b: importWorld()
+### 4b: importWorld() ✅
 - [x] settings_manager.h/cpp: add `setWorldSeed(uint32_t)` (writes both cached static + settings map)
 - [x] terrain.cpp: parse world.json, fatal-exit on errors
 - [x] terrain.cpp: apply worldSeed to SettingsManager BEFORE any terrain task runs; apply renderDistance only in test mode (normal import keeps user's current renderDistance)
+- [x] terrain.cpp: re-call `ChunkGenerator::init()` after `setWorldSeed` (chunk_generator caches `worldSeed` + RNG-derived `noiseOffsetXZ` at init time, so initial Terrain::init's cache must be rebuilt with the imported seed before any boundary chunk runs fresh-gen)
 - [x] terrain.cpp: per region — read header, validate magic + version=4, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData
 - [x] terrain.cpp: count expected BLAS chunks (imported chunks within createBlasDistance of camera), restore camera, setDirty()
 - [x] renderer.cpp: call Terrain::importWorld() right after Terrain::init in voxelMode init path (Step 5 will layer BLAS tracking around this same call site)
-- [ ] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters
+- [x] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters (confirmed via diag log: HG=expectedBlas exactly, all imported chunks within createBlasDistance reach HAS_GEOMETRY)
+
+### 4c: Pipeline distance fix ✅
+Discovered during 4b verify with `--lockCamera=true`: chunks at `D=renderDistance` ring stuck at `HAS_ALL_BLOCKS` because their cardinal neighbors at `D+1=fillStructuresDistance+1` couldn't run `checkStructureNeighbors` (gated at `fillStructuresDistance`). Fixed by widening `fillStructuresDistance` so the structure-neighbor 5×5 footprint of every chunk inside `createBlasDistance+1` is itself within the gate.
+
+- [x] terrain.cpp: change `fillStructuresDistance = createBlasDistance + 1` → `createBlasDistance + 1 + structureMaxChunkRadius`. `generateTerrainDistance` formula unchanged (still `fillStructuresDistance + structureMaxChunkRadius`), so it widens automatically. Work zone grows from `(2·(rd+4)+1)²` to `(2·(rd+6)+1)²` — ~12% more chunks generated, but `D=renderDistance` ring now actually renders under locked camera. Pre-existing design issue, not introduced by import work.
 
 ## Step 5: Renderer init wiring + BLAS tracking
 - [x] renderer.cpp: wire importWorld() call at init (done in 4b)
 - [ ] terrain.cpp: increment BLAS counter in addChunkToCreateBlas()
 - [ ] terrain.cpp: implement isWorldFullyLoaded()
-- [ ] Verify: log confirms all BLASes built after import
+- [ ] Verify: log confirms all BLASes built after import (with 4c fix, `expectedBlasBuildChunks` now matches actual HG count exactly under locked camera)
 
 ## Step 6: Test loader integration
 - [ ] test_loader.cpp: support "world" field in test JSON
