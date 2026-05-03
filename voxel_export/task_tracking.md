@@ -20,8 +20,8 @@
 - [x] chunk.h/cpp: add getBlocks(), getBiomes(), getSegments() const-ref getters
 - [x] util/file_util.h/cpp: extract getDocumentsDir() + getTimestampString() helpers
 - [x] renderer_screenshot.cpp: refactored to use FileUtil helpers
-- [x] terrain.cpp: implement exportWorld() — directory creation, region binary writing w/ LZ4, scene.json
-- [x] Verify: build succeeds, export produces valid region .bin files + scene.json
+- [x] terrain.cpp: implement exportWorld() — directory creation, region binary writing w/ LZ4, world.json
+- [x] Verify: build succeeds, export produces valid region .bin files + world.json
 
 ## Step 3b: Structure export ✅
 - [x] chunk.h/cpp: add getStructures() getter, extend loadSerializedData() to accept structures
@@ -45,14 +45,16 @@
 - [x] chunk.cpp: `generateSegments` unchanged (always runs)
 
 ### 4b: importWorld()
-- [ ] terrain.cpp: parse scene.json, fatal-exit on errors
-- [ ] terrain.cpp: apply worldSeed to SettingsManager BEFORE any terrain task runs; apply renderDistance only in test mode (normal import keeps user's current renderDistance)
-- [ ] terrain.cpp: per region — read header, validate magic + version=4, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData
-- [ ] terrain.cpp: count expected BLAS chunks (imported chunks within createBlasDistance of camera), restore camera, setDirty()
+- [x] settings_manager.h/cpp: add `setWorldSeed(uint32_t)` (writes both cached static + settings map)
+- [x] terrain.cpp: parse world.json, fatal-exit on errors
+- [x] terrain.cpp: apply worldSeed to SettingsManager BEFORE any terrain task runs; apply renderDistance only in test mode (normal import keeps user's current renderDistance)
+- [x] terrain.cpp: per region — read header, validate magic + version=4, create Region, decompress per-chunk blocks+biomes (always) and structures (if size > 0), call loadSerializedData
+- [x] terrain.cpp: count expected BLAS chunks (imported chunks within createBlasDistance of camera), restore camera, setDirty()
+- [x] renderer.cpp: call Terrain::importWorld() right after Terrain::init in voxelMode init path (Step 5 will layer BLAS tracking around this same call site)
 - [ ] Verify: round-trip export→import renders correctly, no missing faces, no stuck state-machine counters
 
 ## Step 5: Renderer init wiring + BLAS tracking
-- [ ] renderer.cpp: wire importWorld() call at init
+- [x] renderer.cpp: wire importWorld() call at init (done in 4b)
 - [ ] terrain.cpp: increment BLAS counter in addChunkToCreateBlas()
 - [ ] terrain.cpp: implement isWorldFullyLoaded()
 - [ ] Verify: log confirms all BLASes built after import

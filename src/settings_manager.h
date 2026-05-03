@@ -24,5 +24,6 @@ void setAsFloat(const std::string& name, float value);
 void setAsString(const std::string& name, const std::string& value);
 
 uint32_t getWorldSeed();
+void setWorldSeed(uint32_t value);
 
 } // namespace SettingsManager

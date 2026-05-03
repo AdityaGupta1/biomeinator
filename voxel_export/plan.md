@@ -36,7 +36,9 @@ Structures payload (uncompressed, variable size):
 
 Segments are NOT serialized — they are deterministic from blocks and regenerated on import via the normal `generateSegments` task.
 
-## `scene.json`
+## `world.json`
+
+(top-level metadata file at the export dir root; also identifies a directory as a biomeinator world for `Ctrl+O`-driven import in the future)
 
 ```json
 {
@@ -84,9 +86,9 @@ These counters are also untouched by `setNeighbors` (`chunk.cpp:69-70`) — the 
 
 ### Import sequence
 
-1. Validate `--world` path exists, contains `scene.json`. Fatal exit if missing/malformed.
-2. Parse `scene.json`. Apply `worldSeed` to `SettingsManager` **before any terrain code runs** (decorators depend on `worldSeed`). Apply `renderDistance` **only in test mode** (so golden comparison matches export exactly); in normal import, leave user's current `renderDistance` untouched.
-3. For each region in `scene.json`:
+1. Validate `--world` path exists, contains `world.json`. Fatal exit if missing/malformed.
+2. Parse `world.json`. Apply `worldSeed` to `SettingsManager` **before any terrain code runs** (decorators depend on `worldSeed`). Apply `renderDistance` **only in test mode** (so golden comparison matches export exactly); in normal import, leave user's current `renderDistance` untouched.
+3. For each region in `world.json`:
    - Open `region_X_Z.bin`. Validate magic + version. Fatal on mismatch.
    - Insert `Region` into `regions` map. Region neighbor pointers are wired up by the normal update loop.
    - For each chunk entry: LZ4-decompress block+biome payload (always present) and structures payload (if `compressedStructuresSize > 0`). Call `chunk->loadSerializedData(blocks, biomes, structures)`. The chunk's `state` stays at `NEEDS_TERRAIN`; `wasImported` is set to `true`.
@@ -132,11 +134,11 @@ Implement `Terrain::exportWorld()` in terrain.cpp.
 4. Iterate `regions` map. For each region containing any chunk with `state >= HAS_ALL_BLOCKS`:
    - Write region binary file per format above
    - Per chunk: gate `state >= HAS_ALL_BLOCKS`. LZ4-compress blocks+biomes (always). LZ4-compress structures (if non-empty).
-5. Write `scene.json` using nlohmann::json
+5. Write `world.json` using nlohmann::json
 
 Chunks below `HAS_ALL_BLOCKS` (including outer-ring stubs at `NEEDS_TERRAIN`, in-flight `GENERATING_TERRAIN` chunks, and `HAS_TERRAIN` boundary chunks) are skipped by the gate. The `HAS_ALL_BLOCKS` gate is required to avoid a torn-read race: past `HAS_ALL_BLOCKS`, no task ever mutates a chunk's `blocks`/`biomes`/`structures`, but at exactly `HAS_TERRAIN` the chunk may transition to `FILLING_STRUCTURES` mid-export. Skipped chunks get regenerated normally on import.
 
-**Verify:** Run voxel mode, fly somewhere, Ctrl+U. Check exports folder exists with scene.json + .bin files. Validate JSON. Hex-check .bin files for BIOM magic + version 4. Log compressed vs uncompressed sizes.
+**Verify:** Run voxel mode, fly somewhere, Ctrl+U. Check exports folder exists with world.json + .bin files. Validate JSON. Hex-check .bin files for BIOM magic + version 4. Log compressed vs uncompressed sizes.
 
 ### Step 4: Import — chunk hooks + importWorld()
 
@@ -153,10 +155,10 @@ Two parts:
 
 **4b. `Terrain::importWorld()` in terrain.cpp.**
 
-1. Validate `--world` path exists and contains `scene.json`. Fatal `exit(1)` if missing/malformed.
-2. Parse `scene.json`.
+1. Validate `--world` path exists and contains `world.json`. Fatal `exit(1)` if missing/malformed.
+2. Parse `world.json`.
 3. Apply `worldSeed` to `SettingsManager` before any terrain task can run (decorators read `worldSeed`). Apply `renderDistance` only in test mode (golden comparison match); in normal import, keep user's current `renderDistance`.
-4. For each region coord pair in `scene.json`:
+4. For each region coord pair in `world.json`:
    - Derive filename `region_X_Z.bin`. Fatal if missing.
    - Read header, validate magic (`0x42494F4D`) + version (`4`). Fatal on mismatch.
    - `regions.emplace(regionPos, std::make_unique<Region>(regionPos))`.
@@ -191,6 +193,14 @@ The BLAS-tracking counter counts imported chunks within `createBlasDistance`. Al
 **Verify:** Add test entry with `world` field to tests.json. Run test harness, confirm it passes args correctly and golden comparison works.
 
 ---
+
+## Future: Ctrl+O mid-run import (not for initial impl)
+
+Add `.json` filter to the `Ctrl+O` open dialog (currently `gltf/glb` only — `window_manager.cpp:147`). When a `.json` is picked:
+- Validate it's a `world.json` (expected keys + version). Fatal exit if malformed or random JSON.
+- If valid, run import live: flush renderer, clear `regions` map + all per-chunk state, reset BLAS tracking statics, run the same `importWorld(path)` body, restore camera.
+
+Requires factoring `importWorld` to take an explicit world dir path, plus a terrain reset path that safely tears down in-flight tasks. Defer until after Steps 4-6 land.
 
 ## Future optimization (not for initial impl)
 

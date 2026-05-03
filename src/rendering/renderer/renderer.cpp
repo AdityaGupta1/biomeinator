@@ -86,6 +86,7 @@ void init()
     if (renderState.voxelMode)
     {
         Terrain::init(&renderState.scene);
+        Terrain::importWorld();
     }
     else
     {

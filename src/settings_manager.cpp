@@ -233,4 +233,10 @@ uint32_t getWorldSeed()
     return worldSeed;
 }
 
+void setWorldSeed(uint32_t value)
+{
+    worldSeed = value;
+    settings["worldSeed"] = value;
+}
+
 } // namespace SettingsManager
