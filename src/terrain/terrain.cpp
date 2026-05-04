@@ -109,7 +109,7 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
-// Test-mode-only gate: isImportComplete() lets the renderer wait for imported chunks to
+// Test-mode-only gate: isTestModeImportComplete() lets the renderer wait for imported chunks to
 // reach the BLAS-create queue before capturing the golden screenshot. Counter ticks on
 // enqueue, not on GPU BLAS-build completion, so completion is one frame early — masked by
 // the renderer's didSceneChange reset, worst case is a loud golden mismatch. All mutation
@@ -1106,7 +1106,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool isImportComplete()
+bool isTestModeImportComplete()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {

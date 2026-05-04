@@ -553,7 +553,7 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
 
-    const bool voxelImportGate = !(renderState.testMode && renderState.voxelMode) || Terrain::isImportComplete();
+    const bool voxelImportGate = !(renderState.testMode && renderState.voxelMode) || Terrain::isTestModeImportComplete();
 
     if (resetAccumulation)
     {

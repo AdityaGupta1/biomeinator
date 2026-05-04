@@ -28,11 +28,11 @@ The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`
 
 `ChunkGenerator` caches `worldSeed` and the RNG-derived `noiseOffsetXZ` at init time. The first `Terrain::init` runs with whatever seed was active at startup; `importWorld` then calls `setWorldSeed` and must re-init `ChunkGenerator` before any boundary chunk runs fresh-gen. Without this, regenerated boundary chunks use the wrong noise offset and produce visible seams against imported chunks.
 
-## `isImportComplete()` is a test-mode-only gate
+## `isTestModeImportComplete()` is a test-mode-only gate
 
 The interactive import path does not need to know when import finishes — frames render unconditionally. The test harness, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before triggering the screenshot, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
 
-The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion, so `isImportComplete()` returns true one frame early. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read. All counter mutation is gated on cached `testMode` so the non-test path stays at zero atomic ops.
+The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion, so `isTestModeImportComplete()` returns true one frame early. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read. All counter mutation is gated on cached `testMode` so the non-test path stays at zero atomic ops.
 
 ## `reimportWorld` flushes everything
 
