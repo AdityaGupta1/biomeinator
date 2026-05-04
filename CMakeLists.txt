@@ -295,5 +295,6 @@ target_include_directories(BiomeinatorTests PRIVATE
 add_dependencies(BiomeinatorTests Biomeinator)
 target_compile_definitions(BiomeinatorTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     BIOMEINATOR_EXE_PATH="$<TARGET_FILE:Biomeinator>"
 )

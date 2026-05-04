@@ -573,7 +573,8 @@
                 "--height=540",
                 "--antialiasingMode=0",
                 "--debugView=\"diffuseAlbedo\"",
-                "--maxPathDepth=4"
+                "--maxPathDepth=4",
+                "--noJitter"
             ],
             "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
             "threshold": 0.001

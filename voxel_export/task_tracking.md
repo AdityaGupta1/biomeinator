@@ -66,6 +66,17 @@ Discovered during 4b verify with `--lockCamera=true`: chunks at `D=renderDistanc
 - [x] chunk.h/cpp: add getWasImported() getter (wasImported is private)
 - [x] Verify: log confirms all BLASes built after import (with 4c fix, `expectedBlasBuildChunks` now matches actual HG count exactly under locked camera)
 
+## Step 7: Ctrl+O mid-run import ✅
+- [x] window_manager.cpp: Ctrl+O directory pick → validates `world.json` exists → calls `Terrain::reimportWorld()`
+- [x] terrain.cpp: `reimportWorld()` flushes renderer, clears regions + per-chunk state, resets BLAS tracking, reruns import body, restores camera
+
+## Step 8: Structure entry compression (region format v4 → v5) ✅
+- [x] terrain.cpp: bump version 4→5, structure entries packed into single `uint32_t` (8b type | 4b localX | 9b Y | 4b localZ); 13B → 4B pre-LZ4. Owner chunk origin implicit from storage location, reconstructed at import. Static asserts on chunkSizeXZ/chunkSizeY/StructureType::COUNT
+- [x] settings_manager.cpp + renderer.cpp: add `--noJitter` flag (init Halton sequence with size 1 — deterministic single-frame rendering for albedo debug-view tests)
+- [x] tests/main.cpp + CMakeLists.txt: route `test_output/` into `build/` via `CMAKE_BINARY_DIR`
+- [x] tests/voxel/water_*: re-export fixtures, regenerate `golden_diffuseAlbedo.png`, add `--noJitter` to albedo test
+- [x] Verify: water_absorption + water_reflection + water_reflection_diffuse_albedo all pass; albedo test stable at 0.00018-0.00022 error vs 0.001 threshold over 6 consecutive runs
+
 ## Step 6: Test loader integration ✅
 - [x] test_loader.cpp: support "world" field in test JSON (mutually exclusive with "scene", exactly one required)
 - [x] renderer.cpp: gate accumulation increment on `Terrain::isImportComplete()` for voxel-mode test runs only (`voxelImportGate`); avoids screenshot racing BLAS-build churn

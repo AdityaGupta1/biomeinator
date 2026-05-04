@@ -228,19 +228,10 @@ So for self at the edge `D = createBlasDistance`, the worst footprint chunk sits
 
 ---
 
-## Future: Ctrl+O mid-run import (not for initial impl)
+## Step 7: Ctrl+O mid-run import ✅
+- [x] window_manager.cpp: Ctrl+O opens directory containing `world.json`, calls `Terrain::reimportWorld(path)`. Logs error if `world.json` missing.
+- [x] terrain.cpp: `reimportWorld` flushes renderer, tears down regions + per-chunk state, resets BLAS tracking statics, reruns `importWorld` body, restores camera.
 
-Add `.json` filter to the `Ctrl+O` open dialog (currently `gltf/glb` only — `window_manager.cpp:147`). When a `.json` is picked:
-- Validate it's a `world.json` (expected keys + version). Fatal exit if malformed or random JSON.
-- If valid, run import live: flush renderer, clear `regions` map + all per-chunk state, reset BLAS tracking statics, run the same `importWorld(path)` body, restore camera.
-
-Requires factoring `importWorld` to take an explicit world dir path, plus a terrain reset path that safely tears down in-flight tasks. Defer until after Steps 4-6 land.
-
-## Future optimization (not for initial impl)
-
-Structure entries currently serialize as `uint8_t type` + `int32_t pos_WS[3]` (13 bytes pre-LZ4). Can compress to 4 bytes by storing chunk-local position instead of world position:
-- 8 bits: type
-- 4 bits + 9 bits + 4 bits: local x (0..15) + local y (0..511) + local z (0..15) — 17 bits, padded to 24
-- Total 25 bits used, fits in 4 bytes (`uint32_t`).
-
-Origin chunk is implicit from where the structure entry is stored. Skip for now — keep format simple until profiler shows it matters.
+## Step 8: Structure entry compression (region format v4 → v5) ✅
+- [x] terrain.cpp: bump version 4→5, replace 13-byte structure entry (`uint8_t type` + `int32_t pos_WS[3]`) with 4-byte packed `uint32_t` (8b type | 4b localX | 9b Y | 4b localZ). Owner chunk origin reconstructs `pos_WS` on import. Static asserts guard chunk dimensions and type byte width.
+- [x] tests/voxel/water_*: re-export fixtures with v5 format.

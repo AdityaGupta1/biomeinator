@@ -72,7 +72,7 @@ int main(int argc, char** argv)
     printf("Filtering tests with regex: %s\n", testFilterStr.c_str());
     const std::regex testFilter(parseResult["filter"].as<std::string>());
 
-    const auto testsOutputPath = std::filesystem::absolute("test_output");
+    const auto testsOutputPath = std::filesystem::path(CMAKE_BINARY_DIR) / "test_output";
     printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
     if (std::filesystem::exists(testsOutputPath))
     {

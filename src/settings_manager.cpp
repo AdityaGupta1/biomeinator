@@ -42,6 +42,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
     ADD_OPTION("useVsync", "Enable VSync", bool, "true");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
+    ADD_OPTION("noJitter", "Disable jitter", bool, "false");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
@@ -111,6 +112,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("doPathSplitting", bool);
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);
+    COPY_SETTING("noJitter", bool);
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);

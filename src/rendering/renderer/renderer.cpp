@@ -282,8 +282,9 @@ void resize()
     // Streamline programming guide says there's no reason to limit the sequence length, so I'm using 64 for the "Base
     // Phase Count" instead of the default/recommended of 8.
     const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderState.renderWidth);
-    const uint32_t jitterHaltonSequenceLength =
-        static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
+    const uint32_t jitterHaltonSequenceLength = SettingsManager::getAsBool("noJitter")
+        ? 1u
+        : static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     renderState.camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 
     renderState.frameTimeBuffer.clear();

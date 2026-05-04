@@ -449,14 +449,20 @@ void update(ToFreeList& toFreeList)
 }
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;
-static constexpr uint16_t worldRegionVersion = 4;
+static constexpr uint16_t worldRegionVersion = 5;
 static constexpr uint32_t worldJsonVersion = 1;
 
-// 13 bytes per Structure (uint8_t type + int32_t[3] pos_WS), no chunk should
-// realistically have more than 512 structures in its 16x16xN footprint.
+// 4 bytes per Structure: 8b type | 4b localX | 9b Y | 4b localZ packed into uint32_t.
+// Owner chunk origin is implicit from where the entry is stored, so only chunk-local
+// position is serialized. No chunk should realistically have more than 512 structures
+// in its 16x16xN footprint.
 static constexpr size_t maxStructuresPerChunk = 512;
-static constexpr size_t structureEntrySize = sizeof(uint8_t) + 3 * sizeof(int32_t);
+static constexpr size_t structureEntrySize = sizeof(uint32_t);
 static constexpr size_t structuresScratchSize = sizeof(uint32_t) + maxStructuresPerChunk * structureEntrySize;
+
+static_assert(chunkSizeXZ == 16, "Structure packing assumes 4-bit localX/localZ (chunkSizeXZ == 16)");
+static_assert(chunkSizeY == 512, "Structure packing assumes 9-bit Y (chunkSizeY == 512)");
+static_assert(static_cast<size_t>(StructureType::COUNT) <= 256, "Structure packing assumes 8-bit type");
 
 static std::string regionFileName(int32_t regionX, int32_t regionZ)
 {
@@ -593,16 +599,30 @@ void exportWorld()
                 const int structuresPayloadSize = static_cast<int>(
                     sizeof(uint32_t) + numStructures * structureEntrySize);
 
+                const glm::ivec2 chunkOriginBlocksXZ_WS = chunk.getChunkPos() * static_cast<int>(chunkSizeXZ);
+
                 memcpy(structuresBuffer.data(), &numStructures, sizeof(uint32_t));
                 char* writePtr = structuresBuffer.data() + sizeof(uint32_t);
                 for (const Structure& s : structures)
                 {
-                    const uint8_t typeByte = static_cast<uint8_t>(s.type);
-                    const int32_t posArr[3] = { s.pos_WS.x, s.pos_WS.y, s.pos_WS.z };
-                    memcpy(writePtr, &typeByte, sizeof(uint8_t));
-                    writePtr += sizeof(uint8_t);
-                    memcpy(writePtr, posArr, sizeof(posArr));
-                    writePtr += sizeof(posArr);
+                    const int32_t localX = s.pos_WS.x - chunkOriginBlocksXZ_WS.x;
+                    const int32_t localZ = s.pos_WS.z - chunkOriginBlocksXZ_WS.y;
+                    const int32_t y = s.pos_WS.y;
+                    const uint32_t typeBits = static_cast<uint32_t>(s.type);
+
+                    ASSERT(localX >= 0 && localX < static_cast<int32_t>(chunkSizeXZ));
+                    ASSERT(localZ >= 0 && localZ < static_cast<int32_t>(chunkSizeXZ));
+                    ASSERT(y >= 0 && y < static_cast<int32_t>(chunkSizeY));
+                    ASSERT(typeBits < 256);
+
+                    const uint32_t packed =
+                        typeBits
+                        | (static_cast<uint32_t>(localX) << 8)
+                        | (static_cast<uint32_t>(y) << 12)
+                        | (static_cast<uint32_t>(localZ) << 21);
+
+                    memcpy(writePtr, &packed, sizeof(uint32_t));
+                    writePtr += sizeof(uint32_t);
                 }
 
                 const int compressed = LZ4_compress_default(
@@ -848,6 +868,11 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                blockBiomeBuffer.data() + numChunkBlocks * sizeof(Block),
                chunkSizeXZSquare * sizeof(Biome));
 
+        const int32_t chunkLocalX = localIdx % static_cast<int32_t>(regionSideLength);
+        const int32_t chunkLocalZ = localIdx / static_cast<int32_t>(regionSideLength);
+        const glm::ivec2 chunkPos = region.regionPosChunks + glm::ivec2(chunkLocalX, chunkLocalZ);
+        const glm::ivec2 chunkOriginBlocksXZ_WS = chunkPos * static_cast<int>(chunkSizeXZ);
+
         std::vector<Structure> structures;
         if (compressedStructuresSize > 0)
         {
@@ -888,21 +913,22 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
             const char* structPtr = structuresBuffer.data() + sizeof(uint32_t);
             for (uint32_t s = 0; s < numStructures; ++s)
             {
-                uint8_t typeByte;
-                int32_t posArr[3];
-                memcpy(&typeByte, structPtr, sizeof(uint8_t));
-                structPtr += sizeof(uint8_t);
-                memcpy(posArr, structPtr, sizeof(posArr));
-                structPtr += sizeof(posArr);
+                uint32_t packed;
+                memcpy(&packed, structPtr, sizeof(uint32_t));
+                structPtr += sizeof(uint32_t);
 
-                structures[s].type = static_cast<StructureType>(typeByte);
-                structures[s].pos_WS = glm::ivec3(posArr[0], posArr[1], posArr[2]);
+                const uint32_t typeBits = packed & 0xFFu;
+                const int32_t localX = static_cast<int32_t>((packed >> 8) & 0xFu);
+                const int32_t y = static_cast<int32_t>((packed >> 12) & 0x1FFu);
+                const int32_t localZ = static_cast<int32_t>((packed >> 21) & 0xFu);
+
+                structures[s].type = static_cast<StructureType>(typeBits);
+                structures[s].pos_WS = glm::ivec3(
+                    chunkOriginBlocksXZ_WS.x + localX,
+                    y,
+                    chunkOriginBlocksXZ_WS.y + localZ);
             }
         }
-
-        const int32_t localX = localIdx % static_cast<int32_t>(regionSideLength);
-        const int32_t localZ = localIdx / static_cast<int32_t>(regionSideLength);
-        const glm::ivec2 chunkPos = region.regionPosChunks + glm::ivec2(localX, localZ);
 
         Chunk* chunk = region.createChunk(chunkPos);
         chunk->loadSerializedData(std::move(blocks), std::move(biomes), std::move(structures));
