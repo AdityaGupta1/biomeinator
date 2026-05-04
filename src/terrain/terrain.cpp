@@ -43,6 +43,11 @@ namespace Terrain
 
 static Scene* scene;
 
+// Cached at init time; assumed never to change for the lifetime of the process (mirrors how
+// renderer.cpp caches its testMode/voxelMode flags). Workers see this via the
+// happens-before edge from threadPool.init() in Terrain::init().
+static bool testMode{ false };
+
 static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     chunk->generateTerrain(threadMemoryAlloc);
@@ -73,6 +78,7 @@ static ThreadPool threadPool;
 void init(Scene* scene)
 {
     Terrain::scene = scene;
+    Terrain::testMode = SettingsManager::isTestMode();
     TerrainMaterials::init(scene);
 
     Blocks::init();
@@ -103,17 +109,22 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
-static uint32_t expectedBlasBuildChunks{ 0 };
-static uint32_t completedBlasBuildChunks{ 0 };
-static bool worldImportActive{ false };
+// Test-mode-only gate: isImportComplete() lets the renderer wait for imported chunks to
+// reach the BLAS-create queue before capturing the golden screenshot. Counter ticks on
+// enqueue, not on GPU BLAS-build completion, so completion is one frame early — masked by
+// the renderer's didSceneChange reset, worst case is a loud golden mismatch. All mutation
+// is gated on cached `testMode` so the non-test path stays at zero atomic ops.
+static std::atomic<uint32_t> expectedImportedChunks{ 0 };
+static std::atomic<uint32_t> importedChunksEnqueuedForBlas{ 0 };
+static std::atomic<bool> worldImportActive{ false };
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
-    if (worldImportActive && chunk->getWasImported())
+    if (testMode && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
     {
-        ++completedBlasBuildChunks;
+        importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -982,16 +993,19 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         }
     }
 
-    expectedBlasBuildChunks = expected;
-    completedBlasBuildChunks = 0;
-    worldImportActive = true;
+    if (testMode)
+    {
+        expectedImportedChunks.store(expected, std::memory_order_relaxed);
+        importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
+        worldImportActive.store(true, std::memory_order_release);
+    }
 
     Renderer::restoreCamera(cameraPosInt, cameraPosFloat, phi, theta);
     setDirty();
 
-    Logger::log("importWorld: imported %u chunks across %zu regions from %s; expectedBlas=%u",
+    Logger::log("importWorld: imported %u chunks across %zu regions from %s; expectedImported=%u",
                 totalChunksImported, regions.size(),
-                worldDir.generic_string().c_str(), expectedBlasBuildChunks);
+                worldDir.generic_string().c_str(), expected);
 
     return true;
 }
@@ -1047,9 +1061,9 @@ static void resetTerrainState()
     lastChunkPos = { INT_MAX, INT_MAX };
     cameraUnderwater = false;
     dirty.store(true, std::memory_order_release);
-    expectedBlasBuildChunks = 0;
-    completedBlasBuildChunks = 0;
-    worldImportActive = false;
+    expectedImportedChunks.store(0, std::memory_order_relaxed);
+    importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
+    worldImportActive.store(false, std::memory_order_relaxed);
 }
 
 void reimportWorld(const std::filesystem::path& worldDir)
@@ -1068,15 +1082,18 @@ void reimportWorld(const std::filesystem::path& worldDir)
 
 bool isImportComplete()
 {
-    if (!worldImportActive)
+    if (!worldImportActive.load(std::memory_order_relaxed))
     {
         return true;
     }
-    if (completedBlasBuildChunks >= expectedBlasBuildChunks)
+    const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
+    const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);
+    ASSERT(enqueued <= expected);
+    if (enqueued >= expected)
     {
-        Logger::log("importWorld: fully loaded, %u/%u BLASes built",
-                    completedBlasBuildChunks, expectedBlasBuildChunks);
-        worldImportActive = false;
+        Logger::log("importWorld: fully loaded, %u/%u imported chunks queued for BLAS",
+                    enqueued, expected);
+        worldImportActive.store(false, std::memory_order_relaxed);
         return true;
     }
     return false;
