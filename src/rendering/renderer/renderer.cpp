@@ -552,12 +552,14 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
 
+    const bool voxelImportGate = !(renderState.testMode && renderState.voxelMode) || Terrain::isImportComplete();
+
     if (resetAccumulation)
     {
         renderState.accumulatedFrameNumber = 0;
         renderState.stopAccumulating = false;
     }
-    else if (!renderState.stopAccumulating)
+    else if (!renderState.stopAccumulating && voxelImportGate)
     {
         if (++renderState.accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {

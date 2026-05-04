@@ -538,6 +538,32 @@
             ],
             "golden": "gltf/fractional_opacity/golden_diffuseAlbedo.png",
             "threshold": 0.0001
+        },
+        {
+            "name": "water_absorption",
+            "world": "voxel/water_absorption",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=4"
+            ],
+            "golden": "voxel/water_absorption/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "water_reflection",
+            "world": "voxel/water_reflection",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=4"
+            ],
+            "golden": "voxel/water_reflection/golden.png",
+            "threshold": 0.01
         }
     ]
 }

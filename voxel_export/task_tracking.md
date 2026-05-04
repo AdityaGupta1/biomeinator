@@ -59,13 +59,16 @@ Discovered during 4b verify with `--lockCamera=true`: chunks at `D=renderDistanc
 
 - [x] terrain.cpp: change `fillStructuresDistance = createBlasDistance + 1` → `createBlasDistance + 1 + structureMaxChunkRadius`. `generateTerrainDistance` formula unchanged (still `fillStructuresDistance + structureMaxChunkRadius`), so it widens automatically. Work zone grows from `(2·(rd+4)+1)²` to `(2·(rd+6)+1)²` — ~12% more chunks generated, but `D=renderDistance` ring now actually renders under locked camera. Pre-existing design issue, not introduced by import work.
 
-## Step 5: Renderer init wiring + BLAS tracking
+## Step 5: Renderer init wiring + BLAS tracking ✅
 - [x] renderer.cpp: wire importWorld() call at init (done in 4b)
 - [x] terrain.cpp: increment BLAS counter in addChunkToCreateBlas() (gated on worldImportActive && chunk->getWasImported())
 - [x] terrain.cpp: rename isWorldFullyLoaded → isImportComplete; add one-shot log + worldImportActive=false flip on first threshold hit
 - [x] chunk.h/cpp: add getWasImported() getter (wasImported is private)
-- [ ] Verify: log confirms all BLASes built after import (with 4c fix, `expectedBlasBuildChunks` now matches actual HG count exactly under locked camera)
+- [x] Verify: log confirms all BLASes built after import (with 4c fix, `expectedBlasBuildChunks` now matches actual HG count exactly under locked camera)
 
-## Step 6: Test loader integration
-- [ ] test_loader.cpp: support "world" field in test JSON
-- [ ] Verify: test harness passes --world arg correctly
+## Step 6: Test loader integration ✅
+- [x] test_loader.cpp: support "world" field in test JSON (mutually exclusive with "scene", exactly one required)
+- [x] renderer.cpp: gate accumulation increment on `Terrain::isImportComplete()` for voxel-mode test runs only (`voxelImportGate`); avoids screenshot racing BLAS-build churn
+- [x] tests/voxel/water_absorption/, tests/voxel/water_reflection/: exported world fixtures + golden PNGs
+- [x] tests/tests.json: added `water_absorption` and `water_reflection` voxel test entries
+- [x] Verify: both voxel tests pass; gltf regression check (fancy_cornell_box) still passes — voxelImportGate has no effect on non-voxel runs
