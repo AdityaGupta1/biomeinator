@@ -564,6 +564,19 @@
             ],
             "golden": "voxel/water_reflection/golden.png",
             "threshold": 0.01
+        },
+        {
+            "name": "water_reflection_diffuse_albedo",
+            "world": "voxel/water_reflection",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=0",
+                "--debugView=\"diffuseAlbedo\"",
+                "--maxPathDepth=4"
+            ],
+            "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
+            "threshold": 0.001
         }
     ]
 }
