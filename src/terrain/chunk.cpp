@@ -28,6 +28,10 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
     : chunkPos(chunkPos), region(region)
 {}
 
+// Main thread only: this can call Region::createChunk, which mutates Region::chunks
+// without locking. Other code (e.g. Terrain::exportWorld) iterates Region::chunks
+// concurrently with worker tasks and relies on the array not being mutated under
+// it. If this assumption is ever broken, the iteration sites need locking.
 void Chunk::setNeighbors(bool createNeighbors)
 {
     const ivec2 thisRegionPosChunks = this->region->regionPosChunks;

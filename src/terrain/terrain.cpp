@@ -449,7 +449,18 @@ static constexpr uint32_t worldRegionMagic = 0x42494F4D;
 static constexpr uint16_t worldRegionVersion = 5;
 static constexpr uint32_t worldJsonVersion = 1;
 
-// 4 bytes per Structure: 8b type | 4b localX | 9b Y | 4b localZ packed into uint32_t.
+static_assert(sizeof(Block) == sizeof(uint16_t), "World export format assumes 2-byte Block");
+static_assert(sizeof(Biome) == sizeof(uint8_t), "World export format assumes 1-byte Biome");
+
+static constexpr size_t blockBiomePayloadSize =
+    numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome);
+
+// 4 bytes per Structure, packed into a uint32_t with the following bit layout
+// (low to high):
+//   bits  [0..7]   = type (8 bits)
+//   bits  [8..11]  = localX (4 bits)
+//   bits  [12..20] = y (9 bits)
+//   bits  [21..24] = localZ (4 bits)
 // Owner chunk origin is implicit from where the entry is stored, so only chunk-local
 // position is serialized. No chunk should realistically have more than 512 structures
 // in its 16x16xN footprint.
@@ -461,25 +472,19 @@ static_assert(chunkSizeXZ == 16, "Structure packing assumes 4-bit localX/localZ 
 static_assert(chunkSizeY == 512, "Structure packing assumes 9-bit Y (chunkSizeY == 512)");
 static_assert(static_cast<size_t>(StructureType::COUNT) <= 256, "Structure packing assumes 8-bit type");
 
-static std::string regionFileName(int32_t regionX, int32_t regionZ)
+static std::string regionFileName(glm::ivec2 regionPos)
 {
     char buf[64];
-    sprintf_s(buf, "region_%d_%d.bin", regionX, regionZ);
+    sprintf_s(buf, "region_%d_%d.bin", regionPos.x, regionPos.y);
     return buf;
 }
-
-struct PopulatedChunkRef
-{
-    uint16_t localIdx;
-    Chunk* chunk;
-};
 
 void exportWorld()
 {
     const std::filesystem::path exportsDir = FileUtil::getDocumentsDir("exports");
     if (exportsDir.empty())
     {
-        Logger::logError("exportWorld: failed to get Documents directory");
+        Logger::logError("world export: failed to get Documents directory");
         return;
     }
 
@@ -499,11 +504,7 @@ void exportWorld()
     uint32_t totalChunksExported = 0;
     uint32_t totalRegionsExported = 0;
 
-    static_assert(sizeof(Block) == sizeof(uint16_t), "Export format assumes 2-byte Block");
-    static_assert(sizeof(Biome) == sizeof(uint8_t), "Export format assumes 1-byte Biome");
-
-    const int blockBiomePayloadSize = static_cast<int>(numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome));
-    const int maxCompressedSize = LZ4_compressBound(blockBiomePayloadSize);
+    const int maxCompressedSize = LZ4_compressBound(static_cast<int>(blockBiomePayloadSize));
     const int maxStructuresCompressedSize = LZ4_compressBound(static_cast<int>(structuresScratchSize));
     std::vector<char> blockBiomeBuffer(blockBiomePayloadSize);
     std::vector<char> structuresBuffer(structuresScratchSize);
@@ -517,7 +518,7 @@ void exportWorld()
 
         const Region& region = *regionPtr;
 
-        std::vector<PopulatedChunkRef> populatedChunks;
+        std::vector<std::pair<uint16_t, Chunk*>> populatedChunks;
 
         for (uint32_t i = 0; i < region.chunks.size(); ++i)
         {
@@ -530,7 +531,7 @@ void exportWorld()
             const ChunkState state = chunkPtr->getState();
             if (state >= ChunkState::HAS_ALL_BLOCKS)
             {
-                populatedChunks.push_back({ static_cast<uint16_t>(i), chunkPtr.get() });
+                populatedChunks.emplace_back(static_cast<uint16_t>(i), chunkPtr.get());
             }
         }
 
@@ -557,9 +558,9 @@ void exportWorld()
         appendBytes(&regionZ, sizeof(regionZ));
         appendBytes(&numPopulatedChunks, sizeof(numPopulatedChunks));
 
-        for (const PopulatedChunkRef& entry : populatedChunks)
+        for (const auto& [localIdx, chunkPtr] : populatedChunks)
         {
-            const Chunk& chunk = *entry.chunk;
+            const Chunk& chunk = *chunkPtr;
 
             const std::vector<Block>& blocks = chunk.getBlocks();
             const std::vector<Biome>& biomes = chunk.getBiomes();
@@ -580,13 +581,13 @@ void exportWorld()
             const int compressedBlocks = LZ4_compress_default(
                 blockBiomeBuffer.data(),
                 regionBuffer.data() + blocksOffset,
-                blockBiomePayloadSize,
+                static_cast<int>(blockBiomePayloadSize),
                 maxCompressedSize);
 
             if (compressedBlocks <= 0)
             {
-                Logger::logError("exportWorld: LZ4 block compression failed for chunk idx %u in region (%d, %d); aborting export",
-                                 entry.localIdx, regionPos.x, regionPos.y);
+                Logger::logError("world export: LZ4 block compression failed for chunk idx %u in region (%d, %d); aborting export",
+                                 localIdx, regionPos.x, regionPos.y);
                 return;
             }
 
@@ -598,7 +599,7 @@ void exportWorld()
             if (!structures.empty())
             {
                 const uint32_t numStructures = static_cast<uint32_t>(structures.size());
-                ASSERT(numStructures <= maxStructuresPerChunk);
+                ASSERT(numStructures <= maxStructuresPerChunk, "structure count exceeds max per chunk");
                 const int structuresPayloadSize = static_cast<int>(
                     sizeof(uint32_t) + numStructures * structureEntrySize);
 
@@ -613,10 +614,10 @@ void exportWorld()
                     const int32_t y = s.pos_WS.y;
                     const uint32_t typeBits = static_cast<uint32_t>(s.type);
 
-                    ASSERT(localX >= 0 && localX < static_cast<int32_t>(chunkSizeXZ));
-                    ASSERT(localZ >= 0 && localZ < static_cast<int32_t>(chunkSizeXZ));
-                    ASSERT(y >= 0 && y < static_cast<int32_t>(chunkSizeY));
-                    ASSERT(typeBits < 256);
+                    ASSERT(localX >= 0 && localX < static_cast<int32_t>(chunkSizeXZ), "structure localX out of range");
+                    ASSERT(localZ >= 0 && localZ < static_cast<int32_t>(chunkSizeXZ), "structure localZ out of range");
+                    ASSERT(y >= 0 && y < static_cast<int32_t>(chunkSizeY), "structure y out of range");
+                    ASSERT(typeBits < 256, "structure type does not fit in 8 bits");
 
                     const uint32_t packed =
                         typeBits
@@ -638,8 +639,8 @@ void exportWorld()
 
                 if (compressed <= 0)
                 {
-                    Logger::logError("exportWorld: LZ4 structure compression failed for chunk idx %u in region (%d, %d); aborting export",
-                                     entry.localIdx, regionPos.x, regionPos.y);
+                    Logger::logError("world export: LZ4 structure compression failed for chunk idx %u in region (%d, %d); aborting export",
+                                     localIdx, regionPos.x, regionPos.y);
                     return;
                 }
 
@@ -648,19 +649,19 @@ void exportWorld()
             }
 
             char* headerPtr = regionBuffer.data() + headerOffset;
-            memcpy(headerPtr, &entry.localIdx, sizeof(uint16_t));
+            memcpy(headerPtr, &localIdx, sizeof(uint16_t));
             memcpy(headerPtr + sizeof(uint16_t), &compressedBlocksSize, sizeof(uint32_t));
             memcpy(headerPtr + sizeof(uint16_t) + sizeof(uint32_t), &compressedStructuresSize, sizeof(uint32_t));
 
             ++totalChunksExported;
         }
 
-        const std::filesystem::path regionFilePath = exportDir / regionFileName(regionPos.x, regionPos.y);
+        const std::filesystem::path regionFilePath = exportDir / regionFileName(regionPos);
 
         std::ofstream file(regionFilePath, std::ios::binary);
         if (!file)
         {
-            Logger::logError("exportWorld: failed to create %s; aborting export",
+            Logger::logError("world export: failed to create %s; aborting export",
                              regionFilePath.generic_string().c_str());
             return;
         }
@@ -692,12 +693,12 @@ void exportWorld()
     std::ofstream jsonFile(worldJsonPath);
     if (!jsonFile)
     {
-        Logger::logError("exportWorld: failed to create world.json");
+        Logger::logError("world export: failed to create world.json");
         return;
     }
     jsonFile << worldJson.dump();
 
-    Logger::log("exportWorld: exported %u chunks across %u regions to %s",
+    Logger::log("world export: exported %u chunks across %u regions to %s",
                 totalChunksExported, totalRegionsExported,
                 exportDir.generic_string().c_str());
 }
@@ -770,9 +771,6 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                            uint32_t& outChunksImported,
                            uint32_t& outChunksWithinBlasDistance)
 {
-    constexpr size_t blockBiomePayloadSize =
-        numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome);
-
     std::ifstream regionFile(regionFilePath, std::ios::binary);
     if (!regionFile)
     {
@@ -807,11 +805,26 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
     int32_t fileRegionZ;
     uint16_t numPopulatedChunks;
 
-    if (!readBytes(&magic, sizeof(magic))) return false;
-    if (!readBytes(&version, sizeof(version))) return false;
-    if (!readBytes(&fileRegionX, sizeof(fileRegionX))) return false;
-    if (!readBytes(&fileRegionZ, sizeof(fileRegionZ))) return false;
-    if (!readBytes(&numPopulatedChunks, sizeof(numPopulatedChunks))) return false;
+    if (!readBytes(&magic, sizeof(magic)))
+    {
+        return false;
+    }
+    if (!readBytes(&version, sizeof(version)))
+    {
+        return false;
+    }
+    if (!readBytes(&fileRegionX, sizeof(fileRegionX)))
+    {
+        return false;
+    }
+    if (!readBytes(&fileRegionZ, sizeof(fileRegionZ)))
+    {
+        return false;
+    }
+    if (!readBytes(&numPopulatedChunks, sizeof(numPopulatedChunks)))
+    {
+        return false;
+    }
 
     if (magic != worldRegionMagic)
     {
@@ -838,9 +851,18 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
         uint32_t compressedBlocksSize;
         uint32_t compressedStructuresSize;
 
-        if (!readBytes(&localIdx, sizeof(localIdx))) return false;
-        if (!readBytes(&compressedBlocksSize, sizeof(compressedBlocksSize))) return false;
-        if (!readBytes(&compressedStructuresSize, sizeof(compressedStructuresSize))) return false;
+        if (!readBytes(&localIdx, sizeof(localIdx)))
+        {
+            return false;
+        }
+        if (!readBytes(&compressedBlocksSize, sizeof(compressedBlocksSize)))
+        {
+            return false;
+        }
+        if (!readBytes(&compressedStructuresSize, sizeof(compressedStructuresSize)))
+        {
+            return false;
+        }
 
         if (readPtr + compressedBlocksSize > fileEnd)
         {
@@ -981,30 +1003,23 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
     const float phi = cameraJson["phi"].get<float>();
     const float theta = cameraJson["theta"].get<float>();
 
-    const glm::ivec2 cameraChunkPos{
-        MathUtil::floorDiv(cameraPosInt.x, static_cast<int>(chunkSizeXZ)),
-        MathUtil::floorDiv(cameraPosInt.z, static_cast<int>(chunkSizeXZ)),
-    };
+    const glm::ivec2 cameraChunkPos = glmUtil::floorDiv(
+        glm::ivec2(cameraPosInt.x, cameraPosInt.z),
+        glm::ivec2(static_cast<int>(chunkSizeXZ)));
     const int createBlasDistance = SettingsManager::getAsInt("renderDistance") + 1;
-
-    static_assert(sizeof(Block) == sizeof(uint16_t), "Import format assumes 2-byte Block");
-    static_assert(sizeof(Biome) == sizeof(uint8_t), "Import format assumes 1-byte Biome");
-
-    constexpr size_t blockBiomePayloadSize =
-        numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome);
 
     std::vector<char> blockBiomeBuffer(blockBiomePayloadSize);
     std::vector<char> structuresBuffer(structuresScratchSize);
 
     uint32_t totalChunksImported = 0;
-    uint32_t expected = 0;
+    uint32_t chunksWithinBlasDistance = 0;
 
     for (const nlohmann::json& regionEntry : worldJson["regions"])
     {
         const int32_t regionX = regionEntry[0].get<int32_t>();
         const int32_t regionZ = regionEntry[1].get<int32_t>();
         const glm::ivec2 regionPos{ regionX, regionZ };
-        const std::filesystem::path regionFilePath = worldDir / regionFileName(regionX, regionZ);
+        const std::filesystem::path regionFilePath = worldDir / regionFileName(regionPos);
 
         const auto [regionIter, inserted] = regions.try_emplace(regionPos, std::make_unique<Region>(regionPos));
         ASSERT(inserted, "region already exists at imported pos");
@@ -1012,7 +1027,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
 
         if (!loadRegionFile(regionFilePath, regionPos, cameraChunkPos, createBlasDistance,
                             region, blockBiomeBuffer, structuresBuffer,
-                            totalChunksImported, expected))
+                            totalChunksImported, chunksWithinBlasDistance))
         {
             return false;
         }
@@ -1020,7 +1035,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
 
     if (testMode)
     {
-        expectedImportedChunks.store(expected, std::memory_order_relaxed);
+        expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
         importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
         worldImportActive.store(true, std::memory_order_release);
     }
@@ -1030,7 +1045,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
 
     Logger::log("world import: imported %u chunks across %zu regions from %s; expectedImported=%u",
                 totalChunksImported, regions.size(),
-                worldDir.generic_string().c_str(), expected);
+                worldDir.generic_string().c_str(), chunksWithinBlasDistance);
 
     return true;
 }
@@ -1048,6 +1063,10 @@ void importWorld()
     }
 }
 
+// Tear down everything that holds Chunk* / region pointers so a fresh world can be
+// loaded into the same Terrain. Caller is responsible for shutting the thread pool
+// down first — half-running tasks holding chunk pointers would crash when the
+// region map is cleared. See knowledge/terrain/world_export_import.md (`reimportWorld`).
 static void resetTerrainState()
 {
     Renderer::flush();
@@ -1105,7 +1124,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool isTestModeImportComplete()
+bool pollTestModeImport()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {
@@ -1113,7 +1132,7 @@ bool isTestModeImportComplete()
     }
     const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
     const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);
-    ASSERT(enqueued <= expected);
+    ASSERT(enqueued <= expected, "imported BLAS-enqueue counter exceeded expected total");
     if (enqueued >= expected)
     {
         Logger::log("world import: fully loaded, %u/%u imported chunks queued for BLAS",

@@ -115,7 +115,10 @@ void toggleFullscreen()
 
 static std::optional<std::filesystem::path> showFolderPicker(HWND owner, const wchar_t* title)
 {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // CoUninitialize must only be paired with a successful CoInitializeEx. Failure
+    // codes like RPC_E_CHANGED_MODE (apartment already initialized in another mode)
+    // do not require — and must not receive — a matching CoUninitialize.
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     std::optional<std::filesystem::path> result;
 
     IFileOpenDialog* dlg = nullptr;
@@ -143,7 +146,10 @@ static std::optional<std::filesystem::path> showFolderPicker(HWND owner, const w
         dlg->Release();
     }
 
-    CoUninitialize();
+    if (SUCCEEDED(initHr))
+    {
+        CoUninitialize();
+    }
     return result;
 }
 

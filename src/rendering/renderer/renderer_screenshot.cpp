@@ -89,6 +89,7 @@ void finalizeQueuedScreenshot()
     if (renderState.screenshotRequest.useTestOutputPath)
     {
         path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
+        std::filesystem::create_directories(path.parent_path());
     }
     else
     {
