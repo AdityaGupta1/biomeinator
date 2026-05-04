@@ -15,6 +15,7 @@
 #include <hidsdi.h>
 #include <shobjidl.h>
 #include <filesystem>
+#include <optional>
 #include <vector>
 
 #include "logger.h"
@@ -112,6 +113,40 @@ void toggleFullscreen()
     SettingsManager::setAsBool("fullscreen", !isFullscreen);
 }
 
+static std::optional<std::filesystem::path> showFolderPicker(HWND owner, const wchar_t* title)
+{
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    std::optional<std::filesystem::path> result;
+
+    IFileOpenDialog* dlg = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
+    {
+        DWORD opts = 0;
+        dlg->GetOptions(&opts);
+        dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+        dlg->SetTitle(title);
+        if (SUCCEEDED(dlg->Show(owner)))
+        {
+            IShellItem* item = nullptr;
+            if (SUCCEEDED(dlg->GetResult(&item)))
+            {
+                PWSTR pathW = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pathW)))
+                {
+                    result = std::filesystem::path(pathW);
+                    CoTaskMemFree(pathW);
+                }
+                item->Release();
+            }
+        }
+        dlg->Release();
+    }
+
+    CoUninitialize();
+    return result;
+}
+
 static void onKeyDown(WPARAM wparam, LPARAM lparam)
 {
     const bool isRepeat = (lparam & (1u << 30)) != 0;
@@ -141,41 +176,18 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
             {
                 if (SettingsManager::getAsBool("voxelMode"))
                 {
-                    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-                    IFileOpenDialog* dlg = nullptr;
-                    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
-                                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
+                    if (const auto worldDir = showFolderPicker(hwnd, L"Open world folder"))
                     {
-                        DWORD opts = 0;
-                        dlg->GetOptions(&opts);
-                        dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-                        dlg->SetTitle(L"Open world folder");
-                        if (SUCCEEDED(dlg->Show(hwnd)))
+                        if (std::filesystem::exists(*worldDir / "world.json"))
                         {
-                            IShellItem* item = nullptr;
-                            if (SUCCEEDED(dlg->GetResult(&item)))
-                            {
-                                PWSTR pathW = nullptr;
-                                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pathW)))
-                                {
-                                    const std::filesystem::path worldDir = pathW;
-                                    CoTaskMemFree(pathW);
-                                    if (std::filesystem::exists(worldDir / "world.json"))
-                                    {
-                                        Terrain::reimportWorld(worldDir);
-                                    }
-                                    else
-                                    {
-                                        Logger::logError("%s missing world.json",
-                                                         worldDir.generic_string().c_str());
-                                    }
-                                }
-                                item->Release();
-                            }
+                            Terrain::reimportWorld(*worldDir);
                         }
-                        dlg->Release();
+                        else
+                        {
+                            Logger::logError("%s missing world.json",
+                                             worldDir->generic_string().c_str());
+                        }
                     }
-                    CoUninitialize();
                 }
                 else
                 {

@@ -239,4 +239,9 @@ void setWorldSeed(uint32_t value)
     settings["worldSeed"] = value;
 }
 
+bool isTestMode()
+{
+    return !getAsString("testOutput").empty();
+}
+
 } // namespace SettingsManager

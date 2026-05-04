@@ -10,7 +10,6 @@
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
-#include "debug.h"
 #include "settings_manager.h"
 #include "util/rng.h"
 
@@ -90,8 +89,6 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
-
-        const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }

@@ -45,7 +45,7 @@ static constexpr float defaultFovYDegrees = 35;
 
 void init()
 {
-    renderState.testMode = (SettingsManager::getAsString("testOutput") != "");
+    renderState.testMode = SettingsManager::isTestMode();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
 
     initStreamline();
