@@ -316,7 +316,7 @@ float Camera::getTheta() const
     return this->theta;
 }
 
-void Camera::restoreState(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
+void Camera::restoreStateFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
 {
     this->posInt_WS = posInt;
     this->posFloat_WS = posFloat;

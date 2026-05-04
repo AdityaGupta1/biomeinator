@@ -149,51 +149,56 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
+void Chunk::runStructuresAndDecoratorPass()
+{
+    for (const Chunk* structureNeighbor : this->structureNeighbors)
+    {
+        const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
+        this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+    }
+
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
+    for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
+    {
+        for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
+        {
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+
+            const Biome biome = this->biomes[columnIdx];
+            const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
+
+            if (decorator.isEmpty())
+            {
+                continue;
+            }
+
+            const uint baseBlockIdx = chunkSizeY * columnIdx;
+            Block bottomBlock = Block::BEDROCK;
+            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
+            {
+                Block& thisBlock = this->blocks[baseBlockIdx + blockY];
+
+                if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
+                {
+                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    if (decoratorBlock != Block::AIR)
+                    {
+                        thisBlock = decoratorBlock;
+                    }
+                }
+
+                bottomBlock = thisBlock;
+            }
+        }
+    }
+}
+
 void Chunk::fillStructuresAndDecorators()
 {
     if (!this->wasImported)
     {
-        for (const Chunk* structureNeighbor : this->structureNeighbors)
-        {
-            const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
-            this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
-        }
-
-        const uint worldSeed = SettingsManager::getWorldSeed();
-        RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
-        for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-        {
-            for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
-            {
-                const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-
-                const Biome biome = this->biomes[columnIdx];
-                const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
-
-                if (decorator.isEmpty())
-                {
-                    continue;
-                }
-
-                const uint baseBlockIdx = chunkSizeY * columnIdx;
-                Block bottomBlock = Block::BEDROCK;
-                for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
-                {
-                    Block& thisBlock = this->blocks[baseBlockIdx + blockY];
-
-                    if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
-                    {
-                        const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
-                        if (decoratorBlock != Block::AIR)
-                        {
-                            thisBlock = decoratorBlock;
-                        }
-                    }
-
-                    bottomBlock = thisBlock;
-                }
-            }
-        }
+        this->runStructuresAndDecoratorPass();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);

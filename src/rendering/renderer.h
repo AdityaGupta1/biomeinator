@@ -40,7 +40,7 @@ ID3D12Device5* getDevice();
 ID3D12CommandQueue* getGraphicsQueue();
 
 const Camera& getCamera();
-void restoreCamera(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
+void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 
 const Scene& getScene();
 

@@ -117,6 +117,7 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
+    void runStructuresAndDecoratorPass();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
 

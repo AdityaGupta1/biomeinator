@@ -553,14 +553,14 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
 
-    const bool voxelImportGate = !(renderState.testMode && renderState.voxelMode) || Terrain::isTestModeImportComplete();
+    const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::isTestModeImportComplete();
 
     if (resetAccumulation)
     {
         renderState.accumulatedFrameNumber = 0;
         renderState.stopAccumulating = false;
     }
-    else if (!renderState.stopAccumulating && voxelImportGate)
+    else if (!renderState.stopAccumulating && !waitingForImport)
     {
         if (++renderState.accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {
@@ -1047,9 +1047,9 @@ const Camera& getCamera()
     return renderState.camera;
 }
 
-void restoreCamera(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
+void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
 {
-    renderState.camera.restoreState(posInt, posFloat, phi, theta);
+    renderState.camera.restoreStateFromImport(posInt, posFloat, phi, theta);
 }
 
 const Scene& getScene()
