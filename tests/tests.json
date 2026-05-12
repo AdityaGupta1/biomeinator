@@ -578,6 +578,32 @@
             ],
             "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
             "threshold": 0.001
+        },
+        {
+            "name": "cave_lights",
+            "world": "voxel/cave_lights",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12"
+            ],
+            "golden": "voxel/cave_lights/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "underwater",
+            "world": "voxel/underwater",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=1024",
+                "--maxPathDepth=6"
+            ],
+            "golden": "voxel/underwater/golden.png",
+            "threshold": 0.005
         }
     ]
 }
