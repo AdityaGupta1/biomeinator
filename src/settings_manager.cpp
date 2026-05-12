@@ -195,7 +195,7 @@ float getAsFloat(const std::string& name)
     return std::get<float>(settings.at(name));
 }
 
-std::string getAsString(const std::string& name)
+const std::string& getAsString(const std::string& name)
 {
     return std::get<std::string>(settings.at(name));
 }

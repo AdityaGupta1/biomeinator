@@ -14,7 +14,7 @@ bool getAsBool(const std::string& name);
 int getAsInt(const std::string& name);
 uint32_t getAsUint(const std::string& name);
 float getAsFloat(const std::string& name);
-std::string getAsString(const std::string& name);
+const std::string& getAsString(const std::string& name);
 
 void setAsBool(const std::string& name, bool value);
 void toggleBool(const std::string& name);
