@@ -42,6 +42,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
     ADD_OPTION("useVsync", "Enable VSync", bool, "true");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
+    ADD_OPTION("noJitter", "Disable jitter", bool, "false");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
@@ -50,6 +51,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
+    ADD_OPTION("world", "World to import", std::string, "");
 
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
     ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
@@ -110,6 +112,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("doPathSplitting", bool);
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);
+    COPY_SETTING("noJitter", bool);
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);
@@ -118,6 +121,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
+    COPY_SETTING("world", std::string);
 
     COPY_SETTING("nrcEnabled", bool);
     COPY_SETTING("nrcResolveMode", uint32_t);
@@ -164,6 +168,11 @@ void parseArgs(const int argc, const char* const* argv)
     }
 
     worldSeed = getAsUint("worldSeed");
+
+    if (!getAsString("world").empty())
+    {
+        settings["voxelMode"] = true;
+    }
 }
 
 bool getAsBool(const std::string& name)
@@ -224,6 +233,17 @@ void setAsString(const std::string& name, const std::string& value)
 uint32_t getWorldSeed()
 {
     return worldSeed;
+}
+
+void setWorldSeed(uint32_t value)
+{
+    worldSeed = value;
+    settings["worldSeed"] = value;
+}
+
+bool isTestMode()
+{
+    return !getAsString("testOutput").empty();
 }
 
 } // namespace SettingsManager

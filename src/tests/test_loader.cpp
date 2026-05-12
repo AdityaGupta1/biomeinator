@@ -49,8 +49,24 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
         tc.threshold = t.value("threshold", 0.0f);
         tc.args = t.value("args", std::vector<std::string>{});
 
-        const std::filesystem::path scene = testsDir / t.at("scene").get<std::string>();
-        tc.args.push_back("--scene=" + scene.generic_string());
+        const bool hasScene = t.contains("scene");
+        const bool hasWorld = t.contains("world");
+        if (hasScene == hasWorld)
+        {
+            std::cerr << "Test '" << name << "' must have exactly one of 'scene' or 'world'\n";
+            exit(1);
+        }
+
+        if (hasScene)
+        {
+            const std::filesystem::path scene = testsDir / t.at("scene").get<std::string>();
+            tc.args.push_back("--scene=" + scene.generic_string());
+        }
+        else
+        {
+            const std::filesystem::path world = testsDir / t.at("world").get<std::string>();
+            tc.args.push_back("--world=" + world.generic_string());
+        }
 
         cases.push_back(std::move(tc));
     }

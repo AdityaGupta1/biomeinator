@@ -6,12 +6,16 @@
 #include "renderer.h"
 #include "settings_manager.h"
 #include "scene/gltf_loader.h"
+#include "terrain/terrain.h"
 
 #include <commdlg.h>
 #include <locale>
 #include <codecvt>
 
 #include <hidsdi.h>
+#include <shobjidl.h>
+#include <filesystem>
+#include <optional>
 #include <vector>
 
 #include "logger.h"
@@ -109,6 +113,46 @@ void toggleFullscreen()
     SettingsManager::setAsBool("fullscreen", !isFullscreen);
 }
 
+static std::optional<std::filesystem::path> showFolderPicker(HWND owner, const wchar_t* title)
+{
+    // CoUninitialize must only be paired with a successful CoInitializeEx. Failure
+    // codes like RPC_E_CHANGED_MODE (apartment already initialized in another mode)
+    // do not require — and must not receive — a matching CoUninitialize.
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    std::optional<std::filesystem::path> result;
+
+    IFileOpenDialog* dlg = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
+    {
+        DWORD opts = 0;
+        dlg->GetOptions(&opts);
+        dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+        dlg->SetTitle(title);
+        if (SUCCEEDED(dlg->Show(owner)))
+        {
+            IShellItem* item = nullptr;
+            if (SUCCEEDED(dlg->GetResult(&item)))
+            {
+                PWSTR pathW = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pathW)))
+                {
+                    result = std::filesystem::path(pathW);
+                    CoTaskMemFree(pathW);
+                }
+                item->Release();
+            }
+        }
+        dlg->Release();
+    }
+
+    if (SUCCEEDED(initHr))
+    {
+        CoUninitialize();
+    }
+    return result;
+}
+
 static void onKeyDown(WPARAM wparam, LPARAM lparam)
 {
     const bool isRepeat = (lparam & (1u << 30)) != 0;
@@ -134,27 +178,51 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
             SettingsManager::toggleBool("showGui");
             break;
         case 'O':
-            if (ctrlHeld && !SettingsManager::getAsBool("voxelMode"))
+            if (ctrlHeld)
             {
-                OPENFILENAMEW ofn{};
-                wchar_t filePath[MAX_PATH] = L"";
-
-                ofn.lStructSize = sizeof(ofn);
-                ofn.hwndOwner = hwnd;
-                ofn.lpstrFile = filePath;
-                ofn.nMaxFile = MAX_PATH;
-                ofn.lpstrFilter = L"glTF Files (*.gltf; *.glb)\0*.gltf;*.glb\0";
-                ofn.lpstrTitle = L"Open glTF file";
-                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-
-                if (GetOpenFileNameW(&ofn))
+                if (SettingsManager::getAsBool("voxelMode"))
                 {
-                    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-                    const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
-                    // strip hidden characters which otherwise cause issues with file extension comparison
-                    const std::string filePathStrClean = std::string(filePathStr.c_str());
-                    Renderer::loadScene(filePathStrClean);
+                    if (const auto worldDir = showFolderPicker(hwnd, L"Open world folder"))
+                    {
+                        if (std::filesystem::exists(*worldDir / "world.json"))
+                        {
+                            Terrain::reimportWorld(*worldDir);
+                        }
+                        else
+                        {
+                            Logger::logError("%s missing world.json",
+                                             worldDir->generic_string().c_str());
+                        }
+                    }
                 }
+                else
+                {
+                    OPENFILENAMEW ofn{};
+                    wchar_t filePath[MAX_PATH] = L"";
+
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hwnd;
+                    ofn.lpstrFile = filePath;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.lpstrFilter = L"glTF Files (*.gltf; *.glb)\0*.gltf;*.glb\0";
+                    ofn.lpstrTitle = L"Open glTF file";
+                    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+                    if (GetOpenFileNameW(&ofn))
+                    {
+                        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+                        const std::string filePathStr = converter.to_bytes(std::wstring(filePath, MAX_PATH));
+                        // strip hidden characters which otherwise cause issues with file extension comparison
+                        const std::string filePathStrClean = std::string(filePathStr.c_str());
+                        Renderer::loadScene(filePathStrClean);
+                    }
+                }
+            }
+            break;
+        case 'U':
+            if (ctrlHeld && SettingsManager::getAsBool("voxelMode"))
+            {
+                Terrain::exportWorld();
             }
             break;
         case 'P':

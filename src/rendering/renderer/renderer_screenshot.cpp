@@ -3,16 +3,13 @@
 
 #include "renderer_internal.h"
 
-#include <shlobj.h>
-
-#include <filesystem>
-
 #include <stb_image_write.h>
 
 #include "rendering/window_manager.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "settings_manager.h"
 #include "logger.h"
+#include "util/file_util.h"
 #include "util/math.h"
 
 using WindowManager::hwnd;
@@ -92,33 +89,19 @@ void finalizeQueuedScreenshot()
     if (renderState.screenshotRequest.useTestOutputPath)
     {
         path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
+        std::filesystem::create_directories(path.parent_path());
     }
     else
     {
-        wchar_t documentsPath[MAX_PATH];
-        if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documentsPath)))
+        const std::filesystem::path dir = FileUtil::getDocumentsDir("screenshots");
+        if (dir.empty())
         {
             throw std::runtime_error("Failed to get screenshots directory");
         }
 
-        const std::filesystem::path dir = std::filesystem::path(documentsPath) / "biomeinator" / "screenshots";
-
-        SYSTEMTIME st{};
-        GetLocalTime(&st);
-        char fileName[64];
-        sprintf_s(fileName,
-                  "%04d.%02d.%02d_%02d-%02d-%02d.png",
-                  st.wYear,
-                  st.wMonth,
-                  st.wDay,
-                  st.wHour,
-                  st.wMinute,
-                  st.wSecond);
-
+        const std::string fileName = FileUtil::getTimestampString() + ".png";
         path = dir / fileName;
     }
-
-    std::filesystem::create_directories(path.parent_path());
 
     stbi_write_png(path.string().c_str(),
                    renderState.screenshotRequest.width,

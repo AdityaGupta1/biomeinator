@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <filesystem>
+
 #include <glm/glm.hpp>
 
 class Chunk;
@@ -22,6 +24,12 @@ void setDirty();
 void update(ToFreeList& toFreeList);
 
 bool isCameraUnderwater();
+
+void exportWorld();
+void importWorld();
+void reimportWorld(const std::filesystem::path& worldDir);
+bool pollTestModeImport();
+
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();
 

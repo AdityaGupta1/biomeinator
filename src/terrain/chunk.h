@@ -99,12 +99,14 @@ private:
     std::vector<Biome> biomes{};
 
     std::vector<Structure> structures{};
-    std::vector<Chunk*> structureNeighbors{};
+    std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
 
     std::array<Chunk*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
+
+    bool wasImported{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
@@ -115,6 +117,7 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
+    void runStructuresAndDecoratorPass();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
 
@@ -150,6 +153,8 @@ public:
     bool getIsMarkedForDestruction() const;
     void setIsMarkedForDestruction(bool marked = true);
 
+    bool getWasImported() const;
+
     void setInstancesVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
@@ -157,6 +162,12 @@ public:
     uint32_t getNumNeighborsSet() const;
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
+
+    const std::vector<Block>& getBlocks() const;
+    const std::vector<Biome>& getBiomes() const;
+    const std::vector<Structure>& getStructures() const;
+
+    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);

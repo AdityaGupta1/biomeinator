@@ -72,4 +72,8 @@ public:
     glm::vec3 getPos_WS() const;
     const glm::ivec3& getPosInt_WS() const;
     const glm::vec3& getPosFloat_WS() const;
+
+    float getPhi() const;
+    float getTheta() const;
+    void restoreFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 };

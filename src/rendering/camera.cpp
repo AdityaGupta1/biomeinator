@@ -305,3 +305,23 @@ const glm::vec3& Camera::getPosFloat_WS() const
 {
     return this->posFloat_WS;
 }
+
+float Camera::getPhi() const
+{
+    return this->phi;
+}
+
+float Camera::getTheta() const
+{
+    return this->theta;
+}
+
+void Camera::restoreFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
+{
+    this->posInt_WS = posInt;
+    this->posFloat_WS = posFloat;
+    this->phi = phi;
+    this->theta = theta;
+    this->setDirectionVectorsFromAngles();
+    this->areMatricesDirty = true;
+}

@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-05-03_
 
 # Terrain Knowledgebase
 
@@ -16,3 +16,4 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [structure_system.md](structure_system.md) | StructureGen grid placement, structure types, StructureBounds |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement |
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |
+| [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |

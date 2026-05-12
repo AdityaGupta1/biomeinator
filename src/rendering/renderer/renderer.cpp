@@ -45,7 +45,7 @@ static constexpr float defaultFovYDegrees = 35;
 
 void init()
 {
-    renderState.testMode = (SettingsManager::getAsString("testOutput") != "");
+    renderState.testMode = SettingsManager::isTestMode();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
 
     initStreamline();
@@ -86,6 +86,7 @@ void init()
     if (renderState.voxelMode)
     {
         Terrain::init(&renderState.scene);
+        Terrain::importWorld();
     }
     else
     {
@@ -281,8 +282,9 @@ void resize()
     // Streamline programming guide says there's no reason to limit the sequence length, so I'm using 64 for the "Base
     // Phase Count" instead of the default/recommended of 8.
     const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderState.renderWidth);
-    const uint32_t jitterHaltonSequenceLength =
-        static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
+    const uint32_t jitterHaltonSequenceLength = SettingsManager::getAsBool("noJitter")
+        ? 0u
+        : static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     renderState.camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 
     renderState.frameTimeBuffer.clear();
@@ -551,12 +553,14 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
 
+    const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
+
     if (resetAccumulation)
     {
         renderState.accumulatedFrameNumber = 0;
         renderState.stopAccumulating = false;
     }
-    else if (!renderState.stopAccumulating)
+    else if (!renderState.stopAccumulating && !waitingForImport)
     {
         if (++renderState.accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {
@@ -1041,6 +1045,11 @@ ID3D12CommandQueue* getGraphicsQueue()
 const Camera& getCamera()
 {
     return renderState.camera;
+}
+
+void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
+{
+    renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
 const Scene& getScene()

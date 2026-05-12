@@ -28,6 +28,10 @@ Chunk::Chunk(ivec2 chunkPos, Region* region)
     : chunkPos(chunkPos), region(region)
 {}
 
+// Main thread only: this can call Region::createChunk, which mutates Region::chunks
+// without locking. Other code (e.g. Terrain::exportWorld) iterates Region::chunks
+// concurrently with worker tasks and relies on the array not being mutated under
+// it. If this assumption is ever broken, the iteration sites need locking.
 void Chunk::setNeighbors(bool createNeighbors)
 {
     const ivec2 thisRegionPosChunks = this->region->regionPosChunks;
@@ -85,12 +89,13 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    this->blocks.resize(numChunkBlocks);
-    this->biomes.resize(chunkSizeXZSquare);
+    if (!this->wasImported)
+    {
+        this->blocks.resize(numChunkBlocks);
+        this->biomes.resize(chunkSizeXZSquare);
 
-    const ivec2 chunkBlockPosXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
-
-    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+        this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+    }
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
@@ -148,9 +153,9 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
-void Chunk::fillStructuresAndDecorators()
+void Chunk::runStructuresAndDecoratorPass()
 {
-    for (Chunk* structureNeighbor : this->structureNeighbors)
+    for (const Chunk* structureNeighbor : this->structureNeighbors)
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
@@ -190,6 +195,14 @@ void Chunk::fillStructuresAndDecorators()
                 bottomBlock = thisBlock;
             }
         }
+    }
+}
+
+void Chunk::fillStructuresAndDecorators()
+{
+    if (!this->wasImported)
+    {
+        this->runStructuresAndDecoratorPass();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
@@ -779,9 +792,25 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
+void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures)
+{
+    ASSERT(blocks.size() == numChunkBlocks);
+    ASSERT(biomes.size() == chunkSizeXZSquare);
+
+    this->blocks = std::move(blocks);
+    this->biomes = std::move(biomes);
+    this->structures = std::move(structures);
+    this->wasImported = true;
+}
+
 bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
+}
+
+bool Chunk::getWasImported() const
+{
+    return this->wasImported;
 }
 
 void Chunk::setIsMarkedForDestruction(bool marked)
@@ -821,6 +850,21 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
 
     outBlock = this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
     return true;
+}
+
+const std::vector<Block>& Chunk::getBlocks() const
+{
+    return this->blocks;
+}
+
+const std::vector<Biome>& Chunk::getBiomes() const
+{
+    return this->biomes;
+}
+
+const std::vector<Structure>& Chunk::getStructures() const
+{
+    return this->structures;
 }
 
 // y changes fastest, then x, then z
@@ -866,6 +910,7 @@ Chunk* Region::getChunk(ivec2 chunkPos)
 Chunk* Region::createChunk(ivec2 chunkPos)
 {
     const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    ASSERT(this->chunks[chunkIdx] == nullptr, "createChunk called on already-populated slot");
     this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     return this->chunks[chunkIdx].get();
 }

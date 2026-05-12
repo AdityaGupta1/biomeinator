@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-05-03_
 
 # Terrain Manager
 
@@ -10,12 +10,16 @@ The update loop defines concentric Chebyshev-distance zones that stack outward f
 
 ```
 renderDistance (user setting)
-  + 1 = createBlasDistance     (geometry built)
-  + 1 = fillStructuresDistance (structures + segments advance)
-  + structureMaxChunkRadius = generateTerrainDistance (noise generated)
+  + 1                            = createBlasDistance       (geometry built)
+  + 1 + structureMaxChunkRadius  = fillStructuresDistance   (structures + segments advance)
+  + structureMaxChunkRadius      = generateTerrainDistance  (noise generated)
 ```
 
 The extra padding exists so chunks have time to progress through the state machine before reaching visible range. A chunk that enters `createBlasDistance` without having geometry yet would pop in visibly — the padding prevents that.
+
+The `+ structureMaxChunkRadius` term inside `fillStructuresDistance` (not the obvious `+ 1`) is the non-obvious one. For a chunk at `D = createBlasDistance` to reach `HAS_GEOMETRY`, its 4 cardinal neighbors (at `D±1`) must each reach `HAS_ALL_BLOCKS`, which requires every chunk in each cardinal's 5×5 structure footprint (chunks at `D±1±structureMaxChunkRadius`) to have run `checkStructureNeighbors`. That task is enqueued only when a chunk advances `HAS_TERRAIN → AWAITING_STRUCTURE_NEIGHBORS`, which is gated at `fillStructuresDistance`. Dropping the term leaves the `D = renderDistance` ring stuck at `HAS_ALL_BLOCKS` under a locked camera. Moving cameras hide the bug because outer rings keep promoting.
+
+`generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius` similarly guarantees that the 5×5 footprint of every `fillStructuresDistance` chunk has materialised `Chunk*` objects (`checkStructureNeighbors` walks neighbor pointers and asserts non-null).
 
 ## Destruction Uses Union of Old + New Bounds
 
