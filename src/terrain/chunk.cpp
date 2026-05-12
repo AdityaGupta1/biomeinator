@@ -910,6 +910,7 @@ Chunk* Region::getChunk(ivec2 chunkPos)
 Chunk* Region::createChunk(ivec2 chunkPos)
 {
     const uint chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    ASSERT(this->chunks[chunkIdx] == nullptr, "createChunk called on already-populated slot");
     this->chunks[chunkIdx] = std::make_unique<Chunk>(chunkPos, this);
     return this->chunks[chunkIdx].get();
 }

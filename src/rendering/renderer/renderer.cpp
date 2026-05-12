@@ -283,7 +283,7 @@ void resize()
     // Phase Count" instead of the default/recommended of 8.
     const float dlssScaleFactor = static_cast<float>(viewportWidth) / static_cast<float>(renderState.renderWidth);
     const uint32_t jitterHaltonSequenceLength = SettingsManager::getAsBool("noJitter")
-        ? 1u
+        ? 0u
         : static_cast<uint32_t>(ceilf(64 * (dlssScaleFactor * dlssScaleFactor)));
     renderState.camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 
@@ -1049,7 +1049,7 @@ const Camera& getCamera()
 
 void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
 {
-    renderState.camera.restoreStateFromImport(posInt, posFloat, phi, theta);
+    renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
 const Scene& getScene()

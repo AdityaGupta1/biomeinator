@@ -33,6 +33,14 @@ void HaltonSequence::generateSequenceDimension(uint32_t dim, uint32_t base)
 
 void HaltonSequence::init(uint32_t sequenceLength)
 {
+    // Length 0 means "no jitter": emit zeros every frame.
+    if (sequenceLength == 0)
+    {
+        this->sequence.assign(1, DirectX::XMFLOAT2{ 0.f, 0.f });
+        this->sequencePtr = 0;
+        return;
+    }
+
     this->sequence.resize(sequenceLength);
     this->generateSequenceDimension(0, 2);
     this->generateSequenceDimension(1, 3);

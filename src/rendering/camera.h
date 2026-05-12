@@ -75,5 +75,5 @@ public:
 
     float getPhi() const;
     float getTheta() const;
-    void restoreStateFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
+    void restoreFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 };

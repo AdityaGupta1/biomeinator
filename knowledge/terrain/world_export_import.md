@@ -1,4 +1,4 @@
-_Last edited: 2026-05-03_
+_Last edited: 2026-05-11_
 
 # World Export / Import
 
@@ -20,7 +20,7 @@ Imported chunks load their data, set `wasImported = true`, and **traverse the fu
 | `generateTerrain` | skip `fillTerrainBlocksAndCreateStructures`; advance to `HAS_TERRAIN` |
 | `checkStructureNeighbors` | unchanged (always runs — drives 5×5 counter on 25 neighbors) |
 | `fillStructuresAndDecorators` | skip structure fill loop AND decorator pass; advance to `HAS_ALL_BLOCKS` |
-| `generateSegments`, `task_generateGeometry` | unchanged (segments + geometry are not serialized) |
+| `generateSegments`, `createInstances` | unchanged (segments + geometry are not serialized) |
 
 The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 5×5 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
 
