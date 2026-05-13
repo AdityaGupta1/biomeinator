@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-05-12_
 
 # Materials and Textures
 
@@ -12,7 +12,7 @@ Material and texture management in `src/scene/scene.h/cpp`.
 
 ## Textures
 
-Textures are 2D RGBA8 sRGB with optional precomputed mip chains. Upload is deferred: `addTexture()` stashes raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
+Textures are 2D RGBA8 sRGB with optional precomputed mip chains. Upload is deferred: `addTexture()` / `addTextureArray()` stash raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
 
 Each texture gets an SRV in the shared descriptor heap. The returned texture ID is the descriptor heap index, which shaders use for bindless access.
 
@@ -22,4 +22,15 @@ Texture upload requires a command list (for `CopyTextureRegion`), but textures m
 
 ## Mip Handling
 
-Two `addTexture` overloads exist: one accepting a full mip chain (`vector<vector<uint8_t>>`) and one accepting just mip 0. The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) generates mip chains CPU-side and passes them via the multi-mip overload. Each mip level is uploaded as a separate `CopyTextureRegion` call into the appropriate subresource, with row pitch aligned to `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT`.
+`PendingTexture` stores `sliceMipData[slice][mip]` + `arraySize`. Subresource index is computed via `D3D12CalcSubresource(mip, slice, ...)`. Row pitch is aligned to `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` per row; each mip start in the upload buffer is aligned to `D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT`.
+
+The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) generates mip chains CPU-side then splits them into per-tile slices.
+
+## Texture2D vs Texture2DArray
+
+`uploadPendingTextures()` picks the SRV dimension from `arraySize`: 1 → `Texture2D`, >1 → `Texture2DArray`. Two invariants follow:
+
+- **`addTextureArray()` asserts size > 1.** A single-slice texture must go through `addTexture()` so the SRV dim matches what the shader expects.
+- **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `emissiveColorTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
+
+Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF materials never do.

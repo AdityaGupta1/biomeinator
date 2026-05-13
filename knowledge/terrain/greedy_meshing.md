@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-05-12_
 
 # Mesh Generation
 
@@ -15,6 +15,12 @@ All vertex positions are integer-derived (block position + vertex offset from lo
 ## X-Shaped Block Jitter
 
 Each X-shaped block (grass, flowers) gets ±0.2 XZ jitter from a per-chunk RNG. This breaks the grid alignment that would otherwise be very visually obvious in fields of grass.
+
+## Texture Slice Indexing
+
+Terrain textures are a `Texture2DArray` of 16×16 tiles (see [scene → materials_textures.md](../scene/materials_textures.md)). Per-vertex UVs are the corner offsets `{0,1}×{0,1}` directly — there is no atlas multiplier. The slice index lives in `PerTriangleData.texArraySliceIdx`, written once per face during mesh gen.
+
+**Slice ordering invariant:** `slice = tileY * tilesPerAxis + tileX`, where `tilesPerAxis == 32` (= `DEFAULT_TEX_NUM_BLOCKS_X`). The same encoding must be used by `chunk.cpp` (writer) and `terrain_materials_helpers.h` (atlas → slice splitter on upload). Both files `static_assert` the 32 value; mismatched ordering silently maps blocks to the wrong texture.
 
 ## Emissive Triangle Tracking
 

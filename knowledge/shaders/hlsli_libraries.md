@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-05-12_
 
 # HLSL Utility Libraries
 
@@ -11,6 +11,11 @@ _Last edited: 2026-04-26_
   `ClosestHit_Primary`). See [path_tracing.md](path_tracing.md).
 - **`common/payload.hlsli`** — `Payload` struct passed through `TraceRay`.
 - **`materials/materials.hlsli`** — BSDF evaluation and sampling, bindless texture reads.
+  All material color samplers take a `TexSampleCtx { mipLevel, arraySliceIdx }` rather
+  than a bare mip. `sampleTexture` casts the bindless descriptor to `Texture2D` or
+  `Texture2DArray` based on `material.hasArrayTexture()` — that flag must agree with
+  the SRV dim set in `Scene::uploadPendingTextures` (see
+  [scene → materials_textures.md](../scene/materials_textures.md)).
 - **`materials/volume.hlsli`** — water absorption and underwater logic. **Include order
   dependency**: must be included after `path_tracing_common.hlsli` because it references
   `instanceDatas` and `perTriDatas` without declaring them.
