@@ -179,6 +179,8 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
     constexpr uint32_t textureSize = 512;
     constexpr uint32_t tileSizeMip0 = 16;
     constexpr uint32_t numMips = 5;
+    // Must match DEFAULT_TEX_NUM_BLOCKS_X in chunk.cpp.
+    static_assert(textureSize / tileSizeMip0 == 32);
     assert(w0 == textureSize && h0 == textureSize);
 
     std::vector<std::vector<uint8_t>> mipData(numMips);
@@ -285,7 +287,39 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
         }
     }
 
-    return scene->addTexture(std::move(mipData), w0, h0);
+    // Atlas mip chain -> per-tile slices. Order: tileY * tilesPerAxis + tileX (matches chunk.cpp).
+    const uint32_t numSlices = tilesPerAxis * tilesPerAxis;
+    std::vector<std::vector<std::vector<uint8_t>>> sliceMipData(numSlices);
+    for (uint32_t slice = 0; slice < numSlices; ++slice)
+    {
+        sliceMipData[slice].resize(numMips);
+    }
+
+    for (uint32_t m = 0; m < numMips; ++m)
+    {
+        const uint32_t mipWidth = w0 >> m;
+        const uint32_t mipTileSize = std::max(1u, tileSizeMip0 >> m);
+        const uint32_t bytesPerTile = mipTileSize * mipTileSize * 4;
+        for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
+        {
+            for (uint32_t tileX = 0; tileX < tilesPerAxis; ++tileX)
+            {
+                const uint32_t slice = tileY * tilesPerAxis + tileX;
+                std::vector<uint8_t>& dst = sliceMipData[slice][m];
+                dst.resize(bytesPerTile);
+                const uint32_t srcTileX = tileX * mipTileSize;
+                const uint32_t srcTileY = tileY * mipTileSize;
+                for (uint32_t y = 0; y < mipTileSize; ++y)
+                {
+                    const uint8_t* srcRow = mipData[m].data() + texelIdx(srcTileX, srcTileY + y, mipWidth);
+                    uint8_t* dstRow = dst.data() + static_cast<size_t>(y) * mipTileSize * 4;
+                    std::memcpy(dstRow, srcRow, static_cast<size_t>(mipTileSize) * 4);
+                }
+            }
+        }
+    }
+
+    return scene->addTextureArray(std::move(sliceMipData), tileSizeMip0, tileSizeMip0);
 }
 
 } // namespace TerrainMaterials

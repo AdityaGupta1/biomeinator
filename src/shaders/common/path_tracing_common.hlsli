@@ -106,14 +106,16 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
-    const float mipLevel = computeMipLevel(coneWidth);
-    const float4 baseColor = getMaterialBaseColor(material, uv, mipLevel);
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    TexSampleCtx texCtx;
+    texCtx.mipLevel = computeMipLevel(coneWidth);
+    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    const float4 baseColor = getMaterialBaseColor(material, uv, texCtx);
 
     if (testRefractionPassthrough)
     {
         payload.pathWeight *= baseColor.rgb;
 
-        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER))
         {
             // Track the first water entry/exit T for absorption in computePassthroughAbsorption.

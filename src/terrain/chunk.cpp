@@ -23,6 +23,9 @@ using namespace DirectX;
 
 #define DEFAULT_TEX_NUM_BLOCKS_X 32
 #define DEFAULT_TEX_NUM_BLOCKS_Y 32
+// Must match tilesPerAxis in terrain_materials_helpers.h (slice ordering: tileY*N + tileX).
+static_assert(DEFAULT_TEX_NUM_BLOCKS_X == DEFAULT_TEX_NUM_BLOCKS_Y);
+static_assert(DEFAULT_TEX_NUM_BLOCKS_X == 32);
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
     : chunkPos(chunkPos), region(region)
@@ -563,7 +566,6 @@ inline constexpr uvec2 uvOffsets[4] = {
     uvec2(0, 1),
     uvec2(1, 1),
 };
-inline constexpr vec2 uvMultiplier = 1.f / vec2(DEFAULT_TEX_NUM_BLOCKS_X, DEFAULT_TEX_NUM_BLOCKS_Y);
 
 void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
 {
@@ -576,17 +578,21 @@ void Chunk::createInstances()
 {
     std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
     std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
+    std::vector<PerTriangleData>& terrainPerTriDatas = this->terrainInstance->host_perTriDatas;
     std::vector<uint32_t> terrainEmissiveTriangleIdxs;
     std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
+    std::vector<PerTriangleData>& waterPerTriDatas = this->waterInstance->host_perTriDatas;
 
     constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
     terrainIdxs.reserve(numTerrainVertsToReserve * 6 / 4);
+    terrainPerTriDatas.reserve(numTerrainVertsToReserve / 2);
 
     constexpr size_t numWaterVertsToReserve = 1 << 8;
     waterVerts.reserve(numWaterVertsToReserve);
     waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
+    waterPerTriDatas.reserve(numWaterVertsToReserve / 2);
 
     terrainEmissiveTriangleIdxs.reserve(512);
 
@@ -624,11 +630,12 @@ void Chunk::createInstances()
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
                         const uvec2 baseTexCoords = blockData.uvs[1]; // side
+                        const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
                         for (uint i = 0; i < 8; ++i)
                         {
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
                             const vec3 normal = xShapedFaceNormals[i / 4];
-                            const vec2 uv = vec2(baseTexCoords + uvOffsets[i % 4]) * uvMultiplier;
+                            const vec2 uv = vec2(uvOffsets[i % 4]);
                             terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), vec3ToDirectX(normal), vec2ToDirectX(uv));
                         }
 
@@ -642,12 +649,20 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
+
+                        PerTriangleData faceData{};
+                        faceData.texArraySliceIdx = texArraySliceIdx;
+                        for (uint t = 0; t < 4; ++t)
+                        {
+                            terrainPerTriDatas.emplace_back(faceData);
+                        }
                     }
                     else // BlockShape::LIQUID_TOP or BlockShape::CUBE
                     {
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
+                        std::vector<PerTriangleData>& perTriDatas = isWater ? waterPerTriDatas : terrainPerTriDatas;
                         const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
 
                         for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
@@ -664,13 +679,14 @@ void Chunk::createInstances()
 
                             const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
+                            const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
+                            const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
                             for (uint i = 0; i < 4; ++i)
                             {
                                 vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
                                 vertPos_CS.y -= topYSubtract;
 
-                                const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                                const vec2 uv = vec2(baseTexCoords + uvOffsets[i]) * uvMultiplier;
+                                const vec2 uv = vec2(uvOffsets[i]);
 
                                 verts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
                             }
@@ -683,6 +699,12 @@ void Chunk::createInstances()
                             idxs.emplace_back(baseVertIdx + 0u);
                             idxs.emplace_back(baseVertIdx + 2u);
                             idxs.emplace_back(baseVertIdx + 3u);
+
+                            PerTriangleData faceData{};
+                            faceData.flags = isWater ? TRIANGLE_FLAG_IS_WATER : 0u;
+                            faceData.texArraySliceIdx = texArraySliceIdx;
+                            perTriDatas.emplace_back(faceData);
+                            perTriDatas.emplace_back(faceData);
 
                             if (blockData.emitsLight)
                             {
@@ -699,13 +721,6 @@ void Chunk::createInstances()
 
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
-
-    terrainInstance->host_perTriDatas.resize(terrainInstance->getTriCount());
-    waterInstance->host_perTriDatas.resize(waterInstance->getTriCount());
-    for (PerTriangleData& perTriData : waterInstance->host_perTriDatas)
-    {
-        perTriData.flags |= TRIANGLE_FLAG_IS_WATER;
-    }
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
