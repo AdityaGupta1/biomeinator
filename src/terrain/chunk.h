@@ -127,6 +127,8 @@ private:
                                     const glm::uvec3 chunkSegmentPos,
                                     const ChunkSegment* const prevSegments);
 
+    void recordGreedyMeshingStats(ThreadMemoryAllocator& threadMemoryAlloc);
+
     void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
 
 public:
@@ -140,7 +142,7 @@ public:
     void generateSegments(ThreadMemoryAllocator& threadMemoryAlloc);
 
     void setInstances(Instance* terrainInstance, Instance* waterInstance);
-    void createInstances();
+    void createInstances(ThreadMemoryAllocator& threadMemoryAlloc);
     void destroyInstances(ToFreeList& toFreeList);
     void cleanUnusedInstances(ToFreeList& toFreeList);
     Instance* getTerrainInstance() const;

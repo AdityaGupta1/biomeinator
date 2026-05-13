@@ -1,0 +1,113 @@
+File 'C:/Users/SDOAJ/code/biomeinator/build/RelWithDebInfo/sl.interposer.dll' is signed by NVIDIA and the signature was verified.
+File 'C:\ProgramData\NVIDIA/NGX/models/sl_common_0\versions\133888\files\190_E658703.dll' is signed by NVIDIA and the signature was verified.
+File 'C:\ProgramData\NVIDIA/NGX/models/sl_dlss_d_0\versions\133888\files\190_E658703.dll' is signed by NVIDIA and the signature was verified.
+File 'C:\ProgramData\NVIDIA/NGX/models/sl_pcl_0\versions\133888\files\190_E658703.dll' is signed by NVIDIA and the signature was verified.
+File 'C:\Users\SDOAJ\code\biomeinator\build\RelWithDebInfo\/sl.dlss_d.dll' is signed by NVIDIA and the signature was verified.
+[23:31:20][info] Selected adapter: NVIDIA GeForce RTX 4070 SUPER
+[23:31:20][info] SER API supported
+[23:31:20][info] Use VSync: true
+[23:31:23][info] [greedy] === stats after 256 chunks ===
+[23:31:23][info] [greedy]   face +X faces=55025 | Y avg=1.51 (runs=36532) | Z avg=1.62 (runs=33896)
+[23:31:23][info] [greedy]   face +Z faces=62958 | X avg=1.62 (runs=38917) | Y avg=1.47 (runs=42708)
+[23:31:23][info] [greedy]   face -X faces=56833 | Y avg=1.34 (runs=42396) | Z avg=1.51 (runs=37752)
+[23:31:23][info] [greedy]   face -Z faces=51703 | X avg=1.56 (runs=33064) | Y avg=1.43 (runs=36190)
+[23:31:23][info] [greedy]   face +Y faces=135176 | X avg=2.37 (runs=56925) | Z avg=2.43 (runs=55741)
+[23:31:23][info] [greedy]   face -Y faces=129439 | X avg=3.78 (runs=34273) | Z avg=3.68 (runs=35214)
+[23:31:23][info] [greedy] === stats after 512 chunks ===
+[23:31:23][info] [greedy]   face +X faces=98720 | Y avg=1.45 (runs=68008) | Z avg=1.62 (runs=60868)
+[23:31:23][info] [greedy]   face +Z faces=108585 | X avg=1.63 (runs=66745) | Y avg=1.42 (runs=76534)
+[23:31:23][info] [greedy]   face -X faces=101792 | Y avg=1.34 (runs=75947) | Z avg=1.55 (runs=65529)
+[23:31:23][info] [greedy]   face -Z faces=94177 | X avg=1.57 (runs=59959) | Y avg=1.39 (runs=67794)
+[23:31:23][info] [greedy]   face +Y faces=256995 | X avg=2.45 (runs=105084) | Z avg=2.48 (runs=103732)
+[23:31:23][info] [greedy]   face -Y faces=250968 | X avg=3.93 (runs=63860) | Z avg=3.84 (runs=65301)
+[23:31:23][info] [greedy] === stats after 768 chunks ===
+[23:31:23][info] [greedy]   face +X faces=140992 | Y avg=1.43 (runs=98832) | Z avg=1.64 (runs=86094)
+[23:31:23][info] [greedy]   face +Z faces=147643 | X avg=1.60 (runs=92103) | Y avg=1.39 (runs=106075)
+[23:31:23][info] [greedy]   face -X faces=142886 | Y avg=1.35 (runs=105662) | Z avg=1.59 (runs=89613)
+[23:31:23][info] [greedy]   face -Z faces=130456 | X avg=1.57 (runs=83182) | Y avg=1.41 (runs=92821)
+[23:31:23][info] [greedy]   face +Y faces=377256 | X avg=2.56 (runs=147601) | Z avg=2.63 (runs=143413)
+[23:31:23][info] [greedy]   face -Y faces=370915 | X avg=3.94 (runs=94223) | Z avg=3.98 (runs=93170)
+[23:31:24][info] [greedy] === stats after 1024 chunks ===
+[23:31:24][info] [greedy]   face +X faces=261737 | Y avg=1.55 (runs=168622) | Z avg=1.66 (runs=157714)
+[23:31:24][info] [greedy]   face +Z faces=268715 | X avg=1.66 (runs=161608) | Y avg=1.51 (runs=178056)
+[23:31:24][info] [greedy]   face -X faces=235545 | Y avg=1.43 (runs=164164) | Z avg=1.55 (runs=152120)
+[23:31:24][info] [greedy]   face -Z faces=230441 | X avg=1.55 (runs=148227) | Y avg=1.49 (runs=154425)
+[23:31:24][info] [greedy]   face +Y faces=579500 | X avg=2.54 (runs=227917) | Z avg=2.53 (runs=229146)
+[23:31:24][info] [greedy]   face -Y faces=550288 | X avg=3.55 (runs=155068) | Z avg=3.59 (runs=153463)
+[23:31:24][info] [greedy] === stats after 1280 chunks ===
+[23:31:24][info] [greedy]   face +X faces=386210 | Y avg=1.61 (runs=240563) | Z avg=1.66 (runs=232851)
+[23:31:24][info] [greedy]   face +Z faces=410370 | X avg=1.71 (runs=240597) | Y avg=1.57 (runs=261657)
+[23:31:24][info] [greedy]   face -X faces=334028 | Y avg=1.47 (runs=227555) | Z avg=1.51 (runs=220680)
+[23:31:24][info] [greedy]   face -Z faces=336788 | X avg=1.56 (runs=215401) | Y avg=1.54 (runs=218827)
+[23:31:24][info] [greedy]   face +Y faces=784378 | X avg=2.52 (runs=311373) | Z avg=2.45 (runs=320101)
+[23:31:24][info] [greedy]   face -Y faces=729256 | X avg=3.33 (runs=219238) | Z avg=3.30 (runs=221191)
+[23:31:24][info] [greedy] === stats after 1536 chunks ===
+[23:31:24][info] [greedy]   face +X faces=497791 | Y avg=1.63 (runs=305012) | Z avg=1.69 (runs=295343)
+[23:31:24][info] [greedy]   face +Z faces=525538 | X avg=1.70 (runs=308506) | Y avg=1.59 (runs=331172)
+[23:31:24][info] [greedy]   face -X faces=430022 | Y avg=1.48 (runs=290520) | Z avg=1.53 (runs=281256)
+[23:31:24][info] [greedy]   face -Z faces=419854 | X avg=1.56 (runs=269539) | Y avg=1.54 (runs=272558)
+[23:31:24][info] [greedy]   face +Y faces=979335 | X avg=2.50 (runs=391834) | Z avg=2.47 (runs=396533)
+[23:31:24][info] [greedy]   face -Y faces=902896 | X avg=3.24 (runs=278632) | Z avg=3.21 (runs=281114)
+[23:31:25][info] [greedy] === stats after 1792 chunks ===
+[23:31:25][info] [greedy]   face +X faces=603000 | Y avg=1.65 (runs=365316) | Z avg=1.70 (runs=354624)
+[23:31:25][info] [greedy]   face +Z faces=628653 | X avg=1.70 (runs=370375) | Y avg=1.60 (runs=392345)
+[23:31:25][info] [greedy]   face -X faces=519317 | Y avg=1.49 (runs=348701) | Z avg=1.53 (runs=338337)
+[23:31:25][info] [greedy]   face -Z faces=501428 | X avg=1.55 (runs=322759) | Y avg=1.55 (runs=323775)
+[23:31:25][info] [greedy]   face +Y faces=1166022 | X avg=2.50 (runs=466163) | Z avg=2.49 (runs=468252)
+[23:31:25][info] [greedy]   face -Y faces=1070484 | X avg=3.20 (runs=335031) | Z avg=3.19 (runs=335081)
+[23:31:25][info] [greedy] === stats after 2048 chunks ===
+[23:31:25][info] [greedy]   face +X faces=655818 | Y avg=1.64 (runs=400020) | Z avg=1.69 (runs=387299)
+[23:31:25][info] [greedy]   face +Z faces=687247 | X avg=1.70 (runs=405378) | Y avg=1.59 (runs=430998)
+[23:31:25][info] [greedy]   face -X faces=569981 | Y avg=1.48 (runs=383849) | Z avg=1.54 (runs=371147)
+[23:31:25][info] [greedy]   face -Z faces=550133 | X avg=1.56 (runs=353563) | Y avg=1.55 (runs=355789)
+[23:31:25][info] [greedy]   face +Y faces=1302372 | X avg=2.53 (runs=515380) | Z avg=2.53 (runs=515638)
+[23:31:25][info] [greedy]   face -Y faces=1203865 | X avg=3.26 (runs=369361) | Z avg=3.24 (runs=371767)
+[23:31:25][info] [greedy] === stats after 2304 chunks ===
+[23:31:25][info] [greedy]   face +X faces=699219 | Y avg=1.62 (runs=432373) | Z avg=1.69 (runs=413769)
+[23:31:25][info] [greedy]   face +Z faces=731962 | X avg=1.69 (runs=433444) | Y avg=1.58 (runs=463837)
+[23:31:25][info] [greedy]   face -X faces=615172 | Y avg=1.48 (runs=416487) | Z avg=1.54 (runs=399765)
+[23:31:25][info] [greedy]   face -Z faces=592849 | X avg=1.56 (runs=380424) | Y avg=1.53 (runs=387569)
+[23:31:25][info] [greedy]   face +Y faces=1432811 | X avg=2.56 (runs=559934) | Z avg=2.56 (runs=560203)
+[23:31:25][info] [greedy]   face -Y faces=1334065 | X avg=3.30 (runs=403909) | Z avg=3.29 (runs=405886)
+[23:31:25][info] [greedy] === stats after 2560 chunks ===
+[23:31:25][info] [greedy]   face +X faces=739406 | Y avg=1.61 (runs=460386) | Z avg=1.69 (runs=438592)
+[23:31:25][info] [greedy]   face +Z faces=769173 | X avg=1.68 (runs=457756) | Y avg=1.57 (runs=488455)
+[23:31:25][info] [greedy]   face -X faces=654468 | Y avg=1.47 (runs=443946) | Z avg=1.54 (runs=424614)
+[23:31:25][info] [greedy]   face -Z faces=632319 | X avg=1.56 (runs=405339) | Y avg=1.52 (runs=415339)
+[23:31:25][info] [greedy]   face +Y faces=1552358 | X avg=2.60 (runs=598053) | Z avg=2.60 (runs=597153)
+[23:31:25][info] [greedy]   face -Y faces=1453220 | X avg=3.35 (runs=433919) | Z avg=3.35 (runs=434309)
+[23:31:26][info] [greedy] === stats after 2816 chunks ===
+[23:31:26][info] [greedy]   face +X faces=789550 | Y avg=1.60 (runs=494644) | Z avg=1.68 (runs=469944)
+[23:31:26][info] [greedy]   face +Z faces=825723 | X avg=1.68 (runs=491892) | Y avg=1.56 (runs=528931)
+[23:31:26][info] [greedy]   face -X faces=706841 | Y avg=1.46 (runs=483195) | Z avg=1.54 (runs=459201)
+[23:31:26][info] [greedy]   face -Z faces=684614 | X avg=1.56 (runs=437808) | Y avg=1.51 (runs=452817)
+[23:31:26][info] [greedy]   face +Y faces=1697675 | X avg=2.62 (runs=648752) | Z avg=2.61 (runs=650735)
+[23:31:26][info] [greedy]   face -Y faces=1595648 | X avg=3.38 (runs=471804) | Z avg=3.37 (runs=473238)
+[23:31:26][info] [greedy] === stats after 3072 chunks ===
+[23:31:26][info] [greedy]   face +X faces=843898 | Y avg=1.59 (runs=531198) | Z avg=1.68 (runs=502384)
+[23:31:26][info] [greedy]   face +Z faces=885746 | X avg=1.67 (runs=529121) | Y avg=1.55 (runs=571093)
+[23:31:26][info] [greedy]   face -X faces=762656 | Y avg=1.46 (runs=523796) | Z avg=1.54 (runs=495223)
+[23:31:26][info] [greedy]   face -Z faces=731053 | X avg=1.56 (runs=468465) | Y avg=1.51 (runs=484639)
+[23:31:26][info] [greedy]   face +Y faces=1836186 | X avg=2.62 (runs=701326) | Z avg=2.62 (runs=700547)
+[23:31:26][info] [greedy]   face -Y faces=1731013 | X avg=3.39 (runs=510204) | Z avg=3.38 (runs=511665)
+[23:31:26][info] [greedy] === stats after 3328 chunks ===
+[23:31:26][info] [greedy]   face +X faces=893428 | Y avg=1.59 (runs=563016) | Z avg=1.68 (runs=532984)
+[23:31:26][info] [greedy]   face +Z faces=931828 | X avg=1.67 (runs=559345) | Y avg=1.55 (runs=600119)
+[23:31:26][info] [greedy]   face -X faces=816658 | Y avg=1.46 (runs=560111) | Z avg=1.55 (runs=528015)
+[23:31:26][info] [greedy]   face -Z faces=782201 | X avg=1.56 (runs=500822) | Y avg=1.51 (runs=518415)
+[23:31:26][info] [greedy]   face +Y faces=1959536 | X avg=2.62 (runs=747324) | Z avg=2.64 (runs=742065)
+[23:31:26][info] [greedy]   face -Y faces=1854184 | X avg=3.40 (runs=544580) | Z avg=3.40 (runs=545965)
+[23:31:26][info] [greedy] === stats after 3584 chunks ===
+[23:31:26][info] [greedy]   face +X faces=943224 | Y avg=1.59 (runs=594208) | Z avg=1.68 (runs=560862)
+[23:31:26][info] [greedy]   face +Z faces=973810 | X avg=1.66 (runs=587865) | Y avg=1.55 (runs=628685)
+[23:31:26][info] [greedy]   face -X faces=872957 | Y avg=1.46 (runs=598162) | Z avg=1.56 (runs=558865)
+[23:31:26][info] [greedy]   face -Z faces=823534 | X avg=1.56 (runs=528757) | Y avg=1.51 (runs=547100)
+[23:31:26][info] [greedy]   face +Y faces=2085016 | X avg=2.62 (runs=795723) | Z avg=2.67 (runs=781970)
+[23:31:26][info] [greedy]   face -Y faces=1979212 | X avg=3.42 (runs=578263) | Z avg=3.43 (runs=577652)
+[23:31:26][info] [greedy] === stats after 3840 chunks ===
+[23:31:26][info] [greedy]   face +X faces=1004562 | Y avg=1.59 (runs=632023) | Z avg=1.69 (runs=595387)
+[23:31:26][info] [greedy]   face +Z faces=1026560 | X avg=1.65 (runs=622007) | Y avg=1.55 (runs=663179)
+[23:31:26][info] [greedy]   face -X faces=931580 | Y avg=1.46 (runs=638317) | Z avg=1.57 (runs=592935)
+[23:31:26][info] [greedy]   face -Z faces=871209 | X avg=1.55 (runs=561487) | Y avg=1.50 (runs=579977)
+[23:31:26][info] [greedy]   face +Y faces=2222037 | X avg=2.62 (runs=848351) | Z avg=2.69 (runs=827153)
+[23:31:26][info] [greedy]   face -Y faces=2112966 | X avg=3.43 (runs=616554) | Z avg=3.44 (runs=613961)

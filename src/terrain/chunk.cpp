@@ -5,6 +5,7 @@
 
 #include "block.h"
 #include "chunk_generator.h"
+#include "logger.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -15,6 +16,8 @@
 
 #include <DirectXMath.h>
 
+#include <algorithm>
+#include <atomic>
 #include <numbers>
 #include <vector>
 
@@ -574,7 +577,7 @@ void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
     this->setInstancesVisible(this->areInstancesVisible);
 }
 
-void Chunk::createInstances()
+void Chunk::createInstances(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
     std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
@@ -722,6 +725,8 @@ void Chunk::createInstances()
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
 
+    this->recordGreedyMeshingStats(threadMemoryAlloc);
+
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
@@ -745,6 +750,200 @@ void Chunk::createInstances()
     else
     {
         Terrain::addChunkToCreateBlas(this);
+    }
+}
+
+namespace
+{
+
+// Instrumentation for greedy-meshing potential. For each greedy-eligible block face,
+// counts contiguous runs of identical (face direction, texture slice) along each of
+// the face's two in-plane axes. Average run length = (faces / runs); higher means
+// more merge potential along that axis. Water blocks and emissive blocks are
+// excluded since they will not be greedy-meshed.
+struct GreedyMeshStats
+{
+    std::atomic<uint64_t> faces[6]{};
+    std::atomic<uint64_t> runs[6][2]{};
+    std::atomic<uint64_t> chunksProcessed{};
+};
+
+GreedyMeshStats g_greedyMeshStats;
+
+// For each face direction (matches faceOffsets order), the two world axes lying in
+// the face's plane along which greedy merging could extend the quad.
+// Axis encoding: 0 = X, 1 = Y, 2 = Z.
+constexpr int g_facePlaneAxes[6][2] = {
+    { 1, 2 }, // +X face: extends along Y, Z
+    { 0, 1 }, // +Z face: extends along X, Y
+    { 1, 2 }, // -X face: extends along Y, Z
+    { 0, 1 }, // -Z face: extends along X, Y
+    { 0, 2 }, // +Y face: extends along X, Z
+    { 0, 2 }, // -Y face: extends along X, Z
+};
+
+constexpr const char* g_faceNames[6] = { "+X", "+Z", "-X", "-Z", "+Y", "-Y" };
+constexpr const char* g_axisNames[3] = { "X", "Y", "Z" };
+
+constexpr uint16_t GREEDY_NO_FACE = 0xFFFFu;
+
+} // namespace
+
+void Chunk::recordGreedyMeshingStats(ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    constexpr size_t totalCells = 6 * numChunkBlocks;
+    uint16_t* faceSlices = threadMemoryAlloc.request<uint16_t>(totalCells);
+    std::fill(faceSlices, faceSlices + totalCells, GREEDY_NO_FACE);
+
+    for (const uvec3& segmentPos : this->segmentsToGenerate)
+    {
+        uvec3 segmentStartPos, segmentEndPos;
+        Chunk::segmentPosToBounds(segmentPos, segmentStartPos, segmentEndPos);
+
+        for (uint blockZ = segmentStartPos.z; blockZ <= segmentEndPos.z; ++blockZ)
+        {
+            for (uint blockX = segmentStartPos.x; blockX <= segmentEndPos.x; ++blockX)
+            {
+                const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
+
+                for (uint blockY = segmentStartPos.y; blockY <= segmentEndPos.y; ++blockY)
+                {
+                    const Block block = this->blocks[baseBlockIdx + blockY];
+                    if (block == Block::AIR)
+                    {
+                        continue;
+                    }
+
+                    const BlockData& blockData = Blocks::getBlockData(block);
+                    if (blockData.shape != BlockShape::CUBE)
+                    {
+                        continue;
+                    }
+                    if (blockData.type == BlockType::WATER)
+                    {
+                        continue;
+                    }
+                    if (blockData.emitsLight)
+                    {
+                        continue;
+                    }
+
+                    const uvec3 blockPos_CS(blockX, blockY, blockZ);
+                    const uint blockIdx = Chunk::blockPosToIdx(blockPos_CS);
+
+                    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                    {
+                        const ivec3 neighborPos_CS = ivec3(blockPos_CS) + faceOffsets[faceIdx];
+                        if (!this->shouldGenerateFace(ivec3(blockPos_CS), blockData.type, blockData.shape, neighborPos_CS, static_cast<int>(faceIdx)))
+                        {
+                            continue;
+                        }
+
+                        const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
+                        const uint16_t slice = static_cast<uint16_t>(baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x);
+                        faceSlices[faceIdx * numChunkBlocks + blockIdx] = slice;
+                    }
+                }
+            }
+        }
+    }
+
+    uint64_t localFaces[6] = {};
+    uint64_t localRuns[6][2] = {};
+
+    const int axisSizes[3] = { static_cast<int>(chunkSizeXZ), static_cast<int>(chunkSizeY), static_cast<int>(chunkSizeXZ) };
+
+    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+    {
+        const uint16_t* faceArr = faceSlices + faceIdx * numChunkBlocks;
+
+        for (uint i = 0; i < numChunkBlocks; ++i)
+        {
+            if (faceArr[i] != GREEDY_NO_FACE)
+            {
+                ++localFaces[faceIdx];
+            }
+        }
+
+        for (uint axisSlot = 0; axisSlot < 2; ++axisSlot)
+        {
+            const int scanAxis = g_facePlaneAxes[faceIdx][axisSlot];
+            int otherA = -1;
+            int otherB = -1;
+            for (int k = 0; k < 3; ++k)
+            {
+                if (k == scanAxis)
+                {
+                    continue;
+                }
+                if (otherA < 0)
+                {
+                    otherA = k;
+                }
+                else
+                {
+                    otherB = k;
+                }
+            }
+
+            uint64_t runs = 0;
+            for (int a = 0; a < axisSizes[otherA]; ++a)
+            {
+                for (int b = 0; b < axisSizes[otherB]; ++b)
+                {
+                    uint16_t prev = GREEDY_NO_FACE;
+                    for (int s = 0; s < axisSizes[scanAxis]; ++s)
+                    {
+                        uvec3 p(0u);
+                        p[scanAxis] = static_cast<uint>(s);
+                        p[otherA] = static_cast<uint>(a);
+                        p[otherB] = static_cast<uint>(b);
+                        const uint16_t cur = faceArr[Chunk::blockPosToIdx(p)];
+                        if (cur != prev)
+                        {
+                            if (cur != GREEDY_NO_FACE)
+                            {
+                                ++runs;
+                            }
+                            prev = cur;
+                        }
+                    }
+                }
+            }
+            localRuns[faceIdx][axisSlot] = runs;
+        }
+    }
+
+    for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+    {
+        g_greedyMeshStats.faces[faceIdx].fetch_add(localFaces[faceIdx], std::memory_order_relaxed);
+        for (uint axisSlot = 0; axisSlot < 2; ++axisSlot)
+        {
+            g_greedyMeshStats.runs[faceIdx][axisSlot].fetch_add(localRuns[faceIdx][axisSlot], std::memory_order_relaxed);
+        }
+    }
+
+    const uint64_t chunksDone = g_greedyMeshStats.chunksProcessed.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    constexpr uint64_t logInterval = 256;
+    if (chunksDone % logInterval == 0)
+    {
+        Logger::log("[greedy] === stats after %llu chunks ===", static_cast<unsigned long long>(chunksDone));
+        for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+        {
+            const uint64_t faces = g_greedyMeshStats.faces[faceIdx].load(std::memory_order_relaxed);
+            const int axA = g_facePlaneAxes[faceIdx][0];
+            const int axB = g_facePlaneAxes[faceIdx][1];
+            const uint64_t rA = g_greedyMeshStats.runs[faceIdx][0].load(std::memory_order_relaxed);
+            const uint64_t rB = g_greedyMeshStats.runs[faceIdx][1].load(std::memory_order_relaxed);
+            const double avgA = rA > 0 ? static_cast<double>(faces) / static_cast<double>(rA) : 0.0;
+            const double avgB = rB > 0 ? static_cast<double>(faces) / static_cast<double>(rB) : 0.0;
+            Logger::log("[greedy]   face %s faces=%llu | %s avg=%.2f (runs=%llu) | %s avg=%.2f (runs=%llu)",
+                        g_faceNames[faceIdx],
+                        static_cast<unsigned long long>(faces),
+                        g_axisNames[axA], avgA, static_cast<unsigned long long>(rA),
+                        g_axisNames[axB], avgB, static_cast<unsigned long long>(rB));
+        }
     }
 }
 

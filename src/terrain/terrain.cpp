@@ -68,7 +68,7 @@ static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMem
 
 static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->createInstances();
+    chunk->createInstances(threadMemoryAlloc);
 }
 
 static ThreadPool threadPool;
