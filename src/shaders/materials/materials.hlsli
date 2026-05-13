@@ -38,25 +38,35 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-float4 getMaterialBaseColor(const Material material, const float2 uv, const float mipLevel)
+// texArraySliceIdx only read when isArrayTexture is true; non-array callers may pass 0.
+float4 sampleTexture(const bool isArrayTexture, const uint texId, const float2 uv, const float mipLevel,
+                     const uint texArraySliceIdx)
 {
-    float4 baseColor = float4(material.baseColor, 1.f);
-    if (material.baseColorTextureId != TEXTURE_ID_INVALID)
+    if (isArrayTexture)
     {
-        Texture2D<float4> tex = ResourceDescriptorHeap[material.baseColorTextureId];
-        baseColor = tex.SampleLevel(texSampler, uv, mipLevel);
+        Texture2DArray<float4> tex = ResourceDescriptorHeap[texId];
+        return tex.SampleLevel(texSampler, float3(uv, texArraySliceIdx), mipLevel);
     }
-    return baseColor;
+    Texture2D<float4> tex = ResourceDescriptorHeap[texId];
+    return tex.SampleLevel(texSampler, uv, mipLevel);
 }
 
-float3 getMaterialEmissiveColor(const Material material, const float2 uv, const float mipLevel)
+float4 getMaterialBaseColor(const Material material, const float2 uv, const float mipLevel,
+                            const uint texArraySliceIdx)
 {
-    float3 emissiveColor = material.emissiveColor;
-    if (material.emissiveColorTextureId != TEXTURE_ID_INVALID)
+    if (material.baseColorTextureId == TEXTURE_ID_INVALID)
     {
-        Texture2D<float4> tex = ResourceDescriptorHeap[material.emissiveColorTextureId];
-        emissiveColor = tex.SampleLevel(texSampler, uv, mipLevel).rgb;
+        return float4(material.baseColor, 1.f);
     }
+    return sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, mipLevel, texArraySliceIdx);
+}
+
+float3 getMaterialEmissiveColor(const Material material, const float2 uv, const float mipLevel,
+                                const uint texArraySliceIdx)
+{
+    const float3 emissiveColor = (material.emissiveColorTextureId == TEXTURE_ID_INVALID)
+        ? material.emissiveColor
+        : sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, mipLevel, texArraySliceIdx).rgb;
     return emissiveColor * material.emissiveStrength;
 }
 
@@ -93,14 +103,15 @@ float3 evaluateBsdf(
     const float3 wo_WS,
     const float3 wi_WS,
     const float3 surfNor_WS,
-    const float mipLevel)
+    const float mipLevel,
+    const uint texArraySliceIdx)
 {
     if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: revisit after adding roughness
     {
         return 0;
     }
 
-    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, mipLevel).rgb;
+    const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, mipLevel, texArraySliceIdx).rgb;
 
     float fresnelReflectance = 0.f;
     if (material.hasGlossyReflection())
@@ -125,6 +136,7 @@ BsdfSample sampleBsdf(
     const float3 wo_WS,
     const float3 surfNor_WS,
     const float mipLevel,
+    const uint texArraySliceIdx,
     inout RandomNumberGenerator rng)
 {
     BsdfSample result;
@@ -175,14 +187,14 @@ BsdfSample sampleBsdf(
             // e.g. 1.f / 1.5f for going from air to glass
             result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
             result.pdf = oneMinusFresnelReflectance;
-            result.bsdfValue = getMaterialBaseColor(material, uv, mipLevel).rgb * oneMinusFresnelReflectance;
+            result.bsdfValue = getMaterialBaseColor(material, uv, mipLevel, texArraySliceIdx).rgb * oneMinusFresnelReflectance;
             result.wasSpecular = true;
         }
         else
         {
             result.wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
             result.pdf = absCosTheta(result.wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
-            result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, mipLevel);
+            result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, mipLevel, texArraySliceIdx);
         }
     }
 
@@ -231,12 +243,13 @@ bool trySplitMaterial(inout Material surfMaterial,
                       const float3 surfNor_WS,
                       const float3 wo_WS,
                       const float mipLevel,
+                      const uint texArraySliceIdx,
                       const uint pathSplitIdx,
                       inout float3 pathWeight)
 {
     if (surfMaterial.hasDiffuse() && surfMaterial.baseColorTextureId != TEXTURE_ID_INVALID)
     {
-        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv, mipLevel);
+        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv, mipLevel, texArraySliceIdx);
         if (baseColorSample.a < 0.999f)
         {
             const float alpha = baseColorSample.a;

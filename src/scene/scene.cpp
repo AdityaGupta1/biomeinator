@@ -301,7 +301,9 @@ uint32_t Scene::addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t
 {
     D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
-    this->pendingTextures.push_back({ std::move(mipData), width, height, cpuHandle });
+    std::vector<std::vector<std::vector<uint8_t>>> sliceMipData;
+    sliceMipData.emplace_back(std::move(mipData));
+    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, 1u, cpuHandle });
     return texId;
 }
 
@@ -310,6 +312,18 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t
     std::vector<std::vector<uint8_t>> mipData;
     mipData.emplace_back(std::move(mip0));
     return this->addTexture(std::move(mipData), width, height);
+}
+
+uint32_t Scene::addTextureArray(
+    std::vector<std::vector<std::vector<uint8_t>>>&& sliceMipData, uint32_t width, uint32_t height)
+{
+    // 1 slice must go through addTexture() so SRV dim matches material's array flag.
+    ASSERT(sliceMipData.size() > 1);
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+    const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
+    const uint32_t arraySize = static_cast<uint32_t>(sliceMipData.size());
+    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, arraySize, cpuHandle });
+    return texId;
 }
 
 void Scene::expandBounds(const glm::vec3& pos_WS)
@@ -587,15 +601,17 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
 {
     for (const auto& pendingTex : this->pendingTextures)
     {
-        const uint32_t numMips = static_cast<uint32_t>(pendingTex.mipData.size());
         ASSERT(pendingTex.width > 0 && pendingTex.height > 0);
+        ASSERT(pendingTex.arraySize > 0);
+        ASSERT(pendingTex.sliceMipData.size() == pendingTex.arraySize);
+        const uint32_t numMips = static_cast<uint32_t>(pendingTex.sliceMipData[0].size());
         ASSERT(numMips > 0);
 
         D3D12_RESOURCE_DESC texDesc = {};
         texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         texDesc.Width = pendingTex.width;
         texDesc.Height = pendingTex.height;
-        texDesc.DepthOrArraySize = 1;
+        texDesc.DepthOrArraySize = static_cast<UINT16>(pendingTex.arraySize);
         texDesc.MipLevels = numMips;
         texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         texDesc.SampleDesc = SAMPLE_DESC_NO_AA;
@@ -609,33 +625,41 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                                                                      IID_PPV_ARGS(&dev_texture)));
         dev_texture->SetName(L"scene texture");
 
-        std::vector<MipLayout> mipLayouts(numMips);
+        // One entry per (slice, mip); each mip start aligned to D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT.
+        std::vector<MipLayout> mipLayouts(static_cast<size_t>(pendingTex.arraySize) * numMips);
         uint32_t totalUploadSizeBytes = 0;
-        for (uint32_t m = 0; m < numMips; ++m)
+        for (uint32_t slice = 0; slice < pendingTex.arraySize; ++slice)
         {
-            const uint32_t mipWidth = std::max(1u, pendingTex.width >> m);
-            const uint32_t mipHeight = std::max(1u, pendingTex.height >> m);
-            const uint32_t rowPitch = mipWidth * 4;
-            const size_t expectedMipSizeBytes = static_cast<size_t>(rowPitch) * mipHeight;
-            ASSERT(pendingTex.mipData[m].size() == expectedMipSizeBytes);
-            const uint32_t rowPitchAligned = MathUtil::roundUp(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-            totalUploadSizeBytes = MathUtil::roundUp(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
-            mipLayouts[m] = { totalUploadSizeBytes, rowPitch, rowPitchAligned, mipWidth, mipHeight };
-            totalUploadSizeBytes += rowPitchAligned * mipHeight;
+            ASSERT(pendingTex.sliceMipData[slice].size() == numMips);
+            for (uint32_t m = 0; m < numMips; ++m)
+            {
+                const uint32_t mipWidth = std::max(1u, pendingTex.width >> m);
+                const uint32_t mipHeight = std::max(1u, pendingTex.height >> m);
+                const uint32_t rowPitch = mipWidth * 4;
+                const size_t expectedMipSizeBytes = static_cast<size_t>(rowPitch) * mipHeight;
+                ASSERT(pendingTex.sliceMipData[slice][m].size() == expectedMipSizeBytes);
+                const uint32_t rowPitchAligned = MathUtil::roundUp(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+                totalUploadSizeBytes = MathUtil::roundUp(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+                mipLayouts[slice * numMips + m] = { totalUploadSizeBytes, rowPitch, rowPitchAligned, mipWidth, mipHeight };
+                totalUploadSizeBytes += rowPitchAligned * mipHeight;
+            }
         }
 
         ComPtr<ID3D12Resource> dev_uploadBuffer = BufferHelper::createBasicBuffer(totalUploadSizeBytes, &UPLOAD_HEAP);
         uint8_t* host_uploadBuffer = nullptr;
         dev_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&host_uploadBuffer));
 
-        for (uint32_t m = 0; m < numMips; ++m)
+        for (uint32_t slice = 0; slice < pendingTex.arraySize; ++slice)
         {
-            const MipLayout& layout = mipLayouts[m];
-            for (uint32_t row = 0; row < layout.height; ++row)
+            for (uint32_t m = 0; m < numMips; ++m)
             {
-                const uint8_t* srcPtr = pendingTex.mipData[m].data() + layout.rowPitchBytes * row;
-                uint8_t* destPtr = host_uploadBuffer + layout.offset + layout.rowPitchBytesAligned * row;
-                memcpy(destPtr, srcPtr, layout.rowPitchBytes);
+                const MipLayout& layout = mipLayouts[slice * numMips + m];
+                for (uint32_t row = 0; row < layout.height; ++row)
+                {
+                    const uint8_t* srcPtr = pendingTex.sliceMipData[slice][m].data() + layout.rowPitchBytes * row;
+                    uint8_t* destPtr = host_uploadBuffer + layout.offset + layout.rowPitchBytesAligned * row;
+                    memcpy(destPtr, srcPtr, layout.rowPitchBytes);
+                }
             }
         }
 
@@ -644,31 +668,34 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         BufferHelper::stateTransitionResourceBarrier(
             cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
 
-        for (uint32_t m = 0; m < numMips; ++m)
+        for (uint32_t slice = 0; slice < pendingTex.arraySize; ++slice)
         {
-            const MipLayout& layout = mipLayouts[m];
+            for (uint32_t m = 0; m < numMips; ++m)
+            {
+                const MipLayout& layout = mipLayouts[slice * numMips + m];
 
-            D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
-            footprint.Format = texDesc.Format;
-            footprint.Width = layout.width;
-            footprint.Height = layout.height;
-            footprint.Depth = 1;
-            footprint.RowPitch = layout.rowPitchBytesAligned;
+                D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
+                footprint.Format = texDesc.Format;
+                footprint.Width = layout.width;
+                footprint.Height = layout.height;
+                footprint.Depth = 1;
+                footprint.RowPitch = layout.rowPitchBytesAligned;
 
-            D3D12_PLACED_SUBRESOURCE_FOOTPRINT placed = { layout.offset, footprint };
+                D3D12_PLACED_SUBRESOURCE_FOOTPRINT placed = { layout.offset, footprint };
 
-            D3D12_TEXTURE_COPY_LOCATION srcTexLocation = {
-                .pResource = dev_uploadBuffer.Get(),
-                .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-                .PlacedFootprint = placed,
-            };
-            D3D12_TEXTURE_COPY_LOCATION destTexLocation = {
-                .pResource = dev_texture.Get(),
-                .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                .SubresourceIndex = m,
-            };
+                D3D12_TEXTURE_COPY_LOCATION srcTexLocation = {
+                    .pResource = dev_uploadBuffer.Get(),
+                    .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+                    .PlacedFootprint = placed,
+                };
+                D3D12_TEXTURE_COPY_LOCATION destTexLocation = {
+                    .pResource = dev_texture.Get(),
+                    .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+                    .SubresourceIndex = D3D12CalcSubresource(m, slice, 0, numMips, pendingTex.arraySize),
+                };
 
-            cmdList->CopyTextureRegion(&destTexLocation, 0, 0, 0, &srcTexLocation, nullptr);
+                cmdList->CopyTextureRegion(&destTexLocation, 0, 0, 0, &srcTexLocation, nullptr);
+            }
         }
 
         BufferHelper::stateTransitionResourceBarrier(
@@ -676,12 +703,25 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {
             .Format = texDesc.Format,
-            .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D,
             .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-            .Texture2D = {
-                .MipLevels = numMips,
-            },
         };
+        if (pendingTex.arraySize > 1)
+        {
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+            srvDesc.Texture2DArray = {
+                .MostDetailedMip = 0,
+                .MipLevels = numMips,
+                .FirstArraySlice = 0,
+                .ArraySize = pendingTex.arraySize,
+            };
+        }
+        else
+        {
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D = {
+                .MipLevels = numMips,
+            };
+        }
         Renderer::getDevice()->CreateShaderResourceView(dev_texture.Get(), &srvDesc, pendingTex.cpuHandle);
 
         this->textures.push_back(dev_texture);

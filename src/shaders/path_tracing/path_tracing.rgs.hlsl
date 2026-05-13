@@ -122,16 +122,16 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const float surfMipLevel = computeMipLevel(payload.rayCone.width);
 
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-        const PerTriangleData perTriData =
-            perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+        const uint surfTexArraySliceIdx = perTriData.texArraySliceIdx;
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         float3 emissiveContrib = 0.f;
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
-            emissiveContrib = payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel);
+            emissiveContrib = payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfMipLevel, surfTexArraySliceIdx);
         }
 
         const float3 wo_WS = -ray.Direction;
@@ -140,7 +140,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
-                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfMipLevel, pathSplitIdx, payload.pathWeight);
+                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfMipLevel, surfTexArraySliceIdx, pathSplitIdx, payload.pathWeight);
             if (!didSplitMaterial && pathSplitIdx == 1)
             {
                 break;
@@ -155,7 +155,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         nrcSurfAttr.specularF0 = surfMaterial.hasGlossyReflection()
             ? surfMaterial.glossyReflectionTint : float3(0, 0, 0);
         nrcSurfAttr.diffuseReflectance = surfMaterial.hasDiffuse()
-            ? getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfMipLevel).rgb
+            ? getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfMipLevel, surfTexArraySliceIdx).rgb
             : float3(0, 0, 0);
         nrcSurfAttr.shadingNormal = payload.hitInfo.hitNor_WS;
         nrcSurfAttr.viewVector = wo_WS;
@@ -214,7 +214,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         if (isPassthrough)
         {
-            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfMipLevel).rgb;
+            payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfMipLevel, surfTexArraySliceIdx).rgb;
             if (hitWasWater)
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
@@ -248,7 +248,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 }
             }
 
-            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfMipLevel, payload.rng);
+            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfMipLevel, surfTexArraySliceIdx, payload.rng);
 
 #if NRC_UPDATE || NRC_QUERY
             NrcSetBrdfPdf(nrcPathState, surfBsdfSample.pdf);
@@ -292,7 +292,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
                     const float3 bsdfVal = evaluateBsdf(
-                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfMipLevel);
+                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfMipLevel, surfTexArraySliceIdx);
 
                     float3 contribution =
                         payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
@@ -338,7 +338,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
-                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfMipLevel);
+                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfMipLevel, surfTexArraySliceIdx);
 
                         float3 contribution = payload.pathWeight * bsdfVal *
                                               absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
@@ -429,9 +429,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
                         const float secondHitMipLevel = computeMipLevel(payload.rayCone.width);
+                        const uint secondHitTexArraySliceIdx = perTriDatas[
+                            instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx].texArraySliceIdx;
                         if (surfMaterial.hasDiffuse())
                         {
-                            const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel).rgb;
+                            const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel, secondHitTexArraySliceIdx).rgb;
                             if (any(baseColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = baseColor;
@@ -440,7 +442,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         }
                         if (!secondHitHasDiffuseAlbedo && surfMaterial.hasEmission())
                         {
-                            const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel);
+                            const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitMipLevel, secondHitTexArraySliceIdx);
                             if (any(emissiveColor > 0.f))
                             {
                                 secondHitDiffuseAlbedo = applyReinhard(emissiveColor);

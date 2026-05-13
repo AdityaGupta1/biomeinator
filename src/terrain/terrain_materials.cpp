@@ -42,6 +42,7 @@ static void createMaterials(Scene* scene)
         defaultMaterial.baseColorTextureId = diffuseTextureId;
         defaultMaterial.emissiveColorTextureId = emissionTextureId;
         defaultMaterial.setHasDiffuse(true);
+        defaultMaterial.setHasArrayTexture(true);
         MATERIAL_IDX(TerrainMaterial::DEFAULT) = scene->addMaterial(toFreeList, &defaultMaterial);
     }
 

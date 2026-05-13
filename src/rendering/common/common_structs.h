@@ -70,6 +70,8 @@ struct InstanceData
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
+// Per-material, not per-texture: base + emissive must both be Texture2DArray (or invalid).
+#define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
 
 #define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
 #define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
@@ -125,6 +127,11 @@ public:
         return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION);
     }
 
+    bool hasArrayTexture()
+    {
+        return bool(flags & MATERIAL_FLAG_ARRAY_TEXTURE);
+    }
+
     bool canScatter()
     {
         return hasGlossyReflection() || hasDiffuseOrGlossyTransmission();
@@ -144,6 +151,11 @@ public:
     void setHasGlossyTransmission(bool enable)
     {
         flags = (flags & ~MATERIAL_FLAG_GLOSSY_TRANSMISSION) | (-uint32_t(enable) & MATERIAL_FLAG_GLOSSY_TRANSMISSION);
+    }
+
+    void setHasArrayTexture(bool enable)
+    {
+        flags = (flags & ~MATERIAL_FLAG_ARRAY_TEXTURE) | (-uint32_t(enable) & MATERIAL_FLAG_ARRAY_TEXTURE);
     }
 #endif
 };
@@ -171,8 +183,8 @@ public:
 
     uint flags;
     uint localAreaLightIdx;
+    uint texArraySliceIdx;
     uint pad0;
-    uint pad1;
 };
 
 #ifdef __cplusplus
