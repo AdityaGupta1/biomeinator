@@ -23,10 +23,16 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    // Inverted-infinity sentinel bbox so that Stage 2's bottom-up bbox union
+    // (min over child mins, max over child maxes) absorbs bogus leaves without
+    // a flux-mask branch. Combined with flux == 0 this also keeps the HIS
+    // weight at zero, so a bogus leaf can never be selected.
+    const float posInf = asfloat(0x7F800000u);
+    const float negInf = asfloat(0xFF800000u);
     LightAux aux;
-    aux.bboxMin = float3(0, 0, 0);
+    aux.bboxMin = float3(posInf, posInf, posInf);
     aux.flux = 0;
-    aux.bboxMax = float3(0, 0, 0);
+    aux.bboxMax = float3(negInf, negInf, negInf);
     aux.pad0 = 0;
     lightAuxOut[i] = aux;
 

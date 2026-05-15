@@ -65,6 +65,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     aux.pad0 = 0;
     lightAuxOut[areaLightIdx] = aux;
 
-    // Leaf index will be scattered in by Stage 2 once the tree is built.
-    lightToLeafOut[areaLightIdx] = LEAF_IDX_INVALID;
+    // lightToLeaf is left at LEAF_IDX_INVALID by light_buffer_clear; Stage 2
+    // scatters the real leaf index for live slots after the sort.
 }
