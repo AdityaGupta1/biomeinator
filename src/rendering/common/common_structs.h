@@ -172,6 +172,21 @@ struct AreaLight
     uint materialIdx;
 };
 
+#define LEAF_IDX_INVALID ~0u
+
+// Parallel to AreaLight, keyed by the same global area light index. Holds
+// per-light extras used to build the stochastic light tree (Stage 1/2).
+// Bbox is world-space (already includes the instance's float transform; the
+// integer transformOffset is added at shading time, same as AreaLight).
+struct LightAux
+{
+    float3 bboxMin;
+    float flux; // radiant power proxy = emissiveStrength * colorTerm * triangleArea
+
+    float3 bboxMax;
+    uint pad0;
+};
+
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData

@@ -80,6 +80,8 @@ void init()
     initRootSignature();
     initPipeline();
 
+    renderState.lightTreeManager.init();
+
     initImgui();
 
     const std::string& defaultScene = SettingsManager::getAsString("scene");
@@ -702,6 +704,16 @@ void render()
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
         // ===================================
+        // LIGHT TREE — EMITTER COLLECT
+        // ===================================
+
+        // TODO (RTSL Stage 2+): when the path tracer starts consuming these
+        // buffers, move the dispatch outside the `!stopAccumulating ||
+        // ACCUMULATE` gate so a moving emitter during an accumulate-stalled
+        // window does not leave fluxes stale on resume.
+        renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
+
+        // ===================================
         // GBUFFER
         // ===================================
 
@@ -960,6 +972,8 @@ void destroy()
     ImGui::DestroyContext();
 
     Terrain::shutdown();
+
+    renderState.lightTreeManager.destroy();
 
     renderState.scene.reset();
     AcsHelper::reset();

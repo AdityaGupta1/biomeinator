@@ -61,6 +61,17 @@
 #define POSTPROCESS_REGISTER_TEX_SAMPLER 0
 
 // =============================================
+#define LIGHT_TREE_REGISTER_SPACE 6
+// =============================================
+
+// b#
+#define LIGHT_TREE_REGISTER_CONSTANTS 0
+
+// u#
+#define LIGHT_TREE_REGISTER_LIGHT_AUX_OUT 0
+#define LIGHT_TREE_REGISTER_LIGHT_TO_LEAF_OUT 1
+
+// =============================================
 #define NRC_REGISTER_SPACE 5
 // =============================================
 

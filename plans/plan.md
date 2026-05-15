@@ -1,5 +1,7 @@
 _Last edited: 2026-05-13_
 
+> **Status:** Stage 1 complete (2026-05-13). Sparse-keyed `LightAux` + `lightToLeaf` buffers, two-pass clear+collect dispatch, topology-change trigger from `Scene::didAreaLightTopologyChange()`. Stages 2-7 pending.
+
 > Design choice: **one light sample per pixel** (not paper-default of n samples per pixel). Plan picks a single subtree uniformly from the n-entry cut → `pdfSelect *= 1/n`. Cheaper sampling, relies on DLSS + temporal accumulation to denoise. Deviates from RTSL paper (which has each pixel sample all n subtrees).
 
 > Scope: **v1 bounds the diffuse lobe only.** Reflectance bound `F = albedo / π * max_dot(normal, x, nodeBbox)` is a true upper bound for the diffuse lobe but not for glossy lobes. Materials with both diffuse and glossy components still get sampled (selection probability stays > 0 wherever the diffuse lobe contributes), but dead-branch pruning (`w_max == 0`) is only valid where the diffuse-only bound is the full BSDF bound. Until glossy bounds land, gate dead-branch pruning to materials with `hasDiffuse() && !hasGlossy()`; mixed materials descend the full tree without pruning. Glossy lobes add variance, not bias.
@@ -30,9 +32,17 @@ These rules together preserve the unbiased property of the existing path tracer.
 
 Each stage is mergeable on its own, with passing tests at the end.
 
-### Stage 1 — Emitter Collection
+### Stage 1 — Emitter Collection ✅ DONE (2026-05-13)
 
 Goal: build per-frame flat buffer of emissive triangle primitives.
+
+**Implementation notes (deviations from original task list above):**
+- Both `dev_lightAux` and `dev_lightToLeaf` are keyed by the **sparse** `areaLights[]` index (not dense `samplingIdx`), so Stage 4's BSDF-hit recovery (`instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx`) indexes them directly. Sized by `Scene::getAreaLightSparseCount()` (high-water sparse index), pow2-stepped from a 256 floor.
+- Two compute dispatches per topology change: `light_buffer_clear.cs.hlsl` zeroes/INVALIDs the full capacity, then `emitter_collect.cs.hlsl` overwrites live sparse slots. UAV barrier between. Clear ensures unreachable slots stay at sentinel even when the sparse layout shifts without a count change.
+- Trigger: `Scene::areaLightTopologyChanged` flag set in `makeTlas`, cleared at top of `Scene::update`. Catches visibility toggles + delete-then-add same frame (which keep `numAreaLights` constant).
+- `LightTreeManager` owns the buffers + two PSOs + two root sigs. `init()` once at renderer init; `reset()` for per-scene cleanup, `destroy()` for full teardown.
+- `serializeAndCreateRootSignature` factored out of `renderer_pipeline.cpp` (static) into `renderer_internal.h` (extern) for reuse.
+- Dispatch site is inside the `hasTlas() && (!stopAccumulating || ACCUMULATE)` block — flagged with TODO for Stage 2 to move out of accumulate gate.
 
 **Tasks:**
 - Add `LightAux` struct (HLSL + C++ mirror), parallel to existing `AreaLight` buffer, keyed by the same global area light index:

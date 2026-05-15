@@ -14,11 +14,11 @@ namespace Renderer
 
 static constexpr uint32_t maxPayloadSizeBytes = 96;
 
-static void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
-                                            uint32_t numParams,
-                                            const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
-                                            uint32_t numStaticSamplers,
-                                            ComPtr<ID3D12RootSignature>& outRootSig)
+void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
+                                     uint32_t numParams,
+                                     const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
+                                     uint32_t numStaticSamplers,
+                                     ComPtr<ID3D12RootSignature>& outRootSig)
 {
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc = {
         .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,

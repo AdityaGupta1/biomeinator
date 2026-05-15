@@ -166,6 +166,13 @@ private:
         },
     };
     uint32_t numAreaLights{ 0 };
+    // High water mark of the sparse area-light index (== max sparse index in
+    // areaLightSamplingStructure + 1, this frame). Used by callers that index
+    // parallel buffers keyed by the sparse areaLights[] index.
+    uint32_t areaLightSparseCount{ 0 };
+    // Set when makeTlas rewrites areaLightSamplingStructure; cleared at the
+    // start of the next Scene::update.
+    bool areaLightTopologyChanged{ false };
     MappedArray<uint32_t> areaLightSamplingStructure;
 
     void freeInstance(Instance* instance);
@@ -214,6 +221,8 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
+    uint32_t getAreaLightSparseCount() const;
+    bool didAreaLightTopologyChange() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevAreaLightSamplingStructureAddress() const;
 };

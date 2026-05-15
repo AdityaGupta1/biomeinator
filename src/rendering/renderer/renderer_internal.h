@@ -27,6 +27,7 @@
 #include <sl_dlss_d.h>
 
 #include "rendering/camera.h"
+#include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
 
 namespace nrc { namespace d3d12 { class Context; } }
@@ -212,6 +213,12 @@ inline D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
 #define MAKE_PARAM(type, regPrefix, name)                                                                              \
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
 
+void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
+                                     uint32_t numParams,
+                                     const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
+                                     uint32_t numStaticSamplers,
+                                     ComPtr<ID3D12RootSignature>& outRootSig);
+
 // =============================================
 // Internal function declarations
 // =============================================
@@ -292,6 +299,7 @@ struct RendererState
     // -- Scene --
     Scene scene;
     Camera camera;
+    LightTreeManager lightTreeManager;
     nrc::d3d12::Context* nrcContext{ nullptr };
 
     // -- Mode flags --
