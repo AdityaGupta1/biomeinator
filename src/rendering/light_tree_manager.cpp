@@ -8,20 +8,11 @@
 #include "common/common_registers.h"
 #include "common/common_settings.h"
 #include "common/common_structs.h"
-#include "debug.h"
 #include "gpu_sort/gpu_radix_sort.h"
-#include "logger.h"
 #include "renderer/pipeline_builder.h"
 #include "renderer/renderer_internal.h"
 #include "renderer/shaders.h"
 #include "util/util.h"
-
-// Temporary build-time validator. CPU-side sanity checks + a one-line log line
-// per topology change so PIX captures can be cross-referenced with the expected
-// tree shape. The full GPU-readback per-level invariant check from the plan was
-// scoped out for impl velocity — once Stage 4 lands, its 2048-spp goldens catch
-// any tree bias and this whole flag can be ripped out.
-#define ENABLE_LIGHT_TREE_VALIDATION 1
 
 namespace Renderer
 {
@@ -375,11 +366,6 @@ void LightTreeManager::ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCou
 void LightTreeManager::ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t numAreaLights)
 {
     const uint32_t newM = Util::nextPow2AtLeast(LIGHT_TREE_LEAF_FLOOR, numAreaLights);
-#if ENABLE_LIGHT_TREE_VALIDATION
-    ASSERT(newM >= LIGHT_TREE_LEAF_FLOOR, "Light tree leaf count below floor");
-    ASSERT((newM & (newM - 1u)) == 0u, "Light tree leaf count must be a power of 2");
-    ASSERT(newM >= numAreaLights, "Light tree leaf count must cover all emitters");
-#endif
     if (newM <= this->mortonCapacity && this->dev_lightTree != nullptr)
     {
         return;
@@ -634,11 +620,6 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
             levelsRemaining -= depth;
         }
     }
-
-#if ENABLE_LIGHT_TREE_VALIDATION
-    Logger::log("LightTree built: numAreaLights=%u sparseCapacity=%u M=%u treeNodes=%u",
-                numAreaLights, this->capacity, M, this->treeNodeCapacity);
-#endif
 
     return true;
 }

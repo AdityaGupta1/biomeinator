@@ -44,8 +44,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID,
     sMax[groupIdx] = lMax;
     GroupMemoryBarrierWithGroupSync();
 
-    // Workgroup-shared reduce. Hardcoded for 256-wide groups; if the workgroup
-    // size changes, update the loop start to size/2.
+    // Workgroup-shared log-step reduce. Loop bound auto-adapts to the
+    // workgroup-size define.
     [unroll]
     for (uint stride = LIGHT_TREE_BBOX_REDUCE_WORKGROUP_SIZE / 2u; stride > 0u; stride >>= 1u)
     {

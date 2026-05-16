@@ -203,6 +203,11 @@ struct LightTreeNode
     uint areaLightIdx;
 };
 
+#ifdef __cplusplus
+static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with the HLSL StructuredBuffer<LightAux> layout");
+static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
+#endif
+
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData

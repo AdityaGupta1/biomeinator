@@ -1,6 +1,6 @@
 _Last edited: 2026-05-15_
 
-> **Status:** Stage 1 complete (2026-05-13). Sparse-keyed `LightAux` + `lightToLeaf` buffers, two-pass clear+collect dispatch, topology-change trigger from `Scene::didAreaLightTopologyChange()`. Stages 2-7 pending.
+> **Status:** Stages 1–3 complete. Stage 2 finished 2026-05-15: `dev_lightTree` (LightTreeNode[2M-1], perfect-binary, M=nextPow2(numAreaLights)), `dev_sceneBbox` (orderable-uint atomic-min/max), `dev_mortonKeys`/`dev_mortonValues` (sorted via `GpuRadixSort`), 5 compute shaders (scene bbox reset, bbox reduce, morton emit, fused leaf populate + reverse scatter, internal levels with `depth=2`-per-dispatch fusion). See `knowledge/rendering/light_tree.md` for design notes. Stages 4-7 pending.
 
 > Design choice: **one light sample per pixel** (not paper-default of n samples per pixel). Plan picks a single subtree uniformly from the n-entry cut → `pdfSelect *= 1/n`. Cheaper sampling, relies on DLSS + temporal accumulation to denoise. Deviates from RTSL paper (which has each pixel sample all n subtrees).
 
@@ -79,11 +79,12 @@ Goal: GPU-side perfect binary tree, rebuilt on the same `Scene::areaLightTopolog
 
 **Compute passes (in order):**
 
+0. **scene bbox reset** — single dispatch `(1,1,1)`, writes 6 orderable-uint sentinels (`+inf` mins, `-inf` maxes) into `dev_sceneBbox` so the bbox-reduce atomics start from the widest possible state. Added during implementation; the original plan implicitly assumed bbox-reduce would seed itself, but cross-workgroup atomics can't safely seed in-shader.
 1. **bbox reduce** — parallel reduce over `dev_lightAux[0..capacity]`, writing min/max into `dev_sceneBbox`. Reads `LightAux` directly — Stage 1 already folds `instanceData.transformOffset` into the WS bbox (`emitter_collect.cs.hlsl:42-47`). Sparse holes carry Stage 1's inverted-infinity sentinels, so the union absorbs them with no live-slot branch. Implementation: workgroup-cooperative shared-memory reduce + atomic min/max into `dev_sceneBbox` across workgroups.
 2. **morton emit** — dispatch `numAreaLights` threads (dense, **not** sparse capacity). Each thread `samplingIdx` reads `sparseIdx = areaLightSamplingStructure[samplingIdx]`, then `LightAux[sparseIdx]`, then writes `(mortonKey32, sparseIdx32)` into `dev_mortonKeys[samplingIdx]` / `dev_mortonValues[samplingIdx]`. 30-bit Morton (10 bits per axis, per RTSL §4) packed into a 32-bit key (top 2 bits zero). Pow2 padding lives only in the tree, not in the sort — sort sees no holes, no sentinels. Writing a new `morton30()` helper in HLSL (no existing one in the repo).
 3. **sort** — `gpuRadixSort.dispatch(cmdList, toFreeList, dev_mortonKeys, dev_mortonValues, numAreaLights)`. In-place ping-pong (Stage 3); result lands back in caller buffers.
 4. **leaf populate + reverse scatter (fused)** — dispatch `M` threads, one per leaf slot. Slot `s < numAreaLights`: read `sparseIdx = dev_mortonValues[s]`, fetch `LightAux[sparseIdx]`, write `lightTree[treeLeafBase + s]` from it (set `areaLightIdx = sparseIdx`), and scatter `lightToLeaf[sparseIdx] = treeLeafBase + s`. Slot `s >= numAreaLights`: write a sentinel node (inverted-infinity bbox, flux=0, `LIGHT_IDX_INVALID`); skip the scatter — Stage 1's pre-clear keeps holes at `LEAF_IDX_INVALID`. Replaces the old separate "leaf populate" + "reverse scatter" passes (saves a dispatch and a UAV barrier).
-5. **internal levels** — bottom-up gather, **d = 2** per dispatch (each thread reads 4 grandchildren, writes its node's union). `log4(M)` dispatches with a UAV barrier between each. Simple per-thread arithmetic, no shared-memory cooperation needed. Bogus-leaf sentinels propagate cleanly through the union (zero flux, no bbox contribution).
+5. **internal levels** — bottom-up gather, **d = 2** per dispatch (each thread reads 4 grandchildren, writes parent + 2 intermediate children). `ceil(log2(M)/2)` dispatches with a UAV barrier between each; when `log2(M)` is odd the last dispatch drops to `d = 1` (via a root-constant flag). Simple per-thread arithmetic, no shared-memory cooperation needed. Bogus-leaf sentinels propagate cleanly through the union (zero flux, no bbox contribution).
 
 **No separate `dev_lightTree` clear pass needed:** the fused leaf-populate writes every leaf slot (real or sentinel) and the internal-levels passes write every internal node. Saves a dispatch on resize-frames too.
 
@@ -93,7 +94,9 @@ Goal: GPU-side perfect binary tree, rebuilt on the same `Scene::areaLightTopolog
 - Bogus leaves (slots `[numAreaLights, M)`): bbox = inverted-infinity sentinel, flux = 0, `areaLightIdx == LIGHT_IDX_INVALID`.
 - **Per-level invariant:** every internal node's flux == sum of its two children's flux, and every internal node's bbox == union of its two children's bboxes. Walk the full tree, not just the root — catches multi-level dispatch bugs (e.g. a level silently skipped) that a root-only check would miss.
 
-**Total dispatch count:** `3 + log4(M)` (bbox reduce, morton emit, fused leaf populate, then `log4(M)` internal levels), plus the 4 internal sort passes Stage 3 owns. For `M = 4096` that's 9 dispatches — vs ~17 for the unfused naïve version.
+**Total dispatch count:** `4 + ceil(log2(M)/2)` (scene bbox reset, bbox reduce, morton emit, fused leaf populate, then `ceil(log2(M)/2)` internal-levels dispatches), plus the 4 internal sort passes Stage 3 owns. For `M = 4096` that's 10 dispatches plus 4 sort passes.
+
+**Floor constants:** implementation collapses the plan's separate `LIGHT_TREE_NODE_FLOOR` / `MORTON_FLOOR` into a single `LIGHT_TREE_LEAF_FLOOR = 256` (matching the Stage 1 `LIGHT_AUX_CAPACITY_FLOOR`). Tree node count is derived as `2M - 1`, Morton buffers size to `M`. Single floor is simpler and the two derived sizes can never drift.
 
 ### Stage 3 — Sort Library ✅ DONE (2026-05-15)
 
@@ -203,11 +206,10 @@ external/
 tests/
   tests.json                             EDIT — add *_sl variants
 knowledge/
-  shaders/
-    light_tree.md                        NEW
   scene/
     area_lights.md                       NEW — area light system + LightAux extension
   rendering/
+    light_tree.md                        NEW (Stage 2)
     render_passes.md                     EDIT — add light tree build pass
 ```
 
