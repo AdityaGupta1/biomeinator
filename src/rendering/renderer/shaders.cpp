@@ -13,6 +13,11 @@
 #include "gpu_sort_upsweep_cs.fxh"
 #include "light_tree/emitter_collect.cs.fxh"
 #include "light_tree/light_buffer_clear.cs.fxh"
+#include "light_tree/light_tree_bbox_reduce.cs.fxh"
+#include "light_tree/light_tree_internal_levels.cs.fxh"
+#include "light_tree/light_tree_leaf_populate.cs.fxh"
+#include "light_tree/light_tree_morton_emit.cs.fxh"
+#include "light_tree/light_tree_scene_bbox_reset.cs.fxh"
 #include "nrc/nrc_query.rgs.fxh"
 #include "nrc/nrc_resolve.cs.fxh"
 #include "nrc/nrc_update.rgs.fxh"
@@ -35,6 +40,11 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(gpu_sort_scan_cs),
     REGISTER_SHADER(gpu_sort_upsweep_cs),
     REGISTER_SHADER(light_buffer_clear_cs),
+    REGISTER_SHADER(light_tree_bbox_reduce_cs),
+    REGISTER_SHADER(light_tree_internal_levels_cs),
+    REGISTER_SHADER(light_tree_leaf_populate_cs),
+    REGISTER_SHADER(light_tree_morton_emit_cs),
+    REGISTER_SHADER(light_tree_scene_bbox_reset_cs),
     REGISTER_SHADER(nrc_query_rgs),
     REGISTER_SHADER(nrc_resolve_cs),
     REGISTER_SHADER(nrc_update_rgs),

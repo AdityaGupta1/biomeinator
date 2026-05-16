@@ -10,16 +10,22 @@ class ToFreeList;
 namespace Renderer
 {
 
-// Stage 1 of the Real-Time Stochastic Lightcuts plan (see plans/plan.md).
-// Owns per-frame buffers parallel to the scene's `areaLights` buffer:
-//   * dev_lightAux       — LightAux[sparseCapacity] (bbox + flux), keyed by the SPARSE areaLights[] index
-//   * dev_lightToLeaf    — uint[sparseCapacity] keyed identically; Stage 2 will scatter leaf indices in
+// Stages 1+2 of the Real-Time Stochastic Lightcuts plan (see plans/plan.md).
 //
-// Both buffers are cleared to zero / LEAF_IDX_INVALID on every topology change,
-// then emitter_collect overwrites the slots that are live in the current sampling
-// structure. Slots whose triangles are not reachable from the current TLAS are
-// left at the sentinel — Stage 2 reads only live slots (via the sampling
-// structure) and Stage 4's BSDF-hit recovery only queries live areaLightIdxs.
+// Stage 1 owns per-frame buffers parallel to the scene's `areaLights` buffer:
+//   * dev_lightAux       — LightAux[sparseCapacity] (bbox + flux), keyed by the SPARSE areaLights[] index
+//   * dev_lightToLeaf    — uint[sparseCapacity] mapping sparseIdx -> leafIdx in dev_lightTree
+//
+// Both buffers are cleared to sentinel on every topology change, then
+// emitter_collect overwrites the slots that are live in the current sampling
+// structure. Stage 2 scatters leaf indices into dev_lightToLeaf after the sort.
+//
+// Stage 2 builds the perfect-binary light tree from those Stage 1 outputs:
+//   * dev_sceneBbox      — 6 floats (orderable-uint encoded) reduced from LightAux bboxes
+//   * dev_mortonKeys     — uint32 morton code per live light, sorted ascending
+//   * dev_mortonValues   — uint32 sparseIdx, sorted by morton (the radix-sort payload)
+//   * dev_lightTree      — LightTreeNode[2M-1] perfect binary tree, M = nextPow2(numAreaLights),
+//                          leaves at [M-1, 2M-1), root at [0]
 class LightTreeManager
 {
 public:
@@ -36,19 +42,50 @@ public:
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightAuxAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightToLeafAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevLightTreeAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevSceneBboxAddress() const;
+    uint32_t getCurrentTreeLeafCount() const; // M
+    uint32_t getCurrentTreeNodeCount() const; // 2M - 1
 
 private:
+    // Stage 1 PSOs
     ComPtr<ID3D12RootSignature> emitterCollectRootSig{ nullptr };
     ComPtr<ID3D12PipelineState> emitterCollectPso{ nullptr };
 
     ComPtr<ID3D12RootSignature> bufferClearRootSig{ nullptr };
     ComPtr<ID3D12PipelineState> bufferClearPso{ nullptr };
 
+    // Stage 2 PSOs
+    ComPtr<ID3D12RootSignature> sceneBboxResetRootSig{ nullptr };
+    ComPtr<ID3D12PipelineState> sceneBboxResetPso{ nullptr };
+
+    ComPtr<ID3D12RootSignature> bboxReduceRootSig{ nullptr };
+    ComPtr<ID3D12PipelineState> bboxReducePso{ nullptr };
+
+    ComPtr<ID3D12RootSignature> mortonEmitRootSig{ nullptr };
+    ComPtr<ID3D12PipelineState> mortonEmitPso{ nullptr };
+
+    ComPtr<ID3D12RootSignature> leafPopulateRootSig{ nullptr };
+    ComPtr<ID3D12PipelineState> leafPopulatePso{ nullptr };
+
+    ComPtr<ID3D12RootSignature> internalLevelsRootSig{ nullptr };
+    ComPtr<ID3D12PipelineState> internalLevelsPso{ nullptr };
+
+    // Stage 1 resources
     ComPtr<ID3D12Resource> dev_lightAux{ nullptr };
     ComPtr<ID3D12Resource> dev_lightToLeaf{ nullptr };
     uint32_t capacity{ 0 };
 
+    // Stage 2 resources
+    ComPtr<ID3D12Resource> dev_lightTree{ nullptr };
+    ComPtr<ID3D12Resource> dev_sceneBbox{ nullptr }; // 24 B, allocated once in init(), never resized
+    ComPtr<ID3D12Resource> dev_mortonKeys{ nullptr };
+    ComPtr<ID3D12Resource> dev_mortonValues{ nullptr };
+    uint32_t mortonCapacity{ 0 }; // == M = nextPow2(numAreaLights)
+    uint32_t treeNodeCapacity{ 0 }; // == 2M - 1
+
     void ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCount);
+    void ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t numAreaLights);
 };
 
 } // namespace Renderer

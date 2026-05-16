@@ -70,6 +70,10 @@
 // u#
 #define LIGHT_TREE_REGISTER_LIGHT_AUX_OUT 0
 #define LIGHT_TREE_REGISTER_LIGHT_TO_LEAF_OUT 1
+#define LIGHT_TREE_REGISTER_LIGHT_TREE_OUT 2
+#define LIGHT_TREE_REGISTER_SCENE_BBOX_OUT 3 // RWByteAddressBuffer, 6 orderable-uint floats
+#define LIGHT_TREE_REGISTER_MORTON_KEYS_OUT 4
+#define LIGHT_TREE_REGISTER_MORTON_VALUES_OUT 5
 
 // =============================================
 #define NRC_REGISTER_SPACE 5

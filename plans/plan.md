@@ -62,27 +62,38 @@ Goal: build per-frame flat buffer of emissive triangle primitives.
 
 ### Stage 2 — Light Tree Build (single-level)
 
-Goal: GPU-side perfect binary tree built every frame.
+Goal: GPU-side perfect binary tree, rebuilt on the same `Scene::areaLightTopologyChanged` flag that gates Stage 1. Tree staleness ≡ Stage 1 staleness — both consume the same trigger because Stage 2 is a pure function of `dev_lightAux`. (When dynamic transforms or runtime emissive-strength changes land later, the fix is to expand Stage 1's trigger; Stage 2 inherits it for free.)
+
+**Storage convention:** 0-indexed perfect binary tree. `tree[0]` = root. Children of node `i` are `tree[2i + 1]` and `tree[2i + 2]`. Parent of node `i > 0` is `tree[(i - 1) / 2]`. For pow2 leaf count `M = nextPow2(numAreaLights)`, total nodes = `2M - 1`, leaves occupy `tree[M - 1 .. 2M - 2]` (so `treeLeafBase = M - 1`).
 
 **Tasks:**
+
 - Add `LightTreeNode` (32 B):
   - `float3 bboxMin`, `float3 bboxMax`
   - `float flux`
-  - `uint areaLightIdx` (leaf only; internal nodes set to `LIGHT_IDX_INVALID`)
-- Add `dev_lightTree` ManagedBuffer (sized to next pow2 of light count × 2).
-- Compute passes (in order):
-  1. **bbox reduction** — parallel reduce over `dev_lightAux` → scene bbox UAV.
-  2. **morton code** — write `(mortonCode, areaLightIdx)` pairs into separate key/value buffers. 30-bit Morton (10 bits per axis, per RTSL §4) stored as a 32-bit key (top 2 bits zero); `areaLightIdx` is the 32-bit payload. The sort library (Stage 3) uses pairs-mode sort, so no 64-bit packing is needed.
-  3. **sort** — see "Sort library" below.
-  4. **leaf populate** — copy sorted lights into bottom level; bogus leaves get zero flux + degenerate bbox + `LIGHT_IDX_INVALID`.
-  5. **internal levels** — bottom-up gather in level groups. Multiple levels per dispatch (level ℓ built directly from level ℓ + d). Use thread = node, gather 2^d children.
-  6. **write reverse index** — fill `dev_lightToLeaf` by scattering: each non-bogus leaf thread reads its leaf node's `areaLightIdx`, writes its own `leafIdx` at that slot. Bogus leaves skip the write (buffer pre-initialized to `LEAF_IDX_INVALID`).
-- Resize tree buffer when light count crosses pow2 boundary.
+  - `uint areaLightIdx` (leaves only; internal nodes + bogus leaves set to `LIGHT_IDX_INVALID`, defined as `~0u` and shared with Stage 1's existing sentinel)
+- Add `dev_lightTree` raw buffer, allocated via `BufferHelper::createBasicBuffer` and resized via `Util::nextPow2AtLeast(LIGHT_TREE_NODE_FLOOR, 2 * numAreaLights - 1)` with old buffers pushed to `toFreeList` (matches Stage 1's pattern in `light_tree_manager.cpp:120-152`, **not** `ManagedBuffer`). Set `LIGHT_TREE_NODE_FLOOR = 511` (= `2 * LIGHT_AUX_CAPACITY_FLOOR - 1`).
+- Add `dev_sceneBbox` permanent UAV (`6 × float`). Allocated once in `LightTreeManager::init`; never resized.
+- Add `dev_mortonKeys` + `dev_mortonValues` raw buffers (uint32 each), sized to `nextPow2AtLeast(MORTON_FLOOR, numAreaLights)`. Resize idiom matches `dev_lightTree`.
+- **Guard whole Stage 2 dispatch on `numAreaLights > 0`.** `GpuRadixSort::dispatch` asserts on `numKeys == 0`; the empty-scene case leaves the tree untouched and Stage 4's sampler bails on the root's zero flux.
 
-**Validation:** CPU readback, verify:
-- Root bbox encloses all lights.
-- Root flux == sum of leaf fluxes (within FP tolerance).
-- Bogus leaves all zero.
+**Compute passes (in order):**
+
+1. **bbox reduce** — parallel reduce over `dev_lightAux[0..capacity]`, writing min/max into `dev_sceneBbox`. Reads `LightAux` directly — Stage 1 already folds `instanceData.transformOffset` into the WS bbox (`emitter_collect.cs.hlsl:42-47`). Sparse holes carry Stage 1's inverted-infinity sentinels, so the union absorbs them with no live-slot branch. Implementation: workgroup-cooperative shared-memory reduce + atomic min/max into `dev_sceneBbox` across workgroups.
+2. **morton emit** — dispatch `numAreaLights` threads (dense, **not** sparse capacity). Each thread `samplingIdx` reads `sparseIdx = areaLightSamplingStructure[samplingIdx]`, then `LightAux[sparseIdx]`, then writes `(mortonKey32, sparseIdx32)` into `dev_mortonKeys[samplingIdx]` / `dev_mortonValues[samplingIdx]`. 30-bit Morton (10 bits per axis, per RTSL §4) packed into a 32-bit key (top 2 bits zero). Pow2 padding lives only in the tree, not in the sort — sort sees no holes, no sentinels. Writing a new `morton30()` helper in HLSL (no existing one in the repo).
+3. **sort** — `gpuRadixSort.dispatch(cmdList, toFreeList, dev_mortonKeys, dev_mortonValues, numAreaLights)`. In-place ping-pong (Stage 3); result lands back in caller buffers.
+4. **leaf populate + reverse scatter (fused)** — dispatch `M` threads, one per leaf slot. Slot `s < numAreaLights`: read `sparseIdx = dev_mortonValues[s]`, fetch `LightAux[sparseIdx]`, write `lightTree[treeLeafBase + s]` from it (set `areaLightIdx = sparseIdx`), and scatter `lightToLeaf[sparseIdx] = treeLeafBase + s`. Slot `s >= numAreaLights`: write a sentinel node (inverted-infinity bbox, flux=0, `LIGHT_IDX_INVALID`); skip the scatter — Stage 1's pre-clear keeps holes at `LEAF_IDX_INVALID`. Replaces the old separate "leaf populate" + "reverse scatter" passes (saves a dispatch and a UAV barrier).
+5. **internal levels** — bottom-up gather, **d = 2** per dispatch (each thread reads 4 grandchildren, writes its node's union). `log4(M)` dispatches with a UAV barrier between each. Simple per-thread arithmetic, no shared-memory cooperation needed. Bogus-leaf sentinels propagate cleanly through the union (zero flux, no bbox contribution).
+
+**No separate `dev_lightTree` clear pass needed:** the fused leaf-populate writes every leaf slot (real or sentinel) and the internal-levels passes write every internal node. Saves a dispatch on resize-frames too.
+
+**Validation (CPU readback):**
+- Root bbox encloses all live `LightAux` bboxes.
+- Root flux == sum of live `LightAux.flux` (within FP tolerance).
+- Bogus leaves (slots `[numAreaLights, M)`): bbox = inverted-infinity sentinel, flux = 0, `areaLightIdx == LIGHT_IDX_INVALID`.
+- **Per-level invariant:** every internal node's flux == sum of its two children's flux, and every internal node's bbox == union of its two children's bboxes. Walk the full tree, not just the root — catches multi-level dispatch bugs (e.g. a level silently skipped) that a root-only check would miss.
+
+**Total dispatch count:** `3 + log4(M)` (bbox reduce, morton emit, fused leaf populate, then `log4(M)` internal levels), plus the 4 internal sort passes Stage 3 owns. For `M = 4096` that's 9 dispatches — vs ~17 for the unfused naïve version.
 
 ### Stage 3 — Sort Library ✅ DONE (2026-05-15)
 
