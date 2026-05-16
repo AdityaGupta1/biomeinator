@@ -1,4 +1,4 @@
-_Last edited: 2026-05-13_
+_Last edited: 2026-05-15_
 
 > **Status:** Stage 1 complete (2026-05-13). Sparse-keyed `LightAux` + `lightToLeaf` buffers, two-pass clear+collect dispatch, topology-change trigger from `Scene::didAreaLightTopologyChange()`. Stages 2-7 pending.
 
@@ -72,7 +72,7 @@ Goal: GPU-side perfect binary tree built every frame.
 - Add `dev_lightTree` ManagedBuffer (sized to next pow2 of light count × 2).
 - Compute passes (in order):
   1. **bbox reduction** — parallel reduce over `dev_lightAux` → scene bbox UAV.
-  2. **morton code** — write `(mortonCode, areaLightIdx)` pairs into key/value buffer. 30-bit Morton (10 bits per axis, per RTSL §4) packed with 32-bit index into a 64-bit key.
+  2. **morton code** — write `(mortonCode, areaLightIdx)` pairs into separate key/value buffers. 30-bit Morton (10 bits per axis, per RTSL §4) stored as a 32-bit key (top 2 bits zero); `areaLightIdx` is the 32-bit payload. The sort library (Stage 3) uses pairs-mode sort, so no 64-bit packing is needed.
   3. **sort** — see "Sort library" below.
   4. **leaf populate** — copy sorted lights into bottom level; bogus leaves get zero flux + degenerate bbox + `LIGHT_IDX_INVALID`.
   5. **internal levels** — bottom-up gather in level groups. Multiple levels per dispatch (level ℓ built directly from level ℓ + d). Use thread = node, gather 2^d children.
@@ -84,18 +84,18 @@ Goal: GPU-side perfect binary tree built every frame.
 - Root flux == sum of leaf fluxes (within FP tolerance).
 - Bogus leaves all zero.
 
-### Stage 3 — Sort Library
+### Stage 3 — Sort Library ✅ DONE (2026-05-15)
 
-Goal: GPU radix sort over 64-bit (Morton, lightIdx) keys.
+Goal: GPU radix sort over 32-bit Morton key + 32-bit `areaLightIdx` payload (pairs mode), ascending.
 
-**Decision:** [GPUSorting (b0nes164)](https://github.com/b0nes164/GPUSorting), DeviceRadixSort variant — D3D12 + HLSL compute, 64-bit key support, active. Fallback to [AMD FidelityFX Parallel Sort](https://gpuopen.com/fidelityfx-parallel-sort/) if integration friction high.
+**Decision:** [GPUSorting (b0nes164)](https://github.com/b0nes164/GPUSorting) — DeviceRadixSort (LSD, 8-bit digits, 4 passes). Reduce-then-scan variant for portability (OneSweep relies on forward thread-progress guarantees we don't want to assume across hardware). Tuning hardcoded to the NVIDIA pairs preset for RTX 30/40-class shared memory; see `knowledge/rendering/gpu_radix_sort.md`.
 
-**Tasks:**
-- Add as git submodule under `external/`.
-- Wire CMake to build its shaders.
-- Call directly; do not wrap in a class until a second caller appears.
+**Implementation notes:**
+- Submodule lives at `external/GPUSorting`. CMake compiles `DeviceRadixSort.hlsl` four times (one per entry point) with `-DSORT_PAIRS -DKEY_UINT -DPAYLOAD_UINT -DSHOULD_ASCEND -DENABLE_16_BIT`. Tuning defaults match NVIDIA pairs preset, so no tuning overrides are passed.
+- `Renderer::GpuRadixSort` (`src/rendering/gpu_sort/gpu_radix_sort.{h,cpp}`) owns the 4 PSOs/root sigs and scratch buffers; exposes `dispatch(cmdList, toFreeList, keysBuf, valuesBuf, numKeys)` with in-place semantics (the 4-pass ping-pong lands the result back in caller storage).
+- Stage 2 will call `dispatch` after writing `(mortonCode, areaLightIdx)` into a pair of UAV buffers.
 
-**Validation:** trust upstream tests; correctness of sorted output is checked transitively by Stage 2's root-flux invariant.
+**Validation:** verified by a temporary smoke test run at renderer init for n ∈ {1, 7680, 7681, 1<<20} — asserted ascending keys + payload-tracks-key. Test passed on RTX 4070 SUPER and was removed (Stage 2 will exercise the path going forward).
 
 ### Stage 4 — Root Sampler (No Cuts)
 

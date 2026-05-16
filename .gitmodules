@@ -19,3 +19,6 @@
 [submodule "external/lz4"]
 	path = external/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "external/GPUSorting"]
+	path = external/GPUSorting
+	url = https://github.com/b0nes164/GPUSorting

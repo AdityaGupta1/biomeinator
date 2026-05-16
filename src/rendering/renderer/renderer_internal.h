@@ -27,6 +27,7 @@
 #include <sl_dlss_d.h>
 
 #include "rendering/camera.h"
+#include "rendering/gpu_sort/gpu_radix_sort.h"
 #include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
 
@@ -300,6 +301,7 @@ struct RendererState
     Scene scene;
     Camera camera;
     LightTreeManager lightTreeManager;
+    GpuRadixSort gpuRadixSort;
     nrc::d3d12::Context* nrcContext{ nullptr };
 
     // -- Mode flags --

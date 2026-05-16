@@ -81,6 +81,7 @@ void init()
     initPipeline();
 
     renderState.lightTreeManager.init();
+    renderState.gpuRadixSort.init();
 
     initImgui();
 
@@ -973,6 +974,7 @@ void destroy()
 
     Terrain::shutdown();
 
+    renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
 
     renderState.scene.reset();
