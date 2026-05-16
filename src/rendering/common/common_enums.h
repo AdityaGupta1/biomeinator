@@ -33,6 +33,7 @@ enum class SamplingMode : uint
     NAIVE,
     MIS,
     RIS,
+    RTSL,
 
     COUNT
 };

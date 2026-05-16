@@ -152,6 +152,9 @@ enum class PtParam
     NRC_QUERY_RADIANCE_PARAMS,
     NRC_COUNTERS_DATA,
 
+    RTSL_LIGHT_TREE,
+    RTSL_LIGHT_TO_LEAF,
+
     COUNT
 };
 

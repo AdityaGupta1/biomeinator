@@ -40,12 +40,35 @@ public:
     // Returns true if a dispatch was recorded.
     bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
+    // Transitions the SRV-bound buffers (dev_lightTree, dev_lightToLeaf) from
+    // UNORDERED_ACCESS → NON_PIXEL_SHADER_RESOURCE, but only for buffers that
+    // were actually written by the most recent update() call. Buffers that
+    // weren't written this frame are still in COMMON (post-decay) and will
+    // implicit-promote to SRV on first raygen read.
+    //
+    // Must be called once per frame between update() and the path tracing
+    // dispatch.
+    void transitionForPathTracingRead(ID3D12GraphicsCommandList4* cmdList);
+
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightAuxAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightToLeafAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightTreeAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevSceneBboxAddress() const;
     uint32_t getCurrentTreeLeafCount() const; // M
     uint32_t getCurrentTreeNodeCount() const; // 2M - 1
+
+    // SRV-bind addresses for path tracing. Fall back to a permanent placeholder
+    // buffer when the real buffer is not allocated (empty scene), so root-SRV
+    // bindings never see GPUVA == 0 (which is a validation error).
+    D3D12_GPU_VIRTUAL_ADDRESS getDevLightTreeSrvBindAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevLightToLeafSrvBindAddress() const;
+
+    // Returns the actual write-target resources when allocated, else nullptr.
+    // Used for resource-state transitions between LightTree build (UAV) and
+    // path tracing (SRV). Skip the transition when the getter returns nullptr —
+    // the placeholder stays in COMMON and implicit-promotes to SRV on read.
+    ID3D12Resource* getDevLightTreeResource() const;
+    ID3D12Resource* getDevLightToLeafResource() const;
 
 private:
     // Stage 1 PSOs
@@ -83,6 +106,18 @@ private:
     ComPtr<ID3D12Resource> dev_mortonValues{ nullptr };
     uint32_t mortonCapacity{ 0 }; // == M = nextPow2(numAreaLights)
     uint32_t treeNodeCapacity{ 0 }; // == 2M - 1
+
+    // 32-byte read-only placeholder, allocated once in init(). Returned by the
+    // *SrvBindAddress() getters when the real buffer is not yet allocated.
+    // Shader reads are gated by rtslParams.treeLeafCount == 0, so contents
+    // never matter.
+    ComPtr<ID3D12Resource> dev_srvPlaceholder{ nullptr };
+
+    // Set inside update() for each buffer actually written this frame.
+    // Consumed by transitionForPathTracingRead(). Reset to false at the top
+    // of every update() call.
+    bool wroteLightTreeThisCall{ false };
+    bool wroteLightToLeafThisCall{ false };
 
     void ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCount);
     void ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t numAreaLights);

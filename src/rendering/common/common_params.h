@@ -131,6 +131,14 @@ struct RenderParams
     float mipBias;
 };
 
+struct RtslParams
+{
+    uint treeLeafBase;  // M - 1, or 0 if no light tree built / scene has no area lights
+    uint treeLeafCount; // M (pow2-rounded numAreaLights), 0 = empty / disabled
+    uint pad0;
+    uint pad1;
+};
+
 struct DebugParams
 {
     uint debugOutputSrvIdx;

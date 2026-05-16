@@ -291,6 +291,12 @@ void LightTreeManager::init()
         &DEFAULT_HEAP,
         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     this->dev_sceneBbox->SetName(L"dev_sceneBbox");
+
+    // SRV-bind placeholder for raygen — used when the real light tree / light-to-leaf
+    // buffers don't exist yet (empty scene). Path tracer's rtslParams.treeLeafCount
+    // gates any actual reads, so the contents are never sampled.
+    this->dev_srvPlaceholder = BufferHelper::createBasicBuffer(32ull, &DEFAULT_HEAP);
+    this->dev_srvPlaceholder->SetName(L"dev_lightTreeSrvPlaceholder");
 }
 
 void LightTreeManager::reset()
@@ -310,6 +316,7 @@ void LightTreeManager::destroy()
 {
     this->reset();
     this->dev_sceneBbox.Reset();
+    this->dev_srvPlaceholder.Reset();
 
     this->emitterCollectPso.Reset();
     this->emitterCollectRootSig.Reset();
@@ -413,6 +420,11 @@ void LightTreeManager::ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t 
 
 bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
+    // Reset write-tracking before any early returns. Buffers decay back to
+    // COMMON between frames, so per-call tracking is sufficient.
+    this->wroteLightTreeThisCall = false;
+    this->wroteLightToLeafThisCall = false;
+
     if (!renderState.scene.didAreaLightTopologyChange())
     {
         return false;
@@ -477,6 +489,9 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
         BufferHelper::uavBarrier(cmdList, this->dev_lightAux.Get());
         BufferHelper::uavBarrier(cmdList, this->dev_lightToLeaf.Get());
     }
+
+    // Stage 1 wrote dev_lightAux + dev_lightToLeaf (both end in UAV state).
+    this->wroteLightToLeafThisCall = true;
 
     const uint32_t numAreaLights = renderState.scene.getNumAreaLights();
     // sparseCount > 0 implies numAreaLights > 0 (both are derived from the same
@@ -621,7 +636,29 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
         }
     }
 
+    // Stage 2 wrote dev_lightTree (ends in UAV state after the final
+    // internal-levels pass + UAV barrier).
+    this->wroteLightTreeThisCall = true;
+
     return true;
+}
+
+void LightTreeManager::transitionForPathTracingRead(ID3D12GraphicsCommandList4* cmdList)
+{
+    BufferHelper::TransitionBatch batch;
+    if (this->wroteLightTreeThisCall && this->dev_lightTree)
+    {
+        batch.add(this->dev_lightTree.Get(),
+                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    if (this->wroteLightToLeafThisCall && this->dev_lightToLeaf)
+    {
+        batch.add(this->dev_lightToLeaf.Get(),
+                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    batch.submit(cmdList);
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightAuxAddress() const
@@ -652,6 +689,26 @@ uint32_t LightTreeManager::getCurrentTreeLeafCount() const
 uint32_t LightTreeManager::getCurrentTreeNodeCount() const
 {
     return this->treeNodeCapacity;
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightTreeSrvBindAddress() const
+{
+    return (this->dev_lightTree ? this->dev_lightTree : this->dev_srvPlaceholder)->GetGPUVirtualAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightToLeafSrvBindAddress() const
+{
+    return (this->dev_lightToLeaf ? this->dev_lightToLeaf : this->dev_srvPlaceholder)->GetGPUVirtualAddress();
+}
+
+ID3D12Resource* LightTreeManager::getDevLightTreeResource() const
+{
+    return this->dev_lightTree.Get();
+}
+
+ID3D12Resource* LightTreeManager::getDevLightToLeafResource() const
+{
+    return this->dev_lightToLeaf.Get();
 }
 
 } // namespace Renderer

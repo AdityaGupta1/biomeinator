@@ -342,6 +342,10 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
     bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), renderState.dev_gbuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TREE),
+                                                          renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
+                                                          renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
 }
 
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
@@ -679,6 +683,16 @@ void render()
     sceneParams->cameraUnderwater = 0;
     sceneParams->voxelBoundsMin_WS = { 0, 0, 0 };
     sceneParams->voxelBoundsMax_WS = { 0, 0, 0 };
+
+    auto& rtslParams = paramBlockManager.rtslParams;
+    {
+        const uint32_t numAreaLights = sceneParams->numAreaLights;
+        const uint32_t M = (numAreaLights == 0) ? 0u : renderState.lightTreeManager.getCurrentTreeLeafCount();
+        rtslParams->treeLeafCount = M;
+        rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
+        rtslParams->pad0 = 0;
+        rtslParams->pad1 = 0;
+    }
     if (renderState.voxelMode)
     {
         const glm::ivec3 voxelBoundsMin_WS = Terrain::getVoxelRenderBoundsMin_WS();
@@ -708,11 +722,12 @@ void render()
         // LIGHT TREE — EMITTER COLLECT
         // ===================================
 
-        // TODO (RTSL Stage 2+): when the path tracer starts consuming these
+        // TODO (RTSL Stage 4+): now that the path tracer consumes these
         // buffers, move the dispatch outside the `!stopAccumulating ||
         // ACCUMULATE` gate so a moving emitter during an accumulate-stalled
         // window does not leave fluxes stale on resume.
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
+        renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
 
         // ===================================
         // GBUFFER

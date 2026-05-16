@@ -15,6 +15,7 @@
 #include "light/dome_light.hlsli"
 #include "light/light_sampling.hlsli"
 #include "light/ris.hlsli"
+#include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
@@ -71,7 +72,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = (samplingMode == SamplingMode::RIS);
-    const bool doMis = (samplingMode == SamplingMode::MIS || useRis);
+    const bool useRtsl = (samplingMode == SamplingMode::RTSL);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl);
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -103,6 +105,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     bool bounceWasSpecular = false;
     float bounceBsdfPdf = 0.f;
     float3 surfPos_WS, surfNor_WS;
+    // Lambertian diffuse reflectance (albedo / π) at the last NEE-eligible
+    // bounce. Used by RTSL to recompute pdfSelect for BSDF-hit MIS. Zero when
+    // the previous bounce was specular / delta / no-diffuse — those surfaces
+    // never enter the forward NEE branch, so the recovered pdfSelect must be
+    // 0 and MIS collapses to BSDF-only.
+    float3 prevBrdfBound = float3(0.f, 0.f, 0.f);
 
     bool hasEncounteredNonDeltaSurface = false;
 
@@ -266,7 +274,57 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
 
                 DirectLightingSample lightSample;
-                if (useRis)
+                if (useRtsl)
+                {
+                    lightSample.didHitLight = false;
+
+                    const float3 brdfBound = surfMaterial.hasDiffuse()
+                        ? (getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb * (1.f / M_PI))
+                        : float3(0.f, 0.f, 0.f);
+
+                    uint pickedLightIdx;
+                    float pdfSelect;
+                    const bool gotLight = selectLightFromSubtree(
+                        0u, surfPos_WS, surfNor_WS, brdfBound, payload.rng, pickedLightIdx, pdfSelect);
+
+                    if (gotLight && pdfSelect > 0.f)
+                    {
+                        const AreaLight light = areaLights[pickedLightIdx];
+
+                        // mirror sampleLightUniform's triangle sampling (light_sampling.hlsli:31-43)
+                        const float2 rndSample = payload.rng.nextFloat2();
+                        const float sqrtRndX = sqrt(rndSample.x);
+                        const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
+                        float3 pointOnLight_WS =
+                            bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
+                        pointOnLight_WS += instanceDatas[light.instanceId].transformOffset - cameraParams.globalInstanceOffset;
+
+                        float3 lightNor_WS;
+                        float lightArea;
+                        getLightNormalAndArea(light, lightNor_WS, lightArea);
+
+                        const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
+                        const float r2 = distance2(surfPos_WS, pointOnLight_WS);
+                        const float lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+
+                        float3 Le;
+                        const bool didHit = traceToLight(
+                            surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, light,
+                            payload.rayCone, canPassthrough, isUnderwater, payload.rng, Le);
+
+                        if (didHit)
+                        {
+                            lightSample.lightIdx = pickedLightIdx;
+                            lightSample.didHitLight = true;
+                            lightSample.pointOnLight_WS = pointOnLight_WS;
+                            lightSample.wi_WS = wi_WS;
+                            lightSample.Le = Le;
+                            lightSample.pdfOrW_Y = pdfSelect * lightSamplePdf; // true pdf — flows into the non-RIS MIS branch below
+                        }
+                    }
+                    // else: null sample. didHitLight stays false → no contribution, no shadow ray.
+                }
+                else if (useRis)
                 {
                     const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                     bool isBsdfSampleUnused;
@@ -386,6 +444,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;
+            // Stash for RTSL's BSDF-hit pdf recovery. Mirrors the NEE-eligibility
+            // gate above (doMis && canScatter && !isDeltaSurface), so the
+            // recovered pdfSelect agrees with what the forward sampler would
+            // have produced at this surface.
+            prevBrdfBound = (surfMaterial.canScatter() && !isDeltaSurface && surfMaterial.hasDiffuse())
+                ? (getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb * (1.f / M_PI))
+                : float3(0.f, 0.f, 0.f);
         } // !isPassthrough
 
         ray.TMin = 0.f;
@@ -508,7 +573,43 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
-                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                float bsdfSampleLightPdf;
+                if (useRtsl)
+                {
+                    // Mirror lightPdfUniform's areaLightIdx recovery, then walk the
+                    // tree using the previous bounce's shading data.
+                    const InstanceData hitInst = instanceDatas[payload.hitInfo.instanceId];
+                    const PerTriangleData hitPerTri =
+                        perTriDatas[hitInst.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+                    if (hitPerTri.localAreaLightIdx == LIGHT_IDX_INVALID)
+                    {
+                        bsdfSampleLightPdf = 0.f;
+                    }
+                    else
+                    {
+                        const uint areaLightIdx = hitInst.areaLightsBufferOffset + hitPerTri.localAreaLightIdx;
+                        const float pdfSelect =
+                            evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, prevBrdfBound);
+                        if (pdfSelect <= 0.f)
+                        {
+                            bsdfSampleLightPdf = 0.f;
+                        }
+                        else
+                        {
+                            const AreaLight hitLight = areaLights[areaLightIdx];
+                            float3 lightNor_WS;
+                            float lightArea;
+                            getLightNormalAndArea(hitLight, lightNor_WS, lightArea);
+                            const float r2 = distance2(surfPos_WS, payload.hitInfo.hitPos_WS);
+                            bsdfSampleLightPdf =
+                                pdfSelect * r2 / (absCosTheta(-ray.Direction, lightNor_WS) * lightArea);
+                        }
+                    }
+                }
+                else
+                {
+                    bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                }
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
                 payload.pathWeight *= emissionMisWeight;
             }

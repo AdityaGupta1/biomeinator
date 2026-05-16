@@ -67,6 +67,10 @@
 // b#
 #define LIGHT_TREE_REGISTER_CONSTANTS 0
 
+// t# (consumed by path tracing raygen — light tree SRVs)
+#define LIGHT_TREE_REGISTER_LIGHT_TREE_IN 0
+#define LIGHT_TREE_REGISTER_LIGHT_TO_LEAF_IN 1
+
 // u#
 #define LIGHT_TREE_REGISTER_LIGHT_AUX_OUT 0
 #define LIGHT_TREE_REGISTER_LIGHT_TO_LEAF_OUT 1

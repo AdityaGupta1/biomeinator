@@ -162,6 +162,34 @@
             "threshold": 0.02
         },
         {
+            "name": "cornell_box_rtsl",
+            "scene": "gltf/cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=12",
+                "--samplingMode=3"
+            ],
+            "golden": "gltf/cornell_box/golden.png",
+            "threshold": 0.015
+        },
+        {
+            "name": "many_faces_emitter_rtsl",
+            "scene": "gltf/many_faces_emitter/many_faces_emitter.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=2",
+                "--samplingMode=3"
+            ],
+            "golden": "gltf/many_faces_emitter/golden.png",
+            "threshold": 0.005
+        },
+        {
             "name": "fancy_cornell_box",
             "scene": "gltf/fancy_cornell_box/fancy_cornell_box.gltf",
             "args": [
@@ -588,6 +616,20 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
                 "--maxPathDepth=12"
+            ],
+            "golden": "voxel/cave_lights/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "cave_lights_rtsl",
+            "world": "voxel/cave_lights",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12",
+                "--samplingMode=3"
             ],
             "golden": "voxel/cave_lights/golden.png",
             "threshold": 0.01
