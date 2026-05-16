@@ -36,6 +36,10 @@ public:
     // Largest input supported without multi-dispatch. The GPUSorting shaders
     // support splitting >65535 thread blocks across two dispatches; we do not
     // wire that yet. With PART_SIZE=7680, the cap is 65535 * 7680 ≈ 503M keys.
+    //
+    // PARTITION_SIZE must be kept in sync with the HLSL `PART_SIZE` resolved
+    // by SortCommon.hlsl for the tuning preset selected in CMakeLists.txt.
+    // Override the preset there, not here.
     static constexpr uint32_t PARTITION_SIZE = 7680;
     static constexpr uint32_t RADIX = 256;
     static constexpr uint32_t RADIX_PASSES = 4;

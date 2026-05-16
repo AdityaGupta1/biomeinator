@@ -16,4 +16,4 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [camera.md](camera.md) | Spherical coordinate camera, Halton TAA jitter, motion vectors |
 | [dlss.md](dlss.md) | NVIDIA Streamline SDK, DLSS-D upsampling integration |
 | [nvapi_ser.md](nvapi_ser.md) | NVAPI, Shader Execution Reordering (SER) optimization |
-| [gpu_radix_sort.md](gpu_radix_sort.md) | GPU radix sort pass (wraps GPUSorting submodule); tuning + ping-pong invariant |
+| [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |

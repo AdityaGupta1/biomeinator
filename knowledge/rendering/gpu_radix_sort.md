@@ -3,9 +3,9 @@ _Last edited: 2026-05-15_
 # GPU Radix Sort
 
 Wraps the external GPUSorting library (`external/GPUSorting`, MIT) to provide an
-in-place sort of 32-bit uint keys + 32-bit uint values, ascending. First caller
-is the Stage 2 light tree build (RTSL, see `plans/plan.md`); future Morton/
-depth-sorting passes can reuse it.
+in-place sort of 32-bit uint keys + 32-bit uint values, ascending. Intended
+first caller is the Stage 2 light tree build (RTSL, see `plans/plan.md`); future
+Morton/depth-sorting passes can reuse it.
 
 ## Why GPUSorting / DeviceRadixSort
 
@@ -21,21 +21,14 @@ depth-sorting passes can reuse it.
 `SortCommon.hlsl` has compile-time `#define` switches for keys-per-thread,
 threads-per-block, partition size, and shared memory. GPUSorting's runtime
 `Tuner.h` picks values per device (NVIDIA shared-mem class, RDNA, etc.). We
-hardcode the NVIDIA pairs preset for the 131072 B/SM tier (RTX 30/40 series):
-
-| Macro            | Value | Source                          |
-|------------------|-------|---------------------------------|
-| `KEYS_PER_THREAD`| 15    | default in `SortCommon.hlsl:22` |
-| `D_DIM`          | 512   | default in `SortCommon.hlsl:28` |
-| `PART_SIZE`      | 7680  | default in `SortCommon.hlsl:40` |
-| `D_TOTAL_SMEM`   | 7936  | default in `SortCommon.hlsl:46` |
-
-These match the default branches in the shader, so the CMake compile rules
-pass *no* tuning overrides — only `-DSORT_PAIRS -DKEY_UINT -DPAYLOAD_UINT
--DSHOULD_ASCEND -DENABLE_16_BIT`. **If a future GPU class needs different
-tuning, add the appropriate `-DPART_SIZE_xxxx` style override to the CMake
-shader-compile invocation, not to the C++ code.** The C++ side has no concept
-of the partition size other than the matching `PARTITION_SIZE` constant in
+target the NVIDIA pairs preset for the 131072 B/SM tier (RTX 30/40 series),
+which is what falls out of `SortCommon.hlsl`'s default macro branches when
+no tuning override is passed. The CMake compile rules therefore pass *no*
+tuning overrides — only `-DSORT_PAIRS -DKEY_UINT -DPAYLOAD_UINT -DSHOULD_ASCEND
+-DENABLE_16_BIT`. **If a future GPU class needs different tuning, add the
+appropriate `-DPART_SIZE_xxxx` style override to the CMake shader-compile
+invocation, not to the C++ code.** The C++ side has no concept of the
+partition size other than the matching `PARTITION_SIZE` constant in
 `gpu_radix_sort.h`, which **must be kept in sync** with whatever `PART_SIZE`
 the shader resolves to.
 
@@ -78,9 +71,13 @@ contract.
 
 ## Single-dispatch cap
 
-GPUSorting's kernel sources have logic for splitting a >65535-block Upsweep/
-Downsweep across two dispatches (the `isPartial` flag in `cbGpuSorting`).
-We don't wire that yet — `MAX_KEYS = 65535 * PART_SIZE ≈ 503M` is plenty for
-the renderer's current and foreseeable needs. The dispatcher asserts the
-limit. If a future caller wants more, see
-`DeviceRadixSortKernels.h:88-120` for the split-dispatch pattern to port.
+D3D12 caps each `Dispatch` dimension at 65535 thread groups. Our wrapper
+issues every Upsweep/Downsweep as `Dispatch(threadBlocks, 1, 1)`, so the
+single-dispatch ceiling is `MAX_KEYS = 65535 * PART_SIZE ≈ 503M`. The
+dispatcher asserts the limit.
+
+GPUSorting's upstream supports much larger inputs by spreading the full
+thread-block count across the y-dimension (`Dispatch(65535, fullBlocks, 1)`)
+plus a follow-up dispatch for the remainder, gated by the `isPartial` flag
+in `cbGpuSorting` — see `DeviceRadixSortKernels.h:88-120`. Wiring that up is
+the path to lift the cap when a caller needs it; nothing on the roadmap does.

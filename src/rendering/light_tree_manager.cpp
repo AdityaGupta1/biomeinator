@@ -47,17 +47,9 @@ enum class BufferClearParam
 #define EMITTER_COLLECT_PARAM_IDX(name) static_cast<uint32_t>(EmitterCollectParam::name)
 #define BUFFER_CLEAR_PARAM_IDX(name) static_cast<uint32_t>(BufferClearParam::name)
 
-// Round-up helper kept local to this manager. The sparse area-light count grows
-// in coarse pow2 steps to avoid reallocating on every tiny topology change.
-uint32_t nextCapacity(uint32_t sparseCount)
-{
-    uint32_t cap = 256;
-    while (cap < sparseCount)
-    {
-        cap *= 2;
-    }
-    return cap;
-}
+// The sparse area-light count grows in coarse pow2 steps from this floor to
+// avoid reallocating on every tiny topology change.
+constexpr uint32_t LIGHT_AUX_CAPACITY_FLOOR = 256;
 
 } // namespace
 
@@ -132,7 +124,7 @@ void LightTreeManager::ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCou
         return;
     }
 
-    const uint32_t newCapacity = nextCapacity(sparseCount);
+    const uint32_t newCapacity = Util::nextPow2AtLeast(LIGHT_AUX_CAPACITY_FLOOR, sparseCount);
 
     if (this->dev_lightAux != nullptr)
     {

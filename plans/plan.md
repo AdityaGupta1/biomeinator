@@ -88,10 +88,10 @@ Goal: GPU-side perfect binary tree built every frame.
 
 Goal: GPU radix sort over 32-bit Morton key + 32-bit `areaLightIdx` payload (pairs mode), ascending.
 
-**Decision:** [GPUSorting (b0nes164)](https://github.com/b0nes164/GPUSorting) — DeviceRadixSort (LSD, 8-bit digits, 4 passes). Reduce-then-scan variant for portability (OneSweep relies on forward thread-progress guarantees we don't want to assume across hardware). Tuning hardcoded to the NVIDIA pairs preset for RTX 30/40-class shared memory; see `knowledge/rendering/gpu_radix_sort.md`.
+**Decision:** [GPUSorting (b0nes164)](https://github.com/b0nes164/GPUSorting) — DeviceRadixSort (LSD, 8-bit digits, 4 passes). Reduce-then-scan variant for portability (OneSweep relies on forward thread-progress guarantees we don't want to assume across hardware). See `knowledge/rendering/gpu_radix_sort.md` for tuning rationale and the in-place ping-pong invariant.
 
-**Implementation notes:**
-- Submodule lives at `external/GPUSorting`. CMake compiles `DeviceRadixSort.hlsl` four times (one per entry point) with `-DSORT_PAIRS -DKEY_UINT -DPAYLOAD_UINT -DSHOULD_ASCEND -DENABLE_16_BIT`. Tuning defaults match NVIDIA pairs preset, so no tuning overrides are passed.
+**Implementation notes (no deviations from spec):**
+- Submodule lives at `external/GPUSorting`. CMake compiles `DeviceRadixSort.hlsl` four times (one per entry point) with `-DSORT_PAIRS -DKEY_UINT -DPAYLOAD_UINT -DSHOULD_ASCEND -DENABLE_16_BIT`.
 - `Renderer::GpuRadixSort` (`src/rendering/gpu_sort/gpu_radix_sort.{h,cpp}`) owns the 4 PSOs/root sigs and scratch buffers; exposes `dispatch(cmdList, toFreeList, keysBuf, valuesBuf, numKeys)` with in-place semantics (the 4-pass ping-pong lands the result back in caller storage).
 - Stage 2 will call `dispatch` after writing `(mortonCode, areaLightIdx)` into a pair of UAV buffers.
 

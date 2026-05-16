@@ -9,6 +9,7 @@
 #include "rendering/renderer/pipeline_builder.h"
 #include "rendering/renderer/renderer_internal.h"
 #include "rendering/renderer/shaders.h"
+#include "util/util.h"
 
 #include <array>
 
@@ -20,7 +21,9 @@ namespace
 
 // GPUSorting register slots are dictated by external/GPUSorting HLSL
 // (SortCommon.hlsl). Use raw register numbers — they cannot be remapped
-// without forking upstream.
+// without forking upstream. The CB and SORT slots both use the literal
+// number 0; that is not a collision because b0 (CBV) and u0 (UAV) live in
+// distinct register namespaces.
 constexpr uint32_t GPU_SORT_REG_SPACE = 0;
 constexpr uint32_t GPU_SORT_REG_CB = 0;          // cbGpuSorting : register(b0)
 constexpr uint32_t GPU_SORT_REG_SORT = 0;        // b_sort        : register(u0)
@@ -32,14 +35,20 @@ constexpr uint32_t GPU_SORT_REG_PASS_HIST = 5;   // b_passHist    : register(u5)
 
 constexpr uint32_t SCRATCH_CAPACITY_FLOOR = 1024;
 
-uint32_t nextScratchCapacity(uint32_t numKeys)
+void replaceScratchUavBuffer(ToFreeList& toFreeList,
+                             ComPtr<ID3D12Resource>& buf,
+                             uint64_t bytes,
+                             const wchar_t* debugName)
 {
-    uint32_t cap = SCRATCH_CAPACITY_FLOOR;
-    while (cap < numKeys)
+    if (buf != nullptr)
     {
-        cap *= 2;
+        toFreeList.pushResource(buf, false /*isMapped*/);
     }
-    return cap;
+    buf = BufferHelper::createBasicBuffer(
+        bytes,
+        &DEFAULT_HEAP,
+        { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    buf->SetName(debugName);
 }
 
 D3D12_ROOT_PARAMETER1 makeRootUav(uint32_t reg)
@@ -78,6 +87,12 @@ void createComputePso(ID3D12RootSignature* rootSig,
 
 void GpuRadixSort::init()
 {
+    // The in-place dispatch contract relies on an even pass count so the final
+    // Downsweep lands back in the caller's keys/values. If RADIX_PASSES ever
+    // changes (e.g. a 24-bit key path), the dispatcher needs a final copy.
+    static_assert(RADIX_PASSES % 2 == 0,
+                  "GpuRadixSort in-place ping-pong requires an even pass count");
+
     // Root signature layouts mirror DeviceRadixSortKernels.h exactly.
     // Slot 0 of each is a 4×u32 root-constants block (cbGpuSorting) except for
     // Init, which only needs the global histogram UAV.
@@ -177,55 +192,23 @@ void GpuRadixSort::ensureScratchCapacity(ToFreeList& toFreeList, uint32_t numKey
 
     if (capExceeded)
     {
-        const uint32_t newCapacity = nextScratchCapacity(numKeys);
+        const uint32_t newCapacity = Util::nextPow2AtLeast(SCRATCH_CAPACITY_FLOOR, numKeys);
+        const uint64_t bytes = static_cast<uint64_t>(newCapacity) * sizeof(uint32_t);
 
-        if (this->dev_altKeys != nullptr)
-        {
-            toFreeList.pushResource(this->dev_altKeys, false /*isMapped*/);
-            this->dev_altKeys.Reset();
-        }
-        if (this->dev_altValues != nullptr)
-        {
-            toFreeList.pushResource(this->dev_altValues, false /*isMapped*/);
-            this->dev_altValues.Reset();
-        }
-
-        this->dev_altKeys = BufferHelper::createBasicBuffer(
-            static_cast<uint64_t>(newCapacity) * sizeof(uint32_t),
-            &DEFAULT_HEAP,
-            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-        this->dev_altKeys->SetName(L"gpuRadixSort_altKeys");
-
-        this->dev_altValues = BufferHelper::createBasicBuffer(
-            static_cast<uint64_t>(newCapacity) * sizeof(uint32_t),
-            &DEFAULT_HEAP,
-            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-        this->dev_altValues->SetName(L"gpuRadixSort_altValues");
+        replaceScratchUavBuffer(toFreeList, this->dev_altKeys, bytes, L"gpuRadixSort_altKeys");
+        replaceScratchUavBuffer(toFreeList, this->dev_altValues, bytes, L"gpuRadixSort_altValues");
 
         this->scratchCapacity = newCapacity;
     }
 
     if (passHistExceeded)
     {
-        if (this->dev_passHist != nullptr)
-        {
-            toFreeList.pushResource(this->dev_passHist, false /*isMapped*/);
-            this->dev_passHist.Reset();
-        }
-
         // passHist is sized by thread-block count, not raw key count. Grow it
         // in pow2 steps independently so it tracks the partition-rounded need.
-        uint32_t newThreadBlocks = 1;
-        while (newThreadBlocks < needThreadBlocks)
-        {
-            newThreadBlocks *= 2;
-        }
+        const uint32_t newThreadBlocks = Util::nextPow2AtLeast(1, needThreadBlocks);
+        const uint64_t bytes = static_cast<uint64_t>(RADIX) * newThreadBlocks * sizeof(uint32_t);
 
-        this->dev_passHist = BufferHelper::createBasicBuffer(
-            static_cast<uint64_t>(RADIX) * newThreadBlocks * sizeof(uint32_t),
-            &DEFAULT_HEAP,
-            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-        this->dev_passHist->SetName(L"gpuRadixSort_passHist");
+        replaceScratchUavBuffer(toFreeList, this->dev_passHist, bytes, L"gpuRadixSort_passHist");
 
         this->passHistThreadBlocks = newThreadBlocks;
     }

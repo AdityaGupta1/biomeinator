@@ -133,20 +133,25 @@ set(GPU_SORT_SHADER "${CMAKE_SOURCE_DIR}/external/GPUSorting/GPUSortingD3D12/Sha
 set(GPU_SORT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/GPUSorting/GPUSortingD3D12/Shaders")
 set(GPU_SORT_DEFINES "-DSORT_PAIRS" "-DKEY_UINT" "-DPAYLOAD_UINT" "-DSHOULD_ASCEND" "-DENABLE_16_BIT")
 
-file(GLOB GPU_SORT_INCLUDE_FILES "${GPU_SORT_INCLUDE_DIR}/*.hlsl")
+# DeviceRadixSort.hlsl transitively includes only SortCommon.hlsl from the
+# GPUSorting shader directory. List its real dependency explicitly instead of
+# globbing the whole directory so edits to unrelated kernels (OneSweep,
+# FFXParallelSort, etc.) don't trigger a needless rebuild of our four kernels.
+set(GPU_SORT_INCLUDE_FILES "${GPU_SORT_INCLUDE_DIR}/SortCommon.hlsl")
 
-# Pairs of (HLSL entry point, output .fxh basename).
 set(GPU_SORT_KERNELS
-    "InitDeviceRadixSort|gpu_sort_init_cs"
-    "Upsweep|gpu_sort_upsweep_cs"
-    "Scan|gpu_sort_scan_cs"
-    "Downsweep|gpu_sort_downsweep_cs"
+    InitDeviceRadixSort gpu_sort_init_cs
+    Upsweep             gpu_sort_upsweep_cs
+    Scan                gpu_sort_scan_cs
+    Downsweep           gpu_sort_downsweep_cs
 )
 
-foreach(KERNEL_ENTRY IN LISTS GPU_SORT_KERNELS)
-    string(REPLACE "|" ";" KERNEL_PAIR ${KERNEL_ENTRY})
-    list(GET KERNEL_PAIR 0 GPU_SORT_KERNEL_ENTRY)
-    list(GET KERNEL_PAIR 1 GPU_SORT_OUT_NAME)
+list(LENGTH GPU_SORT_KERNELS GPU_SORT_KERNELS_LEN)
+math(EXPR GPU_SORT_KERNELS_LAST "${GPU_SORT_KERNELS_LEN} - 1")
+foreach(IDX RANGE 0 ${GPU_SORT_KERNELS_LAST} 2)
+    math(EXPR NAME_IDX "${IDX} + 1")
+    list(GET GPU_SORT_KERNELS ${IDX} GPU_SORT_KERNEL_ENTRY)
+    list(GET GPU_SORT_KERNELS ${NAME_IDX} GPU_SORT_OUT_NAME)
     set(GPU_SORT_FXH_OUT "${GENERATED_SHADER_HEADERS_DIR}/${GPU_SORT_OUT_NAME}.fxh")
 
     add_custom_command(
