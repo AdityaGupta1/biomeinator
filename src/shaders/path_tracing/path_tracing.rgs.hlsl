@@ -111,6 +111,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     // never enter the forward NEE branch, so the recovered pdfSelect must be
     // 0 and MIS collapses to BSDF-only.
     float3 prevBrdfBound = float3(0.f, 0.f, 0.f);
+    // Mirrors the forward sampler's allowPruning argument at the last NEE-
+    // eligible bounce — false when the material had a glossy lobe (whose
+    // contribution the diffuse-only brdfBound does not cover), so MIS
+    // recovery walks dead branches uniformly instead of returning 0.
+    bool prevAllowPruning = false;
 
     bool hasEncounteredNonDeltaSurface = false;
 
@@ -281,11 +286,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     const float3 brdfBound = surfMaterial.hasDiffuse()
                         ? (getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb * (1.f / M_PI))
                         : float3(0.f, 0.f, 0.f);
+                    const bool allowPruning =
+                        !surfMaterial.hasGlossyReflection() && !surfMaterial.hasGlossyTransmission();
 
                     uint pickedLightIdx;
                     float pdfSelect;
                     const bool gotLight = selectLightFromSubtree(
-                        0u, surfPos_WS, surfNor_WS, brdfBound, payload.rng, pickedLightIdx, pdfSelect);
+                        0u, surfPos_WS, surfNor_WS, brdfBound, allowPruning, payload.rng, pickedLightIdx, pdfSelect);
 
                     if (gotLight && pdfSelect > 0.f)
                     {
@@ -450,6 +457,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             prevBrdfBound = (surfMaterial.canScatter() && !isDeltaSurface && surfMaterial.hasDiffuse())
                 ? (getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb * (1.f / M_PI))
                 : float3(0.f, 0.f, 0.f);
+            prevAllowPruning =
+                !surfMaterial.hasGlossyReflection() && !surfMaterial.hasGlossyTransmission();
         } // !isPassthrough
 
         ray.TMin = 0.f;
@@ -588,7 +597,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         const uint areaLightIdx = hitInst.areaLightsBufferOffset + hitPerTri.localAreaLightIdx;
                         const float pdfSelect =
-                            evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, prevBrdfBound);
+                            evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, prevBrdfBound, prevAllowPruning);
                         if (pdfSelect <= 0.f)
                         {
                             bsdfSampleLightPdf = 0.f;

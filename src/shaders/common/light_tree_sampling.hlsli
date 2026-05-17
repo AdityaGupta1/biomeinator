@@ -111,7 +111,10 @@ void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
 
 // Child probability mix per RTSL paper: p_j = 0.5 * (p_j^min + p_j^max), where
 // p_j^min = w_j^min / Σ w^min with w_j^min = F_j · I_j / d_j^min². Sets
-// p1 + p2 == 0 when both children are dead (caller bails).
+// p1 + p2 == 0 when both children are dead AND allowPruning is true (caller
+// bails). When allowPruning is false, falls back to uniform 0.5/0.5 so the
+// descent continues — used when the brdfBound is incomplete (e.g. material has
+// a glossy lobe we cannot bound yet). See plan.md §scope.
 //
 // Edge case (paper §3.2 last paragraph): when x is inside BOTH children's
 // bboxes, d_min² collapses to 0 for both → 1/0. Drop the 1/d_min² term from
@@ -121,6 +124,7 @@ void rtslChildProbs(LightTreeNode c1,
                     float3 hitPos,
                     float3 hitNormal,
                     float3 brdfBound,
+                    bool allowPruning,
                     out float p1,
                     out float p2)
 {
@@ -143,8 +147,13 @@ void rtslChildProbs(LightTreeNode c1,
 
     if (sumMin == 0.0f && sumMax == 0.0f)
     {
-        p1 = 0.0f;
-        p2 = 0.0f;
+        // Both children's diffuse bound collapses to zero. With a complete
+        // bound this is a true dead branch (geometric back-face). With an
+        // incomplete bound (glossy lobe present) we cannot rule the subtree
+        // out — descend uniformly so the glossy contribution is still
+        // reachable. MIS recovery must mirror this choice.
+        p1 = allowPruning ? 0.0f : 0.5f;
+        p2 = allowPruning ? 0.0f : 0.5f;
         return;
     }
 
@@ -169,6 +178,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
                             float3 hitPos,
                             float3 hitNormal,
                             float3 brdfBound,
+                            bool allowPruning,
                             inout RandomNumberGenerator rng,
                             out uint areaLightIdx,
                             out float pdfSelect)
@@ -196,7 +206,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, allowPruning, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
@@ -236,7 +246,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
 // at this shading point. Used by the BSDF-hit emission MIS branch.
 // Must use the IDENTICAL weight formula as selectLightFromSubtree at each
 // internal node — see rtslChildProbs.
-float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, float3 brdfBound)
+float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, float3 brdfBound, bool allowPruning)
 {
     if (rtslParams.treeLeafCount == 0u)
     {
@@ -267,7 +277,7 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, allowPruning, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
