@@ -30,81 +30,92 @@ StructuredBuffer<uint>          rtslLightToLeaf : REGISTER_T(LIGHT_TREE, LIGHT_T
 // Bbox geometry helpers
 // =============================================
 
-// Returns max( dot(n, normalize(corner - x)) ) over the 8 bbox corners. Trying
-// all 8 (rather than the axis-picked corner that maximizes the UNNORMALIZED
-// dot) is necessary because normalization can change the ordering. If any
-// corner coincides with x (degenerate, x exactly on a corner), returns 1.
-float maxDotToBbox(float3 n, float3 x, float3 bboxMin, float3 bboxMax)
+// Max value of dot(dir, c - p) over the 8 bbox corners. dot is linear in c, so
+// the optimum is per-axis: argmax along axis i is bMin[i] or bMax[i] by the
+// sign of dir[i]. No normalization here — used as a building block.
+float maxDistAlong(float3 p, float3 dir, float3 bboxMin, float3 bboxMax)
 {
-    float bestDot = 0.0f;
-    [unroll]
-    for (uint i = 0u; i < 8u; ++i)
-    {
-        const float3 corner = float3(
-            (i & 1u) ? bboxMax.x : bboxMin.x,
-            (i & 2u) ? bboxMax.y : bboxMin.y,
-            (i & 4u) ? bboxMax.z : bboxMin.z);
-        const float3 v = corner - x;
-        const float lenSq = dot(v, v);
-        if (lenSq < 1e-30f)
-        {
-            return 1.0f;
-        }
-        bestDot = max(bestDot, dot(n, v * rsqrt(lenSq)));
-    }
-    return bestDot;
+    const float3 dirP = dir * p;
+    const float3 m0 = dir * bboxMin - dirP;
+    const float3 m1 = dir * bboxMax - dirP;
+    return max(m0.x, m1.x) + max(m0.y, m1.y) + max(m0.z, m1.z);
 }
 
-// Bounding-sphere distance bounds. Smoother than the per-corner bbox bounds
-// (which have a discontinuity at the bbox boundary and a 1/eps singularity
-// for x inside the bbox), so adjacent pixels straddling a cluster boundary
-// don't see wildly different importance weights.
-//
-// dMin is regularized to at least half the sphere radius so it never goes to
-// zero (or negative when x is inside the sphere). dMax is always positive.
-void distanceBoundsToSphere(float3 x, float3 bboxMin, float3 bboxMax, out float dMinSq, out float dMaxSq)
+// min |dot(dir, c - p)| over the 8 bbox corners. Returns 0 when the corners
+// straddle the plane through p perpendicular to dir.
+float absMinDistAlong(float3 p, float3 dir, float3 bboxMin, float3 bboxMax)
 {
-    const float3 center = 0.5f * (bboxMin + bboxMax);
-    const float radius = 0.5f * length(bboxMax - bboxMin);
-    const float dCenter = length(center - x);
+    const float a = dot(dir, float3(bboxMin.x, bboxMin.y, bboxMin.z) - p);
+    const float b = dot(dir, float3(bboxMin.x, bboxMin.y, bboxMax.z) - p);
+    const float c = dot(dir, float3(bboxMin.x, bboxMax.y, bboxMin.z) - p);
+    const float d = dot(dir, float3(bboxMin.x, bboxMax.y, bboxMax.z) - p);
+    const float e = dot(dir, float3(bboxMax.x, bboxMin.y, bboxMin.z) - p);
+    const float f = dot(dir, float3(bboxMax.x, bboxMin.y, bboxMax.z) - p);
+    const float g = dot(dir, float3(bboxMax.x, bboxMax.y, bboxMin.z) - p);
+    const float h = dot(dir, float3(bboxMax.x, bboxMax.y, bboxMax.z) - p);
+    const bool hasPos = (a > 0.f) || (b > 0.f) || (c > 0.f) || (d > 0.f)
+                     || (e > 0.f) || (f > 0.f) || (g > 0.f) || (h > 0.f);
+    const bool hasNeg = (a < 0.f) || (b < 0.f) || (c < 0.f) || (d < 0.f)
+                     || (e < 0.f) || (f < 0.f) || (g < 0.f) || (h < 0.f);
+    if (hasPos && hasNeg)
+    {
+        return 0.0f;
+    }
+    return min(min(min(abs(a), abs(b)), min(abs(c), abs(d))),
+               min(min(abs(e), abs(f)), min(abs(g), abs(h))));
+}
 
-    const float dMin = max(dCenter - radius, 0.5f * max(radius, 1e-10f));
-    const float dMax = dCenter + radius;
+// Upper bound on max{ω in cone from x to bbox} dot(N, ω). True bbox-interior
+// bound (RTSL ref impl, Lin & Yuksel 2020): project bbox onto a tangent frame
+// (T, B) of N; nrm_max is max along N, (y_amin, z_amin) is the closest
+// in-plane offset. cos angle is bounded by nrm_max / sqrt(nrm_max² + y_amin² +
+// z_amin²). Tighter and more correct than 8-corner enumeration (corners do
+// not cover bbox-interior maxima).
+float geomTermBound(float3 p, float3 N, float3 bboxMin, float3 bboxMax)
+{
+    const float nrmMax = maxDistAlong(p, N, bboxMin, bboxMax);
+    if (nrmMax <= 0.0f)
+    {
+        return 0.0f;
+    }
+    float3 T;
+    if (abs(N.x) > abs(N.y))
+    {
+        T = float3(-N.z, 0.0f, N.x) * rsqrt(N.x * N.x + N.z * N.z);
+    }
+    else
+    {
+        T = float3(0.0f, N.z, -N.y) * rsqrt(N.y * N.y + N.z * N.z);
+    }
+    const float3 B = normalize(cross(N, T));
+    const float yAmin = absMinDistAlong(p, T, bboxMin, bboxMax);
+    const float zAmin = absMinDistAlong(p, B, bboxMin, bboxMax);
+    const float hyp2 = yAmin * yAmin + zAmin * zAmin + nrmMax * nrmMax;
+    return nrmMax * rsqrt(hyp2);
+}
 
-    dMinSq = dMin * dMin;
-    dMaxSq = dMax * dMax;
+// Squared distance from x to bbox (closest-point, 0 if x inside) and to the
+// farthest bbox corner.
+void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
+                            out float dMinSq, out float dMaxSq)
+{
+    const float3 closest = x - clamp(x, bboxMin, bboxMax);
+    dMinSq = dot(closest, closest);
+    const float3 farthest = max(abs(x - bboxMin), abs(x - bboxMax));
+    dMaxSq = dot(farthest, farthest);
 }
 
 // =============================================
 // HIS weight helpers
 // =============================================
 
-void rtslChildWeightsForNode(LightTreeNode child,
-                             float3 hitPos,
-                             float3 hitNormal,
-                             float3 brdfBound,
-                             out float wMin,
-                             out float wMax)
-{
-    if (child.flux <= 0.0f)
-    {
-        wMin = 0.0f;
-        wMax = 0.0f;
-        return;
-    }
-
-    float dMinSq, dMaxSq;
-    distanceBoundsToSphere(hitPos, child.bboxMin, child.bboxMax, dMinSq, dMaxSq);
-
-    const float reflectance = luminance(brdfBound) * maxDotToBbox(hitNormal, hitPos, child.bboxMin, child.bboxMax);
-    const float weightCore = reflectance * child.flux;
-
-    wMin = weightCore / dMinSq;
-    wMax = weightCore / dMaxSq;
-}
-
-// Child probability mix per RTSL paper: p = 0.5 * (p_min + p_max).
-// Sets p1 + p2 == 0 when the entire subtree is a dead branch (caller bails).
+// Child probability mix per RTSL paper: p_j = 0.5 * (p_j^min + p_j^max), where
+// p_j^min = w_j^min / Σ w^min with w_j^min = F_j · I_j / d_j^min². Sets
+// p1 + p2 == 0 when both children are dead (caller bails).
+//
+// Edge case (paper §3.2 last paragraph): when x is inside BOTH children's
+// bboxes, d_min² collapses to 0 for both → 1/0. Drop the 1/d_min² term from
+// w^min entirely; the ratio falls back to F·I-only and stays well-defined.
 void rtslChildProbs(LightTreeNode c1,
                     LightTreeNode c2,
                     float3 hitPos,
@@ -113,23 +124,32 @@ void rtslChildProbs(LightTreeNode c1,
                     out float p1,
                     out float p2)
 {
-    float wMin1, wMax1, wMin2, wMax2;
-    rtslChildWeightsForNode(c1, hitPos, hitNormal, brdfBound, wMin1, wMax1);
-    rtslChildWeightsForNode(c2, hitPos, hitNormal, brdfBound, wMin2, wMax2);
+    const float lum = luminance(brdfBound);
+    const float core1 = (c1.flux > 0.0f) ? (lum * geomTermBound(hitPos, hitNormal, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
+    const float core2 = (c2.flux > 0.0f) ? (lum * geomTermBound(hitPos, hitNormal, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
+
+    float dMinSq1, dMaxSq1, dMinSq2, dMaxSq2;
+    distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1, dMaxSq1);
+    distanceSquaredToBbox(hitPos, c2.bboxMin, c2.bboxMax, dMinSq2, dMaxSq2);
+
+    const bool dropDistanceFromMin = (dMinSq1 == 0.0f) && (dMinSq2 == 0.0f);
+    const float wMin1 = dropDistanceFromMin ? core1 : (core1 / max(dMinSq1, 1e-20f));
+    const float wMin2 = dropDistanceFromMin ? core2 : (core2 / max(dMinSq2, 1e-20f));
+    const float wMax1 = (dMaxSq1 > 0.0f) ? (core1 / dMaxSq1) : core1;
+    const float wMax2 = (dMaxSq2 > 0.0f) ? (core2 / dMaxSq2) : core2;
 
     const float sumMin = wMin1 + wMin2;
     const float sumMax = wMax1 + wMax2;
 
-    const float pMin1 = (sumMin > 0.0f) ? (wMin1 / sumMin) : 0.0f;
-    const float pMax1 = (sumMax > 0.0f) ? (wMax1 / sumMax) : 0.0f;
-
     if (sumMin == 0.0f && sumMax == 0.0f)
     {
-        // Dead branch.
         p1 = 0.0f;
         p2 = 0.0f;
         return;
     }
+
+    const float pMin1 = (sumMin > 0.0f) ? (wMin1 / sumMin) : 0.0f;
+    const float pMax1 = (sumMax > 0.0f) ? (wMax1 / sumMax) : 0.0f;
 
     p1 = 0.5f * (pMin1 + pMax1);
     p2 = 1.0f - p1;
