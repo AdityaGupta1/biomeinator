@@ -42,6 +42,8 @@ enum class Block : BlockId
     PALM_LEAVES,
     ACACIA_LOG,
     ACACIA_LEAVES,
+    LAVA,
+    LAVA_TOP,
 
     COUNT
 };
@@ -52,6 +54,8 @@ enum class BlockType : uint8_t
     WATER,
     SOLID,
     TRANSPARENT_CUTOUT,
+
+    COUNT
 };
 
 enum class BlockShape : uint8_t
@@ -59,6 +63,8 @@ enum class BlockShape : uint8_t
     CUBE,
     X_SHAPED,
     LIQUID_TOP,
+
+    COUNT
 };
 
 struct BlockUvs

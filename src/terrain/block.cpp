@@ -35,6 +35,9 @@ void init()
     BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::CUBE };
     BLOCK_DATA_BY_NAME(WATER_TOP) = { .type = BlockType::WATER, .shape = BlockShape::LIQUID_TOP };
 
+    BLOCK_DATA_BY_NAME(LAVA) = { .uvs = { uvec2(0, 1) }, .emitsLight = true };
+    BLOCK_DATA_BY_NAME(LAVA_TOP) = { .uvs = { uvec2(0, 1) }, .shape = BlockShape::LIQUID_TOP, .emitsLight = true };
+
     BLOCK_DATA_BY_NAME(BEDROCK) = { .uvs = { uvec2(5, 0) } };
     BLOCK_DATA_BY_NAME(STONE) = { .uvs = { uvec2(0, 0) } };
     BLOCK_DATA_BY_NAME(LAMP) = { .uvs = { uvec2(1, 0) }, .emitsLight = true };

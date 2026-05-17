@@ -240,7 +240,7 @@ void Chunk::fillStructuresAndDecorators()
     }
 }
 
-bool Chunk::isRegionAllBlockType(const uvec3 startPos, const uvec3 endPos, BlockType blockType)
+bool Chunk::isRegionAllBlockType(const uvec3 startPos, const uvec3 endPos, BlockType blockType, BlockShape blockShape)
 {
     for (uint blockZ = startPos.z; blockZ <= endPos.z; ++blockZ)
     {
@@ -250,8 +250,8 @@ bool Chunk::isRegionAllBlockType(const uvec3 startPos, const uvec3 endPos, Block
 
             for (uint blockY = startPos.y; blockY <= endPos.y; ++blockY)
             {
-                const Block block = this->blocks[blockIdx++];
-                if (Blocks::getBlockData(block).type != blockType)
+                const BlockData& blockData = Blocks::getBlockData(this->blocks[blockIdx++]);
+                if ((blockData.type != blockType) || (blockShape != BlockShape::COUNT && blockData.shape != blockShape))
                 {
                     return false;
                 }
@@ -294,7 +294,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         if (check)
         {
             const bool isSolid = chunk->isRegionAllBlockType(
-                uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID);
+                uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID, BlockShape::CUBE);
             if (!isSolid)
             {
                 return false;
@@ -307,7 +307,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
     {
         const uint blockY = startPos.y - 1;
         const bool isSolid = this->isRegionAllBlockType(
-            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID);
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID, BlockShape::CUBE);
         if (!isSolid)
         {
             return false;
@@ -335,7 +335,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         if (check)
         {
             const bool isSolid = chunk->isRegionAllBlockType(
-                uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID);
+                uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID, BlockShape::CUBE);
             if (!isSolid)
             {
                 return false;
@@ -359,7 +359,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         }
 
         const bool isSolid = chunk->isRegionAllBlockType(
-            uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID);
+            uvec3(blockX, startPos.y, startPos.z), uvec3(blockX, endPos.y, endPos.z), BlockType::SOLID, BlockShape::CUBE);
         if (!isSolid)
         {
             return false;
@@ -370,7 +370,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
     {
         const uint blockY = endPos.y + 1;
         const bool isSolid = this->isRegionAllBlockType(
-            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID);
+            uvec3(startPos.x, blockY, startPos.z), uvec3(endPos.x, blockY, endPos.z), BlockType::SOLID, BlockShape::CUBE);
         if (!isSolid)
         {
             return false;
@@ -393,7 +393,7 @@ bool Chunk::isSegmentSurroundedBySolid(const uvec3 startPos,
         }
 
         const bool isSolid = chunk->isRegionAllBlockType(
-            uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID);
+            uvec3(startPos.x, startPos.y, blockZ), uvec3(endPos.x, endPos.y, blockZ), BlockType::SOLID, BlockShape::CUBE);
         if (!isSolid)
         {
             return false;
@@ -438,7 +438,7 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
                         // top and bottom chunks cannot be surrounded
                         const bool isTopOrBottom = segmentY == 0 || segmentY == numChunkSegmentsY - 1;
                         if (!isTopOrBottom &&
-                            this->isRegionAllBlockType(segmentStartPos, segmentEndPos, BlockType::SOLID) &&
+                            this->isRegionAllBlockType(segmentStartPos, segmentEndPos, BlockType::SOLID, BlockShape::CUBE) &&
                             isSegmentSurroundedBySolid(segmentStartPos, segmentEndPos, chunkSegmentPos, prevSegments))
                         {
                             segment = ChunkSegment::SOLID_SURROUNDED;
@@ -497,8 +497,8 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
         neighborBlock = blocks[Chunk::blockPosToIdx(uvec3(neighborPos_CS))];
     }
 
-    const BlockType neighborBlockType = Blocks::getBlockData(neighborBlock).type;
-    if (neighborBlockType == BlockType::AIR)
+    const BlockData& neighborBlockData = Blocks::getBlockData(neighborBlock);
+    if (neighborBlockData.type == BlockType::AIR)
     {
         return true;
     }
@@ -506,14 +506,31 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
     switch (thisBlockType)
     {
         case BlockType::SOLID:
-            return neighborBlockType != BlockType::SOLID;
+        {
+            if (neighborBlockData.type != BlockType::SOLID)
+            {
+                return true;
+            }
+
+            const bool thisShort = (thisBlockShape == BlockShape::LIQUID_TOP);
+            const bool neighborShort = (neighborBlockData.shape == BlockShape::LIQUID_TOP);
+            if (faceIdx == 4) // +y
+            {
+                return thisShort;
+            }
+            if (faceIdx == 5) // -y
+            {
+                return neighborShort;
+            }
+            return neighborBlockData.shape == BlockShape::LIQUID_TOP; // +/- x/z
+        }
         case BlockType::TRANSPARENT_CUTOUT:
         {
-            if (neighborBlockType == BlockType::SOLID)
+            if (neighborBlockData.type == BlockType::SOLID)
             {
                 return false;
             }
-            else if (neighborBlockType == BlockType::TRANSPARENT_CUTOUT)
+            else if (neighborBlockData.type == BlockType::TRANSPARENT_CUTOUT)
             {
                 return all(lessThanEqual(thisPos_CS, neighborPos_CS));
             }
@@ -521,7 +538,7 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
         }
         case BlockType::WATER:
         {
-            return (thisBlockShape == BlockShape::LIQUID_TOP && faceIdx == 4) || (neighborBlockType == BlockType::AIR);
+            return (thisBlockShape == BlockShape::LIQUID_TOP && faceIdx == 4) || (neighborBlockData.type == BlockType::AIR);
         }
     }
 

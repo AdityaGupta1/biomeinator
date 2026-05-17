@@ -442,6 +442,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
             }
 
+            for (uint y = 1; y <= 4; ++y)
+            {
+                Block& block = this->blocks[baseBlockIdx + y];
+                if (block == Block::AIR)
+                {
+                    block = (y == 4) ? Block::LAVA_TOP : Block::LAVA;
+                }
+            }
+
             heightfield[columnIdx] = topBlockY;
         }
     }

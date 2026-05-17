@@ -121,7 +121,7 @@ private:
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
 
-    bool isRegionAllBlockType(const glm::uvec3 startPos, const glm::uvec3 endPos, BlockType blockType);
+    bool isRegionAllBlockType(const glm::uvec3 startPos, const glm::uvec3 endPos, BlockType blockType, BlockShape blockShape = BlockShape::COUNT);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos,
                                     const glm::uvec3 endPos,
                                     const glm::uvec3 chunkSegmentPos,
