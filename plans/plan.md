@@ -1,10 +1,13 @@
 _Last edited: 2026-05-17_
 
-> **Status:** Stages 1–3 complete. Stage 2 finished 2026-05-15: `dev_lightTree` (LightTreeNode[2M-1], perfect-binary, M=nextPow2(numAreaLights)), `dev_sceneBbox` (orderable-uint atomic-min/max), `dev_mortonKeys`/`dev_mortonValues` (sorted via `GpuRadixSort`), 5 compute shaders (scene bbox reset, bbox reduce, morton emit, fused leaf populate + reverse scatter, internal levels with `depth=2`-per-dispatch fusion). See `knowledge/rendering/light_tree.md` for design notes. Stages 4-7 pending.
+> **Status:** Stages 1–4 complete. Stage 4 post-refactor (2026-05-17): RTSL logic
+> lives entirely in `src/shaders/common/light_tree_sampling.hlsli`; `path_tracing.rgs.hlsl`
+> only dispatches between sampling modes. Stages 5-7 pending. See `plans/cleanup.md`
+> for remaining follow-ups.
 
 > Design choice: **one light sample per pixel** (not paper-default of n samples per pixel). Plan picks a single subtree uniformly from the n-entry cut → `pdfSelect *= 1/n`. Cheaper sampling, relies on DLSS + temporal accumulation to denoise. Deviates from RTSL paper (which has each pixel sample all n subtrees).
 
-> Scope: **v1 bounds the diffuse lobe only.** Reflectance bound `F = albedo / π * max_dot(normal, x, nodeBbox)` is a true upper bound for the diffuse lobe but not for glossy lobes. Materials with both diffuse and glossy components still get sampled (selection probability stays > 0 wherever the diffuse lobe contributes), but dead-branch pruning (`w_max == 0`) is only valid where the diffuse-only bound is the full BSDF bound. Until glossy bounds land, gate dead-branch pruning to materials with `hasDiffuse() && !hasGlossy()`; mixed materials descend the full tree without pruning. Glossy lobes add variance, not bias.
+> Scope: **HIS weights are pure `I · G / d²`** — the paper's BRDF reflectance bound `F` is omitted, matching the reference impl (`SLCHelperFunctions.hlsli::firstChildWeight`). Rationale: `luminance(F)` is a scalar shared by both children and cancels in the selection ratio, so F provides zero importance signal but introduces a degenerate uniform fallback for glossy-only materials. Dead-branch pruning is now purely geometric (`flux == 0 || geomTermBound == 0`) and valid for any BSDF — geometric back-face means no light path possible regardless of surface response. See `plans/cleanup.md` §1 for full rationale.
 
 > Codebase note: emissive triangles already exist as `AreaLight` (`src/rendering/common/common_structs.h:163`), populated per-instance into `StructuredBuffer<AreaLight> areaLights` plus a flat selection index `areaLightSamplingStructure[]` (`src/scene/scene.cpp:480-565`). Triangles are flagged emissive by `perTriData.localAreaLightIdx != LIGHT_IDX_INVALID`, not by a `TRIANGLE_FLAG_*` bit (only `TRIANGLE_FLAG_IS_WATER` exists). Reuse `AreaLight`; add a parallel buffer for the per-light extras (bbox + flux) keyed by the same global area light index.
 
@@ -111,22 +114,24 @@ Goal: GPU radix sort over 32-bit Morton key + 32-bit `areaLightIdx` payload (pai
 
 **Validation:** verified by a temporary smoke test run at renderer init for n ∈ {1, 7680, 7681, 1<<20} — asserted ascending keys + payload-tracks-key. Test passed on RTX 4070 SUPER and was removed (Stage 2 will exercise the path going forward).
 
-### Stage 4 — Root Sampler (No Cuts)
+### Stage 4 — Root Sampler (No Cuts) ✅ DONE (2026-05-17)
 
 Goal: replace RIS branch with stochastic light tree sampling from root. No cut selection yet.
 
-**Tasks:**
-- Add `STOCHASTIC_LIGHTCUTS` to `SamplingMode` enum in `src/rendering/common/common_enums.h` (alongside `NAIVE`, `MIS`, `RIS`). Existing modes stay so we can A/B during dev.
-- Add `light_tree_sampling.hlsli`:
-  - `selectLightFromSubtree(uint subtreeRoot, float3 hitPos, float3 hitNormal, float3 brdfBound, inout RNGState rng, out uint areaLightIdx, out float pdfSelect)` — implements Alg. 1 of offline paper. Uses the RTSL weight scheme: `p_j = 0.5 * (p_min_j + p_max_j)` with `w_min/max = F * I / d_{min/max}²`. Single uniform rescaled across descent (Yuksel 2019 Alg. 1 lines 11/15). Dead branch (w1+w2==0 at any depth) → return null light + current pdf.
-  - `evaluateReflectanceBound(float3 hitPos, float3 hitNormal, float3 brdf, LightTreeNode node)` — Lambertian: `albedo / π * geomTermBound(x, normal, nodeBbox)`, where `geomTermBound` is the tangent-frame projection bound from Lin & Yuksel 2020 (ref impl `LightTreeUtilities.hlsli`): `nrm_max / sqrt(nrm_max² + y_amin² + z_amin²)`. True upper bound on cos angle over bbox interior; tighter than naïve 8-corner enumeration (which is not even a valid upper bound — bbox-interior maxima can exceed corner values). Diffuse-only bound — see scope note in front-matter. Materials with glossy lobes still descend the tree (selection probability stays > 0 wherever diffuse contributes), but dead-branch pruning is suppressed (`hasGlossy() → never treat w_max == 0 as dead`). Specular surfaces never call into the sampler (existing path tracer already gates light sampling on `!isDeltaSurface`, see `path_tracing.rgs.hlsl:260`).
-  - `evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, float3 brdfBound)` — for MIS BSDF→light direction. Looks up `leafIdx = lightToLeaf[areaLightIdx]`; bogus leaf → return 0. Descend root → leaf using leaf-index bits as the path. At each internal node computes the same `w_min/w_max` weights, multiplies in the probability of the on-path child. Returns 0 if any ancestor is a dead branch (`w1 + w2 == 0`) at this shading point. Stage 5 extends this to handle cut sharing.
-  - Edge case: x inside both child bboxes (both `d_min == 0`) → drop distance term from `w_min` only (`w_min_j = F_j * I_j`); `w_max` retains `1 / d_max²` since `d_max > 0` always. Per RTSL §3.2 last paragraph.
-- In `path_tracing.rgs.hlsl`:
-  - Step 7 (NEE), when `samplingMode == STOCHASTIC_LIGHTCUTS`: call `selectLightFromSubtree(root, ...)` per sample. Reuse existing `traceToLight(...)` (`src/shaders/light/light_sampling.hlsli`) for the shadow ray — it already validates `instanceId/triangleIdx` against the chosen `AreaLight`. Accumulate `L * f * cosθ * V / (pdfSelect * pdfSolidAngle)`. MIS weight uses `pdfSelect * pdfSolidAngle` as the area pdf.
-  - Step 10 (BSDF-hit emission MIS): existing code reads `payload.hitInfo`, recovers `areaLightIdx = instanceDatas[hitInfo.instanceId].areaLightsBufferOffset + perTriDatas[…].localAreaLightIdx` (mirrors `lightPdfUniform` in `src/shaders/light/light_sampling.hlsli:137-156`). Then `pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, prevBrdfBound)` and `areaPdf = pdfSelect * r² / (absCosTheta(-wi, lightNor) * lightArea)`. `pdfSelect == 0` (dead branch / cut miss) → MIS weight collapses to 1 (BSDF-only).
-  - Stash `prevBrdfBound` at the last-real-bounce alongside the existing `surfPos_WS / surfNor_WS / bounceBsdfPdf` (`path_tracing.rgs.hlsl:104-106, 203-207`). Single `float3` (Lambertian albedo evaluated at last bounce); zero for delta surfaces (no light-sample branch was taken).
-- Null light from `selectLightFromSubtree`: skip shadow ray, add zero contribution (but still count toward sample budget for unbiased MIS weighting).
+**Implementation notes (post-refactor state):**
+- `samplingMode == RTSL` (added to `SamplingMode` enum in `src/rendering/common/common_enums.h`). Existing modes retained for A/B.
+- All RTSL logic lives in `src/shaders/common/light_tree_sampling.hlsli`:
+  - `rtslChildProbs(c1, c2, hitPos, hitNormal, out p1, out p2)` — paper's `p_j = 0.5 * (p_min_j + p_max_j)` with `w_min/max = I · G / d_{min/max}²`. F factor dropped (see front-matter scope note).
+  - `geomTermBound(p, N, bboxMin, bboxMax)` — tangent-frame projection bound from Lin & Yuksel 2020 (ref impl `LightTreeUtilities.hlsli`): `nrm_max / sqrt(nrm_max² + y_amin² + z_amin²)`. True upper bound on cos angle over bbox interior.
+  - `selectLightFromSubtree(subtreeRoot, hitPos, hitNormal, rng, out areaLightIdx, out pdfSelect)` — Alg. 1 of offline paper. Single uniform rescaled across descent (Yuksel 2019 Alg. 1 lines 11/15). Dead branch → null light, no retry.
+  - `evaluateLightSelectPdf(areaLightIdx, hitPos, hitNormal)` — MIS BSDF→light recovery. Leaf-index bits as the path, MSB-first. Returns 0 on dead ancestor or sentinel leaf. Stage 5 will extend to support non-root subtree.
+  - `sampleDirectLightingRtsl(...)` — NEE entry point mirroring `sampleDirectLightingUniform`. Calls `selectLightFromSubtree` + `sampleAreaLightPoint` + `traceToLight`.
+  - `lightPdfRtsl(hitInfo, surfPos_WS, surfNor_WS, wi_WS)` — BSDF-hit MIS pdf, mirroring `lightPdfUniform`'s signature.
+  - Edge case: x inside both child bboxes → drop distance term from `w_min`; `w_max` retains `1 / d_max²`. Per RTSL §3.2 last paragraph.
+- `light_sampling.hlsli` factored: `sampleAreaLightPoint` (shared triangle-area sampler used by uniform + RTSL), `getAreaLightIdxFromHit` (shared hit-decode used by both pdf functions).
+- `path_tracing.rgs.hlsl` `useRtsl` branches are one-liners: `sampleDirectLightingRtsl(...)` for NEE, `lightPdfRtsl(...)` for BSDF-hit MIS. Same shape as `useRis` dispatch.
+- Specular surfaces never enter NEE (`!isDeltaSurface` gate, see `path_tracing.rgs.hlsl`).
+- Null light from `selectLightFromSubtree`: skip shadow ray, add zero contribution. Still counts as one sample (no retry — would introduce bias per offline paper §3.2.2).
 
 **Validation:**
 - Add tests `cornell_box_sl`, `cave_lights_sl`, `many_faces_emitter_sl` with `--samplingMode=3`, same goldens + threshold as their MIS/RIS variants. Goldens unchanged — unbiased estimator converges to same mean.
@@ -142,7 +147,7 @@ Goal: 8×8 tile cut sharing for perf. Pure speed — must not affect bias.
   - One thread per tile.
   - Pick representative pixel by scanning the 64 tile pixels in an order seeded by `(tile, frameIdx)` — **must vary per frame** for temporal stability (paper §3.3 randomizes per frame; this is equivalent). Read each candidate's entry from `dev_gbuffer` (flat `StructuredBuffer<GbufferData>`, indexed by `pixelIdx.y * renderSize.x + pixelIdx.x`; see `path_tracing.rgs.hlsl:46, 541`). Take the first pixel that has `payload.flags & PAYLOAD_FLAG_DID_HIT`, a valid `materialIdx`, and a non-delta material. All 64 pixels fail → write `cut[0] = INVALID` and skip light sampling for the tile.
   - Build cut: start with [root], repeatedly replace highest-error node with its children until `n` nodes. Error metric = max-illumination bound per RTSL §3.2 (use same `w_max_j` formula as importance sampling so consistent).
-- In path tracing: **one light sample per pixel.** Read cut for current tile, pick one subtree uniformly (1/n), descend via HIS using **this pixel's own** `(surfPos, surfNor, brdfBound)` — the cut is shared, but the descent weights are pixel-local. Deviates from RTSL paper (which samples all n cut entries per pixel). Single-sample chosen for perf; DLSS + temporal accumulation handle the extra noise.
+- In path tracing: **one light sample per pixel.** Read cut for current tile, pick one subtree uniformly (1/n), descend via HIS using **this pixel's own** `(surfPos, surfNor)` — the cut is shared, but the descent weights are pixel-local. Deviates from RTSL paper (which samples all n cut entries per pixel). Single-sample chosen for perf; DLSS + temporal accumulation handle the extra noise.
 - Extend `evaluateLightSelectPdf` for cut sharing: walk leaf → root via parent indices (`parent = (i - 1) / 2`), scan cut entries (n ≤ ~8) for first ancestor in the cut. Found → `pdfSelect = (1/n) * P(descend ancestor → leaf)`. Not found (cut entry mismatch — shouldn't happen with full cut, possible later if interleaved sampling lands) → `pdfSelect = 0`. Cost is O(log N · n) per BSDF-hit pdf eval — acceptable; flag if profiling later objects.
 - **Invalid-cut tile (`cut[0] == INVALID`): skip NEE entirely for the pixel.** Both forward NEE and BSDF-hit `evaluateLightSelectPdf` must agree on the selection pdf or MIS double-counts. Skipping NEE collapses MIS to BSDF-only on both sides — consistent and unbiased. Forward sampler and pdf eval check the same `cut[0] == INVALID` flag and bail.
 - Tile size = 8×8. n configurable, default 8.
@@ -200,7 +205,7 @@ src/
       light_tree_internals.cs.hlsl       NEW
       cut_selection.cs.hlsl              NEW (Stage 5)
     path_tracing/
-      path_tracing.rgs.hlsl              EDIT — swap RIS branch, stash prevBrdfBound
+      path_tracing.rgs.hlsl              EDIT — dispatch to sampleDirectLightingRtsl / lightPdfRtsl
 external/
   GPUSorting/                            NEW (submodule)
 tests/
@@ -219,10 +224,10 @@ knowledge/
 
 | Risk | Mitigation |
 |---|---|
-| Reflectance bound too loose for voxel materials (under-importance distant lights) | Compare HIS noise vs RIS on `many_faces_emitter`. Tighten bound (per-face cone) if needed. |
+| Geometric bound too loose for voxel materials (under-importance distant lights) | Compare HIS noise vs RIS on `many_faces_emitter`. Tighten bound (per-face cone) if needed. |
 | Dead branch handling bug → bias | Unit-test the HIS sampler on a CPU port: 1M samples, verify mean matches uniform sampling. |
 | Cut selection picks bad rep pixel (specular, miss) | Skip NEE for pixel when `cut[0] == INVALID`; both sides of MIS agree. |
-| MIS pdf mismatch between forward sampler and `evaluateLightSelectPdf` (silent bias) | Unit-test on CPU port: for fixed `x, normal, brdf`, run sampler N times, build empirical leaf histogram, compare to `evaluateLightSelectPdf` predictions. χ² should match. |
+| MIS pdf mismatch between forward sampler and `evaluateLightSelectPdf` (silent bias) | Unit-test on CPU port: for fixed `x, normal`, run sampler N times, build empirical leaf histogram, compare to `evaluateLightSelectPdf` predictions. χ² should match. |
 
 ---
 

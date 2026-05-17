@@ -17,7 +17,7 @@
 
 #include "common/global_params.hlsli"
 #include "common/light_tree.hlsli"
-#include "util/color.hlsli"
+#include "light/light_sampling.hlsli"
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 
@@ -109,28 +109,29 @@ void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
 // HIS weight helpers
 // =============================================
 
-// Child probability mix per RTSL paper: p_j = 0.5 * (p_j^min + p_j^max), where
-// p_j^min = w_j^min / Σ w^min with w_j^min = F_j · I_j / d_j^min². Sets
-// p1 + p2 == 0 when both children are dead AND allowPruning is true (caller
-// bails). When allowPruning is false, falls back to uniform 0.5/0.5 so the
-// descent continues — used when the brdfBound is incomplete (e.g. material has
-// a glossy lobe we cannot bound yet). See plan.md §scope.
+// Child probability mix per RTSL paper: p_j = 0.5 * (p_j^min + p_j^max), with
+// w_j = I_j · G_j / d_j². The paper's F factor (reflectance bound) is omitted
+// here; it is the same scalar for both children after luminance reduction and
+// therefore cancels in p_j. Matches the reference impl (SLCHelperFunctions.hlsli
+// :: firstChildWeight uses pure I · G). Dropping F also removes the glossy-only
+// degenerate case where F = 0 collapses the descent to uniform.
+//
+// Dead-branch detection is purely geometric: w_max == 0 ⟺ flux == 0 (padding
+// leaf / empty subtree) or geomTermBound == 0 (entire bbox back-facing wrt N,
+// no light path possible for any BSDF). Both cases prune safely.
 //
 // Edge case (paper §3.2 last paragraph): when x is inside BOTH children's
 // bboxes, d_min² collapses to 0 for both → 1/0. Drop the 1/d_min² term from
-// w^min entirely; the ratio falls back to F·I-only and stays well-defined.
+// w^min entirely; the ratio falls back to I·G-only and stays well-defined.
 void rtslChildProbs(LightTreeNode c1,
                     LightTreeNode c2,
                     float3 hitPos,
                     float3 hitNormal,
-                    float3 brdfBound,
-                    bool allowPruning,
                     out float p1,
                     out float p2)
 {
-    const float lum = luminance(brdfBound);
-    const float core1 = (c1.flux > 0.0f) ? (lum * geomTermBound(hitPos, hitNormal, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
-    const float core2 = (c2.flux > 0.0f) ? (lum * geomTermBound(hitPos, hitNormal, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
+    const float core1 = (c1.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
+    const float core2 = (c2.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
 
     float dMinSq1, dMaxSq1, dMinSq2, dMaxSq2;
     distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1, dMaxSq1);
@@ -147,18 +148,16 @@ void rtslChildProbs(LightTreeNode c1,
 
     if (sumMin == 0.0f && sumMax == 0.0f)
     {
-        // Both children's diffuse bound collapses to zero. With a complete
-        // bound this is a true dead branch (geometric back-face). With an
-        // incomplete bound (glossy lobe present) we cannot rule the subtree
-        // out — descend uniformly so the glossy contribution is still
-        // reachable. MIS recovery must mirror this choice.
-        p1 = allowPruning ? 0.0f : 0.5f;
-        p2 = allowPruning ? 0.0f : 0.5f;
+        p1 = 0.0f;
+        p2 = 0.0f;
         return;
     }
 
-    const float pMin1 = (sumMin > 0.0f) ? (wMin1 / sumMin) : 0.0f;
-    const float pMax1 = (sumMax > 0.0f) ? (wMax1 / sumMax) : 0.0f;
+    // wMin* / wMax* are scaled forms of the same core*, so sumMin == 0
+    // iff core1 == core2 == 0 iff sumMax == 0 (caught by the early-out
+    // above). Past that gate both sums are strictly positive.
+    const float pMin1 = wMin1 / sumMin;
+    const float pMax1 = wMax1 / sumMax;
 
     p1 = 0.5f * (pMin1 + pMax1);
     p2 = 1.0f - p1;
@@ -177,8 +176,6 @@ void rtslChildProbs(LightTreeNode c1,
 bool selectLightFromSubtree(uint subtreeRoot,
                             float3 hitPos,
                             float3 hitNormal,
-                            float3 brdfBound,
-                            bool allowPruning,
                             inout RandomNumberGenerator rng,
                             out uint areaLightIdx,
                             out float pdfSelect)
@@ -195,7 +192,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
     float pdf = 1.0f;
     uint cur = subtreeRoot;
 
-    // Descend until cur is a leaf (leaf indices start at rtslParams.treeLeafBase).
+    // Leaf indices start at rtslParams.treeLeafBase.
     [loop]
     while (cur < rtslParams.treeLeafBase)
     {
@@ -206,23 +203,26 @@ bool selectLightFromSubtree(uint subtreeRoot,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, allowPruning, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
-            return false; // dead branch — null light
+            return false;
         }
 
+        // p1 + p2 == 1 always (see rtslChildProbs), and the dead-branch case
+        // (p1 + p2 == 0) was caught above — so the picked branch's prob is
+        // always > 0 and the rescale never divides by zero.
         if (r < p1)
         {
             pdf *= p1;
-            r = (p1 > 0.0f) ? (r / p1) : r;
+            r /= p1;
             cur = leftIdx;
         }
         else
         {
             pdf *= p2;
-            r = (p2 > 0.0f) ? ((r - p1) / p2) : r;
+            r = (r - p1) / p2;
             cur = rightIdx;
         }
     }
@@ -246,7 +246,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
 // at this shading point. Used by the BSDF-hit emission MIS branch.
 // Must use the IDENTICAL weight formula as selectLightFromSubtree at each
 // internal node — see rtslChildProbs.
-float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, float3 brdfBound, bool allowPruning)
+float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal)
 {
     if (rtslParams.treeLeafCount == 0u)
     {
@@ -277,14 +277,14 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, brdfBound, allowPruning, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
             return 0.0f; // dead ancestor
         }
 
-        // Bit (logM - 1 - d) of pathOffset: MSB first.
+        // MSB first — must mirror leaf-bit construction order in selectLightFromSubtree.
         const uint bit = (pathOffset >> (logM - 1u - d)) & 1u;
         if (bit == 0u)
         {
@@ -300,5 +300,84 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal,
 
     return pdf;
 }
+
+// BSDF-hit MIS pdf recovery — mirrors lightPdfUniform's signature. Returns
+// the full area-light pdf (select × area-to-solid-angle) the forward sampler
+// would have assigned to the triangle that `hitInfo` landed on.
+float lightPdfRtsl(const HitInfo hitInfo,
+                   const float3 surfPos_WS,
+                   const float3 surfNor_WS,
+                   const float3 wi_WS)
+{
+    const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
+    if (areaLightIdx == LIGHT_IDX_INVALID)
+    {
+        return 0.f;
+    }
+
+    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS);
+    if (pdfSelect <= 0.f)
+    {
+        return 0.f;
+    }
+
+    const AreaLight light = areaLights[areaLightIdx];
+    float3 lightNor_WS;
+    float lightArea;
+    getLightNormalAndArea(light, lightNor_WS, lightArea);
+    const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
+    return pdfSelect * r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+}
+
+// =============================================
+// Forward NEE entry point — mirrors sampleDirectLightingUniform / evaluateRisSample
+// =============================================
+
+#ifdef HITGROUP_LIGHTS
+// One-light-sample-per-pixel RTSL NEE. Returns the picked light's contribution
+// (or didHitLight=false on null sample). pdfOrW_Y is the true selection pdf
+// times the area-to-solid-angle pdf — flows into the non-RIS MIS branch.
+DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
+                                              const float3 surfNor_WS,
+                                              const RayCone rayCone,
+                                              const bool canPassthrough,
+                                              const bool startUnderwater,
+                                              inout RandomNumberGenerator rng)
+{
+    DirectLightingSample result;
+    result.didHitLight = false;
+
+    uint pickedLightIdx;
+    float pdfSelect;
+    const bool gotLight = selectLightFromSubtree(
+        0u, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
+    if (!gotLight)
+    {
+        return result;
+    }
+
+    const AreaLight light = areaLights[pickedLightIdx];
+
+    float3 pointOnLight_WS, wi_WS;
+    float lightSamplePdf;
+    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
+
+    float3 Le;
+    const bool didHit = traceToLight(
+        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+    if (!didHit)
+    {
+        return result;
+    }
+
+    result.lightIdx = pickedLightIdx;
+    result.didHitLight = true;
+    result.pointOnLight_WS = pointOnLight_WS;
+    result.wi_WS = wi_WS;
+    result.Le = Le;
+    result.pdfOrW_Y = pdfSelect * lightSamplePdf;
+    return result;
+}
+#endif // HITGROUP_LIGHTS
 
 #endif // LIGHT_TREE_SAMPLING_HLSLI

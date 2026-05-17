@@ -44,3 +44,8 @@ float sanitizeFloat(float v, float backup)
 {
     return (isinf(v) || isnan(v)) ? backup : v;
 }
+
+float balanceHeuristic(const float pdfA, const float pdfB)
+{
+    return pdfA / (pdfA + pdfB);
+}
