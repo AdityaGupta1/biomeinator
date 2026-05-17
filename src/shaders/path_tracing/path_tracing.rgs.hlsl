@@ -370,8 +370,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
                         const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
 
-                        const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
-                        contribution *= W * balanceHeuristicWeight;
+                        contribution *= W * balanceHeuristic(lightPdf, lightSampleBsdfPdf);
                     }
                     else
                     {

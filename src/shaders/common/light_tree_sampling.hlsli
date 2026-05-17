@@ -30,50 +30,59 @@ StructuredBuffer<uint>          rtslLightToLeaf : REGISTER_T(LIGHT_TREE, LIGHT_T
 // Bbox geometry helpers
 // =============================================
 
-// Returns max( dot(n, normalize(corner - x)) ) over bbox corners. The maximizing
-// corner is obtained per-axis: choose bboxMax[i] when n[i] >= 0, else bboxMin[i].
-// If x coincides with that corner (degenerate), returns 1 (cosine bound).
+// Returns max( dot(n, normalize(corner - x)) ) over the 8 bbox corners. Trying
+// all 8 (rather than the axis-picked corner that maximizes the UNNORMALIZED
+// dot) is necessary because normalization can change the ordering. If any
+// corner coincides with x (degenerate, x exactly on a corner), returns 1.
 float maxDotToBbox(float3 n, float3 x, float3 bboxMin, float3 bboxMax)
 {
-    const float3 corner = float3(
-        (n.x >= 0.0f) ? bboxMax.x : bboxMin.x,
-        (n.y >= 0.0f) ? bboxMax.y : bboxMin.y,
-        (n.z >= 0.0f) ? bboxMax.z : bboxMin.z);
-    const float3 v = corner - x;
-    const float lenSq = dot(v, v);
-    if (lenSq < 1e-30f)
+    float bestDot = 0.0f;
+    [unroll]
+    for (uint i = 0u; i < 8u; ++i)
     {
-        return 1.0f;
+        const float3 corner = float3(
+            (i & 1u) ? bboxMax.x : bboxMin.x,
+            (i & 2u) ? bboxMax.y : bboxMin.y,
+            (i & 4u) ? bboxMax.z : bboxMin.z);
+        const float3 v = corner - x;
+        const float lenSq = dot(v, v);
+        if (lenSq < 1e-30f)
+        {
+            return 1.0f;
+        }
+        bestDot = max(bestDot, dot(n, v * rsqrt(lenSq)));
     }
-    return max(0.0f, dot(n, v * rsqrt(lenSq)));
+    return bestDot;
 }
 
-void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax, out float dMinSq, out float dMaxSq)
+// Bounding-sphere distance bounds. Smoother than the per-corner bbox bounds
+// (which have a discontinuity at the bbox boundary and a 1/eps singularity
+// for x inside the bbox), so adjacent pixels straddling a cluster boundary
+// don't see wildly different importance weights.
+//
+// dMin is regularized to at least half the sphere radius so it never goes to
+// zero (or negative when x is inside the sphere). dMax is always positive.
+void distanceBoundsToSphere(float3 x, float3 bboxMin, float3 bboxMax, out float dMinSq, out float dMaxSq)
 {
-    // dMin: closest-point distance (0 if x is inside the bbox).
-    const float3 clamped = clamp(x, bboxMin, bboxMax);
-    const float3 dMinVec = x - clamped;
-    dMinSq = dot(dMinVec, dMinVec);
+    const float3 center = 0.5f * (bboxMin + bboxMax);
+    const float radius = 0.5f * length(bboxMax - bboxMin);
+    const float dCenter = length(center - x);
 
-    // dMax: farthest-corner distance.
-    const float3 dToMin = abs(x - bboxMin);
-    const float3 dToMax = abs(x - bboxMax);
-    const float3 farthest = max(dToMin, dToMax);
-    dMaxSq = dot(farthest, farthest);
+    const float dMin = max(dCenter - radius, 0.5f * max(radius, 1e-10f));
+    const float dMax = dCenter + radius;
+
+    dMinSq = dMin * dMin;
+    dMaxSq = dMax * dMax;
 }
 
 // =============================================
 // HIS weight helpers
 // =============================================
 
-// Per-child (w_min, w_max) for RTSL importance. Setting dropDistanceFromMin
-// disables 1/d_min^2 in w_min — required when x is inside both children's
-// bboxes (RTSL paper §3.2 last paragraph).
 void rtslChildWeightsForNode(LightTreeNode child,
                              float3 hitPos,
                              float3 hitNormal,
                              float3 brdfBound,
-                             bool dropDistanceFromMin,
                              out float wMin,
                              out float wMax)
 {
@@ -85,20 +94,13 @@ void rtslChildWeightsForNode(LightTreeNode child,
     }
 
     float dMinSq, dMaxSq;
-    distanceSquaredToBbox(hitPos, child.bboxMin, child.bboxMax, dMinSq, dMaxSq);
+    distanceBoundsToSphere(hitPos, child.bboxMin, child.bboxMax, dMinSq, dMaxSq);
 
     const float reflectance = luminance(brdfBound) * maxDotToBbox(hitNormal, hitPos, child.bboxMin, child.bboxMax);
     const float weightCore = reflectance * child.flux;
 
-    wMax = (dMaxSq > 0.0f) ? (weightCore / dMaxSq) : weightCore;
-    if (dropDistanceFromMin)
-    {
-        wMin = weightCore;
-    }
-    else
-    {
-        wMin = weightCore / max(dMinSq, 1e-20f);
-    }
+    wMin = weightCore / dMinSq;
+    wMax = weightCore / dMaxSq;
 }
 
 // Child probability mix per RTSL paper: p = 0.5 * (p_min + p_max).
@@ -111,15 +113,9 @@ void rtslChildProbs(LightTreeNode c1,
                     out float p1,
                     out float p2)
 {
-    float dMinSq1Tmp, dMaxSq1Tmp, dMinSq2Tmp, dMaxSq2Tmp;
-    distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1Tmp, dMaxSq1Tmp);
-    distanceSquaredToBbox(hitPos, c2.bboxMin, c2.bboxMax, dMinSq2Tmp, dMaxSq2Tmp);
-
-    const bool dropDistanceFromMin = (dMinSq1Tmp == 0.0f) && (dMinSq2Tmp == 0.0f);
-
     float wMin1, wMax1, wMin2, wMax2;
-    rtslChildWeightsForNode(c1, hitPos, hitNormal, brdfBound, dropDistanceFromMin, wMin1, wMax1);
-    rtslChildWeightsForNode(c2, hitPos, hitNormal, brdfBound, dropDistanceFromMin, wMin2, wMax2);
+    rtslChildWeightsForNode(c1, hitPos, hitNormal, brdfBound, wMin1, wMax1);
+    rtslChildWeightsForNode(c2, hitPos, hitNormal, brdfBound, wMin2, wMax2);
 
     const float sumMin = wMin1 + wMin2;
     const float sumMax = wMax1 + wMax2;
