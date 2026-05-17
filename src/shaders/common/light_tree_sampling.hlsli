@@ -6,12 +6,8 @@
 // (Stage 1/2 of plans/plan.md). Per-pixel root descent — no cut sharing yet
 // (Stage 5 lands that).
 
-#ifndef LIGHT_TREE_SAMPLING_HLSLI
-#define LIGHT_TREE_SAMPLING_HLSLI
+#pragma once
 
-// Include paths mirror the convention of light/light_sampling.hlsli so that
-// DXC's #pragma once sees the same canonical path string from every shader
-// translation unit — otherwise we hit redefinition errors on the util/* headers.
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
@@ -116,13 +112,18 @@ void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
 // :: firstChildWeight uses pure I · G). Dropping F also removes the glossy-only
 // degenerate case where F = 0 collapses the descent to uniform.
 //
-// Dead-branch detection is purely geometric: w_max == 0 ⟺ flux == 0 (padding
+// Dead-branch detection is purely geometric: core == 0 ⟺ flux == 0 (padding
 // leaf / empty subtree) or geomTermBound == 0 (entire bbox back-facing wrt N,
 // no light path possible for any BSDF). Both cases prune safely.
 //
+// Per-child ratios use the cross-multiplied form
+// (core1 · d_j^2) / (core1 · d_j^2 + core2 · d_i^2) instead of computing
+// (core/d²) explicitly — algebraically equivalent but avoids dividing by
+// tiny d² values (matches reference impl's `normalizedWeights`).
+//
 // Edge case (paper §3.2 last paragraph): when x is inside BOTH children's
-// bboxes, d_min² collapses to 0 for both → 1/0. Drop the 1/d_min² term from
-// w^min entirely; the ratio falls back to I·G-only and stays well-defined.
+// bboxes, d_min² collapses to 0 for both → both cross-multiplied terms vanish.
+// Drop the distance term entirely; the ratio falls back to core-only.
 void rtslChildProbs(LightTreeNode c1,
                     LightTreeNode c2,
                     float3 hitPos,
@@ -133,31 +134,42 @@ void rtslChildProbs(LightTreeNode c1,
     const float core1 = (c1.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
     const float core2 = (c2.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
 
-    float dMinSq1, dMaxSq1, dMinSq2, dMaxSq2;
-    distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1, dMaxSq1);
-    distanceSquaredToBbox(hitPos, c2.bboxMin, c2.bboxMax, dMinSq2, dMaxSq2);
-
-    const bool dropDistanceFromMin = (dMinSq1 == 0.0f) && (dMinSq2 == 0.0f);
-    const float wMin1 = dropDistanceFromMin ? core1 : (core1 / max(dMinSq1, 1e-20f));
-    const float wMin2 = dropDistanceFromMin ? core2 : (core2 / max(dMinSq2, 1e-20f));
-    const float wMax1 = (dMaxSq1 > 0.0f) ? (core1 / dMaxSq1) : core1;
-    const float wMax2 = (dMaxSq2 > 0.0f) ? (core2 / dMaxSq2) : core2;
-
-    const float sumMin = wMin1 + wMin2;
-    const float sumMax = wMax1 + wMax2;
-
-    if (sumMin == 0.0f && sumMax == 0.0f)
+    if (core1 == 0.0f && core2 == 0.0f)
     {
         p1 = 0.0f;
         p2 = 0.0f;
         return;
     }
+    if (core1 == 0.0f)
+    {
+        p1 = 0.0f;
+        p2 = 1.0f;
+        return;
+    }
+    if (core2 == 0.0f)
+    {
+        p1 = 1.0f;
+        p2 = 0.0f;
+        return;
+    }
 
-    // wMin* / wMax* are scaled forms of the same core*, so sumMin == 0
-    // iff core1 == core2 == 0 iff sumMax == 0 (caught by the early-out
-    // above). Past that gate both sums are strictly positive.
-    const float pMin1 = wMin1 / sumMin;
-    const float pMax1 = wMax1 / sumMax;
+    float dMinSq1, dMaxSq1, dMinSq2, dMaxSq2;
+    distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1, dMaxSq1);
+    distanceSquaredToBbox(hitPos, c2.bboxMin, c2.bboxMax, dMinSq2, dMaxSq2);
+
+    // Both children's core > 0 past this point, so the cross-multiplied
+    // denominators are strictly positive whenever at least one distance > 0.
+    const bool dropDistanceFromMin = (dMinSq1 == 0.0f) && (dMinSq2 == 0.0f);
+    const float pMin1 = dropDistanceFromMin
+        ? (core1 / (core1 + core2))
+        : ((core1 * dMinSq2) / (core1 * dMinSq2 + core2 * dMinSq1));
+
+    // dMaxSq is zero only if the bbox degenerates to the shading point — same
+    // fallback as min for robustness.
+    const bool dropDistanceFromMax = (dMaxSq1 == 0.0f) && (dMaxSq2 == 0.0f);
+    const float pMax1 = dropDistanceFromMax
+        ? (core1 / (core1 + core2))
+        : ((core1 * dMaxSq2) / (core1 * dMaxSq2 + core2 * dMaxSq1));
 
     p1 = 0.5f * (pMin1 + pMax1);
     p2 = 1.0f - p1;
@@ -379,5 +391,3 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     return result;
 }
 #endif // HITGROUP_LIGHTS
-
-#endif // LIGHT_TREE_SAMPLING_HLSLI

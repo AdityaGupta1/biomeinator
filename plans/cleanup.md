@@ -97,22 +97,22 @@ returns `true` after a complete descent where every chosen `pi > 0`, so
 
 ---
 
-## 6. `1e-20f` epsilon vs reference's algebraic cancellation
+## ✅ 6. `1e-20f` epsilon → algebraic cross-multiply — DONE (2026-05-17)
 
-**File:** `src/shaders/common/light_tree_sampling.hlsli` (`rtslChildProbs`).
+`rtslChildProbs` now uses the cross-multiplied form
+`(core1 · d_j²) / (core1 · d_j² + core2 · d_i²)` instead of computing
+`core / d²` explicitly and then taking the ratio. Algebraically equivalent
+to the eps-floored form but avoids astronomical intermediate values when
+the point is inside (or extremely close to) a bbox.
 
-```hlsl
-const float wMin1 = dropDistanceFromMin ? core1 : (core1 / max(dMinSq1, 1e-20f));
-const float wMin2 = dropDistanceFromMin ? core2 : (core2 / max(dMinSq2, 1e-20f));
-```
+Also restructured the dead-child handling: `core == 0` is now an explicit
+upfront check that short-circuits to `p1 = 1, p2 = 0` (or symmetric) before
+distance computation. Cleaner than relying on `sumMin/sumMax == 0` after
+the fact.
 
-The reference impl avoids this epsilon by computing the ratio symbolically via
-`normalizedWeights(l2_min0, l2_min1, intensGeom0, intensGeom1) = l2_min1 * intensGeom0 / (l2_min0 * intensGeom1 + l2_min1 * intensGeom0)`,
-which is well-defined when one (but not both) `l2_min` is zero.
-
-Equivalent in result, but biomeinator's eps-floored form can produce `1e20`-magnitude
-intermediates. **No bias** (both forward and recovery use the same arithmetic).
-Worth replacing for numerical hygiene if the file is touched again.
+The `dropDistance` fallback for both-children-contain-point (paper §3.2 last
+paragraph) still applies; symmetric fallback added for the degenerate
+both-bboxes-collapse-to-point case on `d_max²`.
 
 ---
 
@@ -135,14 +135,12 @@ Pre-existing risk, not introduced by the refactor.
 
 ---
 
-## 8. Header guard inconsistency (informational)
+## ✅ 8. Header guards unified — DONE (2026-05-17)
 
-`light_tree_sampling.hlsli` and `light_tree.hlsli` use `#ifndef`; everything
-else in `src/shaders/` uses `#pragma once`. Pick one. If `#pragma once` works
-for the light-tree headers (try the build), unify on that. The leading comment
-in `light_tree_sampling.hlsli:12-14` about DXC `#pragma once` reliability is
-misleading — other headers reaching the same `util/*` transitively use
-`#pragma once` without issue.
+Switched `light_tree_sampling.hlsli` and `light_tree.hlsli` to `#pragma once`,
+matching the rest of `src/shaders/`. Dropped the misleading workaround comment
+about DXC canonical-path issues. Build clean — the workaround was either fixed
+in current DXC or never applied to this transitive include chain.
 
 ---
 
@@ -159,6 +157,4 @@ unconditional divides with a comment explaining the invariant.
 
 1. Item #2 (subtree-root parameter) — defer until Stage 5 starts.
 2. Item #3 (pow2 assertion) — defer; defensive only.
-3. Item #6 (`1e-20f` cleanup) — opportunistic.
-4. Item #7 (firefly clamp) — wait for evidence in test goldens.
-5. Item #8 (header guards) — low value, low effort.
+3. Item #7 (firefly clamp) — wait for evidence in test goldens.

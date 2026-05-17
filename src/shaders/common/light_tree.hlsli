@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
-#ifndef LIGHT_TREE_HLSLI
-#define LIGHT_TREE_HLSLI
+#pragma once
 
 #include "../../rendering/common/common_structs.h"
 
@@ -119,5 +118,3 @@ float3 loadSceneBboxMax(RWByteAddressBuffer buf)
     const uint3 u = buf.Load3(SCENE_BBOX_MAX_OFFSET_BYTES);
     return float3(orderableUintToFloat(u.x), orderableUintToFloat(u.y), orderableUintToFloat(u.z));
 }
-
-#endif // LIGHT_TREE_HLSLI
