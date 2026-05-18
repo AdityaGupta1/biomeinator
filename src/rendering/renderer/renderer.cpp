@@ -684,13 +684,6 @@ void render()
     sceneParams->voxelBoundsMin_WS = { 0, 0, 0 };
     sceneParams->voxelBoundsMax_WS = { 0, 0, 0 };
 
-    auto& rtslParams = paramBlockManager.rtslParams;
-    {
-        const uint32_t numAreaLights = sceneParams->numAreaLights;
-        const uint32_t M = (numAreaLights == 0) ? 0u : renderState.lightTreeManager.getTreeLeafCapacity();
-        rtslParams->treeLeafCount = M;
-        rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
-    }
     if (renderState.voxelMode)
     {
         const glm::ivec3 voxelBoundsMin_WS = Terrain::getVoxelRenderBoundsMin_WS();
@@ -723,6 +716,17 @@ void render()
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
+    }
+
+    // rtslParams must be populated AFTER lightTreeManager.update — mortonCapacity is
+    // first set inside ensureLightTreeCapacity, so on the build frame the pre-update
+    // value is 0 and the path tracer's treeLeafCount==0 guard short-circuits RTSL.
+    auto& rtslParams = paramBlockManager.rtslParams;
+    {
+        const uint32_t numAreaLights = sceneParams->numAreaLights;
+        const uint32_t M = (numAreaLights == 0) ? 0u : renderState.lightTreeManager.getTreeLeafCapacity();
+        rtslParams->treeLeafCount = M;
+        rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
     }
 
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
