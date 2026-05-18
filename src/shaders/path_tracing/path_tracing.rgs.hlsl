@@ -172,6 +172,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 #endif
 
+        // In voxel mode all terrain shares one material with hasDiffuse=true; emissive blocks
+        // like LAMP/LAVA have zero diffuse in the texture, so skip scatter work in that case
+        // to avoid pointless shadow rays and BSDF sampling.
+        bool isPureEmitter = false;
         if (any(emissiveContrib > 0))
         {
             pathColor += emissiveContrib;
@@ -179,10 +183,19 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 ptDiffuseAlbedo += applyReinhard(emissiveContrib);
             }
+
+            const bool isDiffuseOnly = surfMaterial.hasDiffuse()
+                && !surfMaterial.hasGlossyReflection()
+                && !surfMaterial.hasGlossyTransmission();
+            if (isDiffuseOnly)
+            {
+                const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
+                isPureEmitter = !any(baseColor > 0.f);
+            }
         }
 
         const bool isLastBounce = (pathDepth == effectiveMaxPathDepth - 1);
-        if (!surfMaterial.canScatter() || isLastBounce)
+        if (!surfMaterial.canScatter() || isLastBounce || isPureEmitter)
         {
             break;
         }
