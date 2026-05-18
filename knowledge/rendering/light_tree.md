@@ -1,4 +1,4 @@
-_Last edited: 2026-05-15_
+_Last edited: 2026-05-17_
 
 # Light Tree Build
 
@@ -122,7 +122,12 @@ too — no separate Stage 2 trigger to keep in sync.
 `4 + ceil(log2(M)/2)` Stage 2 dispatches per rebuild (scene bbox reset, bbox
 reduce, morton emit, leaf populate, then the internal-levels loop), plus 4
 internal sort passes from `GpuRadixSort`. At M=256: 4 internal-level
-dispatches; at M=1M: 10. All Stage 2 buffers live permanently in
-`D3D12_RESOURCE_STATE_UNORDERED_ACCESS`
-— no state transitions, only UAV barriers between writer→reader passes
-(matches Stage 1's pattern).
+dispatches; at M=1M: 10. Build-only buffers (`dev_lightAux`, `dev_sceneBbox`,
+`dev_mortonKeys`, `dev_mortonValues`) stay in
+`D3D12_RESOURCE_STATE_UNORDERED_ACCESS` and use UAV barriers only between
+writer→reader passes (matches Stage 1's pattern). The two path-tracer-visible
+buffers (`dev_lightTree`, `dev_lightToLeaf`) round-trip
+UAV → NON_PIXEL_SHADER_RESOURCE each frame via
+`LightTreeManager::transitionForPathTracingRead` — only for buffers actually
+written that frame; skipped buffers rely on D3D12 buffer state decay back to
+COMMON and implicit-promote to SRV on raygen read.
