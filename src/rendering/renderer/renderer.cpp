@@ -716,16 +716,17 @@ void render()
     // the accumulate-stalled gate below. Otherwise an emitter change during an
     // accumulate-stalled window would clear the flag (top of Scene::update next
     // frame) without anyone consuming it, leaving the tree stale on resume.
+    // SetDescriptorHeaps must precede any SetComputeRootSignature because the
+    // root sigs declare CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED.
     if (renderState.scene.hasTlas())
     {
+        renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
     }
 
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
-        renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-
         // ===================================
         // GBUFFER
         // ===================================
