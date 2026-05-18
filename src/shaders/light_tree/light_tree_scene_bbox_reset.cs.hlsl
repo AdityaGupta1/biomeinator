@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
-#include "../../rendering/common/common_registers.h"
-#include "../../rendering/common/common_settings.h"
+#include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_settings.h"
 
-#include "../common/light_tree.hlsli"
+#include "common/light_tree.hlsli"
 
 // dev_sceneBbox is a 24-byte raw buffer carrying 6 orderable-uint-encoded
 // floats: min x/y/z then max x/y/z. Reset to +inf/-inf so the bbox-reduce

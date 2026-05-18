@@ -31,9 +31,9 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float negInf = asfloat(0xFF800000u);
     LightAux aux;
     aux.bboxMin = float3(posInf, posInf, posInf);
-    aux.flux = 0;
+    aux.flux = 0.f;
     aux.bboxMax = float3(negInf, negInf, negInf);
-    aux.pad0 = 0;
+    aux.pad0 = 0; // DXC validator rejects struct UAV stores with undef members
     lightAuxOut[i] = aux;
 
     lightToLeafOut[i] = LEAF_IDX_INVALID;

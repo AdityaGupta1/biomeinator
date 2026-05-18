@@ -6,6 +6,7 @@
 #include "../rendering/common/common_structs.h"
 
 #include "common/global_params.hlsli"
+#include "util/math.hlsli"
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
 StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
@@ -17,11 +18,6 @@ StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SA
 // perTriDatas[...].localAreaLightIdx).
 RWStructuredBuffer<LightAux> lightAuxOut : REGISTER_U(LIGHT_TREE, LIGHT_AUX_OUT);
 RWStructuredBuffer<uint> lightToLeafOut : REGISTER_U(LIGHT_TREE, LIGHT_TO_LEAF_OUT);
-
-float luminance(const float3 color)
-{
-    return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
-}
 
 [shader("compute")]
 [numthreads(EMITTER_COLLECT_WORKGROUP_SIZE, 1, 1)]
@@ -62,7 +58,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     aux.bboxMin = bboxMin;
     aux.flux = flux;
     aux.bboxMax = bboxMax;
-    aux.pad0 = 0;
+    aux.pad0 = 0; // DXC validator rejects struct UAV stores with undef members
     lightAuxOut[areaLightIdx] = aux;
 
     // lightToLeaf is left at LEAF_IDX_INVALID by light_buffer_clear; Stage 2

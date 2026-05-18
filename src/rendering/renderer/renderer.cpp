@@ -687,11 +687,9 @@ void render()
     auto& rtslParams = paramBlockManager.rtslParams;
     {
         const uint32_t numAreaLights = sceneParams->numAreaLights;
-        const uint32_t M = (numAreaLights == 0) ? 0u : renderState.lightTreeManager.getCurrentTreeLeafCount();
+        const uint32_t M = (numAreaLights == 0) ? 0u : renderState.lightTreeManager.getTreeLeafCapacity();
         rtslParams->treeLeafCount = M;
         rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
-        rtslParams->pad0 = 0;
-        rtslParams->pad1 = 0;
     }
     if (renderState.voxelMode)
     {
@@ -714,20 +712,19 @@ void render()
 
     ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
 
+    // Light tree build runs whenever the topology flag is set, regardless of
+    // the accumulate-stalled gate below. Otherwise an emitter change during an
+    // accumulate-stalled window would clear the flag (top of Scene::update next
+    // frame) without anyone consuming it, leaving the tree stale on resume.
+    if (renderState.scene.hasTlas())
+    {
+        renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
+        renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
+    }
+
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-
-        // ===================================
-        // LIGHT TREE — EMITTER COLLECT
-        // ===================================
-
-        // TODO (RTSL Stage 4+): now that the path tracer consumes these
-        // buffers, move the dispatch outside the `!stopAccumulating ||
-        // ACCUMULATE` gate so a moving emitter during an accumulate-stalled
-        // window does not leave fluxes stale on resume.
-        renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
-        renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
 
         // ===================================
         // GBUFFER

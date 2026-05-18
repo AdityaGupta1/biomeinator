@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
+#pragma once
+
 // Real-Time Stochastic Lightcuts (Lin & Yuksel 2020) HIS sampler + MIS pdf
 // recovery. Reads the perfect-binary tree built by LightTreeManager
 // (Stage 1/2 of plans/plan.md). Per-pixel root descent — no cut sharing yet
 // (Stage 5 lands that).
 
-#pragma once
-
-#include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_structs.h"
 
 #include "common/global_params.hlsli"
 #include "common/light_tree.hlsli"
@@ -224,17 +224,20 @@ bool selectLightFromSubtree(uint subtreeRoot,
 
         // p1 + p2 == 1 always (see rtslChildProbs), and the dead-branch case
         // (p1 + p2 == 0) was caught above — so the picked branch's prob is
-        // always > 0 and the rescale never divides by zero.
+        // always > 0 and the rescale never divides by zero. Algebraically the
+        // rescale stays in [0, 1), but FP rounding at extreme p_j can land at
+        // exactly 1.0; clamp below 1 so the next `r < p1` test stays correct.
+        const float rMax = asfloat(0x3F7FFFFFu); // largest float < 1
         if (r < p1)
         {
             pdf *= p1;
-            r /= p1;
+            r = min(r / p1, rMax);
             cur = leftIdx;
         }
         else
         {
             pdf *= p2;
-            r = (r - p1) / p2;
+            r = min((r - p1) / p2, rMax);
             cur = rightIdx;
         }
     }

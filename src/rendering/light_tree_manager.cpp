@@ -14,6 +14,8 @@
 #include "renderer/shaders.h"
 #include "util/util.h"
 
+#include <bit>
+
 namespace Renderer
 {
 
@@ -121,17 +123,6 @@ D3D12_ROOT_PARAMETER1 makeLightTreeRootConstants(uint32_t num32BitValues)
             .Num32BitValues = num32BitValues,
         },
     };
-}
-
-// log2 of a pow2 value. Caller guarantees v is a power of two and v >= 1.
-uint32_t log2OfPow2(uint32_t v)
-{
-    uint32_t r = 0;
-    while ((1u << r) < v)
-    {
-        ++r;
-    }
-    return r;
 }
 
 } // namespace
@@ -299,39 +290,30 @@ void LightTreeManager::init()
     this->dev_srvPlaceholder->SetName(L"dev_lightTreeSrvPlaceholder");
 }
 
-void LightTreeManager::reset()
+void LightTreeManager::destroy()
 {
     this->dev_lightAux.Reset();
     this->dev_lightToLeaf.Reset();
-    this->capacity = 0;
-
     this->dev_lightTree.Reset();
     this->dev_mortonKeys.Reset();
     this->dev_mortonValues.Reset();
-    this->mortonCapacity = 0;
-    this->treeNodeCapacity = 0;
-}
-
-void LightTreeManager::destroy()
-{
-    this->reset();
     this->dev_sceneBbox.Reset();
     this->dev_srvPlaceholder.Reset();
 
     this->emitterCollectPso.Reset();
-    this->emitterCollectRootSig.Reset();
     this->bufferClearPso.Reset();
-    this->bufferClearRootSig.Reset();
-
     this->sceneBboxResetPso.Reset();
-    this->sceneBboxResetRootSig.Reset();
     this->bboxReducePso.Reset();
-    this->bboxReduceRootSig.Reset();
     this->mortonEmitPso.Reset();
-    this->mortonEmitRootSig.Reset();
     this->leafPopulatePso.Reset();
-    this->leafPopulateRootSig.Reset();
     this->internalLevelsPso.Reset();
+
+    this->emitterCollectRootSig.Reset();
+    this->bufferClearRootSig.Reset();
+    this->sceneBboxResetRootSig.Reset();
+    this->bboxReduceRootSig.Reset();
+    this->mortonEmitRootSig.Reset();
+    this->leafPopulateRootSig.Reset();
     this->internalLevelsRootSig.Reset();
 }
 
@@ -415,7 +397,6 @@ void LightTreeManager::ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t 
     this->dev_mortonValues->SetName(L"dev_mortonValues");
 
     this->mortonCapacity = newM;
-    this->treeNodeCapacity = newNodeCount;
 }
 
 bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -614,7 +595,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
         cmdList->SetComputeRootUnorderedAccessView(INTERNAL_LEVELS_PARAM_IDX(LIGHT_TREE_OUT),
                                                    this->dev_lightTree->GetGPUVirtualAddress());
 
-        uint32_t levelsRemaining = log2OfPow2(M);
+        uint32_t levelsRemaining = static_cast<uint32_t>(std::bit_width(M)) - 1u;
         while (levelsRemaining > 0u)
         {
             const uint32_t depth = (levelsRemaining >= 2u) ? 2u : 1u;
@@ -661,34 +642,9 @@ void LightTreeManager::transitionForPathTracingRead(ID3D12GraphicsCommandList4* 
     batch.submit(cmdList);
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightAuxAddress() const
-{
-    return this->dev_lightAux ? this->dev_lightAux->GetGPUVirtualAddress() : 0;
-}
-
-D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightToLeafAddress() const
-{
-    return this->dev_lightToLeaf ? this->dev_lightToLeaf->GetGPUVirtualAddress() : 0;
-}
-
-D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightTreeAddress() const
-{
-    return this->dev_lightTree ? this->dev_lightTree->GetGPUVirtualAddress() : 0;
-}
-
-D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevSceneBboxAddress() const
-{
-    return this->dev_sceneBbox ? this->dev_sceneBbox->GetGPUVirtualAddress() : 0;
-}
-
-uint32_t LightTreeManager::getCurrentTreeLeafCount() const
+uint32_t LightTreeManager::getTreeLeafCapacity() const
 {
     return this->mortonCapacity;
-}
-
-uint32_t LightTreeManager::getCurrentTreeNodeCount() const
-{
-    return this->treeNodeCapacity;
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightTreeSrvBindAddress() const
@@ -699,16 +655,6 @@ D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightTreeSrvBindAddress() cons
 D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightToLeafSrvBindAddress() const
 {
     return (this->dev_lightToLeaf ? this->dev_lightToLeaf : this->dev_srvPlaceholder)->GetGPUVirtualAddress();
-}
-
-ID3D12Resource* LightTreeManager::getDevLightTreeResource() const
-{
-    return this->dev_lightTree.Get();
-}
-
-ID3D12Resource* LightTreeManager::getDevLightToLeafResource() const
-{
-    return this->dev_lightToLeaf.Get();
 }
 
 } // namespace Renderer

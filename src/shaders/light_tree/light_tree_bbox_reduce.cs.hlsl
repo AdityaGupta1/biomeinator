@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
-#include "../../rendering/common/common_registers.h"
-#include "../../rendering/common/common_settings.h"
-#include "../../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_settings.h"
+#include "../rendering/common/common_structs.h"
 
-#include "../common/light_tree.hlsli"
+#include "common/light_tree.hlsli"
 
 cbuffer LightTreeConstants : REGISTER_B(LIGHT_TREE, CONSTANTS)
 {
@@ -46,7 +46,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID,
 
     // Workgroup-shared log-step reduce. Loop bound auto-adapts to the
     // workgroup-size define.
-    [unroll]
     for (uint stride = LIGHT_TREE_BBOX_REDUCE_WORKGROUP_SIZE / 2u; stride > 0u; stride >>= 1u)
     {
         if (groupIdx < stride)

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
-#include "../../rendering/common/common_registers.h"
-#include "../../rendering/common/common_settings.h"
-#include "../../rendering/common/common_structs.h"
+#include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_settings.h"
+#include "../rendering/common/common_structs.h"
 
-#include "../common/global_params.hlsli"
-#include "../common/light_tree.hlsli"
+#include "common/global_params.hlsli"
+#include "common/light_tree.hlsli"
 
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 

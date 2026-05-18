@@ -408,7 +408,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = rng.nextFloat() < 0.01f ? Block::LAMP : Block::STONE;
+                        block = rng.nextFloat() < 0.04f ? Block::LAMP : Block::STONE;
                     }
                 }
                 else if (y <= seaLevel)

@@ -49,3 +49,8 @@ float balanceHeuristic(const float pdfA, const float pdfB)
 {
     return pdfA / (pdfA + pdfB);
 }
+
+float luminance(const float3 color)
+{
+    return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+}

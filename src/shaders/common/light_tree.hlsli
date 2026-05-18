@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../../rendering/common/common_structs.h"
+#include "../rendering/common/common_structs.h"
 
 // =============================================
 // Tree node helpers
