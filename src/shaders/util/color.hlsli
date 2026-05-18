@@ -39,6 +39,7 @@ float3 applyReinhard(const float3 color)
 
 float3 applyTonemapping(float3 color)
 {
+    color = max(color, 0.f);
     float3 tonemappedColor;
     switch ((Tonemapping)renderParams.tonemapping)
     {
