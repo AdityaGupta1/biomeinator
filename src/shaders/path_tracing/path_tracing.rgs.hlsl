@@ -56,13 +56,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
 
-#if !NRC_UPDATE
-    if (pathSplitIdx == 0)
-    {
-        debugTexture()[pixelIdx] = float4(0.f, 0.f, 0.f, 1.f);
-    }
-#endif
-
 #if NRC_UPDATE || NRC_QUERY
     // NRC frameDimensions match full dispatch (e.g. doubled width when path splitting).
     // Do not use getPixelIdx() here - it collapses split lanes to the same coordinate.
@@ -308,13 +301,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     lightSample =
                         sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
                 }
-
-#if !NRC_UPDATE
-                if (pathDepth == 0 && pathSplitIdx == 0)
-                {
-                    debugTexture()[pixelIdx] = float4(lightSample.didHitLight ? float3(0, 1, 0) : float3(1, 0, 0), 1);
-                }
-#endif
 
                 if (lightSample.didHitLight)
                 {
