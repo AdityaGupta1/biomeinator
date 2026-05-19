@@ -560,7 +560,7 @@
                 "--width=960",
                 "--height=540",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=16",
+                "--maxAccumulatedFrames=32",
                 "--maxPathDepth=2"
             ],
             "golden": "gltf/direct_lighting_proximity/golden.png",
