@@ -2,6 +2,8 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #pragma once
+#ifndef COMMON_STRUCTS_H
+#define COMMON_STRUCTS_H
 
 #ifdef __cplusplus
 #include <DirectXMath.h>
@@ -172,6 +174,40 @@ struct AreaLight
     uint materialIdx;
 };
 
+#define LEAF_IDX_INVALID ~0u
+
+// Parallel to AreaLight, keyed by the same global area light index. Holds
+// per-light extras used to build the stochastic light tree (Stage 1/2).
+// Bbox is world-space (already includes the instance's float transform; the
+// integer transformOffset is added at shading time, same as AreaLight).
+struct LightAux
+{
+    float3 bboxMin;
+    float flux; // radiant power proxy = emissiveStrength * colorTerm * triangleArea
+
+    float3 bboxMax;
+    uint pad0;
+};
+
+// Node in the Stage 2 perfect-binary light tree (0-indexed, root at [0],
+// children of node i at 2i+1 and 2i+2). Leaves hold a real `areaLightIdx`
+// (sparse, into AreaLight[]); internal nodes and bogus padding-leaves use
+// LIGHT_IDX_INVALID. Field order matches LightAux so HLSL/cbuffer 16-byte
+// packing rules give a tight 32-byte layout with no crossed boundaries.
+struct LightTreeNode
+{
+    float3 bboxMin;
+    float flux;
+
+    float3 bboxMax;
+    uint areaLightIdx;
+};
+
+#ifdef __cplusplus
+static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with the HLSL StructuredBuffer<LightAux> layout");
+static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
+#endif
+
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData
@@ -198,3 +234,5 @@ public:
 
 #undef float4x4
 #endif
+
+#endif // COMMON_STRUCTS_H

@@ -1,4 +1,4 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-05-15_
 
 # Rendering Knowledgebase
 
@@ -16,3 +16,5 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [camera.md](camera.md) | Spherical coordinate camera, Halton TAA jitter, motion vectors |
 | [dlss.md](dlss.md) | NVIDIA Streamline SDK, DLSS-D upsampling integration |
 | [nvapi_ser.md](nvapi_ser.md) | NVAPI, Shader Execution Reordering (SER) optimization |
+| [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |
+| [light_tree.md](light_tree.md) | RTSL Stage 2 GPU light tree build: sparse/dense buffers, sentinels, atomic float min/max, fused internal-levels |

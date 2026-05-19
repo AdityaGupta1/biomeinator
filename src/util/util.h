@@ -28,4 +28,17 @@ inline uint32_t calculateDispatchSize(const uint32_t size, const uint32_t thread
     return (size + threadGroupSize - 1) / threadGroupSize;
 }
 
+// Smallest power of two >= max(floor, target), with both inputs treated as
+// pow2-friendly. Used by managers that grow GPU scratch buffers in coarse
+// pow2 steps so small topology changes don't reallocate every frame.
+inline uint32_t nextPow2AtLeast(uint32_t floor, uint32_t target)
+{
+    uint32_t cap = floor;
+    while (cap < target)
+    {
+        cap *= 2;
+    }
+    return cap;
+}
+
 } // namespace Util

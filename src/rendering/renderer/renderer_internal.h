@@ -27,6 +27,8 @@
 #include <sl_dlss_d.h>
 
 #include "rendering/camera.h"
+#include "rendering/gpu_sort/gpu_radix_sort.h"
+#include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
 
 namespace nrc { namespace d3d12 { class Context; } }
@@ -150,6 +152,9 @@ enum class PtParam
     NRC_QUERY_RADIANCE_PARAMS,
     NRC_COUNTERS_DATA,
 
+    RTSL_LIGHT_TREE,
+    RTSL_LIGHT_TO_LEAF,
+
     COUNT
 };
 
@@ -211,6 +216,12 @@ inline D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
 
 #define MAKE_PARAM(type, regPrefix, name)                                                                              \
     makeParam(D3D12_ROOT_PARAMETER_TYPE_##type, regPrefix##_REGISTER_##name, regPrefix##_REGISTER_SPACE)
+
+void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
+                                     uint32_t numParams,
+                                     const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
+                                     uint32_t numStaticSamplers,
+                                     ComPtr<ID3D12RootSignature>& outRootSig);
 
 // =============================================
 // Internal function declarations
@@ -292,6 +303,8 @@ struct RendererState
     // -- Scene --
     Scene scene;
     Camera camera;
+    LightTreeManager lightTreeManager;
+    GpuRadixSort gpuRadixSort;
     nrc::d3d12::Context* nrcContext{ nullptr };
 
     // -- Mode flags --

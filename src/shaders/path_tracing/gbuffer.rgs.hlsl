@@ -118,6 +118,6 @@ void RayGeneration()
     outGbufferData.hitInfo = payload.hitInfo;
     outGbufferData.materialIdx = payload.materialIdx;
     outGbufferData.payloadFlags = payload.flags;
-    outGbufferData.pad0 = outGbufferData.pad1 = 0;
+    outGbufferData.pad0 = outGbufferData.pad1 = 0; // necessary since we're writing to a UAV
     gbufferOut[linearPixelIdx] = outGbufferData;
 }

@@ -15,6 +15,7 @@
 #include "light/dome_light.hlsli"
 #include "light/light_sampling.hlsli"
 #include "light/ris.hlsli"
+#include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
@@ -50,11 +51,6 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 #endif
 
-float balanceHeuristic(const float pdfA, const float pdfB)
-{
-    return pdfA / (pdfA + pdfB);
-}
-
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
@@ -71,7 +67,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = (samplingMode == SamplingMode::RIS);
-    const bool doMis = (samplingMode == SamplingMode::MIS || useRis);
+    const bool useRtsl = (samplingMode == SamplingMode::RTSL);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl);
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -279,7 +276,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
 
                 DirectLightingSample lightSample;
-                if (useRis)
+                if (useRtsl)
+                {
+                    lightSample = sampleDirectLightingRtsl(
+                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                }
+                else if (useRis)
                 {
                     const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
                     bool isBsdfSampleUnused;
@@ -325,8 +327,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
                         const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
 
-                        const float balanceHeuristicWeight = lightPdf / (lightPdf + lightSampleBsdfPdf);
-                        contribution *= W * balanceHeuristicWeight;
+                        contribution *= W * balanceHeuristic(lightPdf, lightSampleBsdfPdf);
                     }
                     else
                     {
@@ -521,7 +522,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
-                const float bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                const float bsdfSampleLightPdf = useRtsl
+                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction)
+                    : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
                 payload.pathWeight *= emissionMisWeight;
             }

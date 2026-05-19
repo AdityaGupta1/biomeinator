@@ -74,13 +74,31 @@ int main(int argc, char** argv)
 
     const auto testsOutputPath = std::filesystem::path(CMAKE_BINARY_DIR) / "test_output";
     printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
-    if (std::filesystem::exists(testsOutputPath))
+    try
     {
-        std::filesystem::remove_all(testsOutputPath);
+        if (std::filesystem::exists(testsOutputPath))
+        {
+            std::filesystem::remove_all(testsOutputPath);
+        }
+        std::filesystem::create_directories(testsOutputPath);
     }
-    std::filesystem::create_directories(testsOutputPath);
+    catch (const std::exception& e)
+    {
+        std::cerr << "Filesystem error preparing test output dir '" << testsOutputPath.generic_string()
+                  << "': " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
 
-    const auto tests = loadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
+    std::vector<TestCase> tests;
+    try
+    {
+        tests = loadTests(std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/tests.json");
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to load tests.json: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
     int numTests = 0;
     std::vector<std::string> failedTestNames;
     for (const TestCase& test : tests)
@@ -99,9 +117,20 @@ int main(int argc, char** argv)
         printf("STARTING TEST: %s\n", test.name.c_str());
         printf("=============================================\n\n");
 
-        TEST_ASSERT(std::filesystem::is_regular_file(test.goldenPath));
-        const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
-        std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
+        try
+        {
+            TEST_ASSERT(std::filesystem::is_regular_file(test.goldenPath));
+            const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
+            std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Filesystem error staging golden for '" << test.name
+                      << "' (golden=" << test.goldenPath.generic_string()
+                      << "): " << e.what() << std::endl;
+            failedTestNames.push_back(test.name);
+            continue;
+        }
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
         const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");

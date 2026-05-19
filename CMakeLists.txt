@@ -124,6 +124,57 @@ foreach(SHADER IN LISTS SHADER_FILES)
     set_source_files_properties(${FXH_OUT} PROPERTIES GENERATED TRUE)
 endforeach()
 
+# --- GPUSorting (external) compute shader kernels ---
+# DeviceRadixSort.hlsl exposes four entry points; compile each into its own .fxh.
+# Tuning defaults in SortCommon.hlsl already match the NVIDIA pairs preset
+# (KEYS_PER_THREAD=15, D_DIM=512, PART_SIZE=7680, D_TOTAL_SMEM=7936) so we don't
+# need to pass tuning macros — only the key/payload/order config.
+set(GPU_SORT_SHADER "${CMAKE_SOURCE_DIR}/external/GPUSorting/GPUSortingD3D12/Shaders/DeviceRadixSort.hlsl")
+set(GPU_SORT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/GPUSorting/GPUSortingD3D12/Shaders")
+set(GPU_SORT_DEFINES "-DSORT_PAIRS" "-DKEY_UINT" "-DPAYLOAD_UINT" "-DSHOULD_ASCEND" "-DENABLE_16_BIT")
+
+# DeviceRadixSort.hlsl transitively includes only SortCommon.hlsl from the
+# GPUSorting shader directory. List its real dependency explicitly instead of
+# globbing the whole directory so edits to unrelated kernels (OneSweep,
+# FFXParallelSort, etc.) don't trigger a needless rebuild of our four kernels.
+set(GPU_SORT_INCLUDE_FILES "${GPU_SORT_INCLUDE_DIR}/SortCommon.hlsl")
+
+set(GPU_SORT_KERNELS
+    InitDeviceRadixSort gpu_sort_init_cs
+    Upsweep             gpu_sort_upsweep_cs
+    Scan                gpu_sort_scan_cs
+    Downsweep           gpu_sort_downsweep_cs
+)
+
+list(LENGTH GPU_SORT_KERNELS GPU_SORT_KERNELS_LEN)
+math(EXPR GPU_SORT_KERNELS_LAST "${GPU_SORT_KERNELS_LEN} - 1")
+foreach(IDX RANGE 0 ${GPU_SORT_KERNELS_LAST} 2)
+    math(EXPR NAME_IDX "${IDX} + 1")
+    list(GET GPU_SORT_KERNELS ${IDX} GPU_SORT_KERNEL_ENTRY)
+    list(GET GPU_SORT_KERNELS ${NAME_IDX} GPU_SORT_OUT_NAME)
+    set(GPU_SORT_FXH_OUT "${GENERATED_SHADER_HEADERS_DIR}/${GPU_SORT_OUT_NAME}.fxh")
+
+    add_custom_command(
+        OUTPUT ${GPU_SORT_FXH_OUT}
+        COMMAND ${DXC_EXECUTABLE}
+                ${GPU_SORT_SHADER}
+                /T cs_${SHADER_VERSION}
+                /E ${GPU_SORT_KERNEL_ENTRY}
+                /Fh ${GPU_SORT_FXH_OUT}
+                /Vn ${GPU_SORT_OUT_NAME}_shaderBytecode
+                /HV 2021
+                -enable-16bit-types
+                ${GPU_SORT_DEFINES}
+                /I "${GPU_SORT_INCLUDE_DIR}"
+        DEPENDS ${GPU_SORT_SHADER} ${GPU_SORT_INCLUDE_FILES}
+        COMMENT "Compiling GPUSorting kernel ${GPU_SORT_KERNEL_ENTRY} -> ${GPU_SORT_FXH_OUT}"
+        VERBATIM
+    )
+
+    list(APPEND COMPILED_HEADERS ${GPU_SORT_FXH_OUT})
+    set_source_files_properties(${GPU_SORT_FXH_OUT} PROPERTIES GENERATED TRUE)
+endforeach()
+
 # Mark shader source files as headers only
 set_source_files_properties(${SHADER_FILES} ${SHADER_INCLUDE_FILES} ${COMPILED_HEADERS} PROPERTIES HEADER_FILE_ONLY TRUE)
 

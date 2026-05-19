@@ -14,11 +14,11 @@ namespace Renderer
 
 static constexpr uint32_t maxPayloadSizeBytes = 96;
 
-static void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
-                                            uint32_t numParams,
-                                            const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
-                                            uint32_t numStaticSamplers,
-                                            ComPtr<ID3D12RootSignature>& outRootSig)
+void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
+                                     uint32_t numParams,
+                                     const D3D12_STATIC_SAMPLER_DESC* staticSamplers,
+                                     uint32_t numStaticSamplers,
+                                     ComPtr<ID3D12RootSignature>& outRootSig)
 {
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc = {
         .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
@@ -123,6 +123,9 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES)] = MAKE_PARAM(UAV, NRC, TRAINING_PATH_VERTICES);
         ptParams[PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE_PARAMS);
         ptParams[PT_PARAM_IDX(NRC_COUNTERS_DATA)] = MAKE_PARAM(UAV, NRC, COUNTERS_DATA);
+
+        ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
+        ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
 
         if (renderState.useSer)
         {

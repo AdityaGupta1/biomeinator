@@ -22,12 +22,16 @@ void getLightNormalAndArea(const AreaLight light, out float3 lightNor_WS, out fl
     area = length(crossVec) * 0.5f;
 }
 
-AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerator rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
+// Samples a point uniformly over the triangle area of `light` and the resulting
+// area-to-solid-angle pdf at `surfPos_WS`. Does NOT include the per-light pick
+// probability — callers multiply that in based on their selection scheme.
+void sampleAreaLightPoint(const AreaLight light,
+                          const float3 surfPos_WS,
+                          inout RandomNumberGenerator rng,
+                          out float3 pointOnLight_WS,
+                          out float3 wi_WS,
+                          out float lightSamplePdf)
 {
-    lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
-    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
-    const AreaLight light = areaLights[lightIdx];
-
     const float2 rndSample = rng.nextFloat2();
     const float sqrtRndX = sqrt(rndSample.x);
     const float2 bary2 = float2(1.f - sqrtRndX, sqrtRndX * rndSample.y);
@@ -38,9 +42,20 @@ AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerato
     float lightArea;
     getLightNormalAndArea(light, lightNor_WS, lightArea);
 
+    wi_WS = normalize(pointOnLight_WS - surfPos_WS);
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-    const float lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+    lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+}
+
+AreaLight sampleLightUniform(const float3 surfPos_WS, inout RandomNumberGenerator rng, out float3 pointOnLight_WS, out float lightPdf, out uint lightIdx)
+{
+    lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
+    const float lightPickPdf = 1.f / sceneParams.numAreaLights;
+    const AreaLight light = areaLights[lightIdx];
+
+    float3 wi_WS;
+    float lightSamplePdf;
+    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
     lightPdf = lightPickPdf * lightSamplePdf;
 
     return light;
@@ -134,16 +149,27 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 }
 #endif
 
-float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
+// Decodes the global area-light index of the triangle the hit landed on, or
+// LIGHT_IDX_INVALID if the triangle is not emissive.
+uint getAreaLightIdxFromHit(const HitInfo hitInfo)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
     if (perTriData.localAreaLightIdx == LIGHT_IDX_INVALID)
     {
+        return LIGHT_IDX_INVALID;
+    }
+    return instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
+}
+
+float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)
+{
+    const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
+    if (areaLightIdx == LIGHT_IDX_INVALID)
+    {
         return 0.f;
     }
 
-    const uint areaLightIdx = instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
     const AreaLight light = areaLights[areaLightIdx];
 
     float3 lightNor_WS;

@@ -5,15 +5,11 @@
 
 #include "../rendering/common/common_enums.h"
 
+#include "util/math.hlsli"
 #include "util/tonemapping/agx.hlsli"
 #include "util/tonemapping/khronos_pbr_neutral.hlsli"
 
 #include "common/global_params.hlsli"
-
-float luminance(const float3 color)
-{
-    return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
-}
 
 float3 srgbToLinear(float3 srgbColor) {
     const float3 higher = pow((srgbColor + 0.055f) / 1.055f, 2.4f);

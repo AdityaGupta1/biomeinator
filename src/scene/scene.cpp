@@ -225,6 +225,8 @@ void Scene::reset()
     this->mappedMaterialsArray.reset();
 
     this->numAreaLights = 0;
+    this->areaLightSparseCount = 0;
+    this->areaLightTopologyChanged = false;
     this->managedAreaLightsBuffer.reset();
     this->areaLightSamplingStructure.reset();
 }
@@ -357,6 +359,8 @@ const glm::vec3& Scene::getBoundsMax_WS() const
 
 bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
+    this->areaLightTopologyChanged = false;
+
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
     bool didChange = false;
@@ -525,6 +529,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     uint32_t nextInstanceDescIdx = 0;
     uint32_t nextAreaLightSamplingIdx = 0;
+    uint32_t maxSparseAreaLightIdx = 0;
     for (const auto& [instanceId, instance] : this->instances)
     {
         if (!instance->isVisible || instance->isScheduledForDeletion ||
@@ -556,12 +561,16 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
                     this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
                 }
 
-                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = instanceAreaLightIdx++;
+                const uint32_t sparseAreaLightIdx = instanceAreaLightIdx++;
+                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = sparseAreaLightIdx;
+                maxSparseAreaLightIdx = std::max(maxSparseAreaLightIdx, sparseAreaLightIdx + 1);
             }
         }
     }
 
     this->numAreaLights = nextAreaLightSamplingIdx;
+    this->areaLightSparseCount = maxSparseAreaLightIdx;
+    this->areaLightTopologyChanged = true;
     this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
 
     AcsHelper::TlasBuildInputs inputs;
@@ -769,6 +778,16 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
 uint32_t Scene::getNumAreaLights() const
 {
     return this->numAreaLights;
+}
+
+uint32_t Scene::getAreaLightSparseCount() const
+{
+    return this->areaLightSparseCount;
+}
+
+bool Scene::didAreaLightTopologyChange() const
+{
+    return this->areaLightTopologyChanged;
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevAreaLightsBufferAddress() const
