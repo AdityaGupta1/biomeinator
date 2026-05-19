@@ -554,6 +554,32 @@
             "threshold": 0.0001
         },
         {
+            "name": "direct_lighting_proximity",
+            "scene": "gltf/direct_lighting_proximity/direct_lighting_proximity.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=16",
+                "--maxPathDepth=2"
+            ],
+            "golden": "gltf/direct_lighting_proximity/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "direct_lighting_rgb",
+            "scene": "gltf/direct_lighting_rgb/direct_lighting_rgb.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=16",
+                "--maxPathDepth=2"
+            ],
+            "golden": "gltf/direct_lighting_rgb/golden.png",
+            "threshold": 0.01
+        },
+        {
             "name": "water_absorption",
             "world": "voxel/water_absorption",
             "args": [
