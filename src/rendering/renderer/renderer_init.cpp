@@ -235,7 +235,6 @@ void initRtTargets()
     renderState.autoTransitionRtTargets.push_back(&renderState.pathTracingTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.diffuseAlbedoTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.specularAlbedoTarget);
-    renderState.autoTransitionRtTargets.push_back(&renderState.linearDepthTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.normalsAndRoughnessTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.motionTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.specularHitDistanceTarget);
@@ -249,9 +248,13 @@ void initRtTargets()
         renderState.allRtTargets.push_back(rtTarget);
     }
 
-    // linearDepthPrevTarget is resized like the others (allRtTargets) but kept
-    // out of autoTransitionRtTargets: path tracing reads it as
-    // NON_PIXEL_SHADER_RESOURCE, not the autotransition's PIXEL_SHADER_RESOURCE.
+    // linearDepthTarget and its ping-pong partner linearDepthPrevTarget are
+    // resized like the others (allRtTargets) but kept OUT of
+    // autoTransitionRtTargets: each frame parity picks which is Curr vs Prev, and
+    // path tracing reads Prev as NON_PIXEL_SHADER_RESOURCE (not the
+    // autotransition's PIXEL_SHADER_RESOURCE). Both are transitioned manually in
+    // render() (plan step 6).
+    renderState.allRtTargets.push_back(&renderState.linearDepthTarget);
     renderState.allRtTargets.push_back(&renderState.linearDepthPrevTarget);
 
     // nrcDebugTarget is added after the copy so it's in autoTransitionRtTargets but NOT in

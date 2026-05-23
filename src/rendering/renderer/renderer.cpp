@@ -603,6 +603,27 @@ void render()
 
     beginFrame();
 
+    // ---- RTSL tile-cache + linear-depth ping-pong (plan step 6) ----
+    // Frame-number parity selects which physical buffer is Curr (written this
+    // frame) vs Prev (reprojected this frame). The shader-visible heap indices
+    // are repointed below once the param block is in hand, and every manual
+    // state transition in the RT section keys off this same selection. Both
+    // linear-depth buffers are OUT of autoTransitionRtTargets: path tracing
+    // reads Prev as NON_PIXEL_SHADER_RESOURCE, not the autotransition's
+    // PIXEL_SHADER_RESOURCE, so they are transitioned here instead. DLSS-D must
+    // tag the physical resource holding THIS frame's depth (linearDepthCurr).
+    const bool pingPongEven = (renderState.frameNumber & 1u) == 0u;
+    RtTarget* const linearDepthCurr =
+        pingPongEven ? &renderState.linearDepthTarget : &renderState.linearDepthPrevTarget;
+    RtTarget* const linearDepthPrev =
+        pingPongEven ? &renderState.linearDepthPrevTarget : &renderState.linearDepthTarget;
+    ID3D12Resource* const tileCacheCurrResource =
+        pingPongEven ? renderState.dev_rtslTileCacheA.Get() : renderState.dev_rtslTileCacheB.Get();
+    const uint32_t tileCacheCurrUavIdx =
+        pingPongEven ? renderState.rtslTileCacheAUavIdx : renderState.rtslTileCacheBUavIdx;
+    const uint32_t tileCachePrevSrvIdx =
+        pingPongEven ? renderState.rtslTileCacheBSrvIdx : renderState.rtslTileCacheASrvIdx;
+
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
     const bool useDlss = antialiasingMode == AntialiasingMode::DLSS;
@@ -617,7 +638,7 @@ void render()
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&renderState.pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&renderState.dlssOutputTarget);
-            sl::Resource linearDepthResource = makeSlResource(&renderState.linearDepthTarget);
+            sl::Resource linearDepthResource = makeSlResource(linearDepthCurr);
             sl::Resource motionResource = makeSlResource(&renderState.motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&renderState.diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&renderState.specularAlbedoTarget);
@@ -662,6 +683,14 @@ void render()
     auto& frameCtx = renderState.frameCtxs[renderState.frameCtxIdx];
 
     ParamBlockManager& paramBlockManager = frameCtx.paramBlockManager;
+
+    // Repoint this frame's ping-pong heap indices (see the step-6 selection
+    // above). The remaining heapIndices fields are fixed at resize().
+    paramBlockManager.heapIndices->uav.linearDepthTargetIdx = linearDepthCurr->getUavIdx();
+    paramBlockManager.heapIndices->uav.rtslTileCacheCurrIdx = tileCacheCurrUavIdx;
+    paramBlockManager.heapIndices->srv.linearDepthTargetIdx = linearDepthCurr->getSrvIdx();
+    paramBlockManager.heapIndices->srv.linearDepthPrevSrvIdx = linearDepthPrev->getSrvIdx();
+    paramBlockManager.heapIndices->srv.rtslTileCachePrevSrvIdx = tileCachePrevSrvIdx;
 
     PlayerInput playerInput = {};
     if (!SettingsManager::getAsBool("lockCamera"))
@@ -732,6 +761,14 @@ void render()
     if (renderState.debugViewComboMap.contains(debugViewSettingStr))
     {
         debugOutputTarget = renderState.debugViewComboMap.at(debugViewSettingStr);
+
+        // linearDepth ping-pongs between two physical buffers; display the one
+        // holding THIS frame's depth (and the one transitioned to PIXEL_SHADER_-
+        // RESOURCE before the debug blit below).
+        if (debugOutputTarget == &renderState.linearDepthTarget)
+        {
+            debugOutputTarget = linearDepthCurr;
+        }
     }
 
     auto& debugParams = paramBlockManager.debugParams;
@@ -914,6 +951,9 @@ void render()
                     rtTarget->addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 }
             }
+            // linearDepth is ping-ponged and out of autoTransitionRtTargets;
+            // gbuffer writes Curr as a UAV.
+            linearDepthCurr->addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             batch.submit(renderState.cmdList.Get());
         }
 
@@ -936,7 +976,28 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+        // ---- RTSL tile cache: reprojection reads + clear Curr (plan step 6) ----
+        // Path tracing reads prev-frame linear depth and motion as SRVs, so move
+        // them to NON_PIXEL_SHADER_RESOURCE first. (Both tile-cache buffers are
+        // ByteAddressBuffers — D3D12 promotes them from COMMON on first access and
+        // decays them after ExecuteCommandLists — so only the clear→insert UAV
+        // hazard on Curr needs an explicit barrier; Prev is read-only this frame.)
+        {
+            BufferHelper::TransitionBatch batch;
+            linearDepthPrev->addTransitionTo(batch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            renderState.motionTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            batch.submit(renderState.cmdList.Get());
+        }
+
+        recordRtslTileCacheClear(renderState.cmdList.Get(), tileCacheCurrUavIdx, renderState.rtslTileCacheNumSlots);
+        BufferHelper::uavBarrier(renderState.cmdList.Get(), tileCacheCurrResource);
+
         dispatchPathTracing(paramBlockManager, doPathSplitting);
+
+        // Path tracing read motion as an SRV; restore it to UAV so the DLSS tag
+        // (UAV) matches the resource state at slEvaluateFeature time, and so the
+        // pre-postprocess autotransition sees the state it expects.
+        renderState.motionTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         // ===================================
         // COLLECT
@@ -1013,6 +1074,10 @@ void render()
                 rtTarget->addTransitionTo(batch, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             }
         }
+        // linearDepth Curr is out of autoTransitionRtTargets; the debug view may
+        // sample it as a pixel-shader SRV. Prev stays NON_PIXEL_SHADER_RESOURCE
+        // until it becomes next frame's Curr.
+        linearDepthCurr->addTransitionTo(batch, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         batch.submit(renderState.cmdList.Get());
     }
 

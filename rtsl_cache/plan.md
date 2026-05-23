@@ -4,6 +4,41 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **v8 (2026-05-23):** step-6 implementation deltas. **Cache is now live** — first
+  step with observable output.
+  - **Ping-pong is pure parity, no physical swap.** `pingPongEven =
+    frameNumber & 1` picks Curr/Prev among the two tile-cache buffers (A/B) and
+    the two linear-depth `RtTarget`s. Each frame the five ping-pong `heapIndices`
+    fields are repointed into the current frame ctx's param block; every manual
+    transition keys off the same `pingPongEven`. The non-ping-pong heapIndices
+    fields stay fixed at resize.
+  - **Tile-cache buffers need NO explicit cross-frame transitions.** As
+    `ByteAddressBuffer`s they auto-promote from COMMON on first access and decay
+    after `ExecuteCommandLists`, so the plan's "NPSR↔UAV" table rows for the
+    buffers collapse to: implicit promote + a single `uavBarrier` on Curr between
+    the clear and the PT inserts. Prev is read-only → implicit COMMON→NPSR.
+    Single-queue serialization guarantees frame N-1's Curr writes finish before
+    frame N reads it as Prev, so two physical buffers suffice for any
+    frames-in-flight count.
+  - **Linear-depth textures DO need explicit per-frame transitions** (textures
+    don't decay). `linearDepthTarget` pulled from `autoTransitionRtTargets` (now
+    in `allRtTargets` only, for resize); both depth `RtTarget`s transitioned by
+    hand: Curr→UAV before gbuffer, Prev→NPSR before PT, Curr→PSR before
+    postprocess. `RtTarget` tracks state across frames, so the parity-flipped
+    roles emit correct barriers.
+  - **Motion** kept in `autoTransitionRtTargets`; transitioned UAV→NPSR before PT
+    (PT reads it as an SRV) and restored NPSR→UAV after PT so the DLSS tag (UAV)
+    matches the resource state at `slEvaluateFeature`.
+  - **DLSS-D depth tag follows `linearDepthCurr`** (parity pointer), not the fixed
+    `linearDepthTarget`. It is UAV at eval (→PSR only at postprocess, after DLSS).
+  - **Debug-view "linearDepth" redirected to `linearDepthCurr`** so it always
+    shows this-frame depth and samples the buffer that reaches PSR.
+    `reconstructWorldPos`'s `linearDepthTargetIdx` read is dead in `psMain`, so no
+    hazard there.
+  - Build clean. Representative goldens pass cache-ON (default): `two_triangles`
+    0.00080/0.00100, `cornell_box_rtsl` 0.00897/0.01500, `cave_lights`
+    0.00530/0.01000 — infinitesimally shifted from step 5 (0.00898 / 0.00533),
+    confirming the cache now produces hits while staying unbiased.
 - **v7 (2026-05-23):** step-5 implementation deltas.
   - **`atPrimaryHit` + `currLinearDepth` hoisted from the `useRtsl` block up to the
     enclosing area-light `doMis` block** so the cache READ (sampler) and the new
@@ -605,6 +640,14 @@ wires ping-pong, so output is byte-identical to step 4.
 - All 48 goldens pass at `rtslCacheEnabled=false` (RNG byte-identical when cache off).
 
 ### Step 6 — Wire dispatches + state transitions in `renderer.cpp` render loop
+
+**Status: DONE (2026-05-23).** See the v8 changelog for implementation deltas
+(parity-only ping-pong, buffers rely on COMMON promote/decay so only a Curr UAV
+barrier is explicit, linear-depth pulled from `autoTransitionRtTargets` and
+transitioned by hand, motion NPSR-during-PT then restored, DLSS tag + debug view
+follow `linearDepthCurr`). Build clean; representative goldens pass cache-ON
+(`two_triangles` 0.00080, `cornell_box_rtsl` 0.00897, `cave_lights` 0.00530),
+shifted from step 5 — the cache is now producing hits.
 
 Per-frame order (mandatory):
 
