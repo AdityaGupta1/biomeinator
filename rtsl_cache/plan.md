@@ -4,6 +4,29 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **v7 (2026-05-23):** step-5 implementation deltas.
+  - **`atPrimaryHit` + `currLinearDepth` hoisted from the `useRtsl` block up to the
+    enclosing area-light `doMis` block** so the cache READ (sampler) and the new
+    INSERT key off the SAME depth value, not two separate `distance()` calls —
+    read/insert symmetry by construction, not by formula coincidence. Computing
+    both for RIS/uniform too is a `distance` + two compares, results unused when
+    `!useRtsl`; no output or RNG effect.
+  - **Insert gate is `useRtsl && atPrimaryHit && rtslCacheParams.enabled`**, placed
+    inside `if (lightSample.didHitLight)` before the BSDF/MIS contribution, in the
+    `!isPassthrough` real-bounce path (Option B passthrough handling). `tcInsert`
+    draws RNG only on the full-cell random-replace branch, so disabled is
+    byte-identical to pre-cache.
+  - **No observable effect yet — temporal loop opens in step 6.** Inserts write
+    Curr (= buffer A); the read's Prev (= buffer B) only ever holds the init-clear
+    sentinel until step 6 wires ping-pong + per-frame clear. So every lookup still
+    misses → pure root → unbiased, and goldens are byte-identical to step 4. Buffer
+    A's UAV write during PT raygen is valid via D3D12 buffer implicit state
+    promotion (same path the one-shot clear already uses); A is never read this
+    frame, so no hazard.
+  - Validation: code review 7/7 invariants PASS (gate match, RNG byte-identity,
+    depth symmetry, non-RTSL no-op, identifier/signature, placement, sentinel).
+    Representative goldens pass cache-ON (default): `two_triangles` 0.00080/0.00100,
+    `cornell_box_rtsl` 0.00898/0.01500, `cave_lights` 0.00533/0.01000.
 - **v6 (2026-05-23):** step-4 implementation deltas.
   - **Pdf hoist collapses to a COUNT, not the scratch-array grouping the plan
     sketched.** Every accepted slot whose cached light shares the query light's
@@ -563,6 +586,13 @@ to Curr) are still step 5, so every lookup currently misses → pure root.
 - Confirm with `cave`, `cave_lights`, `cornell_box_rtsl`, `two_triangles`.
 
 ### Step 5 — Inline insert at NEE-hit branch in `path_tracing.rgs.hlsl`
+
+**Status: DONE (2026-05-23).** See the v7 changelog for implementation deltas
+(`atPrimaryHit`/`currLinearDepth` hoist for read/insert symmetry, gate, Option B
+passthrough, byte-identical-until-step-6). Build clean; code review 7/7 PASS;
+representative goldens (`two_triangles`, `cornell_box_rtsl`, `cave_lights`) pass
+cache-ON. Inserts write Curr (A) but Prev (B) stays sentinel-only until step 6
+wires ping-pong, so output is byte-identical to step 4.
 
 - Insert site: inside existing `if (lightSample.didHitLight)` block in `path_tracing.rgs.hlsl` (around line 305), BEFORE BSDF/MIS contribution code.
 - Insert gate: `useRtsl && pathDepth == 0 && pathSplitIdx == 0 && rtslCacheParams.enabled`. (No `NRC_UPDATE` gate per "NRC consistency rule" above.)

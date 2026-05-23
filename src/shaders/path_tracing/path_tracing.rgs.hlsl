@@ -275,14 +275,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
 
+                // Cache is read+written only at the primary diffuse hit (see plan
+                // "Gating discipline"); the NEE pdf here must match the emission-MIS
+                // pdf below, and the insert further down must key off the same
+                // currLinearDepth as the read, so all gate on the identical
+                // atPrimaryHit condition and share this one depth value.
+                const bool atPrimaryHit = (pathDepth == 0 && pathSplitIdx == 0);
+                const float currLinearDepth = distance(cameraParams.pos_WS, surfPos_WS);
+
                 DirectLightingSample lightSample;
                 if (useRtsl)
                 {
-                    // Cache is read+written only at the primary diffuse hit (see plan
-                    // "Gating discipline"); the NEE pdf here must match the emission-MIS
-                    // pdf below, so both gate on the identical atPrimaryHit condition.
-                    const bool atPrimaryHit = (pathDepth == 0 && pathSplitIdx == 0);
-                    const float currLinearDepth = distance(cameraParams.pos_WS, surfPos_WS);
                     ByteAddressBuffer rtslCachePrev = ResourceDescriptorHeap[heapIndices.srv.rtslTileCachePrevSrvIdx];
                     Texture2D<float> rtslLinearDepthPrev = ResourceDescriptorHeap[heapIndices.srv.linearDepthPrevSrvIdx];
                     Texture2D<float2> rtslMotionTex = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
@@ -314,6 +317,16 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 if (lightSample.didHitLight)
                 {
+                    // Vote the hit light into this frame's tile cache. Same gate as the
+                    // cache read above so the sampler/MIS pair stays unbiased; tcInsert
+                    // only consumes RNG on the full-cell random-replace path, so the
+                    // disabled case remains byte-identical to the pre-cache code.
+                    if (useRtsl && atPrimaryHit && rtslCacheParams.enabled)
+                    {
+                        RWByteAddressBuffer rtslTileCacheCurr = ResourceDescriptorHeap[heapIndices.uav.rtslTileCacheCurrIdx];
+                        tcInsert(pixelIdx, currLinearDepth, surfNor_WS, lightSample.lightIdx, rtslTileCacheCurr, payload.rng);
+                    }
+
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
                     const float3 bsdfVal = evaluateBsdf(
