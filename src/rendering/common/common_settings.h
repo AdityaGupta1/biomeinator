@@ -35,3 +35,15 @@
 // and log2(M) >= 8.
 #define LIGHT_TREE_LEAF_FLOOR 256
 
+// =============================================
+// RTSL SCREEN-SPACE TILE CACHE
+// =============================================
+
+// Screen tile edge in pixels. Tile index = pixel.xy / RTSL_TILE_PIXELS.
+#define RTSL_TILE_PIXELS 8
+// Log-depth sub-buckets per tile, so a near surface is not evicted by a far one.
+#define RTSL_TILE_SUB_BUCKETS 4
+// Buffer-sizing slot count per sub-bucket. The runtime active count
+// (rtslCacheLightsPerCell) is clamped to this; K_MAX only sizes the allocation.
+#define RTSL_LIGHT_CACHE_K_MAX 32
+

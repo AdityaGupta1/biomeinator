@@ -53,6 +53,14 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
+    ADD_OPTION("rtslCacheEnabled", "Enable RTSL screen-space light cache", bool, "true");
+    ADD_OPTION("rtslCacheLevels", "RTSL cache descent levels above cached leaf (L)", int, "5");
+    ADD_OPTION("rtslCacheUniformFrac", "RTSL cache mixture weight on root descent", float, "0.20");
+    ADD_OPTION("rtslCacheLightsPerCell", "RTSL cache active slots per sub-bucket", int, "16");
+    ADD_OPTION("rtslCacheRejectDepthRel", "RTSL cache relative-depth disocclusion tolerance", float, "0.05");
+    ADD_OPTION("rtslCacheRejectNormalCos", "RTSL cache min cosine for normal-tag acceptance", float, "0.7");
+    ADD_OPTION("rtslCacheDepthBucketScale", "RTSL cache log2-depth to sub-bucket scaling", float, "0.3333");
+
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
     ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
     ADD_OPTION("nrcMaxRadiance", "NRC max expected average radiance value", float, "10.0");
@@ -122,6 +130,14 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("refractionIndirectPassthrough", bool);
     COPY_SETTING("renderDistance", int);
     COPY_SETTING("world", std::string);
+
+    COPY_SETTING("rtslCacheEnabled", bool);
+    COPY_SETTING("rtslCacheLevels", int);
+    COPY_SETTING("rtslCacheUniformFrac", float);
+    COPY_SETTING("rtslCacheLightsPerCell", int);
+    COPY_SETTING("rtslCacheRejectDepthRel", float);
+    COPY_SETTING("rtslCacheRejectNormalCos", float);
+    COPY_SETTING("rtslCacheDepthBucketScale", float);
 
     COPY_SETTING("nrcEnabled", bool);
     COPY_SETTING("nrcResolveMode", uint32_t);

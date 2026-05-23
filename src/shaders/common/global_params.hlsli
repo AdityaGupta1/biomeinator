@@ -14,6 +14,7 @@ cbuffer GlobalParams : REGISTER_B(COMMON, GLOBAL_PARAMS)
     SceneParams sceneParams;
     RenderParams renderParams;
     RtslParams rtslParams;
+    RtslCacheParams rtslCacheParams;
     DebugParams debugParams;
 };
 

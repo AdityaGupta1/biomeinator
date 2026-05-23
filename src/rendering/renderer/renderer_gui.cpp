@@ -118,6 +118,17 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Sampling");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
 
+        if (ImGui::CollapsingHeader("RTSL Cache"))
+        {
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable RTSL cache", "rtslCacheEnabled");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderInt("Levels (L)", "rtslCacheLevels", 3, 7);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Uniform fraction", "rtslCacheUniformFrac", 0.05f, 1.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderInt("Lights per cell", "rtslCacheLightsPerCell", 1, RTSL_LIGHT_CACHE_K_MAX);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Reject depth (rel)", "rtslCacheRejectDepthRel", 0.f, 1.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Reject normal (cos)", "rtslCacheRejectNormalCos", 0.f, 1.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Depth bucket scale", "rtslCacheDepthBucketScale", 0.01f, 4.f);
+        }
+
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Materials");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");

@@ -729,6 +729,38 @@ void render()
         rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
     }
 
+    auto& rtslCacheParams = paramBlockManager.rtslCacheParams;
+    {
+        rtslCacheParams->enabled = SettingsManager::getAsBool("rtslCacheEnabled") ? 1u : 0u;
+        rtslCacheParams->levels = static_cast<uint32_t>(SettingsManager::getAsInt("rtslCacheLevels"));
+        rtslCacheParams->uniformFrac = SettingsManager::getAsFloat("rtslCacheUniformFrac");
+
+        // lightsPerCell is the runtime active slot count; K_MAX only sizes the buffer.
+        static_assert(RTSL_LIGHT_CACHE_K_MAX > 0, "RTSL_LIGHT_CACHE_K_MAX must be positive");
+        const uint32_t lightsPerCell = static_cast<uint32_t>(SettingsManager::getAsInt("rtslCacheLightsPerCell"));
+        rtslCacheParams->lightsPerCell = std::min(lightsPerCell, static_cast<uint32_t>(RTSL_LIGHT_CACHE_K_MAX));
+
+        rtslCacheParams->rejectDepthRel = SettingsManager::getAsFloat("rtslCacheRejectDepthRel");
+        rtslCacheParams->rejectNormalCos = SettingsManager::getAsFloat("rtslCacheRejectNormalCos");
+        rtslCacheParams->depthBucketScale = SettingsManager::getAsFloat("rtslCacheDepthBucketScale");
+
+        // Scene-cut detection: only events that truly invalidate Prev force a
+        // one-frame suppress. Deliberately excluded:
+        //  - globalInstanceOffset rebases: worldToPrevClipMat is patched for the
+        //    full offset delta (camera.cpp setMatrices), so motion vectors stay
+        //    correct and the screen-space cache reprojects fine across a rebase.
+        //  - light-tree topology changes: voxel chunk churn alters emitter
+        //    topology almost every frame, so suppressing on it would keep clearing
+        //    Prev and the cache would never accumulate. A removed light's slot
+        //    self-invalidates via the rtslLightToLeaf == LEAF_IDX_INVALID reject,
+        //    and a reused sparse index is still unbiased (sampler and pdf consume
+        //    the same lookup) — at worst a poorer sampling seed, never bias.
+        const bool suppressPrev =
+            renderState.frameNumber == 0
+            || renderState.didPathTracingSettingsChange;
+        rtslCacheParams->suppressPrev = suppressPrev ? 1u : 0u;
+    }
+
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         // ===================================

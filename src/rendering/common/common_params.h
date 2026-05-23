@@ -139,6 +139,19 @@ struct RtslParams
     uint pad1;
 };
 
+struct RtslCacheParams
+{
+    uint enabled;             // master toggle; 0 => RTSL path byte-identical to pre-cache
+    uint levels;              // L — HIS descent start level above the cached leaf
+    float uniformFrac;        // mixture weight on root descent (keeps full coverage / unbiased)
+    uint lightsPerCell;       // runtime active slots per sub-bucket (clamped to RTSL_LIGHT_CACHE_K_MAX)
+
+    float rejectDepthRel;     // relative-depth disocclusion tolerance on reprojection
+    float rejectNormalCos;    // min cosine for per-slot normal-tag acceptance
+    float depthBucketScale;   // log2(depth + 1) -> sub-bucket index scaling
+    uint suppressPrev;        // per-frame: 1 => ignore Prev (frame 0 / teleport / topology / settings change)
+};
+
 struct DebugParams
 {
     uint debugOutputSrvIdx;
