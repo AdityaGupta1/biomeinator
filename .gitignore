@@ -3,3 +3,4 @@ out/
 .vs/
 .cursor/plans/
 .claude/settings.local.json
+__pycache__/

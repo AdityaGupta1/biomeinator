@@ -4,6 +4,35 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **v5 (2026-05-23):** step-3 implementation deltas.
+  - **Normal tag stores the FULL 32-bit oct, not `octEncode(normal) & 0xFFFF`.**
+    `octEncode` packs x→low16 / y→high16 (`packSnorm2ToUint`); masking to 16
+    bits drops y and the decode is unrecoverable. The slot tag field is already
+    a full `u32`, so we use all 32 bits. The "16 reserved" note is moot.
+  - **`lcEvaluateSubtreePdf` + an explicit same-subtree prefix guard.** The
+    step-2 pseudocode for `lcEvaluateMixturePdf` looped `lcEvaluateSubtreePdf`
+    per accepted slot WITHOUT a prefix check. That is incorrect: a cached slot
+    only contributes to a query light when both share the high `(logM - L)`
+    leaf-offset prefix (same L-ancestor). The guard is mandatory and matches the
+    archived (validated) hash-grid Python. Hoisting duplicate subtree walks is
+    still deferred to step 4; step 3 keeps the naive per-slot form.
+  - **Naming:** mixture/descent functions keep the `lc` prefix from the prior
+    plan (`lcSelectSubtreeRoot`, `lcEvaluateMixturePdf`, `lcEvaluateSubtreePdf`,
+    `lcAncestorAt`, `lcEffectiveLevels`); tile-cache mechanics use `tc`
+    (`tcInsert`, `tcLookupReprojected`, `tcLoadSlot`, `tcSubBucket`,
+    `tcDepthBucket`, `tcSlotAccepts`, `tcNormalTagAccepts`, `tcLookupNull`,
+    `tcTilesX`, `tcSlotBase`). The step-3 symbol list's "tcEvaluateMixturePdf /
+    tcEvaluateSubtreePdf" was a naming slip.
+  - **`tcTilesX` uses ceil division** (`(renderSize.x + TILE - 1) / TILE`) so
+    the rightmost partial tile column is addressable; insert and lookup share it.
+  - **Validator (`rtsl_cache/test_cache_mis.py`) runs the cache-exercising
+    configs at `L = 3` on a 12-light (logM = 4) tree.** At the production default
+    `L = 5`, `lcEffectiveLevels` clamps to `logM` and every subtree root
+    collapses to the tree root — the cache becomes a no-op and the test cannot
+    detect bias. `L < logM` is required to exercise it. Negative control is the
+    `/numAccepted` form (plain `uniformFrac`, divide by `numAccepted` not `K`);
+    it trips at z > 500 on a partially-accepted cell. Sampler is vectorized over
+    all 2M samples per config (runs in seconds, not minutes).
 - **v4 (2026-05-23):** step-2 implementation deltas.
   - **Clear shader root sig is root-constants, not "GLOBAL_PARAMS only".** The
     clear takes `(numSlots, strideThreads, targetUavHeapIdx)` as three 32-bit
@@ -473,6 +502,14 @@ cleared to `LIGHT_IDX_INVALID`; no shader reads/writes them yet.
 - Buffers allocated but not yet used by any shader. Goldens pass.
 
 ### Step 3 — Write `tile_cache.hlsli`
+
+**Status: DONE (2026-05-23).** See the v5 changelog for implementation deltas
+(full-32-bit normal tag, same-subtree prefix guard in the mixture pdf, `lc`/`tc`
+naming, ceil-division `tcTilesX`, `L = 3` in the validator to exercise the
+cache). `src/shaders/tile_cache/tile_cache.hlsli` authored;
+`rtsl_cache/test_cache_mis.py` passes all 11 configs (max z 1.25–1.77) and the
+`/numAccepted` negative control trips at z ≈ 544. Header is not yet included by
+any shader, so no shader compiles it and goldens are unaffected.
 
 - New folder `src/shaders/tile_cache/`.
 - Public symbols: `tcInsert`, `tcLookupReprojected`, `tcEvaluateMixturePdf`, `tcEvaluateSubtreePdf` (reused from prior plan's design), `tcSubBucket`, `tcDepthBucket`, `tcNormalTagAccepts`, `tcSlotAccepts`, `lcAncestorAt`, `lcEffectiveLevels`, `lcSelectSubtreeRoot`. Helper: `tcLookupNull`, `tcLoadSlot`.

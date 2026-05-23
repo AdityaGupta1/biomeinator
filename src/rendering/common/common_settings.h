@@ -46,7 +46,7 @@
 // Buffer-sizing slot count per sub-bucket. The runtime active count
 // (rtslCacheLightsPerCell) is clamped to this; K_MAX only sizes the allocation.
 #define RTSL_LIGHT_CACHE_K_MAX 32
-// Bytes per slot: lightIdx u32 + normalTag u32 (16 tag bits used, 16 reserved).
+// Bytes per slot: lightIdx u32 + normalTag u32 (full 32-bit octEncode normal).
 #define RTSL_TILE_CACHE_SLOT_BYTES 8
 
 // Tile-cache clear compute. Each thread clears RTSL_TILE_CACHE_CLEAR_SLOTS_PER_THREAD
