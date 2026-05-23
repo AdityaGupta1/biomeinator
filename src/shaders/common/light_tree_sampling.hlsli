@@ -316,32 +316,75 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal)
     return pdf;
 }
 
-// BSDF-hit MIS pdf recovery — mirrors lightPdfUniform's signature. Returns
-// the full area-light pdf (select × area-to-solid-angle) the forward sampler
-// would have assigned to the triangle that `hitInfo` landed on.
-float lightPdfRtsl(const HitInfo hitInfo,
-                   const float3 surfPos_WS,
-                   const float3 surfNor_WS,
-                   const float3 wi_WS)
-{
-    const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
-    if (areaLightIdx == LIGHT_IDX_INVALID)
-    {
-        return 0.f;
-    }
+// Screen-space tile cache: mixture sampler (lcSelectSubtreeRoot) + MIS pdf
+// (lcEvaluateMixturePdf) that splice a cached-subtree descent into the per-pixel
+// root descent above. Included HERE so it sees rtslLightTree / rtslLightToLeaf /
+// rtslParams / rtslChildProbs / evaluateLightSelectPdf (all defined above) and
+// is in turn visible to the cache-aware lightPdfRtsl / sampleDirectLightingRtsl
+// below.
+#include "tile_cache/tile_cache.hlsli"
 
-    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS);
+// Area-light select-pdf → solid-angle pdf at the BSDF-hit point. Shared by both
+// MIS pdf variants so the conversion stays in one place.
+float lightPdfRtslAreaToSolidAngle(uint areaLightIdx, float pdfSelect,
+                                   const HitInfo hitInfo,
+                                   const float3 surfPos_WS,
+                                   const float3 wi_WS)
+{
     if (pdfSelect <= 0.f)
     {
         return 0.f;
     }
-
     const AreaLight light = areaLights[areaLightIdx];
     float3 lightNor_WS;
     float lightArea;
     getLightNormalAndArea(light, lightNor_WS, lightArea);
     const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
     return pdfSelect * r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+}
+
+// BSDF-hit MIS pdf recovery, UNIFORM (no cache) — pure root descent. Used by
+// the deeper-bounce / passthrough-recovery callers, where the cache must not
+// fire (it is read+written only at the primary diffuse hit; see plan "Gating
+// discipline"). Identical to the pre-cache lightPdfRtsl.
+float lightPdfRtslUniform(const HitInfo hitInfo,
+                          const float3 surfPos_WS,
+                          const float3 surfNor_WS,
+                          const float3 wi_WS)
+{
+    const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
+    if (areaLightIdx == LIGHT_IDX_INVALID)
+    {
+        return 0.f;
+    }
+    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS);
+    return lightPdfRtslAreaToSolidAngle(areaLightIdx, pdfSelect, hitInfo, surfPos_WS, wi_WS);
+}
+
+// BSDF-hit MIS pdf recovery, CACHE-AWARE — only call at the primary diffuse hit
+// (pathDepth == 0 && pathSplitIdx == 0). Pairs with sampleDirectLightingRtsl's
+// mixture sampler: both must consume the SAME reprojected lookup (identical
+// args) or the MIS estimator biases. With the cache disabled lcEvaluateMixturePdf
+// returns evaluateLightSelectPdf exactly, so this collapses to lightPdfRtslUniform.
+float lightPdfRtsl(const HitInfo hitInfo,
+                   const float3 surfPos_WS,
+                   const float3 surfNor_WS,
+                   const float3 wi_WS,
+                   const uint2 currPixel,
+                   const float currLinearDepth,
+                   ByteAddressBuffer cachePrev,
+                   Texture2D<float> linearDepthPrev,
+                   Texture2D<float2> motionTex)
+{
+    const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
+    if (areaLightIdx == LIGHT_IDX_INVALID)
+    {
+        return 0.f;
+    }
+    const float pdfSelect = lcEvaluateMixturePdf(
+        areaLightIdx, currPixel, surfPos_WS, surfNor_WS, currLinearDepth,
+        cachePrev, linearDepthPrev, motionTex);
+    return lightPdfRtslAreaToSolidAngle(areaLightIdx, pdfSelect, hitInfo, surfPos_WS, wi_WS);
 }
 
 // =============================================
@@ -352,20 +395,40 @@ float lightPdfRtsl(const HitInfo hitInfo,
 // One-light-sample-per-pixel RTSL NEE. Returns the picked light's contribution
 // (or didHitLight=false on null sample). pdfOrW_Y is the true selection pdf
 // times the area-to-solid-angle pdf — flows into the non-RIS MIS branch.
+// `useCache` is the primary-diffuse-hit gate (pathDepth == 0 && pathSplitIdx == 0)
+// resolved at the call site. When false the descent starts at the tree root and
+// the selection pdf is the plain root pdf — byte-identical to the pre-cache
+// path. When true the mixture sampler picks a cached subtree root and the
+// selection pdf becomes lcEvaluateMixturePdf, which it MUST: the descent's own
+// pdfSelect is conditioned on the chosen seed, not the marginal pick probability
+// MIS needs. lcSelectSubtreeRoot also short-circuits before any RNG call when
+// the cache is disabled, so useCache==true with the master toggle off stays
+// byte-identical too.
 DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const float3 surfNor_WS,
                                               const RayCone rayCone,
                                               const bool canPassthrough,
                                               const bool startUnderwater,
+                                              const bool useCache,
+                                              const uint2 currPixel,
+                                              const float currLinearDepth,
+                                              ByteAddressBuffer cachePrev,
+                                              Texture2D<float> linearDepthPrev,
+                                              Texture2D<float2> motionTex,
                                               inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
 
+    const uint subtreeRoot = useCache
+        ? lcSelectSubtreeRoot(currPixel, surfNor_WS, currLinearDepth,
+                              cachePrev, linearDepthPrev, motionTex, rng)
+        : 0u;
+
     uint pickedLightIdx;
     float pdfSelect;
     const bool gotLight = selectLightFromSubtree(
-        0u, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
+        subtreeRoot, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
     if (!gotLight)
     {
         return result;
@@ -385,12 +448,17 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
         return result;
     }
 
+    const float pdfSelectMis = useCache
+        ? lcEvaluateMixturePdf(pickedLightIdx, currPixel, surfPos_WS, surfNor_WS,
+                               currLinearDepth, cachePrev, linearDepthPrev, motionTex)
+        : pdfSelect;
+
     result.lightIdx = pickedLightIdx;
     result.didHitLight = true;
     result.pointOnLight_WS = pointOnLight_WS;
     result.wi_WS = wi_WS;
     result.Le = Le;
-    result.pdfOrW_Y = pdfSelect * lightSamplePdf;
+    result.pdfOrW_Y = pdfSelectMis * lightSamplePdf;
     return result;
 }
 #endif // HITGROUP_LIGHTS

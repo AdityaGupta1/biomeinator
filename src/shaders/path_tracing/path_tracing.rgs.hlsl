@@ -278,8 +278,18 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 DirectLightingSample lightSample;
                 if (useRtsl)
                 {
+                    // Cache is read+written only at the primary diffuse hit (see plan
+                    // "Gating discipline"); the NEE pdf here must match the emission-MIS
+                    // pdf below, so both gate on the identical atPrimaryHit condition.
+                    const bool atPrimaryHit = (pathDepth == 0 && pathSplitIdx == 0);
+                    const float currLinearDepth = distance(cameraParams.pos_WS, surfPos_WS);
+                    ByteAddressBuffer rtslCachePrev = ResourceDescriptorHeap[heapIndices.srv.rtslTileCachePrevSrvIdx];
+                    Texture2D<float> rtslLinearDepthPrev = ResourceDescriptorHeap[heapIndices.srv.linearDepthPrevSrvIdx];
+                    Texture2D<float2> rtslMotionTex = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        atPrimaryHit, pixelIdx, currLinearDepth,
+                        rtslCachePrev, rtslLinearDepthPrev, rtslMotionTex, payload.rng);
                 }
                 else if (useRis)
                 {
@@ -522,9 +532,33 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
-                const float bsdfSampleLightPdf = useRtsl
-                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction)
-                    : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                // surfPos_WS / surfNor_WS / bounceBsdfPdf are this bounce's surface,
+                // so the cache lookup must match the NEE that ran there: cache-aware
+                // pdf only when that NEE used the cache (primary diffuse hit), else
+                // the uniform (root-descent) pdf — identical to the pre-cache path.
+                float bsdfSampleLightPdf;
+                if (useRtsl)
+                {
+                    const bool atPrimaryHit = (pathDepth == 0 && pathSplitIdx == 0);
+                    if (atPrimaryHit)
+                    {
+                        const float currLinearDepth = distance(cameraParams.pos_WS, surfPos_WS);
+                        ByteAddressBuffer rtslCachePrev = ResourceDescriptorHeap[heapIndices.srv.rtslTileCachePrevSrvIdx];
+                        Texture2D<float> rtslLinearDepthPrev = ResourceDescriptorHeap[heapIndices.srv.linearDepthPrevSrvIdx];
+                        Texture2D<float2> rtslMotionTex = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
+                        bsdfSampleLightPdf = lightPdfRtsl(
+                            payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction,
+                            pixelIdx, currLinearDepth, rtslCachePrev, rtslLinearDepthPrev, rtslMotionTex);
+                    }
+                    else
+                    {
+                        bsdfSampleLightPdf = lightPdfRtslUniform(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction);
+                    }
+                }
+                else
+                {
+                    bsdfSampleLightPdf = lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                }
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
                 payload.pathWeight *= emissionMisWeight;
             }

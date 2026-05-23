@@ -353,7 +353,14 @@ float lcEvaluateSubtreePdf(uint subtreeRoot, uint areaLightIdx,
 // with uniformFrac' = uniformFrac + (1 - uniformFrac) * (K - numAccepted) / K.
 // The (K - numAccepted) mass folds empty + dropped-light + normal-rejected
 // slots into the root term exactly — each of those collapses to root on the
-// sampler side. (Naive per-slot subtree walks here; step 4 hoists duplicates.)
+// sampler side.
+//
+// Pdf hoist (plan step 4): a slot contributes a nonzero p_subtree to `j` only
+// when its cached light shares j's high (logM - L) prefix — and every such slot
+// then descends from the SAME root (j's L-ancestor, see lcAncestorAt prefix
+// algebra), so each contributes the identical lcEvaluateSubtreePdf value. The
+// per-slot sum therefore collapses to (count of matching slots) × one subtree
+// walk, replacing the naive K walks.
 float lcEvaluateMixturePdf(uint areaLightIdx,
                            uint2 currPixel,
                            float3 surfPos_WS, float3 surfNor_WS,
@@ -388,8 +395,8 @@ float lcEvaluateMixturePdf(uint areaLightIdx,
         ? 0u
         : lcAncestorAt(queryLeaf, levels);
 
-    float pSubtreeSum = 0.0f;
     uint numAccepted = 0u;
+    uint numMatching = 0u; // accepted AND sharing the query's L-prefix
 
     [loop]
     for (uint s = 0u; s < K; ++s)
@@ -405,12 +412,16 @@ float lcEvaluateMixturePdf(uint areaLightIdx,
             continue;
         }
         const uint cachedLeaf = rtslLightToLeaf[lk.slots[s]];
-        if (((cachedLeaf - rtslParams.treeLeafBase) >> levels) != queryPrefix)
+        if (((cachedLeaf - rtslParams.treeLeafBase) >> levels) == queryPrefix)
         {
-            continue; // cached light is in a different subtree → contributes 0
+            ++numMatching; // shares the subtree → contributes one identical walk
         }
-        pSubtreeSum += lcEvaluateSubtreePdf(querySubtreeRoot, areaLightIdx, surfPos_WS, surfNor_WS);
     }
+
+    // One subtree walk, scaled by the matching-slot count (the hoist).
+    const float pSubtreeSum = (numMatching > 0u)
+        ? float(numMatching) * lcEvaluateSubtreePdf(querySubtreeRoot, areaLightIdx, surfPos_WS, surfNor_WS)
+        : 0.0f;
 
     const float uniformFrac = rtslCacheParams.uniformFrac;
     const float uniformFracPrime = uniformFrac

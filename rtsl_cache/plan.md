@@ -4,6 +4,33 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **v6 (2026-05-23):** step-4 implementation deltas.
+  - **Pdf hoist collapses to a COUNT, not the scratch-array grouping the plan
+    sketched.** Every accepted slot whose cached light shares the query light's
+    high `(logM - L)` prefix descends from the SAME subtree root (the query's
+    L-ancestor — `(2^logM + offset) >> L` has no carry, so equal prefix ⇒ equal
+    `lcAncestorAt`), so each per-slot `lcEvaluateSubtreePdf` term is identical.
+    `pSubtreeSum = numMatching * lcEvaluateSubtreePdf(querySubtreeRoot, …)` —
+    one walk, not K, and not the general `scratchRoots/scratchCounts` insertion
+    scan. `test_pdf_hoist.py` confirms naive-vs-hoisted max rel err 3.3e-16.
+  - **`lightPdfRtsl` split into cache-aware + `lightPdfRtslUniform`** with a
+    shared `lightPdfRtslAreaToSolidAngle` helper. Uniform variant is verbatim
+    the pre-cache body (depth>0 / passthrough-recovery callers); cache-aware
+    variant only fires at `atPrimaryHit`. Explicit-variant approach chosen over
+    the magic-pixel sentinel, as the plan specified.
+  - **`sampleDirectLightingRtsl` gains a `useCache` bool** (resolved at the call
+    site as `pathDepth == 0 && pathSplitIdx == 0`) plus the lookup params. When
+    false it passes subtree root `0u` and the plain `pdfSelect` — no extra RNG,
+    byte-identical. The MIS pdf swap uses `lcEvaluateMixturePdf` (marginal pick
+    prob), NOT the descent's seed-conditioned `pdfSelect`.
+  - **`currLinearDepth` is computed `distance(cameraParams.pos_WS, surfPos_WS)`
+    at the call site**, not read from a depth texture — matches gbuffer's
+    `distance(ray.Origin, hitPos)` exactly at the primary hit, so no extra SRV
+    binding is needed in PT for the Curr depth and insert/read stay symmetric.
+  - Goldens (`two_triangles`, `cornell_box_rtsl`, `cave`, `cave_lights`) pass
+    cache-ON (default `enabled=true`): cache empty until step 5 → every lookup
+    misses → pure root → unbiased, converges under threshold. Byte-identical
+    when disabled holds by construction (early-out before `nextFloat`).
 - **v5 (2026-05-23):** step-3 implementation deltas.
   - **Normal tag stores the FULL 32-bit oct, not `octEncode(normal) & 0xFFFF`.**
     `octEncode` packs x→low16 / y→high16 (`packSnorm2ToUint`); masking to 16
@@ -518,6 +545,13 @@ any shader, so no shader compiles it and goldens are unaffected.
 - Header is unused by any other shader at this step. Goldens unaffected.
 
 ### Step 4 — Modify `sampleDirectLightingRtsl` and `lightPdfRtsl`
+
+**Status: DONE (2026-05-23).** See the v6 changelog for implementation deltas
+(hoist collapses to a count, `lightPdfRtslUniform` split, `useCache` gate,
+call-site-computed `currLinearDepth`). Build clean; `test_pdf_hoist.py` max rel
+err 3.3e-16; `test_cache_mis.py` 11/11 + neg control trips; goldens `cave`,
+`cave_lights`, `cornell_box_rtsl`, `two_triangles` pass cache-on. Inserts (writes
+to Curr) are still step 5, so every lookup currently misses → pure root.
 
 - Add new params to both signatures: `currPixel`, `currLinearDepth`, `cachePrev`, `linearDepthPrev`, `motionTex`. Buffers fetched at the call sites in `path_tracing.rgs.hlsl` via bindless heap.
 - `sampleDirectLightingRtsl`: replace `selectLightFromSubtree(0u, ...)` with `selectLightFromSubtree(lcSelectSubtreeRoot(...), ...)`. Replace `result.pdfOrW_Y = pdfSelect * lightSamplePdf` with `result.pdfOrW_Y = lcEvaluateMixturePdf(pickedLightIdx, ...) * lightSamplePdf`.
