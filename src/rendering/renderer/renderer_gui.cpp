@@ -118,7 +118,7 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Sampling");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
 
-        if (ImGui::CollapsingHeader("RTSL Cache"))
+        if (ImGui::CollapsingHeader("RTSL Cache", ImGuiTreeNodeFlags_DefaultOpen))
         {
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable RTSL cache", "rtslCacheEnabled");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderInt("Levels (L)", "rtslCacheLevels", 3, 7);
@@ -198,7 +198,9 @@ void imguiEndFrame(double deltaTime)
 
             SettingsGuiHelpers::VerticalSpacing();
 
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+            // TODO(cleanup): temporary RTSL-cache debug label; revert to "Debug bool 0"
+            // when the NEE-only instrumentation in path_tracing.rgs.hlsl is removed.
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("NEE only", "debugBool0");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");

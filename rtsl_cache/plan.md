@@ -39,6 +39,13 @@ _Last edited: 2026-05-23_
     0.00080/0.00100, `cornell_box_rtsl` 0.00897/0.01500, `cave_lights`
     0.00530/0.01000 — infinitesimally shifted from step 5 (0.00898 / 0.00533),
     confirming the cache now produces hits while staying unbiased.
+  - **Temporary debug instrumentation (REVERT before merge).** `debugBool0` was
+    repurposed into a "NEE only" view: when set, the path tracer overwrites the
+    final output with just the primary-hit area-light NEE estimator (no MIS
+    weight), so the cache's effect on NEE variance is directly visible. To revert:
+    remove `debugNeeOnly` + its captures + the tail/sky overrides in
+    `path_tracing.rgs.hlsl`, and restore the `renderer_gui.cpp` label to
+    "Debug bool 0". Both sites carry a `TODO(cleanup)` marker.
 - **v7 (2026-05-23):** step-5 implementation deltas.
   - **`atPrimaryHit` + `currLinearDepth` hoisted from the `useRtsl` block up to the
     enclosing area-light `doMis` block** so the cache READ (sampler) and the new

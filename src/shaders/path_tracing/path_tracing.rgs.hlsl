@@ -56,6 +56,15 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
 
+    // debugBool0 ("NEE only"): when set, the final output is overwritten at the
+    // function tail with just the primary-hit area-light NEE estimator, with no
+    // MIS weight applied — isolates the RTSL cache's effect on NEE.
+    // TODO(cleanup): temporary RTSL-cache debugging instrumentation. Before the
+    // cache work merges, revert debugBool0 to a plain debug bool: remove
+    // debugNeeOnly + its captures + the tail/sky overrides here, and restore the
+    // GUI label in renderer_gui.cpp ("NEE only" -> "Debug bool 0").
+    float3 debugNeeOnly = 0.f;
+
 #if NRC_UPDATE || NRC_QUERY
     // NRC frameDimensions match full dispatch (e.g. doubled width when path splitting).
     // Do not use getPixelIdx() here - it collapses split lanes to the same coordinate.
@@ -83,7 +92,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         NrcUpdateOnMiss(nrcPathState);
         NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
 #endif
-        pathColor = payload.pathWeight * domeLightColor;
+        // NEE-only debug: the camera ray missed all geometry, so there is no
+        // primary-hit NEE here — leave the pixel black.
+        pathColor = debugParams.debugBool0 ? 0.f : (payload.pathWeight * domeLightColor);
         return;
     }
 
@@ -350,6 +361,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
                         const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
 
+                        if (atPrimaryHit)
+                        {
+                            debugNeeOnly = contribution * W;
+                        }
                         contribution *= W * balanceHeuristic(lightPdf, lightSampleBsdfPdf);
                     }
                     else
@@ -357,6 +372,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const float lightPdf = lightSample.pdfOrW_Y;
                         const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
 
+                        if (atPrimaryHit)
+                        {
+                            debugNeeOnly = contribution / lightPdf;
+                        }
                         contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
                     }
 
@@ -583,6 +602,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if NRC_UPDATE || NRC_QUERY
     NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
 #endif
+
+    // Applied after the NRC write so training still sees the real radiance.
+    if (debugParams.debugBool0)
+    {
+        pathColor = debugNeeOnly;
+    }
 }
 
 [shader("raygeneration")]
