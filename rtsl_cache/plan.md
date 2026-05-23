@@ -4,6 +4,34 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **v4 (2026-05-23):** step-2 implementation deltas.
+  - **Clear shader root sig is root-constants, not "GLOBAL_PARAMS only".** The
+    clear takes `(numSlots, strideThreads, targetUavHeapIdx)` as three 32-bit
+    root constants (space `RTSL_CACHE_CLEAR_REGISTER_SPACE = 4`). Reaching the
+    target buffer through a per-dispatch root constant lets one PSO clear BOTH
+    ping-pong buffers in a single command list; a shared-cbuffer
+    `heapIndices.uav.rtslTileCacheCurrIdx` could not be changed between the two
+    dispatches without a race. Step 6's per-frame clear reuses the same helper,
+    passing the current Curr buffer's UAV index from the CPU.
+  - **Clear is grid-stride, stride = total threads launched.** Each thread
+    clears `RTSL_TILE_CACHE_CLEAR_SLOTS_PER_THREAD = 16` slots spaced
+    `strideThreads` apart so consecutive lanes write consecutive slots every
+    iteration (coalesced). A block partition (16 adjacent slots per thread)
+    would scatter each warp and was rejected.
+  - **`linearDepthPrev` is a second `RtTarget`** (`linearDepthPrevTarget`), the
+    ping-pong partner of `linearDepthTarget`. Added to `allRtTargets` (resized
+    like the rest) but NOT `autoTransitionRtTargets`. The `linearDepthTargetIdx`
+    → `linearDepthCurrIdx` rename is deferred to step 6; step 2 adds
+    `linearDepthPrevIdx` (uav) + `linearDepthPrevSrvIdx` (srv) alongside it.
+  - **Tile cache buffers use RAW (byte-address) UAV+SRV descriptors** in the
+    shared heap (`createRawUavSrv`), reached bindless — not root descriptors
+    like the light tree. Both A and B get a UAV and an SRV (they swap roles).
+  - New `.cs.hlsl` files must be hand-registered in `shaders.cpp` (include the
+    `.fxh` + `REGISTER_SHADER`); the CMake glob compiles them but does not
+    register them.
+  - One-shot init clear runs from `init()` after `initPipeline()` (PSO ready,
+    buffers already allocated by `initRtTargets`→`resize`). `resize()` repeats it
+    guarded on `rtslTileCacheClearPso != null`.
 - **v3 (2026-05-23):** step-1 implementation deltas. `L` default raised to 5 (UI range 3–7); `uniformFrac` min raised to 0.05. Scene-cut suppression narrowed to **frame 0 + settings change only** — `globalInstanceOffset` rebase and light-tree topology change are deliberately NO LONGER suppressed (see "Scene-cut handling" for rationale). `depthBucketScale` default set to 0.3333.
 - **v2 (2026-05-22):** audit-driven revision. Critical fixes folded inline. See "v1 → v2 deltas" appendix at the bottom for the explicit list. Major changes: pdf path now gated on `pathDepth == 0` (was ambiguous); NRC cache use is "on in both UPDATE+QUERY or off in both" (was "off in update, on in query" — biased); `MAX_RENDER_SIZE` dropped (didn't exist) — buffers reallocate on resize; pdf-hoist moved to step 4 (perf risk on critical path); explicit state-transition table in step 6; `linearDepthPrev` pulled out of `autoTransitionRtTargets`; light-tree-topology-change force-clears Prev; scene-cut detector beyond frame 0; shared `tcSlotAccepts` predicate as single source of truth.
 
@@ -415,6 +443,8 @@ motion vectors are corrected as above.
 
 ### Step 1 — Constants + struct + params plumbing
 
+**Status: DONE (2026-05-23, commit 798e030).**
+
 - Add `RTSL_TILE_PIXELS`, `RTSL_TILE_SUB_BUCKETS`, `RTSL_LIGHT_CACHE_K_MAX` to `common_settings.h`.
 - Add `RtslCacheParams` struct to `common_params.h` (between `RtslParams` and `DebugParams`). Fields: `enabled`, `levels`, `uniformFrac`, `lightsPerCell`, `rejectDepthRel`, `rejectNormalCos`, `depthBucketScale`, `suppressPrev`, + pads to 16-byte align.
 - Insert into `GlobalParams` cbuffer in `global_params.hlsli`.
@@ -425,6 +455,12 @@ motion vectors are corrected as above.
 - No shader read sites yet. RTSL path byte-identical. Goldens `cave`, `cave_lights`, `cornell_box_rtsl`, `two_triangles` pass.
 
 ### Step 2 — GPU resources
+
+**Status: DONE (2026-05-23).** See the v4 changelog for implementation deltas
+(root-constant clear root sig, `linearDepthPrevTarget` as an RtTarget, RAW
+bindless descriptors, manual shader registration). Build clean; goldens `cave`,
+`cave_lights`, `cornell_box_rtsl`, `two_triangles` pass. Buffers allocated +
+cleared to `LIGHT_IDX_INVALID`; no shader reads/writes them yet.
 
 - Add `dev_rtslTileCacheA` / `dev_rtslTileCacheB` `RWByteAddressBuffer`s, allocated at current render-size (NOT MAX_RENDER_SIZE — reallocate on resize).
 - Add `dev_linearDepthPrev` matching `linearDepthTarget`'s format/dimensions. **Do NOT add to `autoTransitionRtTargets`** — manual transitions only, so PT can read it in `NON_PIXEL_SHADER_RESOURCE` instead of the autotransition's `PIXEL_SHADER_RESOURCE`. Same applies to `linearDepthTarget` if it gets renamed to `linearDepthCurr` — both Curr and Prev linear depth need manual transitions.

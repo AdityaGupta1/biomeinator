@@ -32,6 +32,11 @@ struct HeapIndices
         uint motionTargetIdx;
         uint specularHitDistanceTargetIdx;
         uint debugTargetIdx;
+
+        uint rtslTileCacheCurrIdx;   // RTSL tile cache written this frame
+        uint linearDepthPrevIdx;     // ping-pong partner of linearDepthTarget (written by gbuffer once it is Curr)
+        uint pad0;
+        uint pad1;
     } uav;
 
     struct
@@ -47,9 +52,9 @@ struct HeapIndices
         uint dlssOutputTargetIdx;
 
         uint debugTargetIdx;
+        uint rtslTileCachePrevSrvIdx;  // RTSL tile cache read this frame (reprojection)
+        uint linearDepthPrevSrvIdx;    // prev-frame linear depth, read by reprojection
         uint pad0;
-        uint pad1;
-        uint pad2;
     } srv;
 };
 

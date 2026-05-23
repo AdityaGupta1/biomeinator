@@ -102,6 +102,12 @@ inline void printSlResultError(sl::Result result)
 // Constants
 // =============================================
 
+// Size of the single shader-visible CBV/SRV/UAV heap that backs ALL bindless
+// access: RtTarget UAV/SRV pairs, the RTSL tile cache, ImGui, and every scene
+// texture (one slot per gltf texture, one per texture array). It is a hard cap
+// (DescriptorHeapAllocator does not grow), so a texture-heavy scene can exhaust
+// it. Not a concern in practice — just raise this if alloc() ever asserts; a
+// shader-visible heap can hold up to ~1M descriptors.
 #define SHARED_DESCRIPTOR_HEAP_MAX_NUM_DESCRIPTORS 64
 
 // =============================================
@@ -325,6 +331,9 @@ struct RendererState
     RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    // Ping-pong partner of linearDepthTarget. NOT in autoTransitionRtTargets —
+    // path tracing reads it as NON_PIXEL_SHADER_RESOURCE, transitioned manually.
+    RtTarget linearDepthPrevTarget{ L"linearDepthPrevTarget", DXGI_FORMAT_R32_FLOAT, 1 };
     // should really be 4 debug channels but it would look funny that way
     RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
@@ -344,6 +353,15 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_gbuffer;
     ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
     ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+
+    // -- RTSL screen-space tile cache (double-buffered, ping-ponged each frame) --
+    ComPtr<ID3D12Resource> dev_rtslTileCacheA;
+    ComPtr<ID3D12Resource> dev_rtslTileCacheB;
+    uint32_t rtslTileCacheAUavIdx{ ~0u };
+    uint32_t rtslTileCacheASrvIdx{ ~0u };
+    uint32_t rtslTileCacheBUavIdx{ ~0u };
+    uint32_t rtslTileCacheBSrvIdx{ ~0u };
+    uint32_t rtslTileCacheNumSlots{ 0 };
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
 
     // -- Viewport and dimensions --
@@ -362,6 +380,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> nrcResolveRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
+    ComPtr<ID3D12RootSignature> rtslTileCacheClearRootSig;
 
     // -- Pipeline state objects --
     ComPtr<ID3D12StateObject> gbufferPso;
@@ -385,6 +404,7 @@ struct RendererState
 
     ComPtr<ID3D12PipelineState> postprocessPso;
     ComPtr<ID3D12PipelineState> debugViewPso;
+    ComPtr<ID3D12PipelineState> rtslTileCacheClearPso;
 
     // -- GUI shared state --
     bool needsResize{ false };

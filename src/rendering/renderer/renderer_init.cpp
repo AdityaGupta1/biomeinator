@@ -249,6 +249,11 @@ void initRtTargets()
         renderState.allRtTargets.push_back(rtTarget);
     }
 
+    // linearDepthPrevTarget is resized like the others (allRtTargets) but kept
+    // out of autoTransitionRtTargets: path tracing reads it as
+    // NON_PIXEL_SHADER_RESOURCE, not the autotransition's PIXEL_SHADER_RESOURCE.
+    renderState.allRtTargets.push_back(&renderState.linearDepthPrevTarget);
+
     // nrcDebugTarget is added after the copy so it's in autoTransitionRtTargets but NOT in
     // allRtTargets — it has custom dimensions and is handled separately in resize().
     renderState.autoTransitionRtTargets.push_back(&renderState.nrcDebugTarget);

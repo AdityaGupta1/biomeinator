@@ -43,6 +43,8 @@ namespace Renderer
 
 static constexpr float defaultFovYDegrees = 35;
 
+static void clearRtslTileCacheOneShot();
+
 void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
@@ -79,6 +81,10 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    // First tile-cache clear: the buffers were allocated during initRtTargets()'s
+    // resize() but the clear PSO only exists now (after initPipeline).
+    clearRtslTileCacheOneShot();
 
     renderState.lightTreeManager.init();
     renderState.gpuRadixSort.init();
@@ -129,6 +135,118 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eMaxPerformance,
     sl::DLSSMode::eUltraPerformance,
 };
+
+// Creates a RAW (byte-address) UAV + SRV pair for `buffer` in the shared heap.
+static void createRawUavSrv(ID3D12Resource* buffer, uint32_t numU32Elements, uint32_t& outUavIdx, uint32_t& outSrvIdx)
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+        .Format = DXGI_FORMAT_R32_TYPELESS,
+        .ViewDimension = D3D12_UAV_DIMENSION_BUFFER,
+    };
+    uavDesc.Buffer = {
+        .FirstElement = 0,
+        .NumElements = numU32Elements,
+        .StructureByteStride = 0,
+        .CounterOffsetInBytes = 0,
+        .Flags = D3D12_BUFFER_UAV_FLAG_RAW,
+    };
+    outUavIdx = sharedDescHeapAlloc.alloc(&handle);
+    renderState.device->CreateUnorderedAccessView(buffer, nullptr, &uavDesc, handle);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+        .Format = DXGI_FORMAT_R32_TYPELESS,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+    };
+    srvDesc.Buffer = {
+        .FirstElement = 0,
+        .NumElements = numU32Elements,
+        .StructureByteStride = 0,
+        .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
+    };
+    outSrvIdx = sharedDescHeapAlloc.alloc(&handle);
+    renderState.device->CreateShaderResourceView(buffer, &srvDesc, handle);
+}
+
+// (Re)allocates the double-buffered RTSL tile cache at the current render size
+// and registers fresh RAW UAV+SRV descriptors. Called from resize() after the
+// render dimensions are set; the buffers are cleared to LIGHT_IDX_INVALID by
+// clearRtslTileCacheOneShot() once the clear PSO exists.
+static void allocateRtslTileCacheResources()
+{
+    uint32_t* const descriptorIdxs[] = {
+        &renderState.rtslTileCacheAUavIdx, &renderState.rtslTileCacheASrvIdx,
+        &renderState.rtslTileCacheBUavIdx, &renderState.rtslTileCacheBSrvIdx,
+    };
+    for (uint32_t* idx : descriptorIdxs)
+    {
+        if (*idx != ~0u)
+        {
+            sharedDescHeapAlloc.free(*idx);
+            *idx = ~0u;
+        }
+    }
+    renderState.dev_rtslTileCacheA.Reset();
+    renderState.dev_rtslTileCacheB.Reset();
+
+    const uint32_t tilesX = (renderState.renderWidth + RTSL_TILE_PIXELS - 1u) / RTSL_TILE_PIXELS;
+    const uint32_t tilesY = (renderState.renderHeight + RTSL_TILE_PIXELS - 1u) / RTSL_TILE_PIXELS;
+    renderState.rtslTileCacheNumSlots = tilesX * tilesY * RTSL_TILE_SUB_BUCKETS * RTSL_LIGHT_CACHE_K_MAX;
+
+    const uint64_t byteSize = static_cast<uint64_t>(renderState.rtslTileCacheNumSlots) * RTSL_TILE_CACHE_SLOT_BYTES;
+    static_assert(RTSL_TILE_CACHE_SLOT_BYTES % 4u == 0u, "slot must be a whole number of u32s for a RAW view");
+    const uint32_t numU32 = renderState.rtslTileCacheNumSlots * (RTSL_TILE_CACHE_SLOT_BYTES / 4u);
+
+    renderState.dev_rtslTileCacheA = BufferHelper::createBasicBuffer(
+        byteSize, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_rtslTileCacheA->SetName(L"dev_rtslTileCacheA");
+
+    renderState.dev_rtslTileCacheB = BufferHelper::createBasicBuffer(
+        byteSize, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_rtslTileCacheB->SetName(L"dev_rtslTileCacheB");
+
+    createRawUavSrv(renderState.dev_rtslTileCacheA.Get(), numU32,
+                    renderState.rtslTileCacheAUavIdx, renderState.rtslTileCacheASrvIdx);
+    createRawUavSrv(renderState.dev_rtslTileCacheB.Get(), numU32,
+                    renderState.rtslTileCacheBUavIdx, renderState.rtslTileCacheBSrvIdx);
+}
+
+static void recordRtslTileCacheClear(ID3D12GraphicsCommandList* cmdList, uint32_t uavHeapIdx, uint32_t numSlots)
+{
+    cmdList->SetPipelineState(renderState.rtslTileCacheClearPso.Get());
+    cmdList->SetComputeRootSignature(renderState.rtslTileCacheClearRootSig.Get());
+
+    const uint32_t groups =
+        Util::calculateDispatchSize(numSlots, RTSL_TILE_CACHE_CLEAR_WORKGROUP_SIZE * RTSL_TILE_CACHE_CLEAR_SLOTS_PER_THREAD);
+    const uint32_t strideThreads = groups * RTSL_TILE_CACHE_CLEAR_WORKGROUP_SIZE;
+
+    const uint32_t consts[3] = { numSlots, strideThreads, uavHeapIdx };
+    cmdList->SetComputeRoot32BitConstants(0, 3, consts, 0);
+    cmdList->Dispatch(groups, 1, 1);
+}
+
+// One-shot clear of BOTH tile cache buffers to LIGHT_IDX_INVALID. Self-contained
+// (records, submits, flushes) so it can run at init and after a resize, outside
+// the normal frame loop. The two dispatches target different buffers, so no UAV
+// barrier between them is needed.
+static void clearRtslTileCacheOneShot()
+{
+    ID3D12CommandAllocator* alloc = renderState.frameCtxs[0].cmdAlloc.Get();
+    CHECK_HRESULT(alloc->Reset());
+    CHECK_HRESULT(renderState.cmdList->Reset(alloc, nullptr));
+
+    ID3D12DescriptorHeap* heaps[] = { renderState.sharedDescriptorHeap.Get() };
+    renderState.cmdList->SetDescriptorHeaps(1, heaps);
+
+    recordRtslTileCacheClear(renderState.cmdList.Get(), renderState.rtslTileCacheAUavIdx, renderState.rtslTileCacheNumSlots);
+    recordRtslTileCacheClear(renderState.cmdList.Get(), renderState.rtslTileCacheBUavIdx, renderState.rtslTileCacheNumSlots);
+
+    CHECK_HRESULT(renderState.cmdList->Close());
+    renderState.graphicsCmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(renderState.cmdList.GetAddressOf()));
+    flush();
+}
 
 void resize()
 {
@@ -248,8 +366,12 @@ void resize()
     renderState.nrcDebugTarget.setDimensions(renderState.renderWidth * (doPathSplitting ? 2 : 1), renderState.renderHeight);
     renderState.nrcDebugTarget.init();
 
+    allocateRtslTileCacheResources();
+
     for (auto& frame : renderState.frameCtxs)
     {
+        // Curr/Prev start as A/B; the per-frame ping-pong (plan step 6) swaps
+        // which physical buffer each index points at.
         frame.paramBlockManager.heapIndices->uav = {
             .pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx(),
             .diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx(),
@@ -260,6 +382,9 @@ void resize()
             .motionTargetIdx = renderState.motionTarget.getUavIdx(),
             .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx(),
             .debugTargetIdx = renderState.debugTarget.getUavIdx(),
+
+            .rtslTileCacheCurrIdx = renderState.rtslTileCacheAUavIdx,
+            .linearDepthPrevIdx = renderState.linearDepthPrevTarget.getUavIdx(),
         };
 
         frame.paramBlockManager.heapIndices->srv = {
@@ -274,7 +399,17 @@ void resize()
             .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
 
             .debugTargetIdx = renderState.debugTarget.getSrvIdx(),
+            .rtslTileCachePrevSrvIdx = renderState.rtslTileCacheBSrvIdx,
+            .linearDepthPrevSrvIdx = renderState.linearDepthPrevTarget.getSrvIdx(),
         };
+    }
+
+    // Re-init the tile cache to the empty sentinel after (re)allocation. Guarded
+    // because the very first resize() runs from initRtTargets() before the clear
+    // PSO exists; init() performs that first clear once the PSO is ready.
+    if (renderState.rtslTileCacheClearPso)
+    {
+        clearRtslTileCacheOneShot();
     }
 
     renderState.camera.setAspectRatio(static_cast<float>(renderState.renderWidth) / static_cast<float>(renderState.renderHeight));

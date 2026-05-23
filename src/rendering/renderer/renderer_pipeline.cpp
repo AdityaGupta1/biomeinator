@@ -204,6 +204,28 @@ void initRootSignature()
         serializeAndCreateRootSignature(debugViewParams.data(), static_cast<uint32_t>(debugViewParams.size()),
                                         &postprocessSamplerDesc, 1, renderState.debugViewRootSig);
     }
+
+    // ===================================
+    // RTSL TILE CACHE CLEAR
+    // ===================================
+    // Single root param: three 32-bit constants (numSlots, strideThreads,
+    // targetUavHeapIdx). The target buffer is reached bindless via
+    // ResourceDescriptorHeap, so passing the heap index as a per-dispatch root
+    // constant lets one PSO clear either ping-pong buffer in a single command
+    // list without a shared-cbuffer write race.
+    {
+        const D3D12_ROOT_PARAMETER1 clearParam = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+            .Constants = {
+                .ShaderRegister = RTSL_CACHE_CLEAR_REGISTER_CONSTANTS,
+                .RegisterSpace = RTSL_CACHE_CLEAR_REGISTER_SPACE,
+                .Num32BitValues = 3,
+            },
+        };
+
+        serializeAndCreateRootSignature(&clearParam, 1, nullptr, 0, renderState.rtslTileCacheClearRootSig);
+        renderState.rtslTileCacheClearRootSig->SetName(L"rtslTileCacheClearRootSig");
+    }
 }
 
 void initPipeline()
@@ -382,6 +404,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("nrc_resolve_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.nrcResolvePso)));
         renderState.nrcResolvePso->SetName(L"nrcResolvePso");
+    }
+
+    // ===================================
+    // RTSL TILE CACHE CLEAR
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.rtslTileCacheClearRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("rtsl_tile_cache_clear_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.rtslTileCacheClearPso)));
+        renderState.rtslTileCacheClearPso->SetName(L"rtslTileCacheClearPso");
     }
 
     {

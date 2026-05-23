@@ -80,6 +80,13 @@
 #define LIGHT_TREE_REGISTER_MORTON_VALUES_OUT 5
 
 // =============================================
+#define RTSL_CACHE_CLEAR_REGISTER_SPACE 4
+// =============================================
+
+// b# — root 32-bit constants (numSlots, strideThreads, targetUavHeapIdx)
+#define RTSL_CACHE_CLEAR_REGISTER_CONSTANTS 0
+
+// =============================================
 #define NRC_REGISTER_SPACE 5
 // =============================================
 
