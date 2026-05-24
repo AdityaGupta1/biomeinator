@@ -2,10 +2,10 @@ _Last edited: 2026-05-24_
 
 # Cave Biome System
 
-`src/terrain/cave_biome.h/cpp` — themes underground stone by a 3D
-(temperature, humidity) noise field. Distinct from the surface
-[biome_system.md](biome_system.md): cave biomes vary with **y**, so the same
-column can pass through several of them with depth.
+`src/terrain/cave_biome.h/cpp` — themes underground stone using two 3D noise
+fields (temperature and humidity), classified into a 2D biome space. Distinct
+from the surface [biome_system.md](biome_system.md): the fields are 3D, so cave
+biomes vary with **y** and the same column can pass through several with depth.
 
 ## Why a separate enum from `Biome`
 
@@ -19,11 +19,11 @@ an enum entry + one init block).
 
 ## STONE at the origin
 
-`STONE` sits at noise `(0, 0)`; the special biomes sit at the `±0.5` corners.
-Because selection is nearest-neighbor, `STONE` only wins near the center of
-noise space, so the special biomes naturally appear only where the noise is
-strong — no explicit rarity threshold needed. Adding more special biomes just
-means more corners; STONE keeps the middle.
+`STONE` sits at the origin of noise space; the special biomes sit at the
+corners. Because selection is nearest-neighbor, `STONE` only wins near the
+center, so the special biomes naturally appear only where the noise is strong —
+no explicit rarity threshold needed. Adding more special biomes just means more
+corners; STONE keeps the middle.
 
 ## Surface bias
 
