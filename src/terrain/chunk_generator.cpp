@@ -41,10 +41,10 @@ static FN::SmartNode<FN::Generator> fnCavesSimplex;
 // Cave biome temperature/humidity are sampled on a coarse grid (one sample per
 // caveBiomeNoiseDownsample blocks per axis) and trilinearly interpolated. Biome
 // regions are far larger than a block, so this costs ~1/64 of a full-resolution
-// 3D field with no visible difference. caveBiomeSurfaceBias mixes in the column's
+// 3D field with no visible difference. caveBiomeSurfaceNoiseBias mixes in the column's
 // 2D temperature/humidity so cave biomes loosely track the surface above them.
 inline constexpr int caveBiomeNoiseDownsample = 4;
-inline constexpr float caveBiomeSurfaceBias = 0.3f;
+inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
 static FN::SmartNode<FN::Generator> fnCaveHumidity;
@@ -416,6 +416,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
 
+            const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+            const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+
             uint topBlockY = 0;
             bool wasSolid = true;
             for (uint y = 1; y <= maxFillY; ++y)
@@ -505,8 +508,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             const float caveHumidity =
                                 sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
                             const CaveBiomeNoise caveBiomeNoise = {
-                                .temperature = caveTemperature + temperatureNoise[columnIdx] * caveBiomeSurfaceBias,
-                                .humidity = caveHumidity + humidityNoise[columnIdx] * caveBiomeSurfaceBias,
+                                .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
+                                .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
                             };
                             const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
                             baseBlock = CaveBiomes::getCaveBiomeData(caveBiome).baseBlock;
