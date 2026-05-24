@@ -5,6 +5,7 @@
 
 #include "biome.h"
 #include "block.h"
+#include "cave_biome.h"
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "terrain_materials.h"
@@ -81,6 +82,7 @@ void init(Scene* scene)
 
     Blocks::init();
     Biomes::init();
+    CaveBiomes::init();
     Structures::init();
     ChunkGenerator::init();
 
