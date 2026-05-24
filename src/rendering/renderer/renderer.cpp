@@ -193,7 +193,8 @@ static void allocateRtslTileCacheResources()
 
     const uint32_t tilesX = (renderState.renderWidth + RTSL_TILE_PIXELS - 1u) / RTSL_TILE_PIXELS;
     const uint32_t tilesY = (renderState.renderHeight + RTSL_TILE_PIXELS - 1u) / RTSL_TILE_PIXELS;
-    renderState.rtslTileCacheNumSlots = tilesX * tilesY * RTSL_TILE_SUB_BUCKETS * RTSL_LIGHT_CACHE_K_MAX;
+    renderState.rtslTileCacheNumCells = tilesX * tilesY * RTSL_TILE_SUB_BUCKETS;
+    renderState.rtslTileCacheNumSlots = renderState.rtslTileCacheNumCells * RTSL_LIGHT_CACHE_K_MAX;
 
     const uint64_t byteSize = static_cast<uint64_t>(renderState.rtslTileCacheNumSlots) * RTSL_TILE_CACHE_SLOT_BYTES;
     static_assert(RTSL_TILE_CACHE_SLOT_BYTES % 4u == 0u, "slot must be a whole number of u32s for a RAW view");
@@ -224,6 +225,25 @@ static void recordRtslTileCacheClear(ID3D12GraphicsCommandList* cmdList, uint32_
 
     const uint32_t consts[3] = { numSlots, strideThreads, uavHeapIdx };
     cmdList->SetComputeRoot32BitConstants(0, 3, consts, 0);
+    cmdList->Dispatch(groups, 1, 1);
+}
+
+// Per-frame carry pass (weighted_plan.md step W2): one thread per cell
+// reprojects + decays the Prev cell into Curr, replacing the per-frame clear.
+// Curr/Prev/motion/linear-depth are reached bindless via the ping-ponged
+// heapIndices; rtslLightToLeaf is bound as a root SRV for the dead-light drop.
+static void recordRtslTileCacheCarry(ID3D12GraphicsCommandList* cmdList, ParamBlockManager& paramBlockManager)
+{
+    cmdList->SetPipelineState(renderState.rtslTileCacheCarryPso.Get());
+    cmdList->SetComputeRootSignature(renderState.rtslTileCacheCarryRootSig.Get());
+
+    cmdList->SetComputeRootConstantBufferView(RTSL_TILE_CACHE_CARRY_PARAM_IDX(GLOBAL_PARAMS),
+                                              paramBlockManager.getParamBufferGpuAddress());
+    cmdList->SetComputeRootShaderResourceView(RTSL_TILE_CACHE_CARRY_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
+                                              renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
+
+    const uint32_t groups =
+        Util::calculateDispatchSize(renderState.rtslTileCacheNumCells, RTSL_TILE_CACHE_CARRY_WORKGROUP_SIZE);
     cmdList->Dispatch(groups, 1, 1);
 }
 
@@ -978,28 +998,39 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        // ---- RTSL tile cache: reprojection reads + clear Curr (plan step 6) ----
-        // Path tracing reads prev-frame linear depth and motion as SRVs, so move
-        // them to NON_PIXEL_SHADER_RESOURCE first. (Both tile-cache buffers are
-        // ByteAddressBuffers — D3D12 promotes them from COMMON on first access and
-        // decays them after ExecuteCommandLists — so only the clear→insert UAV
+        // ---- RTSL tile cache: reprojection reads + carry Prev→Curr (step W2) ----
+        // The carry reads prev-frame linear depth, motion, AND this-frame linear
+        // depth (for the center-pixel disocclusion test) as SRVs, so move all
+        // three to NON_PIXEL_SHADER_RESOURCE first. linearDepthCurr is left in
+        // UAV by the gbuffer (PT computes depth via distance(), never reads the
+        // texture), and the carry is its first SRV reader — it is restored to UAV
+        // after PT so the DLSS tag (UAV) still matches. (Both tile-cache buffers
+        // are ByteAddressBuffers — D3D12 promotes them from COMMON on first access
+        // and decays them after ExecuteCommandLists — so only the carry→insert UAV
         // hazard on Curr needs an explicit barrier; Prev is read-only this frame.)
         {
             BufferHelper::TransitionBatch batch;
+            linearDepthCurr->addTransitionTo(batch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             linearDepthPrev->addTransitionTo(batch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             renderState.motionTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             batch.submit(renderState.cmdList.Get());
         }
 
-        recordRtslTileCacheClear(renderState.cmdList.Get(), tileCacheCurrUavIdx, renderState.rtslTileCacheNumSlots);
+        recordRtslTileCacheCarry(renderState.cmdList.Get(), paramBlockManager);
         BufferHelper::uavBarrier(renderState.cmdList.Get(), tileCacheCurrResource);
 
         dispatchPathTracing(paramBlockManager, doPathSplitting);
 
         // Path tracing read motion as an SRV; restore it to UAV so the DLSS tag
         // (UAV) matches the resource state at slEvaluateFeature time, and so the
-        // pre-postprocess autotransition sees the state it expects.
-        renderState.motionTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        // pre-postprocess autotransition sees the state it expects. linearDepthCurr
+        // likewise returns to UAV (its DLSS-tagged / gbuffer-written state).
+        {
+            BufferHelper::TransitionBatch batch;
+            renderState.motionTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            linearDepthCurr->addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            batch.submit(renderState.cmdList.Get());
+        }
 
         // ===================================
         // COLLECT

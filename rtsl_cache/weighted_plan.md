@@ -4,6 +4,28 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **W2 done (2026-05-23):** carry pass replaces the per-frame clear. New
+  `rtsl_tile_cache_carry.cs.hlsl` (one thread per cell) reprojects Prev→Curr by
+  tile-center motion vector, decays both counters (`round(c * statDecay)` via
+  `tcPackCounter`), and drops dead lights; rejects (→ fully empty cell) on
+  `suppressPrev`, `frame 0`, `prevUv` OOB, or center-depth disocclusion.
+  **Carry root sig is GLOBAL_PARAMS CBV + `rtslLightToLeaf` root SRV, not
+  "GLOBAL_PARAMS only"** — lightToLeaf is root-SRV-bound (not in the descriptor
+  heap), so the dead-light check binds it the way PT does; the tile-cache
+  buffers / motion / linear-depth are still reached bindless via the ping-ponged
+  `heapIndices`. Refactor: the light-tree-INDEPENDENT half of `tile_cache.hlsli`
+  (cell addressing, sub-bucket, counter pack/rate, slot load, reprojection,
+  new shared `tcDepthRejects`) was split into `tile_cache_cells.hlsli` so the
+  carry can reuse it without dragging in the `lc*` sampler/pdf (which reference
+  `rtslLightTree` / `evaluateLightSelectPdf` the carry never binds); no `lc*`
+  body changed. `renderer.cpp`: `linearDepthCurr` UAV→NPSR before the carry
+  (audit fix #2 — carry is its first SRV reader) and restored NPSR→UAV after PT
+  so the DLSS-D tag still matches; clear dispatch swapped for the carry; UAV
+  barrier on Curr and the one-shot init clear kept. Build clean; representative
+  goldens within float drift of step 6 (`cornell_box_rtsl` 0.00895,
+  `cave_lights` 0.00531, `two_triangles` pass); `test_cache_mis.py` 11/11 + neg
+  control trips (header split left the estimator math untouched). Three parallel
+  reviews (correctness, GPU/dispatch, edge-cases): no critical findings.
 - **W1 done (2026-05-23):** slot layout + params plumbing. `RTSL_TILE_CACHE_SLOT_BYTES`
   8 → 16; added `RTSL_CACHE_STAT_SCALE` (256), `RTSL_CACHE_COUNTER_MAX` (clamp
   ceiling, exactly float-representable so `tcPackCounter`'s round-trip can't
@@ -429,6 +451,9 @@ accumulation either, since they don't change the converged image — only its no
   Counters written 0, not yet read. No behavior change. Goldens pass.
 
 ### Step W2 — Carry pass (replaces clear)
+**Status: DONE (2026-05-23).** See the "W2 done" changelog entry for deltas
+(carry root sig is GLOBAL_PARAMS + `rtslLightToLeaf` root SRV, not GLOBAL_PARAMS
+only; `tile_cache_cells.hlsli` header split; `linearDepthCurr` UAV→NPSR→restore).
 - New `rtsl_tile_cache_carry.cs.hlsl` + `GLOBAL_PARAMS`-only root sig + PSO
   (hand-register in `shaders.cpp`).
 - `renderer.cpp`: add the `linearDepthCurr` UAV→NPSR transition (restore after);

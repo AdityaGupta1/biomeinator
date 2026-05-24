@@ -226,6 +226,25 @@ void initRootSignature()
         serializeAndCreateRootSignature(&clearParam, 1, nullptr, 0, renderState.rtslTileCacheClearRootSig);
         renderState.rtslTileCacheClearRootSig->SetName(L"rtslTileCacheClearRootSig");
     }
+
+    // ===================================
+    // RTSL TILE CACHE CARRY
+    // ===================================
+    // Runs once per frame on the parity-selected Curr, so unlike the clear it
+    // needs no root-constant trick: it reads the already-ping-ponged heapIndices
+    // / rtslCacheParams from GLOBAL_PARAMS and reaches the tile-cache buffers,
+    // motion, and linear-depth textures bindless. rtslLightToLeaf (dead-light
+    // drop) is the one resource not in the heap, bound as a root SRV like PT.
+    {
+        std::array<D3D12_ROOT_PARAMETER1, RTSL_TILE_CACHE_CARRY_PARAM_IDX(COUNT)> carryParams;
+
+        carryParams[RTSL_TILE_CACHE_CARRY_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        carryParams[RTSL_TILE_CACHE_CARRY_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
+
+        serializeAndCreateRootSignature(carryParams.data(), static_cast<uint32_t>(carryParams.size()),
+                                        nullptr, 0, renderState.rtslTileCacheCarryRootSig);
+        renderState.rtslTileCacheCarryRootSig->SetName(L"rtslTileCacheCarryRootSig");
+    }
 }
 
 void initPipeline()
@@ -415,6 +434,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("rtsl_tile_cache_clear_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.rtslTileCacheClearPso)));
         renderState.rtslTileCacheClearPso->SetName(L"rtslTileCacheClearPso");
+    }
+
+    // ===================================
+    // RTSL TILE CACHE CARRY
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.rtslTileCacheCarryRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("rtsl_tile_cache_carry_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.rtslTileCacheCarryPso)));
+        renderState.rtslTileCacheCarryPso->SetName(L"rtslTileCacheCarryPso");
     }
 
     {

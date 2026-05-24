@@ -27,6 +27,7 @@
 #include "postprocess/debug_view.ps.fxh"
 #include "postprocess/postprocess.ps.fxh"
 #include "postprocess/postprocess.vs.fxh"
+#include "tile_cache/rtsl_tile_cache_carry.cs.fxh"
 #include "tile_cache/rtsl_tile_cache_clear.cs.fxh"
 
 #define REGISTER_SHADER(name) { #name, name##_shaderBytecode }
@@ -52,6 +53,7 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(path_tracing_rgs),
     REGISTER_SHADER(postprocess_ps),
     REGISTER_SHADER(postprocess_vs),
+    REGISTER_SHADER(rtsl_tile_cache_carry_cs),
     REGISTER_SHADER(rtsl_tile_cache_clear_cs),
 };
 

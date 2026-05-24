@@ -164,6 +164,15 @@ enum class PtParam
     COUNT
 };
 
+enum class RtslTileCacheCarryParam
+{
+    GLOBAL_PARAMS,
+
+    RTSL_LIGHT_TO_LEAF,
+
+    COUNT
+};
+
 enum class PostprocessParam
 {
     GLOBAL_PARAMS,
@@ -206,6 +215,7 @@ enum class NrcResolveParam
 #define NRC_RESOLVE_PARAM_IDX(param) static_cast<uint32_t>(NrcResolveParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
+#define RTSL_TILE_CACHE_CARRY_PARAM_IDX(param) static_cast<uint32_t>(RtslTileCacheCarryParam::param)
 
 inline D3D12_ROOT_PARAMETER1 makeParam(const D3D12_ROOT_PARAMETER_TYPE type,
                                        const uint32_t reg,
@@ -362,6 +372,7 @@ struct RendererState
     uint32_t rtslTileCacheBUavIdx{ ~0u };
     uint32_t rtslTileCacheBSrvIdx{ ~0u };
     uint32_t rtslTileCacheNumSlots{ 0 };
+    uint32_t rtslTileCacheNumCells{ 0 }; // tilesX * tilesY * SUB_BUCKETS — one carry thread per cell
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
 
     // -- Viewport and dimensions --
@@ -381,6 +392,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
     ComPtr<ID3D12RootSignature> rtslTileCacheClearRootSig;
+    ComPtr<ID3D12RootSignature> rtslTileCacheCarryRootSig;
 
     // -- Pipeline state objects --
     ComPtr<ID3D12StateObject> gbufferPso;
@@ -405,6 +417,7 @@ struct RendererState
     ComPtr<ID3D12PipelineState> postprocessPso;
     ComPtr<ID3D12PipelineState> debugViewPso;
     ComPtr<ID3D12PipelineState> rtslTileCacheClearPso;
+    ComPtr<ID3D12PipelineState> rtslTileCacheCarryPso;
 
     // -- GUI shared state --
     bool needsResize{ false };
