@@ -4,6 +4,36 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **W4 done (2026-05-23):** weighted eviction. `tcUpsert` Pass 2 (cell full, no
+  dup/empty) replaced the uniform-random victim with the confidence-shrunk
+  `rate_est = (successes + priorSuccesses)/(attempts + priorAttempts)` min-scan:
+  victim = lowest `rate_est`, **ties broken by lower attempts** (evict the
+  less-tested slot). `priorAttempts = RTSL_CACHE_STAT_SCALE *
+  evictPriorStrength`; `priorMean` is the **cell's own mean observed rate** over
+  slots with `attempts > 0` (audit fix #7 — cell-relative, so "fresh" means
+  "typical for this cell"), folding 0-attempt membership-vote slots OUT of the
+  mean so they don't drag the prior to 0; falls back to 0.5 when no slot has
+  evidence. **`evictPriorStrength == 0` guard** (review finding, folded in): with no
+prior `priorAttempts == 0`, so an untested (0-attempt) slot's `rate_est` denom is 0;
+it is defined as 0 (most-evictable) instead of `0/0 = NaN`, which would compare
+false against everything and, in an all-untested full cell, leave the victim INVALID
+and silently drop the insert. The default prior (2.0) keeps the denom > 0, so this
+guard is inert at the default and goldens are unchanged. The victim is
+**CAS-claimed** on its lightIdx word with a bounded
+  (≤K) re-scan retry: a lost CAS (concurrent move) recomputes the prior + victim
+  and retries, and a concurrent same-light insert spotted during the scan
+  accumulates + returns — counters raced in before the claim are discarded by the
+  seed-counter overwrite, like Pass 1b. Selection is now **deterministic**, so
+  `tcUpsert`'s `inout RandomNumberGenerator rng` param was **removed** (the only
+  use was the uniform draw) and the three `path_tracing.rgs.hlsl` call sites
+  dropped the arg; the W3-era single Pass-2 RNG draw is gone, which only reshuffles
+  cache-on noise for full-cell samples (variance-only, no bias). Counters are now
+  **read** by eviction. Build clean; representative goldens within prior drift
+  (`cornell_box_rtsl` 0.00898, `cave_lights` 0.00535, `two_triangles` pass);
+  `test_cache_mis.py` 11/11 + neg control trips (z=544) — sampler/pdf untouched,
+  so the MIS emulator is unaffected by construction. The occlusion-convergence
+  golden (validation item 3) and the dynamic-scene check (item 7) still need the
+  debug-readback tooling deferred to W5; not run here.
 - **W3 done (2026-05-23):** outcome attribution. `tcLookupReprojected` gained an
   `out uint prevSlotBase` (slot-0 index of the reprojected Prev cell) so the
   sampler can read a chosen slot's counters with no second reprojection — two
@@ -410,8 +440,12 @@ priorSuccesses = priorMean * priorAttempts
 resident converges to `rate_est → 1`, so a fresh light at 0.5 is the **worst** and
 gets thrashed out immediately — the exact failure the prior was meant to prevent;
 in a fully-occluded cell a fresh 0.5 light squats. So `priorMean` is the cell's
-**current mean (or max) resident rate**, computed in the same min-scan, so "fresh"
-means "typical for this cell." Falls back to 0.5 for an all-empty cell.
+**current mean resident rate** (W4 chose mean over max), computed in the same
+min-scan over slots with recorded attempts (0-attempt membership-vote slots are
+folded out so they can't drag it to 0), so "fresh" means "typical for this cell."
+Falls back to 0.5 when no slot has evidence. When `evictPriorStrength == 0` (no
+prior) an untested slot's `rate_est` is defined as 0 — most-evictable — rather
+than `0/0`, so the disabled-prior knob stays well-defined.
 
 - A consistently occluded light drives `rate_est → 0` → first evicted.
 - A genuinely fresh light sits at the cell's typical rate → survives long enough
@@ -525,6 +559,11 @@ signal liveness by construction; empirical dump deferred to W5).
   all ≈ 1.0 — i.e. failures are actually being counted.
 
 ### Step W4 — Weighted eviction + confidence prior
+**Status: DONE (2026-05-23).** See the "W4 done" changelog entry for deltas
+(uniform Pass-2 victim → `rate_est` min-scan with cell-relative prior mean over
+evidenced slots + ties by attempts, CAS-claimed with bounded re-scan retry;
+`tcUpsert` lost its now-unused `rng` param). The occlusion-convergence and
+dynamic-scene comparisons need the W5 readback tooling and are deferred there.
 - `tcInsert` / `tcUpsert` Pass 2: replace the uniform random victim with the
   `rate_est` min-scan (cell-relative prior, ties by attempts), CAS-claimed.
 - Now counters affect cell contents. Validate goldens + MIS + an occlusion-heavy

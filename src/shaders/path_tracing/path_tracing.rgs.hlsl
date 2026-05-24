@@ -352,7 +352,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         // from X's carried history, not the neutral prior.
                         tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
                                  cacheSeed.lightIdx, RTSL_CACHE_STAT_SCALE, hitInc,
-                                 cacheSeed.attempts, cacheSeed.successes, payload.rng);
+                                 cacheSeed.attempts, cacheSeed.successes);
                         // Y (membership vote) — keep the sampled light resident at a
                         // neutral prior. Skipped when X == Y so the real outcome above
                         // is not re-seeded with the prior, and skipped on occlusion
@@ -360,7 +360,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         if (cacheUnoccluded && cacheResolvedLightIdx != cacheSeed.lightIdx)
                         {
                             tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
-                                     cacheResolvedLightIdx, 0u, 0u, 0u, 0u, payload.rng);
+                                     cacheResolvedLightIdx, 0u, 0u, 0u, 0u);
                         }
                     }
                     else if (cacheUnoccluded)
@@ -368,7 +368,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         // Uniform branch / cache miss: no seed to credit, but vote the
                         // reached light in so cold cells still accumulate membership.
                         tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
-                                 cacheResolvedLightIdx, 0u, 0u, 0u, 0u, payload.rng);
+                                 cacheResolvedLightIdx, 0u, 0u, 0u, 0u);
                     }
                 }
 #endif

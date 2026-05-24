@@ -85,8 +85,10 @@ bool tcSlotAccepts(uint lightIdxStored, uint normalTagStored, float3 surfNor_WS)
 // guaranteed (0, 0) by the carry pass, so seeding via InterlockedAdd composes
 // correctly with any same-light dup-adds that race in.
 //
-// W3: victim selection in Pass 2 is still uniform-random; W4 swaps it for the
-// weighted rate_est min-scan.
+// W4: Pass 2 (cell full) evicts the slot with the lowest confidence-shrunk
+// success rate (weighted eviction) rather than a uniform-random victim, so a
+// consistently occluded light is dropped before a visible one. Selection is
+// deterministic, so no RNG is drawn here anymore.
 void tcUpsert(RWByteAddressBuffer cacheCurr,
               uint2 currPixel,
               float linearDepth,
@@ -95,8 +97,7 @@ void tcUpsert(RWByteAddressBuffer cacheCurr,
               uint dAttempts,
               uint dSuccesses,
               uint seedAttempts,
-              uint seedSuccesses,
-              inout RandomNumberGenerator rng)
+              uint seedSuccesses)
 {
     // Storing the empty sentinel would permanently block this slot's dup/empty
     // scan; callers pass a resolved light index, but bail defensively.
@@ -181,38 +182,97 @@ void tcUpsert(RWByteAddressBuffer cacheCurr,
         }
     }
 
-    // Pass 2: cell full, no match. Uniform-random victim, drawn ONCE (so the RNG
-    // sequence matches the base plan's single Pass-2 draw), then CAS-claimed on
-    // that slot. A lost CAS means another lane changed the slot; re-load and
-    // retry on the same slot (bounded by K). Counter adds that raced in before
-    // the claim are discarded by the overwrite — bounded and self-healing.
-    const uint subSlot = min(uint(rng.nextFloat() * float(K)), K - 1u);
-    const uint off = (slotBase + subSlot) * RTSL_TILE_CACHE_SLOT_BYTES;
+    // Pass 2: cell full, no match. Weighted eviction (weighted_plan.md W4): the
+    // victim is the slot with the lowest confidence-shrunk success rate
+    //   rate_est = (successes + priorSuccesses) / (attempts + priorAttempts),
+    // so a consistently occluded light (rate_est -> 0) is evicted first. The
+    // prior is RELATIVE TO THE CELL (audit fix #7): priorMean is the cell's own
+    // mean observed rate, so "fresh" means "typical for this cell" rather than an
+    // absolute 0.5 — otherwise a well-lit cell (every resident -> 1) would thrash
+    // each newcomer and a fully-occluded cell would let one squat. Ties break by
+    // the lower attempts, evicting the less-tested slot so an earned mid rate
+    // beats an untested newcomer at the same rate_est.
+    //
+    // The victim is CAS-claimed on its lightIdx word; a lost CAS means another
+    // lane moved the cell under us, so we re-scan (bounded by K retries). Counter
+    // adds that raced in before the claim are discarded by the overwrite —
+    // bounded and self-healing, like Pass 1b.
+    const float priorAttempts = float(RTSL_CACHE_STAT_SCALE) * rtslCacheParams.evictPriorStrength;
     [loop]
     for (uint t = 0u; t < K; ++t)
     {
-        const uint victim = cacheCurr.Load(off);
-        if (victim == lightIdx)
+        // Cell mean observed rate -> the per-slot prior mean. Only slots with
+        // recorded attempts contribute (a 0-attempt membership-vote slot has no
+        // observed rate and would otherwise drag the prior to 0). Falls back to
+        // 0.5 when no slot has evidence yet.
+        float rateSum = 0.0f;
+        uint evidenced = 0u;
+        [loop]
+        for (uint s = 0u; s < K; ++s)
         {
-            // Another lane just inserted our light here — accumulate and stop.
-            cacheCurr.Store(off + 4u, normalTag);
-            if (dAttempts != 0u)
+            const uint off = (slotBase + s) * RTSL_TILE_CACHE_SLOT_BYTES;
+            const uint a = cacheCurr.Load(off + 8u);
+            if (a != 0u)
             {
-                cacheCurr.InterlockedAdd(off + 8u, dAttempts);
+                rateSum += tcCounterRate(a, cacheCurr.Load(off + 12u));
+                ++evidenced;
             }
-            if (dSuccesses != 0u)
-            {
-                cacheCurr.InterlockedAdd(off + 12u, dSuccesses);
-            }
-            return;
         }
-        uint prev;
-        cacheCurr.InterlockedCompareExchange(off, victim, lightIdx, prev);
-        if (prev == victim)
+        const float priorMean = (evidenced != 0u) ? (rateSum / float(evidenced)) : 0.5f;
+        const float priorSuccesses = priorMean * priorAttempts;
+
+        // Pick the victim = min rate_est, ties by lower attempts. A concurrent
+        // insert of our own light is caught here too (accumulate and stop).
+        uint victimSlot = 0u;
+        uint victimLight = LIGHT_IDX_INVALID;
+        float bestRate = 2.0f; // rate_est in [0, 1]; sentinel above the max
+        uint bestAttempts = 0xFFFFFFFFu;
+        [loop]
+        for (uint s = 0u; s < K; ++s)
         {
-            cacheCurr.Store(off + 4u, normalTag);
-            cacheCurr.Store(off + 8u, seedAttempts + dAttempts);
-            cacheCurr.Store(off + 12u, seedSuccesses + dSuccesses);
+            const uint off = (slotBase + s) * RTSL_TILE_CACHE_SLOT_BYTES;
+            const uint light = cacheCurr.Load(off);
+            if (light == lightIdx)
+            {
+                cacheCurr.Store(off + 4u, normalTag);
+                if (dAttempts != 0u)
+                {
+                    cacheCurr.InterlockedAdd(off + 8u, dAttempts);
+                }
+                if (dSuccesses != 0u)
+                {
+                    cacheCurr.InterlockedAdd(off + 12u, dSuccesses);
+                }
+                return;
+            }
+            const uint a = cacheCurr.Load(off + 8u);
+            const uint sc = cacheCurr.Load(off + 12u);
+            // denom is 0 only when evictPriorStrength == 0 (no prior) AND the slot
+            // is untested (a == 0): with no prior an untested slot has no evidence
+            // of visibility, so rank it as the most-evictable (rate 0) rather than
+            // 0/0 = NaN, which would compare false against everything and either
+            // exclude it from eviction or, in an all-untested full cell, leave the
+            // victim INVALID and silently drop the insert. With the default prior
+            // (> 0) denom is always > 0 and this branch never fires.
+            const float denom = float(a) + priorAttempts;
+            const float rateEst = (denom > 0.0f) ? (float(sc) + priorSuccesses) / denom : 0.0f;
+            if (rateEst < bestRate || (rateEst == bestRate && a < bestAttempts))
+            {
+                bestRate = rateEst;
+                bestAttempts = a;
+                victimSlot = s;
+                victimLight = light;
+            }
+        }
+
+        const uint victimOff = (slotBase + victimSlot) * RTSL_TILE_CACHE_SLOT_BYTES;
+        uint prev;
+        cacheCurr.InterlockedCompareExchange(victimOff, victimLight, lightIdx, prev);
+        if (prev == victimLight)
+        {
+            cacheCurr.Store(victimOff + 4u, normalTag);
+            cacheCurr.Store(victimOff + 8u, seedAttempts + dAttempts);
+            cacheCurr.Store(victimOff + 12u, seedSuccesses + dSuccesses);
             return;
         }
     }
