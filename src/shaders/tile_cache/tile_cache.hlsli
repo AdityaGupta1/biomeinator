@@ -69,19 +69,37 @@ bool tcSlotAccepts(uint lightIdxStored, uint normalTagStored, float3 surfNor_WS)
 }
 
 // =============================================
-// Insert path (write to this frame's Curr buffer)
+// Upsert path (write this frame's Curr buffer + accumulate outcome counters)
 // =============================================
 
-void tcInsert(uint2 currPixel,
+// Find-or-insert `lightIdx` in its (tile, sub-bucket) cell, accumulating the
+// outcome (dAttempts, dSuccesses) onto its visibility counters. All counter
+// values are fixed-point (scale RTSL_CACHE_STAT_SCALE). On a fresh insert the
+// slot is seeded from the carried (decayed Prev) counters (seedAttempts,
+// seedSuccesses) so X keeps its history instead of restarting at the prior.
+//
+// Concurrency: empty/full slots are claimed via InterlockedCompareExchange on
+// the lightIdx word, never a plain Store, so persistent counters can't tear
+// against concurrent InterlockedAdds from other lanes crediting the same slot
+// (weighted_plan.md audit fix #4). The freshly-claimed slot's counters are
+// guaranteed (0, 0) by the carry pass, so seeding via InterlockedAdd composes
+// correctly with any same-light dup-adds that race in.
+//
+// W3: victim selection in Pass 2 is still uniform-random; W4 swaps it for the
+// weighted rate_est min-scan.
+void tcUpsert(RWByteAddressBuffer cacheCurr,
+              uint2 currPixel,
               float linearDepth,
               float3 normal_WS,
               uint lightIdx,
-              RWByteAddressBuffer cacheCurr,
+              uint dAttempts,
+              uint dSuccesses,
+              uint seedAttempts,
+              uint seedSuccesses,
               inout RandomNumberGenerator rng)
 {
-    // Storing the empty sentinel would permanently block this slot's
-    // dup/empty scan. Callers gate on lightSample.didHitLight (valid lightIdx),
-    // but bail defensively rather than corrupt the cell.
+    // Storing the empty sentinel would permanently block this slot's dup/empty
+    // scan; callers pass a resolved light index, but bail defensively.
     if (lightIdx == LIGHT_IDX_INVALID)
     {
         return;
@@ -93,26 +111,111 @@ void tcInsert(uint2 currPixel,
     const uint normalTag = octEncode(normal_WS);
     const uint K = rtslCacheParams.lightsPerCell;
 
-    // Pass 1: scan for a duplicate or an empty slot via CAS on the lightIdx word.
-    // Prev is read-only this frame, so reading the tag word never races.
+    // Pass 1a: read-only scan for an existing slot for this light. Finding a
+    // resident copy BEFORE claiming an empty slot is what stops one light's
+    // counters being split across two slots when an empty slot precedes the
+    // resident one (e.g. a low slot freed by the carry's dead-light drop) — the
+    // single-CAS-pass form would claim the empty slot first and duplicate the
+    // light. A plain Load of the lightIdx word is atomic; a concurrent claim only
+    // flips it to its old or new value.
+    for (uint s = 0u; s < K; ++s)
+    {
+        const uint off = (slotBase + s) * RTSL_TILE_CACHE_SLOT_BYTES;
+        if (cacheCurr.Load(off) == lightIdx)
+        {
+            // Already resident — accumulate just this sample's outcome.
+            cacheCurr.Store(off + 4u, normalTag);
+            if (dAttempts != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 8u, dAttempts);
+            }
+            if (dSuccesses != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 12u, dSuccesses);
+            }
+            return;
+        }
+    }
+
+    // Pass 1b: not resident — claim the first empty slot via CAS. A lane that
+    // raced us to insert the same light between the scan above and here is caught
+    // by the existing==lightIdx branch (add the delta, don't duplicate); only the
+    // residual two-first-inserters race can still duplicate, which is bounded and
+    // self-heals at the next carry (matches the plan's find-then-add note).
     for (uint s = 0u; s < K; ++s)
     {
         const uint off = (slotBase + s) * RTSL_TILE_CACHE_SLOT_BYTES;
         uint existing;
         cacheCurr.InterlockedCompareExchange(off, LIGHT_IDX_INVALID, lightIdx, existing);
-        if (existing == lightIdx || existing == LIGHT_IDX_INVALID)
+        if (existing == LIGHT_IDX_INVALID)
         {
+            // Won a fresh slot (carry left its counters at 0) — seed from X's
+            // carried history plus this sample's outcome.
             cacheCurr.Store(off + 4u, normalTag);
+            const uint a0 = seedAttempts + dAttempts;
+            const uint s0 = seedSuccesses + dSuccesses;
+            if (a0 != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 8u, a0);
+            }
+            if (s0 != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 12u, s0);
+            }
+            return;
+        }
+        if (existing == lightIdx)
+        {
+            // Raced — another lane just inserted our light here. Accumulate the
+            // delta only (it already seeded from the carried history).
+            cacheCurr.Store(off + 4u, normalTag);
+            if (dAttempts != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 8u, dAttempts);
+            }
+            if (dSuccesses != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 12u, dSuccesses);
+            }
             return;
         }
     }
 
-    // Pass 2: cell full, no match. Random-replace. RNG consumed ONLY here, so
-    // the disabled/empty/non-full paths stay RNG byte-identical to pre-cache.
+    // Pass 2: cell full, no match. Uniform-random victim, drawn ONCE (so the RNG
+    // sequence matches the base plan's single Pass-2 draw), then CAS-claimed on
+    // that slot. A lost CAS means another lane changed the slot; re-load and
+    // retry on the same slot (bounded by K). Counter adds that raced in before
+    // the claim are discarded by the overwrite — bounded and self-healing.
     const uint subSlot = min(uint(rng.nextFloat() * float(K)), K - 1u);
     const uint off = (slotBase + subSlot) * RTSL_TILE_CACHE_SLOT_BYTES;
-    cacheCurr.Store(off, lightIdx);
-    cacheCurr.Store(off + 4u, normalTag);
+    [loop]
+    for (uint t = 0u; t < K; ++t)
+    {
+        const uint victim = cacheCurr.Load(off);
+        if (victim == lightIdx)
+        {
+            // Another lane just inserted our light here — accumulate and stop.
+            cacheCurr.Store(off + 4u, normalTag);
+            if (dAttempts != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 8u, dAttempts);
+            }
+            if (dSuccesses != 0u)
+            {
+                cacheCurr.InterlockedAdd(off + 12u, dSuccesses);
+            }
+            return;
+        }
+        uint prev;
+        cacheCurr.InterlockedCompareExchange(off, victim, lightIdx, prev);
+        if (prev == victim)
+        {
+            cacheCurr.Store(off + 4u, normalTag);
+            cacheCurr.Store(off + 8u, seedAttempts + dAttempts);
+            cacheCurr.Store(off + 12u, seedSuccesses + dSuccesses);
+            return;
+        }
+    }
 }
 
 // =============================================
@@ -123,16 +226,24 @@ void tcInsert(uint2 currPixel,
 // (tree root) means "no cache contribution this sample". The caller feeds the
 // result straight into selectLightFromSubtree.
 //
+// `seed` reports the cached light X this sample descended from (and its decayed
+// Prev counters) for outcome attribution; seed.valid is false on every path that
+// returns 0u (uniform branch / miss / rejected slot — no cached seed used).
+//
 // Byte-identical-when-disabled: every early-out below precedes any nextFloat()
-// call, so with the cache off the RNG sequence matches the pre-cache path.
+// call, so with the cache off the RNG sequence matches the pre-cache path. The
+// seed thread-through draws no extra random.
 uint lcSelectSubtreeRoot(uint2 currPixel,
                          float3 surfNor_WS,
                          float currLinearDepth,
                          ByteAddressBuffer cachePrev,
                          Texture2D<float> linearDepthPrevTex,
                          Texture2D<float2> motionTex,
+                         out TileCacheSeed seed,
                          inout RandomNumberGenerator rng)
 {
+    seed = tcSeedNull();
+
     if (rtslCacheParams.enabled == 0u || rtslParams.treeLeafCount == 0u)
     {
         return 0u;
@@ -144,8 +255,9 @@ uint lcSelectSubtreeRoot(uint2 currPixel,
         return 0u;
     }
 
+    uint prevSlotBase;
     const TileCacheLookup lk = tcLookupReprojected(
-        currPixel, surfNor_WS, currLinearDepth, cachePrev, linearDepthPrevTex, motionTex);
+        currPixel, surfNor_WS, currLinearDepth, cachePrev, linearDepthPrevTex, motionTex, prevSlotBase);
     if (!lk.valid)
     {
         return 0u;
@@ -157,6 +269,15 @@ uint lcSelectSubtreeRoot(uint2 currPixel,
     {
         return 0u;
     }
+
+    // X = the cached light this descent seeds from. Read its decayed counters
+    // straight from the Prev slot the reprojection already resolved (two loads
+    // on the accept path — no second reprojection).
+    const uint seedOff = (prevSlotBase + subSlot) * RTSL_TILE_CACHE_SLOT_BYTES;
+    seed.valid = true;
+    seed.lightIdx = lk.slots[subSlot];
+    seed.attempts = cachePrev.Load(seedOff + 8u);
+    seed.successes = cachePrev.Load(seedOff + 12u);
 
     const uint leafIdx = rtslLightToLeaf[lk.slots[subSlot]];
     return lcAncestorAt(leafIdx, lcEffectiveLevels());
@@ -248,8 +369,9 @@ float lcEvaluateMixturePdf(uint areaLightIdx,
         return pRoot;
     }
 
+    uint pdfPrevSlotBase; // the pdf has no use for the counters, only the slots
     const TileCacheLookup lk = tcLookupReprojected(
-        currPixel, surfNor_WS, currLinearDepth, cachePrev, linearDepthPrevTex, motionTex);
+        currPixel, surfNor_WS, currLinearDepth, cachePrev, linearDepthPrevTex, motionTex, pdfPrevSlotBase);
     if (!lk.valid)
     {
         return pRoot; // numAccepted == 0 → uniformFrac' == 1 → p_total == pRoot

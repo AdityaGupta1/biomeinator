@@ -404,6 +404,15 @@ float lightPdfRtsl(const HitInfo hitInfo,
 // MIS needs. lcSelectSubtreeRoot also short-circuits before any RNG call when
 // the cache is disabled, so useCache==true with the master toggle off stays
 // byte-identical too.
+//
+// Outcome attribution out-params (weighted_plan.md step W3): the cache write at
+// the call site needs the shadow-ray outcome, which the early-out returns below
+// would otherwise hide (didHitLight is false for both "occluded" and "no light
+// selected"). So the caller learns separately: `seed` (the cached light X this
+// sample descended from), `shadowRayCast` (a light was resolved and a shadow ray
+// traced — the "attempt"), `unoccluded` (that ray reached the light — the
+// "success"), and `resolvedLightIdx` (the sampled leaf Y, valid whenever a ray
+// was cast).
 DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const float3 surfNor_WS,
                                               const RayCone rayCone,
@@ -415,14 +424,22 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               ByteAddressBuffer cachePrev,
                                               Texture2D<float> linearDepthPrev,
                                               Texture2D<float2> motionTex,
+                                              out TileCacheSeed seed,
+                                              out bool shadowRayCast,
+                                              out bool unoccluded,
+                                              out uint resolvedLightIdx,
                                               inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
     result.didHitLight = false;
+    seed = tcSeedNull();
+    shadowRayCast = false;
+    unoccluded = false;
+    resolvedLightIdx = LIGHT_IDX_INVALID;
 
     const uint subtreeRoot = useCache
         ? lcSelectSubtreeRoot(currPixel, surfNor_WS, currLinearDepth,
-                              cachePrev, linearDepthPrev, motionTex, rng)
+                              cachePrev, linearDepthPrev, motionTex, seed, rng)
         : 0u;
 
     uint pickedLightIdx;
@@ -431,8 +448,13 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
         subtreeRoot, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
     if (!gotLight)
     {
-        return result;
+        return result; // no shadow ray cast → no outcome to record
     }
+
+    // A light was resolved and a shadow ray is about to be traced: this is the
+    // attempt, attributed to seed X (resolved leaf Y for the membership vote).
+    shadowRayCast = true;
+    resolvedLightIdx = pickedLightIdx;
 
     const AreaLight light = areaLights[pickedLightIdx];
 
@@ -443,6 +465,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     float3 Le;
     const bool didHit = traceToLight(
         surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+    unoccluded = didHit;
     if (!didHit)
     {
         return result;

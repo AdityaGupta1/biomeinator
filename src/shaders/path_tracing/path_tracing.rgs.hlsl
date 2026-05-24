@@ -295,6 +295,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 const float currLinearDepth = distance(cameraParams.pos_WS, surfPos_WS);
 
                 DirectLightingSample lightSample;
+                // RTSL cache outcome for this NEE sample (set by the RTSL sampler
+                // only; the defaults below mean "no shadow ray, no outcome").
+                TileCacheSeed cacheSeed = tcSeedNull();
+                bool cacheShadowRayCast = false;
+                bool cacheUnoccluded = false;
+                uint cacheResolvedLightIdx = LIGHT_IDX_INVALID;
                 if (useRtsl)
                 {
                     ByteAddressBuffer rtslCachePrev = ResourceDescriptorHeap[heapIndices.srv.rtslTileCachePrevSrvIdx];
@@ -303,7 +309,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     lightSample = sampleDirectLightingRtsl(
                         surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
                         atPrimaryHit, pixelIdx, currLinearDepth,
-                        rtslCachePrev, rtslLinearDepthPrev, rtslMotionTex, payload.rng);
+                        rtslCachePrev, rtslLinearDepthPrev, rtslMotionTex,
+                        cacheSeed, cacheShadowRayCast, cacheUnoccluded, cacheResolvedLightIdx, payload.rng);
                 }
                 else if (useRis)
                 {
@@ -326,18 +333,48 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
                 }
 
+#if !NRC_UPDATE
+                // Record the NEE shadow-ray outcome into this frame's tile cache
+                // (weighted_plan.md step W3). Outside the didHitLight guard so
+                // occluded attempts are counted too (audit fix #1): the seed X is
+                // credited an attempt (success only when unoccluded), while the
+                // resolved leaf Y gets a neutral membership vote to stay resident.
+                // Gated to QUERY/normal dispatches — the sparse NRC_UPDATE pixels
+                // would contaminate the additive rate (audit fix #3). The pdf still
+                // reads Prev identically in both builds, so NRC stays consistent.
+                if (useRtsl && atPrimaryHit && rtslCacheParams.enabled && cacheShadowRayCast)
+                {
+                    RWByteAddressBuffer rtslTileCacheCurr = ResourceDescriptorHeap[heapIndices.uav.rtslTileCacheCurrIdx];
+                    const uint hitInc = cacheUnoccluded ? RTSL_CACHE_STAT_SCALE : 0u;
+                    if (cacheSeed.valid)
+                    {
+                        // X (seed) — a real observed outcome; a fresh insert seeds
+                        // from X's carried history, not the neutral prior.
+                        tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
+                                 cacheSeed.lightIdx, RTSL_CACHE_STAT_SCALE, hitInc,
+                                 cacheSeed.attempts, cacheSeed.successes, payload.rng);
+                        // Y (membership vote) — keep the sampled light resident at a
+                        // neutral prior. Skipped when X == Y so the real outcome above
+                        // is not re-seeded with the prior, and skipped on occlusion
+                        // since the attempt already landed on X.
+                        if (cacheUnoccluded && cacheResolvedLightIdx != cacheSeed.lightIdx)
+                        {
+                            tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
+                                     cacheResolvedLightIdx, 0u, 0u, 0u, 0u, payload.rng);
+                        }
+                    }
+                    else if (cacheUnoccluded)
+                    {
+                        // Uniform branch / cache miss: no seed to credit, but vote the
+                        // reached light in so cold cells still accumulate membership.
+                        tcUpsert(rtslTileCacheCurr, pixelIdx, currLinearDepth, surfNor_WS,
+                                 cacheResolvedLightIdx, 0u, 0u, 0u, 0u, payload.rng);
+                    }
+                }
+#endif
+
                 if (lightSample.didHitLight)
                 {
-                    // Vote the hit light into this frame's tile cache. Same gate as the
-                    // cache read above so the sampler/MIS pair stays unbiased; tcInsert
-                    // only consumes RNG on the full-cell random-replace path, so the
-                    // disabled case remains byte-identical to the pre-cache code.
-                    if (useRtsl && atPrimaryHit && rtslCacheParams.enabled)
-                    {
-                        RWByteAddressBuffer rtslTileCacheCurr = ResourceDescriptorHeap[heapIndices.uav.rtslTileCacheCurrIdx];
-                        tcInsert(pixelIdx, currLinearDepth, surfNor_WS, lightSample.lightIdx, rtslTileCacheCurr, payload.rng);
-                    }
-
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
                     const float3 bsdfVal = evaluateBsdf(

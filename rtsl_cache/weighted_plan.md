@@ -4,6 +4,46 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **W3 done (2026-05-23):** outcome attribution. `tcLookupReprojected` gained an
+  `out uint prevSlotBase` (slot-0 index of the reprojected Prev cell) so the
+  sampler can read a chosen slot's counters with no second reprojection — two
+  extra `Load`s on the accept path only; the pdf passes a throwaway. New
+  `TileCacheSeed` (valid / lightIdx / decayed attempts+successes) + `tcSeedNull`
+  in `tile_cache_cells.hlsli`. `lcSelectSubtreeRoot` gained an `out TileCacheSeed
+  seed` (valid only on the accept path — false on uniform branch / miss / rejected
+  slot); the seed thread-through draws no extra RNG, so the disabled path stays
+  byte-identical. `tcInsert` **replaced by `tcUpsert`** (find-or-add + atomic
+  counter accumulate): Pass 1 does a read-only find scan for the light FIRST, then
+  CAS-claims the first empty slot only on a miss — finding a resident copy before
+  claiming an empty slot stops one light's counters being split across two slots
+  when an empty slot precedes the resident one (a low slot freed by the carry's
+  dead-light drop); the single-CAS-pass form duplicated the light there (review
+  finding M1, folded in — variance-only today but corrupts the rate W4 reads). A
+  freshly claimed slot is seeded from X's carried counters via `InterlockedAdd`
+  (carry guarantees a claimed slot starts (0,0), so seed+delta composes with
+  racing dup-adds); only the residual two-first-inserters race can still
+  duplicate, bounded + self-heals next carry. Pass 2 (cell full) still
+  picks a **uniform** victim — one RNG draw, matching the base plan — but
+  CAS-claims it on a bounded same-slot retry instead of a tearing `Store` (audit
+  fix #4 brought forward because counters are now persistent). `sampleDirect-
+  LightingRtsl` now also outs `shadowRayCast` / `unoccluded` / `resolvedLightIdx`
+  so the occlusion result is visible to the caller (the early-out returns hid it).
+  `path_tracing.rgs.hlsl`: the cache write moved **out** of the `didHitLight`
+  guard (audit fix #1 — attempts must count occluded samples or the rate is dead
+  at ≡1); X is upserted (+1 attempt, +hit success, seeded from carried counters),
+  Y gets a neutral (0,0) membership vote (skipped when X==Y or occluded), and a
+  bare uniform/miss hit still votes Y in to bootstrap cold cells. The whole write
+  block is gated `#if !NRC_UPDATE` (audit fix #3 — sparse UPDATE pixels would
+  contaminate the additive rate; the pdf still reads Prev in both builds). Counters
+  are **populated but not yet read** by eviction (Pass 2 stays uniform; W4 swaps in
+  the weighted min-scan). Build clean; representative goldens within float drift of
+  W2 (`cornell_box_rtsl` 0.00896, `cave_lights` 0.00537, `two_triangles` pass);
+  `test_cache_mis.py` 11/11 + neg control trips (sampling law untouched — the seed
+  out-param is pure observability). **Signal liveness (validation item 6) holds by
+  construction** — `attempts` increments unconditionally outside the `didHitLight`
+  guard, `successes` only when unoccluded — but the empirical per-slot dump it asks
+  for needs debug-readback tooling that does not exist yet (base-plan step 8.3's
+  `dev_dbgRtslSamples` / `analyze_cache_hist.py` were never built); deferred to W5.
 - **W2 done (2026-05-23):** carry pass replaces the per-frame clear. New
   `rtsl_tile_cache_carry.cs.hlsl` (one thread per cell) reprojects Prev→Curr by
   tile-center motion vector, decays both counters (`round(c * statDecay)` via
@@ -467,6 +507,11 @@ only; `tile_cache_cells.hlsli` header split; `linearDepthCurr` UAV→NPSR→rest
   `test_cache_mis.py`.
 
 ### Step W3 — Outcome attribution
+**Status: DONE (2026-05-23).** See the "W3 done" changelog entry for deltas
+(`prevSlotBase` out-param + `TileCacheSeed`, `tcInsert`→`tcUpsert` with
+CAS-claimed Pass 2, occlusion result threaded out of `sampleDirectLightingRtsl`,
+write block moved outside the `didHitLight` guard and gated `#if !NRC_UPDATE`,
+signal liveness by construction; empirical dump deferred to W5).
 - `lcSelectSubtreeRoot`: add the `out` seed descriptor (X lightIdx + X's decayed
   Prev counters, or sentinel).
 - `path_tracing.rgs.hlsl`: **restructure the NEE branch so the occlusion result is

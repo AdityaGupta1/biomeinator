@@ -98,6 +98,29 @@ struct TileCacheLookup
     uint normalTags[RTSL_LIGHT_CACHE_K_MAX];
 };
 
+// Seed descriptor for outcome attribution (weighted_plan.md step W3): the cached
+// light X whose subtree the mixture descent started from, plus X's decayed Prev
+// counters (used to seed a fresh insert when the outcome upsert finds X absent
+// from this frame's cell). valid == false means the sample took the uniform
+// branch or missed the cache, so there is no seed and no outcome to attribute.
+struct TileCacheSeed
+{
+    bool valid;
+    uint lightIdx;
+    uint attempts;   // fixed-point (scale RTSL_CACHE_STAT_SCALE), decayed Prev value
+    uint successes;
+};
+
+TileCacheSeed tcSeedNull()
+{
+    TileCacheSeed seed;
+    seed.valid = false;
+    seed.lightIdx = LIGHT_IDX_INVALID;
+    seed.attempts = 0u;
+    seed.successes = 0u;
+    return seed;
+}
+
 TileCacheLookup tcLookupNull()
 {
     TileCacheLookup lk;
@@ -142,13 +165,20 @@ bool tcDepthRejects(float currLinearDepth, float prevLinearDepth)
     return depthRel > rtslCacheParams.rejectDepthRel;
 }
 
+// `prevSlotBase` returns the slot-0 index of the reprojected Prev cell so the
+// caller can read a chosen slot's visibility counters without re-running the
+// reprojection (the sampler uses this to grab the seed's decayed counters). It
+// is 0 and meaningless on any null (valid == false) result.
 TileCacheLookup tcLookupReprojected(uint2 currPixel,
                                     float3 surfNor_WS,
                                     float currLinearDepth,
                                     ByteAddressBuffer cachePrev,
                                     Texture2D<float> linearDepthPrevTex,
-                                    Texture2D<float2> motionTex)
+                                    Texture2D<float2> motionTex,
+                                    out uint prevSlotBase)
 {
+    prevSlotBase = 0u;
+
     // First-frame / scene-cut / settings-change guard (see "Scene-cut handling").
     if (renderParams.frameNumber == 0u || rtslCacheParams.suppressPrev != 0u)
     {
@@ -183,5 +213,6 @@ TileCacheLookup tcLookupReprojected(uint2 currPixel,
     // Adjacent-frame drift across a band boundary only costs hit rate, never
     // bias (numAccepted == 0 → pure root on both sampler and pdf).
     const uint subBucket = tcSubBucket(currLinearDepth, surfNor_WS);
+    prevSlotBase = tcSlotBase(prevTile, subBucket);
     return tcLoadSlot(cachePrev, prevTile, subBucket);
 }
