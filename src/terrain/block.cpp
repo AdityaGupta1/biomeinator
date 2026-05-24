@@ -65,6 +65,10 @@ void init()
     BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = { uvec2(28, 0) }, .type = BlockType::TRANSPARENT_CUTOUT };
     BLOCK_DATA_BY_NAME(ACACIA_LOG) = { .uvs = { uvec2(30, 0), uvec2(29, 0), uvec2(30, 0) } };
     BLOCK_DATA_BY_NAME(ACACIA_LEAVES) = { .uvs = { uvec2(31, 0) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(MARBLE) = { .uvs = { uvec2(4, 1) } };
+    BLOCK_DATA_BY_NAME(SCALESTONE) = { .uvs = { uvec2(1, 1) } };
+    BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
+    BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
 }
 
 const BlockData& getBlockData(Block block)

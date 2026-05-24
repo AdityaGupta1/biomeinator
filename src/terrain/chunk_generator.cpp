@@ -4,6 +4,7 @@
 #include "chunk_generator.h"
 
 #include "biome.h"
+#include "cave_biome.h"
 #include "chunk.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -36,6 +37,17 @@ inline constexpr int caveAbsoluteMaxY = 320;
 
 static FN::SmartNode<FN::Generator> fnCavesWorley;
 static FN::SmartNode<FN::Generator> fnCavesSimplex;
+
+// Cave biome temperature/humidity are sampled on a coarse grid (one sample per
+// caveBiomeNoiseDownsample blocks per axis) and trilinearly interpolated. Biome
+// regions are far larger than a block, so this costs ~1/64 of a full-resolution
+// 3D field with no visible difference. caveBiomeSurfaceNoiseBias mixes in the column's
+// 2D temperature/humidity so cave biomes loosely track the surface above them.
+inline constexpr int caveBiomeNoiseDownsample = 4;
+inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
+
+static FN::SmartNode<FN::Generator> fnCaveTemperature;
+static FN::SmartNode<FN::Generator> fnCaveHumidity;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -163,6 +175,26 @@ void init()
 
         fnCavesSimplex = fnDomainWarp;
     }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(418203741);
+        fnSimplex->SetScale(800.f);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnCaveTemperature = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(992013047);
+        fnSimplex->SetScale(800.f);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnCaveHumidity = fnSimplex;
+    }
 }
 
 static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
@@ -190,6 +222,56 @@ static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generat
                          1.f,
                          1.f,
                          worldSeed ^ hash(391023545));
+}
+
+// Fills a coarse grid stepping caveBiomeNoiseDownsample blocks per axis, starting at world y=0.
+// The coarse origin is the chunk origin (a multiple of chunkSizeXZ, hence of the downsample), so
+// adjacent chunks sample identical world positions on their shared border and biomes stay seamless.
+static inline void fillCaveBiomeNoiseArray(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint coarseSizeXZ, uint coarseHeight)
+{
+    fn->GenUniformGrid3D(data,
+                         0.f /*y*/,
+                         posXZ.x + noiseOffsetXZ.x /*x*/,
+                         posXZ.y + noiseOffsetXZ.y /*z*/,
+                         coarseHeight,
+                         coarseSizeXZ,
+                         coarseSizeXZ,
+                         caveBiomeNoiseDownsample,
+                         caveBiomeNoiseDownsample,
+                         caveBiomeNoiseDownsample,
+                         worldSeed ^ hash(391023545));
+}
+
+// Trilinearly samples a coarse cave biome field at a chunk-local block position. The coarse layout
+// mirrors fillNoiseArray3D: world y is contiguous (grid x-axis), then world x, then world z.
+static inline float sampleCaveBiomeNoise(const float* coarseNoise, uint coarseSizeXZ, uint coarseHeight, uint blockX, uint y, uint blockZ)
+{
+    constexpr float invDownsample = 1.f / caveBiomeNoiseDownsample;
+    const float gridX = blockX * invDownsample;
+    const float gridY = y * invDownsample;
+    const float gridZ = blockZ * invDownsample;
+
+    const uint x0 = static_cast<uint>(gridX);
+    const uint y0 = static_cast<uint>(gridY);
+    const uint z0 = static_cast<uint>(gridZ);
+    const float tx = gridX - x0;
+    const float ty = gridY - y0;
+    const float tz = gridZ - z0;
+
+    const auto sample = [&](uint cellX, uint cellY, uint cellZ) -> float {
+        const uint idx = (cellZ * coarseSizeXZ + cellX) * coarseHeight + cellY;
+        return coarseNoise[idx];
+    };
+
+    const float c00 = glm::mix(sample(x0, y0, z0), sample(x0 + 1, y0, z0), tx);
+    const float c10 = glm::mix(sample(x0, y0 + 1, z0), sample(x0 + 1, y0 + 1, z0), tx);
+    const float c01 = glm::mix(sample(x0, y0, z0 + 1), sample(x0 + 1, y0, z0 + 1), tx);
+    const float c11 = glm::mix(sample(x0, y0 + 1, z0 + 1), sample(x0 + 1, y0 + 1, z0 + 1), tx);
+
+    const float c0 = glm::mix(c00, c10, ty);
+    const float c1 = glm::mix(c01, c11, ty);
+
+    return glm::mix(c0, c1, tz);
 }
 
 }; // namespace ChunkGenerator
@@ -293,6 +375,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, chunkPosBlocksXZ_WS, caveWorleyNoiseHeight);
     fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, chunkPosBlocksXZ_WS, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
 
+    // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
+    // top of the band to interpolate against the next coarse cell.
+    const uint caveBiomeNoiseSizeXZ = chunkSizeXZ / caveBiomeNoiseDownsample + 1;
+    const uint caveBiomeNoiseHeight = caveNoiseMaxY / caveBiomeNoiseDownsample + 2;
+    const uint caveBiomeNoiseSize = caveBiomeNoiseSizeXZ * caveBiomeNoiseSizeXZ * caveBiomeNoiseHeight;
+    float* caveTemperatureNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+    float* caveHumidityNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
@@ -323,6 +415,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
+
+            const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+            const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
 
             uint topBlockY = 0;
             bool wasSolid = true;
@@ -405,10 +500,25 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                     if (!isCave)
                     {
+                        Block baseBlock = Block::STONE;
+                        if (y < static_cast<uint>(caveNoiseMaxY))
+                        {
+                            const float caveTemperature =
+                                sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                            const float caveHumidity =
+                                sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                            const CaveBiomeNoise caveBiomeNoise = {
+                                .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
+                                .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
+                            };
+                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                            baseBlock = CaveBiomes::getCaveBiomeData(caveBiome).baseBlock;
+                        }
+
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = rng.nextFloat() < 0.04f ? Block::LAMP : Block::STONE;
+                        block = rng.nextFloat() < 0.04f ? Block::LAMP : baseBlock;
                     }
                 }
                 else if (y <= seaLevel)

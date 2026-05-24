@@ -44,6 +44,10 @@ enum class Block : BlockId
     ACACIA_LEAVES,
     LAVA,
     LAVA_TOP,
+    MARBLE,
+    SCALESTONE,
+    HELLSTONE,
+    MOSS,
 
     COUNT
 };

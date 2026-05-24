@@ -1,4 +1,4 @@
-_Last edited: 2026-04-27_
+_Last edited: 2026-05-24_
 
 # Chunk Generator
 
@@ -17,6 +17,15 @@ Each noise source is only generated for its relevant y-range across the chunk (w
 Two mechanisms suppress caves near the surface:
 - **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
 - **Altitude squash**: above y=240 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
+
+## Cave Biome Noise
+
+Two additional 3D fields (temperature, humidity) drive cave biome theming — see
+[cave_biome_system.md](cave_biome_system.md). They are generated coarsely
+(downsampled) over `[0, caveNoiseMaxY]` and trilinearly interpolated, then
+biased by the column's 2D surface noise. Classification picks the block that
+replaces `STONE` in the `STONE`/`LAMP` choice, for every solid voxel in the cave
+band.
 
 ## Heightfield Design
 
