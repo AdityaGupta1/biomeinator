@@ -915,6 +915,8 @@ void render()
         rtslCacheParams->rejectDepthRel = SettingsManager::getAsFloat("rtslCacheRejectDepthRel");
         rtslCacheParams->rejectNormalCos = SettingsManager::getAsFloat("rtslCacheRejectNormalCos");
         rtslCacheParams->depthBucketScale = SettingsManager::getAsFloat("rtslCacheDepthBucketScale");
+        rtslCacheParams->statDecay = SettingsManager::getAsFloat("rtslCacheStatDecay");
+        rtslCacheParams->evictPriorStrength = SettingsManager::getAsFloat("rtslCacheEvictPriorStrength");
 
         // Scene-cut detection: only events that truly invalidate Prev force a
         // one-frame suppress. Deliberately excluded:

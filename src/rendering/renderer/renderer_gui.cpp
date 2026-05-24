@@ -127,6 +127,13 @@ void imguiEndFrame(double deltaTime)
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Reject depth (rel)", "rtslCacheRejectDepthRel", 0.f, 1.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Reject normal (cos)", "rtslCacheRejectNormalCos", 0.f, 1.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Depth bucket scale", "rtslCacheDepthBucketScale", 0.01f, 4.f);
+            // Stat decay and eviction prior change only the counter arithmetic, not
+            // cell addressing/acceptance, so they deliberately do NOT wire
+            // didPathTracingSettingsChange: a suppressPrev reset would empty every
+            // cell and force a ~20-frame re-warm on each slider nudge, making the
+            // steady-state behaviour these knobs tune impossible to observe.
+            SettingsGuiHelpers::SliderFloat("Stat decay", "rtslCacheStatDecay", 0.5f, 0.99f);
+            SettingsGuiHelpers::SliderFloat("Evict prior strength", "rtslCacheEvictPriorStrength", 0.f, 16.f);
         }
 
         SettingsGuiHelpers::VerticalSpacing();

@@ -60,6 +60,8 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("rtslCacheRejectDepthRel", "RTSL cache relative-depth disocclusion tolerance", float, "0.05");
     ADD_OPTION("rtslCacheRejectNormalCos", "RTSL cache min cosine for normal-tag acceptance", float, "0.7");
     ADD_OPTION("rtslCacheDepthBucketScale", "RTSL cache log2-depth to sub-bucket scaling", float, "0.3333");
+    ADD_OPTION("rtslCacheStatDecay", "RTSL cache visibility-counter EWMA decay per carry", float, "0.95");
+    ADD_OPTION("rtslCacheEvictPriorStrength", "RTSL cache weighted-eviction confidence prior strength", float, "2.0");
 
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
     ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
@@ -138,6 +140,8 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("rtslCacheRejectDepthRel", float);
     COPY_SETTING("rtslCacheRejectNormalCos", float);
     COPY_SETTING("rtslCacheDepthBucketScale", float);
+    COPY_SETTING("rtslCacheStatDecay", float);
+    COPY_SETTING("rtslCacheEvictPriorStrength", float);
 
     COPY_SETTING("nrcEnabled", bool);
     COPY_SETTING("nrcResolveMode", uint32_t);

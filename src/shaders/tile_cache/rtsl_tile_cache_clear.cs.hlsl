@@ -31,8 +31,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         if (slot < numSlots)
         {
             const uint byteOffset = slot * RTSL_TILE_CACHE_SLOT_BYTES;
-            cache.Store(byteOffset, LIGHT_IDX_INVALID);
-            cache.Store(byteOffset + 4u, 0u);
+            cache.Store(byteOffset, LIGHT_IDX_INVALID);  // lightIdx
+            cache.Store(byteOffset + 4u, 0u);            // normalTag
+            cache.Store(byteOffset + 8u, 0u);            // attempts
+            cache.Store(byteOffset + 12u, 0u);           // successes
         }
     }
 }

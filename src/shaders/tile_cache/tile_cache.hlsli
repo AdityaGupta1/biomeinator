@@ -125,6 +125,26 @@ uint tcSlotBase(uint2 tile, uint subBucket)
     return (tileLinear * RTSL_TILE_SUB_BUCKETS + subBucket) * RTSL_LIGHT_CACHE_K_MAX;
 }
 
+// Per-light visibility counters. A 16-byte slot is four u32 words:
+//   +0 lightIdx   +4 normalTag   +8 attempts   +12 successes
+// attempts/successes are fixed-point (scale RTSL_CACHE_STAT_SCALE). They are
+// written 0 by the clear/carry and not yet read until weighted eviction (W4).
+
+// Round (not floor) and clamp a fractional count back to a stored counter word.
+// Rounding keeps the carry-pass decay matching the nominal rate instead of
+// biasing steeper at low counts; the clamp keeps the EWMA fixed point in range.
+uint tcPackCounter(float value)
+{
+    return (uint)clamp(value + 0.5f, 0.0f, (float)RTSL_CACHE_COUNTER_MAX);
+}
+
+// Success rate from fixed-point counters; the scale cancels, and max() guards a
+// fresh (0, 0) slot against divide-by-zero.
+float tcCounterRate(uint attempts, uint successes)
+{
+    return (float)successes / (float)max(attempts, 1u);
+}
+
 // Loads the active slots of one (tile, sub-bucket) cell from a read-only Prev
 // buffer. Reads K_MAX entries (compile-time loop bound); slots beyond
 // lightsPerCell stay INVALID from the frame's clear and are never accepted.

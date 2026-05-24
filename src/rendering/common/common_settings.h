@@ -46,12 +46,27 @@
 // Buffer-sizing slot count per sub-bucket. The runtime active count
 // (rtslCacheLightsPerCell) is clamped to this; K_MAX only sizes the allocation.
 #define RTSL_LIGHT_CACHE_K_MAX 32
-// Bytes per slot: lightIdx u32 + normalTag u32 (full 32-bit octEncode normal).
-#define RTSL_TILE_CACHE_SLOT_BYTES 8
+// Bytes per slot: lightIdx u32 + normalTag u32 (full 32-bit octEncode normal)
+// + attempts u32 + successes u32 (per-light visibility counters, see
+// weighted_plan.md). 16 B keeps the slot 4-aligned for the RAW UAV/SRV view.
+#define RTSL_TILE_CACHE_SLOT_BYTES 16
+
+// Fixed-point scale for the attempts/successes counters. Counts are stored
+// scaled by this so the carry-pass decay multiply keeps fractional precision at
+// low traffic; rate = successes / attempts cancels the scale.
+#define RTSL_CACHE_STAT_SCALE 256u
+// Clamp ceiling for a stored counter word, keeping the EWMA fixed point well
+// inside u32 range and exactly representable as float (so the round-trip in
+// tcPackCounter never overflows). Far above the steady-state attempts*.
+#define RTSL_CACHE_COUNTER_MAX 0x10000000u
 
 // Tile-cache clear compute. Each thread clears RTSL_TILE_CACHE_CLEAR_SLOTS_PER_THREAD
 // slots spaced one full grid-stride apart, so consecutive lanes always touch
 // consecutive slots and every store is coalesced (see plan "clear shader").
 #define RTSL_TILE_CACHE_CLEAR_WORKGROUP_SIZE 256
 #define RTSL_TILE_CACHE_CLEAR_SLOTS_PER_THREAD 16
+
+// Tile-cache carry compute (step W2, replaces the per-frame clear). One thread
+// per cell (tile x sub-bucket); mirrors the clear's workgroup sizing.
+#define RTSL_TILE_CACHE_CARRY_WORKGROUP_SIZE 256
 

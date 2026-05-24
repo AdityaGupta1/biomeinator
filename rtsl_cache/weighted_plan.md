@@ -4,6 +4,18 @@ _Last edited: 2026-05-23_
 
 ## Changelog
 
+- **W1 done (2026-05-23):** slot layout + params plumbing. `RTSL_TILE_CACHE_SLOT_BYTES`
+  8 → 16; added `RTSL_CACHE_STAT_SCALE` (256), `RTSL_CACHE_COUNTER_MAX` (clamp
+  ceiling, exactly float-representable so `tcPackCounter`'s round-trip can't
+  overflow), and `RTSL_TILE_CACHE_CARRY_WORKGROUP_SIZE`. Buffer alloc + slot stride
+  both derive from `SLOT_BYTES`, so they doubled with no extra edits. Clear shader
+  zeros the two new words. `RtslCacheParams` gained `statDecay`/`evictPriorStrength`
+  (+ 2 pads, struct now 48 B); uploaded in `renderer.cpp`. Two settings registered;
+  GUI sliders deliberately omit `didPathTracingSettingsChange` (arithmetic-only —
+  see Settings). `tile_cache.hlsli` gained `tcPackCounter` (round + clamp) and
+  `tcCounterRate`; counters written 0, not yet read. Build clean; representative
+  goldens pass within float drift of step 6 (`two_triangles` 0.00080,
+  `cornell_box_rtsl` 0.00896, `cave_lights` 0.00532).
 - **v2 (2026-05-23):** audit-driven revision (three parallel reviews: correctness,
   GPU/dispatch, edge-cases). Critical fixes folded inline:
   1. **Outcome must be recorded OUTSIDE the `didHitLight` guard.** The existing
@@ -406,6 +418,7 @@ accumulation either, since they don't change the converged image — only its no
 ## Implementation steps
 
 ### Step W1 — Slot layout + params plumbing
+**Status: DONE (2026-05-23).** See the "W1 done" changelog entry for deltas.
 - `RTSL_TILE_CACHE_SLOT_BYTES` 8 → 16; add `RTSL_CACHE_STAT_SCALE` and carry
   workgroup constants.
 - Double the RAW UAV/SRV element counts; bump the one-shot init clear to zero the

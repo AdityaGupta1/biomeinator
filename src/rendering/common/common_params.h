@@ -155,6 +155,11 @@ struct RtslCacheParams
     float rejectNormalCos;    // min cosine for per-slot normal-tag acceptance
     float depthBucketScale;   // log2(depth + 1) -> sub-bucket index scaling
     uint suppressPrev;        // per-frame: 1 => ignore Prev (frame 0 / teleport / topology / settings change)
+
+    float statDecay;          // EWMA decay per carry on the visibility counters
+    float evictPriorStrength; // weighted-eviction confidence prior strength (effective attempts)
+    float pad0;               // pad RtslCacheParams to a 16-byte multiple
+    float pad1;
 };
 
 struct DebugParams
