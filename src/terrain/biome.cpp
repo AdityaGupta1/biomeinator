@@ -82,7 +82,7 @@ void init()
             .mid = Block::SAND,
         };
         data.structureGens = {
-            { StructureType::PALM_TREE, 32, 12.0f },
+            { StructureType::PALM_TREE, 32, 8 },
         };
     }
 
@@ -150,7 +150,7 @@ void init()
             .mid = Block::SANDSTONE,
         };
         data.structureGens = {
-            { StructureType::SAGUARO_CACTUS, 20, 4.0f },
+            { StructureType::SAGUARO_CACTUS, 20, 4 },
         };
         data.decorator.addEntry(Block::DEAD_BUSH, 1.f, { Block::SAND });
         data.decorator.addEntry(Block::TINY_CACTUS, 2.f, { Block::SAND });
@@ -169,7 +169,7 @@ void init()
             .peak = -0.4f,
         };
         data.structureGens = {
-            { StructureType::OAK_TREE, 7, 1.5f },
+            { StructureType::OAK_TREE, 6, 1 },
         };
         data.decorator.addEntry(Block::GRASS, 4.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
@@ -207,7 +207,7 @@ void init()
             .peak = -0.2f,
         };
         data.structureGens = {
-            { StructureType::ACACIA_TREE, 48, 20.f },
+            { StructureType::ACACIA_TREE, 48, 16 },
         };
         data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });

@@ -42,7 +42,9 @@ struct StructureGen
 {
     StructureType type;
     uint32_t gridCellSideLength;
-    float minRadius{ 0.f };
+    // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
+    // between candidates in adjacent cells.
+    uint32_t gridCellPadding{ 0 };
     uint32_t flags{ 0 };
 };
 
