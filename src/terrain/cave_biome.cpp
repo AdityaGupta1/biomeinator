@@ -35,6 +35,9 @@ void init()
             .humidity = 0.0f,
         };
         data.baseBlock = Block::STONE;
+        data.caveStructureGens = {
+            { .type = CaveStructureType::STONE_COLUMN, .minLayerHeight = 10, .gridCellSideLength = 56, .gridCellPadding = 12 },
+        };
     }
 
     // LUSH
@@ -55,6 +58,9 @@ void init()
             .humidity = -0.7f,
         };
         data.baseBlock = Block::HELLSTONE;
+        data.caveStructureGens = {
+            { .type = CaveStructureType::HANGING_LAMP, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 12, .gridCellPadding = 4 },
+        };
     }
 
     // MARBLE_CRYSTALS
@@ -65,6 +71,9 @@ void init()
             .humidity = -0.7f,
         };
         data.baseBlock = Block::MARBLE;
+        data.caveStructureGens = {
+            { .type = CaveStructureType::CRYSTAL, .minLayerHeight = 12, .gridCellSideLength = 12, .gridCellPadding = 4 },
+        };
     }
 
     // SUBMARINE

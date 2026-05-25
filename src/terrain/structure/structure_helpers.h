@@ -21,7 +21,7 @@ inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx
     }
 }
 
-void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 endPos_CS, Block block)
+inline void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 endPos_CS, Block block)
 {
     const glm::ivec3 minPt = glm::min(startPos_CS, endPos_CS);
     const glm::ivec3 maxPt = glm::max(startPos_CS, endPos_CS);
@@ -70,7 +70,7 @@ void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 end
     }
 }
 
-std::vector<glm::vec3> buildSpline(const std::vector<glm::vec3>& ctrlPts, uint32_t numSplinePts)
+inline std::vector<glm::vec3> buildSpline(const std::vector<glm::vec3>& ctrlPts, uint32_t numSplinePts)
 {
     std::vector<glm::vec3> result;
     result.reserve(numSplinePts);
@@ -108,7 +108,7 @@ std::vector<glm::vec3> buildSpline(const std::vector<glm::vec3>& ctrlPts, uint32
     return result;
 }
 
-void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline, Block block)
+inline void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline, Block block)
 {
     for (int i = 0; i < spline.size() - 1; ++i)
     {
@@ -116,7 +116,7 @@ void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>& spline
     }
 }
 
-void placeLeafCap(std::vector<Block>& blocks,
+inline void placeLeafCap(std::vector<Block>& blocks,
                   glm::ivec3 centerPos_CS,
                   float minRadius,
                   float maxRadius,

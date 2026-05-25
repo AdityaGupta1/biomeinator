@@ -162,6 +162,9 @@ void Chunk::runStructuresAndDecoratorPass()
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+
+        const std::vector<CaveStructure>& neighborCaveStructures = structureNeighbor->caveStructures;
+        this->fillCaveStructureBlocks(neighborCaveStructures.data(), neighborCaveStructures.size());
     }
 
     const uint worldSeed = SettingsManager::getWorldSeed();

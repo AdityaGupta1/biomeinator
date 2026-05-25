@@ -274,6 +274,26 @@ static inline float sampleCaveBiomeNoise(const float* coarseNoise, uint coarseSi
     return glm::mix(c0, c1, tz);
 }
 
+// Finds the grid cell containing posXZ_WS (accounting for the staggered odd-row x shift) and
+// returns its corner. Shared by surface and cave placement so both lay grids over the same cells.
+static inline ivec2 gridCellCornerForPosXZ_WS(ivec2 posXZ_WS, int gridCellSideLength)
+{
+    const int halfCell = gridCellSideLength / 2;
+    const int gridZ = MathUtil::floorDiv(posXZ_WS.y /*z*/, gridCellSideLength);
+    const int rowShiftX = (gridZ & 1) ? halfCell : 0; // odd rows shift half a cell in x (staggered/brick layout)
+    const int gridX = MathUtil::floorDiv(posXZ_WS.x - rowShiftX, gridCellSideLength);
+    return ivec2(gridX * gridCellSideLength + rowShiftX, gridZ * gridCellSideLength);
+}
+
+// Maps a grid cell corner to its single deterministic candidate XZ, jittered within an inner
+// region inset by padding on the cell's high edge (innerSide = gridCellSideLength - padding).
+// rngSeed/rngArg4 let surface and cave seed independent grids over the same cells.
+static inline ivec2 gridCellCandidateXZ_WS(ivec2 cellCornerXZ_WS, int innerSide, uint rngSeed, uint rngArg4)
+{
+    RandomNumberGenerator rng = initRng(rngSeed, cellCornerXZ_WS.x, cellCornerXZ_WS.y /*z*/, rngArg4);
+    return cellCornerXZ_WS + ivec2(rng.nextInt(innerSide), rng.nextInt(innerSide));
+}
+
 }; // namespace ChunkGenerator
 
 using namespace ChunkGenerator;
@@ -282,6 +302,10 @@ inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
 inline constexpr int seaLevel = 125;
+
+// y of the lava surface (the low-y lava fill writes LAVA_TOP at y == 4); cave structures
+// whose anchor sits at or below this are rejected unless flagged to allow lava.
+inline constexpr int lavaSurfaceY = 4;
 
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -392,6 +416,63 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     const uint caveSimplexNoiseSize = chunkSizeXZSquare * caveSimplexNoiseHeight;
     const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, seaLevel));
 
+    // Reused scratch: holds one column's air pockets at a time, cleared and refilled per column.
+    std::vector<CaveLayer> columnLayers;
+
+    // Decides cave structures for a single column the instant its y-scan finishes. Column-centric
+    // (unlike the cell-centric surface pass) because layer data is per-column and ready immediately.
+    const auto placeCaveStructuresForColumn = [&](ivec2 columnPosXZ_WS)
+    {
+        for (uint layerIdx = 0; layerIdx < columnLayers.size(); ++layerIdx)
+        {
+            const CaveLayer& layer = columnLayers[layerIdx];
+            const int layerHeight = layer.end - layer.start;
+
+            const auto tryPlaceSide = [&](CaveBiome biome, bool ceiling, int anchorY)
+            {
+                const std::vector<CaveStructureGen>& gens = CaveBiomes::getCaveBiomeData(biome).caveStructureGens;
+                for (const CaveStructureGen& gen : gens)
+                {
+                    if (gen.generatesFromCeiling != ceiling)
+                    {
+                        continue;
+                    }
+                    if (layerHeight < static_cast<int>(gen.minLayerHeight))
+                    {
+                        continue;
+                    }
+                    if (anchorY <= lavaSurfaceY && !bool(gen.flags & CAVE_STRUCTURE_GEN_FLAG_ALLOW_LAVA))
+                    {
+                        continue;
+                    }
+
+                    const int gridCellSideLength = static_cast<int>(gen.gridCellSideLength);
+                    const int innerSide = gridCellSideLength - static_cast<int>(gen.gridCellPadding);
+                    const ivec2 cellCornerXZ_WS = gridCellCornerForPosXZ_WS(columnPosXZ_WS, gridCellSideLength);
+                    // fold layerIdx into the seed so a feature-pos column doesn't stamp every one of its stacked layers
+                    const uint rngSeed = worldSeed ^ hash(53198477u) ^ hash(static_cast<uint>(gen.type)) ^
+                                         hash(static_cast<uint>(layerIdx) * 0x9e3779b9u);
+                    const ivec2 candidateXZ_WS =
+                        gridCellCandidateXZ_WS(cellCornerXZ_WS, innerSide, rngSeed, static_cast<uint>(gen.type));
+                    if (candidateXZ_WS != columnPosXZ_WS)
+                    {
+                        continue;
+                    }
+
+                    this->caveStructures.emplace_back(
+                        gen.type, ivec3(columnPosXZ_WS.x, anchorY, columnPosXZ_WS.y /*z*/), layerHeight);
+                    return; // first passing gen wins for this side (gen-list order = priority)
+                }
+            };
+
+            tryPlaceSide(layer.bottomBiome, false /*ceiling*/, layer.start + 1);
+            if (layer.closed)
+            {
+                tryPlaceSide(layer.topBiome, true /*ceiling*/, layer.end);
+            }
+        }
+    };
+
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -419,11 +500,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
 
+            columnLayers.clear();
+            bool layerOpen = false;
+            int layerStart = 0;
+            CaveBiome layerBottomBiome = CaveBiome::STONE;
+            CaveBiome lastSolidCaveBiome = CaveBiome::STONE;
+
             uint topBlockY = 0;
             bool wasSolid = true;
             for (uint y = 1; y <= maxFillY; ++y)
             {
                 Block block = Block::AIR;
+                CaveBiome voxelCaveBiome = CaveBiome::STONE;
                 const uint blockIdx = baseBlockIdx + y;
                 ASSERT(blockIdx < numChunkBlocks, "block index out of bounds");
 
@@ -512,6 +600,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
                             };
                             const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                            voxelCaveBiome = caveBiome;
                             baseBlock = CaveBiomes::getCaveBiomeData(caveBiome).baseBlock;
                         }
 
@@ -529,6 +618,34 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 this->blocks[blockIdx] = block;
 
                 const bool isSolid = (Blocks::getBlockData(block).type == BlockType::SOLID);
+
+                // Capture cave air pockets (layers) bottom-up as the scan crosses floor/ceiling boundaries.
+                // No new noise samples: isCave and the per-voxel cave biome are already computed above.
+                if (wasSolid && isCave)
+                {
+                    // floor event: solid -> cave air opens a layer; start is the floor solid just below
+                    layerOpen = true;
+                    layerStart = static_cast<int>(y) - 1;
+                    layerBottomBiome = lastSolidCaveBiome;
+                }
+                else if (layerOpen && !isCave)
+                {
+                    // pocket ends: a solid voxel caps it (ceiling, closed); anything else opens to non-cave air
+                    columnLayers.push_back(CaveLayer{
+                        .start = layerStart,
+                        .end = static_cast<int>(y) - 1,
+                        .bottomBiome = layerBottomBiome,
+                        .topBiome = isSolid ? voxelCaveBiome : CaveBiome::STONE,
+                        .closed = isSolid,
+                    });
+                    layerOpen = false;
+                }
+
+                if (isSolid)
+                {
+                    lastSolidCaveBiome = voxelCaveBiome;
+                }
+
                 if (wasSolid && !isSolid && !isCave)
                 {
                     topBlockY = y - 1;
@@ -562,6 +679,21 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
 
             heightfield[columnIdx] = topBlockY;
+
+            // A pocket still open at the top of the scan opened upward into non-cave air (sky); close
+            // it unceilinged. In practice the scan always reaches non-cave air first, so this is a guard.
+            if (layerOpen)
+            {
+                columnLayers.push_back(CaveLayer{
+                    .start = layerStart,
+                    .end = static_cast<int>(maxFillY),
+                    .bottomBiome = layerBottomBiome,
+                    .topBiome = CaveBiome::STONE,
+                    .closed = false,
+                });
+            }
+
+            placeCaveStructuresForColumn(blockPosXZ_WS);
         }
     }
 
@@ -595,12 +727,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     const ivec2 cellCornerXZ_WS(gridX * gridCellSideLength + rowShiftX, gridZ * gridCellSideLength);
 
-                    RandomNumberGenerator rng = initRng(worldSeed ^ hash(87152059),
-                                                        cellCornerXZ_WS.x,
-                                                        cellCornerXZ_WS.y /*z*/,
-                                                        static_cast<uint>(structureGen.type));
-                    const ivec2 candidatePosXZ_WS =
-                        cellCornerXZ_WS + ivec2(rng.nextInt(innerSide), rng.nextInt(innerSide));
+                    const ivec2 candidatePosXZ_WS = gridCellCandidateXZ_WS(
+                        cellCornerXZ_WS, innerSide, worldSeed ^ hash(87152059), static_cast<uint>(structureGen.type));
 
                     const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
                     if (!Chunk::isInChunkXZ(candidatePosXZ_CS))
