@@ -32,10 +32,10 @@ void configureNrc()
         // The actual render-space AABB is camera-centric and bounded by ±(renderDistance+1)*chunkSizeXZ
         // in XZ; pad to absorb the sub-chunk remainder and any glTF/area-light geometry just outside.
         const int renderDistance = SettingsManager::getAsInt("renderDistance");
-        const int padding = 32;
-        const int halfExtentXZ = (renderDistance + 1) * static_cast<int>(chunkSizeXZ) + padding;
-        cs.sceneBoundsMin = { static_cast<float>(-halfExtentXZ), static_cast<float>(-padding), static_cast<float>(-halfExtentXZ) };
-        cs.sceneBoundsMax = { static_cast<float>( halfExtentXZ), static_cast<float>(static_cast<int>(chunkSizeY) + padding), static_cast<float>( halfExtentXZ) };
+        const int paddingXZ = 32;
+        const int halfExtentXZ = (renderDistance + 1) * static_cast<int>(chunkSizeXZ) + paddingXZ;
+        cs.sceneBoundsMin = { static_cast<float>(-halfExtentXZ), 0.f, static_cast<float>(-halfExtentXZ) };
+        cs.sceneBoundsMax = { static_cast<float>( halfExtentXZ), static_cast<float>(chunkSizeY), static_cast<float>( halfExtentXZ) };
     }
     else
     {
