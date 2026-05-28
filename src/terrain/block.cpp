@@ -70,6 +70,9 @@ void init()
     BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
     BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
     BLOCK_DATA_BY_NAME(RAINBOW_CRYSTAL) = { .uvs = { uvec2(26, 1) } };
+    BLOCK_DATA_BY_NAME(DARKSHROOM) = { .uvs = { uvec2(1, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DARKSHROOM_STEM) = { .uvs = { uvec2(29, 1) } };
+    BLOCK_DATA_BY_NAME(DARKSHROOM_CAP) = { .uvs = { uvec2(31, 1) } };
 }
 
 const BlockData& getBlockData(Block block)

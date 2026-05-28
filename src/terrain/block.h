@@ -49,6 +49,9 @@ enum class Block : BlockId
     HELLSTONE,
     MOSS,
     RAINBOW_CRYSTAL,
+    DARKSHROOM,
+    DARKSHROOM_STEM,
+    DARKSHROOM_CAP,
 
     COUNT
 };
