@@ -272,8 +272,7 @@ void Chunk::fillStructureBlocks(const Structure* structures, uint32_t numStructu
         const ivec2 structureMinXZ_CS = structurePosXZ_CS + bounds.minDiffXZ;
         const ivec2 structureMaxXZ_CS = structurePosXZ_CS + bounds.maxDiffXZ;
 
-        if (structureMinXZ_CS.x >= static_cast<int>(chunkSizeXZ) || structureMinXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||
-            structureMaxXZ_CS.x < 0 || structureMaxXZ_CS.y /*z*/ < 0)
+        if (structureAabbRejectsChunk(structureMinXZ_CS, structureMaxXZ_CS))
         {
             continue;
         }

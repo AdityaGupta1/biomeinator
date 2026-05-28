@@ -59,14 +59,6 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
     fill3x3VerticalRun(blocks, structurePos_CS, structure.availableHeight, 1, Block::SCALESTONE);
 }
 
-CaveStructureBounds::CaveStructureBounds(int diff)
-    : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
-{}
-
-CaveStructureBounds::CaveStructureBounds(glm::ivec2 minDiffXZ, glm::ivec2 maxDiffXZ)
-    : minDiffXZ(minDiffXZ), maxDiffXZ(maxDiffXZ)
-{}
-
 namespace CaveStructures
 {
 
@@ -76,7 +68,7 @@ static std::array<FillCaveStructureFunc, static_cast<size_t>(CaveStructureType::
 #define FILL_CAVE_STRUCTURE_FUNC_BY_NAME(structureName) fillCaveStructureFuncs[static_cast<size_t>(CaveStructureType::structureName)]
 #define SET_FILL_CAVE_STRUCTURE_FUNC(structureName) FILL_CAVE_STRUCTURE_FUNC_BY_NAME(structureName) = fillCaveStructureBlocks_##structureName;
 
-static std::array<CaveStructureBounds, static_cast<size_t>(CaveStructureType::COUNT)> caveStructureBounds{};
+static std::array<StructureBounds, static_cast<size_t>(CaveStructureType::COUNT)> caveStructureBounds{};
 
 #define CAVE_STRUCTURE_BOUNDS_BY_NAME(structureName) caveStructureBounds[static_cast<size_t>(CaveStructureType::structureName)]
 
@@ -97,7 +89,7 @@ void init()
     }
 }
 
-const CaveStructureBounds& getCaveStructureBounds(CaveStructureType type)
+const StructureBounds& getCaveStructureBounds(CaveStructureType type)
 {
     return caveStructureBounds[static_cast<size_t>(type)];
 }
@@ -115,12 +107,11 @@ void Chunk::fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_
         const CaveStructure& caveStructure = caveStructures[i];
 
         const ivec2 structurePosXZ_CS = ivec2(caveStructure.pos_WS.x, caveStructure.pos_WS.z) - chunkPosBlocksXZ_WS;
-        const CaveStructureBounds& bounds = CaveStructures::getCaveStructureBounds(caveStructure.type);
+        const StructureBounds& bounds = CaveStructures::getCaveStructureBounds(caveStructure.type);
         const ivec2 structureMinXZ_CS = structurePosXZ_CS + bounds.minDiffXZ;
         const ivec2 structureMaxXZ_CS = structurePosXZ_CS + bounds.maxDiffXZ;
 
-        if (structureMinXZ_CS.x >= static_cast<int>(chunkSizeXZ) || structureMinXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||
-            structureMaxXZ_CS.x < 0 || structureMaxXZ_CS.y /*z*/ < 0)
+        if (structureAabbRejectsChunk(structureMinXZ_CS, structureMaxXZ_CS))
         {
             continue;
         }

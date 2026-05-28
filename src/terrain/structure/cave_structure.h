@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../block.h"
+#include "structure.h"
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -26,16 +27,6 @@ struct CaveStructure
     int availableHeight;
 };
 
-struct CaveStructureBounds
-{
-    glm::ivec2 minDiffXZ;
-    glm::ivec2 maxDiffXZ;
-
-    CaveStructureBounds() = default;
-    CaveStructureBounds(int diff);
-    CaveStructureBounds(glm::ivec2 minDiffXZ, glm::ivec2 maxDiffXZ);
-};
-
 #define CAVE_STRUCTURE_GEN_FLAG_ALLOW_LAVA (1 << 0)
 
 struct CaveStructureGen
@@ -45,7 +36,7 @@ struct CaveStructureGen
     // ceiling and are only tried on closed pockets.
     bool generatesFromCeiling{ false };
     uint32_t minLayerHeight{ 0 };
-    uint32_t gridCellSideLength;
+    uint32_t gridCellSideLength{ 16 };
     // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
     // between candidates in adjacent cells. Mirrors StructureGen.
     uint32_t gridCellPadding{ 0 };
@@ -57,6 +48,6 @@ namespace CaveStructures
 
 void init();
 
-const CaveStructureBounds& getCaveStructureBounds(CaveStructureType type);
+const StructureBounds& getCaveStructureBounds(CaveStructureType type);
 
 } // namespace CaveStructures

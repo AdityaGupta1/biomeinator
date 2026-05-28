@@ -21,6 +21,14 @@ inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx
     }
 }
 
+// True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
+// blocks land here. Lets the per-chunk fill passes skip structures that only overhang neighbors.
+inline bool structureAabbRejectsChunk(glm::ivec2 minXZ_CS, glm::ivec2 maxXZ_CS)
+{
+    return minXZ_CS.x >= static_cast<int>(chunkSizeXZ) || minXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||
+           maxXZ_CS.x < 0 || maxXZ_CS.y /*z*/ < 0;
+}
+
 inline void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::ivec3 endPos_CS, Block block)
 {
     const glm::ivec3 minPt = glm::min(startPos_CS, endPos_CS);
