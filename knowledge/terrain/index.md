@@ -15,6 +15,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [cave_biome_system.md](cave_biome_system.md) | 3D cave biome noise, downsampled classification, surface bias, stone theming |
 | [block_system.md](block_system.md) | Block enum, BlockData (textures, type, shape), emissive blocks |
 | [structure_system.md](structure_system.md) | StructureGen grid placement, structure types, StructureBounds |
+| [cave_structure_system.md](cave_structure_system.md) | Underground floor/ceiling structures, column-centric placement, CaveLayer capture, layer-index seed |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement |
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |
 | [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |

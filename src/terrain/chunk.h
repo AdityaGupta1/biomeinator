@@ -6,6 +6,7 @@
 #include "biome.h"
 #include "block.h"
 #include "scene/scene.h"
+#include "structure/cave_structure.h"
 #include "structure/structure.h"
 #include "util/math.h"
 
@@ -99,6 +100,7 @@ private:
     std::vector<Biome> biomes{};
 
     std::vector<Structure> structures{};
+    std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
 
@@ -117,6 +119,7 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
+    void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures);
     void runStructuresAndDecoratorPass();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);

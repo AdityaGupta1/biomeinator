@@ -48,6 +48,7 @@ enum class Block : BlockId
     SCALESTONE,
     HELLSTONE,
     MOSS,
+    RAINBOW_CRYSTAL,
 
     COUNT
 };

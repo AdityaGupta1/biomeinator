@@ -69,6 +69,7 @@ void init()
     BLOCK_DATA_BY_NAME(SCALESTONE) = { .uvs = { uvec2(1, 1) } };
     BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
     BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
+    BLOCK_DATA_BY_NAME(RAINBOW_CRYSTAL) = { .uvs = { uvec2(26, 1) } };
 }
 
 const BlockData& getBlockData(Block block)
