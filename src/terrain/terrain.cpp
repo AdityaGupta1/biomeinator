@@ -16,6 +16,7 @@
 #include "rendering/renderer.h"
 #include "settings_manager.h"
 #include "logger.h"
+#include "structure/cave_structure.h"
 #include "structure/structure.h"
 #include "util/file_util.h"
 #include "util/glm_util.h"
@@ -84,6 +85,7 @@ void init(Scene* scene)
     Biomes::init();
     CaveBiomes::init();
     Structures::init();
+    CaveStructures::init();
     ChunkGenerator::init();
 
     threadPool.init();

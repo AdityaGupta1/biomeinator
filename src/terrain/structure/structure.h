@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-enum StructureType
+enum class StructureType : uint8_t
 {
     OAK_TREE,
     SAGUARO_CACTUS,
@@ -41,7 +41,7 @@ struct StructureBounds
 struct StructureGen
 {
     StructureType type;
-    uint32_t gridCellSideLength;
+    uint32_t gridCellSideLength{ 16 };
     // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
     // between candidates in adjacent cells.
     uint32_t gridCellPadding{ 0 };
