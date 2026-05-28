@@ -525,7 +525,7 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
             {
                 return neighborShort;
             }
-            return neighborBlockData.shape == BlockShape::LIQUID_TOP; // +/- x/z
+            return neighborBlockData.shape == BlockShape::LIQUID_TOP && !thisShort; // +/- x/z
         }
         case BlockType::TRANSPARENT_CUTOUT:
         {
