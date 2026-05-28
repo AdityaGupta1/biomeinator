@@ -8,7 +8,7 @@
 #undef max
 
 #include "scene/scene.h"
-#include "terrain/terrain.h"
+#include "terrain/chunk.h"
 #include "settings_manager.h"
 #include "logger.h"
 
@@ -27,17 +27,24 @@ void configureNrc()
     cs.learnIrradiance = false;
     if (renderState.voxelMode)
     {
-        const glm::ivec3 boundsMin = Terrain::getVoxelRenderBoundsMin_WS();
-        const glm::ivec3 boundsMax = Terrain::getVoxelRenderBoundsMax_WS();
-        cs.sceneBoundsMin = { static_cast<float>(boundsMin.x), static_cast<float>(boundsMin.y), static_cast<float>(boundsMin.z) };
-        cs.sceneBoundsMax = { static_cast<float>(boundsMax.x), static_cast<float>(boundsMax.y), static_cast<float>(boundsMax.z) };
+        // Hit positions reach NRC in render space (globalInstanceOffset already subtracted by the
+        // TLAS), so derive a static camera-centric AABB rather than re-Configure on every chunk move.
+        // The actual render-space AABB is camera-centric and bounded by ±(renderDistance+1)*chunkSizeXZ
+        // in XZ; pad to absorb the sub-chunk remainder and any glTF/area-light geometry just outside.
+        const int renderDistance = SettingsManager::getAsInt("renderDistance");
+        const int padding = 32;
+        const int halfExtentXZ = (renderDistance + 1) * static_cast<int>(chunkSizeXZ) + padding;
+        cs.sceneBoundsMin = { static_cast<float>(-halfExtentXZ), static_cast<float>(-padding), static_cast<float>(-halfExtentXZ) };
+        cs.sceneBoundsMax = { static_cast<float>( halfExtentXZ), static_cast<float>(static_cast<int>(chunkSizeY) + padding), static_cast<float>( halfExtentXZ) };
     }
     else
     {
         if (renderState.scene.hasBounds())
         {
-            const glm::vec3& boundsMin = renderState.scene.getBoundsMin_WS();
-            const glm::vec3& boundsMax = renderState.scene.getBoundsMax_WS();
+            const glm::ivec3& offset = renderState.scene.getGlobalInstanceOffset();
+            const glm::vec3 offsetF = { static_cast<float>(offset.x), static_cast<float>(offset.y), static_cast<float>(offset.z) };
+            const glm::vec3 boundsMin = renderState.scene.getBoundsMin_WS() - offsetF;
+            const glm::vec3 boundsMax = renderState.scene.getBoundsMax_WS() - offsetF;
             cs.sceneBoundsMin = { boundsMin.x, boundsMin.y, boundsMin.z };
             cs.sceneBoundsMax = { boundsMax.x, boundsMax.y, boundsMax.z };
         }
