@@ -38,7 +38,7 @@ static void createMaterials(Scene* scene)
 
     {
         Material defaultMaterial{};
-        defaultMaterial.emissiveStrength = 3.0f;
+        defaultMaterial.emissiveStrength = 5.0f;
         defaultMaterial.baseColorTextureId = diffuseTextureId;
         defaultMaterial.emissiveColorTextureId = emissionTextureId;
         defaultMaterial.setHasDiffuse(true);

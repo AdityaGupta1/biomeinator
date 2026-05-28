@@ -52,6 +52,8 @@ enum class Block : BlockId
     DARKSHROOM,
     DARKSHROOM_STEM,
     DARKSHROOM_CAP,
+    OBSIDIAN,
+    BLUE_SPARKLES,
 
     COUNT
 };
