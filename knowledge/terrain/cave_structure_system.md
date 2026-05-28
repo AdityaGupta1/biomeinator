@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-05-27_
 
 # Cave Structure System
 
@@ -82,7 +82,8 @@ bottom layer index in gives each pocket an independent grid.
   is intended one-per-cell behavior.
 - **Ceiling gens only run on `closed` layers** (a pocket open to the sky has no
   ceiling solid to hang from). Currently only BRIMSTONE has a ceiling gen
-  (`HANGING_LAMP`); it is naturally absent wherever hot-dry caves don't generate.
+  (`OBSIDIAN_STALACTITE`); it is naturally absent wherever hot-dry caves don't
+  generate.
 - **`STONE_COLUMN` is the only gen using `availableHeight`** (fills floor→ceiling
   for `end - start` blocks). The fixed-height gens ignore it; their high
   `minLayerHeight` guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so

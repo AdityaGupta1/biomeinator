@@ -604,10 +604,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             baseBlock = CaveBiomes::getCaveBiomeData(caveBiome).baseBlock;
                         }
 
-                        const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                        RandomNumberGenerator rng =
-                            initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = rng.nextFloat() < 0.04f ? Block::LAMP : baseBlock;
+                        block = baseBlock;
                     }
                 }
                 else if (y <= seaLevel)

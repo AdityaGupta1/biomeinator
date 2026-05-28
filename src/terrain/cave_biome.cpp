@@ -59,7 +59,7 @@ void init()
         };
         data.baseBlock = Block::HELLSTONE;
         data.caveStructureGens = {
-            { .type = CaveStructureType::HANGING_LAMP, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 12, .gridCellPadding = 4 },
+            { .type = CaveStructureType::OBSIDIAN_STALACTITE, .generatesFromCeiling = true, .minLayerHeight = 15, .gridCellSideLength = 8, .gridCellPadding = 2 },
         };
     }
 

@@ -12,7 +12,7 @@
 enum class CaveStructureType : uint8_t
 {
     CRYSTAL,
-    HANGING_LAMP,
+    OBSIDIAN_STALACTITE,
     STONE_COLUMN,
 
     COUNT
