@@ -70,6 +70,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     const bool useRtsl = (samplingMode == SamplingMode::RTSL);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl);
 
+    // Debug: show only primary-bounce NEE direct lighting (no MIS, no emission, no indirect).
+    // Reuses existing NEE sampling code below; skips MIS weighting and breaks after.
+    const bool debugPrimaryNeeOnly = (debugParams.debugBool0 == 1);
+    if (debugPrimaryNeeOnly && pathSplitIdx == 1)
+    {
+        return;
+    }
+
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
@@ -126,7 +134,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         float3 emissiveContrib = 0.f;
-        if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
+        if (!debugPrimaryNeeOnly && (pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             emissiveContrib = payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfTexCtx);
         }
@@ -316,25 +324,35 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     if (useRis)
                     {
                         const float W = lightSample.pdfOrW_Y;
+                        contribution *= W;
 
-                        const AreaLight light = areaLights[lightSample.lightIdx];
+                        if (!debugPrimaryNeeOnly)
+                        {
+                            const AreaLight light = areaLights[lightSample.lightIdx];
 
-                        float3 lightNor_WS;
-                        float lightArea;
-                        getLightNormalAndArea(light, lightNor_WS, lightArea);
+                            float3 lightNor_WS;
+                            float lightArea;
+                            getLightNormalAndArea(light, lightNor_WS, lightArea);
 
-                        // TODO: use lightPdfUniform function?
-                        const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                        const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
+                            // TODO: use lightPdfUniform function?
+                            const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
+                            const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
 
-                        contribution *= W * balanceHeuristic(lightPdf, lightSampleBsdfPdf);
+                            contribution *= balanceHeuristic(lightPdf, lightSampleBsdfPdf);
+                        }
                     }
                     else
                     {
                         const float lightPdf = lightSample.pdfOrW_Y;
-                        const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
-
-                        contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
+                        if (debugPrimaryNeeOnly)
+                        {
+                            contribution /= lightPdf;
+                        }
+                        else
+                        {
+                            const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
+                            contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
+                        }
                     }
 
                     pathColor += contribution;
@@ -358,10 +376,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                                               absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
 
                         const float domeLightPdf = domeLightSample.pdf;
-                        const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
-                        const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
+                        if (debugPrimaryNeeOnly)
+                        {
+                            contribution /= domeLightPdf;
+                        }
+                        else
+                        {
+                            const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
+                            const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
 
-                        contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
+                            contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
+                        }
 
                         pathColor += contribution;
                     }
@@ -401,6 +426,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;
         } // !isPassthrough
+
+        if (debugPrimaryNeeOnly)
+        {
+            break;
+        }
 
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
