@@ -364,6 +364,7 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
     bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), renderState.dev_gbuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TREE),
                                                           renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
@@ -633,6 +634,7 @@ void render()
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
     renderParams->mipBias = renderState.dlss.mipBias;
+    renderParams->restirDoVisibilityCheck = SettingsManager::getAsBool("restirDoVisibilityCheck") ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -798,6 +800,11 @@ void render()
         renderState.cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
         bindSceneSrvs(GBUFFER_PARAM_IDX(RAYTRACING_ACS));
         renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), renderState.dev_gbuffer->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(RIS_SAMPLES_OUT), renderState.dev_risSamplesOut->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RTSL_LIGHT_TREE),
+                                                              renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
+        renderState.cmdList->SetComputeRootShaderResourceView(GBUFFER_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
+                                                              renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = renderState.pathTracingTarget.getTarget()->GetDesc();
         renderState.gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -811,7 +818,18 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+        const SamplingMode samplingMode = static_cast<SamplingMode>(renderParams->samplingMode);
+        if (samplingMode == SamplingMode::RESTIR)
+        {
+            swapRisSamplesBuffers();
+        }
+
         dispatchPathTracing(paramBlockManager, doPathSplitting);
+
+        if (samplingMode == SamplingMode::RESTIR)
+        {
+            storePrevRisSamplesBuffer();
+        }
 
         // ===================================
         // COLLECT

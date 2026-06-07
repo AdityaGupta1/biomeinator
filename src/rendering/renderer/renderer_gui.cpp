@@ -75,6 +75,7 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "MIS",
     "RIS",
     "RTSL",
+    "ReSTIR",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",
@@ -117,6 +118,11 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+        const SamplingMode samplingMode = static_cast<SamplingMode>(SettingsManager::getAsUint("samplingMode"));
+        if (samplingMode == SamplingMode::RESTIR)
+        {
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
+        }
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Materials");

@@ -34,6 +34,7 @@ enum class SamplingMode : uint
     MIS,
     RIS,
     RTSL,
+    RESTIR,
 
     COUNT
 };

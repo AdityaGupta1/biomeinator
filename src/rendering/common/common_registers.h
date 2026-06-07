@@ -33,6 +33,7 @@
 
 // u#
 #define GBUFFER_REGISTER_GBUFFER_OUT 0
+#define GBUFFER_REGISTER_RIS_SAMPLES_OUT 1
 
 // =============================================
 #define PT_REGISTER_SPACE 2
@@ -40,6 +41,7 @@
 
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
+#define PT_REGISTER_RIS_SAMPLES_IN 1
 
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0

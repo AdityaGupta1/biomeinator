@@ -11,11 +11,13 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "light/ris.hlsli"
+#include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER, GBUFFER_OUT);
+RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(GBUFFER, RIS_SAMPLES_OUT);
 
 // motion is in uv space, not pixel space
 float2 calculateMotionFromPos(const float3 pos_WS)
@@ -120,4 +122,62 @@ void RayGeneration()
     outGbufferData.payloadFlags = payload.flags;
     outGbufferData.pad0 = outGbufferData.pad1 = 0; // necessary since we're writing to a UAV
     gbufferOut[linearPixelIdx] = outGbufferData;
+
+    const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
+    if (samplingMode == SamplingMode::RESTIR)
+    {
+        RisSample risSample;
+        risSample.lightIdx = LIGHT_IDX_INVALID;
+        risSample.pointOnLight_WS = 0.f;
+        risSample.W = 0.f;
+        risSample.p_hat = 0.f;
+        risSample.confidence = 0;
+        risSample.pad0 = 0;
+
+        if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+        {
+            const Material surfMaterial = materials[payload.materialIdx];
+            if (surfMaterial.canScatter() && !surfMaterial.isDelta())
+            {
+                const float3 wo_WS = -ray.Direction;
+                const float3 surfNor_WS = faceforward(payload.hitInfo.hitNor_WS, wo_WS);
+                const float3 surfPos_WS = payload.hitInfo.hitPos_WS;
+
+                RandomNumberGenerator rng = initRng(constantParams.rngSeed, 6831107, linearPixelIdx, renderParams.frameNumber);
+
+                uint pickedLightIdx;
+                float pdfSelect;
+                const bool gotLight = selectLightFromSubtree(0u, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
+                if (gotLight)
+                {
+                    const AreaLight light = areaLights[pickedLightIdx];
+
+                    float3 pointOnLight_WS, wi_WS;
+                    float lightSamplePdf;
+                    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
+
+                    const float p_hat = risTargetFunction(light, pointOnLight_WS, surfPos_WS, surfNor_WS);
+                    const float q = pdfSelect * lightSamplePdf;
+
+                    risSample.lightIdx = pickedLightIdx;
+                    risSample.pointOnLight_WS = pointOnLight_WS;
+                    risSample.W = (p_hat > 0.f && q > 0.f) ? (1.f / q) : 0.f;
+                    risSample.p_hat = p_hat;
+                    risSample.confidence = 1;
+
+                    if (renderParams.restirDoVisibilityCheck == 1)
+                    {
+                        const DirectLightingSample lightSample = evaluateRisSample(
+                            risSample, surfPos_WS, surfNor_WS, payload.rayCone, false, false, rng);
+                        if (!lightSample.didHitLight)
+                        {
+                            risSample.W = 0.f;
+                        }
+                    }
+                }
+            }
+        }
+
+        risSamplesOut[linearPixelIdx] = risSample;
+    }
 }

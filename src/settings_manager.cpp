@@ -34,7 +34,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
-    ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS, 3=RTSL)", uint32_t, "3");
+    ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS, 3=RTSL, 4=ReSTIR)", uint32_t, "3");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
@@ -43,6 +43,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("useVsync", "Enable VSync", bool, "true");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
     ADD_OPTION("noJitter", "Disable jitter", bool, "false");
+    ADD_OPTION("restirDoVisibilityCheck", "ReSTIR do visibility check", bool, "true");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
@@ -113,6 +114,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);
     COPY_SETTING("noJitter", bool);
+    COPY_SETTING("restirDoVisibilityCheck", bool);
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);

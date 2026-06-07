@@ -45,6 +45,7 @@
 #endif
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
+StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT, RIS_SAMPLES_IN);
 
 #if !NRC_UPDATE
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
@@ -68,7 +69,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRis = (samplingMode == SamplingMode::RIS);
     const bool useRtsl = (samplingMode == SamplingMode::RTSL);
-    const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl);
+    const bool useRestir = (samplingMode == SamplingMode::RESTIR);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl || useRestir);
 
     // Debug: show only primary-bounce NEE direct lighting (no MIS, no emission, no indirect).
     // Reuses existing NEE sampling code below; skips MIS weighting and breaks after.
@@ -284,7 +286,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
 
                 DirectLightingSample lightSample;
-                if (useRtsl)
+                if (useRestir && pathDepth == 0)
+                {
+                    const RisSample risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
+                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                }
+                else if (useRtsl || useRestir)
                 {
                     lightSample = sampleDirectLightingRtsl(
                         surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
@@ -321,7 +328,24 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                     const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    if (useRis)
+                    if (useRestir && pathDepth == 0)
+                    {
+                        const float W = lightSample.pdfOrW_Y;
+                        contribution *= W;
+
+                        if (!debugPrimaryNeeOnly)
+                        {
+                            const float pdfSelect = evaluateLightSelectPdf(lightSample.lightIdx, surfPos_WS, surfNor_WS);
+                            const AreaLight light = areaLights[lightSample.lightIdx];
+                            float3 lightNor_WS;
+                            float lightArea;
+                            getLightNormalAndArea(light, lightNor_WS, lightArea);
+                            const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
+                            const float lightPdf = pdfSelect * r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea);
+                            contribution *= balanceHeuristic(lightPdf, lightSampleBsdfPdf);
+                        }
+                    }
+                    else if (useRis)
                     {
                         const float W = lightSample.pdfOrW_Y;
                         contribution *= W;
@@ -552,7 +576,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
-                const float bsdfSampleLightPdf = useRtsl
+                const float bsdfSampleLightPdf = (useRtsl || useRestir)
                     ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction)
                     : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
