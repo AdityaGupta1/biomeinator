@@ -216,6 +216,28 @@ void resize()
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     renderState.dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
 
+    const uint64_t risSamplesBufferSize = renderState.renderWidth * renderState.renderHeight * sizeof(RisSample);
+    renderState.dev_risSamples1.Reset();
+    renderState.dev_risSamples1 = BufferHelper::createBasicBuffer(risSamplesBufferSize,
+                                                                  &DEFAULT_HEAP,
+                                                                  { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_risSamples1->SetName(L"dev_risSamples1");
+    renderState.dev_risSamplesIn = renderState.dev_risSamples1.Get();
+
+    renderState.dev_risSamples2.Reset();
+    renderState.dev_risSamples2 = BufferHelper::createBasicBuffer(risSamplesBufferSize,
+                                                                  &DEFAULT_HEAP,
+                                                                  { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_risSamples2->SetName(L"dev_risSamples2");
+    renderState.dev_risSamplesOut = renderState.dev_risSamples2.Get();
+
+    renderState.dev_risSamples3.Reset();
+    renderState.dev_risSamples3 = BufferHelper::createBasicBuffer(risSamplesBufferSize,
+                                                                  &DEFAULT_HEAP,
+                                                                  { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_risSamples3->SetName(L"dev_risSamples3");
+    renderState.dev_risSamplesPrev = renderState.dev_risSamples3.Get();
+
     const uint32_t rtvIncrementSize = renderState.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
@@ -443,6 +465,26 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 
         BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
     }
+}
+
+static void swapRisSamplesBuffers()
+{
+    std::swap(renderState.dev_risSamplesIn, renderState.dev_risSamplesOut);
+
+    BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
+                                                 renderState.dev_risSamplesIn,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
+                                                 renderState.dev_risSamplesOut,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
+static void storePrevRisSamplesBuffer()
+{
+    std::swap(renderState.dev_risSamplesIn, renderState.dev_risSamplesPrev);
 }
 
 static void beginFrame();
@@ -1005,6 +1047,13 @@ void destroy()
     renderState.dev_gbuffer.Reset();
     renderState.dev_pathTracingRawBuffer.Reset();
     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
+
+    renderState.dev_risSamples1.Reset();
+    renderState.dev_risSamples2.Reset();
+    renderState.dev_risSamples3.Reset();
+    renderState.dev_risSamplesIn = nullptr;
+    renderState.dev_risSamplesOut = nullptr;
+    renderState.dev_risSamplesPrev = nullptr;
 
     destroyNrc();
 

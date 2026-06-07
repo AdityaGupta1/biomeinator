@@ -344,6 +344,14 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_gbuffer;
     ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
     ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+
+    // -- ReSTIR buffers (triple-buffered for temporal reuse) --
+    ComPtr<ID3D12Resource> dev_risSamples1;
+    ComPtr<ID3D12Resource> dev_risSamples2;
+    ComPtr<ID3D12Resource> dev_risSamples3;
+    ID3D12Resource* dev_risSamplesIn{ nullptr };
+    ID3D12Resource* dev_risSamplesOut{ nullptr };
+    ID3D12Resource* dev_risSamplesPrev{ nullptr };
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
 
     // -- Viewport and dimensions --

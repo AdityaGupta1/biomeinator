@@ -208,6 +208,23 @@ static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with
 static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
 #endif
 
+#define RESTIR_MAX_CONFIDENCE 8
+
+struct RisSample
+{
+    uint lightIdx;
+    float3 pointOnLight_WS;
+
+    float W;
+    float p_hat;
+    uint confidence;
+    uint pad0;
+};
+
+#ifdef __cplusplus
+static_assert(sizeof(RisSample) == 32, "RisSample must be 32 bytes for parity with the HLSL StructuredBuffer<RisSample> layout");
+#endif
+
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
 
 struct PerTriangleData

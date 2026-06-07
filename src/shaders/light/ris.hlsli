@@ -11,13 +11,6 @@
 #define RIS_MAX_NUM_LIGHT_CANDIDATES 32
 #define RIS_MIN_NUM_LIGHT_CANDIDATES 8
 
-struct RisSample
-{
-    uint lightIdx;
-    float3 pointOnLight_WS;
-    float W;
-};
-
 float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, const float3 surfPos_WS, const float3 surfNor_WS)
 {
     const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
@@ -30,6 +23,18 @@ float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, con
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
     return lightMaterial.emissiveStrength * cosThetaSurf;
+}
+
+float calcGeomTermJacobian(const float3 this_surfPos_WS, const float3 other_surfPos_WS, const float3 pointOnLight_WS, const float3 lightNor_WS)
+{
+    const float3 this_wi_WS = normalize(pointOnLight_WS - this_surfPos_WS);
+    const float this_r2 = distance2(this_surfPos_WS, pointOnLight_WS);
+
+    const float3 other_wi_WS = normalize(pointOnLight_WS - other_surfPos_WS);
+    const float other_r2 = distance2(other_surfPos_WS, pointOnLight_WS);
+
+    const float geomTermJacobian = (absCosTheta(-this_wi_WS, lightNor_WS) * other_r2) / (absCosTheta(-other_wi_WS, lightNor_WS) * this_r2);
+    return isinf(geomTermJacobian) ? 0.f : geomTermJacobian;
 }
 
 RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
@@ -80,6 +85,9 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
     risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f);
+    risSampleOut.p_hat = Y_p_hat;
+    risSampleOut.confidence = 1;
+    risSampleOut.pad0 = 0;
     return risSampleOut;
 }
 
