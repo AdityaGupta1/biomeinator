@@ -1,3 +1,20 @@
+## Reference commit (READ FIRST)
+
+The old ReSTIR implementation was removed in commit
+**`a0c71e022c46c589e86999fab265539e09115604`** ("Remove ReSTIR (#228)").
+
+**All future agents reading this plan must always reference the old
+implementation against this commit.** To see the removed code, view the
+state *before* the removal at its parent `a0c71e0^`
+(`5acba702850a12222bd4abe93ad8098c12d04492`), or run `git show a0c71e0` to
+see exactly what was deleted.
+
+> **Caveat:** the codebase has changed significantly since that commit. Do
+> not copy the old code verbatim — some things need adapting to fit the
+> current structures, APIs, and conventions.
+
+---
+
 **Key difference from old implementation:** RTSL (light tree traversal) replaces RIS for initial candidate generation. RTSL already selects a light + point on light — store that as the reservoir sample instead of running RIS candidates.
 
 ## 1. ReSTIR sample struct + buffers [DONE]
