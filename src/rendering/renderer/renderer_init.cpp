@@ -239,6 +239,7 @@ void initRtTargets()
     renderState.autoTransitionRtTargets.push_back(&renderState.normalsAndRoughnessTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.motionTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.specularHitDistanceTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.prevDepthAndNormalTarget);
 
     renderState.autoTransitionRtTargets.push_back(&renderState.dlssOutputTarget);
 

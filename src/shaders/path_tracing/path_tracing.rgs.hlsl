@@ -341,8 +341,16 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                             float lightArea;
                             getLightNormalAndArea(light, lightNor_WS, lightArea);
                             const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                            const float lightPdf = pdfSelect * r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea);
-                            contribution *= balanceHeuristic(lightPdf, lightSampleBsdfPdf);
+                            const float cosLight = absCosTheta(-lightSample.wi_WS, lightNor_WS);
+                            // Balance heuristic in area form (numerator and denominator scaled by cosLight*lightArea)
+                            // so a reused sample grazing the light can't blow the light pdf up to inf; the only
+                            // degenerate case left is all-zero pdfs, guarded below.
+                            // c.f. const float lightPdf = pdfSelect * r2 / (cosLight * lightArea);
+                            const float lightTerm = pdfSelect * r2;
+                            const float bsdfTerm = lightSampleBsdfPdf * cosLight * lightArea;
+                            const float misDenominator = lightTerm + bsdfTerm;
+                            const float misWeight = (misDenominator > 0.f) ? (lightTerm / misDenominator) : 0.f;
+                            contribution *= misWeight;
                         }
                     }
                     else if (useRis)

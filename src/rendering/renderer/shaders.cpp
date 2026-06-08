@@ -24,6 +24,7 @@
 #include "path_tracing/collect.cs.fxh"
 #include "path_tracing/gbuffer.rgs.fxh"
 #include "path_tracing/path_tracing.rgs.fxh"
+#include "path_tracing/temporal_reuse.cs.fxh"
 #include "postprocess/debug_view.ps.fxh"
 #include "postprocess/postprocess.ps.fxh"
 #include "postprocess/postprocess.vs.fxh"
@@ -51,6 +52,7 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(path_tracing_rgs),
     REGISTER_SHADER(postprocess_ps),
     REGISTER_SHADER(postprocess_vs),
+    REGISTER_SHADER(temporal_reuse_cs),
 };
 
 std::span<const unsigned char> getShader(std::string_view name)

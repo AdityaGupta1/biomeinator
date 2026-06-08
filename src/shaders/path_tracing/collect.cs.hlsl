@@ -12,6 +12,20 @@
 StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT, PATH_TRACING_RAW_BUFFER_IN);
 StructuredBuffer<float4> ptDiffuseAlbedoRawBufferIn : REGISTER_T(COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
 
+// Snapshot this frame's depth and normal so the next frame's ReSTIR temporal reuse pass can
+// validate reprojected samples against last frame's surface.
+void storePrevDepthAndNormal(const uint2 pixelIdx)
+{
+    Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
+    Texture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.srv.normalsAndRoughnessTargetIdx];
+
+    const float depth = linearDepthTarget[pixelIdx];
+    const float3 normal = normalize(normalsAndRoughnessTarget[pixelIdx].xyz);
+
+    RWTexture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.uav.prevDepthAndNormalTargetIdx];
+    prevDepthAndNormalTarget[pixelIdx] = uint2(asuint(depth), octEncode(normal));
+}
+
 [shader("compute")]
 [numthreads(COLLECT_WORKGROUP_SIZE_X, COLLECT_WORKGROUP_SIZE_Y, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -21,6 +35,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (pixelIdx.x >= renderParams.renderSize.x || pixelIdx.y >= renderParams.renderSize.y)
     {
         return;
+    }
+
+    if ((SamplingMode) renderParams.samplingMode == SamplingMode::RESTIR)
+    {
+        storePrevDepthAndNormal(pixelIdx);
     }
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;

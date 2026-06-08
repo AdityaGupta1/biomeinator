@@ -91,6 +91,7 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
     return risSampleOut;
 }
 
+#ifdef HITGROUP_LIGHTS
 DirectLightingSample evaluateRisSample(const RisSample risSample,
                                        const float3 surfPos_WS,
                                        const float3 surfNor_WS,
@@ -132,3 +133,4 @@ DirectLightingSample evaluateRisSample(const RisSample risSample,
     result.pdfOrW_Y = risSample.W;
     return result;
 }
+#endif // HITGROUP_LIGHTS

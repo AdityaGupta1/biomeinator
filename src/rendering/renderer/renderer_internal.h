@@ -163,6 +163,21 @@ enum class PtParam
     COUNT
 };
 
+enum class TemporalReuseParam
+{
+    GLOBAL_PARAMS,
+
+    MATERIALS,
+    AREA_LIGHTS,
+
+    RIS_SAMPLES_IN,
+    RIS_SAMPLES_PREV,
+
+    RIS_SAMPLES_OUT,
+
+    COUNT
+};
+
 enum class PostprocessParam
 {
     GLOBAL_PARAMS,
@@ -202,6 +217,7 @@ enum class NrcResolveParam
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
+#define TEMPORAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(TemporalReuseParam::param)
 #define NRC_RESOLVE_PARAM_IDX(param) static_cast<uint32_t>(NrcResolveParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
@@ -334,6 +350,7 @@ struct RendererState
     RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
     RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    RtTarget prevDepthAndNormalTarget{ L"prevDepthAndNormalTarget", DXGI_FORMAT_R32G32_UINT };
 
     RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
@@ -372,6 +389,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> gbufferRootSig;
     ComPtr<ID3D12RootSignature> ptRootSig;
     ComPtr<ID3D12RootSignature> collectRootSig;
+    ComPtr<ID3D12RootSignature> temporalReuseRootSig;
     ComPtr<ID3D12RootSignature> nrcResolveRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
@@ -386,6 +404,7 @@ struct RendererState
     D3D12_DISPATCH_RAYS_DESC ptDispatchDesc{};
 
     ComPtr<ID3D12PipelineState> collectPso;
+    ComPtr<ID3D12PipelineState> temporalReusePso;
     ComPtr<ID3D12PipelineState> nrcResolvePso;
 
     ComPtr<ID3D12StateObject> nrcUpdatePso;

@@ -281,6 +281,8 @@ void resize()
             .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx(),
             .motionTargetIdx = renderState.motionTarget.getUavIdx(),
             .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx(),
+            .prevDepthAndNormalTargetIdx = renderState.prevDepthAndNormalTarget.getUavIdx(),
+
             .debugTargetIdx = renderState.debugTarget.getUavIdx(),
         };
 
@@ -293,8 +295,9 @@ void resize()
             .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx(),
             .motionTargetIdx = renderState.motionTarget.getSrvIdx(),
             .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getSrvIdx(),
-            .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
+            .prevDepthAndNormalTargetIdx = renderState.prevDepthAndNormalTarget.getSrvIdx(),
 
+            .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
             .debugTargetIdx = renderState.debugTarget.getSrvIdx(),
         };
     }
@@ -486,6 +489,33 @@ static void swapRisSamplesBuffers()
 static void storePrevRisSamplesBuffer()
 {
     std::swap(renderState.dev_risSamplesIn, renderState.dev_risSamplesPrev);
+}
+
+// ReSTIR temporal reuse: combine this frame's initial reservoir (risSamplesIn) with the reprojected
+// reservoir from last frame (risSamplesPrev), writing the merged reservoir to risSamplesOut.
+static void dispatchTemporalReuse(ParamBlockManager& paramBlockManager)
+{
+    renderState.motionTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    renderState.prevDepthAndNormalTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    renderState.cmdList->SetPipelineState(renderState.temporalReusePso.Get());
+    renderState.cmdList->SetComputeRootSignature(renderState.temporalReuseRootSig.Get());
+
+    renderState.cmdList->SetComputeRootConstantBufferView(TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(MATERIALS), renderState.scene.getDevMaterialsAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS), renderState.scene.getDevAreaLightsBufferAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV), renderState.dev_risSamplesPrev->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), renderState.dev_risSamplesOut->GetGPUVirtualAddress());
+
+    const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.gbufferDispatchDesc.Width, TEMPORAL_REUSE_WORKGROUP_SIZE_X);
+    const uint32_t dispatchHeight = Util::calculateDispatchSize(renderState.gbufferDispatchDesc.Height, TEMPORAL_REUSE_WORKGROUP_SIZE_Y);
+    renderState.cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+
+    // restore motion to UAV for DLSS / Streamline tagging and next frame's gbuffer write
+    renderState.motionTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    // prevDepthAndNormal is written (UAV) by the collect pass later this frame
+    renderState.prevDepthAndNormalTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 static void beginFrame();
@@ -821,7 +851,19 @@ void render()
         const SamplingMode samplingMode = static_cast<SamplingMode>(renderParams->samplingMode);
         if (samplingMode == SamplingMode::RESTIR)
         {
+            // linearDepth and normalsAndRoughness are read as SRVs by the temporal reuse pass (this
+            // frame's surface) and by the collect pass (which stores prevDepthAndNormal for next frame)
+            renderState.linearDepthTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            renderState.normalsAndRoughnessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
             swapRisSamplesBuffers();
+
+            // skip temporal reuse on frame 0 (no previous reservoir / prevDepthAndNormal yet)
+            if (renderState.frameNumber > 0)
+            {
+                dispatchTemporalReuse(paramBlockManager);
+                swapRisSamplesBuffers();
+            }
         }
 
         dispatchPathTracing(paramBlockManager, doPathSplitting);
@@ -868,6 +910,15 @@ void render()
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             batch.submit(renderState.cmdList.Get());
+        }
+
+        if (samplingMode == SamplingMode::RESTIR)
+        {
+            // ReSTIR put these in NON_PIXEL_SHADER_RESOURCE for the temporal reuse and collect reads;
+            // restore them to UNORDERED_ACCESS to match the state Streamline was told they are in (see
+            // makeSlResource) before DLSS evaluates, matching how dispatchTemporalReuse restores motion.
+            renderState.linearDepthTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            renderState.normalsAndRoughnessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
 
         // ===================================
@@ -1080,6 +1131,7 @@ void destroy()
     renderState.gbufferPso.Reset();
     renderState.ptPso.Reset();
     renderState.collectPso.Reset();
+    renderState.temporalReusePso.Reset();
     renderState.nrcResolvePso.Reset();
     renderState.nrcUpdatePso.Reset();
     renderState.nrcQueryPso.Reset();
@@ -1089,6 +1141,7 @@ void destroy()
     renderState.gbufferRootSig.Reset();
     renderState.ptRootSig.Reset();
     renderState.collectRootSig.Reset();
+    renderState.temporalReuseRootSig.Reset();
     renderState.nrcResolveRootSig.Reset();
     renderState.postprocessRootSig.Reset();
     renderState.debugViewRootSig.Reset();

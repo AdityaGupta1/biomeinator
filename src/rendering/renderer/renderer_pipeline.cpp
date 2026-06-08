@@ -163,6 +163,27 @@ void initRootSignature()
     }
 
     // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, TEMPORAL_REUSE_PARAM_IDX(COUNT)> temporalReuseParams;
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_IN);
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV)] = MAKE_PARAM(SRV, TEMPORAL_REUSE, RIS_SAMPLES_PREV);
+
+        temporalReuseParams[TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, TEMPORAL_REUSE, RIS_SAMPLES_OUT);
+
+        serializeAndCreateRootSignature(temporalReuseParams.data(), static_cast<uint32_t>(temporalReuseParams.size()),
+                                        rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
+                                        renderState.temporalReuseRootSig);
+    }
+
+    // ===================================
     // NRC RESOLVE
     // ===================================
     {
@@ -376,6 +397,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("collect_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.collectPso)));
         renderState.collectPso->SetName(L"collectPso");
+    }
+
+    // ===================================
+    // TEMPORAL REUSE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.temporalReuseRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("temporal_reuse_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.temporalReusePso)));
+        renderState.temporalReusePso->SetName(L"temporalReusePso");
     }
 
     // ===================================

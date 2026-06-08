@@ -29,7 +29,7 @@ see exactly what was deleted.
 - Write to `risSamplesOut` buffer
 - GBuffer needs RTSL light tree SRV bindings (currently only PT has them)
 
-## 3. Temporal reuse compute shader (new `temporal_reuse.cs.hlsl`)
+## 3. Temporal reuse compute shader (new `temporal_reuse.cs.hlsl`) [DONE]
 - Largely same as old — reproject via motion vectors, depth/normal comparison, pairwise MIS, geometry term Jacobian, confidence-weighted combination
 - Reads `risSamplesIn` + `risSamplesPrev`, writes `risSamplesOut`
 - Needs its own root signature, PSO, register space, workgroup size constants
