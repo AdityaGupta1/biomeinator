@@ -184,6 +184,26 @@ void initRootSignature()
     }
 
     // ===================================
+    // SPATIAL REUSE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, SPATIAL_REUSE_PARAM_IDX(COUNT)> spatialReuseParams;
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(MATERIALS)] = MAKE_PARAM(SRV, RT, MATERIALS);
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS)] = MAKE_PARAM(SRV, RT, AREA_LIGHTS);
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN)] = MAKE_PARAM(SRV, SPATIAL_REUSE, RIS_SAMPLES_IN);
+
+        spatialReuseParams[SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT)] = MAKE_PARAM(UAV, SPATIAL_REUSE, RIS_SAMPLES_OUT);
+
+        serializeAndCreateRootSignature(spatialReuseParams.data(), static_cast<uint32_t>(spatialReuseParams.size()),
+                                        rtStaticSamplers.data(), static_cast<uint32_t>(rtStaticSamplers.size()),
+                                        renderState.spatialReuseRootSig);
+    }
+
+    // ===================================
     // NRC RESOLVE
     // ===================================
     {
@@ -408,6 +428,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("temporal_reuse_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.temporalReusePso)));
         renderState.temporalReusePso->SetName(L"temporalReusePso");
+    }
+
+    // ===================================
+    // SPATIAL REUSE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.spatialReuseRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("spatial_reuse_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.spatialReusePso)));
+        renderState.spatialReusePso->SetName(L"spatialReusePso");
     }
 
     // ===================================

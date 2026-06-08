@@ -178,6 +178,20 @@ enum class TemporalReuseParam
     COUNT
 };
 
+enum class SpatialReuseParam
+{
+    GLOBAL_PARAMS,
+
+    MATERIALS,
+    AREA_LIGHTS,
+
+    RIS_SAMPLES_IN,
+
+    RIS_SAMPLES_OUT,
+
+    COUNT
+};
+
 enum class PostprocessParam
 {
     GLOBAL_PARAMS,
@@ -218,6 +232,7 @@ enum class NrcResolveParam
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define TEMPORAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(TemporalReuseParam::param)
+#define SPATIAL_REUSE_PARAM_IDX(param) static_cast<uint32_t>(SpatialReuseParam::param)
 #define NRC_RESOLVE_PARAM_IDX(param) static_cast<uint32_t>(NrcResolveParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
@@ -390,6 +405,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> ptRootSig;
     ComPtr<ID3D12RootSignature> collectRootSig;
     ComPtr<ID3D12RootSignature> temporalReuseRootSig;
+    ComPtr<ID3D12RootSignature> spatialReuseRootSig;
     ComPtr<ID3D12RootSignature> nrcResolveRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
@@ -405,6 +421,7 @@ struct RendererState
 
     ComPtr<ID3D12PipelineState> collectPso;
     ComPtr<ID3D12PipelineState> temporalReusePso;
+    ComPtr<ID3D12PipelineState> spatialReusePso;
     ComPtr<ID3D12PipelineState> nrcResolvePso;
 
     ComPtr<ID3D12StateObject> nrcUpdatePso;

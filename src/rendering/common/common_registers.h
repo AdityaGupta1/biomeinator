@@ -47,6 +47,16 @@
 #define TEMPORAL_REUSE_REGISTER_RIS_SAMPLES_OUT 0
 
 // =============================================
+#define SPATIAL_REUSE_REGISTER_SPACE 2
+// =============================================
+
+// t#
+#define SPATIAL_REUSE_REGISTER_RIS_SAMPLES_IN 0
+
+// u#
+#define SPATIAL_REUSE_REGISTER_RIS_SAMPLES_OUT 0
+
+// =============================================
 #define PT_REGISTER_SPACE 2
 // =============================================
 

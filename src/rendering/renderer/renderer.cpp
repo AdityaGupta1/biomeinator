@@ -518,6 +518,25 @@ static void dispatchTemporalReuse(ParamBlockManager& paramBlockManager)
     renderState.prevDepthAndNormalTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+// ReSTIR spatial reuse: combine this pixel's reservoir (risSamplesIn) with reservoirs from random
+// nearby pixels (also risSamplesIn), writing the merged reservoir to risSamplesOut. linearDepth and
+// normalsAndRoughness are already in NON_PIXEL_SHADER_RESOURCE from the RESTIR block in render().
+static void dispatchSpatialReuse(ParamBlockManager& paramBlockManager)
+{
+    renderState.cmdList->SetPipelineState(renderState.spatialReusePso.Get());
+    renderState.cmdList->SetComputeRootSignature(renderState.spatialReuseRootSig.Get());
+
+    renderState.cmdList->SetComputeRootConstantBufferView(SPATIAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(MATERIALS), renderState.scene.getDevMaterialsAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(AREA_LIGHTS), renderState.scene.getDevAreaLightsBufferAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(SPATIAL_REUSE_PARAM_IDX(RIS_SAMPLES_OUT), renderState.dev_risSamplesOut->GetGPUVirtualAddress());
+
+    const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.gbufferDispatchDesc.Width, SPATIAL_REUSE_WORKGROUP_SIZE_X);
+    const uint32_t dispatchHeight = Util::calculateDispatchSize(renderState.gbufferDispatchDesc.Height, SPATIAL_REUSE_WORKGROUP_SIZE_Y);
+    renderState.cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+}
+
 static void beginFrame();
 static void submitCmd();
 
@@ -851,8 +870,8 @@ void render()
         const SamplingMode samplingMode = static_cast<SamplingMode>(renderParams->samplingMode);
         if (samplingMode == SamplingMode::RESTIR)
         {
-            // linearDepth and normalsAndRoughness are read as SRVs by the temporal reuse pass (this
-            // frame's surface) and by the collect pass (which stores prevDepthAndNormal for next frame)
+            // linearDepth and normalsAndRoughness are read as SRVs by the temporal and spatial reuse
+            // passes (this frame's surface) and by the collect pass (which stores prevDepthAndNormal for next frame)
             renderState.linearDepthTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             renderState.normalsAndRoughnessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -864,6 +883,9 @@ void render()
                 dispatchTemporalReuse(paramBlockManager);
                 swapRisSamplesBuffers();
             }
+
+            dispatchSpatialReuse(paramBlockManager);
+            swapRisSamplesBuffers();
         }
 
         dispatchPathTracing(paramBlockManager, doPathSplitting);
@@ -1132,6 +1154,7 @@ void destroy()
     renderState.ptPso.Reset();
     renderState.collectPso.Reset();
     renderState.temporalReusePso.Reset();
+    renderState.spatialReusePso.Reset();
     renderState.nrcResolvePso.Reset();
     renderState.nrcUpdatePso.Reset();
     renderState.nrcQueryPso.Reset();
@@ -1142,6 +1165,7 @@ void destroy()
     renderState.ptRootSig.Reset();
     renderState.collectRootSig.Reset();
     renderState.temporalReuseRootSig.Reset();
+    renderState.spatialReuseRootSig.Reset();
     renderState.nrcResolveRootSig.Reset();
     renderState.postprocessRootSig.Reset();
     renderState.debugViewRootSig.Reset();

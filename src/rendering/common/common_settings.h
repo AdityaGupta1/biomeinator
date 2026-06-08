@@ -11,6 +11,13 @@
 #define TEMPORAL_REUSE_WORKGROUP_SIZE_Y 16
 
 // =============================================
+// SPATIAL REUSE
+// =============================================
+
+#define SPATIAL_REUSE_WORKGROUP_SIZE_X 16
+#define SPATIAL_REUSE_WORKGROUP_SIZE_Y 16
+
+// =============================================
 // COLLECT
 // =============================================
 

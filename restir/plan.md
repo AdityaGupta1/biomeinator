@@ -34,7 +34,7 @@ see exactly what was deleted.
 - Reads `risSamplesIn` + `risSamplesPrev`, writes `risSamplesOut`
 - Needs its own root signature, PSO, register space, workgroup size constants
 
-## 4. Spatial reuse compute shader (new `spatial_reuse.cs.hlsl`)
+## 4. Spatial reuse compute shader (new `spatial_reuse.cs.hlsl`) [DONE]
 - Same as old — random spatial neighbors, normal/depth rejection, pairwise MIS with Jacobian
 - Own root signature, PSO, register space
 
