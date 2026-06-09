@@ -12,7 +12,7 @@
 #include "util/rng.hlsli"
 
 #define NUM_SPATIAL_SAMPLES 5
-#define SPATIAL_SAMPLE_MAX_RADIUS 8
+#define SPATIAL_SAMPLE_MAX_RADIUS 32
 
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(SPATIAL_REUSE, RIS_SAMPLES_IN);
 
