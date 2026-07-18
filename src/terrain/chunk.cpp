@@ -704,7 +704,10 @@ void Chunk::createInstances()
                             for (uint i = 0; i < 4; ++i)
                             {
                                 vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                                vertPos_CS.y -= topYSubtract;
+                                if (thisFaceVertPositions[i].y == 1)
+                                {
+                                    vertPos_CS.y -= topYSubtract;
+                                }
 
                                 const vec2 uv = vec2(uvOffsets[i]);
 
