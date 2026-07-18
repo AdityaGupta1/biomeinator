@@ -14,8 +14,8 @@
 // vertex identification in water_displace.cs.hlsl breaks if displacement can reach 0.125.
 // Current max: sum(SWELL_STRENGTHS) 0.055 + sum(CHOP_STRENGTHS) 0.045 = 0.1.
 //
-// The shading normal (waveGradient) adds a noise-based perturbation on top of the analytic
-// sine gradient: small-scale OpenSimplex2 FBM tilts the normal in X and Z. It never touches
+// The shading normal adds a noise-based perturbation (waveNormalPerturbation) on top of the
+// analytic sine gradient: small-scale OpenSimplex2 FBM tilts the normal in X and Z. It never touches
 // waveHeight, so it adds surface detail without moving verts (and cannot break the invariant).
 // The perturbation is scaled by a choppiness factor combining the large-scale sine envelope
 // with a medium-scale OpenSimplex2 envelope, floored so even calm water keeps some detail.
@@ -47,7 +47,7 @@ static const float2 SINE_CHOP_FREQS[2] = { float2(0.0167f, 0.01f), float2(-0.006
 static const float2 SINE_CHOP_SPEEDS = float2(0.1f, 0.13f);
 
 // ===== Normal perturbation =====
-// Noise applied to the shading normal only (waveGradient); never moves vertices.
+// Noise applied to the shading normal only (waveNormalPerturbation); never moves vertices.
 
 // medium-scale OpenSimplex2 choppiness, multiplied into the shared factor above
 static const float MED_CHOP_FREQ = 0.02f;
@@ -142,10 +142,4 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float time)
     const float nz = fnlGetNoise3D(state, decorrelated.x, decorrelated.y, decorrelated.z);
 
     return chop * NOISE_PERTURB_STRENGTH * float2(nx, nz);
-}
-
-// surface normal = normalize(float3(-grad.x, 1.f, -grad.y))
-float2 waveGradient(float2 posXZ_WS, float time)
-{
-    return waveHeightAndGradient(posXZ_WS, time).yz + waveNormalPerturbation(posXZ_WS, time);
 }
