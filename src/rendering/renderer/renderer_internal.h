@@ -167,7 +167,9 @@ enum class TemporalReuseParam
 {
     GLOBAL_PARAMS,
 
+    INSTANCE_DATAS,
     MATERIALS,
+    PER_TRI_DATAS,
     AREA_LIGHTS,
 
     RIS_SAMPLES_IN,

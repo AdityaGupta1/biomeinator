@@ -277,6 +277,11 @@ void Scene::freeInstance(Instance* instance)
     this->availableInstanceIds.push(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
 
+    // ReSTIR temporal reuse validates reprojected light samples against instanceDatas; mark
+    // this instance's lights as gone so stale reservoirs can't resolve to a freed light range
+    this->mappedInstanceDatasArray[instance->id].areaLightsBufferOffset = LIGHT_IDX_INVALID;
+    this->mappedInstanceDatasArray.markDirty(instance->id);
+
     auto instanceIter = this->instances.find(instance->id);
     ASSERT(instanceIter != this->instances.end());
     this->instancesToReuse.push(std::move(instanceIter->second));
@@ -491,6 +496,10 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
                 Util::convertByteSizeToCount<AreaLight>(instance->areaLightsBufferSection.offsetBytes);
 
             toFreeList.pushManagedBufferSection(areaLightsUploadBufferSection);
+        }
+        else
+        {
+            instanceData.areaLightsBufferOffset = LIGHT_IDX_INVALID;
         }
 
         instanceData.transformOffset = {

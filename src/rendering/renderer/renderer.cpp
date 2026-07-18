@@ -502,7 +502,9 @@ static void dispatchTemporalReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootSignature(renderState.temporalReuseRootSig.Get());
 
     renderState.cmdList->SetComputeRootConstantBufferView(TEMPORAL_REUSE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(INSTANCE_DATAS), renderState.scene.getDevInstanceDatasAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(MATERIALS), renderState.scene.getDevMaterialsAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(PER_TRI_DATAS), renderState.scene.getDevPerTriDatasBufferAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(AREA_LIGHTS), renderState.scene.getDevAreaLightsBufferAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_IN), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(TEMPORAL_REUSE_PARAM_IDX(RIS_SAMPLES_PREV), renderState.dev_risSamplesPrev->GetGPUVirtualAddress());
