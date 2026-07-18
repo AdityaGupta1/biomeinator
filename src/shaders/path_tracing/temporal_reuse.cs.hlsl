@@ -13,6 +13,11 @@
 #include "util/ray.hlsli"
 #include "util/rng.hlsli"
 
+#define NUM_REPROJECTION_ATTEMPTS 9
+#define REPROJECTION_SEARCH_RADIUS 4
+#define REPROJECTION_MAX_POSITION_DIST 0.2f // TODO: set this based on depth? (i.e. higher max dist at higher depth)
+#define REPROJECTION_MIN_NORMAL_DOT 0.95f
+
 StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(TEMPORAL_REUSE, RIS_SAMPLES_IN);
 StructuredBuffer<RisSample> risSamplesPrev : REGISTER_T(TEMPORAL_REUSE, RIS_SAMPLES_PREV);
 
@@ -20,7 +25,7 @@ RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(TEMPORAL_REUSE, RIS_SAM
 
 struct ReprojectionResult
 {
-    float score;
+    bool found;
     uint2 pixelIdx;
 
     float3 this_surfPos_WS;
@@ -30,20 +35,33 @@ struct ReprojectionResult
     float3 reproj_surfNor_WS;
 };
 
-ReprojectionResult reproject(uint2 pixelIdx)
+// Deterministic per-frame 4x4 cross-shuffle of the temporal fetch position (from RTXDI).
+// Decorrelates neighboring pixels' temporal reuse chains so coherent sample blobs can't
+// slowly crawl across the screen.
+void applyPermutationSampling(inout int2 pixelIdx, const uint uniformRandomNumber)
+{
+    const int2 offset = int2(uniformRandomNumber & 3, (uniformRandomNumber >> 2) & 3);
+    pixelIdx += offset;
+    pixelIdx.x ^= 3;
+    pixelIdx.y ^= 3;
+    pixelIdx -= offset;
+}
+
+ReprojectionResult reproject(const uint2 pixelIdx, inout RandomNumberGenerator rng)
 {
     ReprojectionResult result;
-    result.score = 0.f;
+    result.found = false;
 
     Texture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.srv.motionTargetIdx];
     const float2 motionPixels = motionTarget[pixelIdx] * renderParams.renderSize;
-    const float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // want to find the closest pixel to the fractional pixel pos where this world pos was last frame
+    float2 reprojectedPixelPos = float2(pixelIdx) + cameraParams.jitter + motionPixels; // fractional pixel pos where this world pos was last frame
 
-    const int2 minCornerPixelIdx = int2(floor(reprojectedPixelPos)) - 1;
-    const int2 maxCornerPixelIdx = minCornerPixelIdx + 2;
-    if (isPixelOutOfBounds(minCornerPixelIdx) && isPixelOutOfBounds(maxCornerPixelIdx))
+    const bool usePermutationSampling = (renderParams.restirEnablePermutationSampling == 1);
+    if (!usePermutationSampling)
     {
-        return result;
+        // stochastic bilinear: a random +-0.5px jitter before rounding makes the expected
+        // reprojection position unbiased, avoiding directional drift of reused samples
+        reprojectedPixelPos += rng.nextFloat2() - 0.5f;
     }
 
     Texture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
@@ -53,41 +71,48 @@ ReprojectionResult reproject(uint2 pixelIdx)
     const float3 this_surfNor_WS = normalsAndRoughnessTarget[pixelIdx].xyz;
 
     Texture2D<uint2> prevDepthAndNormalTarget = ResourceDescriptorHeap[heapIndices.srv.prevDepthAndNormalTargetIdx];
-    for (int y = minCornerPixelIdx.y; y <= maxCornerPixelIdx.y; ++y)
+
+    const int2 basePixelIdx = int2(round(reprojectedPixelPos));
+    for (uint attemptIdx = 0; attemptIdx < NUM_REPROJECTION_ATTEMPTS; ++attemptIdx)
     {
-        for (int x = minCornerPixelIdx.x; x <= maxCornerPixelIdx.x; ++x)
+        int2 reprojCandidatePixelIdx = basePixelIdx;
+        if (attemptIdx > 0)
         {
-            const int2 reprojCandidatePixelIdx = int2(x, y);
-            if (isPixelOutOfBounds(reprojCandidatePixelIdx))
-            {
-                continue;
-            }
-
-            const uint2 packedReprojDepthAndNormal = prevDepthAndNormalTarget[reprojCandidatePixelIdx];
-            const float reproj_depth = asfloat(packedReprojDepthAndNormal.x);
-            const float3 reproj_surfNor_WS = octDecode(packedReprojDepthAndNormal.y);
-
-            const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojCandidatePixelIdx) * reproj_depth;
-            const float dist = distance(this_surfPos_WS, reproj_surfPos_WS);
-
-            const float maxDist = 0.2f; // TODO: set this based on depth? (i.e. higher max dist at higher depth)
-            const float positionReprojectionScore = max(maxDist - dist, 0.f) / maxDist;
-            const float maxNormalDiff = 0.05f;
-            const float normalReprojectionScore = max((dot(this_surfNor_WS, reproj_surfNor_WS) - (1.f - maxNormalDiff)), 0.f) / maxNormalDiff;
-
-            const float candidateReprojectionScore = positionReprojectionScore * normalReprojectionScore;
-            if (candidateReprojectionScore > result.score)
-            {
-                result.score = candidateReprojectionScore;
-                result.pixelIdx = reprojCandidatePixelIdx;
-
-                result.this_surfPos_WS = this_surfPos_WS;
-                result.this_surfNor_WS = this_surfNor_WS;
-
-                result.reproj_surfPos_WS = reproj_surfPos_WS;
-                result.reproj_surfNor_WS = reproj_surfNor_WS;
-            }
+            // disocclusion fallback: search a small random neighborhood
+            reprojCandidatePixelIdx += int2((rng.nextFloat2() - 0.5f) * REPROJECTION_SEARCH_RADIUS);
         }
+        else if (usePermutationSampling)
+        {
+            applyPermutationSampling(reprojCandidatePixelIdx, constantParams.rngSeed);
+        }
+
+        if (isPixelOutOfBounds(reprojCandidatePixelIdx))
+        {
+            continue;
+        }
+
+        const uint2 packedReprojDepthAndNormal = prevDepthAndNormalTarget[reprojCandidatePixelIdx];
+        const float reproj_depth = asfloat(packedReprojDepthAndNormal.x);
+        const float3 reproj_surfNor_WS = octDecode(packedReprojDepthAndNormal.y);
+        const float3 reproj_surfPos_WS = cameraParams.prevPos_WS + getPrevPrimaryRayDirection(reprojCandidatePixelIdx) * reproj_depth;
+
+        // accept the first candidate whose surface matches; a deterministic "best match"
+        // search would re-introduce directional reprojection bias
+        if (distance(this_surfPos_WS, reproj_surfPos_WS) > REPROJECTION_MAX_POSITION_DIST ||
+            dot(this_surfNor_WS, reproj_surfNor_WS) < REPROJECTION_MIN_NORMAL_DOT)
+        {
+            continue;
+        }
+
+        result.found = true;
+        result.pixelIdx = uint2(reprojCandidatePixelIdx);
+
+        result.this_surfPos_WS = this_surfPos_WS;
+        result.this_surfNor_WS = this_surfNor_WS;
+
+        result.reproj_surfPos_WS = reproj_surfPos_WS;
+        result.reproj_surfNor_WS = reproj_surfNor_WS;
+        break;
     }
 
     return result;
@@ -113,9 +138,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const ReprojectionResult reprojResult = reproject(pixelIdx);
+    RandomNumberGenerator rng = initRng(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
 
-    if (reprojResult.score < 0.01f)
+    const ReprojectionResult reprojResult = reproject(pixelIdx, rng);
+
+    if (!reprojResult.found)
     {
         risSamplesOut[linearPixelIdx] = this_risSample;
         return;
@@ -137,7 +164,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     //}
 
     const float this_confidence = this_risSample.confidence;
-    const float reproj_confidence = reproj_risSample.confidence * reprojResult.score;
+    const float reproj_confidence = reproj_risSample.confidence;
 
     const AreaLight this_light = areaLights[this_risSample.lightIdx];
     const AreaLight reproj_light = areaLights[reproj_risSample.lightIdx];
@@ -154,14 +181,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float reproj_m_denominator = reproj_m_numerator + (reproj_p_hat_this * this_confidence);
     const float reproj_m = (reproj_m_denominator > 0.f) ? (reproj_m_numerator / reproj_m_denominator) : 0.f;
 
-    float3 reproj_lightNor_WS;
-    float reproj_lightArea_unused;
-    getLightNormalAndArea(reproj_light, reproj_lightNor_WS, reproj_lightArea_unused);
-
-    const float geomTermJacobian = calcGeomTermJacobian(reprojResult.this_surfPos_WS, reprojResult.reproj_surfPos_WS, reproj_risSample.pointOnLight_WS, reproj_lightNor_WS);
-
     const float this_w = this_m * this_p_hat * this_risSample.W;
-    const float reproj_w = reproj_m * reproj_p_hat_this * reproj_risSample.W * geomTermJacobian;
+    const float reproj_w = reproj_m * reproj_p_hat_this * reproj_risSample.W;
     const float w_sum = this_w + reproj_w;
 
     if (!(w_sum > 0.f)) // also catches NaN
@@ -169,8 +190,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         risSamplesOut[linearPixelIdx] = this_risSample;
         return;
     }
-
-    RandomNumberGenerator rng = initRng(constantParams.rngSeed, 44721359, linearPixelIdx, renderParams.frameNumber);
 
     RisSample risSampleOut;
     float Y_p_hat;

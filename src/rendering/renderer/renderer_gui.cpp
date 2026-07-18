@@ -122,6 +122,7 @@ void imguiEndFrame(double deltaTime)
         if (samplingMode == SamplingMode::RESTIR)
         {
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Include visibility", "restirDoVisibilityCheck");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Permutation sampling", "restirEnablePermutationSampling");
         }
 
         SettingsGuiHelpers::VerticalSpacing();

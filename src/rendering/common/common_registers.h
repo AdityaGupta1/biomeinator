@@ -62,11 +62,11 @@
 
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
-#define PT_REGISTER_RIS_SAMPLES_IN 1
 
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
 #define PT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT 1
+#define PT_REGISTER_RIS_SAMPLES_INOUT 2
 
 // =============================================
 #define COLLECT_REGISTER_SPACE 2

@@ -18,6 +18,22 @@ StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(SPATIAL_REUSE, RIS_SAMPLES
 
 RWStructuredBuffer<RisSample> risSamplesOut : REGISTER_U(SPATIAL_REUSE, RIS_SAMPLES_OUT);
 
+// Confidence-weighted pairwise MIS (from RTXDI): each neighbor is MIS'd against the
+// canonical (center) sample only, which is O(N) and folds confidence weights in without
+// needing a preliminary pass to sum them across all neighbors.
+float pairwiseMisWeight(const float p_atOwn, const float p_atOther, const float ownM, const float otherM)
+{
+    const float balanceDenominator = ownM * p_atOwn + otherM * p_atOther;
+    return (balanceDenominator > 0.f) ? max(0.f, ownM * p_atOwn) / balanceDenominator : 0.f;
+}
+
+// Discounts a neighbor's confidence contribution when its target function disagrees with
+// the canonical surface's, so dissimilar neighbors can't inflate the merged history.
+float pairwiseMFactor(const float p_atOwn, const float p_atOther)
+{
+    return (p_atOwn <= 0.f) ? 1.f : pow(saturate(p_atOther / p_atOwn), 8.f);
+}
+
 [shader("compute")]
 [numthreads(SPATIAL_REUSE_WORKGROUP_SIZE_X, SPATIAL_REUSE_WORKGROUP_SIZE_Y, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -52,12 +68,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const AreaLight this_light = areaLights[this_risSample.lightIdx];
     const float this_p_hat = this_risSample.p_hat;
-    float this_m = 0.f; // TODO: add confidence weights to this_m and other_m? seems like it would require a preliminary pass to sum confidence weights for all spatial samples
+    const float this_confidence = this_risSample.confidence;
 
     float w_sum = 0.f;
-    const uint totalNumSamples = NUM_SPATIAL_SAMPLES + 1;
+    float canonicalMisWeight = 0.f; // accumulates this pixel's share of each pairwise MIS pair
+    float sumConfidence = this_confidence;
     uint numValidSpatialSamples = 0;
-    uint sumConfidence = this_risSample.confidence;
     for (uint spatialSampleIdx = 0; spatialSampleIdx < NUM_SPATIAL_SAMPLES; ++spatialSampleIdx)
     {
         const float2 spatialSamplePixelOffset = float2((rng.nextFloat2() - 0.5f) * 2 * SPATIAL_SAMPLE_MAX_RADIUS);
@@ -76,26 +92,31 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const uint spatialSampleLinearPixelIdx = spatialSamplePixelIdx.y * renderParams.renderSize.x + spatialSamplePixelIdx.x;
         const RisSample other_risSample = risSamplesIn[spatialSampleLinearPixelIdx];
-        if (other_risSample.lightIdx == LIGHT_IDX_INVALID)
+
+        // similar surface = usable neighbor; counted even when its reservoir is dead so the
+        // final normalization stays unbiased
+        ++numValidSpatialSamples;
+
+        if (other_risSample.lightIdx == LIGHT_IDX_INVALID || other_risSample.confidence == 0)
         {
             continue;
         }
 
         const AreaLight other_light = areaLights[other_risSample.lightIdx];
+        const float other_confidence = other_risSample.confidence;
 
-        float3 other_lightNor_WS;
-        float other_lightArea_unused;
-        getLightNormalAndArea(other_light, other_lightNor_WS, other_lightArea_unused);
-
-        const float geomTermJacobian = calcGeomTermJacobian(this_surfPos_WS, other_surfPos_WS, other_risSample.pointOnLight_WS, other_lightNor_WS);
-
+        // target function of each sample at each surface; stored p_hat is always evaluated
+        // at the storing pixel's current-frame surface, so it can be reused directly
         const float other_p_hat = other_risSample.p_hat;
         const float other_p_hat_this = risTargetFunction(other_light, other_risSample.pointOnLight_WS, this_surfPos_WS, this_surfNor_WS); // other_p_hat from this_pos
-        const float other_m = (other_p_hat) / (totalNumSamples * (other_p_hat + other_p_hat_this / NUM_SPATIAL_SAMPLES)); // NUM_SPATIAL_SAMPLES = totalNumSamples - 1
-        const float other_w = other_m * other_p_hat_this * other_risSample.W * geomTermJacobian;
-
         const float this_p_hat_other = risTargetFunction(this_light, this_risSample.pointOnLight_WS, other_surfPos_WS, other_surfNor_WS); // this_p_hat from other_pos
-        this_m += this_p_hat / (NUM_SPATIAL_SAMPLES * (this_p_hat_other + this_p_hat / NUM_SPATIAL_SAMPLES));
+
+        const float otherStreamM = other_confidence * NUM_SPATIAL_SAMPLES;
+        const float other_m = pairwiseMisWeight(other_p_hat, other_p_hat_this, otherStreamM, this_confidence);
+        const float canonical_m = pairwiseMisWeight(this_p_hat_other, this_p_hat, otherStreamM, this_confidence);
+        canonicalMisWeight += 1.f - canonical_m;
+
+        const float other_w = other_m * other_p_hat_this * other_risSample.W;
 
         w_sum += other_w;
         if (rng.nextFloat() < other_w / w_sum)
@@ -104,12 +125,17 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             Y_p_hat = other_p_hat_this;
             Y_pointOnLight_WS = other_risSample.pointOnLight_WS;
         }
-        ++numValidSpatialSamples;
-        sumConfidence += other_risSample.confidence;
+
+        sumConfidence += other_confidence * min(pairwiseMFactor(other_p_hat, other_p_hat_this),
+                                                pairwiseMFactor(this_p_hat_other, this_p_hat));
     }
 
-    this_m = (1.f + this_m) / totalNumSamples;
-    const float this_w = this_m * this_risSample.p_hat * this_risSample.W;
+    if (numValidSpatialSamples == 0)
+    {
+        canonicalMisWeight = 1.f;
+    }
+
+    const float this_w = canonicalMisWeight * this_p_hat * this_risSample.W;
     w_sum += this_w;
     if (rng.nextFloat() < this_w / w_sum)
     {
@@ -118,14 +144,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         Y_pointOnLight_WS = this_risSample.pointOnLight_WS;
     }
 
-    const float validSpatialSamplesCorrectionFactor = totalNumSamples / float(numValidSpatialSamples + 1);
-
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
-    risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f) * validSpatialSamplesCorrectionFactor;
+    risSampleOut.W = sanitizeFloat(w_sum / (Y_p_hat * max(numValidSpatialSamples, 1)), 0.f);
     risSampleOut.p_hat = Y_p_hat;
-    risSampleOut.confidence = min(sumConfidence, RESTIR_MAX_CONFIDENCE);
+    risSampleOut.confidence = min(uint(round(sumConfidence)), RESTIR_MAX_CONFIDENCE);
     risSampleOut.pad0 = 0;
     risSamplesOut[linearPixelIdx] = risSampleOut;
 }

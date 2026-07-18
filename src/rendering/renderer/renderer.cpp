@@ -367,7 +367,7 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
     bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), renderState.dev_gbuffer->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RIS_SAMPLES_IN), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RIS_SAMPLES_INOUT), renderState.dev_risSamplesIn->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TREE),
                                                           renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
@@ -684,6 +684,7 @@ void render()
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
     renderParams->mipBias = renderState.dlss.mipBias;
     renderParams->restirDoVisibilityCheck = SettingsManager::getAsBool("restirDoVisibilityCheck") ? 1 : 0;
+    renderParams->restirEnablePermutationSampling = SettingsManager::getAsBool("restirEnablePermutationSampling") ? 1 : 0;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -886,12 +887,23 @@ void render()
 
             dispatchSpatialReuse(paramBlockManager);
             swapRisSamplesBuffers();
+
+            // path tracing writes visibility feedback into risSamplesIn (W = 0 for occluded
+            // samples) before it becomes risSamplesPrev for next frame's temporal reuse
+            BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
+                                                         renderState.dev_risSamplesIn,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
 
         dispatchPathTracing(paramBlockManager, doPathSplitting);
 
         if (samplingMode == SamplingMode::RESTIR)
         {
+            BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
+                                                         renderState.dev_risSamplesIn,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             storePrevRisSamplesBuffer();
         }
 

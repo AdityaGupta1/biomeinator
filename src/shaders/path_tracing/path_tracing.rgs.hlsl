@@ -45,7 +45,7 @@
 #endif
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
-StructuredBuffer<RisSample> risSamplesIn : REGISTER_T(PT, RIS_SAMPLES_IN);
+RWStructuredBuffer<RisSample> risSamplesInOut : REGISTER_U(PT, RIS_SAMPLES_INOUT);
 
 #if !NRC_UPDATE
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
@@ -288,8 +288,19 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 DirectLightingSample lightSample;
                 if (useRestir && pathDepth == 0)
                 {
-                    const RisSample risSample = risSamplesIn[pixelIdx.y * renderParams.renderSize.x + pixelIdx.x];
+                    const uint risSampleIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+                    const RisSample risSample = risSamplesInOut[risSampleIdx];
                     lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+
+#if !NRC_UPDATE
+                    // visibility feedback: this buffer becomes next frame's temporal input, so kill
+                    // occluded samples now (W = 0, keep confidence) instead of letting them persist
+                    // through temporal reuse as lagging shadows
+                    if (risSample.lightIdx != LIGHT_IDX_INVALID && !lightSample.didHitLight)
+                    {
+                        risSamplesInOut[risSampleIdx].W = 0.f;
+                    }
+#endif
                 }
                 else if (useRtsl || useRestir)
                 {

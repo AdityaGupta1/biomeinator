@@ -136,9 +136,9 @@ struct RenderParams
     float mipBias;
 
     uint restirDoVisibilityCheck;
+    uint restirEnablePermutationSampling;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 struct RtslParams

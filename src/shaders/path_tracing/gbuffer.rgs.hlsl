@@ -153,11 +153,16 @@ void RayGeneration()
                     const AreaLight light = areaLights[pickedLightIdx];
 
                     float3 pointOnLight_WS, wi_WS;
-                    float lightSamplePdf;
-                    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
+                    float lightSamplePdf_unused;
+                    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf_unused);
 
                     const float p_hat = risTargetFunction(light, pointOnLight_WS, surfPos_WS, surfNor_WS);
-                    const float q = pdfSelect * lightSamplePdf;
+
+                    // area-measure source pdf to match the area-measure target function
+                    float3 lightNor_unused;
+                    float lightArea;
+                    getLightNormalAndArea(light, lightNor_unused, lightArea);
+                    const float q = pdfSelect / lightArea;
 
                     risSample.lightIdx = pickedLightIdx;
                     risSample.pointOnLight_WS = pointOnLight_WS;
