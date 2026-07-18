@@ -18,11 +18,11 @@
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER, GBUFFER_OUT);
 
 // motion is in uv space, not pixel space
-float2 calculateMotionFromPos(const float3 pos_WS)
+float2 calculateMotionFromPos(const float3 pos_WS, const float3 prevPos_WS)
 {
     float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
     currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(pos_WS, 1)); // worldToPrevClipMat accounts for changed globalInstanceOffset
+    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(prevPos_WS, 1)); // worldToPrevClipMat accounts for changed globalInstanceOffset
     prevNdc /= prevNdc.w;
 
     float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;
@@ -36,6 +36,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
+    float3 prevMotionHitPos_WS;
     float3 hitNor_WS = 0.f;
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
@@ -47,7 +48,18 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
 
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
+        prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = payload.hitInfo.hitNor_WS;
+
+        // water displacement is vertical at fixed XZ, so the previous position of a water
+        // surface point is the same column's wave height at the previous frame's time
+        const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
+        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+        {
+            const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevTime) - waveHeight(posXZ_WS, renderParams.time);
+        }
 
         // TODO: eventually set roughness
 
@@ -70,6 +82,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     else
     {
         motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
+        prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = normalize(-ray.Direction);
     }
 
@@ -77,7 +90,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     linearDepthTarget[pixelIdx] = linearDepth;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
-    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS);
+    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS, prevMotionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);

@@ -285,6 +285,7 @@ struct RendererState
     HANDLE frameLatencyWaitable{ nullptr };
     std::chrono::high_resolution_clock::time_point lastTimePoint{ std::chrono::high_resolution_clock::now() };
     double elapsedTime{ 0.0 };
+    float prevElapsedTime{ 0.f }; // previous frame's RenderParams::time, for water motion vectors
     bool stopAccumulating{ false };
 
     // -- Device and infrastructure --

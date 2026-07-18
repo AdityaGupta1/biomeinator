@@ -567,6 +567,8 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
     renderParams->time = elapsedTimeFloat;
+    renderParams->prevTime = renderState.prevElapsedTime;
+    renderState.prevElapsedTime = elapsedTimeFloat;
 
     const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
 

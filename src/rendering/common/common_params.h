@@ -133,7 +133,9 @@ struct RenderParams
     // elapsed seconds; consumed by both the water displacement pass and hit shaders,
     // which must see the same value each frame or wave normals won't match geometry
     float time;
-    uint pad0;
+    // previous frame's time; used to reconstruct the previous water surface position for
+    // motion vectors
+    float prevTime;
     uint pad1;
     uint pad2;
 };
