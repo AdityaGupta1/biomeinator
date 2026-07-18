@@ -80,6 +80,16 @@
 #define LIGHT_TREE_REGISTER_MORTON_VALUES_OUT 5
 
 // =============================================
+#define WATER_DISPLACE_REGISTER_SPACE 7
+// =============================================
+
+// b#
+#define WATER_DISPLACE_REGISTER_CONSTANTS 0
+
+// u#
+#define WATER_DISPLACE_REGISTER_VERTS_OUT 0
+
+// =============================================
 #define NRC_REGISTER_SPACE 5
 // =============================================
 

@@ -21,12 +21,19 @@ struct GeometryWrapper
 
     ManagedBufferSection vertsBufferSection{};
     ManagedBufferSection idxsBufferSection{};
+
+    // nonzero only for BLASes built with allowUpdate
+    size_t updateScratchSizeBytes{ 0 };
 };
 
 struct BlasBuildInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
+
+    // builds with ALLOW_UPDATE | PREFER_FAST_TRACE so the BLAS can be refit in place via
+    // updateBlases (built once, refit forever, hit by many primary/refraction rays)
+    bool allowUpdate{ false };
 
     GeometryWrapper* outGeoWrapper{ nullptr };
 };
@@ -38,6 +45,12 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ManagedBuffer* dev_verts,
                 ManagedBuffer* dev_idxs,
                 const std::vector<BlasBuildInputs>& allInputs);
+
+// In-place refit of BLASes originally built with allowUpdate, reading the current contents
+// of their verts/idxs sections. Valid because topology and vert count never change.
+void updateBlases(ID3D12GraphicsCommandList4* cmdList,
+                  ToFreeList& toFreeList,
+                  const std::vector<GeometryWrapper*>& geoWrappers);
 
 struct TlasBuildInputs
 {

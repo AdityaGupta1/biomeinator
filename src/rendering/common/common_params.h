@@ -129,6 +129,13 @@ struct RenderParams
     uint antialiasingMode;
     uint refractionIndirectPassthrough;
     float mipBias;
+
+    // elapsed seconds; consumed by both the water displacement pass and hit shaders,
+    // which must see the same value each frame or wave normals won't match geometry
+    float time;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct RtslParams

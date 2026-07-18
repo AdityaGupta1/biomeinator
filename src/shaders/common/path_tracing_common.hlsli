@@ -8,6 +8,7 @@
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
+#include "common/water_waves.hlsli"
 #include "materials/materials.hlsli"
 #include "util/ray.hlsli"
 
@@ -169,6 +170,17 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+    {
+        // analytic wave normal; waves are evaluated in true world space, but hitPos_WS is
+        // camera-relative (globalInstanceOffset subtracted), so add the offset back
+        const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+        const float2 grad = waveGradient(posXZ_WS, renderParams.time);
+        nor_WS = normalize(float3(-grad.x, 1.f, -grad.y));
+    }
+
     if (dot(nor_WS, -WorldRayDirection()) < 0.f)
     {
         nor_WS = -nor_WS;

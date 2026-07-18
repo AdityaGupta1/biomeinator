@@ -10,6 +10,7 @@
 #include "rendering/camera.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "rendering/water_displacer.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -47,6 +48,7 @@ void Instance::reset(bool alsoFreeFromScene)
     this->host_perTriDatas.clear();
     this->host_areaLights.clear();
     this->isGeometryFinalized = false;
+    this->isInTlas = false;
 
     if (alsoFreeFromScene)
     {
@@ -149,6 +151,11 @@ void Instance::setMaterialIdx(uint32_t id)
     this->materialIdx = id;
 }
 
+void Instance::setIsDeformable(bool deformable)
+{
+    this->isDeformable = deformable;
+}
+
 void Scene::init()
 {
     this->managedVertsBuffer.setName(L"scene verts");
@@ -196,6 +203,7 @@ void Scene::reset()
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
+    this->deformableInstances.clear();
     this->availableInstanceIds = {};
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
@@ -276,6 +284,7 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
+    this->deformableInstances.erase(instance);
 
     auto instanceIter = this->instances.find(instance->id);
     ASSERT(instanceIter != this->instances.end());
@@ -357,11 +366,13 @@ const glm::vec3& Scene::getBoundsMax_WS() const
     return this->sceneBoundsMax_WS;
 }
 
-bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time)
 {
     this->areaLightTopologyChanged = false;
 
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
+
+    this->updateDeformableInstances(cmdList, toFreeList, time);
 
     bool didChange = false;
 
@@ -377,17 +388,67 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     }
 
     this->prevGlobalInstanceOffset = this->globalInstanceOffset;
-    if (this->isTlasDirty)
+    // Rebuild the TLAS every frame once one exists: BLAS refits change the AABBs the TLAS
+    // caches, and the steady rebuild also smooths the frame-pacing spikes caused by bursty
+    // rebuilds. Deformation alone doesn't reset accumulation, so didChange only reflects
+    // actual topology changes (isTlasDirty).
+    // TODO: use TLAS PERFORM_UPDATE instead of full rebuild on frames with no new/freed
+    // chunks (the updateScratchSizePtr plumbing in makeTlas is the start of this)
+    if (this->isTlasDirty || this->hasTlas())
     {
+        didChange |= this->isTlasDirty;
         const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
         this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z); // y = 0 to optimize for voxel mode
-        this->makeTlas(cmdList, toFreeList);
-        didChange = true;
+        // only rewrite the area light sampling structure on topology changes so light tree
+        // rebuilds and accumulation resets aren't triggered every frame
+        this->makeTlas(cmdList, toFreeList, this->isTlasDirty /*updateAreaLights*/);
     }
 
     didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
 
     return didChange;
+}
+
+void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time)
+{
+    if (this->deformableInstances.empty())
+    {
+        return;
+    }
+    std::vector<WaterDisplacer::DispatchInputs> allDispatchInputs;
+    std::vector<AcsHelper::GeometryWrapper*> geoWrappers;
+    allDispatchInputs.reserve(this->deformableInstances.size());
+    geoWrappers.reserve(this->deformableInstances.size());
+    for (Instance* const instance : this->deformableInstances)
+    {
+        WaterDisplacer::DispatchInputs dispatchInputs;
+        dispatchInputs.vertsBufferOffset =
+            Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
+        dispatchInputs.vertCount = Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.sizeBytes);
+        dispatchInputs.transformOffsetX = instance->transformOffset.x;
+        dispatchInputs.transformOffsetZ = instance->transformOffset.z;
+        allDispatchInputs.push_back(dispatchInputs);
+
+        geoWrappers.push_back(&instance->geoWrapper);
+    }
+
+    // whole-resource transitions also cover terrain verts, so the displacement pass must not
+    // overlap other passes reading verts (BLAS build/refit reads them in NON_PIXEL_SHADER_RESOURCE)
+    ID3D12Resource* dev_vertsResource = this->managedVertsBuffer.getBuffer();
+    BufferHelper::stateTransitionResourceBarrier(cmdList,
+                                                 dev_vertsResource,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), time, allDispatchInputs);
+
+    BufferHelper::uavBarrier(cmdList, dev_vertsResource);
+    BufferHelper::stateTransitionResourceBarrier(cmdList,
+                                                 dev_vertsResource,
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    AcsHelper::updateBlases(cmdList, toFreeList, geoWrappers);
 }
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
@@ -447,6 +508,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             blasInputs.host_idxs = &instance->host_idxs;
         }
 
+        blasInputs.allowUpdate = instance->isDeformable;
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
@@ -502,6 +564,11 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         this->mappedInstanceDatasArray[instance->id] = instanceData;
         this->mappedInstanceDatasArray.markDirty(instance->id);
 
+        if (instance->isDeformable)
+        {
+            this->deformableInstances.insert(instance);
+        }
+
         if (instance->isVisible)
         {
             ++numVisibleBlasesWaitingForTlas;
@@ -517,7 +584,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     return thresholdReached || queueDrained;
 }
 
-void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights)
 {
     if (this->hasTlas())
     {
@@ -538,6 +605,19 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
             continue;
         }
 
+        if (updateAreaLights)
+        {
+            instance->isInTlas = true;
+        }
+        else if (!instance->isInTlas)
+        {
+            // freshly built BLAS still waiting for the next dirty rebuild: keep it out of the
+            // TLAS until the area light structures are rebuilt alongside it, or emissive hits
+            // would reference lights missing from the sampling structure / light tree (the
+            // path tracer's light tree lookups then read garbage and can hang the GPU)
+            continue;
+        }
+
         D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
         memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
         const glm::ivec3 totalOffset = instance->transformOffset - this->globalInstanceOffset;
@@ -550,7 +630,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         instanceDesc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
         currentFrameInstanceDescs[nextInstanceDescIdx++] = instanceDesc;
 
-        if (instance->areaLightsBufferSection.sizeBytes > 0)
+        if (updateAreaLights && instance->areaLightsBufferSection.sizeBytes > 0)
         {
             const uint32_t instanceNumAreaLights = instance->areaLightsBufferSection.sizeBytes / sizeof(AreaLight);
             uint32_t instanceAreaLightIdx = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
@@ -568,10 +648,13 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         }
     }
 
-    this->numAreaLights = nextAreaLightSamplingIdx;
-    this->areaLightSparseCount = maxSparseAreaLightIdx;
-    this->areaLightTopologyChanged = true;
-    this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
+    if (updateAreaLights)
+    {
+        this->numAreaLights = nextAreaLightSamplingIdx;
+        this->areaLightSparseCount = maxSparseAreaLightIdx;
+        this->areaLightTopologyChanged = true;
+        this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
+    }
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
@@ -584,7 +667,12 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
 
-    this->numVisibleBlasesWaitingForTlas = 0;
+    if (updateAreaLights)
+    {
+        // non-dirty rebuilds exclude waiting instances, so they stay counted for the
+        // dirty-rebuild threshold in makeQueuedBlases
+        this->numVisibleBlasesWaitingForTlas = 0;
+    }
 }
 
 const glm::ivec3& Scene::getGlobalInstanceOffset() const

@@ -44,6 +44,11 @@ private:
 
     bool isVisible{ true };
     bool isScheduledForDeletion{ false };
+    // geometry gets displaced by a compute pass every frame and its BLAS refit instead of rebuilt
+    bool isDeformable{ false };
+    // set on the first dirty TLAS rebuild that includes this instance; non-dirty per-frame
+    // rebuilds only include instances already in the TLAS (see Scene::makeTlas)
+    bool isInTlas{ false };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -81,6 +86,8 @@ public:
     void setVisible(bool visible);
 
     void setMaterialIdx(uint32_t id);
+
+    void setIsDeformable(bool deformable);
 };
 
 class Scene
@@ -94,6 +101,9 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .bufferCreationFlags = {
+                .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, // deformable instance displacement writes verts in place
+            },
         },
     };
     ReservedManagedBuffer managedIdxsBuffer{
@@ -119,6 +129,10 @@ private:
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
+    // finalized, BLAS-built deformable instances; drives the displacement dispatches and BLAS
+    // refits (every deformable instance is water for now — when other deformable types arrive,
+    // split per type or add a deformation-type enum to Instance to pick the dispatch shader)
+    std::unordered_set<Instance*> deformableInstances{};
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -180,7 +194,9 @@ private:
     // returns true if TLAS is now dirty
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
-    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    void updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time);
+
+    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights);
 
     void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
@@ -189,7 +205,7 @@ public:
 
     void reset();
 
-    bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

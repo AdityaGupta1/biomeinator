@@ -209,6 +209,8 @@ static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for p
 #endif
 
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
+// wave-surface faces; marks triangles whose normals get overridden with analytic wave normals
+#define TRIANGLE_FLAG_IS_WATER_TOP (1 << 1)
 
 struct PerTriangleData
 {
