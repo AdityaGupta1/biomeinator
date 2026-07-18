@@ -47,6 +47,11 @@
 // VERSION: 1.1.1
 // https://github.com/Auburn/FastNoiseLite
 
+// Integer hash functions in this library rely on well-defined wraparound when
+// multiplying the large PRIME constants, which DXC flags as overflow.
+#pragma dxc diagnostic push
+#pragma dxc diagnostic ignored "-Winteger-overflow"
+
 // Switch between using floats or doubles for input position
 typedef float FNLfloat;
 //typedef double FNLfloat;
@@ -2322,3 +2327,5 @@ void fnlDomainWarp3D(fnl_state state, inout FNLfloat x, inout FNLfloat y, inout 
         break;
     }
 }
+
+#pragma dxc diagnostic pop
