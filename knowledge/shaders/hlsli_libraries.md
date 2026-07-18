@@ -1,4 +1,4 @@
-_Last edited: 2026-05-12_
+_Last edited: 2026-07-18_
 
 # HLSL Utility Libraries
 
@@ -30,3 +30,7 @@ _Last edited: 2026-05-12_
 - **`util/color.hlsli`** — luminance, sRGB conversion, DLSS specular albedo helper.
 - **`util/ray.hlsli`** — ray evaluation and ray cone helpers.
 - **`util/packing.hlsli`** — octahedral normal encoding/decoding.
+- **`util/FastNoiseLite.hlsli`** — vendored noise library
+  ([FastNoiseLite](https://github.com/Auburn/FastNoiseLite), MIT). Kept as `.hlsli`,
+  not upstream `.hlsl`, so the `*.hlsl` glob doesn't compile it as a standalone shader.
+  Build `fnl_state` from compile-time constants so dxc prunes the unused noise-type branches.
