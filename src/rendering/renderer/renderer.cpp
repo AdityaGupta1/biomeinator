@@ -44,6 +44,8 @@ namespace Renderer
 
 static constexpr float defaultFovYDegrees = 35;
 
+static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
+
 void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
@@ -468,7 +470,12 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
-    renderState.animTime += deltaTime * SettingsManager::getAsFloat("animTimeScale");
+    // scrubbing overrides the pause, so time can be stepped from a frozen scene
+    const float timeScrubDirection = WindowManager::getTimeScrubDirection();
+    const float animTimeScale = timeScrubDirection != 0.f
+        ? timeScrubDirection * timeScrubSpeed
+        : (SettingsManager::getAsBool("animTimePaused") ? 0.f : 1.f);
+    renderState.animTime += deltaTime * animTimeScale;
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);

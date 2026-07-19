@@ -1,4 +1,4 @@
-_Last edited: 2026-07-18_
+_Last edited: 2026-07-19_
 
 # HLSL Utility Libraries
 
@@ -20,7 +20,9 @@ _Last edited: 2026-07-18_
   dependency**: must be included after `path_tracing_common.hlsli` because it references
   `instanceDatas` and `perTriDatas` without declaring them.
 - **`light/ris.hlsli`** — Resampled Importance Sampling for direct area light sampling.
-- **`light/dome_light.hlsli`** — dome light (sun + sky gradient), voxel mode only.
+- **`light/dome_light.hlsli`** — dome light (sun + sky gradient), voxel mode only. The sun
+  direction is a closed-form function of `renderParams.animTime` rather than integrated state, so
+  scrubbing time in either direction always reproduces the same sky.
 - **`light/light_sampling.hlsli`** — shared helpers for sampling points on area light
   triangles and computing solid-angle PDFs.
 - **`util/rng.hlsli`** — PCG-based hash RNG. Sequential state — call order within a shader

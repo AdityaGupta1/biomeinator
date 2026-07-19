@@ -46,7 +46,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
-    ADD_OPTION("animTimeScale", "Time scale for world animation (e.g. water waves)", float, "1.f");
+    ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
     ADD_OPTION("fullscreen", "Start in fullscreen mode", bool, "false");
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
@@ -117,7 +117,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);
-    COPY_SETTING("animTimeScale", float);
+    COPY_SETTING("animTimePaused", bool);
     COPY_SETTING("fullscreen", bool);
     COPY_SETTING("useWaitableSwapChain", bool);
     COPY_SETTING("showGui", bool);

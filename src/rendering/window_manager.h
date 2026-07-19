@@ -15,4 +15,7 @@ void init();
 
 PlayerInput getPlayerInput();
 
+// -1, 0, or +1: direction of fast time scrubbing requested by the bracket keys.
+float getTimeScrubDirection();
+
 } // namespace WindowManager

@@ -1,4 +1,4 @@
-_Last edited: 2026-07-18_
+_Last edited: 2026-07-19_
 
 # Settings Manager
 
@@ -39,10 +39,12 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
 - **`testOutput`**: If set to a `.png` path, the engine renders one frame, saves a screenshot, and exits. Used by automated tests.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
-- **`animTimeScale`** (default `1`): Scales only the animation time driving world animation
-  (currently water displacement and shading); player movement, camera, and everything else
-  timed stay unaffected. The test runner passes `--animTimeScale=0` for every test so water is
-  frozen at its t=0 shape and goldens are deterministic.
+- **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation
+  (water displacement and shading, sun position); player movement, camera, and everything else
+  timed stay unaffected. Runtime toggling goes through the setting rather than renderer-side
+  state, so there is no pause flag to keep in sync. The test runner passes
+  `--animTimePaused=true` for every test so goldens are deterministic. Scrub keys still move
+  time while paused — see [rendering → render_loop.md](../rendering/render_loop.md).
 
 ## GUI Helpers
 

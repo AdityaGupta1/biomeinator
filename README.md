@@ -25,8 +25,10 @@ For voxel terrain, run with the command line argument `--voxelMode`. Otherwise, 
 Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move vertically, and the mouse to rotate. Additional controls include:
 - Hold <kbd>C</kbd> to zoom
 - Press <kbd>Z</kbd> to toggle the cursor for accessing the settings menu
-- Press <kbd>P</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`)
+- Press <kbd>F2</kbd> to take a screenshot (which is then stored in `Documents/biomeinator/screenshots/`)
 - Press <kbd>H</kbd> to toggle GUI visibility
+- Press <kbd>P</kbd> to pause and unpause world animation (water waves, sun position)
+- Hold <kbd>[</kbd> or <kbd>]</kbd> to run world animation backwards or forwards at 50x speed, which also works while paused
 
 ## Third-Party Licenses
 
