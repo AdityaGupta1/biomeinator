@@ -24,6 +24,21 @@
 #define WATER_DISPLACE_WORKGROUP_SIZE 64
 
 // =============================================
+// SKY ATMOSPHERE
+// =============================================
+
+#define SKY_TRANSMITTANCE_LUT_WIDTH 256
+#define SKY_TRANSMITTANCE_LUT_HEIGHT 64
+#define SKY_TRANSMITTANCE_LUT_NUM_STEPS 40
+
+#define SKY_VIEW_LUT_WIDTH 200
+#define SKY_VIEW_LUT_HEIGHT 100
+#define SKY_VIEW_LUT_NUM_STEPS 30
+
+#define SKY_WORKGROUP_SIZE_X 8
+#define SKY_WORKGROUP_SIZE_Y 8
+
+// =============================================
 // LIGHT TREE
 // =============================================
 

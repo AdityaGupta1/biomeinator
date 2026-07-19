@@ -7,28 +7,27 @@
 
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
+#include "sky/atmosphere.hlsli"
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 
+// deliberately larger than the real sun (~0.8° radius vs. 0.27°)
 static const float sunCosTheta = 0.9999f;
-static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 16000.f;
+static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
 
-static const float sunPeriodSeconds = 1200.f; // half above the horizon, half below
-static const float sunTiltRadians = 23.5f * (M_PI / 180.f);
-static const float sunPhaseOffsetRadians = M_PI / 4.f;
+// Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
+// angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
+static const float3 sunIlluminance = float3(10.f, 10.f, 10.f);
 
-static const float3 zenithColor = float3(0.15f, 0.40f, 0.80f) * 1.5f;
-static const float3 horizonColor = float3(0.45f, 0.55f, 0.65f) * 1.2f;
-static const float3 groundColor = float3(0.09f, 0.08f, 0.07f);
+// Small constant floor so nights aren't pitch black until the moon exists. Added at the lookup
+// rather than baked into the sky-view LUT so it's trivial to delete when the moon lands.
+static const float3 nightAmbient = float3(0.01f, 0.015f, 0.025f);
 
-// The sun rides a great circle tilted towards +Z, rising at +X and setting at -X. Derived purely from
-// animTime so that scrubbing time forwards or backwards lands on the same sky.
+SamplerState skyLutSampler : REGISTER_S(RT, LUT_SAMPLER);
+
 float3 getSunDir_WS()
 {
-    const float angle = renderParams.animTime * (M_TWO_PI / sunPeriodSeconds) + sunPhaseOffsetRadians;
-    float sinAngle, cosAngle;
-    sincos(angle, sinAngle, cosAngle);
-    return float3(cosAngle, sinAngle * cos(sunTiltRadians), sinAngle * sin(sunTiltRadians));
+    return computeSunDir_WS(renderParams.animTime);
 }
 
 bool isInSun(float3 wi_WS)
@@ -36,19 +35,32 @@ bool isInSun(float3 wi_WS)
     return dot(wi_WS, getSunDir_WS()) >= sunCosTheta;
 }
 
-float3 getSkyGradientColor(float3 wi_WS)
+float getCameraAtmosphereRadius()
 {
-    const float y = wi_WS.y;
-    if (y >= 0.f)
-    {
-        float t = pow(1.f - y, 4.f);
-        return lerp(zenithColor, horizonColor, t);
-    }
-    else
-    {
-        float t = saturate(-y * 2.f);
-        return lerp(horizonColor, groundColor, t);
-    }
+    return atmosphereRadiusForCameraY(cameraParams.pos_WS.y + cameraParams.globalInstanceOffset.y);
+}
+
+float3 getSkyColor(float3 wi_WS)
+{
+    Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
+    const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
+    return skyViewLut.SampleLevel(skyLutSampler, uv, 0).rgb * sunIlluminance + nightAmbient;
+}
+
+// True if the ray from the camera towards wi_WS is occluded by the virtual planet. The
+// transmittance parameterization only covers rays that don't hit the ground sphere, and isInSun
+// alone would show the disk through the horizon at night.
+bool isSunOccluded(float3 wi_WS)
+{
+    const float r = getCameraAtmosphereRadius();
+    return raySphereIntersectNearest(float3(0.f, r, 0.f), wi_WS, atmosphereGroundRadius) >= 0.f;
+}
+
+float3 getSunColor(float3 wi_WS)
+{
+    Texture2D<float4> transmittanceLut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
+    const float3 transmittance = sampleTransmittanceLut(transmittanceLut, skyLutSampler, getCameraAtmosphereRadius(), wi_WS.y);
+    return sunIlluminance * transmittance / sunSolidAngle;
 }
 
 float3 getDomeLightColor(float3 wi_WS)
@@ -58,12 +70,12 @@ float3 getDomeLightColor(float3 wi_WS)
         return float3(0.f, 0.f, 0.f);
     }
 
-    if (isInSun(wi_WS))
+    if (isInSun(wi_WS) && !isSunOccluded(wi_WS))
     {
-        return sunColor;
+        return getSunColor(wi_WS);
     }
 
-    return getSkyGradientColor(wi_WS);
+    return getSkyColor(wi_WS);
 }
 
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)

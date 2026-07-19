@@ -8,6 +8,7 @@
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/common/common_enums.h"
+#include "rendering/sky_atmosphere.h"
 #include "rendering/water_displacer.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
@@ -70,6 +71,7 @@ void init()
     renderState.useWaitableSwapChain = SettingsManager::getAsBool("useWaitableSwapChain");
 
     initSwapChain();
+    SkyAtmosphere::init(); // before initRtTargets — resize() records the LUT SRV indices into heapIndices
     initRtTargets();
     initCommand();
     initConstantParams();
@@ -279,6 +281,8 @@ void resize()
             .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
 
             .debugTargetIdx = renderState.debugTarget.getSrvIdx(),
+            .transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx(),
+            .skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx(),
         };
     }
 
@@ -749,6 +753,17 @@ void render()
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         // ===================================
+        // SKY ATMOSPHERE LUTS
+        // ===================================
+
+        if (renderState.voxelMode)
+        {
+            const float cameraY = paramBlockManager.cameraParams->pos_WS.y +
+                static_cast<float>(paramBlockManager.cameraParams->globalInstanceOffset.y);
+            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY);
+        }
+
+        // ===================================
         // GBUFFER
         // ===================================
 
@@ -1011,6 +1026,7 @@ void destroy()
     renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
     WaterDisplacer::destroy();
+    SkyAtmosphere::destroy();
 
     renderState.scene.reset();
     AcsHelper::reset();

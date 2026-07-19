@@ -26,6 +26,7 @@
 
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0
+#define RT_REGISTER_LUT_SAMPLER 1 // linear clamp, for the sky atmosphere LUTs
 
 // =============================================
 #define GBUFFER_REGISTER_SPACE 2
@@ -88,6 +89,16 @@
 
 // u#
 #define WATER_DISPLACE_REGISTER_VERTS_OUT 0
+
+// =============================================
+#define SKY_REGISTER_SPACE 8
+// =============================================
+
+// b#
+#define SKY_REGISTER_CONSTANTS 0
+
+// s#
+#define SKY_REGISTER_LUT_SAMPLER 0
 
 // =============================================
 #define NRC_REGISTER_SPACE 5

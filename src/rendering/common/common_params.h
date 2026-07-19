@@ -47,9 +47,9 @@ struct HeapIndices
         uint dlssOutputTargetIdx;
 
         uint debugTargetIdx;
+        uint transmittanceLutIdx;
+        uint skyViewLutIdx;
         uint pad0;
-        uint pad1;
-        uint pad2;
     } srv;
 };
 
