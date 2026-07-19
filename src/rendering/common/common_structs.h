@@ -209,6 +209,8 @@ static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for p
 #endif
 
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)
+// Faces that receive wave displacement and noise-based normals perturbation
+#define TRIANGLE_FLAG_IS_WATER_TOP (1 << 1)
 
 struct PerTriangleData
 {

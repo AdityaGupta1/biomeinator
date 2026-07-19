@@ -8,6 +8,7 @@
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/common/common_enums.h"
+#include "rendering/water_displacer.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
@@ -79,6 +80,8 @@ void init()
 
     initRootSignature();
     initPipeline();
+
+    WaterDisplacer::init();
 
     renderState.lightTreeManager.init();
     renderState.gpuRadixSort.init();
@@ -465,6 +468,10 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
+    renderState.animTime += deltaTime * SettingsManager::getAsFloat("animTimeScale");
+    // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
+    // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
+    const float animTimeFloat = static_cast<float>(renderState.animTime);
 
     beginFrame();
 
@@ -540,7 +547,7 @@ void render()
         Terrain::update(frameCtx.toFreeList);
     }
 
-    const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList);
+    const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
 
     const bool didCameraChange = renderState.camera.update();
 
@@ -559,6 +566,9 @@ void render()
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
+    renderParams->animTime = animTimeFloat;
+    renderParams->prevAnimTime = renderState.prevAnimTime;
+    renderState.prevAnimTime = animTimeFloat;
 
     const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
 
@@ -993,6 +1003,7 @@ void destroy()
 
     renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
+    WaterDisplacer::destroy();
 
     renderState.scene.reset();
     AcsHelper::reset();

@@ -108,7 +108,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
-static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper)
+static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* geoWrapper, bool allowUpdate)
 {
     const ManagedBufferSection vertsBufferSection = geoWrapper->vertsBufferSection;
     const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
@@ -132,15 +132,31 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapp
         },
     };
 
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+    if (allowUpdate)
+    {
+        // ALLOW_UPDATE must also be passed to GetRaytracingAccelerationStructurePrebuildInfo,
+        // or UpdateScratchDataSizeInBytes comes back 0
+        buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+    }
+
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
+        .Flags = buildFlags,
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
     };
+}
+
+static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper, bool allowUpdate)
+{
+    makeBlasBuildInputs(buildInfo, geoWrapper, allowUpdate);
 
     Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
+
+    geoWrapper->updateScratchSizeBytes = allowUpdate ? buildInfo->prebuildInfo.UpdateScratchDataSizeInBytes : 0;
 
     buildInfo->outAcs = &geoWrapper->blasBufferSection;
 }
@@ -179,7 +195,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         }
 
         buildInfos.emplace_back();
-        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper);
+        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, inputs.allowUpdate);
     }
 
     dev_verts->endBatchCopy(cmdList);
@@ -188,18 +204,64 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
 
+void updateBlases(ID3D12GraphicsCommandList4* cmdList,
+                  ToFreeList& toFreeList,
+                  const std::vector<GeometryWrapper*>& geoWrappers)
+{
+    if (geoWrappers.empty())
+    {
+        return;
+    }
+
+    // Last frame's DispatchRays read these BLASes and the in-place refit writes the same
+    // memory; the buffer lives permanently in the AS state, so ordering is UAV-barrier-only.
+    // The existing barrier in makeTlas only covers this frame's writes -> TLAS read, not
+    // last frame's read -> this frame's write.
+    BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer());
+
+    for (GeometryWrapper* const geoWrapper : geoWrappers)
+    {
+        AcsBuildInfo buildInfo;
+        makeBlasBuildInputs(&buildInfo, geoWrapper, true /*allowUpdate*/);
+        // update flags must match the original build's flags aside from PERFORM_UPDATE, and
+        // ALLOW_UPDATE must stay set or no further updates are allowed
+        buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+
+        const size_t scratchSizeBytes = MathUtil::roundUp(geoWrapper->updateScratchSizeBytes,
+                                                          D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+        const ManagedBufferSection scratchSection =
+            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
+
+        const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+            .DestAccelerationStructureData = geoWrapper->blasBufferSection.getGpuVirtualAddress(),
+            .Inputs = buildInfo.inputs,
+            .SourceAccelerationStructureData = geoWrapper->blasBufferSection.getGpuVirtualAddress(),
+            .ScratchAccelerationStructureData = scratchSection.getGpuVirtualAddress(),
+        };
+
+        toFreeList.pushManagedBufferSection(scratchSection);
+
+        cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+    }
+}
+
 void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const TlasBuildInputs& inputs)
 {
     AcsBuildInfo buildInfo;
 
-    const bool allowUpdates = (inputs.updateScratchSizePtr != nullptr);
+    const bool allowUpdate = (inputs.updateScratchSizePtr != nullptr);
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+    if (allowUpdate)
+    {
+        buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+    }
 
     BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer()); // ensure BLAS writes are completed before building TLAS
 
     buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-        .Flags = allowUpdates ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD,
+        .Flags = buildFlags,
         .NumDescs = inputs.numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress(),

@@ -8,6 +8,7 @@
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
+#include "common/water_waves.hlsli"
 #include "materials/materials.hlsli"
 #include "util/ray.hlsli"
 
@@ -173,6 +174,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     {
         nor_WS = -nor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
+    }
+
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+    {
+        const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+        nor_WS = waveShadingNormal(posXZ_WS, renderParams.time, WorldRayDirection(),
+                                   bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     payload.hitInfo.hitNor_WS = nor_WS;
 

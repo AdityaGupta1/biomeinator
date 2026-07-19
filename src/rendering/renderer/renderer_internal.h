@@ -284,6 +284,8 @@ struct RendererState
     uint32_t frameCtxIdx{ 0 };
     HANDLE frameLatencyWaitable{ nullptr };
     std::chrono::high_resolution_clock::time_point lastTimePoint{ std::chrono::high_resolution_clock::now() };
+    double animTime{ 0.0 }; // elapsed seconds scaled by the animTimeScale setting
+    float prevAnimTime{ 0.f }; // previous frame's RenderParams::animTime, for water motion vectors
     bool stopAccumulating{ false };
 
     // -- Device and infrastructure --

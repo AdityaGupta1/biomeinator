@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-07-17_
 
 # Scene
 
@@ -24,6 +24,30 @@ it's copied to a device buffer before use.
 `Scene::update()` ordering matters — BLAS builds must happen before TLAS rebuild, and TLAS
 rebuild must happen before area light sampling structure copy, because TLAS rebuild is what
 populates the sampling structure. The return value signals whether accumulation should reset.
+
+Deformable instances (water) are displaced and their BLASes refit between the BLAS builds
+and the TLAS rebuild. Once a TLAS exists it is rebuilt **every frame**, because refits change
+the BLAS AABBs the TLAS caches (also smooths the frame-pacing spikes of bursty rebuilds). Two
+things stay gated on `isTlasDirty` so per-frame deformation doesn't trigger them: the area
+light sampling structure rewrite (which would rebuild the light tree and reset accumulation
+every frame, hanging test-mode screenshots) and the `didChange` return value.
+
+**INVARIANT:** the TLAS instance set must only change on dirty rebuilds, which also rebuild
+the area light structures — non-dirty per-frame rebuilds include only instances already
+marked `isInTlas` and just refresh AABBs. If a freshly built emissive instance entered the
+TLAS before the sampling structure / light tree knew about it, the path tracer's light tree
+lookups for its hits read garbage and can hang the GPU (observed as intermittent TDR during
+world import in `cave_lights`).
+
+## Deformable Instances
+
+`Instance::isDeformable` (set by chunk meshing for water) routes an instance into
+`deformableInstances` after its first BLAS build. The set drives the per-frame displacement
+dispatches (`WaterDisplacer`) and BLAS refits. Displacement rewrites verts **in place** in
+the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
+and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
+whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must
+not overlap other passes reading verts.
 
 ## Area Light Sampling Structure
 

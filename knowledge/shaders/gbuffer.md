@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-07-18_
 
 # G-Buffer Shader
 
@@ -17,7 +17,11 @@ Primary rays are separated from the main path tracer so that:
 ## Non-Obvious Details
 
 **Motion vectors**: `worldToPrevClipMat` already accounts for `globalInstanceOffset` changes
-between frames, so no manual offset correction is needed in this shader.
+between frames, so no manual offset correction is needed in this shader. Water-top hits
+additionally reconstruct the previous frame's surface position analytically — displacement
+is vertical at fixed XZ, so re-evaluating `waveHeight` at `renderParams.prevTime` gives the
+previous Y. Refracted geometry seen through water keeps camera-only motion. The noise-based
+normal perturbation is shading-only and intentionally ignored.
 
 **Diffuse albedo** is intentionally NOT written here — it's written by the path tracing
 shader because specular bounces modulate it (a specular first bounce looks through to the

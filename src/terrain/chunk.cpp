@@ -704,7 +704,10 @@ void Chunk::createInstances()
                             for (uint i = 0; i < 4; ++i)
                             {
                                 vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                                vertPos_CS.y -= topYSubtract;
+                                if (thisFaceVertPositions[i].y == 1)
+                                {
+                                    vertPos_CS.y -= topYSubtract;
+                                }
 
                                 const vec2 uv = vec2(uvOffsets[i]);
 
@@ -722,6 +725,10 @@ void Chunk::createInstances()
 
                             PerTriangleData faceData{};
                             faceData.flags = isWater ? TRIANGLE_FLAG_IS_WATER : 0u;
+                            if (isWater && faceIdx == 4) // top face
+                            {
+                                faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
+                            }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);
                             perTriDatas.emplace_back(faceData);
@@ -755,6 +762,7 @@ void Chunk::createInstances()
         waterInstance->setTransformOffset(transformOffset);
         waterInstance->finalizeGeometry();
         waterInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::WATER));
+        waterInstance->setIsDeformable(true);
     }
 
     this->advanceState(ChunkState::HAS_GEOMETRY);
