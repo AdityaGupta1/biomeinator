@@ -11,7 +11,7 @@
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 
-// deliberately larger than the real sun (~0.8° radius vs. 0.27°)
+// Deliberately larger than the real sun (~0.8° radius vs. 0.27°)
 static const float sunCosTheta = 0.9999f;
 static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
 
@@ -24,6 +24,7 @@ static const float3 sunIlluminance = float3(10.f, 10.f, 10.f);
 static const float3 nightAmbient = float3(0.01f, 0.015f, 0.025f);
 
 SamplerState skyLutSampler : REGISTER_S(RT, LUT_SAMPLER);
+SamplerState skyViewSampler : REGISTER_S(RT, SKY_VIEW_SAMPLER);
 
 float3 getSunDir_WS()
 {
@@ -44,7 +45,7 @@ float3 getSkyColor(float3 wi_WS)
 {
     Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
     const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
-    return skyViewLut.SampleLevel(skyLutSampler, uv, 0).rgb * sunIlluminance + nightAmbient;
+    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + nightAmbient;
 }
 
 // True if the ray from the camera towards wi_WS is occluded by the virtual planet. The
@@ -101,6 +102,8 @@ struct DomeLightSample
     float pdf;
 };
 
+// TODO: Once the moon exists, NEE should consider sampling its cap as well (and domeLightPdf
+// must account for both caps to keep MIS consistent).
 float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
     const float3 sunDir_WS = getSunDir_WS();

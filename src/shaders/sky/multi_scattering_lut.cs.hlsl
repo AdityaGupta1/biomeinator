@@ -30,7 +30,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float muSun = 2.f * uv.x - 1.f;
     const float3 sunDir = float3(sqrt(saturate(1.f - muSun * muSun)), muSun, 0.f);
 
-    // keep the sample point off the exact ground/top spheres, where the ray intersections degenerate
+    // Keep the sample point off the exact ground/top spheres, where the ray intersections degenerate
     const float altitude = clamp(uv.y * (atmosphereTopRadius - atmosphereGroundRadius),
                                  1.f,
                                  atmosphereTopRadius - atmosphereGroundRadius - 1.f);
@@ -66,11 +66,11 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             const float3 sampleTransmittance = exp(-medium.extinction * dt);
             const float3 scattering = medium.rayleighScattering + medium.mieScattering;
 
-            // f_ms integrand (Eq. 8): scattered energy transfer only — no shadowing or phase,
+            // The f_ms integrand (Eq. 8): scattered energy transfer only — no shadowing or phase,
             // those are already accounted for in L_2ndorder
             luminanceFactor += throughput * (scattering - scattering * sampleTransmittance) / max(medium.extinction, 1e-12f);
 
-            // L' integrand (Eq. 6) with unit illuminance and the isotropic phase function
+            // The L' integrand (Eq. 6) with unit illuminance and the isotropic phase function
             const float earthShadow =
                 raySphereIntersectNearest(samplePos, sunDir, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
             const float sampleMuSun = dot(samplePos, sunDir) / sampleRadius;
@@ -91,12 +91,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             luminance += throughput * transmittanceToSun * NdotL * (atmosphereGroundAlbedo * M_INV_PI);
         }
 
-        // integrate against the isotropic phase (Eq. 5 and 7): pu * dΩ = (1/4π)(4π/N) = 1/N
+        // Integrate against the isotropic phase (Eq. 5 and 7): pu * dΩ = (1/4π)(4π/N) = 1/N
         secondOrderLuminance += luminance / SKY_MULTI_SCATTERING_NUM_DIRS;
         transferFactor += luminanceFactor / SKY_MULTI_SCATTERING_NUM_DIRS;
     }
 
-    // infinite scattering orders as a geometric series (Eq. 9-10)
+    // Infinite scattering orders as a geometric series (Eq. 9-10)
     const float3 psiMs = secondOrderLuminance / (1.f - transferFactor);
 
     RWTexture2D<float4> multiScatteringLut = ResourceDescriptorHeap[lutUavIdx];

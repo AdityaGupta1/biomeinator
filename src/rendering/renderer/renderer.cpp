@@ -474,7 +474,7 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
-    // scrubbing overrides the pause, so time can be stepped from a frozen scene
+    // Scrubbing overrides the pause, so time can be stepped from a frozen scene
     const float timeScrubDirection = WindowManager::getTimeScrubDirection();
     const float animTimeScale = timeScrubDirection != 0.f
         ? timeScrubDirection * timeScrubSpeed

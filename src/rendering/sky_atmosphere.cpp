@@ -176,6 +176,7 @@ void destroy()
     multiScatteringPso.Reset();
     transmittancePso.Reset();
     rootSig.Reset();
+    staticLutsGenerated = false;
 }
 
 } // namespace SkyAtmosphere

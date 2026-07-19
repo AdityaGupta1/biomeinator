@@ -45,7 +45,10 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
   exactly between generation and lookup — both sides call the shared helpers in
   `atmosphere.hlsli`; don't reimplement either half.
 - `RT_REGISTER_LUT_SAMPLER` exists because the RT `texSampler` is point-filtered in voxel mode;
-  the LUTs need bilinear + clamp.
+  the LUTs need bilinear + clamp. The sky-view LUT alone uses `RT_REGISTER_SKY_VIEW_SAMPLER`
+  (wrap in u): it is periodic in azimuth, and clamp would leave a bilinear seam at the anti-sun
+  azimuth. Don't reuse the wrap sampler for the other LUTs — their u axes are not periodic, and
+  float error at u ≈ 1 would wrap to the opposite end of the parameterization.
 - Sky changes invalidate goldens that see the sky (`water_absorption`, `water_reflection`,
   `underwater`); rebaseline after each stage of the sky plan, not between sub-steps.
 

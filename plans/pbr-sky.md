@@ -1,10 +1,10 @@
 # Physically Based Sky
 
 References:
-- Hillaire, "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (EGSR 2020).
-  Full paper is in this repo: `plans/egsr2020.pdf`, with a plain-text extraction at
-  `plans/egsr2020.txt` — read the txt for equations, LUT parameterizations, and Table 1/2
-  details before implementing either stage. Equation and section numbers below refer to it.
+- Hillaire, "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (EGSR 2020):
+  https://sebh.github.io/publications/egsr2020.pdf — read it for equations, LUT
+  parameterizations, and Table 1/2 details before implementing either stage. Equation and
+  section numbers below refer to it.
 - Maxime Heckel, "On rendering the sky, sunsets and planets" (single-scattering walkthrough
   of the same LUT scheme): https://blog.maximeheckel.com/posts/on-rendering-the-sky-sunsets-and-planets/
 
@@ -72,8 +72,9 @@ self-contained pass owning its textures):
   moon exists, add a small constant ambient floor at the lookup in `dome_light.hlsli` (not
   baked into the LUT) so nights aren't pitch black; keeping it out of the LUT makes it trivial
   to delete when the moon lands.
-- LUT sampling: bilinear, clamp; sky-view latitude mapping must match between generation and
-  lookup (single shared uv↔direction helper in `atmosphere.hlsli`).
+- LUT sampling: bilinear, clamp (wrap in u for the sky-view LUT, which is periodic in azimuth);
+  sky-view latitude mapping must match between generation and lookup (single shared
+  uv↔direction helper in `atmosphere.hlsli`).
 - Per-frame ordering: sky-view LUT dispatch + UAV barrier must run before the path trace pass
   each frame; the one-time transmittance (and later multi-scattering) generation must complete
   before the first sky-view dispatch.

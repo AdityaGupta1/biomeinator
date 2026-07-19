@@ -52,7 +52,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const MediumSample medium = sampleMedium(sampleRadius - atmosphereGroundRadius);
         const float3 sampleTransmittance = exp(-medium.extinction * dt);
 
-        // the transmittance LUT only covers rays that don't hit the ground, so the planet's own
+        // The transmittance LUT only covers rays that don't hit the ground, so the planet's own
         // shadow needs an explicit visibility check
         const float earthShadow = raySphereIntersectNearest(samplePos, sunDir_WS, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
         const float muSun = dot(samplePos, sunDir_WS) / sampleRadius;
@@ -68,7 +68,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float3 scatteredLuminance = earthShadow * transmittanceToSun * phaseTimesScattering + multiScatteredLuminance;
 
-        // analytic integration of the scattered luminance over the segment (Hillaire's
+        // Analytic integration of the scattered luminance over the segment (Hillaire's
         // energy-conserving form), instead of a plain midpoint sum
         luminance += throughput * (scatteredLuminance - scatteredLuminance * sampleTransmittance) / max(medium.extinction, 1e-12f);
         throughput *= sampleTransmittance;
