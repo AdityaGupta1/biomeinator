@@ -132,13 +132,18 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* 
         },
     };
 
-    // ALLOW_UPDATE must also be passed to GetRaytracingAccelerationStructurePrebuildInfo,
-    // or UpdateScratchDataSizeInBytes comes back 0
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+    if (allowUpdate)
+    {
+        // ALLOW_UPDATE must also be passed to GetRaytracingAccelerationStructurePrebuildInfo,
+        // or UpdateScratchDataSizeInBytes comes back 0
+        buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+    }
+
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE |
-                 (allowUpdate ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-                              : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE),
+        .Flags = buildFlags,
         .NumDescs = 1,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
@@ -244,15 +249,19 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
 {
     AcsBuildInfo buildInfo;
 
-    const bool allowUpdates = (inputs.updateScratchSizePtr != nullptr);
+    const bool allowUpdate = (inputs.updateScratchSizePtr != nullptr);
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+    if (allowUpdate)
+    {
+        buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+    }
 
     BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer()); // ensure BLAS writes are completed before building TLAS
 
     buildInfo.inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE |
-                 (allowUpdates ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-                               : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE),
+        .Flags = buildFlags,
         .NumDescs = inputs.numInstances,
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .InstanceDescs = inputs.dev_instanceDescs->GetGPUVirtualAddress(),

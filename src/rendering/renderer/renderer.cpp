@@ -468,7 +468,7 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
-    renderState.animTime += deltaTime * SettingsManager::getAsFloat("timeScale");
+    renderState.animTime += deltaTime * SettingsManager::getAsFloat("animTimeScale");
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);
@@ -566,8 +566,8 @@ void render()
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
-    renderParams->time = animTimeFloat;
-    renderParams->prevTime = renderState.prevAnimTime;
+    renderParams->animTime = animTimeFloat;
+    renderParams->prevAnimTime = renderState.prevAnimTime;
     renderState.prevAnimTime = animTimeFloat;
 
     const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();

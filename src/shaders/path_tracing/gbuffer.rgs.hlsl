@@ -58,7 +58,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevTime) - waveHeight(posXZ_WS, renderParams.time);
+            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
         }
 
         // TODO: eventually set roughness

@@ -39,9 +39,9 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
 - **`testOutput`**: If set to a `.png` path, the engine renders one frame, saves a screenshot, and exits. Used by automated tests.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
-- **`timeScale`** (default `1`): Scales only the animation time driving world animation
+- **`animTimeScale`** (default `1`): Scales only the animation time driving world animation
   (currently water displacement and shading); player movement, camera, and everything else
-  timed stay unaffected. The test runner passes `--timeScale=0` for every test so water is
+  timed stay unaffected. The test runner passes `--animTimeScale=0` for every test so water is
   frozen at its t=0 shape and goldens are deterministic.
 
 ## GUI Helpers

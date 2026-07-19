@@ -139,7 +139,7 @@ int main(int argc, char** argv)
             "--useVsync=false",
             "--lockCamera=true",
             "--showGui=false",
-            "--timeScale=0" // freeze world animation for deterministic screenshots
+            "--animTimeScale=0" // freeze world animation for deterministic screenshots
         };
         std::string command = exePath.generic_string();
         for (const std::string& arg : constantArgs)

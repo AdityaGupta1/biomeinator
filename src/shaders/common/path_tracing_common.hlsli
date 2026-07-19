@@ -170,7 +170,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
-
     if (dot(nor_WS, -WorldRayDirection()) < 0.f)
     {
         nor_WS = -nor_WS;

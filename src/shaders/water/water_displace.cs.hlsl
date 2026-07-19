@@ -12,7 +12,7 @@ cbuffer WaterDisplaceConstants : REGISTER_B(WATER_DISPLACE, CONSTANTS)
     uint vertsBufferOffset; // in verts
     uint vertCount;
     int2 transformOffsetXZ;
-    float time;
+    float animTime;
 };
 
 RWStructuredBuffer<Vertex> vertsOut : REGISTER_U(WATER_DISPLACE, VERTS_OUT);
@@ -36,6 +36,6 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float2 posXZ_WS = vert.pos_OS.xz + float2(transformOffsetXZ);
-    vert.pos_OS.y = restY + waveHeight(posXZ_WS, time);
+    vert.pos_OS.y = restY + waveHeight(posXZ_WS, animTime);
     vertsOut[vertIdx] = vert;
 }

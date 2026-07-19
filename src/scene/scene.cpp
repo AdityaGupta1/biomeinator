@@ -366,13 +366,13 @@ const glm::vec3& Scene::getBoundsMax_WS() const
     return this->sceneBoundsMax_WS;
 }
 
-bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time)
+bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)
 {
     this->areaLightTopologyChanged = false;
 
     this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
 
-    this->updateDeformableInstances(cmdList, toFreeList, time);
+    this->updateDeformableInstances(cmdList, toFreeList, animTime);
 
     bool didChange = false;
 
@@ -408,7 +408,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     return didChange;
 }
 
-void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float time)
+void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)
 {
     if (this->deformableInstances.empty())
     {
@@ -439,7 +439,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
                                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), time, allDispatchInputs);
+    WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), animTime, allDispatchInputs);
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
     BufferHelper::stateTransitionResourceBarrier(cmdList,

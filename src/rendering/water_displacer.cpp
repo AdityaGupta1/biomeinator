@@ -37,7 +37,7 @@ struct WaterDisplaceConstants
     uint32_t vertCount;
     int32_t transformOffsetX;
     int32_t transformOffsetZ;
-    float time;
+    float animTime;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
@@ -71,7 +71,7 @@ void init()
 
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
-              float time,
+              float animTime,
               const std::vector<DispatchInputs>& allInputs)
 {
     cmdList->SetPipelineState(pso.Get());
@@ -88,7 +88,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
             .vertCount = inputs.vertCount,
             .transformOffsetX = inputs.transformOffsetX,
             .transformOffsetZ = inputs.transformOffsetZ,
-            .time = time,
+            .animTime = animTime,
         };
         cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
                                               sizeof(WaterDisplaceConstants) / 4, &constants, 0);
