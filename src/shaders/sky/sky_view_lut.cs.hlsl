@@ -22,6 +22,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     Texture2D<float4> transmittanceLut = ResourceDescriptorHeap[transmittanceLutSrvIdx];
+    Texture2D<float4> multiScatteringLut = ResourceDescriptorHeap[multiScatteringLutSrvIdx];
 
     const float3 sunDir_WS = computeSunDir_WS(animTime);
 
@@ -59,7 +60,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         const float3 phaseTimesScattering =
             medium.rayleighScattering * rayleighPhaseValue + medium.mieScattering * miePhaseValue;
-        const float3 scatteredLuminance = earthShadow * transmittanceToSun * phaseTimesScattering;
+
+        // Eq. 11: multiple scattering (Ψms · σs) added alongside the phase-weighted single
+        // scattering; Ψms already includes the sun shadowing of the second order
+        const float3 psiMs = sampleMultiScatteringLut(multiScatteringLut, lutSampler, sampleRadius, muSun);
+        const float3 multiScatteredLuminance = psiMs * (medium.rayleighScattering + medium.mieScattering);
+
+        const float3 scatteredLuminance = earthShadow * transmittanceToSun * phaseTimesScattering + multiScatteredLuminance;
 
         // analytic integration of the scattered luminance over the segment (Hillaire's
         // energy-conserving form), instead of a plain midpoint sum

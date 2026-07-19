@@ -154,6 +154,30 @@ float3 sampleTransmittanceLut(Texture2D<float4> transmittanceLut,
 }
 
 // =============================================
+// Multi-scattering LUT parameterization
+// =============================================
+
+// Paper §5.5.2: (sun zenith cosine, altitude). Ψms is isotropic and the medium only varies with
+// altitude, so it's valid for any view point and light direction.
+
+float2 multiScatteringLutRMuSunToUv(const float r, const float muSun)
+{
+    const float u = 0.5f + 0.5f * muSun;
+    const float v = saturate((r - atmosphereGroundRadius) / (atmosphereTopRadius - atmosphereGroundRadius));
+    return float2(u, v);
+}
+
+// Ψms (unit sr^-1): multiplied by a directional light's illuminance and the local scattering
+// coefficient to get the multiple scattering contribution (Eq. 10-11).
+float3 sampleMultiScatteringLut(Texture2D<float4> multiScatteringLut,
+                                SamplerState lutSampler,
+                                const float r,
+                                const float muSun)
+{
+    return multiScatteringLut.SampleLevel(lutSampler, multiScatteringLutRMuSunToUv(r, muSun), 0).rgb;
+}
+
+// =============================================
 // Sky-view LUT parameterization
 // =============================================
 

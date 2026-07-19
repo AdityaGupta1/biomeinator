@@ -11,6 +11,7 @@ cbuffer SkyConstants : REGISTER_B(SKY, CONSTANTS)
 {
     uint lutUavIdx;
     uint transmittanceLutSrvIdx;
+    uint multiScatteringLutSrvIdx;
     float animTime;
     float cameraY;
 };

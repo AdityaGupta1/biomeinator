@@ -27,6 +27,7 @@
 #include "postprocess/debug_view.ps.fxh"
 #include "postprocess/postprocess.ps.fxh"
 #include "postprocess/postprocess.vs.fxh"
+#include "sky/multi_scattering_lut.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
 #include "sky/transmittance_lut.cs.fxh"
 #include "water/water_displace.cs.fxh"
@@ -52,6 +53,7 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(nrc_resolve_cs),
     REGISTER_SHADER(nrc_update_rgs),
     REGISTER_SHADER(path_tracing_rgs),
+    REGISTER_SHADER(multi_scattering_lut_cs),
     REGISTER_SHADER(postprocess_ps),
     REGISTER_SHADER(postprocess_vs),
     REGISTER_SHADER(sky_view_lut_cs),

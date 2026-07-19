@@ -1,16 +1,18 @@
 _Last edited: 2026-07-19_
 
-# Sky Atmosphere (PBR sky, stage 1)
+# Sky Atmosphere (PBR sky)
 
 Physically based sky per Hillaire's EGSR 2020 technique (see `plans/pbr-sky.md` for the full
-plan and paper references). `src/rendering/sky_atmosphere.cpp` owns two LUT textures and their
-compute passes; `shaders/sky/atmosphere.hlsli` holds the shared constants and
-parameterizations; `shaders/light/dome_light.hlsli` consumes both LUTs.
+plan and paper references). `src/rendering/sky_atmosphere.cpp` owns three LUT textures and
+their compute passes; `shaders/sky/atmosphere.hlsli` holds the shared constants and
+parameterizations; `shaders/light/dome_light.hlsli` consumes the transmittance and sky-view
+LUTs (the multi-scattering LUT is only read during sky-view generation).
 
 ## Ordering invariants
 
-- The transmittance LUT depends only on atmosphere constants, so it is generated once on the
-  first `dispatch()` call; the sky-view LUT is regenerated every frame (sun moves with
+- The transmittance and multi-scattering LUTs depend only on atmosphere constants, so they are
+  generated once on the first `dispatch()` call, in that order (multi-scattering reads
+  transmittance); the sky-view LUT reads both and is regenerated every frame (sun moves with
   `animTime`, and it tracks camera altitude). The per-frame dispatch must complete (UAV
   barrier) before the path trace pass samples the LUTs.
 - `SkyAtmosphere::init()` must run before `initRtTargets()` — the first `resize()` records the
@@ -47,8 +49,16 @@ parameterizations; `shaders/light/dome_light.hlsli` consumes both LUTs.
 - Sky changes invalidate goldens that see the sky (`water_absorption`, `water_reflection`,
   `underwater`); rebaseline after each stage of the sky plan, not between sub-steps.
 
-## Not yet done (stage 2)
+## Multi-scattering notes
 
-Multiple scattering (paper §5.5). Without it, twilight is near-black and the sunset zenith is
-darker than reality; the stage 2 multi-scattering LUT slots between the transmittance and
-sky-view passes at startup.
+- Ψms is stored as a transfer function (unit sr⁻¹): the sky-view raymarch multiplies it by the
+  local scattering coefficient (and implicitly the unit sun illuminance), per Eq. 11. When the
+  moon lands, its illuminance reuses the same LUT — Ψms multiplies any directional light.
+- The multi-scattering integration deliberately skips the phase functions and sun shadowing in
+  the `f_ms` transfer term — those are already accounted for in `L_2ndorder` (paper §5.5.3);
+  including them again would double-count and break the `f_ms < 1` geometric series bound.
+- Sample altitudes in the multi-scattering pass are clamped 1m off both atmosphere boundary
+  spheres, where the ray-sphere intersections degenerate.
+- Effect size: roughly +40% zenith luminance at noon, brighter sunset zenith, and a visible
+  red-to-purple gradient through civil twilight (sun down to ~-5°); by nautical twilight
+  (sun < -6°) the sky is genuinely near-black and only `nightAmbient` remains.

@@ -33,18 +33,21 @@ struct SkyConstants
 {
     uint32_t lutUavIdx;
     uint32_t transmittanceLutSrvIdx;
+    uint32_t multiScatteringLutSrvIdx;
     float animTime;
     float cameraY;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
 ComPtr<ID3D12PipelineState> transmittancePso{ nullptr };
+ComPtr<ID3D12PipelineState> multiScatteringPso{ nullptr };
 ComPtr<ID3D12PipelineState> skyViewPso{ nullptr };
 
 RtTarget transmittanceLut{ L"skyTransmittanceLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
+RtTarget multiScatteringLut{ L"skyMultiScatteringLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 RtTarget skyViewLut{ L"skyViewLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 
-bool transmittanceLutGenerated{ false };
+bool staticLutsGenerated{ false };
 
 } // namespace
 
@@ -80,12 +83,19 @@ void init()
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&transmittancePso)));
     transmittancePso->SetName(L"skyTransmittanceLutPso");
 
+    psoDesc.CS = makeShaderBytecode(getShader("multi_scattering_lut_cs"));
+    CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&multiScatteringPso)));
+    multiScatteringPso->SetName(L"skyMultiScatteringLutPso");
+
     psoDesc.CS = makeShaderBytecode(getShader("sky_view_lut_cs"));
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&skyViewPso)));
     skyViewPso->SetName(L"skyViewLutPso");
 
     transmittanceLut.setDimensions(SKY_TRANSMITTANCE_LUT_WIDTH, SKY_TRANSMITTANCE_LUT_HEIGHT);
     transmittanceLut.init();
+
+    multiScatteringLut.setDimensions(SKY_MULTI_SCATTERING_LUT_SIZE, SKY_MULTI_SCATTERING_LUT_SIZE);
+    multiScatteringLut.init();
 
     skyViewLut.setDimensions(SKY_VIEW_LUT_WIDTH, SKY_VIEW_LUT_HEIGHT);
     skyViewLut.init();
@@ -95,30 +105,46 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const f
 {
     cmdList->SetComputeRootSignature(rootSig.Get());
 
-    if (!transmittanceLutGenerated)
+    if (!staticLutsGenerated)
     {
         transmittanceLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         cmdList->SetPipelineState(transmittancePso.Get());
-        const SkyConstants constants = {
+        const SkyConstants transmittanceConstants = {
             .lutUavIdx = transmittanceLut.getUavIdx(),
         };
-        cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &constants, 0);
+        cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &transmittanceConstants, 0);
         cmdList->Dispatch(Util::calculateDispatchSize(SKY_TRANSMITTANCE_LUT_WIDTH, SKY_WORKGROUP_SIZE_X),
                           Util::calculateDispatchSize(SKY_TRANSMITTANCE_LUT_HEIGHT, SKY_WORKGROUP_SIZE_Y),
                           1);
 
         BufferHelper::uavBarrier(cmdList, transmittanceLut.getTarget());
-        transmittanceLutGenerated = true;
+        transmittanceLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+        multiScatteringLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+        cmdList->SetPipelineState(multiScatteringPso.Get());
+        const SkyConstants multiScatteringConstants = {
+            .lutUavIdx = multiScatteringLut.getUavIdx(),
+            .transmittanceLutSrvIdx = transmittanceLut.getSrvIdx(),
+        };
+        cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &multiScatteringConstants, 0);
+        cmdList->Dispatch(Util::calculateDispatchSize(SKY_MULTI_SCATTERING_LUT_SIZE, SKY_WORKGROUP_SIZE_X),
+                          Util::calculateDispatchSize(SKY_MULTI_SCATTERING_LUT_SIZE, SKY_WORKGROUP_SIZE_Y),
+                          1);
+
+        BufferHelper::uavBarrier(cmdList, multiScatteringLut.getTarget());
+        staticLutsGenerated = true;
     }
 
-    transmittanceLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    multiScatteringLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     skyViewLut.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     cmdList->SetPipelineState(skyViewPso.Get());
     const SkyConstants constants = {
         .lutUavIdx = skyViewLut.getUavIdx(),
         .transmittanceLutSrvIdx = transmittanceLut.getSrvIdx(),
+        .multiScatteringLutSrvIdx = multiScatteringLut.getSrvIdx(),
         .animTime = animTime,
         .cameraY = cameraY,
     };
@@ -144,8 +170,10 @@ uint32_t getSkyViewLutSrvIdx()
 void destroy()
 {
     transmittanceLut.reset();
+    multiScatteringLut.reset();
     skyViewLut.reset();
     skyViewPso.Reset();
+    multiScatteringPso.Reset();
     transmittancePso.Reset();
     rootSig.Reset();
 }
