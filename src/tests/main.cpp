@@ -138,7 +138,8 @@ int main(int argc, char** argv)
             "--testOutput=" + generatedImagePath.generic_string(),
             "--useVsync=false",
             "--lockCamera=true",
-            "--showGui=false"
+            "--showGui=false",
+            "--timeScale=0" // freeze world animation for deterministic screenshots
         };
         std::string command = exePath.generic_string();
         for (const std::string& arg : constantArgs)

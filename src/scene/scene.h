@@ -129,9 +129,8 @@ private:
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
-    // finalized, BLAS-built deformable instances; drives the displacement dispatches and BLAS
-    // refits (every deformable instance is water for now — when other deformable types arrive,
-    // split per type or add a deformation-type enum to Instance to pick the dispatch shader)
+    // finalized, BLAS-built deformable instances; drives the displacement dispatches and
+    // BLAS refits (every deformable instance is water for now)
     std::unordered_set<Instance*> deformableInstances{};
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};

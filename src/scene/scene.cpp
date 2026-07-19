@@ -388,12 +388,11 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     }
 
     this->prevGlobalInstanceOffset = this->globalInstanceOffset;
-    // Rebuild the TLAS every frame once one exists: BLAS refits change the AABBs the TLAS
-    // caches, and the steady rebuild also smooths the frame-pacing spikes caused by bursty
-    // rebuilds. Deformation alone doesn't reset accumulation, so didChange only reflects
-    // actual topology changes (isTlasDirty).
-    // TODO: use TLAS PERFORM_UPDATE instead of full rebuild on frames with no new/freed
-    // chunks (the updateScratchSizePtr plumbing in makeTlas is the start of this)
+    // Intentionally rebuild the TLAS every frame once one exists, even on frames with no
+    // deformable instances: BLAS refits change the AABBs the TLAS caches, and the steady
+    // rebuild also smooths the frame-pacing spikes caused by bursty rebuilds. Deformation
+    // alone doesn't reset accumulation, so didChange only reflects actual topology changes
+    // (isTlasDirty).
     if (this->isTlasDirty || this->hasTlas())
     {
         didChange |= this->isTlasDirty;

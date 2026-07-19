@@ -39,8 +39,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    // chunk transforms are pure integer translations, so world XZ is exact float math —
-    // identical inputs for shared boundary verts across chunks, no seams
+    // chunk transforms are pure integer translations, so world XZ is exact float math,
+    // giving identical inputs for shared boundary verts across chunks (no seams)
     const float2 posXZ_WS = vert.pos_OS.xz + float2(transformOffsetXZ);
     vert.pos_OS.y = restY + waveHeight(posXZ_WS, time);
     vertsOut[vertIdx] = vert;

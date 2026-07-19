@@ -130,8 +130,9 @@ struct RenderParams
     uint refractionIndirectPassthrough;
     float mipBias;
 
-    // elapsed seconds; consumed by both the water displacement pass and hit shaders,
-    // which must see the same value each frame or wave normals won't match geometry
+    // elapsed seconds scaled by the timeScale setting; consumed by both the water
+    // displacement pass and hit shaders, which must see the same value each frame or wave
+    // normals won't match geometry
     float time;
     // previous frame's time; used to reconstruct the previous water surface position for
     // motion vectors

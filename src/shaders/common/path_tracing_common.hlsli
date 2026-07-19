@@ -181,32 +181,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        const float2 baseGrad = waveHeightAndGradient(posXZ_WS, renderParams.time).yz;
-        const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, renderParams.time);
-        float3 baseNor_WS = normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));
-        float3 waveNor_WS = normalize(float3(-grad.x, 1.f, -grad.y));
-        if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
-        {
-            baseNor_WS = -baseNor_WS;
-            waveNor_WS = -waveNor_WS;
-        }
-
-        // At grazing incidence, the noise-perturbed normal can reflect rays into this or a
-        // neighboring wave, where they return almost no light (mostly lost to volume
-        // absorption), showing as flickering black pixels. Clamp the reflection direction
-        // to a margin above the unperturbed surface's horizon — enough to clear neighboring
-        // waves — and rebuild the normal as the view/reflection half vector, which also
-        // keeps the normal in the viewer's hemisphere.
-        const float minReflectedDotBase = 0.05f;
-        const float3 view_WS = -WorldRayDirection();
-        const float3 reflected_WS = reflect(WorldRayDirection(), waveNor_WS);
-        const float reflectedDotBase = dot(reflected_WS, baseNor_WS);
-        if (reflectedDotBase < minReflectedDotBase)
-        {
-            const float3 clampedReflected_WS = normalize(reflected_WS + baseNor_WS * (minReflectedDotBase - reflectedDotBase));
-            waveNor_WS = normalize(view_WS + clampedReflected_WS);
-        }
-        nor_WS = waveNor_WS;
+        nor_WS = waveShadingNormal(posXZ_WS, renderParams.time, WorldRayDirection(),
+                                   bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     payload.hitInfo.hitNor_WS = nor_WS;
 

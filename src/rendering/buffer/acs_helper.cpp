@@ -108,7 +108,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     }
 }
 
-static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper, bool allowUpdate)
+static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* geoWrapper, bool allowUpdate)
 {
     const ManagedBufferSection vertsBufferSection = geoWrapper->vertsBufferSection;
     const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
@@ -143,6 +143,11 @@ static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapp
         .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
         .pGeometryDescs = &buildInfo->geometryDesc,
     };
+}
+
+static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper, bool allowUpdate)
+{
+    makeBlasBuildInputs(buildInfo, geoWrapper, allowUpdate);
 
     Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
@@ -212,7 +217,7 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
     for (GeometryWrapper* const geoWrapper : geoWrappers)
     {
         AcsBuildInfo buildInfo;
-        makeBlasBuildInfo(&buildInfo, geoWrapper, true /*allowUpdate*/);
+        makeBlasBuildInputs(&buildInfo, geoWrapper, true /*allowUpdate*/);
         // update flags must match the original build's flags aside from PERFORM_UPDATE, and
         // ALLOW_UPDATE must stay set or no further updates are allowed
         buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;

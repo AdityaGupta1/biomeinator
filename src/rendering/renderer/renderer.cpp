@@ -468,10 +468,10 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
-    renderState.elapsedTime += deltaTime;
+    renderState.animTime += deltaTime * SettingsManager::getAsFloat("timeScale");
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
-    const float elapsedTimeFloat = static_cast<float>(renderState.elapsedTime);
+    const float animTimeFloat = static_cast<float>(renderState.animTime);
 
     beginFrame();
 
@@ -547,7 +547,7 @@ void render()
         Terrain::update(frameCtx.toFreeList);
     }
 
-    const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, elapsedTimeFloat);
+    const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
 
     const bool didCameraChange = renderState.camera.update();
 
@@ -566,9 +566,9 @@ void render()
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
-    renderParams->time = elapsedTimeFloat;
-    renderParams->prevTime = renderState.prevElapsedTime;
-    renderState.prevElapsedTime = elapsedTimeFloat;
+    renderParams->time = animTimeFloat;
+    renderParams->prevTime = renderState.prevAnimTime;
+    renderState.prevAnimTime = animTimeFloat;
 
     const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
 

@@ -8,17 +8,18 @@
 // Layered wave model. Vertex displacement (waveHeight) is a pure analytic sum of sines:
 // two large-scale swells present everywhere, plus three small chop waves scaled by a
 // very-low-frequency "choppiness" envelope so some areas read as rough water and others
-// as nearly calm. All coefficients are the tunable constants below.
-// INVARIANT: total displacement amplitude must stay < 0.125 — non-top water verts sit at
+// as nearly calm.
+// INVARIANT: total displacement amplitude must stay < 0.125: non-top water verts sit at
 // integer Y, which is exactly 0.125 from the nearest k + 7/8 rest position, so the in-place
 // vertex identification in water_displace.cs.hlsl breaks if displacement can reach 0.125.
 // Current max: sum(SWELL_STRENGTHS) 0.055 + sum(CHOP_STRENGTHS) 0.045 = 0.1.
 //
-// The shading normal adds a noise-based perturbation (waveNormalPerturbation) on top of the
-// analytic sine gradient: small-scale OpenSimplex2 FBM tilts the normal in X and Z. It never touches
-// waveHeight, so it adds surface detail without moving verts (and cannot break the invariant).
-// The perturbation is scaled by a choppiness factor combining the large-scale sine envelope
-// with a medium-scale OpenSimplex2 envelope, floored so even calm water keeps some detail.
+// The shading normal (waveShadingNormal) adds a noise-based perturbation
+// (waveNormalPerturbation) on top of the analytic sine gradient: small-scale OpenSimplex2
+// FBM tilts the normal in X and Z. It never touches waveHeight, so it adds surface detail
+// without moving verts (and cannot break the invariant). The perturbation is scaled by a
+// choppiness factor combining the large-scale sine envelope with a medium-scale
+// OpenSimplex2 envelope, floored so even calm water keeps some detail.
 //
 // Wave parameters come in triples: STRENGTH (amplitude), FREQ (angular wave vector; its
 // magnitude sets the spatial frequency) and SPEED (time scale).
@@ -31,7 +32,7 @@
 static const int SWELL_WAVE_COUNT = 2;
 static const float SWELL_STRENGTHS[SWELL_WAVE_COUNT] = { 0.03f, 0.025f };
 static const float2 SWELL_FREQS[SWELL_WAVE_COUNT] = { float2(0.08f, 0.06f), float2(-0.05f, 0.11f) };
-static const float SWELL_SPEEDS[SWELL_WAVE_COUNT] = { 0.25f, 0.3f };
+static const float SWELL_SPEEDS[SWELL_WAVE_COUNT] = { 0.4f, 0.5f };
 
 // small-scale chop, gated by the shared choppiness envelope below (~5 block wavelength)
 static const int CHOP_WAVE_COUNT = 3;
@@ -55,11 +56,25 @@ static const float MED_CHOP_SPEED = 0.05f;
 
 // small-scale OpenSimplex2 FBM tilt
 static const float NOISE_WAVE_FREQ = 0.5f;
-static const float NOISE_WAVE_SPEED = 0.2f; // animation rate
+static const float NOISE_WAVE_SPEED = 0.2f;
 static const float NOISE_PERTURB_STRENGTH = 0.12f;
 static const int NOISE_WAVE_OCTAVES = 4;
 
 static const float CHOP_FLOOR = 0.1f; // choppiness retained in the calmest areas
+
+// frequency stays 1 because the spatial scale is applied to the sample inputs directly
+fnl_state makeNoiseState(int seed, int fractalType, int octaves)
+{
+    fnl_state state = fnlCreateState(seed);
+    state.noise_type = FNL_NOISE_OPENSIMPLEX2;
+    state.fractal_type = fractalType;
+    state.octaves = octaves;
+    state.frequency = 1.f;
+    return state;
+}
+
+static const fnl_state MED_CHOP_NOISE_STATE = makeNoiseState(9001, FNL_FRACTAL_NONE, 1);
+static const fnl_state NOISE_WAVE_STATE = makeNoiseState(1337, FNL_FRACTAL_FBM, NOISE_WAVE_OCTAVES);
 
 // accumulates one sine wave's height into x and its analytic XZ gradient into yz
 void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float time, inout float3 heightAndGrad)
@@ -69,12 +84,19 @@ void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, floa
     heightAndGrad.yz += amplitude * cos(phase) * waveVec;
 }
 
-// large-scale sine/cos choppiness envelope in [0, 1]
-float sineChop01(float2 posXZ_WS, float time)
+// large-scale sine/cos choppiness envelope: value in [0, 1] in x, XZ gradient in yz
+float3 sineChop01AndGradient(float2 posXZ_WS, float time)
 {
     const float phaseA = dot(posXZ_WS, SINE_CHOP_FREQS[0]) + SINE_CHOP_SPEEDS.x * time;
     const float phaseB = dot(posXZ_WS, SINE_CHOP_FREQS[1]) + SINE_CHOP_SPEEDS.y * time;
-    return 0.5f + 0.5f * sin(phaseA) * sin(phaseB);
+    const float2 grad = 0.5f * (cos(phaseA) * sin(phaseB) * SINE_CHOP_FREQS[0]
+                              + sin(phaseA) * cos(phaseB) * SINE_CHOP_FREQS[1]);
+    return float3(0.5f + 0.5f * sin(phaseA) * sin(phaseB), grad);
+}
+
+float sineChop01(float2 posXZ_WS, float time)
+{
+    return sineChop01AndGradient(posXZ_WS, time).x;
 }
 
 // returns height in x, d(height)/dx in y, d(height)/dz in z
@@ -87,12 +109,7 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float time)
         addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, time, result);
     }
 
-    // choppiness envelope in [0, 1] and its gradient (see sineChop01)
-    const float phaseA = dot(posXZ_WS, SINE_CHOP_FREQS[0]) + SINE_CHOP_SPEEDS.x * time;
-    const float phaseB = dot(posXZ_WS, SINE_CHOP_FREQS[1]) + SINE_CHOP_SPEEDS.y * time;
-    const float envelope = sineChop01(posXZ_WS, time);
-    const float2 envelopeGrad = 0.5f * (cos(phaseA) * sin(phaseB) * SINE_CHOP_FREQS[0]
-                                      + sin(phaseA) * cos(phaseB) * SINE_CHOP_FREQS[1]);
+    const float3 envelope = sineChop01AndGradient(posXZ_WS, time);
 
     float3 chop = float3(0.f, 0.f, 0.f);
     [unroll]
@@ -101,9 +118,9 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float time)
         addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, time, chop);
     }
 
-    // product rule: d(envelope * chop.x) = envelopeGrad * chop.x + envelope * chop.yz
-    result.x += envelope * chop.x;
-    result.yz += envelopeGrad * chop.x + envelope * chop.yz;
+    // product rule: d(envelope * chop.x) = envelopeGrad * chop.x + envelope * chopGrad
+    result.x += envelope.x * chop.x;
+    result.yz += envelope.yz * chop.x + envelope.x * chop.yz;
 
     return result;
 }
@@ -116,10 +133,7 @@ float waveHeight(float2 posXZ_WS, float time)
 // medium-scale OpenSimplex2 choppiness envelope in [0, 1]
 float medChop01(float2 posXZ_WS, float time)
 {
-    fnl_state state = fnlCreateState(9001);
-    state.noise_type = FNL_NOISE_OPENSIMPLEX2;
-    state.frequency = 1.f; // spatial scale applied to the inputs directly
-    const float n = fnlGetNoise3D(state, posXZ_WS.x * MED_CHOP_FREQ, posXZ_WS.y * MED_CHOP_FREQ, time * MED_CHOP_SPEED);
+    const float n = fnlGetNoise3D(MED_CHOP_NOISE_STATE, posXZ_WS.x * MED_CHOP_FREQ, posXZ_WS.y * MED_CHOP_FREQ, time * MED_CHOP_SPEED);
     return 0.5f + 0.5f * n;
 }
 
@@ -130,16 +144,40 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float time)
 {
     const float chop = CHOP_FLOOR + (1.f - CHOP_FLOOR) * sineChop01(posXZ_WS, time) * medChop01(posXZ_WS, time);
 
-    fnl_state state = fnlCreateState(1337);
-    state.noise_type = FNL_NOISE_OPENSIMPLEX2;
-    state.fractal_type = FNL_FRACTAL_FBM;
-    state.octaves = NOISE_WAVE_OCTAVES;
-    state.frequency = 1.f; // spatial scale applied to the inputs directly
-
     const float3 samplePos = float3(posXZ_WS * NOISE_WAVE_FREQ, time * NOISE_WAVE_SPEED);
     const float3 decorrelated = samplePos + float3(137.f, -91.f, 0.f) * NOISE_WAVE_FREQ;
-    const float nx = fnlGetNoise3D(state, samplePos.x, samplePos.y, samplePos.z);
-    const float nz = fnlGetNoise3D(state, decorrelated.x, decorrelated.y, decorrelated.z);
+    const float nx = fnlGetNoise3D(NOISE_WAVE_STATE, samplePos.x, samplePos.y, samplePos.z);
+    const float nz = fnlGetNoise3D(NOISE_WAVE_STATE, decorrelated.x, decorrelated.y, decorrelated.z);
 
     return chop * NOISE_PERTURB_STRENGTH * float2(nx, nz);
+}
+
+// Shading normal for a water top-surface hit: the analytic wave gradient plus the noise
+// perturbation, flipped for backface (underwater) hits.
+//
+// At grazing incidence, the perturbed normal can reflect rays into this or a neighboring
+// wave, where they return almost no light (mostly lost to volume absorption), showing as
+// flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
+// surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
+// view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
+float3 waveShadingNormal(float2 posXZ_WS, float time, float3 rayDir_WS, bool backfaceHit)
+{
+    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, time).yz;
+    const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, time);
+    const float flip = backfaceHit ? -1.f : 1.f;
+    const float3 baseNor_WS = flip * normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));
+    float3 waveNor_WS = flip * normalize(float3(-grad.x, 1.f, -grad.y));
+
+    const float minReflectedDotBase = 0.05f;
+    const float3 reflected_WS = reflect(rayDir_WS, waveNor_WS);
+    const float reflectedDotBase = dot(reflected_WS, baseNor_WS);
+    if (reflectedDotBase < minReflectedDotBase)
+    {
+        const float3 clampedReflected_WS = normalize(reflected_WS + baseNor_WS * (minReflectedDotBase - reflectedDotBase));
+        const float3 halfVec_WS = clampedReflected_WS - rayDir_WS; // view + clamped reflection
+        // the half vector degenerates when the clamped reflection points back along the
+        // ray; fall back to the unperturbed normal
+        waveNor_WS = dot(halfVec_WS, halfVec_WS) > 1e-6f ? normalize(halfVec_WS) : baseNor_WS;
+    }
+    return waveNor_WS;
 }
