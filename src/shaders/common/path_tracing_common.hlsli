@@ -180,7 +180,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        nor_WS = waveShadingNormal(posXZ_WS, renderParams.time, WorldRayDirection(),
+        nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     payload.hitInfo.hitNor_WS = nor_WS;
