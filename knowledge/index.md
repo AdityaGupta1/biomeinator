@@ -1,4 +1,4 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-07-18_
 
 # Knowledgebase Index
 
@@ -15,3 +15,4 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [settings/](settings/index.md) | Runtime settings and CLI argument parsing |
 | [util/](util/index.md) | Math helpers, RNG, Halton sequence, ring buffer |
 | [build/](build/index.md) | Shader compilation pipeline, third-party dependencies |
+| [reference/](reference/index.md) | Vendored upstream docs (DirectX-Specs) for agent reference |
