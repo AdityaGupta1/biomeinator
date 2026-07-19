@@ -725,7 +725,7 @@ void Chunk::createInstances()
 
                             PerTriangleData faceData{};
                             faceData.flags = isWater ? TRIANGLE_FLAG_IS_WATER : 0u;
-                            if (isWater && faceIdx == 4) // faceOffsets[4] = (0, 1, 0), the top face
+                            if (isWater && faceIdx == 4) // top face
                             {
                                 faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
                             }

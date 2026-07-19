@@ -45,9 +45,6 @@ float3 getPrevPrimaryRayDirection(const uint2 pixelIdx)
     return normalize(targetPos_WS - cameraParams.prevPos_WS);
 }
 
-// positions are camera-relative, so float precision (and thus the offset needed to escape
-// the surface) degrades with distance from the camera; a fixed epsilon self-intersects on
-// far-away geometry (observed as black pixels on grazing-angle water near the horizon)
 float rayOriginOffsetEpsilon(const float3 origin_WS)
 {
     return max(RAY_ORIGIN_OFFSET_EPSILON, 4e-6f * length(origin_WS));
