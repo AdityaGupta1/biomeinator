@@ -137,8 +137,8 @@ struct RenderParams
 
     float fogG;
     uint fogMarchSteps;
+    float fogAmbientStrength;
     uint pad0;
-    uint pad1;
 };
 
 struct RtslParams

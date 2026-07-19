@@ -450,9 +450,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             const float segmentDist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
                 ? distance(ray.Origin, payload.hitInfo.hitPos_WS)
                 : getDistanceToVoxelBounds(ray.Origin, ray.Direction);
-            // Restrict the sun march to early path depths; deeper bounces keep only
-            // transmittance and the ambient term. Bounce segments diverge after the path
-            // split, so no split gating here — this puts god rays into the reflection split.
+            // Restrict in-scattering to early path depths; deeper bounces keep only
+            // transmittance. Bounce segments diverge after the path split, so no split
+            // gating here — this puts god rays into the reflection split.
             const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
             const float3 inScatter = computeFogInScatter(ray.Origin, ray.Direction, segmentDist, numFogSteps, payload.rng);
             pathColor += payload.pathWeight * inScatter;

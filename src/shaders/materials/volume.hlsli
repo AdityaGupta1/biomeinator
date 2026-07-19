@@ -37,7 +37,7 @@ float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
 
 // TODO: hoist sea level to a shared location (the CPU-side constant lives in chunk_generator.cpp)
 static const float fogSeaLevelY = 125.f;
-static const float fogRampBlocks = 48.f;
+static const float fogRampBlocks = 24.f;
 
 // Fog density profile in true world-space Y: zero below (seaLevel - fogRampBlocks), linear
 // ramp up to seaLevel, exponential falloff above. Linear (not smoothstep) in the ramp so the

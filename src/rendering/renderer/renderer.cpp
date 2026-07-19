@@ -605,6 +605,7 @@ void render()
     renderParams->fogScaleHeight = SettingsManager::getAsFloat("fogScaleHeight");
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
+    renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
