@@ -13,6 +13,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "light/dome_light.hlsli"
+#include "light/fog.hlsli"
 #include "light/light_sampling.hlsli"
 #include "light/ris.hlsli"
 #include "common/light_tree_sampling.hlsli"
@@ -74,6 +75,24 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     const float3 segmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
+    if (fogEnabled && !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    {
+        const float segmentDist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+            ? distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
+            : getDistanceToVoxelBounds(cameraParams.pos_WS, ray.Direction);
+        // The primary segment is identical for both path splits and collect sums them, so
+        // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
+        if (pathSplitIdx == 0)
+        {
+            const float3 inScatter =
+                computeFogInScatter(cameraParams.pos_WS, ray.Direction, segmentDist, renderParams.fogMarchSteps, payload.rng);
+            pathColor += payload.pathWeight * inScatter;
+        }
+        payload.pathWeight *= computeFogTransmittance(cameraParams.pos_WS, ray.Direction, segmentDist);
+    }
+
     payload.pathWeight *= segmentAbsorption;
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
@@ -83,7 +102,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         NrcUpdateOnMiss(nrcPathState);
         NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
 #endif
-        pathColor = payload.pathWeight * domeLightColor;
+        pathColor += payload.pathWeight * domeLightColor;
         return;
     }
 
@@ -424,6 +443,23 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
+
+        float fogTransmittance = 1.f;
+        if (fogEnabled && !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+        {
+            const float segmentDist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+                ? distance(ray.Origin, payload.hitInfo.hitPos_WS)
+                : getDistanceToVoxelBounds(ray.Origin, ray.Direction);
+            // Restrict the sun march to early path depths; deeper bounces keep only
+            // transmittance and the ambient term. Bounce segments diverge after the path
+            // split, so no split gating here — this puts god rays into the reflection split.
+            const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
+            const float3 inScatter = computeFogInScatter(ray.Origin, ray.Direction, segmentDist, numFogSteps, payload.rng);
+            pathColor += payload.pathWeight * inScatter;
+            fogTransmittance = computeFogTransmittance(ray.Origin, ray.Direction, segmentDist);
+            payload.pathWeight *= fogTransmittance;
+        }
+
         payload.pathWeight *= segmentAbsorption;
 
         if (pathDepth == 0)
@@ -467,7 +503,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
                     }
                     else
                     {

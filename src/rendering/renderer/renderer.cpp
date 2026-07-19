@@ -601,6 +601,10 @@ void render()
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
     renderParams->mipBias = renderState.dlss.mipBias;
+    renderParams->fogSigmaS = SettingsManager::getAsFloat("fogSigmaS");
+    renderParams->fogScaleHeight = SettingsManager::getAsFloat("fogScaleHeight");
+    renderParams->fogG = SettingsManager::getAsFloat("fogG");
+    renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

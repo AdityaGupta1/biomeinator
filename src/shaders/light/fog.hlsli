@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 Aditya Gupta
+
+#pragma once
+
+// NOTE: needs the sun constants, so this file must be included after dome_light.hlsli
+// (volume.hlsli holds the sun-independent fog math and is included much earlier).
+
+#include "../rendering/common/common_hitgroups.h"
+
+#include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
+#include "common/payload.hlsli"
+#include "light/dome_light.hlsli"
+#include "util/math.hlsli"
+
+static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
+static const float3 fogAmbientSkyColor = 0.5f * (zenithColor + horizonColor);
+
+float henyeyGreensteinPhase(const float cosAngle, const float g)
+{
+    const float g2 = g * g;
+    const float denom = 1.f + g2 - 2.f * g * cosAngle;
+    return (1.f - g2) / (4.f * M_PI * denom * sqrt(denom));
+}
+
+bool isSunOccluded(const float3 pos_WS)
+{
+    RayDesc ray;
+    ray.Origin = pos_WS;
+    ray.Direction = sunDir_WS;
+    ray.TMin = 0.f;
+    ray.TMax = RAY_DEFAULT_TMAX;
+
+    // Only the miss shader can run (FORCE_OPAQUE + SKIP_CLOSEST_HIT_SHADER), and it clears
+    // PAYLOAD_FLAG_DID_HIT, so seed the flag and check whether it survived. FORCE_OPAQUE
+    // means alpha-cutout foliage and water surfaces occlude fully; acceptable for now.
+    Payload payload = (Payload)0;
+    payload.flags = PAYLOAD_FLAG_DID_HIT;
+    TraceRay(raytracingAcs,
+             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+             0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+    return bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
+}
+
+// Marches the fog along a segment, accumulating single-scattered sunlight plus a cheap
+// analytic sky ambient term (aerial perspective). Returns radiance to be multiplied by the
+// path weight at the segment start; the caller applies segment transmittance to pathWeight
+// separately. numSteps == 0 skips the sun march and keeps only the ambient term.
+float3 computeFogInScatter(
+    const float3 origin_WS, const float3 dir, const float dist, const uint numSteps, inout RandomNumberGenerator rng)
+{
+    const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
+    const float globalOffsetY = float(cameraParams.globalInstanceOffset.y);
+
+    float3 inScatter = float3(0.f, 0.f, 0.f);
+
+    if (numSteps > 0)
+    {
+        const float stepLength = dist / numSteps;
+        float sunScatter = 0.f;
+        for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
+        {
+            const float t = (stepIdx + rng.nextFloat()) * stepLength;
+            const float3 stepPos_WS = origin_WS + dir * t;
+            const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
+            if (density <= 0.f)
+            {
+                continue;
+            }
+
+            const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
+            const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
+
+            if (isSunOccluded(stepPos_WS))
+            {
+                continue;
+            }
+
+            sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
+        }
+        inScatter = sunScatter * phase * sunSolidAngle * sunColor;
+    }
+
+    const float segmentTransmittance = computeFogTransmittance(origin_WS, dir, dist);
+    inScatter += (1.f - segmentTransmittance) * fogAmbientSkyColor;
+
+    return inScatter;
+}

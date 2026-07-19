@@ -132,6 +132,11 @@ struct RenderParams
 
     float animTime; // scaled by animTimeScale setting
     float prevAnimTime;
+    float fogSigmaS;
+    float fogScaleHeight;
+
+    float fogG;
+    uint fogMarchSteps;
     uint pad0;
     uint pad1;
 };

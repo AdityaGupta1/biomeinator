@@ -51,6 +51,10 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
+    ADD_OPTION("fogSigmaS", "Fog peak scattering coefficient (0 disables fog; voxel mode only)", float, "0.005");
+    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "40.f");
+    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.6");
+    ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
@@ -122,6 +126,10 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("useWaitableSwapChain", bool);
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
+    COPY_SETTING("fogSigmaS", float);
+    COPY_SETTING("fogScaleHeight", float);
+    COPY_SETTING("fogG", float);
+    COPY_SETTING("fogMarchSteps", uint32_t);
     COPY_SETTING("renderDistance", int);
     COPY_SETTING("world", std::string);
 

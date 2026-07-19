@@ -587,7 +587,8 @@
                 "--height=540",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=4"
+                "--maxPathDepth=4",
+                "--fogSigmaS=0"
             ],
             "golden": "voxel/water_absorption/golden.png",
             "threshold": 0.01
@@ -600,7 +601,8 @@
                 "--height=540",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=4"
+                "--maxPathDepth=4",
+                "--fogSigmaS=0"
             ],
             "golden": "voxel/water_reflection/golden.png",
             "threshold": 0.01
@@ -614,7 +616,8 @@
                 "--antialiasingMode=0",
                 "--debugView=\"diffuseAlbedo\"",
                 "--maxPathDepth=4",
-                "--noJitter"
+                "--noJitter",
+                "--fogSigmaS=0"
             ],
             "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
             "threshold": 0.001
@@ -627,7 +630,8 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
-                "--maxPathDepth=12"
+                "--maxPathDepth=12",
+                "--fogSigmaS=0"
             ],
             "golden": "voxel/cave_lights/golden.png",
             "threshold": 0.01
@@ -640,7 +644,8 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=1024",
-                "--maxPathDepth=6"
+                "--maxPathDepth=6",
+                "--fogSigmaS=0"
             ],
             "golden": "voxel/underwater/golden.png",
             "threshold": 0.005

@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-07-18_
 
 # Path Tracing Shader
 
@@ -94,6 +94,12 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
 - **`domeLightPdf()`** — returns 0 in non-voxel mode, so BSDF-hit MIS against the dome light has no effect.
 - **Chunk debug coloring** — tints the primary hit based on chunk coordinates.
 - **Water absorption** — `computeSegmentAbsorption` and `computePassthroughAbsorption` use `voxelBoundsMin/Max_WS` to compute water travel distance, which is only populated in voxel mode. The `PerTriData` flag `TRIANGLE_FLAG_IS_WATER` is also never set outside voxel mode, so water-surface detection itself is voxel-only.
+- **Air fog / god rays** — per-segment height fog with single-scattered sunlight, applied at the two segment-absorption call sites (skipped for underwater segments). Transmittance is closed-form (`volume.hlsli`); in-scattering marches jittered steps with one `FORCE_OPAQUE` sun occlusion ray each (`light/fog.hlsli`), plus an analytic `(1 - T) * avgSky` ambient term. Non-obvious rules:
+  - Primary-segment in-scatter is gated on `pathSplitIdx == 0` (like emission); bounce segments are ungated, which is what puts god rays into the reflection split.
+  - The sun march runs only at path depths ≤ 1 (half steps); deeper bounces keep transmittance + ambient only.
+  - `fogSigmaS = 0` must skip the entire fog block (including the march's RNG draws) so renders stay bit-identical with fog off — the voxel golden tests rely on this via `--fogSigmaS=0`.
+  - Sea level (125) is hardcoded in `volume.hlsli` (TODO: share with `chunk_generator.cpp`); fog height math adds `globalInstanceOffset.y` to get true world Y.
+  - NRC only sees fog transmittance (via `pathWeight`); the cache tail is fogless — accepted for now (see `plans/god_rays.md`).
 
 ---
 
