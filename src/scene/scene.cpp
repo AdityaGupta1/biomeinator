@@ -398,7 +398,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         didChange |= this->isTlasDirty;
         const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
         this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z); // y = 0 to optimize for voxel mode
-        // only rewrite the area light sampling structure on topology changes so light tree
+        // Rewrite the area light sampling structure only on topology changes so light tree
         // rebuilds and accumulation resets aren't triggered every frame
         this->makeTlas(cmdList, toFreeList, this->isTlasDirty /*updateAreaLights*/);
     }
@@ -610,10 +610,9 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         }
         else if (!instance->isInTlas)
         {
-            // freshly built BLAS still waiting for the next dirty rebuild: keep it out of the
-            // TLAS until the area light structures are rebuilt alongside it, or emissive hits
-            // would reference lights missing from the sampling structure / light tree (the
-            // path tracer's light tree lookups then read garbage and can hang the GPU)
+            // This is a freshly built BLAS still waiting for the next dirty rebuild. Keep it out of the
+            // TLAS until the area light structures are rebuilt alongside it, otherwise the GPU would access invalid
+            // lights.
             continue;
         }
 
@@ -668,8 +667,8 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     if (updateAreaLights)
     {
-        // non-dirty rebuilds exclude waiting instances, so they stay counted for the
-        // dirty-rebuild threshold in makeQueuedBlases
+        // Non-dirty rebuilds exclude waiting instances, so they stay counted for the
+        // dirty-rebuild threshold in makeQueuedBlases.
         this->numVisibleBlasesWaitingForTlas = 0;
     }
 }

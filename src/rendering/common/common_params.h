@@ -130,7 +130,7 @@ struct RenderParams
     uint refractionIndirectPassthrough;
     float mipBias;
 
-    float animTime;
+    float animTime; // scaled by animTimeScale setting
     float prevAnimTime;
     uint pad0;
     uint pad1;

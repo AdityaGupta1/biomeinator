@@ -44,9 +44,9 @@ private:
 
     bool isVisible{ true };
     bool isScheduledForDeletion{ false };
-    // geometry gets displaced by a compute pass every frame and its BLAS refit instead of rebuilt
+    // If true, geometry gets displaced by a compute pass every frame and its BLAS refit instead of rebuilt
     bool isDeformable{ false };
-    // set on the first dirty TLAS rebuild that includes this instance; non-dirty per-frame
+    // Set on the first dirty TLAS rebuild that includes this instance; non-dirty per-frame
     // rebuilds only include instances already in the TLAS (see Scene::makeTlas)
     bool isInTlas{ false };
 
