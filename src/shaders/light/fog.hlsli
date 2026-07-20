@@ -14,9 +14,6 @@
 #include "light/dome_light.hlsli"
 #include "util/math.hlsli"
 
-static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
-static const float3 fogAmbientSkyColor = 0.5f * (zenithColor + horizonColor);
-
 float henyeyGreensteinPhase(const float cosAngle, const float g)
 {
     const float g2 = g * g;
@@ -55,37 +52,49 @@ float3 computeFogInScatter(
         return float3(0.f, 0.f, 0.f);
     }
 
-    const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
     const float globalOffsetY = float(cameraParams.globalInstanceOffset.y);
+    const float3 sunDir_WS = getSunDir_WS();
 
-    const float stepLength = dist / numSteps;
-    float sunScatter = 0.f;
-    for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
+    float3 inScatter = float3(0.f, 0.f, 0.f);
+
+    // Below the horizon the sun contributes nothing, and computeFogOpticalDepthToSky's
+    // parameterization assumes an upward direction, so skip the march entirely at night.
+    if (!isSunOccluded(sunDir_WS))
     {
-        const float t = (stepIdx + rng.nextFloat()) * stepLength;
-        const float3 stepPos_WS = origin_WS + dir * t;
-        const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
-        if (density <= 0.f)
+        const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
+
+        const float stepLength = dist / numSteps;
+        float sunScatter = 0.f;
+        for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
         {
-            continue;
+            const float t = (stepIdx + rng.nextFloat()) * stepLength;
+            const float3 stepPos_WS = origin_WS + dir * t;
+            const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
+            if (density <= 0.f)
+            {
+                continue;
+            }
+
+            const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
+            const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
+
+            if (isRayOccluded(stepPos_WS, sunDir_WS))
+            {
+                continue;
+            }
+
+            sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
 
-        const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-        const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
-
-        if (isRayOccluded(stepPos_WS, sunDir_WS))
-        {
-            continue;
-        }
-
-        sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
+        // getSunColor is radiance over the sun disk, so undo the solid-angle division to get
+        // illuminance; this also picks up atmospheric transmittance, reddening rays at sunset.
+        inScatter = sunScatter * phase * sunSolidAngle * getSunColor(sunDir_WS);
     }
-    float3 inScatter = sunScatter * phase * sunSolidAngle * sunColor;
 
     // NOTE: no visibility check, so this also brightens enclosed spaces (cave interiors)
     // with sky-colored haze; fogAmbientStrength is the artistic control for how much.
     const float segmentTransmittance = computeFogTransmittance(origin_WS, dir, dist);
-    inScatter += renderParams.fogAmbientStrength * (1.f - segmentTransmittance) * fogAmbientSkyColor;
+    inScatter += renderParams.fogAmbientStrength * (1.f - segmentTransmittance) * getSkyColor(float3(0.f, 1.f, 0.f));
 
     return inScatter;
 }

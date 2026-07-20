@@ -26,6 +26,8 @@
 
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0
+#define RT_REGISTER_LUT_SAMPLER 1 // linear clamp, for the sky atmosphere LUTs
+#define RT_REGISTER_SKY_VIEW_SAMPLER 2 // linear, wrap in u; the sky-view LUT is periodic in azimuth
 
 // =============================================
 #define GBUFFER_REGISTER_SPACE 2
@@ -61,7 +63,7 @@
 #define POSTPROCESS_REGISTER_TEX_SAMPLER 0
 
 // =============================================
-#define LIGHT_TREE_REGISTER_SPACE 6
+#define LIGHT_TREE_REGISTER_SPACE 4
 // =============================================
 
 // b#
@@ -80,7 +82,7 @@
 #define LIGHT_TREE_REGISTER_MORTON_VALUES_OUT 5
 
 // =============================================
-#define WATER_DISPLACE_REGISTER_SPACE 7
+#define WATER_DISPLACE_REGISTER_SPACE 5
 // =============================================
 
 // b#
@@ -90,7 +92,17 @@
 #define WATER_DISPLACE_REGISTER_VERTS_OUT 0
 
 // =============================================
-#define NRC_REGISTER_SPACE 5
+#define SKY_REGISTER_SPACE 6
+// =============================================
+
+// b#
+#define SKY_REGISTER_CONSTANTS 0
+
+// s#
+#define SKY_REGISTER_LUT_SAMPLER 0
+
+// =============================================
+#define NRC_REGISTER_SPACE 7
 // =============================================
 
 // b#

@@ -7,35 +7,61 @@
 
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
+#include "sky/atmosphere.hlsli"
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 
-static const float3 sunDir_WS = normalize(float3(1.f, 2.f, 4.f));
+// Deliberately larger than the real sun (~0.8° radius vs. 0.27°)
 static const float sunCosTheta = 0.9999f;
-static const float3 sunColor = float3(1.f, 0.95f, 0.8f) * 16000.f;
+static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
 
-static const float3 zenithColor = float3(0.15f, 0.40f, 0.80f) * 1.5f;
-static const float3 horizonColor = float3(0.45f, 0.55f, 0.65f) * 1.2f;
-static const float3 groundColor = float3(0.09f, 0.08f, 0.07f);
+// Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
+// angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
+static const float3 sunIlluminance = float3(10.f, 10.f, 10.f);
+
+// Small constant floor so nights aren't pitch black until the moon exists. Added at the lookup
+// rather than baked into the sky-view LUT so it's trivial to delete when the moon lands.
+static const float3 nightAmbient = float3(0.01f, 0.015f, 0.025f);
+
+SamplerState skyLutSampler : REGISTER_S(RT, LUT_SAMPLER);
+SamplerState skyViewSampler : REGISTER_S(RT, SKY_VIEW_SAMPLER);
+
+float3 getSunDir_WS()
+{
+    return computeSunDir_WS(renderParams.animTime);
+}
 
 bool isInSun(float3 wi_WS)
 {
-    return dot(wi_WS, sunDir_WS) >= sunCosTheta;
+    return dot(wi_WS, getSunDir_WS()) >= sunCosTheta;
 }
 
-float3 getSkyGradientColor(float3 wi_WS)
+float getCameraAtmosphereRadius()
 {
-    const float y = wi_WS.y;
-    if (y >= 0.f)
-    {
-        float t = pow(1.f - y, 4.f);
-        return lerp(zenithColor, horizonColor, t);
-    }
-    else
-    {
-        float t = saturate(-y * 2.f);
-        return lerp(horizonColor, groundColor, t);
-    }
+    return atmosphereRadiusForCameraY(cameraParams.pos_WS.y + cameraParams.globalInstanceOffset.y);
+}
+
+float3 getSkyColor(float3 wi_WS)
+{
+    Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
+    const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
+    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + nightAmbient;
+}
+
+// True if the ray from the camera towards wi_WS is occluded by the virtual planet. The
+// transmittance parameterization only covers rays that don't hit the ground sphere, and isInSun
+// alone would show the disk through the horizon at night.
+bool isSunOccluded(float3 wi_WS)
+{
+    const float r = getCameraAtmosphereRadius();
+    return raySphereIntersectNearest(float3(0.f, r, 0.f), wi_WS, atmosphereGroundRadius) >= 0.f;
+}
+
+float3 getSunColor(float3 wi_WS)
+{
+    Texture2D<float4> transmittanceLut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
+    const float3 transmittance = sampleTransmittanceLut(transmittanceLut, skyLutSampler, getCameraAtmosphereRadius(), wi_WS.y);
+    return sunIlluminance * transmittance / sunSolidAngle;
 }
 
 float3 getDomeLightColor(float3 wi_WS)
@@ -45,12 +71,12 @@ float3 getDomeLightColor(float3 wi_WS)
         return float3(0.f, 0.f, 0.f);
     }
 
-    if (isInSun(wi_WS))
+    if (isInSun(wi_WS) && !isSunOccluded(wi_WS))
     {
-        return sunColor;
+        return getSunColor(wi_WS);
     }
 
-    return getSkyGradientColor(wi_WS);
+    return getSkyColor(wi_WS);
 }
 
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
@@ -62,7 +88,7 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 
     if (isInSun(wi_WS))
     {
-        return sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+        return sphericalCapUniformPdf(wi_WS, getSunDir_WS(), sunCosTheta);
     }
 
     return 0.f;
@@ -76,8 +102,11 @@ struct DomeLightSample
     float pdf;
 };
 
+// TODO: Once the moon exists, NEE should sample its cap as well, based on whether the sun is up at the time. Also,
+// domeLightPdf must account for both caps to keep MIS consistent.
 float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
+    const float3 sunDir_WS = getSunDir_WS();
     const float3 wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
     pdf = sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
     return wi_WS;
