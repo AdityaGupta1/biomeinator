@@ -48,7 +48,6 @@ void Instance::reset(bool alsoFreeFromScene)
     this->host_perTriDatas.clear();
     this->host_areaLights.clear();
     this->isGeometryFinalized = false;
-    this->isInTlas = false;
 
     if (alsoFreeFromScene)
     {
@@ -215,7 +214,6 @@ void Scene::reset()
 
     this->isTlasDirty = false;
     this->tlasBufferSection.free();
-    this->numVisibleBlasesWaitingForTlas = 0;
 
     this->hasSceneBounds = false;
     this->sceneBoundsMin_WS = {};
@@ -451,7 +449,6 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 }
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
-static constexpr uint32_t maxNumWaitingBlases = 64;
 
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
@@ -568,19 +565,13 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             this->deformableInstances.insert(instance);
         }
 
-        if (instance->isVisible)
-        {
-            ++numVisibleBlasesWaitingForTlas;
-        }
+        hadVisibleInstance |= instance->isVisible;
     }
 
     this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
     this->managedAreaLightsBuffer.endBatchCopy(cmdList);
 
-    const bool thresholdReached = this->numVisibleBlasesWaitingForTlas >= maxNumWaitingBlases;
-    const bool queueDrained =
-        this->instancesReadyForBlasBuild.empty() && this->numVisibleBlasesWaitingForTlas > 0;
-    return thresholdReached || queueDrained;
+    return hadVisibleInstance;
 }
 
 void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights)
@@ -601,18 +592,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
         if (!instance->isVisible || instance->isScheduledForDeletion ||
             !instance->geoWrapper.blasBufferSection.isValid())
         {
-            continue;
-        }
-
-        if (updateAreaLights)
-        {
-            instance->isInTlas = true;
-        }
-        else if (!instance->isInTlas)
-        {
-            // This is a freshly built BLAS still waiting for the next dirty rebuild. Keep it out of the
-            // TLAS until the area light structures are rebuilt alongside it, otherwise the GPU would access invalid
-            // lights.
             continue;
         }
 
@@ -664,13 +643,6 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     this->isTlasDirty = false;
 
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
-
-    if (updateAreaLights)
-    {
-        // Non-dirty rebuilds exclude waiting instances, so they stay counted for the
-        // dirty-rebuild threshold in makeQueuedBlases.
-        this->numVisibleBlasesWaitingForTlas = 0;
-    }
 }
 
 const glm::ivec3& Scene::getGlobalInstanceOffset() const
