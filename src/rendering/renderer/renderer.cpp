@@ -8,6 +8,7 @@
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/common/common_enums.h"
+#include "rendering/sky_atmosphere.h"
 #include "rendering/water_displacer.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
@@ -44,6 +45,8 @@ namespace Renderer
 
 static constexpr float defaultFovYDegrees = 35;
 
+static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
+
 void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
@@ -68,6 +71,12 @@ void init()
     renderState.useWaitableSwapChain = SettingsManager::getAsBool("useWaitableSwapChain");
 
     initSwapChain();
+    SkyAtmosphere::init();
+    for (auto& frame : renderState.frameCtxs)
+    {
+        frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
+    }
     initRtTargets();
     initCommand();
     initConstantParams();
@@ -253,31 +262,29 @@ void resize()
 
     for (auto& frame : renderState.frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav = {
-            .pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx(),
-            .diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx(),
-            .specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx(),
-            .linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx(),
+        auto& uav = frame.paramBlockManager.heapIndices->uav;
+        uav.pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx();
+        uav.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx();
+        uav.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx();
+        uav.linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx();
 
-            .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx(),
-            .motionTargetIdx = renderState.motionTarget.getUavIdx(),
-            .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx(),
-            .debugTargetIdx = renderState.debugTarget.getUavIdx(),
-        };
+        uav.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx();
+        uav.motionTargetIdx = renderState.motionTarget.getUavIdx();
+        uav.specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx();
+        uav.debugTargetIdx = renderState.debugTarget.getUavIdx();
 
-        frame.paramBlockManager.heapIndices->srv = {
-            .pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx(),
-            .diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx(),
-            .specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx(),
-            .linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx(),
+        auto& srv = frame.paramBlockManager.heapIndices->srv;
+        srv.pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx();
+        srv.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx();
+        srv.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx();
+        srv.linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx();
 
-            .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx(),
-            .motionTargetIdx = renderState.motionTarget.getSrvIdx(),
-            .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getSrvIdx(),
-            .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
+        srv.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx();
+        srv.motionTargetIdx = renderState.motionTarget.getSrvIdx();
+        srv.specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getSrvIdx();
+        srv.dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx();
 
-            .debugTargetIdx = renderState.debugTarget.getSrvIdx(),
-        };
+        srv.debugTargetIdx = renderState.debugTarget.getSrvIdx();
     }
 
     renderState.camera.setAspectRatio(static_cast<float>(renderState.renderWidth) / static_cast<float>(renderState.renderHeight));
@@ -468,7 +475,12 @@ void render()
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
-    renderState.animTime += deltaTime * SettingsManager::getAsFloat("animTimeScale");
+    // Scrubbing overrides the pause, so time can be stepped from a frozen scene
+    const float timeScrubDirection = WindowManager::getTimeScrubDirection();
+    const float animTimeScale = timeScrubDirection != 0.f
+        ? timeScrubDirection * timeScrubSpeed
+        : (SettingsManager::getAsBool("animTimePaused") ? 0.f : 1.f);
+    renderState.animTime += deltaTime * animTimeScale;
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);
@@ -742,6 +754,17 @@ void render()
     if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         // ===================================
+        // SKY ATMOSPHERE LUTS
+        // ===================================
+
+        if (renderState.voxelMode)
+        {
+            const float cameraY = paramBlockManager.cameraParams->pos_WS.y +
+                static_cast<float>(paramBlockManager.cameraParams->globalInstanceOffset.y);
+            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY);
+        }
+
+        // ===================================
         // GBUFFER
         // ===================================
 
@@ -1004,6 +1027,7 @@ void destroy()
     renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
     WaterDisplacer::destroy();
+    SkyAtmosphere::destroy();
 
     renderState.scene.reset();
     AcsHelper::reset();

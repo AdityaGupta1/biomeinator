@@ -47,9 +47,9 @@ struct HeapIndices
         uint dlssOutputTargetIdx;
 
         uint debugTargetIdx;
+        uint transmittanceLutIdx;
+        uint skyViewLutIdx;
         uint pad0;
-        uint pad1;
-        uint pad2;
     } srv;
 };
 
@@ -130,7 +130,7 @@ struct RenderParams
     uint refractionIndirectPassthrough;
     float mipBias;
 
-    float animTime; // scaled by animTimeScale setting
+    float animTime; // can be frozen by animTimePaused setting
     float prevAnimTime;
     uint pad0;
     uint pad1;

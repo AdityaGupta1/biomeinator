@@ -60,6 +60,29 @@ void initRootSignature()
 
     rtStaticSamplers.push_back(staticSampler);
 
+    // Linear clamp sampler for sky atmosphere LUTs
+    const D3D12_STATIC_SAMPLER_DESC lutSampler = {
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .ShaderRegister = RT_REGISTER_LUT_SAMPLER,
+        .RegisterSpace = RT_REGISTER_SPACE,
+    };
+    rtStaticSamplers.push_back(lutSampler);
+
+    // The sky-view LUT is periodic in azimuth, so bilinear filtering must wrap across the
+    // u = 0/1 seam; latitude (v) still clamps
+    const D3D12_STATIC_SAMPLER_DESC skyViewSampler = {
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .ShaderRegister = RT_REGISTER_SKY_VIEW_SAMPLER,
+        .RegisterSpace = RT_REGISTER_SPACE,
+    };
+    rtStaticSamplers.push_back(skyViewSampler);
+
     const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,

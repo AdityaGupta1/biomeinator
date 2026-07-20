@@ -1,4 +1,4 @@
-_Last edited: 2026-05-15_
+_Last edited: 2026-07-19_
 
 # Rendering Knowledgebase
 
@@ -7,7 +7,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 
 | Entry | Description |
 |---|---|
-| [render_loop.md](render_loop.md) | Main game loop, render pass sequence, frame pacing |
+| [render_loop.md](render_loop.md) | Main game loop, render pass sequence, frame pacing, animation time and input |
 | [frame_contexts.md](frame_contexts.md) | Triple buffering, per-frame resources, CPU-GPU pipelining |
 | [render_passes.md](render_passes.md) | G-buffer → NRC → path trace → collect → present |
 | [pipeline.md](pipeline.md) | DXR pipeline state object, PipelineBuilder, shader tables |
@@ -18,3 +18,4 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [nvapi_ser.md](nvapi_ser.md) | NVAPI, Shader Execution Reordering (SER) optimization |
 | [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |
 | [light_tree.md](light_tree.md) | RTSL Stage 2 GPU light tree build: sparse/dense buffers, sentinels, atomic float min/max, fused internal-levels |
+| [sky_atmosphere.md](sky_atmosphere.md) | PBR sky LUT passes: ordering invariants, unit calibration, horizon/occlusion gotchas |

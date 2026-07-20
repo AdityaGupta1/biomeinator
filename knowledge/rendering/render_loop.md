@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-07-19_
 
 # Render Loop
 
@@ -23,6 +23,22 @@ always active and prevents overwriting a frame context the GPU is still reading.
 `resetAccumulation` fires when camera moves, scene changes, OR `didPathTracingSettingsChange`
 is set. Only settings that alter the path-traced radiance should set this flag — post-process
 settings (tonemapping, debug view) should not, since the accumulated HDR data is still valid.
+
+## Animation Time and Input
+
+Keyboard input in `window_manager.cpp` splits into two paths, and new controls must pick the
+right one: **edge-triggered** (`onKeyDown`) for toggles and one-shot actions, **polled per
+frame** (`getPlayerInput`, `getTimeScrubDirection`) for anything continuous.
+
+Animation time scale resolves in strict precedence: **scrub → `animTimePaused` setting → 1x**,
+so a scrub key steps time even while paused.
+
+Gotchas:
+
+- Pause lives in the `animTimePaused` setting, not renderer state, so the key, the CLI, and the
+  test runner all drive one switch with no separate pause path.
+- Scrub direction is sampled *before* `getPlayerInput()` in `render()`, so `lockCamera` (which
+  zeroes `PlayerInput` wholesale) does not disable time control.
 
 ## Test Mode
 

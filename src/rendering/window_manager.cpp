@@ -226,6 +226,9 @@ static void onKeyDown(WPARAM wparam, LPARAM lparam)
             }
             break;
         case 'P':
+            SettingsManager::toggleBool("animTimePaused");
+            break;
+        case VK_F2:
             Renderer::queueScreenshot();
             break;
         case 'Z':
@@ -418,16 +421,21 @@ void init()
     }
 }
 
+#define KEY_DOWN(key) (GetAsyncKeyState(key) & 0x8000)
+
+static bool areKeysAccepted()
+{
+    return !isInCursorMode && GetForegroundWindow() == WindowManager::hwnd;
+}
+
 PlayerInput getPlayerInput()
 {
     PlayerInput input;
 
-    if (isInCursorMode || GetForegroundWindow() != WindowManager::hwnd)
+    if (!areKeysAccepted())
     {
         return input;
     }
-
-#define KEY_DOWN(key) (GetAsyncKeyState(key) & 0x8000)
 
     if (KEY_DOWN('W'))
     {
@@ -471,8 +479,6 @@ PlayerInput getPlayerInput()
 
     input.isZoomHeld = KEY_DOWN('C');
 
-#undef KEY_DOWN
-
     if (input.linearInput.x != 0 || input.linearInput.z != 0)
     {
         const float inputHorizontalLength =
@@ -493,5 +499,29 @@ PlayerInput getPlayerInput()
 
     return input;
 }
+
+float getTimeScrubDirection()
+{
+    if (!areKeysAccepted())
+    {
+        return 0.f;
+    }
+
+    float direction = 0.f;
+
+    if (KEY_DOWN(VK_OEM_4)) // '['
+    {
+        direction -= 1.f;
+    }
+
+    if (KEY_DOWN(VK_OEM_6)) // ']'
+    {
+        direction += 1.f;
+    }
+
+    return direction;
+}
+
+#undef KEY_DOWN
 
 }; // namespace WindowManager
