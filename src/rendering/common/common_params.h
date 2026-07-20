@@ -130,7 +130,7 @@ struct RenderParams
     uint refractionIndirectPassthrough;
     float mipBias;
 
-    float animTime; // world animation time in seconds; frozen by the animTimePaused setting
+    float animTime; // can be frozen by animTimePaused setting
     float prevAnimTime;
     uint pad0;
     uint pad1;

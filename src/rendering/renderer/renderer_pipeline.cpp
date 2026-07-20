@@ -60,7 +60,7 @@ void initRootSignature()
 
     rtStaticSamplers.push_back(staticSampler);
 
-    // Linear clamp sampler for the sky atmosphere LUTs (texSampler is point-filtered in voxelMode)
+    // Linear clamp sampler for sky atmosphere LUTs
     const D3D12_STATIC_SAMPLER_DESC lutSampler = {
         .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
         .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,

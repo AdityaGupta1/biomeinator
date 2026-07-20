@@ -102,8 +102,8 @@ struct DomeLightSample
     float pdf;
 };
 
-// TODO: Once the moon exists, NEE should consider sampling its cap as well (and domeLightPdf
-// must account for both caps to keep MIS consistent).
+// TODO: Once the moon exists, NEE should sample its cap as well, based on whether the sun is up at the time. Also,
+// domeLightPdf must account for both caps to keep MIS consistent.
 float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
     const float3 sunDir_WS = getSunDir_WS();

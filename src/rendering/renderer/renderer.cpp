@@ -71,7 +71,12 @@ void init()
     renderState.useWaitableSwapChain = SettingsManager::getAsBool("useWaitableSwapChain");
 
     initSwapChain();
-    SkyAtmosphere::init(); // before initRtTargets — resize() records the LUT SRV indices into heapIndices
+    SkyAtmosphere::init();
+    for (auto& frame : renderState.frameCtxs)
+    {
+        frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
+    }
     initRtTargets();
     initCommand();
     initConstantParams();
@@ -257,33 +262,29 @@ void resize()
 
     for (auto& frame : renderState.frameCtxs)
     {
-        frame.paramBlockManager.heapIndices->uav = {
-            .pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx(),
-            .diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx(),
-            .specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx(),
-            .linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx(),
+        auto& uav = frame.paramBlockManager.heapIndices->uav;
+        uav.pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx();
+        uav.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx();
+        uav.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx();
+        uav.linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx();
 
-            .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx(),
-            .motionTargetIdx = renderState.motionTarget.getUavIdx(),
-            .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx(),
-            .debugTargetIdx = renderState.debugTarget.getUavIdx(),
-        };
+        uav.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx();
+        uav.motionTargetIdx = renderState.motionTarget.getUavIdx();
+        uav.specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx();
+        uav.debugTargetIdx = renderState.debugTarget.getUavIdx();
 
-        frame.paramBlockManager.heapIndices->srv = {
-            .pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx(),
-            .diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx(),
-            .specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx(),
-            .linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx(),
+        auto& srv = frame.paramBlockManager.heapIndices->srv;
+        srv.pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx();
+        srv.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx();
+        srv.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx();
+        srv.linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx();
 
-            .normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx(),
-            .motionTargetIdx = renderState.motionTarget.getSrvIdx(),
-            .specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getSrvIdx(),
-            .dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx(),
+        srv.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx();
+        srv.motionTargetIdx = renderState.motionTarget.getSrvIdx();
+        srv.specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getSrvIdx();
+        srv.dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx();
 
-            .debugTargetIdx = renderState.debugTarget.getSrvIdx(),
-            .transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx(),
-            .skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx(),
-        };
+        srv.debugTargetIdx = renderState.debugTarget.getSrvIdx();
     }
 
     renderState.camera.setAspectRatio(static_cast<float>(renderState.renderWidth) / static_cast<float>(renderState.renderHeight));

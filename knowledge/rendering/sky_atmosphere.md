@@ -15,8 +15,9 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
   transmittance); the sky-view LUT reads both and is regenerated every frame (sun moves with
   `animTime`, and it tracks camera altitude). The per-frame dispatch must complete (UAV
   barrier) before the path trace pass samples the LUTs.
-- `SkyAtmosphere::init()` must run before `initRtTargets()` — the first `resize()` records the
-  LUT SRV indices into every frame's `heapIndices`.
+- The LUT SRV indices are recorded into every frame's `heapIndices` once, right after
+  `SkyAtmosphere::init()`. `resize()` deliberately assigns `heapIndices.srv` per-field (not as a
+  whole struct literal, which would zero-fill them) so those once-set indices survive.
 - The dispatch is bindless (root constants carry heap indices), so it sits after the
   `SetDescriptorHeaps` call in the render loop, inside the TLAS-gated block. It is skipped
   entirely when not in voxel mode (the dome light is black there anyway).
