@@ -31,8 +31,9 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
   old radiance 16000 × the oversized disk's solid angle (`2π(1 − 0.9999)`). The disk radiance is
   `illuminance × transmittance / solidAngle`, so noon exposure is unchanged while sunset
   reddening/dimming comes from the transmittance fetch for free.
-- `nightAmbient` is a constant floor added at the lookup (not baked into the LUT) so nights
-  aren't pitch black; delete it when the moon lands.
+- `ambientSkyLight` is a constant floor added at the lookup (not baked into the LUT) so nights
+  aren't pitch black; delete it when the moon lands. It applies to every sky lookup, not just
+  night ones, so raising it shifts daytime goldens as well.
 
 ## Gotchas
 
@@ -65,4 +66,4 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
   spheres, where the ray-sphere intersections degenerate.
 - Effect size: roughly +40% zenith luminance at noon, brighter sunset zenith, and a visible
   red-to-purple gradient through civil twilight (sun down to ~-5°); by nautical twilight
-  (sun < -6°) the sky is genuinely near-black and only `nightAmbient` remains.
+  (sun < -6°) the sky is genuinely near-black and only `ambientSkyLight` remains.

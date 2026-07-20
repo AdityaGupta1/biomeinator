@@ -103,6 +103,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
 #endif
         pathColor += payload.pathWeight * domeLightColor;
+        if (sceneParams.voxelMode == 1)
+        {
+            // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
+            // light rather than pathWeight, which would fold in fog transmittance.
+            ptDiffuseAlbedo = applyReinhard(domeLightColor);
+        }
         return;
     }
 
@@ -462,6 +468,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         payload.pathWeight *= segmentAbsorption;
 
+        const bool didMiss = !bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
+        const float3 missDomeLightColor = didMiss ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
+
         if (pathDepth == 0)
         {
             // at this point, ptDiffuseAlbedo = first bounce path weight or emission
@@ -505,6 +514,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
                     }
+                    else if (didMiss && sceneParams.voxelMode == 1)
+                    {
+                        // Specular reflection of the sky. Excludes fog and absorption to match
+                        // how the primary miss builds its albedo.
+                        ptDiffuseAlbedo *= applyReinhard(missDomeLightColor);
+                    }
                     else
                     {
                         ptDiffuseAlbedo = 0.f;
@@ -515,9 +530,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
         }
 
-        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+        if (didMiss)
         {
-            float3 domeLightContrib = payload.pathWeight * getDomeLightColor(ray.Direction);
+            float3 domeLightContrib = payload.pathWeight * missDomeLightColor;
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
