@@ -63,10 +63,12 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     {
         return false;
     }
+
     if (payload.waterEntryT != RAY_DEFAULT_TMAX)
     {
         return false;
     }
+
     const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
     return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
