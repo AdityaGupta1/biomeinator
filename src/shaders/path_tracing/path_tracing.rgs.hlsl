@@ -58,8 +58,8 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 // (fog in-scatter below sea level, unattenuated dome light) which glows and flickers.
 bool isOrphanWaterBackfaceHit(const Payload payload)
 {
-    const uint requiredFlags = PAYLOAD_FLAG_DID_HIT | PAYLOAD_FLAG_BACKFACE_HIT;
-    if ((payload.flags & (requiredFlags | PAYLOAD_FLAG_UNDERWATER)) != requiredFlags)
+    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || !bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ||
+        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
     {
         return false;
     }
