@@ -588,7 +588,7 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=4",
-                "--fogSigmaS=0"
+                "--animTime=510"
             ],
             "golden": "voxel/water_absorption/golden.png",
             "threshold": 0.01
@@ -601,8 +601,7 @@
                 "--height=540",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=4",
-                "--fogSigmaS=0"
+                "--maxPathDepth=4"
             ],
             "golden": "voxel/water_reflection/golden.png",
             "threshold": 0.01
@@ -616,8 +615,7 @@
                 "--antialiasingMode=0",
                 "--debugView=\"diffuseAlbedo\"",
                 "--maxPathDepth=4",
-                "--noJitter",
-                "--fogSigmaS=0"
+                "--noJitter"
             ],
             "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
             "threshold": 0.001
@@ -630,8 +628,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
-                "--maxPathDepth=12",
-                "--fogSigmaS=0"
+                "--maxPathDepth=12"
             ],
             "golden": "voxel/cave_lights/golden.png",
             "threshold": 0.01
@@ -644,8 +641,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=1024",
-                "--maxPathDepth=6",
-                "--fogSigmaS=0"
+                "--maxPathDepth=6"
             ],
             "golden": "voxel/underwater/golden.png",
             "threshold": 0.005
@@ -659,7 +655,7 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=6",
-                "--animTime=435"
+                "--animTime=585"
             ],
             "golden": "voxel/fog_haze/golden.png",
             "threshold": 0.01
@@ -673,7 +669,7 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=6",
-                "--animTime=435"
+                "--animTime=585"
             ],
             "golden": "voxel/fog_god_rays/golden.png",
             "threshold": 0.01

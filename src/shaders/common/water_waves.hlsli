@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../rendering/common/common_water_waves.h"
+#include "../rendering/common/common_settings.h"
 
 #include "util/FastNoiseLite.hlsli"
 

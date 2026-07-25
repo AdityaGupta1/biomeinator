@@ -126,7 +126,7 @@ void imguiEndFrame(double deltaTime)
         {
             SettingsGuiHelpers::VerticalSpacing();
             SettingsGuiHelpers::SectionTitle("Fog");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogSigmaS", 0.f, 0.05f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.1f, 10.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);

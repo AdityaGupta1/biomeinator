@@ -5,7 +5,6 @@
 
 #include "common/common_registers.h"
 #include "common/common_settings.h"
-#include "common/common_water_waves.h"
 #include "renderer/pipeline_builder.h"
 #include "renderer/renderer_internal.h"
 #include "renderer/shaders.h"
@@ -46,7 +45,7 @@ ComPtr<ID3D12RootSignature> rootSig{ nullptr };
 ComPtr<ID3D12PipelineState> pso{ nullptr };
 
 // CPU mirror of waveHeight() in shaders/common/water_waves.hlsli (displacement only, no
-// shading-normal noise); constants are shared via common_water_waves.h, but the math must
+// shading-normal noise); constants are shared via common_settings.h, but the math must
 // match the shader exactly.
 inline constexpr float swellStrengths[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_STRENGTHS;
 inline constexpr glm::vec2 swellFreqs[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_FREQS;
