@@ -42,11 +42,13 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
 
 // Marches the fog along a segment, accumulating single-scattered sunlight plus a cheap
 // analytic sky ambient term (aerial perspective). Returns radiance to be multiplied by the
-// path weight at the segment start; the caller applies segment transmittance to pathWeight
-// separately. numSteps == 0 skips everything and returns zero.
-float3 computeFogInScatter(
-    const float3 origin_WS, const float3 dir, const float dist, const uint numSteps, inout RandomNumberGenerator rng)
+// path weight at the segment start and outputs the segment's fog transmittance, which the
+// caller applies to pathWeight separately. numSteps == 0 skips the march and the ambient
+// term, returning zero radiance (but still a valid transmittance).
+float3 computeFogInScatter(const float3 origin_WS, const float3 dir, const float dist, const uint numSteps,
+    inout RandomNumberGenerator rng, out float segmentTransmittance)
 {
+    segmentTransmittance = computeFogTransmittance(origin_WS, dir, dist);
     if (numSteps == 0)
     {
         return float3(0.f, 0.f, 0.f);
@@ -75,14 +77,13 @@ float3 computeFogInScatter(
                 continue;
             }
 
-            const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-            const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
-
             if (isRayOccluded(stepPos_WS, sunDir_WS))
             {
                 continue;
             }
 
+            const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
+            const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
             sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
 
@@ -93,7 +94,6 @@ float3 computeFogInScatter(
 
     // NOTE: no visibility check, so this also brightens enclosed spaces (cave interiors)
     // with sky-colored haze; fogAmbientStrength is the artistic control for how much.
-    const float segmentTransmittance = computeFogTransmittance(origin_WS, dir, dist);
     inScatter += renderParams.fogAmbientStrength * (1.f - segmentTransmittance) * getSkyColor(float3(0.f, 1.f, 0.f));
 
     return inScatter;

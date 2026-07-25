@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../rendering/common/common_water_waves.h"
+
 #include "util/FastNoiseLite.hlsli"
 
 // Layered wave model. Vertex displacement (waveHeight) is a pure analytic sum of sines:
@@ -29,23 +31,23 @@
 // define the base shading normal.
 
 // large-scale swells, present everywhere (~30 block wavelength)
-static const int SWELL_WAVE_COUNT = 2;
-static const float SWELL_STRENGTHS[SWELL_WAVE_COUNT] = { 0.03f, 0.025f };
-static const float2 SWELL_FREQS[SWELL_WAVE_COUNT] = { float2(0.08f, 0.06f), float2(-0.05f, 0.11f) };
-static const float SWELL_SPEEDS[SWELL_WAVE_COUNT] = { 0.4f, 0.5f };
+static const int SWELL_WAVE_COUNT = WATER_SWELL_WAVE_COUNT;
+static const float SWELL_STRENGTHS[SWELL_WAVE_COUNT] = WATER_SWELL_STRENGTHS;
+static const float2 SWELL_FREQS[SWELL_WAVE_COUNT] = WATER_SWELL_FREQS;
+static const float SWELL_SPEEDS[SWELL_WAVE_COUNT] = WATER_SWELL_SPEEDS;
 
 // small-scale chop, gated by the shared choppiness envelope below (~5 block wavelength)
-static const int CHOP_WAVE_COUNT = 3;
-static const float CHOP_STRENGTHS[CHOP_WAVE_COUNT] = { 0.02f, 0.015f, 0.01f };
-static const float2 CHOP_FREQS[CHOP_WAVE_COUNT] = { float2(0.8f, 0.6f), float2(-0.5f, 1.3f), float2(1.2f, -0.4f) };
-static const float CHOP_SPEEDS[CHOP_WAVE_COUNT] = { 0.55f, 0.85f, 0.7f };
+static const int CHOP_WAVE_COUNT = WATER_CHOP_WAVE_COUNT;
+static const float CHOP_STRENGTHS[CHOP_WAVE_COUNT] = WATER_CHOP_STRENGTHS;
+static const float2 CHOP_FREQS[CHOP_WAVE_COUNT] = WATER_CHOP_FREQS;
+static const float CHOP_SPEEDS[CHOP_WAVE_COUNT] = WATER_CHOP_SPEEDS;
 
 // ===== Shared: choppiness envelope =====
 // Large-scale sine/cos factor in [0, 1] (~300 block patches). Gates the sine chop in the
 // displacement above AND scales the noise perturbation below, so calm and rough regions
 // line up between geometry and shading detail.
-static const float2 SINE_CHOP_FREQS[2] = { float2(0.0167f, 0.01f), float2(-0.0067f, 0.02f) };
-static const float2 SINE_CHOP_SPEEDS = float2(0.1f, 0.13f);
+static const float2 SINE_CHOP_FREQS[2] = WATER_SINE_CHOP_FREQS;
+static const float2 SINE_CHOP_SPEEDS = WATER_SINE_CHOP_SPEEDS;
 
 // ===== Normal perturbation =====
 // Noise applied to the shading normal only (waveNormalPerturbation); never moves vertices.

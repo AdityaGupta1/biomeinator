@@ -104,13 +104,18 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             : getDistanceToVoxelBounds(cameraParams.pos_WS, ray.Direction);
         // The primary segment is identical for both path splits and collect sums them, so
         // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
+        float fogTransmittance;
         if (pathSplitIdx == 0)
         {
-            const float3 inScatter =
-                computeFogInScatter(cameraParams.pos_WS, ray.Direction, segmentDist, renderParams.fogMarchSteps, payload.rng);
+            const float3 inScatter = computeFogInScatter(
+                cameraParams.pos_WS, ray.Direction, segmentDist, renderParams.fogMarchSteps, payload.rng, fogTransmittance);
             pathColor += payload.pathWeight * inScatter;
         }
-        payload.pathWeight *= computeFogTransmittance(cameraParams.pos_WS, ray.Direction, segmentDist);
+        else
+        {
+            fogTransmittance = computeFogTransmittance(cameraParams.pos_WS, ray.Direction, segmentDist);
+        }
+        payload.pathWeight *= fogTransmittance;
     }
 
     payload.pathWeight *= segmentAbsorption;
@@ -489,9 +494,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // transmittance. Bounce segments diverge after the path split, so no split
             // gating here — this puts god rays into the reflection split.
             const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
-            const float3 inScatter = computeFogInScatter(ray.Origin, ray.Direction, segmentDist, numFogSteps, payload.rng);
+            const float3 inScatter =
+                computeFogInScatter(ray.Origin, ray.Direction, segmentDist, numFogSteps, payload.rng, fogTransmittance);
             pathColor += payload.pathWeight * inScatter;
-            fogTransmittance = computeFogTransmittance(ray.Origin, ray.Direction, segmentDist);
             payload.pathWeight *= fogTransmittance;
         }
 

@@ -5,6 +5,7 @@
 
 #include "common/common_registers.h"
 #include "common/common_settings.h"
+#include "common/common_water_waves.h"
 #include "renderer/pipeline_builder.h"
 #include "renderer/renderer_internal.h"
 #include "renderer/shaders.h"
@@ -45,24 +46,23 @@ ComPtr<ID3D12RootSignature> rootSig{ nullptr };
 ComPtr<ID3D12PipelineState> pso{ nullptr };
 
 // CPU mirror of waveHeight() in shaders/common/water_waves.hlsli (displacement only, no
-// shading-normal noise); constants and math must match the shader exactly.
-inline constexpr int swellWaveCount = 2;
-inline constexpr float swellStrengths[swellWaveCount] = { 0.03f, 0.025f };
-inline constexpr glm::vec2 swellFreqs[swellWaveCount] = { { 0.08f, 0.06f }, { -0.05f, 0.11f } };
-inline constexpr float swellSpeeds[swellWaveCount] = { 0.4f, 0.5f };
+// shading-normal noise); constants are shared via common_water_waves.h, but the math must
+// match the shader exactly.
+inline constexpr float swellStrengths[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_STRENGTHS;
+inline constexpr glm::vec2 swellFreqs[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_FREQS;
+inline constexpr float swellSpeeds[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_SPEEDS;
 
-inline constexpr int chopWaveCount = 3;
-inline constexpr float chopStrengths[chopWaveCount] = { 0.02f, 0.015f, 0.01f };
-inline constexpr glm::vec2 chopFreqs[chopWaveCount] = { { 0.8f, 0.6f }, { -0.5f, 1.3f }, { 1.2f, -0.4f } };
-inline constexpr float chopSpeeds[chopWaveCount] = { 0.55f, 0.85f, 0.7f };
+inline constexpr float chopStrengths[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_STRENGTHS;
+inline constexpr glm::vec2 chopFreqs[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_FREQS;
+inline constexpr float chopSpeeds[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_SPEEDS;
 
-inline constexpr glm::vec2 sineChopFreqs[2] = { { 0.0167f, 0.01f }, { -0.0067f, 0.02f } };
-inline constexpr glm::vec2 sineChopSpeeds = { 0.1f, 0.13f };
+inline constexpr glm::vec2 sineChopFreqs[2] = WATER_SINE_CHOP_FREQS;
+inline constexpr glm::vec2 sineChopSpeeds = WATER_SINE_CHOP_SPEEDS;
 
 float waveHeight(const glm::vec2 posXZ_WS, const float time)
 {
     float height = 0.f;
-    for (int i = 0; i < swellWaveCount; ++i)
+    for (int i = 0; i < WATER_SWELL_WAVE_COUNT; ++i)
     {
         height += swellStrengths[i] * std::sin(glm::dot(posXZ_WS, swellFreqs[i]) + swellSpeeds[i] * time);
     }
@@ -72,7 +72,7 @@ float waveHeight(const glm::vec2 posXZ_WS, const float time)
     const float envelope = 0.5f + 0.5f * std::sin(phaseA) * std::sin(phaseB);
 
     float chop = 0.f;
-    for (int j = 0; j < chopWaveCount; ++j)
+    for (int j = 0; j < WATER_CHOP_WAVE_COUNT; ++j)
     {
         chop += chopStrengths[j] * std::sin(glm::dot(posXZ_WS, chopFreqs[j]) + chopSpeeds[j] * time);
     }
