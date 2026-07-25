@@ -52,6 +52,26 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 #endif
 
+// Detects hitting a water backface without having crossed a water front face or started
+// underwater — happens when partially loaded chunks leave water volumes open. Paths are
+// terminated at such hits: continuing would trace the open water interior flagged as air
+// (fog in-scatter below sea level, unattenuated dome light) which glows and flickers.
+bool isOrphanWaterBackfaceHit(const Payload payload)
+{
+    const uint requiredFlags = PAYLOAD_FLAG_DID_HIT | PAYLOAD_FLAG_BACKFACE_HIT;
+    if ((payload.flags & (requiredFlags | PAYLOAD_FLAG_UNDERWATER)) != requiredFlags)
+    {
+        return false;
+    }
+    if (payload.waterEntryT != RAY_DEFAULT_TMAX)
+    {
+        return false;
+    }
+    const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+}
+
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
@@ -94,6 +114,15 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     }
 
     payload.pathWeight *= segmentAbsorption;
+
+    if (isOrphanWaterBackfaceHit(payload))
+    {
+#if NRC_UPDATE || NRC_QUERY
+        NrcUpdateOnMiss(nrcPathState);
+        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
+#endif
+        return;
+    }
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -467,6 +496,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 
         payload.pathWeight *= segmentAbsorption;
+
+        if (isOrphanWaterBackfaceHit(payload))
+        {
+            break;
+        }
 
         const bool didMiss = !bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
         const float3 missDomeLightColor = didMiss ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);

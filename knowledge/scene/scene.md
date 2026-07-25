@@ -1,4 +1,4 @@
-_Last edited: 2026-07-17_
+_Last edited: 2026-07-19_
 
 # Scene
 
@@ -48,6 +48,14 @@ the shared verts buffer — no rest-position copy — relying on top verts sitti
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
 whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must
 not overlap other passes reading verts.
+
+`water_displacer.cpp` also holds a CPU mirror of the shader's `waveHeight()` (constants and
+math must be kept in sync) used by `sampleMeshWaveOffsetY()`, which reproduces the
+**rendered** surface at a point: corner wave heights interpolated across the two top-face
+triangles (diagonal from local (0, 0) to (1, 1), matching `cubeFaceVertPositions` in
+`chunk.cpp`) rather than evaluating the wave function directly at that point. The
+camera-underwater check in `terrain.cpp` relies on this to agree with the mesh the rays
+actually hit.
 
 ## Area Light Sampling Structure
 

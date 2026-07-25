@@ -1125,6 +1125,11 @@ void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, f
     renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
+float getAnimTime()
+{
+    return static_cast<float>(renderState.animTime);
+}
+
 const Scene& getScene()
 {
     return renderState.scene;

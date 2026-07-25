@@ -1,4 +1,4 @@
-_Last edited: 2026-07-18_
+_Last edited: 2026-07-19_
 
 # Path Tracing Shader
 
@@ -94,6 +94,7 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
 - **`domeLightPdf()`** — returns 0 in non-voxel mode, so BSDF-hit MIS against the dome light has no effect.
 - **Chunk debug coloring** — tints the primary hit based on chunk coordinates.
 - **Water absorption** — `computeSegmentAbsorption` and `computePassthroughAbsorption` use `voxelBoundsMin/Max_WS` to compute water travel distance, which is only populated in voxel mode. The `PerTriData` flag `TRIANGLE_FLAG_IS_WATER` is also never set outside voxel mode, so water-surface detection itself is voxel-only.
+- **Orphan water backface termination** — hitting a water backface without having crossed a front face or started underwater means the water volume is open (front-face chunk not loaded yet). Paths are terminated at such hits (`isOrphanWaterBackfaceHit`), after the segment's fog/absorption but before any surface interaction: continuing would trace the water interior flagged as air — bounce-segment fog in-scatter below sea level plus unattenuated dome light through missing chunks — which glows and flickers as chunks stream in. Cannot trigger on sealed geometry.
 - **Air fog / god rays** — per-segment height fog with single-scattered sunlight, applied at the two segment-absorption call sites (skipped for underwater segments). Transmittance is closed-form (`volume.hlsli`); in-scattering marches jittered steps with one `FORCE_OPAQUE` sun occlusion ray each (`light/fog.hlsli`), plus an analytic `fogAmbientStrength * (1 - T) * avgSky` ambient term with no visibility check — it also brightens enclosed cave interiors, and the strength setting is the artistic control for that trade-off. Non-obvious rules:
   - Primary-segment in-scatter is gated on `pathSplitIdx == 0` (like emission); bounce segments are ungated, which is what puts god rays into the reflection split.
   - In-scattering (sun march + ambient) runs only at path depths ≤ 1 (half steps on bounce segments); deeper bounces keep transmittance only.
