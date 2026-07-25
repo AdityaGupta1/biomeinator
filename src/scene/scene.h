@@ -46,9 +46,6 @@ private:
     bool isScheduledForDeletion{ false };
     // If true, geometry gets displaced by a compute pass every frame and its BLAS refit instead of rebuilt
     bool isDeformable{ false };
-    // Set on the first dirty TLAS rebuild that includes this instance; non-dirty per-frame
-    // rebuilds only include instances already in the TLAS (see Scene::makeTlas)
-    bool isInTlas{ false };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -147,9 +144,6 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
-    // Not decremented when a counted instance is freed, so it can over-count; worst case is a
-    // spurious dirty rebuild, which zeroes it
-    uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
     glm::ivec3 globalInstanceOffset{};
     glm::ivec3 prevGlobalInstanceOffset{};

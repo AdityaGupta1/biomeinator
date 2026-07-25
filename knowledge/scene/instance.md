@@ -27,4 +27,4 @@ When an instance is freed, its `unique_ptr` is moved to `instancesToReuse` rathe
 
 ## BLAS Build Throttling
 
-`makeQueuedBlases` builds at most `maxBlasBuildsPerFrame` (8) BLASes per frame. TLAS rebuild is deferred until either the queue drains or `maxNumWaitingBlases` (64) visible instances accumulate — this batches the expensive TLAS rebuild rather than triggering it per-BLAS.
+`makeQueuedBlases` builds at most `maxBlasBuildsPerFrame` (8) BLASes per frame. Any frame that builds a visible BLAS triggers a dirty TLAS rebuild that same frame, so new instances enter the TLAS together with the area light structure rebuild (see the invariant in [scene.md](scene.md)).

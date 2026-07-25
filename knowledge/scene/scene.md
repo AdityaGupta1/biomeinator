@@ -33,11 +33,12 @@ light sampling structure rewrite (which would rebuild the light tree and reset a
 every frame, hanging test-mode screenshots) and the `didChange` return value.
 
 **INVARIANT:** the TLAS instance set must only change on dirty rebuilds, which also rebuild
-the area light structures — non-dirty per-frame rebuilds include only instances already
-marked `isInTlas` and just refresh AABBs. If a freshly built emissive instance entered the
-TLAS before the sampling structure / light tree knew about it, the path tracer's light tree
-lookups for its hits read garbage and can hang the GPU (observed as intermittent TDR during
-world import in `cave_lights`).
+the area light structures — non-dirty per-frame rebuilds just refresh AABBs. This holds
+because `makeQueuedBlases` dirties the TLAS on any frame that builds a visible BLAS, and
+`setVisible` dirties it when toggling an instance with a valid BLAS. If a freshly built
+emissive instance entered the TLAS before the sampling structure / light tree knew about it,
+the path tracer's light tree lookups for its hits read garbage and can hang the GPU (observed
+as intermittent TDR during world import in `cave_lights`).
 
 ## Deformable Instances
 
