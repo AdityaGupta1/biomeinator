@@ -147,6 +147,8 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
+    // Not decremented when a counted instance is freed, so it can over-count; worst case is a
+    // spurious dirty rebuild, which zeroes it
     uint32_t numVisibleBlasesWaitingForTlas{ 0 };
 
     glm::ivec3 globalInstanceOffset{};

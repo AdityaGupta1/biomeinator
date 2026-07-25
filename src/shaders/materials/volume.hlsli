@@ -6,6 +6,8 @@
 // NOTE: this file is intended to be included from path_tracing_common.hlsli, after instanceDatas
 // and perTriDatas are declared.
 
+#include "../rendering/common/common_settings.h"
+
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
 
@@ -35,8 +37,7 @@ float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
     return (tExit > tEnter) ? tExit : 0.f;
 }
 
-// TODO: hoist sea level to a shared location (the CPU-side constant lives in chunk_generator.cpp)
-static const float fogSeaLevelY = 125.f;
+static const float fogSeaLevelY = float(SEA_LEVEL);
 static const float fogRampBlocks = 24.f;
 
 // Fog density profile in true world-space Y: zero below (seaLevel - fogRampBlocks), linear
