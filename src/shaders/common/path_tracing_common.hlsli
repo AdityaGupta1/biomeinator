@@ -20,7 +20,7 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
-#include "materials/volume.hlsli"
+#include "materials/water.hlsli"
 
 uint getPathSplitIdx()
 {
