@@ -649,6 +649,34 @@
             ],
             "golden": "voxel/underwater/golden.png",
             "threshold": 0.005
+        },
+        {
+            "name": "fog_haze",
+            "world": "voxel/fog_haze",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=6",
+                "--animTime=435"
+            ],
+            "golden": "voxel/fog_haze/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "fog_god_rays",
+            "world": "voxel/fog_god_rays",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=6",
+                "--animTime=435"
+            ],
+            "golden": "voxel/fog_god_rays/golden.png",
+            "threshold": 0.01
         }
     ]
 }

@@ -51,6 +51,7 @@ void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
+    renderState.animTime = SettingsManager::getAsFloat("animTime");
 
     initStreamline();
 
