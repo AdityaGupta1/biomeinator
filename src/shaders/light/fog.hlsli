@@ -60,8 +60,9 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
     const float rampT1 = clamp(max(tAtRampBottom, tAtSeaLevel), 0.f, dist);
     if (rampT1 > rampT0)
     {
-        const float yMid = y0 + dy * 0.5f * (rampT0 + rampT1);
-        opticalDepth += sigmaS * ((yMid - rampBottomY) / fogUndergroundRampBlocks) * (rampT1 - rampT0);
+        const float yMid = y0 + ((rampT0 + rampT1) * 0.5f) * dy;
+        const float densityYMid = sigmaS * ((yMid - rampBottomY) / fogUndergroundRampBlocks);
+        opticalDepth += densityYMid * (rampT1 - rampT0);
     }
 
     // exponential zone
@@ -71,8 +72,9 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
     {
         const float yA = y0 + dy * expT0;
         const float yB = y0 + dy * expT1;
-        opticalDepth += sigmaS * scaleHeight * invDy *
-                        (exp(-(yA - fogSeaLevelY) / scaleHeight) - exp(-(yB - fogSeaLevelY) / scaleHeight));
+        const float densityYA = sigmaS * exp(-(yA - fogSeaLevelY) / scaleHeight);
+        const float densityYB = sigmaS * exp(-(yB - fogSeaLevelY) / scaleHeight);
+        opticalDepth += (densityYA - densityYB) * scaleHeight * invDy;
     }
 
     return opticalDepth;
@@ -81,29 +83,6 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
 float computeFogTransmittance(const float3 origin_WS, const float3 dir, const float dist)
 {
     return exp(-computeFogOpticalDepth(origin_WS, dir, dist));
-}
-
-// Optical depth from a point (true world Y) out of the atmosphere along an upward direction
-// (dirY > 0); the exponential zone integrates to a finite value out to infinity.
-float computeFogOpticalDepthToSky(const float y, const float dirY)
-{
-    const float sigmaS = renderParams.fogSigmaS;
-    const float scaleHeight = renderParams.fogScaleHeight;
-    const float rampBottomY = fogSeaLevelY - fogUndergroundRampBlocks;
-    const float invDy = rcp(max(dirY, 1e-3f));
-
-    float opticalDepth = 0.f;
-    if (y < fogSeaLevelY)
-    {
-        const float yA = max(y, rampBottomY);
-        opticalDepth += sigmaS * ((0.5f * (yA + fogSeaLevelY) - rampBottomY) / fogUndergroundRampBlocks) *
-                        (fogSeaLevelY - yA) * invDy;
-    }
-
-    const float yExp = max(y, fogSeaLevelY);
-    opticalDepth += sigmaS * scaleHeight * invDy * exp(-(yExp - fogSeaLevelY) / scaleHeight);
-
-    return opticalDepth;
 }
 
 float henyeyGreensteinPhase(const float cosAngle, const float g)
@@ -192,8 +171,7 @@ float3 computeFogInScatter(const float3 origin_WS,
 
     float3 inScatter = float3(0.f, 0.f, 0.f);
 
-    // Below the horizon the sun contributes nothing, and computeFogOpticalDepthToSky's
-    // parameterization assumes an upward direction, so skip the march entirely at night.
+    // Below the horizon the sun contributes nothing, so skip the march entirely at night.
     if (!isSunOccluded(sunDir_WS))
     {
         const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
@@ -216,7 +194,10 @@ float3 computeFogInScatter(const float3 origin_WS,
             }
 
             const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-            const float sunTransmittance = exp(-computeFogOpticalDepthToSky(stepPos_WS.y + globalOffsetY, sunDir_WS.y));
+            // Bound the sun ray to the voxel bounds like view segments, so both share the
+            // same fog medium extent.
+            const float sunDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
+            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunDist);
             sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
 
