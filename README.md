@@ -32,7 +32,7 @@ Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move 
 
 ## Disclaimer
 
-Significant parts of this codebase were written using AI coding tools (e.g., the physically-based sky). Not all of it was manually reviewed. What can I say? I'm a lazy guy sometimes. I tend to concentrate my manual effort on areas I care about the most, like terrain generation. Please keep this in mind if you look into the code.
+Significant parts of this codebase were written using AI coding tools (e.g., the physically-based sky). Not all of it was manually reviewed. What can I say? I'm a lazy guy sometimes. I tend to concentrate my manual effort on areas I care about the most, like terrain generation and volume scattering. Please keep this in mind if you look into the code.
 
 ## Third-Party Licenses
 
