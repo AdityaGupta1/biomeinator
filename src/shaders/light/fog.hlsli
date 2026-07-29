@@ -14,21 +14,21 @@
 #include "util/rng.hlsli"
 
 static const float fogSeaLevelY = float(SEA_LEVEL);
-static const float fogRampBlocks = 24.f;
+static const float fogUndergroundRampBlocks = 24.f;
 
-// Fog density profile in true world-space Y: zero below (seaLevel - fogRampBlocks), linear
-// ramp up to seaLevel, exponential falloff above. Linear (not smoothstep) in the ramp so the
-// optical-depth integral stays closed-form; the ramp is mostly underground anyway.
+// Fog density profile in true world-space Y: zero below (seaLevel - fogUndergroundRampBlocks), linear ramp up to
+// seaLevel, exponential falloff above. Linear (not smoothstep) in the ramp so the optical-depth integral stays
+// closed-form; the ramp is mostly underground anyway.
 float getFogDensity(const float y)
 {
-    const float rampBottomY = fogSeaLevelY - fogRampBlocks;
+    const float rampBottomY = fogSeaLevelY - fogUndergroundRampBlocks;
     if (y <= rampBottomY)
     {
         return 0.f;
     }
     if (y <= fogSeaLevelY)
     {
-        return renderParams.fogSigmaS * (y - rampBottomY) / fogRampBlocks;
+        return renderParams.fogSigmaS * (y - rampBottomY) / fogUndergroundRampBlocks;
     }
     return renderParams.fogSigmaS * exp(-(y - fogSeaLevelY) / renderParams.fogScaleHeight);
 }
@@ -39,7 +39,7 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
 {
     const float sigmaS = renderParams.fogSigmaS;
     const float scaleHeight = renderParams.fogScaleHeight;
-    const float rampBottomY = fogSeaLevelY - fogRampBlocks;
+    const float rampBottomY = fogSeaLevelY - fogUndergroundRampBlocks;
 
     const float y0 = origin_WS.y + float(cameraParams.globalInstanceOffset.y);
     const float dy = dir.y;
@@ -61,7 +61,7 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
     if (rampT1 > rampT0)
     {
         const float yMid = y0 + dy * 0.5f * (rampT0 + rampT1);
-        opticalDepth += sigmaS * ((yMid - rampBottomY) / fogRampBlocks) * (rampT1 - rampT0);
+        opticalDepth += sigmaS * ((yMid - rampBottomY) / fogUndergroundRampBlocks) * (rampT1 - rampT0);
     }
 
     // exponential zone
@@ -72,7 +72,7 @@ float computeFogOpticalDepth(const float3 origin_WS, const float3 dir, const flo
         const float yA = y0 + dy * expT0;
         const float yB = y0 + dy * expT1;
         opticalDepth += sigmaS * scaleHeight * invDy *
-            (exp(-(yA - fogSeaLevelY) / scaleHeight) - exp(-(yB - fogSeaLevelY) / scaleHeight));
+                        (exp(-(yA - fogSeaLevelY) / scaleHeight) - exp(-(yB - fogSeaLevelY) / scaleHeight));
     }
 
     return opticalDepth;
@@ -89,14 +89,15 @@ float computeFogOpticalDepthToSky(const float y, const float dirY)
 {
     const float sigmaS = renderParams.fogSigmaS;
     const float scaleHeight = renderParams.fogScaleHeight;
-    const float rampBottomY = fogSeaLevelY - fogRampBlocks;
+    const float rampBottomY = fogSeaLevelY - fogUndergroundRampBlocks;
     const float invDy = rcp(max(dirY, 1e-3f));
 
     float opticalDepth = 0.f;
     if (y < fogSeaLevelY)
     {
         const float yA = max(y, rampBottomY);
-        opticalDepth += sigmaS * ((0.5f * (yA + fogSeaLevelY) - rampBottomY) / fogRampBlocks) * (fogSeaLevelY - yA) * invDy;
+        opticalDepth += sigmaS * ((0.5f * (yA + fogSeaLevelY) - rampBottomY) / fogUndergroundRampBlocks) *
+                        (fogSeaLevelY - yA) * invDy;
     }
 
     const float yExp = max(y, fogSeaLevelY);
@@ -153,8 +154,12 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
         // alpha handling needed here.
         const PerTriangleData perTriData =
             perTriDatas[instanceData.perTriDatasBufferOffset + query.CandidatePrimitiveIndex()];
-        const float4 baseColor = getMaterialBaseColorAtHit(material, instanceData, perTriData,
-            query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics(), 0.f);
+        const float4 baseColor = getMaterialBaseColorAtHit(material,
+                                                           instanceData,
+                                                           perTriData,
+                                                           query.CandidatePrimitiveIndex(),
+                                                           query.CandidateTriangleBarycentrics(),
+                                                           0.f);
         if (baseColor.a >= 0.5f)
         {
             query.CommitNonOpaqueTriangleHit();
@@ -169,8 +174,12 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
 // path weight at the segment start and outputs the segment's fog transmittance, which the
 // caller applies to pathWeight separately. numSteps == 0 skips the march and the ambient
 // term, returning zero radiance (but still a valid transmittance).
-float3 computeFogInScatter(const float3 origin_WS, const float3 dir, const float dist, const uint numSteps,
-    inout RandomNumberGenerator rng, out float segmentTransmittance)
+float3 computeFogInScatter(const float3 origin_WS,
+                           const float3 dir,
+                           const float dist,
+                           const uint numSteps,
+                           inout RandomNumberGenerator rng,
+                           out float segmentTransmittance)
 {
     segmentTransmittance = computeFogTransmittance(origin_WS, dir, dist);
     if (numSteps == 0)
