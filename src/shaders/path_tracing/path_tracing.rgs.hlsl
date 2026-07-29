@@ -74,6 +74,27 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 }
 
+// Adds the segment's fog in-scatter to pathColor and folds fog transmittance into
+// pathWeight. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
+float applySegmentFog(inout Payload payload, const float3 origin_WS, const float3 dir,
+    const uint numInScatterSteps, inout float3 pathColor)
+{
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
+    if (!fogEnabled || bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    {
+        return 1.f;
+    }
+
+    const float segmentDist = getSegmentVolumeDistance(payload, origin_WS, dir);
+
+    float fogTransmittance;
+    const float3 inScatter =
+        computeFogInScatter(origin_WS, dir, segmentDist, numInScatterSteps, payload.rng, fogTransmittance);
+    pathColor += payload.pathWeight * inScatter;
+    payload.pathWeight *= fogTransmittance;
+    return fogTransmittance;
+}
+
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
@@ -98,27 +119,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     const float3 segmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
 
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
-    if (fogEnabled && !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
-    {
-        const float segmentDist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-            ? distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
-            : getDistanceToVoxelBounds(cameraParams.pos_WS, ray.Direction);
-        // The primary segment is identical for both path splits and collect sums them, so
-        // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
-        float fogTransmittance;
-        if (pathSplitIdx == 0)
-        {
-            const float3 inScatter = computeFogInScatter(
-                cameraParams.pos_WS, ray.Direction, segmentDist, renderParams.fogMarchSteps, payload.rng, fogTransmittance);
-            pathColor += payload.pathWeight * inScatter;
-        }
-        else
-        {
-            fogTransmittance = computeFogTransmittance(cameraParams.pos_WS, ray.Direction, segmentDist);
-        }
-        payload.pathWeight *= fogTransmittance;
-    }
+    // The primary segment is identical for both path splits and collect sums them, so
+    // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
+    applySegmentFog(payload, cameraParams.pos_WS, ray.Direction,
+        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathColor);
 
     payload.pathWeight *= segmentAbsorption;
 
@@ -486,21 +490,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
 
-        float fogTransmittance = 1.f;
-        if (fogEnabled && !bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
-        {
-            const float segmentDist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-                ? distance(ray.Origin, payload.hitInfo.hitPos_WS)
-                : getDistanceToVoxelBounds(ray.Origin, ray.Direction);
-            // Restrict in-scattering to early path depths; deeper bounces keep only
-            // transmittance. Bounce segments diverge after the path split, so no split
-            // gating here — this puts god rays into the reflection split.
-            const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
-            const float3 inScatter =
-                computeFogInScatter(ray.Origin, ray.Direction, segmentDist, numFogSteps, payload.rng, fogTransmittance);
-            pathColor += payload.pathWeight * inScatter;
-            payload.pathWeight *= fogTransmittance;
-        }
+        // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
+        const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
+        const float fogTransmittance = applySegmentFog(payload, ray.Origin, ray.Direction, numFogSteps, pathColor);
 
         payload.pathWeight *= segmentAbsorption;
 

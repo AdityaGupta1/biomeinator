@@ -5,14 +5,13 @@
 
 // NOTE: needs the sun constants, so this file must be included after dome_light.hlsli.
 
-#include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_settings.h"
 
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
-#include "common/payload.hlsli"
 #include "light/dome_light.hlsli"
 #include "util/math.hlsli"
+#include "util/rng.hlsli"
 
 static const float fogSeaLevelY = float(SEA_LEVEL);
 static const float fogRampBlocks = 24.f;
@@ -113,6 +112,9 @@ float henyeyGreensteinPhase(const float cosAngle, const float g)
     return (1.f - g2) / (4.f * M_PI * denom * sqrt(denom));
 }
 
+// Inline ray query instead of TraceRay: no payload or shader-table indirection on the fog
+// march's hot loop, and alpha-cutout foliage can be tested per candidate so leaves don't
+// occlude as solid quads.
 bool isRayOccluded(const float3 pos_WS, const float3 dir)
 {
     RayDesc ray;
@@ -121,15 +123,45 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 
-    // Only the miss shader can run (FORCE_OPAQUE + SKIP_CLOSEST_HIT_SHADER), and it clears
-    // PAYLOAD_FLAG_DID_HIT, so seed the flag and check whether it survived. FORCE_OPAQUE
-    // means alpha-cutout foliage and water surfaces occlude fully; acceptable for now.
-    Payload payload = (Payload)0;
-    payload.flags = PAYLOAD_FLAG_DID_HIT;
-    TraceRay(raytracingAcs,
-             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
-    return bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
+    query.TraceRayInline(raytracingAcs, RAY_FLAG_NONE, 0xFF, ray);
+
+    // SKIP_PROCEDURAL_PRIMITIVES means every candidate is a non-opaque triangle. Committing
+    // one ends traversal via ACCEPT_FIRST_HIT_AND_END_SEARCH.
+    while (query.Proceed())
+    {
+        const InstanceData instanceData = instanceDatas[query.CandidateInstanceID()];
+        if (instanceData.materialIdx == MATERIAL_IDX_INVALID)
+        {
+            query.CommitNonOpaqueTriangleHit();
+            continue;
+        }
+
+        const Material material = materials[instanceData.materialIdx];
+        if (material.hasGlossyTransmission())
+        {
+            continue; // transmissive surfaces (e.g. water) let sunlight through
+        }
+
+        if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
+        {
+            query.CommitNonOpaqueTriangleHit();
+            continue;
+        }
+
+        // Mip 0 and a fixed threshold: occlusion is a boolean, so no ray cone or stochastic
+        // alpha handling needed here.
+        const PerTriangleData perTriData =
+            perTriDatas[instanceData.perTriDatasBufferOffset + query.CandidatePrimitiveIndex()];
+        const float4 baseColor = getMaterialBaseColorAtHit(material, instanceData, perTriData,
+            query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics(), 0.f);
+        if (baseColor.a >= 0.5f)
+        {
+            query.CommitNonOpaqueTriangleHit();
+        }
+    }
+
+    return query.CommittedStatus() != COMMITTED_NOTHING;
 }
 
 // Marches the fog along a segment, accumulating single-scattered sunlight plus a cheap
