@@ -34,9 +34,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
 void destroy();
 
 // Height of the displaced water top surface above its rest level at a point inside a block,
-// sampled the way the mesh renders it: the wave function evaluated at the four block-corner
-// verts and interpolated across the two top-face triangles (see the +y face in chunk.cpp's
-// cubeFaceVertPositions), whose shared diagonal runs from local (0, 0) to (1, 1) in XZ.
+// sampled to match the actual mesh geometry (by sampling corners and interpolating).
 float sampleMeshWaveOffsetY(glm::ivec2 blockXZ_WS, glm::vec2 blockFraction, float time);
 
 } // namespace WaterDisplacer
