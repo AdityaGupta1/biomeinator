@@ -11,6 +11,7 @@
 #include "util/util.h"
 
 #include <array>
+#include <cmath>
 
 namespace WaterDisplacer
 {
@@ -42,6 +43,41 @@ struct WaterDisplaceConstants
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
 ComPtr<ID3D12PipelineState> pso{ nullptr };
+
+// CPU mirror of waveHeight() in shaders/common/water_waves.hlsli (displacement only, no
+// shading-normal noise); constants are shared via common_settings.h, but the math must
+// match the shader exactly.
+inline constexpr float swellStrengths[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_STRENGTHS;
+inline constexpr glm::vec2 swellFreqs[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_FREQS;
+inline constexpr float swellSpeeds[WATER_SWELL_WAVE_COUNT] = WATER_SWELL_SPEEDS;
+
+inline constexpr float chopStrengths[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_STRENGTHS;
+inline constexpr glm::vec2 chopFreqs[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_FREQS;
+inline constexpr float chopSpeeds[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_SPEEDS;
+
+inline constexpr glm::vec2 sineChopFreqs[2] = WATER_SINE_CHOP_FREQS;
+inline constexpr glm::vec2 sineChopSpeeds = WATER_SINE_CHOP_SPEEDS;
+
+float waveHeight(const glm::vec2 posXZ_WS, const float time)
+{
+    float height = 0.f;
+    for (int i = 0; i < WATER_SWELL_WAVE_COUNT; ++i)
+    {
+        height += swellStrengths[i] * std::sin(glm::dot(posXZ_WS, swellFreqs[i]) + swellSpeeds[i] * time);
+    }
+
+    const float phaseA = glm::dot(posXZ_WS, sineChopFreqs[0]) + sineChopSpeeds.x * time;
+    const float phaseB = glm::dot(posXZ_WS, sineChopFreqs[1]) + sineChopSpeeds.y * time;
+    const float envelope = 0.5f + 0.5f * std::sin(phaseA) * std::sin(phaseB);
+
+    float chop = 0.f;
+    for (int j = 0; j < WATER_CHOP_WAVE_COUNT; ++j)
+    {
+        chop += chopStrengths[j] * std::sin(glm::dot(posXZ_WS, chopFreqs[j]) + chopSpeeds[j] * time);
+    }
+
+    return height + envelope * chop;
+}
 
 } // namespace
 
@@ -102,6 +138,20 @@ void destroy()
 {
     pso.Reset();
     rootSig.Reset();
+}
+
+float sampleMeshWaveOffsetY(const glm::ivec2 blockXZ_WS, const glm::vec2 blockFraction, const float time)
+{
+    const float h00 = waveHeight(glm::vec2(blockXZ_WS), time);
+    const float h10 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 0)), time);
+    const float h01 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(0, 1)), time);
+    const float h11 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 1)), time);
+
+    const float fx = blockFraction.x;
+    const float fz = blockFraction.y;
+    return (fx >= fz)
+        ? h00 + (h10 - h00) * fx + (h11 - h10) * fz
+        : h00 + (h11 - h01) * fx + (h01 - h00) * fz;
 }
 
 } // namespace WaterDisplacer

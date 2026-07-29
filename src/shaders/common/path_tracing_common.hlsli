@@ -20,7 +20,7 @@ StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
-#include "materials/volume.hlsli"
+#include "materials/water.hlsli"
 
 uint getPathSplitIdx()
 {
@@ -78,6 +78,21 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v2 = verts[instanceData.vertsBufferOffset + i2];
 }
 
+float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
+    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+{
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, triIdx, v0, v1, v2);
+
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+
+    TexSampleCtx texCtx;
+    texCtx.mipLevel = mipLevel;
+    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    return getMaterialBaseColor(material, uv, texCtx);
+}
+
 [shader("anyhit")]
 void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
@@ -100,18 +115,10 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
         return;
     }
 
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
-
-    const float2 bary2 = attribs.barycentrics;
-    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
-    TexSampleCtx texCtx;
-    texCtx.mipLevel = computeMipLevel(coneWidth);
-    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    const float4 baseColor = getMaterialBaseColor(material, uv, texCtx);
+    const float4 baseColor = getMaterialBaseColorAtHit(
+        material, instanceData, perTriData, PrimitiveIndex(), attribs.barycentrics, computeMipLevel(coneWidth));
 
     if (testRefractionPassthrough)
     {

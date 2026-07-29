@@ -8,6 +8,7 @@
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/common/common_enums.h"
+#include "rendering/common/common_settings.h"
 #include "rendering/sky_atmosphere.h"
 #include "rendering/water_displacer.h"
 #include "scene/gltf_loader.h"
@@ -51,6 +52,7 @@ void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
+    renderState.animTime = SettingsManager::getAsFloat("animTime");
 
     initStreamline();
 
@@ -458,6 +460,26 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 static void beginFrame();
 static void submitCmd();
 
+// Fog strength peaks around sunrise and sunset: full within fogFullStrengthSeconds of the sun
+// crossing the horizon, fading to zero with smoothstep by fogFadeEndSeconds away.
+static constexpr float fogPeakSigmaS = 0.004f;
+static constexpr float fogFullStrengthSeconds = 30.f;
+static constexpr float fogFadeEndSeconds = 120.f;
+
+static float computeFogSigmaS(const float animTime)
+{
+    float dayTime = std::fmod(animTime, SUN_PERIOD_SECONDS);
+    if (dayTime < 0.f)
+    {
+        dayTime += SUN_PERIOD_SECONDS;
+    }
+    const float distToSunrise = std::min(dayTime, SUN_PERIOD_SECONDS - dayTime);
+    const float distToSunset = std::abs(dayTime - 0.5f * SUN_PERIOD_SECONDS);
+    const float dist = std::min(distToSunrise, distToSunset);
+    const float ramp = 1.f - glm::smoothstep(fogFullStrengthSeconds, fogFadeEndSeconds, dist);
+    return fogPeakSigmaS * ramp * SettingsManager::getAsFloat("fogScatteringMultiplier");
+}
+
 void render()
 {
     if (renderState.needsResize)
@@ -613,6 +635,11 @@ void render()
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
     renderParams->mipBias = renderState.dlss.mipBias;
+    renderParams->fogSigmaS = computeFogSigmaS(animTimeFloat);
+    renderParams->fogScaleHeight = SettingsManager::getAsFloat("fogScaleHeight");
+    renderParams->fogG = SettingsManager::getAsFloat("fogG");
+    renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
+    renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -1118,6 +1145,11 @@ const Camera& getCamera()
 void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
 {
     renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
+}
+
+float getAnimTime()
+{
+    return static_cast<float>(renderState.animTime);
 }
 
 const Scene& getScene()

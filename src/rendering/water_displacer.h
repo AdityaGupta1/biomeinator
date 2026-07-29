@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#include <glm/glm.hpp>
+
 // Compute pass that displaces WATER_TOP verts in place with the analytic wave function
 // (see shaders/common/water_waves.hlsli).
 namespace WaterDisplacer
@@ -30,5 +32,9 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
               const std::vector<DispatchInputs>& allInputs);
 
 void destroy();
+
+// Height of the displaced water top surface above its rest level at a point inside a block,
+// sampled to match the actual mesh geometry (by sampling corners and interpolating).
+float sampleMeshWaveOffsetY(glm::ivec2 blockXZ_WS, glm::vec2 blockFraction, float time);
 
 } // namespace WaterDisplacer

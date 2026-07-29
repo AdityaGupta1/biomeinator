@@ -13,6 +13,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "light/dome_light.hlsli"
+#include "light/fog.hlsli"
 #include "light/light_sampling.hlsli"
 #include "light/ris.hlsli"
 #include "common/light_tree_sampling.hlsli"
@@ -51,6 +52,49 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 #endif
 
+// Detects hitting a water backface without having crossed a water front face or started
+// underwater — happens when partially loaded chunks leave water volumes open. Paths are
+// terminated at such hits: continuing would trace the open water interior flagged as air
+// (fog in-scatter below sea level, unattenuated dome light) which glows and flickers.
+bool isOrphanWaterBackfaceHit(const Payload payload)
+{
+    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || !bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ||
+        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    {
+        return false;
+    }
+
+    if (payload.waterEntryT != RAY_DEFAULT_TMAX)
+    {
+        return false;
+    }
+
+    const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+}
+
+// Adds the segment's fog in-scatter to pathColor and folds fog transmittance into
+// pathWeight. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
+float applySegmentFog(inout Payload payload, const float3 origin_WS, const float3 dir,
+    const uint numInScatterSteps, inout float3 pathColor)
+{
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
+    if (!fogEnabled || bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    {
+        return 1.f;
+    }
+
+    const float segmentDist = getSegmentVolumeDistance(payload, origin_WS, dir);
+
+    float fogTransmittance;
+    const float3 inScatter =
+        computeFogInScatter(origin_WS, dir, segmentDist, numInScatterSteps, payload.rng, fogTransmittance);
+    pathColor += payload.pathWeight * inScatter;
+    payload.pathWeight *= fogTransmittance;
+    return fogTransmittance;
+}
+
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
@@ -74,7 +118,22 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
 
     const float3 segmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+
+    // The primary segment is identical for both path splits and collect sums them, so
+    // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
+    applySegmentFog(payload, cameraParams.pos_WS, ray.Direction,
+        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathColor);
+
     payload.pathWeight *= segmentAbsorption;
+
+    if (isOrphanWaterBackfaceHit(payload))
+    {
+#if NRC_UPDATE || NRC_QUERY
+        NrcUpdateOnMiss(nrcPathState);
+        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
+#endif
+        return;
+    }
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
@@ -83,7 +142,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         NrcUpdateOnMiss(nrcPathState);
         NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
 #endif
-        pathColor = payload.pathWeight * domeLightColor;
+        pathColor += payload.pathWeight * domeLightColor;
+        if (sceneParams.voxelMode == 1)
+        {
+            // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
+            // light rather than pathWeight, which would fold in fog transmittance.
+            ptDiffuseAlbedo = applyReinhard(domeLightColor);
+        }
         return;
     }
 
@@ -424,7 +489,20 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
+
+        // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
+        const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
+        const float fogTransmittance = applySegmentFog(payload, ray.Origin, ray.Direction, numFogSteps, pathColor);
+
         payload.pathWeight *= segmentAbsorption;
+
+        if (isOrphanWaterBackfaceHit(payload))
+        {
+            break;
+        }
+
+        const bool didMiss = !bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
+        const float3 missDomeLightColor = didMiss ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
 
         if (pathDepth == 0)
         {
@@ -467,7 +545,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
+                    }
+                    else if (didMiss && sceneParams.voxelMode == 1)
+                    {
+                        // Specular reflection of the sky. Excludes fog and absorption to match
+                        // how the primary miss builds its albedo.
+                        ptDiffuseAlbedo *= applyReinhard(missDomeLightColor);
                     }
                     else
                     {
@@ -479,9 +563,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
         }
 
-        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+        if (didMiss)
         {
-            float3 domeLightContrib = payload.pathWeight * getDomeLightColor(ray.Direction);
+            float3 domeLightContrib = payload.pathWeight * missDomeLightColor;
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode

@@ -1,4 +1,4 @@
-_Last edited: 2026-07-19_
+_Last edited: 2026-07-25_
 
 # HLSL Utility Libraries
 
@@ -16,13 +16,16 @@ _Last edited: 2026-07-19_
   `Texture2DArray` based on `material.hasArrayTexture()` — that flag must agree with
   the SRV dim set in `Scene::uploadPendingTextures` (see
   [scene → materials_textures.md](../scene/materials_textures.md)).
-- **`materials/volume.hlsli`** — water absorption and underwater logic. **Include order
-  dependency**: must be included after `path_tracing_common.hlsli` because it references
-  `instanceDatas` and `perTriDatas` without declaring them.
+- **`materials/water.hlsli`** — water absorption and underwater logic. Included from
+  `path_tracing_common.hlsli` so its helpers are available to `AnyHit` and every consumer
+  of the common header (e.g. `dome_light.hlsli`, `light_sampling.hlsli`).
 - **`light/ris.hlsli`** — Resampled Importance Sampling for direct area light sampling.
 - **`light/dome_light.hlsli`** — dome light (sun + sky gradient), voxel mode only. The sun
   direction is a closed-form function of `renderParams.animTime` rather than integrated state, so
   scrubbing time in either direction always reproduces the same sky.
+- **`light/fog.hlsli`** — all air fog math: closed-form density profile and segment/to-sky
+  optical depth, plus the in-scattering march (god rays). Needs the sun constants:
+  **must be included after `dome_light.hlsli`**.
 - **`light/light_sampling.hlsli`** — shared helpers for sampling points on area light
   triangles and computing solid-angle PDFs.
 - **`util/rng.hlsli`** — PCG-based hash RNG. Sequential state — call order within a shader

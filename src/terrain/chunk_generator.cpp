@@ -6,6 +6,7 @@
 #include "biome.h"
 #include "cave_biome.h"
 #include "chunk.h"
+#include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "util/glm_util.h"
@@ -301,7 +302,7 @@ using namespace ChunkGenerator;
 inline constexpr float terrainBelowHeightfieldSurfaceMultiplier = 2.f;
 inline constexpr float surfaceValBound = 1.2f; // noise is approximately between -1 and 1, so +/- 1.2 means we can be absolutely sure that this is terrain or air
 
-inline constexpr int seaLevel = 125;
+inline constexpr int seaLevel = SEA_LEVEL;
 
 // y of the lava surface (the low-y lava fill writes LAVA_TOP at y == 4); cave structures
 // whose anchor sits at or below this are rejected unless flagged to allow lava.

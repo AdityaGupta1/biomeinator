@@ -3,8 +3,7 @@
 
 #pragma once
 
-// NOTE: this file is intended to be included from path_tracing_common.hlsli, after instanceDatas
-// and perTriDatas are declared.
+// NOTE: this file is intended to be included from path_tracing_common.hlsli.
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
@@ -35,6 +34,15 @@ float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
     return (tExit > tEnter) ? tExit : 0.f;
 }
 
+// Length of a path segment through in-bounds media: distance to the hit, or to the voxel
+// bounds exit on a miss.
+float getSegmentVolumeDistance(const Payload payload, const float3 rayOrigin, const float3 rayDir)
+{
+    return bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(rayOrigin, payload.hitInfo.hitPos_WS)
+        : getDistanceToVoxelBounds(rayOrigin, rayDir);
+}
+
 void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
 {
     if (wasBackfaceHit)
@@ -54,10 +62,7 @@ float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, c
         return float3(1.f, 1.f, 1.f);
     }
 
-    const float dist = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? distance(rayOrigin, payload.hitInfo.hitPos_WS)
-        : getDistanceToVoxelBounds(rayOrigin, rayDir);
-    return computeWaterAbsorption(dist);
+    return computeWaterAbsorption(getSegmentVolumeDistance(payload, rayOrigin, rayDir));
 }
 
 float3 computePassthroughAbsorption(const Payload payload, const float rayEndT)

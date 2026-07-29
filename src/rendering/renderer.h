@@ -42,6 +42,8 @@ ID3D12CommandQueue* getGraphicsQueue();
 const Camera& getCamera();
 void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 
+float getAnimTime();
+
 const Scene& getScene();
 
 } // namespace Renderer

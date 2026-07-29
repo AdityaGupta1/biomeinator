@@ -14,6 +14,7 @@
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 #include "rendering/renderer.h"
+#include "rendering/water_displacer.h"
 #include "settings_manager.h"
 #include "logger.h"
 #include "structure/cave_structure.h"
@@ -204,8 +205,20 @@ void update(ToFreeList& toFreeList)
                                               Blocks::getBlockData(cameraBlock).type == BlockType::WATER;
                     if (blockIsWater)
                     {
-                        cameraUnderwater =
-                            (cameraBlock == Block::WATER_TOP) ? (camera.getPosFloat_WS().y < 0.875f) : true;
+                        if (cameraBlock == Block::WATER_TOP)
+                        {
+                            const glm::vec3 cameraPosFloat_WS = camera.getPosFloat_WS();
+                            const float surfaceY = 0.875f +
+                                WaterDisplacer::sampleMeshWaveOffsetY(
+                                    glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z),
+                                    glm::vec2(cameraPosFloat_WS.x, cameraPosFloat_WS.z),
+                                    Renderer::getAnimTime());
+                            cameraUnderwater = cameraPosFloat_WS.y < surfaceY;
+                        }
+                        else
+                        {
+                            cameraUnderwater = true;
+                        }
                     }
                 }
             }

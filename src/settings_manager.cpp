@@ -47,10 +47,16 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
     ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
+    ADD_OPTION("animTime", "Initial world animation time in seconds (0 = sunrise)", float, "150");
     ADD_OPTION("fullscreen", "Start in fullscreen mode", bool, "false");
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
     ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
+    ADD_OPTION("fogScatteringMultiplier", "Fog scattering multiplier on the time-of-day fog strength (0 disables fog; voxel mode only)", float, "1");
+    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "40");
+    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
+    ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
+    ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
@@ -118,10 +124,16 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("worldSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);
     COPY_SETTING("animTimePaused", bool);
+    COPY_SETTING("animTime", float);
     COPY_SETTING("fullscreen", bool);
     COPY_SETTING("useWaitableSwapChain", bool);
     COPY_SETTING("showGui", bool);
     COPY_SETTING("refractionIndirectPassthrough", bool);
+    COPY_SETTING("fogScatteringMultiplier", float);
+    COPY_SETTING("fogScaleHeight", float);
+    COPY_SETTING("fogG", float);
+    COPY_SETTING("fogMarchSteps", uint32_t);
+    COPY_SETTING("fogAmbientStrength", float);
     COPY_SETTING("renderDistance", int);
     COPY_SETTING("world", std::string);
 

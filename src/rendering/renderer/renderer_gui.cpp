@@ -122,6 +122,17 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::SectionTitle("Materials");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
 
+        if (renderState.voxelMode)
+        {
+            SettingsGuiHelpers::VerticalSpacing();
+            SettingsGuiHelpers::SectionTitle("Fog");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+        }
+
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Radiance Cache");
         const bool didNrcChange = SettingsGuiHelpers::Checkbox("Enable NRC", "nrcEnabled");

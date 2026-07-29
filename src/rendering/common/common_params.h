@@ -132,8 +132,13 @@ struct RenderParams
 
     float animTime; // can be frozen by animTimePaused setting
     float prevAnimTime;
+    float fogSigmaS;
+    float fogScaleHeight;
+
+    float fogG;
+    uint fogMarchSteps;
+    float fogAmbientStrength;
     uint pad0;
-    uint pad1;
 };
 
 struct RtslParams

@@ -19,9 +19,10 @@ static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
 // angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
 static const float3 sunIlluminance = float3(10.f, 10.f, 10.f);
 
-// Small constant floor so nights aren't pitch black until the moon exists. Added at the lookup
-// rather than baked into the sky-view LUT so it's trivial to delete when the moon lands.
-static const float3 nightAmbient = float3(0.01f, 0.015f, 0.025f);
+// Constant floor on every sky lookup, sized so nights aren't pitch black until the moon exists;
+// it tints the daytime sky slightly too. Added at the lookup rather than baked into the sky-view
+// LUT so it's trivial to delete when the moon lands.
+static const float3 ambientSkyLight = float3(0.015f, 0.0225f, 0.0375f);
 
 SamplerState skyLutSampler : REGISTER_S(RT, LUT_SAMPLER);
 SamplerState skyViewSampler : REGISTER_S(RT, SKY_VIEW_SAMPLER);
@@ -45,7 +46,7 @@ float3 getSkyColor(float3 wi_WS)
 {
     Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
     const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
-    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + nightAmbient;
+    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + ambientSkyLight;
 }
 
 // True if the ray from the camera towards wi_WS is occluded by the virtual planet. The

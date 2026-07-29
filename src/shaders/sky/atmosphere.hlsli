@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../rendering/common/common_settings.h"
+
 #include "util/math.hlsli"
 
 // Earth atmosphere model from Hillaire, "A Scalable and Production Ready Sky and Atmosphere
@@ -30,15 +32,15 @@ static const float ozoneHalfWidth = 15000.f;
 
 static const float atmosphereGroundAlbedo = 0.3f;
 
-static const float sunPeriodSeconds = 1200.f; // half above the horizon, half below
+static const float sunPeriodSeconds = SUN_PERIOD_SECONDS; // half above the horizon, half below
 static const float sunTiltRadians = 23.5f * (M_PI / 180.f);
-static const float sunPhaseOffsetRadians = M_PI / 4.f;
 
 // The sun rides a great circle tilted towards +Z, rising at +X and setting at -X. Derived purely from
-// animTime so that scrubbing time forwards or backwards lands on the same sky.
+// animTime so that scrubbing time forwards or backwards lands on the same sky. animTime 0 puts the
+// sun's center right on the horizon, about to rise.
 float3 computeSunDir_WS(const float animTime)
 {
-    const float angle = animTime * (M_TWO_PI / sunPeriodSeconds) + sunPhaseOffsetRadians;
+    const float angle = animTime * (M_TWO_PI / sunPeriodSeconds);
     float sinAngle, cosAngle;
     sincos(angle, sinAngle, cosAngle);
     return float3(cosAngle, sinAngle * cos(sunTiltRadians), sinAngle * sin(sunTiltRadians));
