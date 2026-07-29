@@ -4,7 +4,7 @@ Real-time path traced voxel engine
 
 ![](img/title.png)
 
-Video demo: https://youtu.be/6ehg5h1aBRI
+Video demo: https://youtu.be/6ehg5h1aBRI (somewhat outdated)
 
 ## Building
 

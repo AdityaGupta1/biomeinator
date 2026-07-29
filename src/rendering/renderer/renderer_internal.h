@@ -76,6 +76,9 @@ inline void printSlResultError(sl::Result result)
         case sl::Result::eErrorMissingConstants:
             msg = "Missing constants";
             break;
+        case sl::Result::eWarnOutOfVRAM:
+            msg = "Out of VRAM";
+            break;
         default:
             msg = "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
             break;
