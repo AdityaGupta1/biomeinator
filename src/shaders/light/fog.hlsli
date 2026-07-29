@@ -194,10 +194,8 @@ float3 computeFogInScatter(const float3 origin_WS,
             }
 
             const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-            // Bound the sun ray to the voxel bounds like view segments, so both share the
-            // same fog medium extent.
-            const float sunDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
-            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunDist);
+            const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
+            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunVolumeDist);
             sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
 
