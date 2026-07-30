@@ -30,8 +30,8 @@ static void createMaterials(Scene* scene)
         return;
     }
 
-    const uint32_t emissionTextureId = loadTexture(scene, "emission.png");
-    if (emissionTextureId == TEXTURE_ID_INVALID)
+    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png", false /*sRGB*/);
+    if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;
     }
@@ -40,9 +40,10 @@ static void createMaterials(Scene* scene)
         Material defaultMaterial{};
         defaultMaterial.emissiveStrength = 3.0f;
         defaultMaterial.baseColorTextureId = diffuseTextureId;
-        defaultMaterial.emissiveColorTextureId = emissionTextureId;
+        defaultMaterial.emissiveColorTextureId = auxTextureId;
         defaultMaterial.setHasDiffuse(true);
         defaultMaterial.setHasArrayTexture(true);
+        defaultMaterial.setHasPackedAux(true);
         MATERIAL_IDX(TerrainMaterial::DEFAULT) = scene->addMaterial(toFreeList, &defaultMaterial);
     }
 

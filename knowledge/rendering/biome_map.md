@@ -30,12 +30,17 @@ through the frame's `ToFreeList`, and a fresh slot is allocated — the SRV inde
 rewritten into `HeapIndices` every frame, so in-flight frames keep reading the old
 descriptor safely.
 
-## Luminance-Replace Tinting
+## Grayscale-Multiply Tinting
 
-Grass textures are still authored green; no grayscale assets. Tinted faces replace the
-sampled color with `luminance * tint / BIOME_TINT_REFERENCE_LUMINANCE` — hue comes
-entirely from the map, per-texel detail survives as luminance. The reference constant
-normalizes so a texel at that luminance renders exactly the tint color.
+Tint-masked texels are authored grayscale in `diffuse.png` (gray = original luminance
+normalized so an average grass texel multiplies to exactly the tint color); the shader
+just multiplies by `lerp(1, tint, mask)`. Hue comes entirely from the map, per-texel
+detail survives as brightness. Editing grass texels later means authoring in grayscale —
+the tint multiply is the only source of color.
+
+The triangle flag only gates the biome map sample; *which texels* tint comes from the aux
+texture's green channel (see [scene → materials_textures.md](../scene/materials_textures.md)),
+so grass block side faces tint only their grass overlay, not the dirt below.
 
 The tint rides in `TexSampleCtx` (alpha = active flag) rather than being applied at call
 sites because `trySplitMaterial` bakes the sampled base color into `material.baseColor`

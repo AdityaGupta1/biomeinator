@@ -76,12 +76,17 @@ static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t
     return static_cast<float>(opaqueCount) / static_cast<float>(texelCount);
 }
 
-template<bool premultiplyAlpha>
+template<bool premultiplyAlpha, bool srgbTransfer>
 static void downsample2x2Tile(
     const std::vector<uint8_t>& src, uint32_t srcWidth, std::vector<uint8_t>& dst, uint32_t dstWidth, uint32_t srcTileX,
     uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize)
 {
     constexpr float alphaEpsilon = 1e-6f;
+    const auto decode = [](uint8_t v) { return srgbTransfer ? linearize(v) : v / 255.f; };
+    const auto encode = [](float v)
+    {
+        return srgbTransfer ? srgbEncode(v) : static_cast<uint8_t>(std::clamp(v * 255.f + 0.5f, 0.f, 255.f));
+    };
     for (uint32_t y = 0; y < dstTileSize; ++y)
     {
         for (uint32_t x = 0; x < dstTileSize; ++x)
@@ -103,16 +108,16 @@ static void downsample2x2Tile(
             {
                 if constexpr (premultiplyAlpha)
                 {
-                    const float avgPremultiplied = (linearize(p00[ch]) * a00 + linearize(p10[ch]) * a10
-                                                   + linearize(p01[ch]) * a01 + linearize(p11[ch]) * a11)
+                    const float avgPremultiplied = (decode(p00[ch]) * a00 + decode(p10[ch]) * a10
+                                                   + decode(p01[ch]) * a01 + decode(p11[ch]) * a11)
                         * 0.25f;
                     const float avg = avgA > alphaEpsilon ? (avgPremultiplied / avgA) : 0.f;
-                    out[ch] = srgbEncode(avg);
+                    out[ch] = encode(avg);
                     continue;
                 }
 
-                const float avg = (linearize(p00[ch]) + linearize(p10[ch]) + linearize(p01[ch]) + linearize(p11[ch])) * 0.25f;
-                out[ch] = srgbEncode(avg);
+                const float avg = (decode(p00[ch]) + decode(p10[ch]) + decode(p01[ch]) + decode(p11[ch])) * 0.25f;
+                out[ch] = encode(avg);
             }
             if constexpr (premultiplyAlpha)
             {
@@ -157,7 +162,7 @@ static void quantizeAlphaToCoverageTile(
     }
 }
 
-static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
+static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename, const bool sRGB = true)
 {
     namespace fs = std::filesystem;
 
@@ -219,15 +224,31 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
 
                 if (!hasTransparency)
                 {
-                    downsample2x2Tile<false /*premultiplyAlpha*/>(
-                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                    if (sRGB)
+                    {
+                        downsample2x2Tile<false /*premultiplyAlpha*/, true /*srgbTransfer*/>(
+                            mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                    }
+                    else
+                    {
+                        downsample2x2Tile<false /*premultiplyAlpha*/, false /*srgbTransfer*/>(
+                            mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                    }
                     continue;
                 }
 
                 const float sourceCoverage =
                     computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
-                downsample2x2Tile<true /*premultiplyAlpha*/>(
-                    mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                if (sRGB)
+                {
+                    downsample2x2Tile<true /*premultiplyAlpha*/, true /*srgbTransfer*/>(
+                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                }
+                else
+                {
+                    downsample2x2Tile<true /*premultiplyAlpha*/, false /*srgbTransfer*/>(
+                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
+                }
                 quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
             }
         }
@@ -319,7 +340,8 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename)
         }
     }
 
-    return scene->addTextureArray(std::move(sliceMipData), tileSizeMip0, tileSizeMip0);
+    return scene->addTextureArray(std::move(sliceMipData), tileSizeMip0, tileSizeMip0,
+                                  sRGB ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM);
 }
 
 } // namespace TerrainMaterials

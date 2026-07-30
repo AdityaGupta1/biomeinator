@@ -1,4 +1,4 @@
-_Last edited: 2026-05-12_
+_Last edited: 2026-07-29_
 
 # Materials and Textures
 
@@ -12,7 +12,7 @@ Material and texture management in `src/scene/scene.h/cpp`.
 
 ## Textures
 
-Textures are 2D RGBA8 sRGB with optional precomputed mip chains. Upload is deferred: `addTexture()` / `addTextureArray()` stash raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
+Textures are 2D RGBA8 with optional precomputed mip chains; `addTextureArray()` takes a format (sRGB default, plain UNORM for data textures like the terrain aux map, whose mips must be averaged without the sRGB transfer). Upload is deferred: `addTexture()` / `addTextureArray()` stash raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
 
 Each texture gets an SRV in the shared descriptor heap. The returned texture ID is the descriptor heap index, which shaders use for bindless access.
 
@@ -34,3 +34,18 @@ The glTF loader uses the single-mip overload (no mip generation). The terrain ma
 - **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `emissiveColorTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
 
 Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF materials never do.
+
+## Packed Aux (Terrain)
+
+`MATERIAL_FLAG_PACKED_AUX` repurposes `emissiveColorTextureId` as a linear aux texture:
+r = per-texel emissive strength, g = biome tint mask. Emission *color* comes from the base
+color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
+"emissive texels are pure emitters" behavior that `isPureEmitter` and NRC rely on. There is
+no separate `emission.png` anymore.
+
+Two invariants:
+- `trySplitMaterial`'s opaque branch must keep `emissiveColorTextureId` (the aux) so the
+  split path retains emission; `getMaterialEmissiveColor` guards the packed path against an
+  invalid base texture ID (post-split) by returning zero.
+- The aux texture must be loaded linear (`loadTexture(..., sRGB=false)`) — mask and strength
+  values would be distorted by the sRGB transfer during mip downsampling and sampling.

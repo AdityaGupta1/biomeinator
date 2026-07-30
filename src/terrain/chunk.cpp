@@ -733,7 +733,7 @@ void Chunk::createInstances()
                             {
                                 faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
                             }
-                            if (block == Block::GRASS_BLOCK && faceIdx == 4) // top face
+                            if (block == Block::GRASS_BLOCK && faceIdx != 5) // all faces except bottom
                             {
                                 faceData.flags |= TRIANGLE_FLAG_BIOME_TINT;
                             }

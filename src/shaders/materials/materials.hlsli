@@ -38,10 +38,6 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
-// Normalization for biome-tinted base colors: a texel at this luminance maps to exactly the
-// biome tint color, so the tint reads as the average color of the tinted texture.
-static const float BIOME_TINT_REFERENCE_LUMINANCE = 0.4f;
-
 // arraySliceIdx only read when sampled tex is Texture2DArray; non-array callers may pass 0.
 struct TexSampleCtx
 {
@@ -68,14 +64,30 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
         return float4(material.baseColor, 1.f);
     }
     float4 baseColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
-    const float3 tintedColor =
-        saturate(texCtx.biomeTint.rgb * (luminance(baseColor.rgb) / BIOME_TINT_REFERENCE_LUMINANCE));
-    baseColor.rgb = lerp(baseColor.rgb, tintedColor, texCtx.biomeTint.a);
+    if (material.hasPackedAux() && material.emissiveColorTextureId != TEXTURE_ID_INVALID)
+    {
+        const float4 aux = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx);
+        baseColor.rgb *= (aux.r > 0.f) ? 0.f : 1.f; // emissive texels carry emission color, not diffuse
+        // Tint-masked texels are authored grayscale; the biome tint provides the hue
+        baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
+    }
     return baseColor;
 }
 
 float3 getMaterialEmissiveColor(const Material material, const float2 uv, const TexSampleCtx texCtx)
 {
+    if (material.hasPackedAux())
+    {
+        // Emission color lives in the base color texture; aux.r is the per-texel strength.
+        if (material.emissiveColorTextureId == TEXTURE_ID_INVALID || material.baseColorTextureId == TEXTURE_ID_INVALID)
+        {
+            return float3(0.f, 0.f, 0.f);
+        }
+        const float auxStrength = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx).r;
+        const float3 emissiveColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
+        return emissiveColor * auxStrength * material.emissiveStrength;
+    }
+
     const float3 emissiveColor = (material.emissiveColorTextureId == TEXTURE_ID_INVALID)
         ? material.emissiveColor
         : sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx).rgb;
