@@ -48,7 +48,7 @@
 #define SEA_LEVEL 125
 
 // World-XZ biome color map: one texel covers this many blocks per axis
-#define BIOME_MAP_BLOCKS_PER_TEXEL 4
+#define BIOME_MAP_BLOCKS_PER_TEXEL 8
 
 // =============================================
 // SKY ATMOSPHERE
