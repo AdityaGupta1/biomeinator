@@ -110,6 +110,7 @@ bool traceToLight(const float3 surfPos_WS,
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance));
     texCtx.arraySliceIdx = perTriDatas[instanceDatas[lightPayload.hitInfo.instanceId].perTriDatasBufferOffset + lightPayload.hitInfo.triangleIdx].texArraySliceIdx;
+    texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f); // only used for emission, which is never tinted
     Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }

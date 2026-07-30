@@ -9,6 +9,7 @@
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/common/common_enums.h"
 #include "rendering/common/common_settings.h"
+#include "rendering/biome_map.h"
 #include "rendering/sky_atmosphere.h"
 #include "rendering/water_displacer.h"
 #include "scene/gltf_loader.h"
@@ -579,6 +580,7 @@ void render()
     if (renderState.voxelMode)
     {
         Terrain::update(frameCtx.toFreeList);
+        BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
 
     const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
@@ -732,6 +734,7 @@ void render()
     sceneParams->cameraUnderwater = 0;
     sceneParams->voxelBoundsMin_WS = { 0, 0, 0 };
     sceneParams->voxelBoundsMax_WS = { 0, 0, 0 };
+    sceneParams->biomeMapTexelsPerSide = 0;
 
     if (renderState.voxelMode)
     {
@@ -740,6 +743,11 @@ void render()
         const glm::ivec3 globalInstanceOffset = renderState.scene.getGlobalInstanceOffset();
 
         sceneParams->cameraUnderwater = Terrain::isCameraUnderwater() ? 1 : 0;
+
+        const glm::ivec2 biomeMapOrigin = BiomeMap::getOriginBlocksXZ_WS();
+        sceneParams->biomeMapOriginBlocksXZ_WS = { biomeMapOrigin.x, biomeMapOrigin.y /*z*/ };
+        sceneParams->biomeMapTexelsPerSide = BiomeMap::getTexelsPerSide();
+        paramBlockManager.heapIndices->srv.biomeMapIdx = BiomeMap::getSrvIdx();
         sceneParams->voxelBoundsMin_WS = {
             voxelBoundsMin_WS.x - globalInstanceOffset.x,
             voxelBoundsMin_WS.y - globalInstanceOffset.y,
@@ -1055,6 +1063,7 @@ void destroy()
     renderState.lightTreeManager.destroy();
     WaterDisplacer::destroy();
     SkyAtmosphere::destroy();
+    BiomeMap::destroy();
 
     renderState.scene.reset();
     AcsHelper::reset();

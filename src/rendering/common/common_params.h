@@ -8,6 +8,7 @@
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+#define int2 DirectX::XMINT2
 #define int3 DirectX::XMINT3
 
 #define uint uint32_t
@@ -49,7 +50,7 @@ struct HeapIndices
         uint debugTargetIdx;
         uint transmittanceLutIdx;
         uint skyViewLutIdx;
-        uint pad0;
+        uint biomeMapIdx;
     } srv;
 };
 
@@ -112,6 +113,10 @@ struct SceneParams
 
     int3 voxelBoundsMax_WS;
     uint pad2;
+
+    int2 biomeMapOriginBlocksXZ_WS;
+    uint biomeMapTexelsPerSide;
+    uint pad3;
 };
 
 struct RenderParams
@@ -173,6 +178,9 @@ struct DebugParams
 };
 
 #ifdef __cplusplus
+#undef int2
+#undef int3
+
 #undef uint
 #undef uint2
 

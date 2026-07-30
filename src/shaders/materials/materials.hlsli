@@ -38,11 +38,16 @@ float walterFresnel(const float eta, const float cosThetaWo)
     return 0.5f * a * a * (1 + b * b);
 }
 
+// Normalization for biome-tinted base colors: a texel at this luminance maps to exactly the
+// biome tint color, so the tint reads as the average color of the tinted texture.
+static const float BIOME_TINT_REFERENCE_LUMINANCE = 0.4f;
+
 // arraySliceIdx only read when sampled tex is Texture2DArray; non-array callers may pass 0.
 struct TexSampleCtx
 {
     float mipLevel;
     uint arraySliceIdx;
+    float4 biomeTint; // rgb = biome map tint, a = 1 to apply it (see getBiomeTint)
 };
 
 float4 sampleTexture(const bool isArrayTexture, const uint texId, const float2 uv, const TexSampleCtx texCtx)
@@ -62,7 +67,11 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
     {
         return float4(material.baseColor, 1.f);
     }
-    return sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
+    float4 baseColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
+    const float3 tintedColor =
+        saturate(texCtx.biomeTint.rgb * (luminance(baseColor.rgb) / BIOME_TINT_REFERENCE_LUMINANCE));
+    baseColor.rgb = lerp(baseColor.rgb, tintedColor, texCtx.biomeTint.a);
+    return baseColor;
 }
 
 float3 getMaterialEmissiveColor(const Material material, const float2 uv, const TexSampleCtx texCtx)

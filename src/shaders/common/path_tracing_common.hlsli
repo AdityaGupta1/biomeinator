@@ -6,6 +6,7 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
+#include "common/biome_map.hlsli"
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
 #include "common/water_waves.hlsli"
@@ -90,6 +91,8 @@ float4 getMaterialBaseColorAtHit(const Material material, const InstanceData ins
     TexSampleCtx texCtx;
     texCtx.mipLevel = mipLevel;
     texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    // Cutout alpha and passthrough absorption don't care about biome tint, so skip the map sample
+    texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f);
     return getMaterialBaseColor(material, uv, texCtx);
 }
 

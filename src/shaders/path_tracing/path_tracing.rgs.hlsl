@@ -187,6 +187,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         TexSampleCtx surfTexCtx;
         surfTexCtx.mipLevel = computeMipLevel(payload.rayCone.width);
         surfTexCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+        surfTexCtx.biomeTint = getBiomeTint(perTriData.flags, payload.hitInfo.hitPos_WS.xz);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -520,9 +521,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
+                        const PerTriangleData secondHitPerTriData =
+                            perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
                         TexSampleCtx secondHitTexCtx;
                         secondHitTexCtx.mipLevel = computeMipLevel(payload.rayCone.width);
-                        secondHitTexCtx.arraySliceIdx = perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx].texArraySliceIdx;
+                        secondHitTexCtx.arraySliceIdx = secondHitPerTriData.texArraySliceIdx;
+                        secondHitTexCtx.biomeTint = getBiomeTint(secondHitPerTriData.flags, payload.hitInfo.hitPos_WS.xz);
                         if (surfMaterial.hasDiffuse())
                         {
                             const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;

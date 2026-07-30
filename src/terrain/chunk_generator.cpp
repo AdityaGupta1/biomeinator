@@ -198,6 +198,43 @@ void init()
     }
 }
 
+void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
+{
+    const uint numSamples = numTexels.x * numTexels.y;
+    std::vector<float> temperatureNoise(numSamples);
+    std::vector<float> humidityNoise(numSamples);
+    std::vector<float> peakNoise(numSamples);
+    std::vector<float> inlandNoise(numSamples);
+
+    const float texelCenterOffset = texelSizeBlocks * 0.5f;
+    const auto fillRectNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
+    {
+        fn->GenUniformGrid2D(data,
+                             originBlocksXZ_WS.x + noiseOffsetXZ.x + texelCenterOffset,
+                             originBlocksXZ_WS.y + noiseOffsetXZ.y + texelCenterOffset /*z*/,
+                             numTexels.x,
+                             numTexels.y,
+                             static_cast<float>(texelSizeBlocks),
+                             static_cast<float>(texelSizeBlocks),
+                             worldSeed ^ hash(719023919));
+    };
+    fillRectNoise(temperatureNoise.data(), fnTemperature);
+    fillRectNoise(humidityNoise.data(), fnHumidity);
+    fillRectNoise(peakNoise.data(), fnPeak);
+    fillRectNoise(inlandNoise.data(), fnInland);
+
+    for (uint idx = 0; idx < numSamples; ++idx)
+    {
+        const BiomeNoise biomeNoise = {
+            .temperature = temperatureNoise[idx],
+            .humidity = humidityNoise[idx],
+            .peak = peakNoise[idx],
+            .inland = inlandNoise[idx],
+        };
+        outBiomes[idx] = Biomes::getClosestBiome(biomeNoise);
+    }
+}
+
 static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
 {
     fn->GenUniformGrid2D(data,

@@ -58,6 +58,7 @@ void init()
             .humidity = 0.0f,
             .peak = -1.0f,
         };
+        data.grassTint = glm::vec3(142.f, 185.f, 113.f) / 255.f;
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SAND,
@@ -77,6 +78,7 @@ void init()
             .humidity = 0.2f,
             .peak = -1.0f,
         };
+        data.grassTint = glm::vec3(161.f, 186.f, 104.f) / 255.f;
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SAND,
@@ -95,6 +97,7 @@ void init()
             .humidity = -0.2f,
             .peak = -1.0f,
         };
+        data.grassTint = glm::vec3(143.f, 164.f, 112.f) / 255.f;
         data.topBlocks = {
             .top = Block::GRAVEL,
             .mid = Block::GRAVEL,
@@ -110,6 +113,7 @@ void init()
             .humidity = -0.3f,
             .peak = -1.0f,
         };
+        data.grassTint = glm::vec3(126.f, 145.f, 82.f) / 255.f;
         data.topBlocks = {
             .top = Block::BLACK_SAND,
             .mid = Block::BLACK_SAND,
@@ -129,6 +133,7 @@ void init()
             .humidity = 0.0f,
             .peak = -0.7f,
         };
+        data.grassTint = glm::vec3(145.f, 189.f, 89.f) / 255.f;
         data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
@@ -145,6 +150,7 @@ void init()
             .humidity = -1.0f,
             .peak = -0.6f,
         };
+        data.grassTint = glm::vec3(191.f, 183.f, 85.f) / 255.f;
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SANDSTONE,
@@ -168,6 +174,7 @@ void init()
             .humidity = 0.2f,
             .peak = -0.4f,
         };
+        data.grassTint = glm::vec3(89.f, 169.f, 59.f) / 255.f;
         data.structureGens = {
             { StructureType::OAK_TREE, 6, 1 },
         };
@@ -187,6 +194,7 @@ void init()
             .humidity = -0.6f,
             .peak = -0.6f,
         };
+        data.grassTint = glm::vec3(128.f, 180.f, 151.f) / 255.f;
         data.topBlocks = {
             .top = Block::SNOWY_GRASS_BLOCK,
             .mid = Block::DIRT,
@@ -206,6 +214,7 @@ void init()
             .humidity = -0.6f,
             .peak = -0.2f,
         };
+        data.grassTint = glm::vec3(191.f, 162.f, 67.f) / 255.f;
         data.structureGens = {
             { StructureType::ACACIA_TREE, 48, 16 },
         };
@@ -224,6 +233,7 @@ void init()
             .humidity = -0.8f,
             .peak = -0.3f,
         };
+        data.grassTint = glm::vec3(138.f, 180.f, 160.f) / 255.f;
         data.topBlocks = {
             .top = Block::SNOW,
             .mid = Block::ICE,
@@ -239,6 +249,7 @@ void init()
             .humidity = -0.4f,
             .peak = 0.6f,
         };
+        data.grassTint = glm::vec3(109.f, 163.f, 107.f) / 255.f;
         data.topBlocks = {
             .top = Block::STONE,
             .mid = Block::STONE,

@@ -671,6 +671,10 @@ void Chunk::createInstances()
                         }
 
                         PerTriangleData faceData{};
+                        if (block == Block::GRASS || block == Block::SHORT_GRASS)
+                        {
+                            faceData.flags = TRIANGLE_FLAG_BIOME_TINT;
+                        }
                         faceData.texArraySliceIdx = texArraySliceIdx;
                         for (uint t = 0; t < 4; ++t)
                         {
@@ -728,6 +732,10 @@ void Chunk::createInstances()
                             if (isWater && faceIdx == 4) // top face
                             {
                                 faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
+                            }
+                            if (block == Block::GRASS_BLOCK && faceIdx == 4) // top face
+                            {
+                                faceData.flags |= TRIANGLE_FLAG_BIOME_TINT;
                             }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);
