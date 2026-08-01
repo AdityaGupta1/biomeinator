@@ -18,6 +18,9 @@ void init(Scene* scene)
 
 static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;
 
+// Aux map g channel is the biome tint mask; per-slice presence drives TRIANGLE_FLAG_BIOME_TINT
+static std::vector<bool> sliceBiomeTintMask;
+
 #define MATERIAL_IDX(material) materialIdxs[static_cast<size_t>(material)]
 
 static void createMaterials(Scene* scene)
@@ -30,7 +33,7 @@ static void createMaterials(Scene* scene)
         return;
     }
 
-    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png", false /*sRGB*/);
+    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png", false /*sRGB*/, &sliceBiomeTintMask);
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;
@@ -63,6 +66,11 @@ static void createMaterials(Scene* scene)
 uint32_t getMaterialIdx(TerrainMaterial terrainMaterial)
 {
     return MATERIAL_IDX(terrainMaterial);
+}
+
+bool sliceHasBiomeTint(uint32_t sliceIdx)
+{
+    return sliceIdx < sliceBiomeTintMask.size() && sliceBiomeTintMask[sliceIdx];
 }
 
 } // namespace TerrainMaterials

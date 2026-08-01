@@ -1,4 +1,4 @@
-_Last edited: 2026-07-29_
+_Last edited: 2026-08-01_
 
 # Biome Color Map
 
@@ -40,7 +40,11 @@ the tint multiply is the only source of color.
 
 The triangle flag only gates the biome map sample; *which texels* tint comes from the aux
 texture's green channel (see [scene → materials_textures.md](../scene/materials_textures.md)),
-so grass block side faces tint only their grass overlay, not the dirt below.
+so grass block side faces tint only their grass overlay, not the dirt below. The mesher
+derives the flag from that same channel — `TerrainMaterials::sliceHasBiomeTint` reports
+which texture slices have any mask coverage, so tinting a new block only requires painting
+its aux tile. Flagged hits pay the map sample even when the hit texel's mask is zero (once
+per hit, at `TexSampleCtx` build).
 
 The tint rides in `TexSampleCtx` (alpha = active flag) rather than being applied at call
 sites because `trySplitMaterial` bakes the sampled base color into `material.baseColor`

@@ -671,7 +671,7 @@ void Chunk::createInstances()
                         }
 
                         PerTriangleData faceData{};
-                        if (block == Block::GRASS || block == Block::SHORT_GRASS)
+                        if (TerrainMaterials::sliceHasBiomeTint(texArraySliceIdx))
                         {
                             faceData.flags = TRIANGLE_FLAG_BIOME_TINT;
                         }
@@ -733,7 +733,7 @@ void Chunk::createInstances()
                             {
                                 faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
                             }
-                            if (block == Block::GRASS_BLOCK && faceIdx != 5) // all faces except bottom
+                            if (TerrainMaterials::sliceHasBiomeTint(texArraySliceIdx))
                             {
                                 faceData.flags |= TRIANGLE_FLAG_BIOME_TINT;
                             }

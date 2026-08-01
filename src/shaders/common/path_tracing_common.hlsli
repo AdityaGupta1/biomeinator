@@ -79,6 +79,17 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v2 = verts[instanceData.vertsBufferOffset + i2];
 }
 
+// Ctx for surface shading at a hit; samples the biome map once here so all base color reads
+// for the hit share the tint
+TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
+{
+    TexSampleCtx texCtx;
+    texCtx.mipLevel = computeMipLevel(rayConeWidth);
+    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    texCtx.biomeTint = getBiomeTint(perTriData.flags, posXZ_WS);
+    return texCtx;
+}
+
 float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
     const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
 {

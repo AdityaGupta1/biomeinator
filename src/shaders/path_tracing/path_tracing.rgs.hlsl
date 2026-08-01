@@ -184,10 +184,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
-        TexSampleCtx surfTexCtx;
-        surfTexCtx.mipLevel = computeMipLevel(payload.rayCone.width);
-        surfTexCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-        surfTexCtx.biomeTint = getBiomeTint(perTriData.flags, payload.hitInfo.hitPos_WS.xz);
+        const TexSampleCtx surfTexCtx =
+            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
@@ -530,10 +528,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         const PerTriangleData secondHitPerTriData =
                             perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-                        TexSampleCtx secondHitTexCtx;
-                        secondHitTexCtx.mipLevel = computeMipLevel(payload.rayCone.width);
-                        secondHitTexCtx.arraySliceIdx = secondHitPerTriData.texArraySliceIdx;
-                        secondHitTexCtx.biomeTint = getBiomeTint(secondHitPerTriData.flags, payload.hitInfo.hitPos_WS.xz);
+                        const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
+                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
                         if (surfMaterial.hasDiffuse())
                         {
                             const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
