@@ -82,9 +82,9 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
 {
     float4 baseColor = getMaterialBaseColorNoAux(material, uv, texCtx);
     if (material.hasPackedAux() && material.baseColorTextureId != TEXTURE_ID_INVALID
-        && material.emissiveColorTextureId != TEXTURE_ID_INVALID)
+        && material.auxTextureId != TEXTURE_ID_INVALID)
     {
-        const float4 aux = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx);
+        const float4 aux = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx);
         baseColor.rgb *= (aux.r > 0.f) ? 0.f : 1.f; // emissive texels carry emission color, not diffuse
         // Tint-masked texels are authored grayscale; the biome tint provides the hue
         baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
@@ -97,11 +97,11 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
     if (material.hasPackedAux())
     {
         // Emission color lives in the base color texture; aux.r is the per-texel strength.
-        if (material.emissiveColorTextureId == TEXTURE_ID_INVALID || material.baseColorTextureId == TEXTURE_ID_INVALID)
+        if (material.auxTextureId == TEXTURE_ID_INVALID || material.baseColorTextureId == TEXTURE_ID_INVALID)
         {
             return float3(0.f, 0.f, 0.f);
         }
-        const float auxStrength = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx).r;
+        const float auxStrength = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).r;
         if (auxStrength <= 0.f) // almost all texels; skip the base color sample for them
         {
             return float3(0.f, 0.f, 0.f);
@@ -110,9 +110,9 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
         return emissiveColor * auxStrength * material.emissiveStrength;
     }
 
-    const float3 emissiveColor = (material.emissiveColorTextureId == TEXTURE_ID_INVALID)
+    const float3 emissiveColor = (material.auxTextureId == TEXTURE_ID_INVALID)
         ? material.emissiveColor
-        : sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx).rgb;
+        : sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).rgb;
     return emissiveColor * material.emissiveStrength;
 }
 
@@ -314,7 +314,7 @@ bool trySplitMaterial(inout Material surfMaterial,
                 surfMaterial.ior = 1.f; // passthrough without refraction
                 surfMaterial.emissiveStrength = 0.f;
                 surfMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
-                surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+                surfMaterial.auxTextureId = TEXTURE_ID_INVALID;
                 pathWeight *= (1.f - alpha);
             }
             return true;
@@ -340,7 +340,7 @@ bool trySplitMaterial(inout Material surfMaterial,
             surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
             surfMaterial.emissiveStrength = 0.f;
             surfMaterial.emissiveColor = float3(0, 0, 0);
-            surfMaterial.emissiveColorTextureId = TEXTURE_ID_INVALID;
+            surfMaterial.auxTextureId = TEXTURE_ID_INVALID;
             pathWeight *= fresnelReflectance;
         }
         return true;

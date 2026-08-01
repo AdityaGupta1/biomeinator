@@ -31,13 +31,13 @@ The glTF loader uses the single-mip overload (no mip generation). The terrain ma
 `uploadPendingTextures()` picks the SRV dimension from `arraySize`: 1 → `Texture2D`, >1 → `Texture2DArray`. Two invariants follow:
 
 - **`addTextureArray()` asserts size > 1.** A single-slice texture must go through `addTexture()` so the SRV dim matches what the shader expects.
-- **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `emissiveColorTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
+- **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `auxTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
 
 Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF materials never do.
 
 ## Packed Aux (Terrain)
 
-`MATERIAL_FLAG_PACKED_AUX` repurposes `emissiveColorTextureId` as a linear aux texture:
+`auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
 "emissive texels are pure emitters" behavior that `isPureEmitter` and NRC rely on. There is

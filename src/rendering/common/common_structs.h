@@ -72,9 +72,9 @@ struct InstanceData
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
-// Per-material, not per-texture: base + emissive must both be Texture2DArray (or invalid).
+// Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
-// emissiveColorTextureId is a packed aux texture: r = emissive strength (color comes from the
+// auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
 #define MATERIAL_FLAG_PACKED_AUX (1 << 4)
 
@@ -100,7 +100,7 @@ public:
     float ior;
 
     float3 emissiveColor;
-    uint emissiveColorTextureId;
+    uint auxTextureId; // emissive color texture, unless MATERIAL_FLAG_PACKED_AUX repurposes it
 
     bool hasDiffuse()
     {
