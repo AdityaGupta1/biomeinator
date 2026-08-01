@@ -3,7 +3,11 @@
 
 #pragma once
 
+#include "debug.h"
 #include "math.h"
+
+#include <charconv>
+#include <string_view>
 
 #include <glm/glm.hpp>
 
@@ -12,6 +16,20 @@
 
 namespace glmUtil
 {
+
+// Decodes an "rrggbb" hex color (leading '#' optional, case-insensitive) into [0, 1] rgb
+inline glm::vec3 colorFromHex(std::string_view hex)
+{
+    if (!hex.empty() && hex.front() == '#')
+    {
+        hex.remove_prefix(1);
+    }
+    ASSERT(hex.size() == 6);
+    uint32_t packed = 0;
+    [[maybe_unused]] const auto result = std::from_chars(hex.data(), hex.data() + hex.size(), packed, 16);
+    ASSERT(result.ec == std::errc() && result.ptr == hex.data() + hex.size());
+    return glm::vec3((packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff) / 255.f;
+}
 
 inline int chebyshevDistance(glm::ivec2 a, glm::ivec2 b)
 {
