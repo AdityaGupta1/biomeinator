@@ -1,4 +1,4 @@
-_Last edited: 2026-07-29_
+_Last edited: 2026-08-01_
 
 # Materials and Textures
 
@@ -44,8 +44,12 @@ color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the o
 no separate `emission.png` anymore.
 
 Two invariants:
-- `trySplitMaterial`'s opaque branch must keep `emissiveColorTextureId` (the aux) so the
-  split path retains emission; `getMaterialEmissiveColor` guards the packed path against an
-  invalid base texture ID (post-split) by returning zero.
+- Emission for a packed-aux material must be evaluated before anything clears its
+  `baseColorTextureId`, because emission *color* lives in that texture. Both
+  `trySplitMaterial`'s opaque branch and the per-bounce base-color bake in
+  `path_tracing.rgs.hlsl` clear the ID, after which `getMaterialEmissiveColor` returns zero
+  via its invalid-base-ID guard. The path tracer stays correct because `emissiveContrib` is
+  computed at the top of the bounce loop before the split/bake, and `surfMaterial` is
+  refetched from the hit buffer after each `TraceRay`.
 - The aux texture must be loaded linear (`loadTexture(..., sRGB=false)`) — mask and strength
   values would be distorted by the sRGB transfer during mip downsampling and sampling.

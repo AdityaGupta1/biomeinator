@@ -46,6 +46,16 @@ struct TexSampleCtx
     float4 biomeTint; // rgb = biome map tint, a = 1 to apply it (see getBiomeTint)
 };
 
+// Ctx for samples that don't apply the biome tint; tinted hits build the ctx with getBiomeTint instead
+TexSampleCtx makeUntintedTexSampleCtx(const float mipLevel, const uint arraySliceIdx)
+{
+    TexSampleCtx texCtx;
+    texCtx.mipLevel = mipLevel;
+    texCtx.arraySliceIdx = arraySliceIdx;
+    texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f);
+    return texCtx;
+}
+
 float4 sampleTexture(const bool isArrayTexture, const uint texId, const float2 uv, const TexSampleCtx texCtx)
 {
     if (isArrayTexture)
@@ -57,14 +67,22 @@ float4 sampleTexture(const bool isArrayTexture, const uint texId, const float2 u
     return tex.SampleLevel(texSampler, uv, texCtx.mipLevel);
 }
 
-float4 getMaterialBaseColor(const Material material, const float2 uv, const TexSampleCtx texCtx)
+// Base color without the packed-aux emission/tint adjustments; aux never affects alpha, so
+// cutout and passthrough tests can use this cheaper path.
+float4 getMaterialBaseColorNoAux(const Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     if (material.baseColorTextureId == TEXTURE_ID_INVALID)
     {
         return float4(material.baseColor, 1.f);
     }
-    float4 baseColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
-    if (material.hasPackedAux() && material.emissiveColorTextureId != TEXTURE_ID_INVALID)
+    return sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
+}
+
+float4 getMaterialBaseColor(const Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    float4 baseColor = getMaterialBaseColorNoAux(material, uv, texCtx);
+    if (material.hasPackedAux() && material.baseColorTextureId != TEXTURE_ID_INVALID
+        && material.emissiveColorTextureId != TEXTURE_ID_INVALID)
     {
         const float4 aux = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx);
         baseColor.rgb *= (aux.r > 0.f) ? 0.f : 1.f; // emissive texels carry emission color, not diffuse
@@ -84,6 +102,10 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
             return float3(0.f, 0.f, 0.f);
         }
         const float auxStrength = sampleTexture(material.hasArrayTexture(), material.emissiveColorTextureId, uv, texCtx).r;
+        if (auxStrength <= 0.f) // almost all texels; skip the base color sample for them
+        {
+            return float3(0.f, 0.f, 0.f);
+        }
         const float3 emissiveColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
         return emissiveColor * auxStrength * material.emissiveStrength;
     }

@@ -76,14 +76,14 @@ static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t
     return static_cast<float>(opaqueCount) / static_cast<float>(texelCount);
 }
 
-template<bool premultiplyAlpha, bool srgbTransfer>
 static void downsample2x2Tile(
     const std::vector<uint8_t>& src, uint32_t srcWidth, std::vector<uint8_t>& dst, uint32_t dstWidth, uint32_t srcTileX,
-    uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize)
+    uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize,
+    const bool premultiplyAlpha, const bool srgbTransfer)
 {
     constexpr float alphaEpsilon = 1e-6f;
-    const auto decode = [](uint8_t v) { return srgbTransfer ? linearize(v) : v / 255.f; };
-    const auto encode = [](float v)
+    const auto decode = [srgbTransfer](uint8_t v) { return srgbTransfer ? linearize(v) : v / 255.f; };
+    const auto encode = [srgbTransfer](float v)
     {
         return srgbTransfer ? srgbEncode(v) : static_cast<uint8_t>(std::clamp(v * 255.f + 0.5f, 0.f, 255.f));
     };
@@ -106,7 +106,7 @@ static void downsample2x2Tile(
 
             for (uint32_t ch = 0; ch < 3; ++ch)
             {
-                if constexpr (premultiplyAlpha)
+                if (premultiplyAlpha)
                 {
                     const float avgPremultiplied = (decode(p00[ch]) * a00 + decode(p10[ch]) * a10
                                                    + decode(p01[ch]) * a01 + decode(p11[ch]) * a11)
@@ -119,7 +119,7 @@ static void downsample2x2Tile(
                 const float avg = (decode(p00[ch]) + decode(p10[ch]) + decode(p01[ch]) + decode(p11[ch])) * 0.25f;
                 out[ch] = encode(avg);
             }
-            if constexpr (premultiplyAlpha)
+            if (premultiplyAlpha)
             {
                 out[3] = static_cast<uint8_t>(std::clamp(avgA * 255.f + 0.5f, 0.f, 255.f));
             }
@@ -222,34 +222,14 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename,
                 const uint32_t dstTileX = tileX * dstTileSize;
                 const uint32_t dstTileY = tileY * dstTileSize;
 
-                if (!hasTransparency)
+                downsample2x2Tile(mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX,
+                                  dstTileY, dstTileSize, hasTransparency /*premultiplyAlpha*/, sRGB /*srgbTransfer*/);
+                if (hasTransparency)
                 {
-                    if (sRGB)
-                    {
-                        downsample2x2Tile<false /*premultiplyAlpha*/, true /*srgbTransfer*/>(
-                            mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
-                    }
-                    else
-                    {
-                        downsample2x2Tile<false /*premultiplyAlpha*/, false /*srgbTransfer*/>(
-                            mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
-                    }
-                    continue;
+                    const float sourceCoverage =
+                        computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
+                    quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
                 }
-
-                const float sourceCoverage =
-                    computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
-                if (sRGB)
-                {
-                    downsample2x2Tile<true /*premultiplyAlpha*/, true /*srgbTransfer*/>(
-                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
-                }
-                else
-                {
-                    downsample2x2Tile<true /*premultiplyAlpha*/, false /*srgbTransfer*/>(
-                        mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX, dstTileY, dstTileSize);
-                }
-                quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
             }
         }
     }

@@ -88,12 +88,10 @@ float4 getMaterialBaseColorAtHit(const Material material, const InstanceData ins
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    TexSampleCtx texCtx;
-    texCtx.mipLevel = mipLevel;
-    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    // Cutout alpha and passthrough absorption don't care about biome tint, so skip the map sample
-    texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f);
-    return getMaterialBaseColor(material, uv, texCtx);
+    // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
+    // adjustments, so skip the map sample and the aux texture sample
+    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(mipLevel, perTriData.texArraySliceIdx);
+    return getMaterialBaseColorNoAux(material, uv, texCtx);
 }
 
 [shader("anyhit")]
