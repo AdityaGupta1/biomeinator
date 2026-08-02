@@ -7,6 +7,7 @@
 #include "dxr_common.h"
 #include "renderer.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/mapped_array.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
@@ -28,6 +29,8 @@ namespace
 
 ComPtr<ID3D12Resource> dev_texture{ nullptr };
 uint32_t srvIdx{ 0 };
+
+MappedArray<uint8_t> uploadBuffer{};
 
 uint32_t texelsPerSide{ 0 };
 glm::ivec2 originBlocksXZ_WS{ 0, 0 };
@@ -128,6 +131,9 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     originBlocksXZ_WS = newOriginBlocksXZ_WS;
     filledWorldSeed = worldSeed;
 
+    const uint32_t rowPitchBytes = texelsPerSide * 4;
+    const uint32_t rowPitchBytesAligned = MathUtil::roundUp(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
     if (needsRecreate)
     {
         if (dev_texture != nullptr)
@@ -162,6 +168,17 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
             .Texture2D = { .MipLevels = 1 },
         };
         Renderer::getDevice()->CreateShaderResourceView(dev_texture.Get(), &srvDesc, srvCpuHandle);
+
+        const uint32_t uploadSizeBytes = rowPitchBytesAligned * texelsPerSide;
+        if (uploadBuffer.getUploadBuffer() == nullptr)
+        {
+            uploadBuffer.setName(L"biomeMap");
+            uploadBuffer.init(uploadSizeBytes, { .uploadOnly = true });
+        }
+        else
+        {
+            uploadBuffer.resize(toFreeList, uploadSizeBytes);
+        }
     }
 
     if (canScroll)
@@ -175,18 +192,9 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
             biomes.data(), originBlocksXZ_WS, glm::uvec2(texelsPerSide, texelsPerSide), blocksPerTexel);
     }
 
-    const uint32_t rowPitchBytes = texelsPerSide * 4;
-    const uint32_t rowPitchBytesAligned = MathUtil::roundUp(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-
-    ComPtr<ID3D12Resource> dev_uploadBuffer =
-        BufferHelper::createBasicBuffer(static_cast<uint64_t>(rowPitchBytesAligned) * texelsPerSide, &UPLOAD_HEAP);
-    dev_uploadBuffer->SetName(L"biomeMap upload");
-    uint8_t* host_uploadBuffer = nullptr;
-    dev_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&host_uploadBuffer));
-
     for (uint32_t texelZ = 0; texelZ < texelsPerSide; ++texelZ)
     {
-        uint8_t* destRow = host_uploadBuffer + static_cast<size_t>(texelZ) * rowPitchBytesAligned;
+        uint8_t* destRow = &uploadBuffer[texelZ * rowPitchBytesAligned];
         for (uint32_t texelX = 0; texelX < texelsPerSide; ++texelX)
         {
             const Biome biome = biomes[texelX + texelsPerSide * texelZ];
@@ -199,13 +207,11 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
         }
     }
 
-    dev_uploadBuffer->Unmap(0, nullptr);
-
     BufferHelper::stateTransitionResourceBarrier(
         cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
 
     const D3D12_TEXTURE_COPY_LOCATION srcTexLocation = {
-        .pResource = dev_uploadBuffer.Get(),
+        .pResource = uploadBuffer.getUploadBuffer(),
         .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
         .PlacedFootprint = {
             .Offset = 0,
@@ -227,8 +233,6 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 
     BufferHelper::stateTransitionResourceBarrier(
         cmdList, dev_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    toFreeList.pushResource(dev_uploadBuffer, false);
 }
 
 uint32_t getSrvIdx()
@@ -252,6 +256,10 @@ void destroy()
     {
         Renderer::sharedDescHeapAlloc.free(srvIdx);
         dev_texture.Reset();
+    }
+    if (uploadBuffer.getUploadBuffer() != nullptr)
+    {
+        uploadBuffer.reset();
     }
     texelsPerSide = 0;
     biomes.clear();
