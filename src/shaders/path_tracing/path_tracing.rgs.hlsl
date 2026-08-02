@@ -211,8 +211,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         // Resolve the sampled base color once per bounce so downstream albedo and BSDF reads take
         // the constant-color path instead of re-sampling the base and aux textures every call.
-        // Must stay after the emission and split evaluations above: packed-aux emission reads the
-        // base color texture, which this invalidates.
         surfMaterial.baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
         surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
 
