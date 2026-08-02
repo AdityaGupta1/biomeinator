@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-07-29_
 
 # Block System
 
@@ -18,4 +18,4 @@ The non-obvious culling rules in `shouldGenerateFace`:
 
 ## Emissive
 
-Only `LAMP` currently has `emitsLight = true`. Its triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding emissive blocks is just setting this flag — the mesh gen and light sampling handle the rest automatically.
+`LAMP`, `LAVA`, and `LAVA_TOP` have `emitsLight = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding an emissive block means setting this flag *and* authoring its texels in the assets: emission color lives in `diffuse.png` (with zero diffuse implied) and per-texel strength in `aux_map.png`'s red channel — see [scene → materials_textures.md](../scene/materials_textures.md).

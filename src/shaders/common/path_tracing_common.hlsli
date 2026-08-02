@@ -6,6 +6,7 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
+#include "common/biome_map.hlsli"
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
 #include "common/water_waves.hlsli"
@@ -78,6 +79,17 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v2 = verts[instanceData.vertsBufferOffset + i2];
 }
 
+// Ctx for surface shading at a hit; samples the biome map once here so all base color reads
+// for the hit share the tint (c.f. makeUntintedTexSampleCtx())
+TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
+{
+    TexSampleCtx texCtx;
+    texCtx.mipLevel = computeMipLevel(rayConeWidth);
+    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    texCtx.biomeTint = getBiomeTint(perTriData.flags, posXZ_WS);
+    return texCtx;
+}
+
 float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
     const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
 {
@@ -87,10 +99,10 @@ float4 getMaterialBaseColorAtHit(const Material material, const InstanceData ins
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
     const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    TexSampleCtx texCtx;
-    texCtx.mipLevel = mipLevel;
-    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    return getMaterialBaseColor(material, uv, texCtx);
+    // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
+    // adjustments, so skip the map sample and the aux texture sample
+    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(mipLevel, perTriData.texArraySliceIdx);
+    return getMaterialBaseColorNoAux(material, uv, texCtx);
 }
 
 [shader("anyhit")]

@@ -113,7 +113,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
                 if (imgIdx >= 0 && imgIdx < textureIds.size())
                 {
-                    material.emissiveColorTextureId = textureIds[imgIdx];
+                    material.auxTextureId = textureIds[imgIdx];
                 }
             }
         }

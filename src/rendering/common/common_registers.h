@@ -28,6 +28,7 @@
 #define RT_REGISTER_TEX_SAMPLER 0
 #define RT_REGISTER_LUT_SAMPLER 1 // linear clamp, for the sky atmosphere LUTs
 #define RT_REGISTER_SKY_VIEW_SAMPLER 2 // linear, wrap in u; the sky-view LUT is periodic in azimuth
+#define RT_REGISTER_BIOME_MAP_SAMPLER 3 // linear clamp, for the world-XZ biome color map
 
 // =============================================
 #define GBUFFER_REGISTER_SPACE 2

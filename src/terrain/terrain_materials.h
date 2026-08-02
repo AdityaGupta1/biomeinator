@@ -22,4 +22,7 @@ void init(Scene* scene);
 
 uint32_t getMaterialIdx(TerrainMaterial terrainMaterial);
 
+// Whether the aux map tile for this texture array slice has any biome tint mask coverage
+bool sliceHasBiomeTint(uint32_t sliceIdx);
+
 } // namespace TerrainMaterials

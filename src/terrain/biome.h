@@ -53,6 +53,7 @@ struct BiomeData
 {
     BiomeNoise biomeNoise{};
     TopBlocks topBlocks{};
+    glm::vec3 grassTint{ 1.f, 1.f, 1.f }; // sRGB
     std::vector<StructureGen> structureGens{};
     Decorator decorator{};
 };

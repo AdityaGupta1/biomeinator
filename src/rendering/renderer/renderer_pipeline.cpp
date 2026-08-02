@@ -83,6 +83,17 @@ void initRootSignature()
     };
     rtStaticSamplers.push_back(skyViewSampler);
 
+    // Linear clamp sampler for the world-XZ biome color map
+    const D3D12_STATIC_SAMPLER_DESC biomeMapSampler = {
+        .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+        .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        .ShaderRegister = RT_REGISTER_BIOME_MAP_SAMPLER,
+        .RegisterSpace = RT_REGISTER_SPACE,
+    };
+    rtStaticSamplers.push_back(biomeMapSampler);
+
     const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         .NumDescriptors = 1,

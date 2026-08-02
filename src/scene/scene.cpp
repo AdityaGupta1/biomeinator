@@ -312,7 +312,7 @@ uint32_t Scene::addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t
     const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
     std::vector<std::vector<std::vector<uint8_t>>> sliceMipData;
     sliceMipData.emplace_back(std::move(mipData));
-    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, 1u, cpuHandle });
+    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, 1u, cpuHandle, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB });
     return texId;
 }
 
@@ -323,15 +323,17 @@ uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t
     return this->addTexture(std::move(mipData), width, height);
 }
 
-uint32_t Scene::addTextureArray(
-    std::vector<std::vector<std::vector<uint8_t>>>&& sliceMipData, uint32_t width, uint32_t height)
+uint32_t Scene::addTextureArray(std::vector<std::vector<std::vector<uint8_t>>>&& sliceMipData,
+                                uint32_t width,
+                                uint32_t height,
+                                DXGI_FORMAT format)
 {
     // 1 slice must go through addTexture() so SRV dim matches material's array flag.
     ASSERT(sliceMipData.size() > 1);
     D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
     const uint32_t arraySize = static_cast<uint32_t>(sliceMipData.size());
-    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, arraySize, cpuHandle });
+    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, arraySize, cpuHandle, format });
     return texId;
 }
 
@@ -680,7 +682,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         texDesc.Height = pendingTex.height;
         texDesc.DepthOrArraySize = static_cast<UINT16>(pendingTex.arraySize);
         texDesc.MipLevels = numMips;
-        texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        texDesc.Format = pendingTex.format;
         texDesc.SampleDesc = SAMPLE_DESC_NO_AA;
 
         ComPtr<ID3D12Resource> dev_texture;

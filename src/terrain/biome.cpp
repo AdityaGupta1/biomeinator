@@ -4,6 +4,7 @@
 #include "biome.h"
 
 #include "chunk.h"
+#include "util/glm_util.h"
 #include "util/rng.h"
 
 #include <array>
@@ -58,6 +59,7 @@ void init()
             .humidity = 0.0f,
             .peak = -1.0f,
         };
+        data.grassTint = glmUtil::colorFromHex("#8eb971");
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SAND,
@@ -77,6 +79,7 @@ void init()
             .humidity = 0.2f,
             .peak = -1.0f,
         };
+        data.grassTint = glmUtil::colorFromHex("#a1ba68");
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SAND,
@@ -95,6 +98,7 @@ void init()
             .humidity = -0.2f,
             .peak = -1.0f,
         };
+        data.grassTint = glmUtil::colorFromHex("#8fa470");
         data.topBlocks = {
             .top = Block::GRAVEL,
             .mid = Block::GRAVEL,
@@ -110,6 +114,7 @@ void init()
             .humidity = -0.3f,
             .peak = -1.0f,
         };
+        data.grassTint = glmUtil::colorFromHex("#7e9152");
         data.topBlocks = {
             .top = Block::BLACK_SAND,
             .mid = Block::BLACK_SAND,
@@ -129,6 +134,7 @@ void init()
             .humidity = 0.0f,
             .peak = -0.7f,
         };
+        data.grassTint = glmUtil::colorFromHex("#91bd59");
         data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
@@ -145,6 +151,7 @@ void init()
             .humidity = -1.0f,
             .peak = -0.6f,
         };
+        data.grassTint = glmUtil::colorFromHex("#bfb755");
         data.topBlocks = {
             .top = Block::SAND,
             .mid = Block::SANDSTONE,
@@ -168,6 +175,7 @@ void init()
             .humidity = 0.2f,
             .peak = -0.4f,
         };
+        data.grassTint = glmUtil::colorFromHex("#59a93b");
         data.structureGens = {
             { StructureType::OAK_TREE, 6, 1 },
         };
@@ -187,6 +195,7 @@ void init()
             .humidity = -0.6f,
             .peak = -0.6f,
         };
+        data.grassTint = glmUtil::colorFromHex("#80b497");
         data.topBlocks = {
             .top = Block::SNOWY_GRASS_BLOCK,
             .mid = Block::DIRT,
@@ -206,6 +215,7 @@ void init()
             .humidity = -0.6f,
             .peak = -0.2f,
         };
+        data.grassTint = glmUtil::colorFromHex("#bfa243");
         data.structureGens = {
             { StructureType::ACACIA_TREE, 48, 16 },
         };
@@ -224,6 +234,7 @@ void init()
             .humidity = -0.8f,
             .peak = -0.3f,
         };
+        data.grassTint = glmUtil::colorFromHex("#8ab4a0");
         data.topBlocks = {
             .top = Block::SNOW,
             .mid = Block::ICE,
@@ -239,6 +250,7 @@ void init()
             .humidity = -0.4f,
             .peak = 0.6f,
         };
+        data.grassTint = glmUtil::colorFromHex("#6da36b");
         data.topBlocks = {
             .top = Block::STONE,
             .mid = Block::STONE,

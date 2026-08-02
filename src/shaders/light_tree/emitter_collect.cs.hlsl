@@ -48,7 +48,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (light.materialIdx != MATERIAL_IDX_INVALID)
     {
         const Material material = materials[light.materialIdx];
-        const float colorTerm = (material.emissiveColorTextureId == TEXTURE_ID_INVALID)
+        const float colorTerm = (material.auxTextureId == TEXTURE_ID_INVALID)
             ? luminance(material.emissiveColor)
             : 1.f;
         flux = material.emissiveStrength * colorTerm * triangleArea;

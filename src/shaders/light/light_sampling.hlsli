@@ -105,11 +105,14 @@ bool traceToLight(const float3 surfPos_WS,
     }
 
     const Material material = materials[light.materialIdx];
-    const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, distance(ray.Origin, lightPayload.hitInfo.hitPos_WS));
     const float lightHitDistance = distance(ray.Origin, lightPayload.hitInfo.hitPos_WS);
-    TexSampleCtx texCtx;
-    texCtx.mipLevel = computeMipLevel(getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance));
-    texCtx.arraySliceIdx = perTriDatas[instanceDatas[lightPayload.hitInfo.instanceId].perTriDatasBufferOffset + lightPayload.hitInfo.triangleIdx].texArraySliceIdx;
+    const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, lightHitDistance);
+    const InstanceData lightInstanceData = instanceDatas[lightPayload.hitInfo.instanceId];
+    const PerTriangleData lightPerTriData =
+        perTriDatas[lightInstanceData.perTriDatasBufferOffset + lightPayload.hitInfo.triangleIdx];
+    const float coneWidth = getRayConeWidthAtDistance(lightPayload.rayCone, lightHitDistance);
+    // Untinted because this ctx is only used for emission, which is never tinted
+    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
     Le = getMaterialEmissiveColor(material, lightPayload.hitInfo.uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }

@@ -198,16 +198,67 @@ void init()
     }
 }
 
-static inline void fillNoiseArray2D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ)
+struct BiomeNoiseGrids
 {
-    fn->GenUniformGrid2D(data,
-                         posXZ.x + noiseOffsetXZ.x,
-                         posXZ.y + noiseOffsetXZ.y /*z*/,
-                         chunkSizeXZ,
-                         chunkSizeXZ,
-                         1.f,
-                         1.f,
-                         worldSeed ^ hash(719023919));
+    float* temperature;
+    float* humidity;
+    float* peak;
+    float* inland;
+};
+
+// Batch-evaluates the four surface biome noise fields on a uniform XZ grid, x-innermost.
+// startXZ already includes any sample offset (texel centers for the biome map, block corners
+// for chunk generation).
+static void fillBiomeNoiseGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples, float stepBlocks)
+{
+    const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
+    {
+        fn->GenUniformGrid2D(data,
+                             startXZ.x + noiseOffsetXZ.x,
+                             startXZ.y + noiseOffsetXZ.y /*z*/,
+                             numSamples.x,
+                             numSamples.y,
+                             stepBlocks,
+                             stepBlocks,
+                             worldSeed ^ hash(719023919));
+    };
+    fill(grids.temperature, fnTemperature);
+    fill(grids.humidity, fnHumidity);
+    fill(grids.peak, fnPeak);
+    fill(grids.inland, fnInland);
+}
+
+static BiomeNoise biomeNoiseAt(const BiomeNoiseGrids& grids, uint idx)
+{
+    return {
+        .temperature = grids.temperature[idx],
+        .humidity = grids.humidity[idx],
+        .peak = grids.peak[idx],
+        .inland = grids.inland[idx],
+    };
+}
+
+void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
+{
+    const uint numSamples = numTexels.x * numTexels.y;
+    std::vector<float> temperatureNoise(numSamples);
+    std::vector<float> humidityNoise(numSamples);
+    std::vector<float> peakNoise(numSamples);
+    std::vector<float> inlandNoise(numSamples);
+    const BiomeNoiseGrids grids = {
+        .temperature = temperatureNoise.data(),
+        .humidity = humidityNoise.data(),
+        .peak = peakNoise.data(),
+        .inland = inlandNoise.data(),
+    };
+
+    const vec2 texelCentersStartXZ = vec2(originBlocksXZ_WS) + texelSizeBlocks * 0.5f;
+    fillBiomeNoiseGrids(grids, texelCentersStartXZ, numTexels, static_cast<float>(texelSizeBlocks));
+
+    for (uint idx = 0; idx < numSamples; ++idx)
+    {
+        outBiomes[idx] = Biomes::getClosestBiome(biomeNoiseAt(grids, idx));
+    }
 }
 
 static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height, int yOffset = 0)
@@ -316,10 +367,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    fillNoiseArray2D(temperatureNoise, fnTemperature, chunkPosBlocksXZ_WS);
-    fillNoiseArray2D(humidityNoise, fnHumidity, chunkPosBlocksXZ_WS);
-    fillNoiseArray2D(peakNoise, fnPeak, chunkPosBlocksXZ_WS);
-    fillNoiseArray2D(inlandNoise, fnInland, chunkPosBlocksXZ_WS);
+    const BiomeNoiseGrids biomeNoiseGrids = {
+        .temperature = temperatureNoise,
+        .humidity = humidityNoise,
+        .peak = peakNoise,
+        .inland = inlandNoise,
+    };
+    fillBiomeNoiseGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -340,12 +394,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            const BiomeNoise biomeNoise = {
-                .temperature = temperatureNoise[columnIdx],
-                .humidity = humidityNoise[columnIdx],
-                .peak = peakNoise[columnIdx],
-                .inland = inlandNoise[columnIdx],
-            };
+            const BiomeNoise biomeNoise = biomeNoiseAt(biomeNoiseGrids, columnIdx);
             const Biome biome = Biomes::getClosestBiome(BiomeNoise::randomOffset(biomeNoise, rng));
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);

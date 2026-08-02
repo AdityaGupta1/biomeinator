@@ -673,6 +673,19 @@
             ],
             "golden": "voxel/fog_god_rays/golden.png",
             "threshold": 0.01
+        },
+        {
+            "name": "grass_biome_blend",
+            "world": "voxel/grass_biome_blend",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=4"
+            ],
+            "golden": "voxel/grass_biome_blend/golden.png",
+            "threshold": 0.01
         }
     ]
 }
