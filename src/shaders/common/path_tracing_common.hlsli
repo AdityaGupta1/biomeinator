@@ -80,7 +80,7 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
 }
 
 // Ctx for surface shading at a hit; samples the biome map once here so all base color reads
-// for the hit share the tint
+// for the hit share the tint (c.f. makeUntintedTexSampleCtx())
 TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
 {
     TexSampleCtx texCtx;

@@ -47,6 +47,7 @@ struct TexSampleCtx
 };
 
 // Ctx for samples that don't apply the biome tint; tinted hits build the ctx with getBiomeTint instead
+// (c.f. makeTintedTexSampleCtx())
 TexSampleCtx makeUntintedTexSampleCtx(const float mipLevel, const uint arraySliceIdx)
 {
     TexSampleCtx texCtx;
@@ -85,7 +86,10 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
         && material.auxTextureId != TEXTURE_ID_INVALID)
     {
         const float4 aux = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx);
-        baseColor.rgb *= (aux.r > 0.f) ? 0.f : 1.f; // emissive texels carry emission color, not diffuse
+        if (aux.r > 0.f) // emissive texels carry emission color, not diffuse
+        {
+            baseColor.rgb = 0.f;
+        }
         // Tint-masked texels are authored grayscale; the biome tint provides the hue
         baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
     }
