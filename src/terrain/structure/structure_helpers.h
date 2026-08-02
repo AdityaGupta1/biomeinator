@@ -162,4 +162,35 @@ inline void placeLeafCap(std::vector<Block>& blocks,
     }
 }
 
+// Roughly spherical blob of leaves, slightly squashed in y, radius jittered ±10%
+inline void placeLeafBlob(std::vector<Block>& blocks, glm::ivec3 centerPos_CS, float radius, RandomNumberGenerator& rng, Block block)
+{
+    const float r = radius * rng.nextFloat(0.9f, 1.1f);
+    constexpr float ySquash = 0.75f;
+    const float r2 = r * r;
+    const int radiusCeilXZ = (int)glm::ceil(r);
+    const int radiusCeilY = (int)glm::ceil(r * ySquash);
+
+    for (int dy = -radiusCeilY; dy <= radiusCeilY; ++dy)
+    {
+        const float scaledDy = dy / ySquash;
+        for (int dz = -radiusCeilXZ; dz <= radiusCeilXZ; ++dz)
+        {
+            for (int dx = -radiusCeilXZ; dx <= radiusCeilXZ; ++dx)
+            {
+                if (dx * dx + scaledDy * scaledDy + dz * dz >= r2)
+                {
+                    continue;
+                }
+                const glm::ivec3 pos_CS = centerPos_CS + glm::ivec3(dx, dy, dz);
+                if (!Chunk::isInChunk(pos_CS))
+                {
+                    continue;
+                }
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+            }
+        }
+    }
+}
+
 } // namespace StructureHelpers
