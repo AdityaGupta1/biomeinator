@@ -57,7 +57,8 @@ static bool tileHasTransparency(const std::vector<uint8_t>& mip, uint32_t width,
     return false;
 }
 
-static bool tileHasGreen(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+// The aux map's g channel is the biome tint mask (see MATERIAL_FLAG_PACKED_AUX)
+static bool tileHasBiomeTintMask(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
 {
     for (uint32_t y = 0; y < tileSize; ++y)
     {
@@ -177,12 +178,13 @@ static void quantizeAlphaToCoverageTile(
     }
 }
 
-// outTileHasGreen, if given, receives one bool per tile (indexed like the returned array's
-// slices) saying whether the tile has any g > 0 texel at mip 0
+// outTileHasBiomeTintMask, if given, receives one bool per tile (indexed like the returned
+// array's slices) saying whether the tile has any biome tint mask coverage at mip 0; only
+// meaningful when loading the aux map
 static uint32_t loadTexture(Scene* scene,
                             const std::filesystem::path& filename,
                             const bool sRGB = true,
-                            std::vector<bool>* outTileHasGreen = nullptr)
+                            std::vector<bool>* outTileHasBiomeTintMask = nullptr)
 {
     namespace fs = std::filesystem;
 
@@ -223,9 +225,9 @@ static uint32_t loadTexture(Scene* scene,
     }
 
     const uint32_t tilesPerAxis = textureSize / tileSizeMip0;
-    if (outTileHasGreen != nullptr)
+    if (outTileHasBiomeTintMask != nullptr)
     {
-        outTileHasGreen->resize(static_cast<size_t>(tilesPerAxis) * tilesPerAxis);
+        outTileHasBiomeTintMask->resize(static_cast<size_t>(tilesPerAxis) * tilesPerAxis);
     }
     for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
     {
@@ -233,10 +235,10 @@ static uint32_t loadTexture(Scene* scene,
         {
             const uint32_t mip0TileX = tileX * tileSizeMip0;
             const uint32_t mip0TileY = tileY * tileSizeMip0;
-            if (outTileHasGreen != nullptr)
+            if (outTileHasBiomeTintMask != nullptr)
             {
-                (*outTileHasGreen)[tileY * tilesPerAxis + tileX] =
-                    tileHasGreen(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
+                (*outTileHasBiomeTintMask)[tileY * tilesPerAxis + tileX] =
+                    tileHasBiomeTintMask(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
             }
             const bool hasTransparency = tileHasTransparency(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
 
