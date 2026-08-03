@@ -758,6 +758,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const int padding = static_cast<int>(structureGen.gridCellPadding);
 
             ASSERT(padding < gridCellSideLength);
+            ASSERT(!structureGen.variants.empty());
+
+            const uint gridSalt = structureGen.gridSalt();
 
             const int halfCell = gridCellSideLength / 2;
             const int innerSide = gridCellSideLength - padding;
@@ -778,7 +781,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const ivec2 cellCornerXZ_WS(gridX * gridCellSideLength + rowShiftX, gridZ * gridCellSideLength);
 
                     const ivec2 candidatePosXZ_WS = gridCellCandidateXZ_WS(
-                        cellCornerXZ_WS, innerSide, worldSeed ^ hash(87152059), static_cast<uint>(structureGen.type));
+                        cellCornerXZ_WS, innerSide, worldSeed ^ hash(87152059), gridSalt);
 
                     const ivec2 candidatePosXZ_CS = candidatePosXZ_WS - chunkPosBlocksXZ_WS;
                     if (!Chunk::isInChunkXZ(candidatePosXZ_CS))
@@ -810,7 +813,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
-                    this->structures.emplace_back(structureGen.type, candidatePos_WS);
+                    RandomNumberGenerator variantRng =
+                        initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
+                    this->structures.emplace_back(structureGen.pickVariant(variantRng), candidatePos_WS);
                 }
             }
         }

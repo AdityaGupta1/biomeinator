@@ -8,6 +8,7 @@
 
 using BlockId = uint16_t;
 
+// Serialized by value in world exports — only append new types.
 enum class Block : BlockId
 {
     AIR = 0,
@@ -49,6 +50,29 @@ enum class Block : BlockId
     HELLSTONE,
     MOSS,
     RAINBOW_CRYSTAL,
+    CHERRY_LOG,
+    CHERRY_LEAVES_PINK,
+    CHERRY_LEAVES_WHITE,
+    REDWOOD_LOG,
+    REDWOOD_LEAVES,
+    BIRCH_LOG,
+    BIRCH_LEAVES_GREEN,
+    BIRCH_LEAVES_YELLOW,
+    BIRCH_LEAVES_ORANGE,
+    FIR_LOG,
+    FIR_LEAVES,
+    PINE_LOG,
+    PINE_LEAVES,
+    COBBLESTONE,
+    MOSSY_COBBLESTONE,
+    MAHOGANY_LOG,
+    MAHOGANY_LEAVES,
+    EUCALYPTUS_LOG,
+    EUCALYPTUS_LEAVES,
+    WILLOW_LOG,
+    WILLOW_LEAVES,
+    CYPRESS_LOG,
+    CYPRESS_LEAVES,
 
     COUNT
 };

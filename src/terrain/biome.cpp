@@ -175,9 +175,17 @@ void init()
             .humidity = 0.2f,
             .peak = -0.4f,
         };
-        data.grassTint = glmUtil::colorFromHex("#59a93b");
+        data.grassTint = glmUtil::colorFromHex("#50a13b");
         data.structureGens = {
-            { StructureType::OAK_TREE, 6, 1 },
+            {
+                {
+                    { StructureType::OAK_TREE, 45.f },
+                    { StructureType::BIRCH_TREE, 40.f },
+                    { StructureType::LARGE_OAK_TREE, 15.f },
+                },
+                8,
+                2,
+            },
         };
         data.decorator.addEntry(Block::GRASS, 4.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });

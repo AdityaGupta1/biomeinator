@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-08-02_
 
 # Structure System
 
@@ -16,7 +16,11 @@ Because the candidate is a pure function of the (global) cell corner, any chunk 
 
 Additional rejection: must be in this chunk's bounds, on valid ground (heightfield > 0), matching biome, not underwater (unless flagged).
 
-**Gotcha:** spacing is per-type only — candidates of different structure types are never checked against each other, so two different structures can overlap.
+**Weighted variants:** a `StructureGen` holds a weighted list of structure types sharing one grid; the type is rolled per accepted candidate (seeded by candidate position). This is how mixed forests keep different tree types spaced from each other — all variants inherit the grid's spacing guarantee, so cross-type spacing needs no distance checks. The candidate grid is salted by a fold-hash of the variant list (`gridSalt`), which is what keeps multiple gens in the same biome on distinct grids.
+
+**Gotcha:** spacing is only guaranteed within a `StructureGen` — candidates of different gens are never checked against each other, so their structures can overlap.
+
+**Gotcha:** `StructureType` values are serialized by value in world exports (8-bit packed field), so new types must be appended to the enum, never inserted.
 
 ## Cross-Chunk Filling
 
@@ -31,4 +35,6 @@ Only writes if the target is AIR/WATER/WATER_TOP. This means structures can't ca
 
 ## Helper Functions
 
-`structure_helpers.h` provides `fillLine` (3D Bresenham), `buildSpline` (de Casteljau Bezier), and `placeLeafCap` (radial disc with tapering radius). These handle chunk-bounds clipping internally so structure generators don't need to.
+`structure_helpers.h` provides `fillLine` (3D Bresenham), `buildSpline` (de Casteljau Bezier), `placeLeafCap` (radial disc with tapering radius), and `placeLeafBlob` (y-squashed sphere). These handle chunk-bounds clipping internally so structure generators don't need to.
+
+**RNG stream invariant:** every chunk overlapping a structure fills it with an identically-seeded RNG, so a fill function must consume the same RNG stream in every chunk. Draw all randomness unconditionally (or gated only on RNG-derived/chunk-independent conditions) before any chunk-bounds check — never inside an `isInChunk` branch that affects later draws. The helpers are safe because they clip internally after their own draws.

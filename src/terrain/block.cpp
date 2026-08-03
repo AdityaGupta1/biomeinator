@@ -70,6 +70,29 @@ void init()
     BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
     BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
     BLOCK_DATA_BY_NAME(RAINBOW_CRYSTAL) = { .uvs = { uvec2(26, 1) } };
+    BLOCK_DATA_BY_NAME(CHERRY_LOG) = { .uvs = { uvec2(11, 1), uvec2(10, 1), uvec2(11, 1) } };
+    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_PINK) = { .uvs = { uvec2(12, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_WHITE) = { .uvs = { uvec2(13, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(REDWOOD_LOG) = { .uvs = { uvec2(15, 1), uvec2(14, 1), uvec2(15, 1) } };
+    BLOCK_DATA_BY_NAME(REDWOOD_LEAVES) = { .uvs = { uvec2(16, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(BIRCH_LOG) = { .uvs = { uvec2(18, 1), uvec2(17, 1), uvec2(18, 1) } };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_GREEN) = { .uvs = { uvec2(19, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_YELLOW) = { .uvs = { uvec2(20, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_ORANGE) = { .uvs = { uvec2(21, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(FIR_LOG) = { .uvs = { uvec2(30, 1), uvec2(29, 1), uvec2(30, 1) } };
+    BLOCK_DATA_BY_NAME(FIR_LEAVES) = { .uvs = { uvec2(31, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(PINE_LOG) = { .uvs = { uvec2(1, 2), uvec2(0, 2), uvec2(1, 2) } };
+    BLOCK_DATA_BY_NAME(PINE_LEAVES) = { .uvs = { uvec2(2, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(COBBLESTONE) = { .uvs = { uvec2(3, 2) } };
+    BLOCK_DATA_BY_NAME(MOSSY_COBBLESTONE) = { .uvs = { uvec2(4, 2) } };
+    BLOCK_DATA_BY_NAME(MAHOGANY_LOG) = { .uvs = { uvec2(8, 1), uvec2(7, 1), uvec2(8, 1) } };
+    BLOCK_DATA_BY_NAME(MAHOGANY_LEAVES) = { .uvs = { uvec2(9, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(EUCALYPTUS_LOG) = { .uvs = { uvec2(6, 2), uvec2(5, 2), uvec2(6, 2) } };
+    BLOCK_DATA_BY_NAME(EUCALYPTUS_LEAVES) = { .uvs = { uvec2(7, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(WILLOW_LOG) = { .uvs = { uvec2(9, 2), uvec2(8, 2), uvec2(9, 2) } };
+    BLOCK_DATA_BY_NAME(WILLOW_LEAVES) = { .uvs = { uvec2(10, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(CYPRESS_LOG) = { .uvs = { uvec2(12, 2), uvec2(11, 2), uvec2(12, 2) } };
+    BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
 }
 
 const BlockData& getBlockData(Block block)
