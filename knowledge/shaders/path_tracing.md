@@ -1,4 +1,4 @@
-_Last edited: 2026-07-28_
+_Last edited: 2026-08-02_
 
 # Path Tracing Shader
 
@@ -109,5 +109,24 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
 Three hit groups exist in the path tracing pipeline:
 
 - **`PT_HITGROUP_PRIMARY`** — used for BSDF-sampled rays. Full closest-hit that records the complete hit, plus anyhit for alpha cutout and passthrough.
-- **`PT_HITGROUP_LIGHTS`** — used for direct light shadow rays. Lightweight closest-hit that only records instance ID, triangle index, hit position, and UV (enough to verify we hit the intended light triangle). Uses the same anyhit as primary for passthrough.
-- **`PT_HITGROUP_DOME_LIGHT`** — used for dome light shadow rays. Minimal closest-hit that just sets `PAYLOAD_FLAG_DID_HIT`. Miss = dome light was reached. Uses the same anyhit as primary for passthrough.
+- **`PT_HITGROUP_LIGHTS`** — used for direct light shadow rays.
+- **`PT_HITGROUP_DOME_LIGHT`** — used for dome light shadow rays.
+
+Both shadow-ray hit groups use the same anyhit as primary (for passthrough), but their
+closest-hit shaders never run: shadow rays trace with `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH |
+RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` (the DXR occlusion-ray idiom — measured ~9% frame time in
+2026-08). `PAYLOAD_FLAG_DID_HIT` starts **set** and only the miss shader clears it, so
+flag-still-set means occluded. Consequences:
+
+- Area-light shadow rays no longer verify they hit the sampled light triangle; instead
+  `traceToLight` stops `TMax` just short of the light and treats any committed hit as
+  occlusion. Le is evaluated analytically from the sampled point's barycentrics
+  (`lightBary2`, threaded from `sampleAreaLightPoint` through all three sampling modes).
+- **TMax gotcha:** the shadow-ray origin is offset along the surface normal, which shifts
+  the ray parallel to itself — it crosses the light's *plane* earlier than the
+  surface-to-sample distance at oblique angles (shortfall `eps·dot(m,n)/dot(m,wi)`,
+  unbounded at grazing). `TMax` is therefore computed from the offset ray's light-plane
+  intersection, not from the sample distance; using the distance self-shadows the light at
+  grazing angles (caught by the `occluded_light` golden).
+- The shadow-ray closest-hit shaders (`ClosestHit_Lights`, `ClosestHit_DomeLight`) are dead
+  at runtime but must stay exported — the pipeline's hit groups reference them.

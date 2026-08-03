@@ -137,8 +137,13 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 
+    // Occlusion-only ray: any committed hit ends traversal and no closest hit shader runs, so
+    // PAYLOAD_FLAG_DID_HIT starts set and only the miss shader (= dome light reached) clears it.
+    // The anyhit shader still runs on non-opaque geometry, preserving passthrough tint and
+    // water entry/exit tracking for absorption.
     Payload domeLightPayload;
     domeLightPayload.flags =
+        PAYLOAD_FLAG_DID_HIT |
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
@@ -147,7 +152,9 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
     domeLightPayload.rayCone = rayCone;
 
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
+    TraceRay(raytracingAcs,
+             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+             0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
 
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
@@ -164,6 +171,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     return result;
 }
 
+// Dead at runtime — shadow rays skip closest hit shaders — but the hit group still
+// references this export.
 [shader("closesthit")]
 void ClosestHit_DomeLight(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {

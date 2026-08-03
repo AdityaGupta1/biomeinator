@@ -51,8 +51,11 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
         inputs.rootSig,
     };
 
-    D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = {
+    // All geometry is triangles, so let the driver strip procedural-primitive handling from
+    // traversal (same rationale as RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES in the fog RayQuery)
+    D3D12_RAYTRACING_PIPELINE_CONFIG1 pipelineCfg = {
         .MaxTraceRecursionDepth = 1,
+        .Flags = D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
     };
 
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
@@ -60,7 +63,7 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
         subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib });
         subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg });
         subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig });
-        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg });
+        subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG1, .pDesc = &pipelineCfg });
 
         for (const auto& hitGroup : inputs.hitGroups)
         {

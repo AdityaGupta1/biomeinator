@@ -24,6 +24,9 @@ struct GeometryWrapper
 
     // nonzero only for BLASes built with allowUpdate
     size_t updateScratchSizeBytes{ 0 };
+
+    // Stored here so BLAS refits reuse the same flags as the original build
+    D3D12_RAYTRACING_GEOMETRY_FLAGS geometryFlags{ D3D12_RAYTRACING_GEOMETRY_FLAG_NONE };
 };
 
 struct BlasBuildInputs

@@ -374,12 +374,13 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     const AreaLight light = areaLights[pickedLightIdx];
 
     float3 pointOnLight_WS, wi_WS;
+    float2 lightBary2;
     float lightSamplePdf;
-    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
+    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, lightBary2, wi_WS, lightSamplePdf);
 
     float3 Le;
     const bool didHit = traceToLight(
-        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHit)
     {
         return result;

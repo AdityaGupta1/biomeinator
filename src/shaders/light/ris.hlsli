@@ -15,6 +15,7 @@ struct RisSample
 {
     uint lightIdx;
     float3 pointOnLight_WS;
+    float2 lightBary2;
     float W;
 };
 
@@ -48,13 +49,15 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
     uint Y_lightIdx = LIGHT_IDX_INVALID;
     float Y_p_hat = 0.f;
     float3 Y_pointOnLight_WS = 0.f;
+    float2 Y_lightBary2 = 0.f;
     float w_sum = 0.f;
     for (uint risLightCandidateIdx = 0; risLightCandidateIdx < numLightCandidates; ++risLightCandidateIdx)
     {
         float3 pointOnLight_WS;
+        float2 lightBary2;
         float lightPdf;
         uint lightIdx;
-        const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightPdf, lightIdx);
+        const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightBary2, lightPdf, lightIdx);
 
         const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
         const float misDenominator = numLightCandidates * lightPdf;
@@ -73,12 +76,14 @@ RisSample generateDirectLightingRisSample(const float3 surfPos_WS,
             Y_lightIdx = lightIdx;
             Y_p_hat = p_hat;
             Y_pointOnLight_WS = pointOnLight_WS;
+            Y_lightBary2 = lightBary2;
         }
     }
 
     RisSample risSampleOut;
     risSampleOut.lightIdx = Y_lightIdx;
     risSampleOut.pointOnLight_WS = Y_pointOnLight_WS;
+    risSampleOut.lightBary2 = Y_lightBary2;
     risSampleOut.W = sanitizeFloat(w_sum / Y_p_hat, 0.f);
     return risSampleOut;
 }
@@ -108,6 +113,7 @@ DirectLightingSample evaluateRisSample(const RisSample risSample,
                                           surfNor_WS,
                                           result.wi_WS,
                                           risSample.pointOnLight_WS,
+                                          risSample.lightBary2,
                                           areaLights[risSample.lightIdx],
                                           rayCone,
                                           canPassthrough,
