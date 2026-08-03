@@ -20,8 +20,7 @@ using namespace StructureHelpers;
         const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng)
 
 // Classic blob canopy: 5x5 ring two layers deep around the trunk top, inner cross rising two
-// more, corner leaves randomized. RNG is drawn for every corner regardless of chunk bounds so
-// all chunks filling this structure consume an identical stream.
+// more, corner leaves randomized.
 static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, RandomNumberGenerator& rng, Block leafBlock)
 {
     const int baseY = trunkTopPos_CS.y - 1;
@@ -70,6 +69,31 @@ fillStructureBlocksHeader(OAK_TREE)
     }
 
     placeBlobCanopy(blocks, trunkTopPos_CS, rng, Block::OAK_LEAVES);
+}
+
+struct BranchTip
+{
+    ivec3 pos_CS;
+    float blobRadius;
+};
+
+// Fills the branch's log spline and records its tip for a later leaf blob. The midpoint is
+// pulled down so the branch sags out of the crown before rising.
+static void placeOakBranch(std::vector<Block>& blocks,
+                           std::vector<BranchTip>& branchTips,
+                           vec3 branchStart,
+                           float angle,
+                           float branchLength,
+                           float branchRise,
+                           float blobRadius)
+{
+    const vec3 branchDir(glm::cos(angle), 0.f, glm::sin(angle));
+    const vec3 branchEnd = branchStart + branchDir * branchLength + vec3(0.f, branchRise, 0.f);
+    const vec3 branchMid = glm::mix(branchStart, branchEnd, 0.5f) - vec3(0.f, branchRise * 0.35f, 0.f);
+    const std::vector<vec3> spline = buildSpline({ branchStart, branchMid, branchEnd }, 4);
+    fillSpline(blocks, spline, Block::OAK_LOG);
+
+    branchTips.push_back({ ivec3(glm::floor(branchEnd)), blobRadius });
 }
 
 fillStructureBlocksHeader(LARGE_OAK_TREE)
@@ -137,13 +161,8 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
     const float firstBranchAngle = rng.nextFloat(glm::two_pi<float>());
     constexpr float maxAngleJitterRadians = 20.f * glm::pi<float>() / 180.f;
 
-    struct BranchTip
-    {
-        ivec3 pos_CS;
-        float blobRadius;
-    };
     std::vector<BranchTip> branchTips;
-    branchTips.reserve(numBranches);
+    branchTips.reserve(numBranches + 2); // room for the lower branches
 
     // All branch logs are filled before any leaves so blobs can't block later splines
     // (tryPlaceStructureBlock is first-placed-wins), keeping branches connected to the trunk
@@ -151,18 +170,11 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
     {
         const float angle =
             firstBranchAngle + (i / static_cast<float>(numBranches)) * glm::two_pi<float>() + rng.nextFloatAbs(maxAngleJitterRadians);
-        const vec3 branchDir(glm::cos(angle), 0.f, glm::sin(angle));
         const float branchLength = rng.nextFloat(2.5f, 5.5f);
         const float branchRise = rng.nextFloat(0.5f, 3.5f);
-
         const vec3 branchStart = trunkTopCenter - vec3(0.f, rng.nextFloat(2.f), 0.f);
-        const vec3 branchEnd = branchStart + branchDir * branchLength + vec3(0.f, branchRise, 0.f);
-        // Midpoint pulled down so the branch sags out of the crown before rising
-        const vec3 branchMid = glm::mix(branchStart, branchEnd, 0.5f) - vec3(0.f, branchRise * 0.35f, 0.f);
-        const std::vector<vec3> spline = buildSpline({ branchStart, branchMid, branchEnd }, 4);
-        fillSpline(blocks, spline, Block::OAK_LOG);
-
-        branchTips.push_back({ ivec3(glm::floor(branchEnd)), rng.nextFloat(2.2f, 3.f) });
+        const float blobRadius = rng.nextFloat(2.2f, 3.f);
+        placeOakBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius);
     }
 
     // One or two shorter branches lower on the trunk so the foliage isn't all at the crown
@@ -170,19 +182,12 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
     for (int i = 0; i < numLowerBranches; ++i)
     {
         const float angle = rng.nextFloat(glm::two_pi<float>());
-        const vec3 branchDir(glm::cos(angle), 0.f, glm::sin(angle));
         const float branchLength = rng.nextFloat(2.f, 4.f);
         const float branchRise = rng.nextFloat(1.f, 2.f);
-
         const float startHeight = rng.nextFloat(0.45f, 0.7f) * trunkHeight;
         const vec3 branchStart = vec3(structurePos_CS) + vec3(1.f, startHeight, 1.f);
-        const vec3 branchEnd = branchStart + branchDir * branchLength + vec3(0.f, branchRise, 0.f);
-        // Midpoint pulled down so the branch sags out of the crown before rising
-        const vec3 branchMid = glm::mix(branchStart, branchEnd, 0.5f) - vec3(0.f, branchRise * 0.35f, 0.f);
-        const std::vector<vec3> spline = buildSpline({ branchStart, branchMid, branchEnd }, 4);
-        fillSpline(blocks, spline, Block::OAK_LOG);
-
-        branchTips.push_back({ ivec3(glm::floor(branchEnd)), rng.nextFloat(1.8f, 2.4f) });
+        const float blobRadius = rng.nextFloat(1.8f, 2.4f);
+        placeOakBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius);
     }
 
     placeLeafBlob(blocks, ivec3(glm::floor(trunkTopCenter)), 3.f, rng, Block::OAK_LEAVES);
@@ -377,6 +382,18 @@ fillStructureBlocksHeader(ACACIA_TREE)
     placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
+StructureGen::StructureGen(StructureType type, uint32_t gridCellSideLength, uint32_t gridCellPadding, uint32_t flags)
+    : StructureGen(std::vector<StructureGenVariant>{ { type } }, gridCellSideLength, gridCellPadding, flags)
+{}
+
+StructureGen::StructureGen(std::vector<StructureGenVariant> variants,
+                           uint32_t gridCellSideLength,
+                           uint32_t gridCellPadding,
+                           uint32_t flags)
+    : variants(std::move(variants)), gridCellSideLength(gridCellSideLength), gridCellPadding(gridCellPadding),
+      flags(flags)
+{}
+
 StructureType StructureGen::pickVariant(RandomNumberGenerator& rng) const
 {
     float totalWeight = 0.f;
@@ -397,7 +414,7 @@ StructureType StructureGen::pickVariant(RandomNumberGenerator& rng) const
     return variants.back().type;
 }
 
-uint32_t StructureGen::candidateSalt() const
+uint32_t StructureGen::gridSalt() const
 {
     uint32_t salt = 0;
     for (const StructureGenVariant& variant : variants)

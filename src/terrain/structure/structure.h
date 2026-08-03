@@ -52,16 +52,22 @@ struct StructureGen
 {
     // Weighted list of types sharing this gen's grid; one is rolled per accepted candidate, so
     // all variants inherit the grid's spacing guarantee.
-    std::vector<StructureGenVariant> variants{};
-    uint32_t gridCellSideLength{ 16 };
+    std::vector<StructureGenVariant> variants;
+    uint32_t gridCellSideLength;
     // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
     // between candidates in adjacent cells.
-    uint32_t gridCellPadding{ 0 };
-    uint32_t flags{ 0 };
+    uint32_t gridCellPadding;
+    uint32_t flags;
+
+    StructureGen(StructureType type, uint32_t gridCellSideLength, uint32_t gridCellPadding = 0, uint32_t flags = 0);
+    StructureGen(std::vector<StructureGenVariant> variants,
+                 uint32_t gridCellSideLength,
+                 uint32_t gridCellPadding = 0,
+                 uint32_t flags = 0);
 
     StructureType pickVariant(RandomNumberGenerator& rng) const;
     // Distinguishes this gen's candidate grid from other gens over the same cells.
-    uint32_t candidateSalt() const;
+    uint32_t gridSalt() const;
 };
 
 namespace Structures

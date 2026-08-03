@@ -8,6 +8,7 @@
 
 using BlockId = uint16_t;
 
+// Serialized by value in world exports — only append new types.
 enum class Block : BlockId
 {
     AIR = 0,

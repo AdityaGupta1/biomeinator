@@ -85,7 +85,7 @@ void init()
             .mid = Block::SAND,
         };
         data.structureGens = {
-            { .variants = { { StructureType::PALM_TREE } }, .gridCellSideLength = 32, .gridCellPadding = 8 },
+            { StructureType::PALM_TREE, 32, 8 },
         };
     }
 
@@ -157,7 +157,7 @@ void init()
             .mid = Block::SANDSTONE,
         };
         data.structureGens = {
-            { .variants = { { StructureType::SAGUARO_CACTUS } }, .gridCellSideLength = 20, .gridCellPadding = 4 },
+            { StructureType::SAGUARO_CACTUS, 20, 4 },
         };
         data.decorator.addEntry(Block::DEAD_BUSH, 1.f, { Block::SAND });
         data.decorator.addEntry(Block::TINY_CACTUS, 2.f, { Block::SAND });
@@ -178,13 +178,13 @@ void init()
         data.grassTint = glmUtil::colorFromHex("#50a13b");
         data.structureGens = {
             {
-                .variants = {
+                {
                     { StructureType::OAK_TREE, 45.f },
                     { StructureType::BIRCH_TREE, 40.f },
                     { StructureType::LARGE_OAK_TREE, 15.f },
                 },
-                .gridCellSideLength = 8,
-                .gridCellPadding = 2,
+                8,
+                2,
             },
         };
         data.decorator.addEntry(Block::GRASS, 4.f, { Block::GRASS_BLOCK });
@@ -225,7 +225,7 @@ void init()
         };
         data.grassTint = glmUtil::colorFromHex("#bfa243");
         data.structureGens = {
-            { .variants = { { StructureType::ACACIA_TREE } }, .gridCellSideLength = 48, .gridCellPadding = 16 },
+            { StructureType::ACACIA_TREE, 48, 16 },
         };
         data.decorator.addEntry(Block::GRASS, 2.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
