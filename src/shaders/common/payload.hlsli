@@ -25,8 +25,6 @@ struct Payload
     float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
 
     RayCone rayCone;
-    uint pad0;
-    uint pad1;
 
     HitInfo hitInfo;
 };

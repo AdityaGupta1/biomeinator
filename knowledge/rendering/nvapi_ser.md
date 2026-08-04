@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-08-02_
 
 # NVAPI and Shader Execution Reordering
 
@@ -11,6 +11,9 @@ On the shader side, the path tracer calls `NvReorderThread()` with a coherence h
 bounce. Hints differentiate: first-bounce hits, passthrough (delta transmissive), and
 scattering (non-delta) surfaces. This groups threads that will follow similar code paths
 together.
+
+The hint reorder is load-bearing: removing it measured a **43%** frame-time loss on a voxel
+forest scene (2026-08).
 
 ## NVAPI Init Quirk
 

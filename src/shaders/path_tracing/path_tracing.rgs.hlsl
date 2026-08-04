@@ -5,8 +5,6 @@
 #include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
 
-#define HITGROUP_LIGHTS PT_HITGROUP_LIGHTS
-
 #include "common/nvapi_includes.hlsli"
 
 #include "common/global_params.hlsli"
@@ -477,7 +475,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.flags &= PAYLOAD_FLAG_UNDERWATER; // reset all payload flags except PAYLOAD_FLAG_UNDERWATER
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
-        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, PT_HITGROUP_PRIMARY, 0, 0, ray, payload);
+        TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {

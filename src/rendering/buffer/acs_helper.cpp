@@ -116,7 +116,7 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* 
 
     buildInfo->geometryDesc = {
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
+        .Flags = geoWrapper->geometryFlags,
 
         .Triangles = {
             .Transform3x4 = 0,
@@ -193,6 +193,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
             toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
         }
+
+        inputs.outGeoWrapper->geometryFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
 
         buildInfos.emplace_back();
         makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, inputs.allowUpdate);

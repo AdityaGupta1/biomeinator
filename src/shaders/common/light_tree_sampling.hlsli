@@ -348,7 +348,6 @@ float lightPdfRtsl(const HitInfo hitInfo,
 // Forward NEE entry point — mirrors sampleDirectLightingUniform / evaluateRisSample
 // =============================================
 
-#ifdef HITGROUP_LIGHTS
 // One-light-sample-per-pixel RTSL NEE. Returns the picked light's contribution
 // (or didHitLight=false on null sample). pdfOrW_Y is the true selection pdf
 // times the area-to-solid-angle pdf — flows into the non-RIS MIS branch.
@@ -374,12 +373,13 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     const AreaLight light = areaLights[pickedLightIdx];
 
     float3 pointOnLight_WS, wi_WS;
+    float2 lightBary2;
     float lightSamplePdf;
-    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, wi_WS, lightSamplePdf);
+    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, lightBary2, wi_WS, lightSamplePdf);
 
     float3 Le;
     const bool didHit = traceToLight(
-        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHit)
     {
         return result;
@@ -393,4 +393,3 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     result.pdfOrW_Y = pdfSelect * lightSamplePdf;
     return result;
 }
-#endif // HITGROUP_LIGHTS

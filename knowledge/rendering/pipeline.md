@@ -1,9 +1,17 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-08-02_
 
 # DXR Pipeline
 
 `pipeline_builder.h` provides `makeRtPipeline()` which creates a DXR state object, builds
 the shader table, and fills a `D3D12_DISPATCH_RAYS_DESC`.
+
+All pipelines use `PIPELINE_CONFIG1` with `SKIP_PROCEDURAL_PRIMITIVES` (all geometry is
+triangles) — measured ~2% frame time (2026-08).
+
+Root-signature gotcha: any shader that uses NVAPI intrinsics (e.g. `NvReorderThread`) needs
+the fake extension UAV (u1738/space1738) bound in that pipeline's root signature or
+`CreateStateObject` fails with E_INVALIDARG. Currently only the path tracing root signature
+has it.
 
 ## Single Library Per Pipeline
 

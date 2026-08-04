@@ -12,7 +12,7 @@
 namespace Renderer
 {
 
-static constexpr uint32_t maxPayloadSizeBytes = 96;
+static constexpr uint32_t maxPayloadSizeBytes = 88;
 
 void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
                                      uint32_t numParams,
@@ -243,157 +243,54 @@ void initRootSignature()
 void initPipeline()
 {
     // ===================================
-    // GBUFFER
+    // RT PIPELINES
     // ===================================
     {
-        RtPipelineInputs gbufferPipelineInputs = {
-            .name = L"gbuffer",
-            .pso = renderState.gbufferPso,
-            .dev_shaderIds = renderState.dev_gbufferShaderIds,
-            .rgsShaderName = L"RayGeneration",
-            .missShaderName = L"Miss",
-            .dispatchDesc = renderState.gbufferDispatchDesc,
+        const auto makeCommonRtPipeline = [](const std::wstring& name, const char* rgsShader,
+                                             ID3D12RootSignature* rootSig, ComPtr<ID3D12StateObject>& pso,
+                                             ComPtr<ID3D12Resource>& dev_shaderIds, D3D12_DISPATCH_RAYS_DESC& dispatchDesc)
+        {
+            RtPipelineInputs pipelineInputs = {
+                .name = name,
+                .pso = pso,
+                .dev_shaderIds = dev_shaderIds,
+                .rgsShaderName = L"RayGeneration",
+                .missShaderName = L"Miss",
+                .dispatchDesc = dispatchDesc,
+            };
+
+            pipelineInputs.shaderBytecode = getShader(rgsShader);
+            pipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
+            pipelineInputs.rootSig = rootSig;
+
+            const std::wstring primaryHitGroupName = name + L"_HitGroup_Primary";
+            const std::wstring lightsHitGroupName = name + L"_HitGroup_Lights";
+
+            pipelineInputs.hitGroups.resize(2);
+            pipelineInputs.hitGroups[HITGROUP_PRIMARY] = {
+                .HitGroupExport = primaryHitGroupName.c_str(),
+                .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+                .AnyHitShaderImport = L"AnyHit",
+                .ClosestHitShaderImport = L"ClosestHit_Primary",
+            };
+            // No CHS needed for shadow rays
+            pipelineInputs.hitGroups[HITGROUP_LIGHTS] = {
+                .HitGroupExport = lightsHitGroupName.c_str(),
+                .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+                .AnyHitShaderImport = L"AnyHit",
+            };
+
+            makeRtPipeline(pipelineInputs);
         };
 
-        gbufferPipelineInputs.shaderBytecode = getShader("gbuffer_rgs");
-        gbufferPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        gbufferPipelineInputs.rootSig = renderState.gbufferRootSig.Get();
-
-        gbufferPipelineInputs.hitGroups.resize(2);
-        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"gbuffer_HitGroup_Primary",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Primary",
-        };
-        gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"gbuffer_HitGroup_Lights",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-
-        makeRtPipeline(gbufferPipelineInputs);
-    }
-
-    // ===================================
-    // NRC UPDATE
-    // ===================================
-    {
-        RtPipelineInputs nrcUpdatePipelineInputs = {
-            .name = L"nrcUpdate",
-            .pso = renderState.nrcUpdatePso,
-            .dev_shaderIds = renderState.dev_nrcUpdateShaderIds,
-            .rgsShaderName = L"RayGeneration",
-            .missShaderName = L"Miss",
-            .dispatchDesc = renderState.nrcUpdateDispatchDesc,
-        };
-
-        nrcUpdatePipelineInputs.shaderBytecode = getShader("nrc_update_rgs");
-        nrcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        nrcUpdatePipelineInputs.rootSig = renderState.ptRootSig.Get();
-
-        nrcUpdatePipelineInputs.hitGroups.resize(3);
-        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"nrcUpdate_HitGroup_Primary",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Primary",
-        };
-        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"nrcUpdate_HitGroup_Lights",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"nrcUpdate_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
-        };
-
-        makeRtPipeline(nrcUpdatePipelineInputs);
-    }
-
-    // ===================================
-    // NRC QUERY
-    // ===================================
-    {
-        RtPipelineInputs nrcQueryPipelineInputs = {
-            .name = L"nrcQuery",
-            .pso = renderState.nrcQueryPso,
-            .dev_shaderIds = renderState.dev_nrcQueryShaderIds,
-            .rgsShaderName = L"RayGeneration",
-            .missShaderName = L"Miss",
-            .dispatchDesc = renderState.nrcQueryDispatchDesc,
-        };
-
-        nrcQueryPipelineInputs.shaderBytecode = getShader("nrc_query_rgs");
-        nrcQueryPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        nrcQueryPipelineInputs.rootSig = renderState.ptRootSig.Get();
-
-        nrcQueryPipelineInputs.hitGroups.resize(3);
-        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"nrcQuery_HitGroup_Primary",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Primary",
-        };
-        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"nrcQuery_HitGroup_Lights",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"nrcQuery_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
-        };
-
-        makeRtPipeline(nrcQueryPipelineInputs);
-    }
-
-    // ===================================
-    // PATH TRACING
-    // ===================================
-    {
-        RtPipelineInputs ptPipelineInputs = {
-            .name = L"pathTracing",
-            .pso = renderState.ptPso,
-            .dev_shaderIds = renderState.dev_ptShaderIds,
-            .rgsShaderName = L"RayGeneration",
-            .missShaderName = L"Miss",
-            .dispatchDesc = renderState.ptDispatchDesc,
-        };
-
-        ptPipelineInputs.shaderBytecode = getShader("path_tracing_rgs");
-        ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
-        ptPipelineInputs.rootSig = renderState.ptRootSig.Get();
-
-        ptPipelineInputs.hitGroups.resize(3);
-        ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
-            .HitGroupExport = L"pt_HitGroup_Primary",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Primary",
-        };
-        ptPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
-            .HitGroupExport = L"pt_HitGroup_Lights",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        ptPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"pt_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
-        };
-
-        makeRtPipeline(ptPipelineInputs);
+        makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", renderState.gbufferRootSig.Get(),
+                             renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
+        makeCommonRtPipeline(L"nrcUpdate", "nrc_update_rgs", renderState.ptRootSig.Get(),
+                             renderState.nrcUpdatePso, renderState.dev_nrcUpdateShaderIds, renderState.nrcUpdateDispatchDesc);
+        makeCommonRtPipeline(L"nrcQuery", "nrc_query_rgs", renderState.ptRootSig.Get(),
+                             renderState.nrcQueryPso, renderState.dev_nrcQueryShaderIds, renderState.nrcQueryDispatchDesc);
+        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs", renderState.ptRootSig.Get(),
+                             renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
     }
 
     // ===================================

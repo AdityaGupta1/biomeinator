@@ -1,8 +1,15 @@
-_Last edited: 2026-07-18_
+_Last edited: 2026-08-02_
 
 # Acceleration Structures
 
 `src/rendering/buffer/acs_helper.h/cpp` — BLAS and TLAS construction.
+
+## Geometry Flags
+
+All BLAS geometry is built with `NO_DUPLICATE_ANYHIT_INVOCATION` (stored in
+`GeometryWrapper::geometryFlags` so refits reuse the same flags): the anyhit shader mutates
+the payload (passthrough tint, stochastic alpha rng draws), which the spec allows to be
+invoked multiple times per triangle per ray without this flag.
 
 ## Shared Buffers
 
