@@ -79,7 +79,6 @@ struct DirectLightingSample
     float pdfOrW_Y;
 };
 
-#ifdef HITGROUP_LIGHTS
 // Occlusion-style shadow ray: TMax stops just short of the light's plane, so any committed
 // hit means the light is occluded — no closest hit shader or hit-identity check needed.
 // The anyhit shader still runs on non-opaque geometry, preserving passthrough tint and
@@ -128,9 +127,8 @@ bool traceToLight(const float3 surfPos_WS,
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
     lightPayload.rayCone = rayCone;
-    TraceRay(raytracingAcs,
-             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
+    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
+    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
 
     if (bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT)) // only the miss shader clears this
     {
@@ -189,7 +187,6 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 
     return result;
 }
-#endif
 
 // Decodes the global area-light index of the triangle the hit landed on, or
 // LIGHT_IDX_INVALID if the triangle is not emissive.

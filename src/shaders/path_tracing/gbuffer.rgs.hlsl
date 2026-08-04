@@ -5,8 +5,6 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
-#define HITGROUP_LIGHTS GBUFFER_HITGROUP_LIGHTS
-
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
@@ -123,7 +121,7 @@ void RayGeneration()
     payload.rayCone.width = 0.f;
     payload.rayCone.angle = getRayConePixelAngle();
 
-    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, GBUFFER_HITGROUP_PRIMARY, 0, 0, ray, payload);
+    TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
     outputGuideBuffers(payload, ray);
 

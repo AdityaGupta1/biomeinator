@@ -152,9 +152,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
     domeLightPayload.rayCone = rayCone;
 
-    TraceRay(raytracingAcs,
-             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, domeLightPayload);
+    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
+    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, domeLightPayload);
 
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
