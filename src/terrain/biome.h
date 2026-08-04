@@ -23,6 +23,7 @@ struct BiomeNoise
     static BiomeNoise randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng);
 };
 
+// Serialized by value in world exports — only append new biomes.
 enum class Biome : uint8_t
 {
     OCEAN,
@@ -39,6 +40,8 @@ enum class Biome : uint8_t
     SAVANNA,
     ICE_FIELDS,
     MOUNTAINS,
+
+    SWAMP,
 
     COUNT
 };

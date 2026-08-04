@@ -17,6 +17,17 @@ void Camera::init(float defaultFovYRadians)
     if (SettingsManager::getAsBool("voxelMode"))
     {
         this->setPos_WS({ 0, 196.f, 0 });
+
+        // TEMP: swamp inspection camera; debugFloat0 = height, debugFloat1 = pitch in radians,
+        // debugFloat2/3 = x/z
+        const float debugCameraHeight = SettingsManager::getAsFloat("debugFloat0");
+        if (debugCameraHeight != 0.f)
+        {
+            this->setPos_WS({ SettingsManager::getAsFloat("debugFloat2"),
+                              debugCameraHeight,
+                              SettingsManager::getAsFloat("debugFloat3") });
+            this->phi = SettingsManager::getAsFloat("debugFloat1");
+        }
     }
     else
     {

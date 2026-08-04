@@ -5,6 +5,7 @@
 
 #include "rendering/renderer.h"
 #include "rendering/window_manager.h"
+#include "terrain/chunk_generator.h" // TEMP: for debugScanSwampSeeds
 
 // Agility SDK
 extern "C"
@@ -16,6 +17,13 @@ extern "C"
 int main(int argc, char** argv)
 {
     SettingsManager::parseArgs(argc, argv);
+
+    // TEMP: swamp seed scanner; remove along with debugScanSwampSeeds
+    if (SettingsManager::getAsBool("debugBool0"))
+    {
+        ChunkGenerator::debugScanSwampSeeds(300);
+        return 0;
+    }
 
     WindowManager::init();
     Renderer::init();
