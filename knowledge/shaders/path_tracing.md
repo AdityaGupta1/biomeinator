@@ -1,4 +1,4 @@
-_Last edited: 2026-08-02_
+_Last edited: 2026-08-03_
 
 # Path Tracing Shader
 
@@ -108,8 +108,8 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
 
 Two hit groups exist in the path tracing pipeline:
 
-- **`PT_HITGROUP_PRIMARY`** — used for BSDF-sampled rays. Full closest-hit that records the complete hit, plus anyhit for alpha cutout and passthrough.
-- **`PT_HITGROUP_LIGHTS`** — shared by area-light and dome-light shadow rays. Anyhit-only
+- **`HITGROUP_PRIMARY`** — used for BSDF-sampled rays. Full closest-hit that records the complete hit, plus anyhit for alpha cutout and passthrough.
+- **`HITGROUP_LIGHTS`** — shared by area-light and dome-light shadow rays. Anyhit-only
   (same anyhit as primary, for passthrough); a triangle hit group needs no closest hit
   shader.
 
