@@ -36,11 +36,11 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RIS, 3=RTSL)", uint32_t, "3");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
-    ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS)", uint32_t, "0");
+    ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
     ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
-    ADD_OPTION("useVsync", "Enable VSync", bool, "true");
+    ADD_OPTION("useVsync", "Enable VSync", bool, "false");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
     ADD_OPTION("noJitter", "Disable jitter", bool, "false");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
@@ -186,6 +186,11 @@ void parseArgs(const int argc, const char* const* argv)
     if (!getAsString("world").empty())
     {
         settings["voxelMode"] = true;
+    }
+
+    if (getAsBool("voxelMode") && parseResult.count("antialiasingMode") == 0)
+    {
+        settings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 }
 
