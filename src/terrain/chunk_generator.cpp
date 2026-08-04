@@ -6,6 +6,8 @@
 #include "biome.h"
 #include "cave_biome.h"
 #include "chunk.h"
+#include "rendering/camera.h" // TEMP: for the bad-noise-range camera diagnostic
+#include "rendering/renderer.h" // TEMP: for the bad-noise-range camera diagnostic
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -389,12 +391,14 @@ inline constexpr int swampCellSize = 128;
 inline constexpr int swampCellPadding = 32;
 inline constexpr int swampLevelQuantize = 4;
 inline constexpr float swampTerrainSurfaceMultiplier = 0.4f;
-// Swamp shaping is height-domain: natural terrain up to swampPullDownStart above the pond level is
-// pulled down to the marsh flat, then blends back to fully natural by swampPullDownEnd. The
+// Swamp shaping is height-domain: natural terrain up to the pull-down start above the pond level
+// is pulled down to the marsh flat, then blends back to fully natural over the blend range. The
 // transition width therefore scales with the natural slope, and tall terrain is never fought —
-// hills form the shore instead of a dam wall.
+// hills form the shore instead of a dam wall. The pull-down start widens with the flood factor so
+// heavily flooded areas absorb more terrain into water.
 inline constexpr float swampPullDownStart = 14.f;
-inline constexpr float swampPullDownEnd = 30.f;
+inline constexpr float swampPullDownStartDeepFlood = 26.f;
+inline constexpr float swampPullDownBlendRange = 16.f;
 // Column positions are domain-warped before the cell lookup so pond shorelines and dam bands
 // wobble organically instead of following straight Voronoi edges. The amplitude must stay well
 // under swampCellPadding so a warped column still finds its true nearest sites in the 3x3 scan.
@@ -414,17 +418,28 @@ struct SwampCellInfo
     int pondLevel;
 };
 
-// Smooth fields only, never the jittered biome — per-column jitter would give adjacent columns
-// different heights/water levels. The inland gate keeps swampy cell sites far enough from the
-// coast that a cell's area can't reach the ocean.
-static float computeSwampFactor(const BiomeNoise& biomeNoise)
+// Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
+// give balanced water/land (swamp); values toward 1 give mostly-water terrain (future igapo and
+// varzea, currently also covered by the swamp biome). Computed from smooth fields only, never the
+// jittered biome — per-column jitter would give adjacent columns different heights/water levels.
+// The inland gate keeps flooded cell sites far enough from the coast that a cell's area can't
+// reach the ocean.
+static float computeFloodFactor(const BiomeNoise& biomeNoise)
 {
-    return smoothstep(0.1f, 0.5f, biomeNoise.temperature) *
-           smoothstep(0.2f, 0.6f, biomeNoise.humidity) *
-           smoothstep(-0.3f, -0.7f, biomeNoise.peak) *
-           smoothstep(0.22f, 0.32f, biomeNoise.inland) *
-           smoothstep(0.80f, 0.70f, biomeNoise.inland);
+    // min, not product: the factor is limited by its worst axis, instead of requiring every axis
+    // to be near-perfect at once.
+    return min(min(smoothstep(0.0f, 0.4f, biomeNoise.temperature),
+                   smoothstep(0.1f, 0.5f, biomeNoise.humidity)),
+               min(smoothstep(-0.2f, -0.6f, biomeNoise.peak),
+                   min(smoothstep(0.22f, 0.32f, biomeNoise.inland),
+                       smoothstep(0.80f, 0.70f, biomeNoise.inland))));
 }
+
+// A cell floods when the flood factor at its site exceeds floodCellThreshold. Columns are painted
+// with the swamp biome above the slightly looser floodTintThreshold so the biome always covers
+// pond banks.
+inline constexpr float floodCellThreshold = 0.35f;
+inline constexpr float floodTintThreshold = 0.3f;
 
 // Blends surface multipliers linearly in amplitude (1 / multiplier) space: the surface offset is
 // noise / multiplier, so mixing multipliers directly compresses most of the amplitude change into
@@ -516,7 +531,7 @@ static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
     const int naturalBase = static_cast<int>(std::floor(secondMinNaturalBase));
     return {
         .siteXZ_WS = siteXZ_WS,
-        .swampy = computeSwampFactor(siteNoise) > 0.5f,
+        .swampy = computeFloodFactor(siteNoise) > floodCellThreshold,
         .pondLevel = std::max((naturalBase - 2) / swampLevelQuantize * swampLevelQuantize, seaLevel + 3),
     };
 }
@@ -673,7 +688,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
             const BiomeNoise biomeNoise = biomeNoiseAt(biomeNoiseGrids, columnIdx);
-            const Biome biome = Biomes::getClosestBiome(BiomeNoise::randomOffset(biomeNoise, rng));
+            const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
+            // The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever
+            // the flood factor is high, so the biome exactly tracks the terrain that floods.
+            Biome biome = Biomes::getClosestBiome(jitteredBiomeNoise);
+            if (computeFloodFactor(jitteredBiomeNoise) > floodTintThreshold)
+            {
+                biome = Biome::SWAMP;
+            }
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
@@ -717,9 +739,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const SwampCellInfo cell1 = getSwampCellInfo(cellCorners[nearestIdx]);
                 if (cell1.swampy)
                 {
-                    const float marshFloorHeight = static_cast<float>(cell1.pondLevel - 2);
+                    const float deepFloodMix = smoothstep(floodCellThreshold, 0.9f, computeFloodFactor(biomeNoise));
+                    const float marshFloorHeight = static_cast<float>(cell1.pondLevel) - glm::mix(2.f, 5.f, deepFloodMix);
                     const float heightAboveLevel = naturalTerrain.baseHeight - static_cast<float>(cell1.pondLevel);
-                    const float naturalMix = smoothstep(swampPullDownStart, swampPullDownEnd, heightAboveLevel);
+                    const float pullDownStart = glm::mix(swampPullDownStart, swampPullDownStartDeepFlood, deepFloodMix);
+                    const float naturalMix = smoothstep(pullDownStart, pullDownStart + swampPullDownBlendRange, heightAboveLevel);
                     if (naturalTerrain.baseHeight > marshFloorHeight)
                     {
                         terrainBaseHeight = glm::mix(marshFloorHeight, naturalTerrain.baseHeight, naturalMix);
@@ -828,6 +852,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
     terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
+    // TEMP: diagnostic for the empty-range assert
+    if (terrainNoiseMinY >= terrainNoiseMaxY)
+    {
+        const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
+        printf("TEMP: bad noise range at chunk (%d, %d): minY=%d maxY=%d baseMin=%f baseMax=%f camera=(%d, %d, %d)\n",
+               chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y,
+               terrainNoiseMinY, terrainNoiseMaxY, terrainBaseHeightMin, terrainBaseHeightMax,
+               cameraPosInt_WS.x, cameraPosInt_WS.y, cameraPosInt_WS.z);
+    }
     ASSERT(terrainNoiseMinY < terrainNoiseMaxY, "terrain noise range is empty or inverted");
 
     const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;

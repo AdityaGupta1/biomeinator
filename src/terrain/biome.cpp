@@ -210,16 +210,11 @@ void init()
         };
     }
 
-    // SWAMP
+    // SWAMP — not a Voronoi candidate: assigned directly from the flood factor during chunk
+    // generation, so the biome exactly tracks the terrain that floods.
     {
         BiomeData& data = BIOME_DATA_BY_NAME(SWAMP);
-        lowlandBiomes.push_back(Biome::SWAMP);
-        data.biomeNoise = {
-            .temperature = 0.6f,
-            .humidity = 0.8f,
-            .peak = -0.8f,
-        };
-        data.grassTint = glmUtil::colorFromHex("#6a7039");
+        data.grassTint = glmUtil::colorFromHex("#53583c");
         data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
