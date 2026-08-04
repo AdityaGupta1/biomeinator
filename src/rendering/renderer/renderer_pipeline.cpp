@@ -266,11 +266,11 @@ void initPipeline()
             .AnyHitShaderImport = L"AnyHit",
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
+        // Shadow rays skip closest hit shaders, so the hit group is anyhit-only
         gbufferPipelineInputs.hitGroups[GBUFFER_HITGROUP_LIGHTS] = {
             .HitGroupExport = L"gbuffer_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
         };
 
         makeRtPipeline(gbufferPipelineInputs);
@@ -293,24 +293,19 @@ void initPipeline()
         nrcUpdatePipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         nrcUpdatePipelineInputs.rootSig = renderState.ptRootSig.Get();
 
-        nrcUpdatePipelineInputs.hitGroups.resize(3);
+        nrcUpdatePipelineInputs.hitGroups.resize(2);
         nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"nrcUpdate_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
+        // Shadow rays (area and dome light) skip closest hit shaders, so they share one
+        // anyhit-only hit group
         nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
             .HitGroupExport = L"nrcUpdate_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        nrcUpdatePipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"nrcUpdate_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
         };
 
         makeRtPipeline(nrcUpdatePipelineInputs);
@@ -333,24 +328,19 @@ void initPipeline()
         nrcQueryPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         nrcQueryPipelineInputs.rootSig = renderState.ptRootSig.Get();
 
-        nrcQueryPipelineInputs.hitGroups.resize(3);
+        nrcQueryPipelineInputs.hitGroups.resize(2);
         nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"nrcQuery_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
+        // Shadow rays (area and dome light) skip closest hit shaders, so they share one
+        // anyhit-only hit group
         nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
             .HitGroupExport = L"nrcQuery_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        nrcQueryPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"nrcQuery_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
         };
 
         makeRtPipeline(nrcQueryPipelineInputs);
@@ -373,24 +363,19 @@ void initPipeline()
         ptPipelineInputs.maxPayloadSizeBytes = maxPayloadSizeBytes;
         ptPipelineInputs.rootSig = renderState.ptRootSig.Get();
 
-        ptPipelineInputs.hitGroups.resize(3);
+        ptPipelineInputs.hitGroups.resize(2);
         ptPipelineInputs.hitGroups[PT_HITGROUP_PRIMARY] = {
             .HitGroupExport = L"pt_HitGroup_Primary",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
             .ClosestHitShaderImport = L"ClosestHit_Primary",
         };
+        // Shadow rays (area and dome light) skip closest hit shaders, so they share one
+        // anyhit-only hit group
         ptPipelineInputs.hitGroups[PT_HITGROUP_LIGHTS] = {
             .HitGroupExport = L"pt_HitGroup_Lights",
             .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
             .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_Lights",
-        };
-        ptPipelineInputs.hitGroups[PT_HITGROUP_DOME_LIGHT] = {
-            .HitGroupExport = L"pt_HitGroup_DomeLight",
-            .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-            .AnyHitShaderImport = L"AnyHit",
-            .ClosestHitShaderImport = L"ClosestHit_DomeLight",
         };
 
         makeRtPipeline(ptPipelineInputs);

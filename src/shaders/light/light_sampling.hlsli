@@ -222,11 +222,3 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
     const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
     return lightPickPdf * r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
 }
-
-// Dead at runtime — shadow rays skip closest hit shaders — but the hit group still
-// references this export.
-[shader("closesthit")]
-void ClosestHit_Lights(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
-{
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
-}

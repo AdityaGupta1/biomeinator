@@ -154,7 +154,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
 
     TraceRay(raytracingAcs,
              RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xFF, PT_HITGROUP_DOME_LIGHT, 0, 0, ray, domeLightPayload);
+             0xFF, PT_HITGROUP_LIGHTS, 0, 0, ray, domeLightPayload);
 
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
@@ -169,12 +169,4 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
         result.Le = float3(0.f, 0.f, 0.f);
     }
     return result;
-}
-
-// Dead at runtime — shadow rays skip closest hit shaders — but the hit group still
-// references this export.
-[shader("closesthit")]
-void ClosestHit_DomeLight(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
-{
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }
