@@ -20,6 +20,7 @@ colored glossy reflection, I manually added the color to the respective glTF fil
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 #include "scene.h"
+#include "util/packing.h"
 
 #include "logger.h"
 
@@ -413,7 +414,9 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     uv = { uvf[0], uvf[1] };
                 }
 
-                host_verts[v] = { { p[0], p[1], p[2] }, { n[0], n[1], n[2] }, uv };
+                host_verts[v] = { { p[0], p[1], p[2] },
+                                  Util::octEncode({ n[0], n[1], n[2] }),
+                                  Util::packFloat2ToUint(uv.x, uv.y) };
 
                 DirectX::XMFLOAT3 pos_WS;
                 DirectX::XMStoreFloat3(

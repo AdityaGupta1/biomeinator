@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-08-04_
 
 # Common CPU/GPU Structs
 
@@ -26,7 +26,9 @@ POD structs that need to be accessible on both CPU and GPU. These live in GPU bu
 
 **`AreaLight`** — triangle light source. Positions do not include `transformOffset` or `globalInstanceOffset` — shaders must apply those offsets.
 
-The remaining structs (`Vertex`, `HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
+**`Vertex`** — normal and uv are packed into one `uint` each (octahedron snorm16 and f16 pair). The CPU encoders in `util/packing.h` must stay bit-identical to the decoders in `shaders/util/packing.hlsli`. Only `pos_OS` is unpacked, which is what lets BLAS builds (pos at offset 0, `sizeof(Vertex)` stride) and the water displacement pass work without decoding. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
+
+The remaining structs (`HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
 
 ---
 

@@ -32,13 +32,12 @@ uint octEncode(float3 n)
 {
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
     n.xy = n.z >= 0.f ? n.xy : octWrap(n.xy);
-    n.xy = n.xy * 0.5f + 0.5f;
     return packSnorm2ToUint(n.xy);
 }
 
 float3 octDecode(uint u)
 {
-    const float2 f = unpackUintToSnorm2(u) * 2.f - 1.f;
+    const float2 f = unpackUintToSnorm2(u);
     float3 n = float3(f.x, f.y, 1.f - abs(f.x) - abs(f.y));
     const float t = saturate(-n.z);
     n.xy += select(n.xy >= 0.f, -t, t);

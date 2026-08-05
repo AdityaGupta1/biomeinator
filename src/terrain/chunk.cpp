@@ -11,6 +11,7 @@
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
 #include "settings_manager.h"
+#include "util/packing.h"
 #include "util/rng.h"
 
 #include <DirectXMath.h>
@@ -654,9 +655,9 @@ void Chunk::createInstances()
                         for (uint i = 0; i < 8; ++i)
                         {
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
-                            const vec3 normal = xShapedFaceNormals[i / 4];
+                            const uint32_t packedNor = Util::octEncode(vec3ToDirectX(xShapedFaceNormals[i / 4]));
                             const vec2 uv = vec2(uvOffsets[i % 4]);
-                            terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), vec3ToDirectX(normal), vec2ToDirectX(uv));
+                            terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), packedNor, Util::packFloat2ToUint(uv.x, uv.y));
                         }
 
                         for (uint j = 0; j < 2; ++j)
@@ -701,7 +702,7 @@ void Chunk::createInstances()
 
                             const uint baseVertIdx = static_cast<uint>(verts.size());
 
-                            const DirectX::XMFLOAT3 normal = vec3ToDirectX(vec3(neighborOffset));
+                            const uint32_t packedNor = Util::octEncode(vec3ToDirectX(vec3(neighborOffset)));
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                             const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
@@ -715,7 +716,7 @@ void Chunk::createInstances()
 
                                 const vec2 uv = vec2(uvOffsets[i]);
 
-                                verts.emplace_back(vec3ToDirectX(vertPos_CS), normal, vec2ToDirectX(uv));
+                                verts.emplace_back(vec3ToDirectX(vertPos_CS), packedNor, Util::packFloat2ToUint(uv.x, uv.y));
                             }
 
                             const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
