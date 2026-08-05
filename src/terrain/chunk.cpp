@@ -464,14 +464,14 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
     Terrain::setDirty();
 }
 
-static inline DirectX::XMFLOAT2 vec2ToDirectX(const glm::vec2& v)
-{
-    return { v.x, v.y };
-}
-
 static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
 {
     return { v.x, v.y, v.z };
+}
+
+static inline Vertex makeVertex(const glm::vec3& pos, const glm::vec3& nor, const glm::vec2& uv)
+{
+    return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), Util::packFloat2ToUint(uv.x, uv.y) };
 }
 
 bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, ivec3 neighborPos_CS, int faceIdx)
@@ -655,9 +655,8 @@ void Chunk::createInstances()
                         for (uint i = 0; i < 8; ++i)
                         {
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
-                            const uint32_t packedNor = Util::octEncode(vec3ToDirectX(xShapedFaceNormals[i / 4]));
-                            const vec2 uv = vec2(uvOffsets[i % 4]);
-                            terrainVerts.emplace_back(vec3ToDirectX(vertPos_CS), packedNor, Util::packFloat2ToUint(uv.x, uv.y));
+                            terrainVerts.emplace_back(
+                                makeVertex(vertPos_CS, xShapedFaceNormals[i / 4], vec2(uvOffsets[i % 4])));
                         }
 
                         for (uint j = 0; j < 2; ++j)
@@ -702,7 +701,6 @@ void Chunk::createInstances()
 
                             const uint baseVertIdx = static_cast<uint>(verts.size());
 
-                            const uint32_t packedNor = Util::octEncode(vec3ToDirectX(vec3(neighborOffset)));
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                             const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
@@ -714,9 +712,7 @@ void Chunk::createInstances()
                                     vertPos_CS.y -= topYSubtract;
                                 }
 
-                                const vec2 uv = vec2(uvOffsets[i]);
-
-                                verts.emplace_back(vec3ToDirectX(vertPos_CS), packedNor, Util::packFloat2ToUint(uv.x, uv.y));
+                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), vec2(uvOffsets[i])));
                             }
 
                             const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);

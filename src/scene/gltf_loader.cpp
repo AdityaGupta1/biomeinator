@@ -414,9 +414,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     uv = { uvf[0], uvf[1] };
                 }
 
-                host_verts[v] = { { p[0], p[1], p[2] },
-                                  Util::octEncode({ n[0], n[1], n[2] }),
-                                  Util::packFloat2ToUint(uv.x, uv.y) };
+                host_verts[v] = {
+                    { p[0], p[1], p[2] },
+                    Util::octEncode({ n[0], n[1], n[2] }),
+                    Util::packFloat2ToUint(uv.x, uv.y),
+                };
 
                 DirectX::XMFLOAT3 pos_WS;
                 DirectX::XMStoreFloat3(
