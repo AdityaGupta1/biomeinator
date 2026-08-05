@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include "debug.h"
 #include "logger.h"
 #include "rendering/common/common_structs.h"
 #include "scene/scene.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -178,13 +178,20 @@ static void quantizeAlphaToCoverageTile(
     }
 }
 
-// outTileHasBiomeTintMask, if given, receives one bool per tile (indexed like the returned
-// array's slices) saying whether the tile has any biome tint mask coverage at mip 0; only
-// meaningful when loading the aux map
-static uint32_t loadTexture(Scene* scene,
-                            const std::filesystem::path& filename,
-                            const bool sRGB = true,
-                            std::vector<bool>* outTileHasBiomeTintMask = nullptr)
+struct LoadTextureOptions
+{
+    bool sRGB = true;
+    // One bool per tile, indexed like the returned array's slices: whether the tile has any biome
+    // tint mask coverage at mip 0. Only meaningful for the aux map.
+    std::vector<bool>* outTileHasBiomeTintMask = nullptr;
+    // Mip 0 alpha channel, one byte per texel
+    std::vector<uint8_t>* outAlphaChannel = nullptr;
+    // Replaces the loaded alpha before mip generation, so a texture co-registered with a cutout
+    // texture inherits its coverage weighting. See knowledge/scene/materials_textures.md.
+    const std::vector<uint8_t>* alphaOverride = nullptr;
+};
+
+static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename, const LoadTextureOptions& options = {})
 {
     namespace fs = std::filesystem;
 
@@ -208,14 +215,33 @@ static uint32_t loadTexture(Scene* scene,
     constexpr uint32_t numMips = 5;
     // Must match DEFAULT_TEX_NUM_BLOCKS_X in chunk.cpp.
     static_assert(textureSize / tileSizeMip0 == 32);
-    assert(w0 == textureSize && h0 == textureSize);
+    ASSERT(w0 == textureSize && h0 == textureSize);
 
+    const size_t texelCount = static_cast<size_t>(w0) * h0;
     std::vector<std::vector<uint8_t>> mipData(numMips);
 
     // Mip 0: copy raw stb_image data
-    mipData[0].resize(static_cast<size_t>(w0) * h0 * 4);
+    mipData[0].resize(texelCount * 4);
     std::memcpy(mipData[0].data(), data, mipData[0].size());
     stbi_image_free(data);
+
+    if (options.alphaOverride != nullptr)
+    {
+        ASSERT(options.alphaOverride->size() == texelCount);
+        for (size_t i = 0; i < texelCount; ++i)
+        {
+            mipData[0][i * 4 + 3] = (*options.alphaOverride)[i];
+        }
+    }
+
+    if (options.outAlphaChannel != nullptr)
+    {
+        options.outAlphaChannel->resize(texelCount);
+        for (size_t i = 0; i < texelCount; ++i)
+        {
+            (*options.outAlphaChannel)[i] = mipData[0][i * 4 + 3];
+        }
+    }
 
     for (uint32_t m = 1; m < numMips; ++m)
     {
@@ -225,9 +251,9 @@ static uint32_t loadTexture(Scene* scene,
     }
 
     const uint32_t tilesPerAxis = textureSize / tileSizeMip0;
-    if (outTileHasBiomeTintMask != nullptr)
+    if (options.outTileHasBiomeTintMask != nullptr)
     {
-        outTileHasBiomeTintMask->resize(static_cast<size_t>(tilesPerAxis) * tilesPerAxis);
+        options.outTileHasBiomeTintMask->resize(static_cast<size_t>(tilesPerAxis) * tilesPerAxis);
     }
     for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
     {
@@ -235,9 +261,9 @@ static uint32_t loadTexture(Scene* scene,
         {
             const uint32_t mip0TileX = tileX * tileSizeMip0;
             const uint32_t mip0TileY = tileY * tileSizeMip0;
-            if (outTileHasBiomeTintMask != nullptr)
+            if (options.outTileHasBiomeTintMask != nullptr)
             {
-                (*outTileHasBiomeTintMask)[tileY * tilesPerAxis + tileX] =
+                (*options.outTileHasBiomeTintMask)[tileY * tilesPerAxis + tileX] =
                     tileHasBiomeTintMask(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
             }
             const bool hasTransparency = tileHasTransparency(mipData[0], w0, mip0TileX, mip0TileY, tileSizeMip0);
@@ -254,7 +280,8 @@ static uint32_t loadTexture(Scene* scene,
                 const uint32_t dstTileY = tileY * dstTileSize;
 
                 downsample2x2Tile(mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX,
-                                  dstTileY, dstTileSize, hasTransparency /*premultiplyAlpha*/, sRGB /*srgbTransfer*/);
+                                  dstTileY, dstTileSize, hasTransparency /*premultiplyAlpha*/,
+                                  options.sRGB /*srgbTransfer*/);
                 if (hasTransparency)
                 {
                     const float sourceCoverage =
@@ -352,7 +379,7 @@ static uint32_t loadTexture(Scene* scene,
     }
 
     return scene->addTextureArray(std::move(sliceMipData), tileSizeMip0, tileSizeMip0,
-                                  sRGB ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM);
+                                  options.sRGB ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM);
 }
 
 } // namespace TerrainMaterials
