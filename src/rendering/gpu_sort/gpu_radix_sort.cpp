@@ -42,7 +42,7 @@ void replaceScratchUavBuffer(ToFreeList& toFreeList,
 {
     if (buf != nullptr)
     {
-        toFreeList.pushResource(buf, false /*isMapped*/);
+        toFreeList.pushResource(buf);
     }
     buf = BufferHelper::createBasicBuffer(
         bytes,

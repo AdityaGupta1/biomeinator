@@ -173,10 +173,10 @@ public:
         uint32_t oldSize = this->size;
         T* host_oldBuffer = this->host_buffer;
 
-        toFreeList.pushResource(this->upload_buffer, true);
+        toFreeList.pushResource(this->upload_buffer);
         if (!this->options.uploadOnly)
         {
-            toFreeList.pushResource(this->dev_buffer, false);
+            toFreeList.pushResource(this->dev_buffer);
         }
 
         this->init(newSize, &toFreeList);

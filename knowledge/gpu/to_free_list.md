@@ -1,4 +1,4 @@
-_Last edited: 2026-03-30_
+_Last edited: 2026-08-04_
 
 # ToFreeList
 
@@ -16,20 +16,21 @@ This means resources live for exactly as many frames as needed: no earlier, no l
 
 ## What It Tracks
 
-Four resource categories, each with its own cleanup logic in `freeAll()`:
+Plain `ID3D12Resource`s, `ManagedBuffer` sections, descriptor heap slots, and
+`Instance*`s. Non-obvious points:
 
-- **`resources`** — plain `ComPtr<ID3D12Resource>`, just `Reset()`'d.
-- **`mappedResources`** — CPU-mapped resources that need `Unmap()` before `Reset()`.
-- **`managedBufferSections`** — allocations inside a `ManagedBuffer` free-list; returned to the allocator via `bufferSection.free()`.
-- **`descriptorIdxs`** — descriptor heap slots returned to `sharedDescHeapAlloc`.
-- **`instances`** — `Instance*` pointers. On push, the instance is immediately marked `isScheduledForDeletion` and hidden (`setVisible(false)`) so it stops rendering. On `freeAll()`, `instance->reset(true)` fully removes it from the scene and frees its geometry.
+- Mapped resources need no special handling: per the D3D12 spec, `Unmap` never
+  needs to be called — releasing the last reference cleans up the mapping, as
+  long as the mapped pointer is never touched afterwards.
+- Pushed instances are immediately hidden and marked `isScheduledForDeletion`
+  so they stop rendering during the deferred-free window.
 
 ## Usage
 
 `toFreeList` is passed into any system that might need to delete resources during an update (e.g. `Terrain::update`, `scene.update`). Code that destroys a resource should always route through it:
 
 ```cpp
-frameCtx.toFreeList.pushResource(someResource, /*isMapped=*/false);
+frameCtx.toFreeList.pushResource(someResource);
 frameCtx.toFreeList.pushManagedBufferSection(section);
 frameCtx.toFreeList.pushInstance(instance);
 frameCtx.toFreeList.pushDescriptor(descriptorIdx);

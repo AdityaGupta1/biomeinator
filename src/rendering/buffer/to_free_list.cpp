@@ -7,11 +7,10 @@
 #include "rendering/renderer.h"
 #include "scene/scene.h"
 
-ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped)
+ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource)
 {
-    auto& resourceVector = (isMapped ? mappedResources : resources);
-    resourceVector.push_back(resource);
-    return resourceVector.back().Get();
+    resources.push_back(resource);
+    return resources.back().Get();
 }
 
 void ToFreeList::pushManagedBufferSection(const ManagedBufferSection& bufferSection)
@@ -43,13 +42,6 @@ void ToFreeList::freeAll()
         resource.Reset();
     }
     resources.clear();
-
-    for (auto& resource : this->mappedResources)
-    {
-        resource->Unmap(0, nullptr);
-        resource.Reset();
-    }
-    mappedResources.clear();
 
     for (auto& bufferSection : this->managedBufferSections)
     {

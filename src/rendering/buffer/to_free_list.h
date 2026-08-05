@@ -17,7 +17,6 @@ class ToFreeList
 {
 private:
     std::vector<ComPtr<ID3D12Resource>> resources;
-    std::vector<ComPtr<ID3D12Resource>> mappedResources;
 
     std::vector<ManagedBufferSection> managedBufferSections;
 
@@ -27,7 +26,7 @@ private:
 
 public:
     // The caller is responsible for nulling the ComPtr if necessary.
-    ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource, bool isMapped);
+    ID3D12Resource* pushResource(const ComPtr<ID3D12Resource>& resource);
 
     void pushManagedBufferSection(const ManagedBufferSection& bufferSection);
 
