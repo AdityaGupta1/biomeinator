@@ -1,4 +1,4 @@
-_Last edited: 2026-03-31_
+_Last edited: 2026-08-04_
 
 # ManagedBuffer
 
@@ -15,6 +15,10 @@ The allocator tracks free regions using two mirrored maps kept in sync at all ti
 **Deallocation** (`freeSection`, called via `ManagedBufferSection::free()`) — returns the section to the free list and merges it with adjacent free neighbors to prevent fragmentation.
 
 **`ManagedBufferSection`** is a lightweight handle — offset, size, and a raw pointer to the owning `ManagedBuffer`. `getGpuVirtualAddress()` adds the offset to the buffer's base GPU VA. Sections should always be freed via `ToFreeList` rather than directly, to avoid freeing while the GPU is still reading them.
+
+`free()` clears the handle afterwards, so a freed section reads back as invalid. This matters because the free list cannot detect a double free: `freeSection` only merges free blocks that are exactly adjacent, so freeing a range that already sits inside a free block silently inserts an overlapping node. The corruption only surfaces much later, as the `isBufferOccupied` assert in `reset()`.
+
+`ToFreeList::pushManagedBufferSection` takes a copy, so the caller's own handle is *not* invalidated and stays stale until reassigned. Any long-lived handle pushed to a `ToFreeList` must be overwritten or cleared by the caller.
 
 ## Copying Data In
 

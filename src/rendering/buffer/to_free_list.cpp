@@ -51,7 +51,7 @@ void ToFreeList::freeAll()
     }
     mappedResources.clear();
 
-    for (const auto& bufferSection : this->managedBufferSections)
+    for (auto& bufferSection : this->managedBufferSections)
     {
         bufferSection.free();
     }
