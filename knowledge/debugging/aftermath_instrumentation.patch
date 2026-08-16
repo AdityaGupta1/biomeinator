@@ -1,0 +1,985 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 58def0a..d3824eb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -44,6 +44,28 @@ else()
+     message(STATUS "Found dxc: ${DXC_EXECUTABLE}")
+ endif()
+ 
++# The Nsight Aftermath SDK ships inside Nsight Graphics rather than as a standalone
++# download, so it is found on the machine instead of vendored. Without it the crash-dump
++# module compiles out and --aftermath is rejected at startup.
++if(NOT AFTERMATH_SDK_DIR)
++    file(GLOB AFTERMATH_POSSIBLE_PATHS
++        "$ENV{ProgramFiles}/NVIDIA Corporation/Nsight Graphics */SDKs/NsightAftermathSDK/*"
++    )
++
++    if(AFTERMATH_POSSIBLE_PATHS)
++        list(SORT AFTERMATH_POSSIBLE_PATHS ORDER DESCENDING)
++        list(GET AFTERMATH_POSSIBLE_PATHS 0 AFTERMATH_SDK_DIR)
++    endif()
++endif()
++
++if(AFTERMATH_SDK_DIR AND EXISTS "${AFTERMATH_SDK_DIR}/include/GFSDK_Aftermath.h")
++    set(ENABLE_AFTERMATH ON)
++    message(STATUS "Found Nsight Aftermath SDK: ${AFTERMATH_SDK_DIR}")
++else()
++    set(ENABLE_AFTERMATH OFF)
++    message(STATUS "Nsight Aftermath SDK not found, --aftermath will be unavailable")
++endif()
++
+ set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+ set(SHADER_DIR "${SRC_DIR}/shaders")
+ set(COMMON_DIR "${SRC_DIR}/rendering/common")
+@@ -253,6 +275,11 @@ target_link_directories(Biomeinator PRIVATE
+ 
+ target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 NRC_D3D12 glm::glm-header-only FastNoise lz4_static)
+ 
++if(ENABLE_AFTERMATH)
++    target_include_directories(Biomeinator PRIVATE "${AFTERMATH_SDK_DIR}/include")
++    target_link_libraries(Biomeinator PRIVATE "${AFTERMATH_SDK_DIR}/lib/x64/GFSDK_Aftermath_Lib.x64.lib")
++endif()
++
+ set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
+ 
+ set(RUNTIME_DLLS
+@@ -268,6 +295,10 @@ set(RUNTIME_DLLS
+     "${EXT}/NRC/Bin/nvrtc-builtins64_128.dll"
+ )
+ 
++if(ENABLE_AFTERMATH)
++    list(APPEND RUNTIME_DLLS "${AFTERMATH_SDK_DIR}/lib/x64/GFSDK_Aftermath_Lib.x64.dll")
++endif()
++
+ add_custom_command(TARGET Biomeinator POST_BUILD
+     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+     ${RUNTIME_DLLS}
+@@ -317,6 +348,7 @@ target_compile_definitions(Biomeinator PRIVATE
+     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+     TARGET_FILE_DIR="$<TARGET_FILE_DIR:Biomeinator>"
+     ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
++    ENABLE_AFTERMATH=$<BOOL:${ENABLE_AFTERMATH}>
+ )
+ 
+ # ==================================================
+diff --git a/src/rendering/buffer/acs_helper.cpp b/src/rendering/buffer/acs_helper.cpp
+index eb865af..c58cac2 100644
+--- a/src/rendering/buffer/acs_helper.cpp
++++ b/src/rendering/buffer/acs_helper.cpp
+@@ -10,6 +10,7 @@
+ #include "managed_buffer.h"
+ #include "to_free_list.h"
+ #include "rendering/renderer.h"
++#include "rendering/renderer/aftermath.h"
+ #include "util/math.h"
+ #include "util/util.h"
+ 
+diff --git a/src/rendering/buffer/buffer_helper.cpp b/src/rendering/buffer/buffer_helper.cpp
+index c7840a2..6c45bce 100644
+--- a/src/rendering/buffer/buffer_helper.cpp
++++ b/src/rendering/buffer/buffer_helper.cpp
+@@ -5,6 +5,7 @@
+ 
+ #include "rendering/dxr_common.h"
+ #include "rendering/renderer.h"
++#include "rendering/renderer/aftermath.h"
+ 
+ #include "debug.h"
+ 
+@@ -50,6 +51,11 @@ ComPtr<ID3D12Resource> createBasicBuffer(uint64_t width,
+                                                                  initialResourceState,
+                                                                  nullptr,
+                                                                  IID_PPV_ARGS(&dev_buffer)));
++
++    // Named here as a fallback so no buffer is missing from a crash dump's VA table; call
++    // sites that set a debug name overwrite this by tracking again.
++    Aftermath::trackResource(dev_buffer.Get(), L"(unnamed)");
++
+     return dev_buffer;
+ }
+ 
+diff --git a/src/rendering/buffer/managed_buffer.cpp b/src/rendering/buffer/managed_buffer.cpp
+index fb37b18..a90c53b 100644
+--- a/src/rendering/buffer/managed_buffer.cpp
++++ b/src/rendering/buffer/managed_buffer.cpp
+@@ -7,6 +7,7 @@
+ #include "to_free_list.h"
+ #include "rendering/dxr_common.h"
+ #include "rendering/renderer.h"
++#include "rendering/renderer/aftermath.h"
+ 
+ #include "debug.h"
+ 
+@@ -171,6 +172,8 @@ void ManagedBuffer::setBufferName()
+ {
+     const std::wstring nameWithSize = this->name + L" (size = " + std::to_wstring(this->bufferSizeBytes) + L" bytes)";
+     this->dev_buffer->SetName(nameWithSize.c_str());
++
++    Aftermath::trackResource(this->dev_buffer.Get(), nameWithSize.c_str());
+ }
+ 
+ void ManagedBuffer::onReset()
+diff --git a/src/rendering/buffer/mapped_array.h b/src/rendering/buffer/mapped_array.h
+index 3ee5fe8..0bc3f29 100644
+--- a/src/rendering/buffer/mapped_array.h
++++ b/src/rendering/buffer/mapped_array.h
+@@ -7,6 +7,7 @@
+ #include "rendering/renderer.h"
+ #include "rendering/buffer/buffer_helper.h"
+ #include "rendering/buffer/to_free_list.h"
++#include "rendering/renderer/aftermath.h"
+ 
+ #include "debug.h"
+ 
+@@ -126,6 +127,7 @@ private:
+                 this->options.perFrameUpload ? (L" " + std::to_wstring(slotIdx)) : std::wstring();
+             const std::wstring uploadBufferNameWithSize = this->name + L" upload_buffer" + slotStr + sizeStr;
+             this->upload_buffers[slotIdx]->SetName(uploadBufferNameWithSize.c_str());
++            Aftermath::trackResource(this->upload_buffers[slotIdx].Get(), uploadBufferNameWithSize.c_str());
+         }
+ 
+         if (!this->options.uploadOnly)
+@@ -133,6 +135,7 @@ private:
+             this->dev_buffer = BufferHelper::createBasicBuffer(sizeBytes, &DEFAULT_HEAP);
+             const std::wstring devBufferNameWithSize = this->name + L" dev_buffer" + sizeStr;
+             this->dev_buffer->SetName(devBufferNameWithSize.c_str());
++            Aftermath::trackResource(this->dev_buffer.Get(), devBufferNameWithSize.c_str());
+         }
+ 
+         this->setNotDirty();
+diff --git a/src/rendering/buffer/to_free_list.cpp b/src/rendering/buffer/to_free_list.cpp
+index 1a17b77..d48eeb8 100644
+--- a/src/rendering/buffer/to_free_list.cpp
++++ b/src/rendering/buffer/to_free_list.cpp
+@@ -5,10 +5,13 @@
+ 
+ #include "managed_buffer.h"
+ #include "rendering/renderer.h"
++#include "rendering/renderer/aftermath.h"
+ #include "scene/scene.h"
+ 
+ ID3D12Resource* ToFreeList::pushResource(const ComPtr<ID3D12Resource>& resource)
+ {
++    Aftermath::noteResourceFreed(resource.Get());
++
+     resources.push_back(resource);
+     return resources.back().Get();
+ }
+diff --git a/src/rendering/gpu_sort/gpu_radix_sort.cpp b/src/rendering/gpu_sort/gpu_radix_sort.cpp
+index 2ada683..98b5aa7 100644
+--- a/src/rendering/gpu_sort/gpu_radix_sort.cpp
++++ b/src/rendering/gpu_sort/gpu_radix_sort.cpp
+@@ -6,6 +6,7 @@
+ #include "debug.h"
+ #include "rendering/buffer/buffer_helper.h"
+ #include "rendering/buffer/to_free_list.h"
++#include "rendering/renderer/aftermath.h"
+ #include "rendering/renderer/pipeline_builder.h"
+ #include "rendering/renderer/renderer_internal.h"
+ #include "rendering/renderer/shaders.h"
+@@ -49,6 +50,7 @@ void replaceScratchUavBuffer(ToFreeList& toFreeList,
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     buf->SetName(debugName);
++    Aftermath::trackResource(buf.Get(), debugName);
+ }
+ 
+ D3D12_ROOT_PARAMETER1 makeRootUav(uint32_t reg)
+@@ -159,6 +161,7 @@ void GpuRadixSort::init()
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_globalHist->SetName(L"gpuRadixSort_globalHist");
++    Aftermath::trackResource(this->dev_globalHist.Get(), L"gpuRadixSort_globalHist");
+ }
+ 
+ void GpuRadixSort::destroy()
+@@ -237,6 +240,7 @@ void GpuRadixSort::dispatch(ID3D12GraphicsCommandList* cmdList,
+     // -------------------------------------------------
+     // 1. Init: zero the global histogram once
+     // -------------------------------------------------
++    Aftermath::setMarker("sort_init");
+     cmdList->SetPipelineState(this->initPso.Get());
+     cmdList->SetComputeRootSignature(this->initRootSig.Get());
+     cmdList->SetComputeRootUnorderedAccessView(0, globalGva);
+@@ -259,6 +263,7 @@ void GpuRadixSort::dispatch(ID3D12GraphicsCommandList* cmdList,
+         const uint32_t cb[4] = { numKeys, radixShift, threadBlocks, /*isPartial=*/0 };
+ 
+         // --- Upsweep ---
++        Aftermath::setMarker("sort_upsweep");
+         cmdList->SetPipelineState(this->upsweepPso.Get());
+         cmdList->SetComputeRootSignature(this->upsweepRootSig.Get());
+         cmdList->SetComputeRoot32BitConstants(0, 4, cb, 0);
+@@ -270,6 +275,7 @@ void GpuRadixSort::dispatch(ID3D12GraphicsCommandList* cmdList,
+         BufferHelper::uavBarrier(cmdList, this->dev_globalHist.Get());
+ 
+         // --- Scan ---
++        Aftermath::setMarker("sort_scan");
+         cmdList->SetPipelineState(this->scanPso.Get());
+         cmdList->SetComputeRootSignature(this->scanRootSig.Get());
+         cmdList->SetComputeRoot32BitConstants(0, 4, cb, 0);
+@@ -278,6 +284,7 @@ void GpuRadixSort::dispatch(ID3D12GraphicsCommandList* cmdList,
+         BufferHelper::uavBarrier(cmdList, this->dev_passHist.Get());
+ 
+         // --- Downsweep ---
++        Aftermath::setMarker("sort_downsweep");
+         cmdList->SetPipelineState(this->downsweepPso.Get());
+         cmdList->SetComputeRootSignature(this->downsweepRootSig.Get());
+         cmdList->SetComputeRoot32BitConstants(0, 4, cb, 0);
+diff --git a/src/rendering/light_tree_manager.cpp b/src/rendering/light_tree_manager.cpp
+index 7ecd37c..64ca32d 100644
+--- a/src/rendering/light_tree_manager.cpp
++++ b/src/rendering/light_tree_manager.cpp
+@@ -9,6 +9,7 @@
+ #include "common/common_settings.h"
+ #include "common/common_structs.h"
+ #include "gpu_sort/gpu_radix_sort.h"
++#include "renderer/aftermath.h"
+ #include "renderer/pipeline_builder.h"
+ #include "renderer/renderer_internal.h"
+ #include "renderer/shaders.h"
+@@ -282,12 +283,14 @@ void LightTreeManager::init()
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_sceneBbox->SetName(L"dev_sceneBbox");
++    Aftermath::trackResource(this->dev_sceneBbox.Get(), L"dev_sceneBbox");
+ 
+     // SRV-bind placeholder for raygen — used when the real light tree / light-to-leaf
+     // buffers don't exist yet (empty scene). Path tracer's rtslParams.treeLeafCount
+     // gates any actual reads, so the contents are never sampled.
+     this->dev_srvPlaceholder = BufferHelper::createBasicBuffer(32ull, &DEFAULT_HEAP);
+     this->dev_srvPlaceholder->SetName(L"dev_lightTreeSrvPlaceholder");
++    Aftermath::trackResource(this->dev_srvPlaceholder.Get(), L"dev_lightTreeSrvPlaceholder");
+ }
+ 
+ void LightTreeManager::destroy()
+@@ -342,12 +345,14 @@ void LightTreeManager::ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCou
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_lightAux->SetName(L"dev_lightAux");
++    Aftermath::trackResource(this->dev_lightAux.Get(), L"dev_lightAux");
+ 
+     this->dev_lightToLeaf = BufferHelper::createBasicBuffer(
+         static_cast<uint64_t>(newCapacity) * sizeof(uint32_t),
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_lightToLeaf->SetName(L"dev_lightToLeaf");
++    Aftermath::trackResource(this->dev_lightToLeaf.Get(), L"dev_lightToLeaf");
+ 
+     this->capacity = newCapacity;
+ }
+@@ -383,18 +388,21 @@ void LightTreeManager::ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_lightTree->SetName(L"dev_lightTree");
++    Aftermath::trackResource(this->dev_lightTree.Get(), L"dev_lightTree");
+ 
+     this->dev_mortonKeys = BufferHelper::createBasicBuffer(
+         static_cast<uint64_t>(newM) * sizeof(uint32_t),
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_mortonKeys->SetName(L"dev_mortonKeys");
++    Aftermath::trackResource(this->dev_mortonKeys.Get(), L"dev_mortonKeys");
+ 
+     this->dev_mortonValues = BufferHelper::createBasicBuffer(
+         static_cast<uint64_t>(newM) * sizeof(uint32_t),
+         &DEFAULT_HEAP,
+         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     this->dev_mortonValues->SetName(L"dev_mortonValues");
++    Aftermath::trackResource(this->dev_mortonValues.Get(), L"dev_mortonValues");
+ 
+     this->mortonCapacity = newM;
+ }
+@@ -425,6 +433,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 1 — Pass A: clear the full capacity to sentinel/zero
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_clear");
+         cmdList->SetPipelineState(this->bufferClearPso.Get());
+         cmdList->SetComputeRootSignature(this->bufferClearRootSig.Get());
+ 
+@@ -445,6 +454,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 1 — Pass B: fill live sparse slots from the scene
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_collect");
+         cmdList->SetPipelineState(this->emitterCollectPso.Get());
+         cmdList->SetComputeRootSignature(this->emitterCollectRootSig.Get());
+ 
+@@ -491,6 +501,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 2 — Pass 0: reset dev_sceneBbox to ±inf sentinels
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_bboxReset");
+         cmdList->SetPipelineState(this->sceneBboxResetPso.Get());
+         cmdList->SetComputeRootSignature(this->sceneBboxResetRootSig.Get());
+ 
+@@ -505,6 +516,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 2 — Pass 1: bbox reduce over dev_lightAux into dev_sceneBbox
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_bboxReduce");
+         cmdList->SetPipelineState(this->bboxReducePso.Get());
+         cmdList->SetComputeRootSignature(this->bboxReduceRootSig.Get());
+ 
+@@ -525,6 +537,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 2 — Pass 2: morton emit
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_mortonEmit");
+         cmdList->SetPipelineState(this->mortonEmitPso.Get());
+         cmdList->SetComputeRootSignature(this->mortonEmitRootSig.Get());
+ 
+@@ -563,6 +576,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // Stage 2 — Pass 4: leaf populate + reverse scatter (fused)
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_leafPopulate");
+         cmdList->SetPipelineState(this->leafPopulatePso.Get());
+         cmdList->SetComputeRootSignature(this->leafPopulateRootSig.Get());
+ 
+@@ -590,6 +604,7 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
+     // last may be depth=1 when log2(M) is odd)
+     // -------------------------------------------------
+     {
++        Aftermath::setMarker("lt_internalLevels");
+         cmdList->SetPipelineState(this->internalLevelsPso.Get());
+         cmdList->SetComputeRootSignature(this->internalLevelsRootSig.Get());
+         cmdList->SetComputeRootUnorderedAccessView(INTERNAL_LEVELS_PARAM_IDX(LIGHT_TREE_OUT),
+diff --git a/src/rendering/renderer/aftermath.cpp b/src/rendering/renderer/aftermath.cpp
+new file mode 100644
+index 0000000..cfbea42
+--- /dev/null
++++ b/src/rendering/renderer/aftermath.cpp
+@@ -0,0 +1,434 @@
++// SPDX-License-Identifier: MIT
++// Copyright (c) 2025-2026 Aditya Gupta
++
++#include "aftermath.h"
++
++#include "logger.h"
++#include "settings_manager.h"
++
++#if ENABLE_AFTERMATH
++
++#include "util/file_util.h"
++
++#include <GFSDK_Aftermath.h>
++#include <GFSDK_Aftermath_GpuCrashDump.h>
++#include <GFSDK_Aftermath_GpuCrashDumpDecoding.h>
++
++#include <algorithm>
++#include <cstring>
++#include <filesystem>
++#include <fstream>
++#include <mutex>
++#include <string>
++#include <vector>
++
++namespace Aftermath
++{
++
++namespace
++{
++
++bool enabled = false;
++GFSDK_Aftermath_ContextHandle contextHandle = nullptr;
++
++// The crash dump and shader debug info callbacks are invoked from driver threads.
++std::mutex dumpMutex;
++std::filesystem::path dumpDir;
++std::string dumpNamePrefix;
++uint32_t numDumpsWritten = 0;
++
++// A resource's VA range and name are captured up front and outlive the resource itself,
++// because the interesting case is a fault against memory that has already been released.
++// The raw pointer is a lookup key only and is never dereferenced.
++struct TrackedResource
++{
++    const ID3D12Resource* key;
++    D3D12_GPU_VIRTUAL_ADDRESS gpuVaStart;
++    uint64_t sizeBytes;
++    std::wstring name;
++    uint32_t createOrdinal;
++    uint32_t freeOrdinal; // freeOrdinalAlive while the resource has not been scheduled for deletion
++};
++
++constexpr uint32_t freeOrdinalAlive = UINT32_MAX;
++
++// Well above the few hundred buffers a session creates; only here so a runaway allocation
++// loop cannot turn the tracker itself into the failure.
++constexpr size_t maxTrackedResources = 65536;
++
++std::mutex trackerMutex;
++std::vector<TrackedResource> trackedResources;
++uint32_t nextOrdinal = 0;
++
++void writeBlob(const std::filesystem::path& path, const void* data, uint32_t sizeBytes)
++{
++    std::ofstream file(path, std::ios::out | std::ios::binary);
++    if (!file)
++    {
++        Logger::logError("Failed to open %s for writing", path.string().c_str());
++        return;
++    }
++
++    file.write(static_cast<const char*>(data), sizeBytes);
++}
++
++// Aftermath's own page-fault report only names a resource it still has tracking data for,
++// and comes back empty for the wild-pointer case. This table covers both, and survives the
++// resource's destruction.
++void writeResourceTable(const std::filesystem::path& path)
++{
++    std::vector<TrackedResource> snapshot;
++    {
++        const std::lock_guard<std::mutex> lock(trackerMutex);
++        snapshot = trackedResources;
++    }
++
++    std::sort(snapshot.begin(), snapshot.end(), [](const TrackedResource& a, const TrackedResource& b) {
++        return a.gpuVaStart < b.gpuVaStart;
++    });
++
++    std::wofstream file(path);
++    if (!file)
++    {
++        Logger::logError("Failed to open %s for writing", path.string().c_str());
++        return;
++    }
++
++    file << L"status  gpuVaStart         gpuVaEnd           sizeBytes   created  freed  name\n";
++    for (const TrackedResource& tracked : snapshot)
++    {
++        const bool isAlive = (tracked.freeOrdinal == freeOrdinalAlive);
++
++        file << (isAlive ? L"live    " : L"FREED   ") << std::hex << L"0x" << tracked.gpuVaStart << L" 0x"
++             << (tracked.gpuVaStart + tracked.sizeBytes) << std::dec << L" " << tracked.sizeBytes << L" "
++             << tracked.createOrdinal << L" ";
++
++        if (isAlive)
++        {
++            file << L"-";
++        }
++        else
++        {
++            file << tracked.freeOrdinal;
++        }
++
++        file << L" " << tracked.name << L"\n";
++    }
++}
++
++void GFSDK_AFTERMATH_CALL onCrashDump(const void* dump, const uint32_t sizeBytes, void* /*userData*/)
++{
++    const std::lock_guard<std::mutex> lock(dumpMutex);
++
++    const std::string baseName = dumpNamePrefix + "-" + std::to_string(numDumpsWritten++);
++
++    const std::filesystem::path path = dumpDir / (baseName + ".nv-gpudmp");
++    writeBlob(path, dump, sizeBytes);
++
++    writeResourceTable(dumpDir / (baseName + ".buffers.txt"));
++
++    Logger::logError("Wrote GPU crash dump: %s", path.string().c_str());
++}
++
++void GFSDK_AFTERMATH_CALL onShaderDebugInfo(const void* debugInfo, const uint32_t sizeBytes, void* /*userData*/)
++{
++    // The identifier is how the Nsight UI matches this blob back to a shader in the dump,
++    // so it has to be the file name.
++    GFSDK_Aftermath_ShaderDebugInfoIdentifier identifier{};
++    const GFSDK_Aftermath_Result result =
++        GFSDK_Aftermath_GetShaderDebugInfoIdentifier(GFSDK_Aftermath_Version_API, debugInfo, sizeBytes, &identifier);
++    if (!GFSDK_Aftermath_SUCCEED(result))
++    {
++        Logger::logError("GFSDK_Aftermath_GetShaderDebugInfoIdentifier failed (0x%08X)",
++                         static_cast<uint32_t>(result));
++        return;
++    }
++
++    char fileName[64];
++    sprintf_s(fileName, "shader-%016llX%016llX.nvdbg", identifier.id[0], identifier.id[1]);
++
++    const std::lock_guard<std::mutex> lock(dumpMutex);
++    writeBlob(dumpDir / fileName, debugInfo, sizeBytes);
++}
++
++void GFSDK_AFTERMATH_CALL onDescription(PFN_GFSDK_Aftermath_AddGpuCrashDumpDescription addValue, void* /*userData*/)
++{
++    // The command line identifies which golden test was running when a stress loop hangs.
++    static const std::string cmdLine =
++        std::string(GetCommandLineA()).substr(0, GFSDK_Aftermath_MAX_STRING_LENGTH);
++
++    addValue(GFSDK_Aftermath_GpuCrashDumpDescriptionKey_ApplicationName, "Biomeinator");
++    addValue(GFSDK_Aftermath_GpuCrashDumpDescriptionKey_UserDefined, cmdLine.c_str());
++}
++
++} // namespace
++
++void enableCrashDumps()
++{
++    if (!SettingsManager::getAsBool("aftermath"))
++    {
++        return;
++    }
++
++    if (SettingsManager::getAsBool("gpuValidation"))
++    {
++        Logger::logError("--aftermath cannot be combined with --gpuValidation: Aftermath refuses to initialize "
++                         "alongside the D3D12 debug layer");
++        exit(1);
++    }
++
++    dumpDir = FileUtil::getDocumentsDir("gpu_crash_dumps");
++    dumpNamePrefix = FileUtil::getTimestampString() + "-" + std::to_string(GetCurrentProcessId());
++
++    const GFSDK_Aftermath_Result result = GFSDK_Aftermath_EnableGpuCrashDumps(
++        GFSDK_Aftermath_Version_API,
++        GFSDK_Aftermath_GpuCrashDumpWatchedApiFlags_DX,
++        // Deferring the shader debug info callbacks means a run that never crashes writes
++        // no files at all, which matters when stress-looping the golden suite.
++        GFSDK_Aftermath_GpuCrashDumpFeatureFlags_DeferDebugInfoCallbacks,
++        onCrashDump,
++        onShaderDebugInfo,
++        onDescription,
++        nullptr /*resolveMarkerCb*/,
++        nullptr /*userData*/);
++
++    if (!GFSDK_Aftermath_SUCCEED(result))
++    {
++        Logger::logError("GFSDK_Aftermath_EnableGpuCrashDumps failed (0x%08X), crash dumps disabled",
++                         static_cast<uint32_t>(result));
++        return;
++    }
++
++    enabled = true;
++}
++
++void initDevice(ID3D12Device* device)
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    // CallStackCapturing gives each marker a CPU callstack, which is what turns a hung
++    // dispatch into a source location without hand-placing a marker on every pass.
++    const uint32_t featureFlags = GFSDK_Aftermath_FeatureFlags_EnableMarkers |
++                                  GFSDK_Aftermath_FeatureFlags_EnableResourceTracking |
++                                  GFSDK_Aftermath_FeatureFlags_CallStackCapturing |
++                                  GFSDK_Aftermath_FeatureFlags_GenerateShaderDebugInfo |
++                                  GFSDK_Aftermath_FeatureFlags_EnableShaderErrorReporting;
++
++    const GFSDK_Aftermath_Result result =
++        GFSDK_Aftermath_DX12_Initialize(GFSDK_Aftermath_Version_API, featureFlags, device);
++    if (!GFSDK_Aftermath_SUCCEED(result))
++    {
++        Logger::logError("GFSDK_Aftermath_DX12_Initialize failed (0x%08X), crash dumps disabled",
++                         static_cast<uint32_t>(result));
++        enabled = false;
++        return;
++    }
++
++    Logger::log("Aftermath crash dumps enabled, output dir: %s", dumpDir.string().c_str());
++}
++
++void initCmdList(ID3D12GraphicsCommandList4* cmdList)
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    const GFSDK_Aftermath_Result result = GFSDK_Aftermath_DX12_CreateContextHandle(cmdList, &contextHandle);
++    if (!GFSDK_Aftermath_SUCCEED(result))
++    {
++        Logger::logError("GFSDK_Aftermath_DX12_CreateContextHandle failed (0x%08X), markers disabled",
++                         static_cast<uint32_t>(result));
++        contextHandle = nullptr;
++    }
++}
++
++void setMarker(const char* name)
++{
++    if (contextHandle == nullptr)
++    {
++        return;
++    }
++
++    GFSDK_Aftermath_SetEventMarker(contextHandle, name, static_cast<uint32_t>(strlen(name) + 1));
++}
++
++void trackResource(ID3D12Resource* resource, const wchar_t* name)
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    {
++        const std::lock_guard<std::mutex> lock(trackerMutex);
++
++        // Buffer creation is tracked centrally, before the caller has had a chance to name
++        // the resource; a later call for the same resource is that name arriving.
++        const auto existing = std::find_if(trackedResources.rbegin(), trackedResources.rend(),
++                                           [resource](const TrackedResource& candidate) {
++                                               return candidate.key == resource &&
++                                                      candidate.freeOrdinal == freeOrdinalAlive;
++                                           });
++        if (existing != trackedResources.rend())
++        {
++            existing->name = name;
++            return;
++        }
++
++        if (trackedResources.size() >= maxTrackedResources)
++        {
++            return;
++        }
++
++        trackedResources.push_back({
++            .key = resource,
++            .gpuVaStart = resource->GetGPUVirtualAddress(),
++            .sizeBytes = resource->GetDesc().Width,
++            .name = name,
++            .createOrdinal = nextOrdinal++,
++            .freeOrdinal = freeOrdinalAlive,
++        });
++    }
++
++    GFSDK_Aftermath_ResourceHandle handle{};
++    const GFSDK_Aftermath_Result result = GFSDK_Aftermath_DX12_RegisterResource(resource, &handle);
++    if (!GFSDK_Aftermath_SUCCEED(result))
++    {
++        static bool didLogFailure = false;
++        if (!didLogFailure)
++        {
++            Logger::logError("GFSDK_Aftermath_DX12_RegisterResource failed (0x%08X), page faults will not name "
++                             "the offending resource",
++                             static_cast<uint32_t>(result));
++            didLogFailure = true;
++        }
++    }
++}
++
++void noteResourceFreed(ID3D12Resource* resource)
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    const std::lock_guard<std::mutex> lock(trackerMutex);
++
++    // Search backwards: a buffer that grows repeatedly reuses the same pointer value, and
++    // the most recent record is the one being retired.
++    const auto tracked = std::find_if(trackedResources.rbegin(), trackedResources.rend(),
++                                      [resource](const TrackedResource& candidate) {
++                                          return candidate.key == resource &&
++                                                 candidate.freeOrdinal == freeOrdinalAlive;
++                                      });
++    if (tracked != trackedResources.rend())
++    {
++        tracked->freeOrdinal = nextOrdinal++;
++    }
++}
++
++void waitForCrashDump()
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    // The fence timeout is shorter than the TDR delay, so on entry the driver has usually
++    // not even noticed the hang yet — poll well past both before giving up.
++    constexpr uint32_t pollIntervalMs = 50;
++    constexpr uint32_t timeoutMs = 5000;
++
++    GFSDK_Aftermath_CrashDump_Status status = GFSDK_Aftermath_CrashDump_Status_Unknown;
++    for (uint32_t elapsedMs = 0; elapsedMs < timeoutMs; elapsedMs += pollIntervalMs)
++    {
++        const GFSDK_Aftermath_Result result = GFSDK_Aftermath_GetCrashDumpStatus(&status);
++        if (!GFSDK_Aftermath_SUCCEED(result))
++        {
++            Logger::logError("GFSDK_Aftermath_GetCrashDumpStatus failed (0x%08X)", static_cast<uint32_t>(result));
++            return;
++        }
++
++        if (status == GFSDK_Aftermath_CrashDump_Status_Finished ||
++            status == GFSDK_Aftermath_CrashDump_Status_CollectingDataFailed)
++        {
++            break;
++        }
++
++        Sleep(pollIntervalMs);
++    }
++
++    if (status != GFSDK_Aftermath_CrashDump_Status_Finished)
++    {
++        Logger::logError("Aftermath produced no crash dump (status: %u)", static_cast<uint32_t>(status));
++    }
++}
++
++void destroy()
++{
++    if (!enabled)
++    {
++        return;
++    }
++
++    if (contextHandle != nullptr)
++    {
++        GFSDK_Aftermath_ReleaseContextHandle(contextHandle);
++        contextHandle = nullptr;
++    }
++
++    GFSDK_Aftermath_DisableGpuCrashDumps();
++    enabled = false;
++}
++
++} // namespace Aftermath
++
++#else
++
++namespace Aftermath
++{
++
++void enableCrashDumps()
++{
++    if (SettingsManager::getAsBool("aftermath"))
++    {
++        Logger::logError("--aftermath requires the Nsight Aftermath SDK, which was not found at configure time");
++        exit(1);
++    }
++}
++
++void initDevice(ID3D12Device* /*device*/)
++{
++}
++
++void initCmdList(ID3D12GraphicsCommandList4* /*cmdList*/)
++{
++}
++
++void setMarker(const char* /*name*/)
++{
++}
++
++void trackResource(ID3D12Resource* /*resource*/, const wchar_t* /*name*/)
++{
++}
++
++void noteResourceFreed(ID3D12Resource* /*resource*/)
++{
++}
++
++void waitForCrashDump()
++{
++}
++
++void destroy()
++{
++}
++
++} // namespace Aftermath
++
++#endif
+diff --git a/src/rendering/renderer/aftermath.h b/src/rendering/renderer/aftermath.h
+new file mode 100644
+index 0000000..fec45c6
+--- /dev/null
++++ b/src/rendering/renderer/aftermath.h
+@@ -0,0 +1,41 @@
++// SPDX-License-Identifier: MIT
++// Copyright (c) 2025-2026 Aditya Gupta
++
++#pragma once
++
++#include "rendering/dxr_includes.h"
++
++// GPU crash dump collection via Nsight Aftermath, for diagnosing GPU hangs that DRED
++// breadcrumbs can only localize to a command-list position. Every entry point is a no-op
++// unless --aftermath is set, and the whole module compiles out when CMake could not find
++// the Aftermath SDK.
++namespace Aftermath
++{
++
++// Must run before device creation.
++void enableCrashDumps();
++
++void initDevice(ID3D12Device* device);
++void initCmdList(ID3D12GraphicsCommandList4* cmdList);
++
++// Names the enclosing pass in the crash dump. Not for high-frequency call sites — each
++// marker is a driver call plus a payload copy.
++void setMarker(const char* name);
++
++// Records a buffer's GPU VA range under `name` and registers it with Aftermath, so a page
++// fault can be attributed to it. Call after ID3D12Object::SetName — that ordering is what
++// lets Aftermath pick up the debug name. Records are deliberately never dropped: the whole
++// point is to still recognize a resource that has since been destroyed.
++void trackResource(ID3D12Resource* resource, const wchar_t* name);
++
++// Marks a tracked buffer as scheduled for destruction, so the dumped table can distinguish
++// a fault in live memory from a use-after-free.
++void noteResourceFreed(ID3D12Resource* resource);
++
++// Blocks until the driver finishes generating a crash dump, or times out. Call from the
++// hang-detection path before tearing anything down.
++void waitForCrashDump();
++
++void destroy();
++
++} // namespace Aftermath
+diff --git a/src/rendering/renderer/fence.cpp b/src/rendering/renderer/fence.cpp
+index 557b90b..a4f13d5 100644
+--- a/src/rendering/renderer/fence.cpp
++++ b/src/rendering/renderer/fence.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "fence.h"
+ 
++#include "aftermath.h"
+ #include "rendering/dxr_common.h"
+ #include "rendering/renderer.h"
+ #include "logger.h"
+@@ -29,6 +30,7 @@ void Fence::waitFor(uint64_t waitFenceValue)
+         if (waitResult == WAIT_TIMEOUT)
+         {
+             Logger::logError("GPU fence wait timed out (possible GPU hang), fence value: %llu", waitFenceValue);
++            Aftermath::waitForCrashDump();
+             __debugbreak();
+         }
+         else if (waitResult == WAIT_FAILED)
+diff --git a/src/rendering/renderer/renderer.cpp b/src/rendering/renderer/renderer.cpp
+index cd0ddec..f98e841 100644
+--- a/src/rendering/renderer/renderer.cpp
++++ b/src/rendering/renderer/renderer.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "renderer_internal.h"
+ 
++#include "aftermath.h"
+ #include "rendering/camera.h"
+ #include "rendering/window_manager.h"
+ #include "rendering/buffer/acs_helper.h"
+@@ -217,6 +218,7 @@ void resize()
+                                                               &DEFAULT_HEAP,
+                                                               { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     renderState.dev_gbuffer->SetName(L"dev_gbuffer");
++    Aftermath::trackResource(renderState.dev_gbuffer.Get(), L"dev_gbuffer");
+ 
+     renderState.dev_pathTracingRawBuffer.Reset();
+     const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
+@@ -225,11 +227,13 @@ void resize()
+     renderState.dev_pathTracingRawBuffer = BufferHelper::createBasicBuffer(
+         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     renderState.dev_pathTracingRawBuffer->SetName(L"dev_pathTracingRawBuffer");
++    Aftermath::trackResource(renderState.dev_pathTracingRawBuffer.Get(), L"dev_pathTracingRawBuffer");
+ 
+     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
+     renderState.dev_ptDiffuseAlbedoRawBuffer = BufferHelper::createBasicBuffer(
+         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+     renderState.dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
++    Aftermath::trackResource(renderState.dev_ptDiffuseAlbedoRawBuffer.Get(), L"dev_ptDiffuseAlbedoRawBuffer");
+ 
+     const uint32_t rtvIncrementSize = renderState.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+ 
+@@ -388,6 +392,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
+     // ===================================
+ 
+     const bool useNrcQuery = (renderState.nrcContext != nullptr);
++    Aftermath::setMarker(useNrcQuery ? "nrc query" : "path tracing");
+     renderState.cmdList->SetPipelineState1(useNrcQuery ? renderState.nrcQueryPso.Get() : renderState.ptPso.Get());
+     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
+ 
+@@ -579,10 +584,12 @@ void render()
+ 
+     if (renderState.voxelMode)
+     {
++        Aftermath::setMarker("terrain");
+         Terrain::update(frameCtx.toFreeList);
+         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
+     }
+ 
++    Aftermath::setMarker("scene update");
+     const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
+ 
+     const bool didCameraChange = renderState.camera.update();
+@@ -818,6 +825,7 @@ void render()
+             batch.submit(renderState.cmdList.Get());
+         }
+ 
++        Aftermath::setMarker("gbuffer");
+         renderState.cmdList->SetPipelineState1(renderState.gbufferPso.Get());
+         renderState.cmdList->SetComputeRootSignature(renderState.gbufferRootSig.Get());
+ 
+@@ -1056,6 +1064,8 @@ void destroy()
+ 
+     flush();
+ 
++    Aftermath::destroy();
++
+     CHECK_SL_RESULT(slShutdown());
+ 
+     ImGui_ImplDX12_Shutdown();
+diff --git a/src/rendering/renderer/renderer_init.cpp b/src/rendering/renderer/renderer_init.cpp
+index ac60fe3..e32ae49 100644
+--- a/src/rendering/renderer/renderer_init.cpp
++++ b/src/rendering/renderer/renderer_init.cpp
+@@ -12,6 +12,7 @@
+ #undef min
+ #undef max
+ 
++#include "aftermath.h"
+ #include "rendering/window_manager.h"
+ #include "rendering/buffer/buffer_helper.h"
+ #include "settings_manager.h"
+@@ -60,6 +61,8 @@ void initStreamline()
+ 
+ void initDevice()
+ {
++    Aftermath::enableCrashDumps();
++
+     const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
+     const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
+ 
+@@ -136,6 +139,8 @@ void initDevice()
+         adapter.Reset();
+     }
+ 
++    Aftermath::initDevice(renderState.device.Get());
++
+     D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
+         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
+     };
+@@ -266,6 +271,8 @@ void initCommand()
+     CHECK_HRESULT(renderState.device->CreateCommandList1(
+         0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&renderState.cmdList)));
+     renderState.cmdList->SetName(L"main cmdList");
++
++    Aftermath::initCmdList(renderState.cmdList.Get());
+ }
+ 
+ void initConstantParams()
+diff --git a/src/settings_manager.cpp b/src/settings_manager.cpp
+index 1b5551b..4d51949 100644
+--- a/src/settings_manager.cpp
++++ b/src/settings_manager.cpp
+@@ -82,6 +82,7 @@ void parseArgs(const int argc, const char* const* argv)
+     ADD_OPTION("debugFloat2", "Debug float 2", float, "0.f");
+     ADD_OPTION("debugFloat3", "Debug float 3", float, "0.f");
+     ADD_OPTION("gpuValidation", "Enable GPU validation (debug mode only)", bool, "false");
++    ADD_OPTION("aftermath", "Write an Nsight Aftermath GPU crash dump on hang", bool, "false");
+     ADD_OPTION("verboseLogging", "Enable SL verbose logging (debug mode only)", bool, "false");
+ 
+ #undef ADD_OPTION
+@@ -159,6 +160,7 @@ void parseArgs(const int argc, const char* const* argv)
+     COPY_SETTING("debugFloat2", float);
+     COPY_SETTING("debugFloat3", float);
+     COPY_SETTING("gpuValidation", bool);
++    COPY_SETTING("aftermath", bool);
+     COPY_SETTING("verboseLogging", bool);
+ 
+ #undef COPY_SETTING

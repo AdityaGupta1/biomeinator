@@ -1017,6 +1017,12 @@ static void beginFrame()
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
+
+    // Every root signature declares CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, which requires the
+    // heap to be bound before any SetComputeRootSignature; bind it once up front so early
+    // compute passes (water displacement, light tree, biome map) are covered.
+    ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
+    renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 }
 
 static void submitCmd()
