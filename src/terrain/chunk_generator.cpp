@@ -1060,6 +1060,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             if (topBlockY != 0)
             {
+                const bool topBlockUnderwater =
+                    Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
                 for (uint y = topBlockY; y > topBlockY - 5; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -1069,7 +1071,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         break;
                     }
 
-                    const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    if (topBlockUnderwater && newBlock == Block::GRASS_BLOCK)
+                    {
+                        newBlock = Block::DIRT;
+                    }
                     block = newBlock;
                 }
             }

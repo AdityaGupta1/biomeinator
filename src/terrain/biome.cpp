@@ -222,7 +222,7 @@ void init()
     {
         BiomeData& data = BIOME_DATA_BY_NAME(SWAMP);
         data.name = "swamp";
-        data.grassTint = glmUtil::colorFromHex("#67703a");
+        data.grassTint = glmUtil::colorFromHex("#78853a");
         data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
