@@ -4,6 +4,7 @@
 #include "chunk_generator.h"
 
 #include "biome.h"
+#include "biome_noise.h"
 #include "cave_biome.h"
 #include "chunk.h"
 #include "rendering/common/common_settings.h"
@@ -20,16 +21,8 @@
 using namespace glm;
 namespace FN = FastNoise;
 
-static Biome biomeFromNoise(const BiomeNoise& biomeNoise);
-
 namespace ChunkGenerator
 {
-
-static FN::SmartNode<FN::Generator> fnTemperature;
-static FN::SmartNode<FN::Generator> fnHumidity;
-static FN::SmartNode<FN::Generator> fnPeak;
-static FN::SmartNode<FN::Generator> fnInland;
-inline constexpr float biomeNoiseScale = 1000.f;
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 
@@ -61,75 +54,8 @@ static ivec2 noiseOffsetXZ;
 void init()
 {
     worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
-    noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(5689481209);
-        fnSimplex->SetScale(2.5f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(-0.7f);
-        fnSimplex->SetOutputMax(0.7f);
-        auto fnWarp = FN::New<FN::DomainWarpGradient>();
-        fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.06f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(3);
-
-        fnTemperature = fnFractal;
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(680199230);
-        fnSimplex->SetScale(1.5f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(-0.7f);
-        fnSimplex->SetOutputMax(0.7f);
-        auto fnWarp = FN::New<FN::DomainWarpGradient>();
-        fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.04f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(3);
-
-        fnHumidity = fnFractal;
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(901992021);
-        fnSimplex->SetScale(2.5f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(0.0f);
-        fnSimplex->SetOutputMax(1.0f);
-        auto fnFractalRidged = FN::New<FN::FractalRidged>();
-        fnFractalRidged->SetSource(fnSimplex);
-        fnFractalRidged->SetOctaveCount(5);
-        auto fnMultiply = FN::New<FN::Multiply>();
-        fnMultiply->SetLHS(fnFractalRidged);
-        fnMultiply->SetRHS(0.7f);
-
-        fnPeak = fnMultiply;
-    }
-
-    {
-        auto fnSimplex = FN::New<FN::Simplex>();
-        fnSimplex->SetSeedOffset(76123912);
-        fnSimplex->SetScale(5.f * biomeNoiseScale);
-        fnSimplex->SetOutputMin(-1.0f);
-        fnSimplex->SetOutputMax(1.0f);
-        auto fnWarp = FN::New<FN::DomainWarpGradient>();
-        fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.04f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
-        auto fnFractal = FN::New<FN::FractalFBm>();
-        fnFractal->SetSource(fnWarp);
-        fnFractal->SetOctaveCount(5);
-
-        fnInland = fnFractal;
-    }
+    BiomeNoiseField::init(worldSeed);
+    noiseOffsetXZ = BiomeNoiseField::getNoiseOffsetXZ();
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
@@ -220,69 +146,6 @@ void init()
         fnSimplex->SetOutputMax(1.0f);
 
         fnCaveHumidity = fnSimplex;
-    }
-}
-
-struct BiomeNoiseGrids
-{
-    float* temperature;
-    float* humidity;
-    float* peak;
-    float* inland;
-};
-
-// Batch-evaluates the four surface biome noise fields on a uniform XZ grid, x-innermost.
-// startXZ already includes any sample offset (texel centers for the biome map, block corners
-// for chunk generation).
-static void fillBiomeNoiseGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples, float stepBlocks)
-{
-    const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
-    {
-        fn->GenUniformGrid2D(data,
-                             startXZ.x + noiseOffsetXZ.x,
-                             startXZ.y + noiseOffsetXZ.y /*z*/,
-                             numSamples.x,
-                             numSamples.y,
-                             stepBlocks,
-                             stepBlocks,
-                             worldSeed ^ hash(719023919));
-    };
-    fill(grids.temperature, fnTemperature);
-    fill(grids.humidity, fnHumidity);
-    fill(grids.peak, fnPeak);
-    fill(grids.inland, fnInland);
-}
-
-static BiomeNoise biomeNoiseAt(const BiomeNoiseGrids& grids, uint idx)
-{
-    return {
-        .temperature = grids.temperature[idx],
-        .humidity = grids.humidity[idx],
-        .peak = grids.peak[idx],
-        .inland = grids.inland[idx],
-    };
-}
-
-void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
-{
-    const uint numSamples = numTexels.x * numTexels.y;
-    std::vector<float> temperatureNoise(numSamples);
-    std::vector<float> humidityNoise(numSamples);
-    std::vector<float> peakNoise(numSamples);
-    std::vector<float> inlandNoise(numSamples);
-    const BiomeNoiseGrids grids = {
-        .temperature = temperatureNoise.data(),
-        .humidity = humidityNoise.data(),
-        .peak = peakNoise.data(),
-        .inland = inlandNoise.data(),
-    };
-
-    const vec2 texelCentersStartXZ = vec2(originBlocksXZ_WS) + texelSizeBlocks * 0.5f;
-    fillBiomeNoiseGrids(grids, texelCentersStartXZ, numTexels, static_cast<float>(texelSizeBlocks));
-
-    for (uint idx = 0; idx < numSamples; ++idx)
-    {
-        outBiomes[idx] = biomeFromNoise(biomeNoiseAt(grids, idx));
     }
 }
 
@@ -417,40 +280,6 @@ struct SwampCellInfo
     int pondLevel;
 };
 
-// Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
-// give balanced water/land (swamp); values toward 1 give mostly-water terrain (future igapo and
-// varzea, currently also covered by the swamp biome). Computed from smooth fields only, never the
-// jittered biome — per-column jitter would give adjacent columns different heights/water levels.
-// The inland gate keeps flooded cell sites far enough from the coast that a cell's area can't
-// reach the ocean.
-static float computeFloodFactor(const BiomeNoise& biomeNoise)
-{
-    // min, not product: the factor is limited by its worst axis, instead of requiring every axis
-    // to be near-perfect at once.
-    return min(min(smoothstep(0.0f, 0.4f, biomeNoise.temperature),
-                   smoothstep(0.1f, 0.5f, biomeNoise.humidity)),
-               min(smoothstep(-0.2f, -0.6f, biomeNoise.peak),
-                   min(smoothstep(0.22f, 0.32f, biomeNoise.inland),
-                       smoothstep(0.80f, 0.70f, biomeNoise.inland))));
-}
-
-// A cell floods when the flood factor at its site exceeds floodCellThreshold. Columns are painted
-// with the swamp biome above the slightly looser floodTintThreshold so the biome always covers
-// pond banks.
-inline constexpr float floodCellThreshold = 0.35f;
-inline constexpr float floodTintThreshold = 0.3f;
-
-// The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever the flood
-// factor is high, so the biome exactly tracks the terrain that floods.
-static Biome biomeFromNoise(const BiomeNoise& biomeNoise)
-{
-    if (computeFloodFactor(biomeNoise) > floodTintThreshold)
-    {
-        return Biome::SWAMP;
-    }
-    return Biomes::getClosestBiome(biomeNoise);
-}
-
 // Blends surface multipliers linearly in amplitude (1 / multiplier) space: the surface offset is
 // noise / multiplier, so mixing multipliers directly compresses most of the amplitude change into
 // the low-multiplier end of the ramp and produces steep slopes there.
@@ -477,20 +306,6 @@ static NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise)
     return { baseHeight, surfaceMultiplier };
 }
 
-// Single-point counterpart of fillBiomeNoiseGrids for arbitrary positions (swamp cell sites).
-static BiomeNoise sampleBiomeNoiseAt(vec2 posXZ_WS)
-{
-    const float x = posXZ_WS.x + noiseOffsetXZ.x;
-    const float z = posXZ_WS.y + noiseOffsetXZ.y;
-    const int seed = static_cast<int>(worldSeed ^ hash(719023919));
-    return {
-        .temperature = fnTemperature->GenSingle2D(x, z, seed),
-        .humidity = fnHumidity->GenSingle2D(x, z, seed),
-        .peak = fnPeak->GenSingle2D(x, z, seed),
-        .inland = fnInland->GenSingle2D(x, z, seed),
-    };
-}
-
 // Swamp cells use a plain square grid, NOT gridCellCornerForPosXZ_WS — that helper's staggered
 // odd-row x shift would make corner + offset * swampCellSize enumerate cells that don't exist.
 static ivec2 swampCellCornerForPosXZ_WS(ivec2 posXZ_WS)
@@ -509,7 +324,7 @@ static ivec2 swampCellSiteXZ_WS(ivec2 cellCornerXZ_WS)
 static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
 {
     const ivec2 siteXZ_WS = swampCellSiteXZ_WS(cellCornerXZ_WS);
-    const BiomeNoise siteNoise = sampleBiomeNoiseAt(vec2(siteXZ_WS));
+    const BiomeNoise siteNoise = BiomeNoiseField::sampleAt(vec2(siteXZ_WS));
 
     // The pond level tracks the low end of the natural height across the cell (site, corners, and
     // edge midpoints), so a cell on sloped terrain floods its low side instead of perching a deep
@@ -526,7 +341,7 @@ static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         }
 
         const ivec2 sampleXZ_WS = cellCornerXZ_WS + (swampCellSize / 2) * ivec2(sampleIdx % 3, sampleIdx / 3);
-        const float sampleBase = computeNaturalTerrain(sampleBiomeNoiseAt(vec2(sampleXZ_WS))).baseHeight;
+        const float sampleBase = computeNaturalTerrain(BiomeNoiseField::sampleAt(vec2(sampleXZ_WS))).baseHeight;
         if (sampleBase < minNaturalBase)
         {
             secondMinNaturalBase = minNaturalBase;
@@ -541,7 +356,7 @@ static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
     const int naturalBase = static_cast<int>(std::floor(secondMinNaturalBase));
     return {
         .siteXZ_WS = siteXZ_WS,
-        .swampy = computeFloodFactor(siteNoise) > floodCellThreshold,
+        .swampy = BiomeNoiseField::computeFloodFactor(siteNoise) > BiomeNoiseField::floodCellThreshold,
         .pondLevel = std::max((naturalBase - 2) / swampLevelQuantize * swampLevelQuantize, seaLevel + 3),
     };
 }
@@ -558,13 +373,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const BiomeNoiseGrids biomeNoiseGrids = {
+    const BiomeNoiseField::BiomeNoiseGrids biomeNoiseGrids = {
         .temperature = temperatureNoise,
         .humidity = humidityNoise,
         .peak = peakNoise,
         .inland = inlandNoise,
     };
-    fillBiomeNoiseGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
+    BiomeNoiseField::fillGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -623,9 +438,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            const BiomeNoise biomeNoise = biomeNoiseAt(biomeNoiseGrids, columnIdx);
+            const BiomeNoise biomeNoise = BiomeNoiseField::noiseAt(biomeNoiseGrids, columnIdx);
             const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
-            const Biome biome = biomeFromNoise(jitteredBiomeNoise);
+            const Biome biome = BiomeNoiseField::biomeFromNoise(jitteredBiomeNoise);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
@@ -669,7 +484,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const SwampCellInfo cell1 = getSwampCellInfo(cellCorners[nearestIdx]);
                 if (cell1.swampy)
                 {
-                    const float deepFloodMix = smoothstep(floodCellThreshold, 0.9f, computeFloodFactor(biomeNoise));
+                    const float deepFloodMix = smoothstep(BiomeNoiseField::floodCellThreshold, 0.9f, BiomeNoiseField::computeFloodFactor(biomeNoise));
                     const float marshFloorHeight = static_cast<float>(cell1.pondLevel) - glm::mix(2.f, 5.f, deepFloodMix);
                     const float heightAboveLevel = naturalTerrain.baseHeight - static_cast<float>(cell1.pondLevel);
                     const float pullDownStart = glm::mix(swampPullDownStart, swampPullDownStartDeepFlood, deepFloodMix);

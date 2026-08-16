@@ -56,7 +56,7 @@ file(GLOB_RECURSE SRC_FILES
     "${SRC_DIR}/*.cpp"
     "${SRC_DIR}/*.h"
 )
-list(FILTER SRC_FILES EXCLUDE REGEX "/tests/")
+list(FILTER SRC_FILES EXCLUDE REGEX "/(tests|scanner)/")
 
 file(GLOB_RECURSE SHADER_FILES
     CONFIGURE_DEPENDS
@@ -348,4 +348,32 @@ target_compile_definitions(BiomeinatorTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     BIOMEINATOR_EXE_PATH="$<TARGET_FILE:Biomeinator>"
+)
+
+# ==================================================
+# BiomeScanner
+# ==================================================
+
+# Local web tool for exploring the biome field: serves an interactive seed map and searches for
+# seeds with a target biome near spawn. Links only the biome/noise modules, not the engine.
+set(BIOME_SCANNER_SRC
+    "${SRC_DIR}/scanner/main.cpp"
+    "${SRC_DIR}/logger.cpp"
+    "${SRC_DIR}/terrain/biome.cpp"
+    "${SRC_DIR}/terrain/biome_noise.cpp"
+    "${SRC_DIR}/terrain/structure/decorator.cpp"
+    "${SRC_DIR}/terrain/structure/structure_gen.cpp"
+)
+
+add_executable(BiomeScanner ${BIOME_SCANNER_SRC})
+target_include_directories(BiomeScanner PRIVATE
+    ${SRC_DIR}
+    "${EXT}/cpp-httplib/include"
+    "${EXT}/FastNoise2/include"
+    "${EXT}/json/include"
+)
+target_link_libraries(BiomeScanner PRIVATE glm::glm-header-only FastNoise)
+target_compile_definitions(BiomeScanner PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
 )

@@ -17,9 +17,4 @@ namespace ChunkGenerator
 
 void init();
 
-// Batch-evaluates the surface biome noise on a uniform XZ grid (one sample per texel center,
-// texelSizeBlocks blocks apart) and writes the closest biome per texel, x-innermost. Skips the
-// per-column jitter chunk generation applies, so results are the macro biome field.
-void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks);
-
 }; // namespace ChunkGenerator

@@ -3,7 +3,6 @@
 
 #include "biome.h"
 
-#include "chunk.h"
 #include "util/glm_util.h"
 #include "util/rng.h"
 

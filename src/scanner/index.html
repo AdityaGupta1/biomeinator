@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BiomeScanner</title>
+<style>
+    html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        background: #1a1a1a;
+        color: #ddd;
+    }
+    #map {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+    }
+    #map.dragging { cursor: grabbing; }
+    .panel {
+        position: absolute;
+        background: rgba(25, 25, 25, 0.92);
+        border: 1px solid #444;
+        border-radius: 6px;
+        padding: 10px;
+        font-size: 13px;
+    }
+    #controls { top: 10px; left: 10px; padding-bottom: 6px; }
+    #controls input[type="number"] { width: 90px; }
+    #legend { bottom: 10px; left: 10px; max-width: 230px; }
+    #legend table { border-collapse: collapse; }
+    #legend td { padding: 1px 6px 1px 0; }
+    #legend td.coverage { text-align: right; color: #aaa; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; }
+    #hoverInfo { top: 10px; right: 10px; pointer-events: none; min-width: 180px; }
+    #search { bottom: 10px; right: 10px; width: 230px; }
+    #search input[type="number"] { width: 70px; }
+    #searchResults { max-height: 220px; overflow-y: auto; margin-top: 6px; }
+    #searchResults table { width: 100%; border-collapse: collapse; }
+    #searchResults td, #searchResults th { padding: 2px 6px; text-align: left; }
+    #searchResults tr:hover { background: #333; cursor: pointer; }
+    input, select, button {
+        background: #2a2a2a;
+        color: #ddd;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 3px 6px;
+    }
+    button { cursor: pointer; }
+    button:hover { background: #3a3a3a; }
+    label { margin-right: 4px; }
+    .row { margin: 4px 0; }
+    #scaleBar {
+        height: 6px;
+        border: 1px solid #ddd;
+        border-top: none;
+        margin-top: 12px;
+    }
+    #scaleLabel { text-align: center; font-size: 12px; line-height: 1.2; color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<div id="controls" class="panel">
+    <div class="row">
+        <label for="seedInput">Seed</label>
+        <input type="number" id="seedInput" value="0" min="0">
+        <button id="seedGo">Go</button>
+    </div>
+    <div class="row"><button id="resetView">Reset to spawn</button></div>
+    <div class="row">
+        <div id="scaleBar"></div>
+        <div id="scaleLabel"></div>
+    </div>
+</div>
+
+<div id="hoverInfo" class="panel"></div>
+
+<div id="legend" class="panel"></div>
+
+<div id="search" class="panel">
+    <b>Seed search</b>
+    <div class="row">
+        <label for="searchBiome">Biome</label>
+        <select id="searchBiome"></select>
+    </div>
+    <div class="row">
+        <label for="searchRadius">Radius</label>
+        <input type="number" id="searchRadius" value="320" min="16">
+    </div>
+    <div class="row">
+        <label for="searchSeedStart">Start</label>
+        <input type="number" id="searchSeedStart" value="1" min="0">
+        <label for="searchSeedCount">Count</label>
+        <input type="number" id="searchSeedCount" value="300" min="1">
+    </div>
+    <div class="row">
+        <button id="searchGo">Search</button>
+        <span id="searchStatus"></span>
+    </div>
+    <div id="searchResults"></div>
+</div>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+
+const state = {
+    seed: 0,
+    centerX: 0,
+    centerZ: 0,
+    blocksPerPixel: 4, // powers of 2, 1 .. 64
+    biomeInfo: [],     // [{id, name, color}]
+    palette: [],       // id -> [r, g, b]
+    // Last fetched grid, for hover lookups and cheap redraws while panning
+    grid: null,        // { data: Uint8Array, x0, z0, w, h, step }
+    fetchId: 0,
+};
+
+const TEXEL_PX = 2; // canvas pixels per fetched texel; halves sample count vs per-pixel
+
+function hexToRgb(hex)
+{
+    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+function resizeCanvas()
+{
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    refetch();
+}
+
+// Block coords of the top-left canvas pixel
+function topLeftBlock()
+{
+    return {
+        x: state.centerX - (canvas.width / 2) * state.blocksPerPixel,
+        z: state.centerZ - (canvas.height / 2) * state.blocksPerPixel,
+    };
+}
+
+function canvasToBlock(px, py)
+{
+    const tl = topLeftBlock();
+    return {
+        x: Math.floor(tl.x + px * state.blocksPerPixel),
+        z: Math.floor(tl.z + py * state.blocksPerPixel),
+    };
+}
+
+async function refetch()
+{
+    const step = state.blocksPerPixel * TEXEL_PX;
+    const w = Math.ceil(canvas.width / TEXEL_PX);
+    const h = Math.ceil(canvas.height / TEXEL_PX);
+    const tl = topLeftBlock();
+    const x0 = Math.floor(tl.x);
+    const z0 = Math.floor(tl.z);
+
+    const fetchId = ++state.fetchId;
+    const params = new URLSearchParams({ seed: state.seed, x0, z0, w, h, step });
+    const resp = await fetch("/api/biomes?" + params);
+    if (!resp.ok || fetchId !== state.fetchId)
+    {
+        return; // superseded by a newer fetch (or server error)
+    }
+    const data = new Uint8Array(await resp.arrayBuffer());
+    state.grid = { data, x0, z0, w, h, step };
+    draw();
+    updateCoverage();
+}
+
+// Per-biome fraction of the current view, shown in the legend table
+function updateCoverage()
+{
+    const grid = state.grid;
+    const counts = new Array(state.biomeInfo.length).fill(0);
+    for (let idx = 0; idx < grid.data.length; idx++)
+    {
+        counts[grid.data[idx]]++;
+    }
+    for (const biome of state.biomeInfo)
+    {
+        const fraction = counts[biome.id] / grid.data.length;
+        document.getElementById("coverage-" + biome.id).textContent =
+            fraction > 0 ? (fraction * 100).toFixed(1) + "%" : "";
+    }
+}
+
+function draw()
+{
+    const grid = state.grid;
+    if (!grid)
+    {
+        return;
+    }
+
+    const image = new ImageData(grid.w, grid.h);
+    for (let idx = 0; idx < grid.data.length; idx++)
+    {
+        const rgb = state.palette[grid.data[idx]] || [255, 0, 255];
+        image.data[idx * 4 + 0] = rgb[0];
+        image.data[idx * 4 + 1] = rgb[1];
+        image.data[idx * 4 + 2] = rgb[2];
+        image.data[idx * 4 + 3] = 255;
+    }
+
+    const offscreen = new OffscreenCanvas(grid.w, grid.h);
+    offscreen.getContext("2d").putImageData(image, 0, 0);
+
+    // Where the grid's origin lands on the canvas with the current view (may differ from 0,0
+    // while panning before the refetch lands)
+    const tl = topLeftBlock();
+    const offsetPxX = (grid.x0 - tl.x) / state.blocksPerPixel;
+    const offsetPxZ = (grid.z0 - tl.z) / state.blocksPerPixel;
+    const scale = grid.step / state.blocksPerPixel;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(offscreen, offsetPxX, offsetPxZ, grid.w * scale, grid.h * scale);
+
+    drawOriginMarker();
+    updateZoomInfo();
+}
+
+function drawOriginMarker()
+{
+    const tl = topLeftBlock();
+    const px = (0 - tl.x) / state.blocksPerPixel;
+    const py = (0 - tl.z) / state.blocksPerPixel;
+    if (px < 0 || py < 0 || px > canvas.width || py > canvas.height)
+    {
+        return;
+    }
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px - 8, py);
+    ctx.lineTo(px + 8, py);
+    ctx.moveTo(px, py - 8);
+    ctx.lineTo(px, py + 8);
+    ctx.stroke();
+}
+
+// Map-style scale bar: the widest "nice" block count that fits in ~140px at the current zoom
+function updateZoomInfo()
+{
+    const niceCounts = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+    let blocks = niceCounts[0];
+    for (const count of niceCounts)
+    {
+        if (count / state.blocksPerPixel <= 140)
+        {
+            blocks = count;
+        }
+    }
+    const widthPx = (blocks / state.blocksPerPixel) + "px";
+    document.getElementById("scaleBar").style.width = widthPx;
+    const label = document.getElementById("scaleLabel");
+    label.style.width = widthPx;
+    label.textContent = blocks + " blocks";
+}
+
+function biomeAtBlock(x, z)
+{
+    const grid = state.grid;
+    if (!grid)
+    {
+        return null;
+    }
+    const tx = Math.floor((x - grid.x0) / grid.step);
+    const tz = Math.floor((z - grid.z0) / grid.step);
+    if (tx < 0 || tz < 0 || tx >= grid.w || tz >= grid.h)
+    {
+        return null;
+    }
+    return grid.data[tx + grid.w * tz];
+}
+
+// --- interaction ---
+
+let dragging = false;
+let lastMouse = null;
+
+// Refetch during drag at most every refetchThrottleMs, with a trailing call so the view always
+// settles on the final position
+const refetchThrottleMs = 100;
+let lastRefetchTime = 0;
+let refetchTimer = null;
+function throttledRefetch()
+{
+    const now = performance.now();
+    if (now - lastRefetchTime >= refetchThrottleMs)
+    {
+        lastRefetchTime = now;
+        refetch();
+    }
+    else if (refetchTimer === null)
+    {
+        refetchTimer = setTimeout(() =>
+        {
+            refetchTimer = null;
+            lastRefetchTime = performance.now();
+            refetch();
+        }, refetchThrottleMs - (now - lastRefetchTime));
+    }
+}
+
+canvas.addEventListener("mousedown", event =>
+{
+    dragging = true;
+    canvas.classList.add("dragging");
+    lastMouse = { x: event.clientX, y: event.clientY };
+});
+
+window.addEventListener("mouseup", () =>
+{
+    if (dragging)
+    {
+        dragging = false;
+        canvas.classList.remove("dragging");
+        refetch();
+    }
+});
+
+canvas.addEventListener("mousemove", event =>
+{
+    if (dragging)
+    {
+        state.centerX -= (event.clientX - lastMouse.x) * state.blocksPerPixel;
+        state.centerZ -= (event.clientY - lastMouse.y) * state.blocksPerPixel;
+        lastMouse = { x: event.clientX, y: event.clientY };
+        draw(); // immediate redraw of the cached grid so panning stays smooth
+        throttledRefetch();
+    }
+
+    const block = canvasToBlock(event.clientX, event.clientY);
+    const biomeId = biomeAtBlock(block.x, block.z);
+    const name = biomeId !== null && state.biomeInfo[biomeId] ? state.biomeInfo[biomeId].name : "?";
+    document.getElementById("hoverInfo").innerHTML =
+        `x: ${block.x}, z: ${block.z}<br>biome: <b>${name}</b>`;
+});
+
+canvas.addEventListener("wheel", event =>
+{
+    event.preventDefault();
+    const oldBpp = state.blocksPerPixel;
+    const newBpp = event.deltaY > 0 ? Math.min(oldBpp * 2, 64) : Math.max(oldBpp / 2, 1);
+    if (newBpp === oldBpp)
+    {
+        return;
+    }
+
+    // Keep the block under the cursor fixed
+    const block = canvasToBlock(event.clientX, event.clientY);
+    state.blocksPerPixel = newBpp;
+    state.centerX = block.x + (canvas.width / 2 - event.clientX) * newBpp;
+    state.centerZ = block.z + (canvas.height / 2 - event.clientY) * newBpp;
+    draw();
+    throttledRefetch();
+});
+
+document.getElementById("seedGo").addEventListener("click", () =>
+{
+    state.seed = parseInt(document.getElementById("seedInput").value) || 0;
+    refetch();
+});
+
+document.getElementById("resetView").addEventListener("click", () =>
+{
+    state.centerX = 0;
+    state.centerZ = 0;
+    refetch();
+});
+
+// --- seed search ---
+
+document.getElementById("searchGo").addEventListener("click", async () =>
+{
+    const biome = document.getElementById("searchBiome").value;
+    const radius = parseInt(document.getElementById("searchRadius").value) || 320;
+    const seedStart = parseInt(document.getElementById("searchSeedStart").value) || 0;
+    const seedCount = parseInt(document.getElementById("searchSeedCount").value) || 100;
+    const status = document.getElementById("searchStatus");
+
+    const BATCH = 25;
+    const results = [];
+    for (let start = seedStart; start < seedStart + seedCount; start += BATCH)
+    {
+        const count = Math.min(BATCH, seedStart + seedCount - start);
+        status.textContent = `${start - seedStart}/${seedCount}...`;
+        const params = new URLSearchParams({ biome, radius, seedStart: start, seedCount: count, step: 16 });
+        const resp = await fetch("/api/search?" + params);
+        if (!resp.ok)
+        {
+            status.textContent = "error";
+            return;
+        }
+        results.push(...await resp.json());
+        renderSearchResults(results);
+    }
+    status.textContent = "done";
+    refetch(); // the search re-seeded the server's noise state; refresh the map's view of it
+});
+
+function renderSearchResults(results)
+{
+    const sorted = [...results].filter(r => r.fraction > 0).sort((a, b) => b.fraction - a.fraction).slice(0, 50);
+    const rows = sorted.map(r =>
+        `<tr data-seed="${r.seed}"><td>${r.seed}</td><td>${(r.fraction * 100).toFixed(1)}%</td></tr>`).join("");
+    document.getElementById("searchResults").innerHTML =
+        `<table><tr><th>seed</th><th>coverage</th></tr>${rows}</table>`;
+    for (const row of document.querySelectorAll("#searchResults tr[data-seed]"))
+    {
+        row.addEventListener("click", () =>
+        {
+            state.seed = parseInt(row.dataset.seed);
+            document.getElementById("seedInput").value = state.seed;
+            state.centerX = 0;
+            state.centerZ = 0;
+            refetch();
+        });
+    }
+}
+
+// --- init ---
+
+async function init()
+{
+    const resp = await fetch("/api/biomeInfo");
+    state.biomeInfo = await resp.json();
+    state.palette = state.biomeInfo.map(b => hexToRgb(b.color));
+
+    const searchBiome = document.getElementById("searchBiome");
+    const legendRows = state.biomeInfo.map(biome =>
+        `<tr><td><div class="swatch" style="background:${biome.color}"></div></td>` +
+        `<td>${biome.name}</td><td class="coverage" id="coverage-${biome.id}"></td></tr>`).join("");
+    document.getElementById("legend").innerHTML = `<table>${legendRows}</table>`;
+    for (const biome of state.biomeInfo)
+    {
+        searchBiome.insertAdjacentHTML("beforeend", `<option value="${biome.id}">${biome.name}</option>`);
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+}
+
+init();
+</script>
+</body>
+</html>
