@@ -439,8 +439,8 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     }
 
     // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the
-    // already-generated column. Only grass or dirt counts as ground so knees can't stack on
-    // other structures' logs. The scan draws no RNG, keeping the cross-chunk stream intact.
+    // already-generated column. Only grass, dirt, or mud counts as ground so knees can't stack
+    // on other structures' logs. The scan draws no RNG, keeping the cross-chunk stream intact.
     const int numKnees = rng.nextInt(6, 13);
     for (int i = 0; i < numKnees; ++i)
     {
@@ -463,7 +463,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
             {
                 continue;
             }
-            if (block == Block::GRASS_BLOCK || block == Block::DIRT)
+            if (block == Block::GRASS_BLOCK || block == Block::DIRT || block == Block::MUD)
             {
                 groundY = y;
             }

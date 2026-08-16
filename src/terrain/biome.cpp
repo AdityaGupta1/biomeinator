@@ -222,6 +222,10 @@ void init()
         BiomeData& data = BIOME_DATA_BY_NAME(SWAMP);
         data.name = "swamp";
         data.grassTint = glmUtil::colorFromHex("#78853a");
+        data.topBlocks = {
+            .underwaterTop = Block::MUD,
+            .shoreTop = Block::MUD,
+        };
         data.structureGens = {
             { StructureType::CYPRESS_TREE, 23, 4, STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER },
         };

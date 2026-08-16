@@ -93,6 +93,7 @@ void init()
     BLOCK_DATA_BY_NAME(WILLOW_LEAVES) = { .uvs = { uvec2(10, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
     BLOCK_DATA_BY_NAME(CYPRESS_LOG) = { .uvs = { uvec2(12, 2), uvec2(11, 2), uvec2(12, 2) } };
     BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(MUD) = { .uvs = { uvec2(14, 2) } };
 }
 
 const BlockData& getBlockData(Block block)

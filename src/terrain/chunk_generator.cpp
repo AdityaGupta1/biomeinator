@@ -47,6 +47,7 @@ static FN::SmartNode<FN::Generator> fnCaveHumidity;
 
 static FN::SmartNode<FN::Generator> fnSwampWarp;
 static FN::SmartNode<FN::Generator> fnSwampWarpFine;
+static FN::SmartNode<FN::Generator> fnSwampShore;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -88,6 +89,16 @@ void init()
         fnSimplex->SetOutputMax(1.0f);
 
         fnSwampWarpFine = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(561203987);
+        fnSimplex->SetScale(30.0f);
+        fnSimplex->SetOutputMin(-1.5f);
+        fnSimplex->SetOutputMax(1.5f);
+
+        fnSwampShore = fnSimplex;
     }
 
     {
@@ -390,7 +401,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* swampWarpZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampWarpFineXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampWarpFineZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const auto fillSwampWarpNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
+    float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    const auto fillSwampNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
     {
         fn->GenUniformGrid2D(data,
                              chunkPosBlocksXZ_WS.x + noiseOffsetXZ.x,
@@ -401,10 +413,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                              1.f,
                              static_cast<int>(worldSeed ^ hash(seedSalt)));
     };
-    fillSwampWarpNoise(swampWarpXNoise, fnSwampWarp, 651209371);
-    fillSwampWarpNoise(swampWarpZNoise, fnSwampWarp, 287119023);
-    fillSwampWarpNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
-    fillSwampWarpNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
+    fillSwampNoise(swampWarpXNoise, fnSwampWarp, 651209371);
+    fillSwampNoise(swampWarpZNoise, fnSwampWarp, 287119023);
+    fillSwampNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
+    fillSwampNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
+    fillSwampNoise(swampShoreNoise, fnSwampShore, 190283475);
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
@@ -930,6 +943,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             {
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
+
+                // Shore band whose height above water level undulates with low-frequency noise
+                bool topBlockOnShore = false;
+                if (!topBlockUnderwater && topBlocks.shoreTop != Block::AIR)
+                {
+                    const int heightAboveWater = static_cast<int>(topBlockY) - waterLevel;
+                    topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
+                }
+
                 for (uint y = topBlockY; y > topBlockY - 5; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -940,9 +962,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
-                    if (topBlockUnderwater && newBlock == Block::GRASS_BLOCK)
+                    if (newBlock == Block::GRASS_BLOCK)
                     {
-                        newBlock = Block::DIRT;
+                        if (topBlockUnderwater)
+                        {
+                            newBlock = (topBlocks.underwaterTop != Block::AIR) ? topBlocks.underwaterTop : Block::DIRT;
+                        }
+                        else if (topBlockOnShore)
+                        {
+                            newBlock = topBlocks.shoreTop;
+                        }
                     }
                     block = newBlock;
                 }
