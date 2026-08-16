@@ -20,6 +20,8 @@
 using namespace glm;
 namespace FN = FastNoise;
 
+static Biome biomeFromNoise(const BiomeNoise& biomeNoise);
+
 namespace ChunkGenerator
 {
 
@@ -280,7 +282,7 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
 
     for (uint idx = 0; idx < numSamples; ++idx)
     {
-        outBiomes[idx] = Biomes::getClosestBiome(biomeNoiseAt(grids, idx));
+        outBiomes[idx] = biomeFromNoise(biomeNoiseAt(grids, idx));
     }
 }
 
@@ -437,6 +439,17 @@ static float computeFloodFactor(const BiomeNoise& biomeNoise)
 // pond banks.
 inline constexpr float floodCellThreshold = 0.35f;
 inline constexpr float floodTintThreshold = 0.3f;
+
+// The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever the flood
+// factor is high, so the biome exactly tracks the terrain that floods.
+static Biome biomeFromNoise(const BiomeNoise& biomeNoise)
+{
+    if (computeFloodFactor(biomeNoise) > floodTintThreshold)
+    {
+        return Biome::SWAMP;
+    }
+    return Biomes::getClosestBiome(biomeNoise);
+}
 
 // Blends surface multipliers linearly in amplitude (1 / multiplier) space: the surface offset is
 // noise / multiplier, so mixing multipliers directly compresses most of the amplitude change into
@@ -612,13 +625,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const BiomeNoise biomeNoise = biomeNoiseAt(biomeNoiseGrids, columnIdx);
             const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
-            // The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever
-            // the flood factor is high, so the biome exactly tracks the terrain that floods.
-            Biome biome = Biomes::getClosestBiome(jitteredBiomeNoise);
-            if (computeFloodFactor(jitteredBiomeNoise) > floodTintThreshold)
-            {
-                biome = Biome::SWAMP;
-            }
+            const Biome biome = biomeFromNoise(jitteredBiomeNoise);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
