@@ -186,7 +186,11 @@ void Scene::init()
     this->managedAreaLightsBuffer.setName(L"scene areaLights");
     this->managedAreaLightsBuffer.init();
     this->areaLightSamplingStructure.setName(L"scene areaLightSamplingStructure");
-    this->areaLightSamplingStructure.init(1 << 8 /*elements*/);
+    // makeTlas rewrites every live entry whenever it marks this dirty, so per-frame upload
+    // staging is safe here. It is required: the light tree's emitter_collect indexes its
+    // UAVs with values read straight out of this buffer, so a torn upload becomes a wild
+    // GPU write rather than a wrong-looking frame.
+    this->areaLightSamplingStructure.init(1 << 8 /*elements*/, { .perFrameUpload = true });
 }
 
 void Scene::reset()
