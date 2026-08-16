@@ -6,15 +6,12 @@
 #include "biome.h"
 #include "cave_biome.h"
 #include "chunk.h"
-#include "rendering/camera.h" // TEMP: for the bad-noise-range camera diagnostic
-#include "rendering/renderer.h" // TEMP: for the bad-noise-range camera diagnostic
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "util/glm_util.h"
 #include "util/rng.h"
 
-#include <cstdio> // TEMP: for debugScanSwampSeeds
 #include <set>
 #include <vector>
 
@@ -536,75 +533,6 @@ static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
     };
 }
 
-// TEMP: scans world seeds for one with many swampy cells near the origin, so the swamp can be
-// inspected from the spawn camera. Remove along with the debugBool0 hook in main.cpp.
-void ChunkGenerator::debugScanSwampSeeds(uint numSeeds)
-{
-    constexpr int halfExtentBlocks = 640;
-    constexpr int nearRadiusBlocks = 288;
-    constexpr int cellsPerAxis = (2 * halfExtentBlocks) / swampCellSize;
-
-    uint bestSeed = 0;
-    uint bestNearCount = 0;
-    for (uint seed = 1; seed <= numSeeds; ++seed)
-    {
-        SettingsManager::setWorldSeed(seed);
-        ChunkGenerator::init();
-
-        uint swampyCount = 0;
-        uint nearCount = 0;
-        ivec2 centroidSum(0);
-        for (int cellZ = 0; cellZ < cellsPerAxis; ++cellZ)
-        {
-            for (int cellX = 0; cellX < cellsPerAxis; ++cellX)
-            {
-                const ivec2 cellCornerXZ_WS = ivec2(-halfExtentBlocks) + ivec2(cellX, cellZ) * swampCellSize;
-                const SwampCellInfo info = computeSwampCellInfo(cellCornerXZ_WS);
-                if (!info.swampy)
-                {
-                    continue;
-                }
-
-                ++swampyCount;
-                centroidSum += info.siteXZ_WS;
-                if (abs(info.siteXZ_WS.x) <= nearRadiusBlocks && abs(info.siteXZ_WS.y) <= nearRadiusBlocks)
-                {
-                    ++nearCount;
-                }
-            }
-        }
-
-        if (swampyCount > 0)
-        {
-            const ivec2 centroid = centroidSum / static_cast<int>(swampyCount);
-            printf("seed %u: swampyCells=%u near=%u centroid=(%d, %d)\n",
-                   seed, swampyCount, nearCount, centroid.x, centroid.y);
-        }
-        if (nearCount > bestNearCount)
-        {
-            bestSeed = seed;
-            bestNearCount = nearCount;
-        }
-    }
-
-    printf("best seed: %u (near=%u)\n", bestSeed, bestNearCount);
-
-    // Map of the best seed's cells: pond level as letter ('a' = lowest quantized level), '.' dry.
-    // One character per cell, row = +z down, col = +x right.
-    SettingsManager::setWorldSeed(bestSeed);
-    ChunkGenerator::init();
-    for (int cellZ = 0; cellZ < cellsPerAxis; ++cellZ)
-    {
-        for (int cellX = 0; cellX < cellsPerAxis; ++cellX)
-        {
-            const ivec2 cellCornerXZ_WS = ivec2(-halfExtentBlocks) + ivec2(cellX, cellZ) * swampCellSize;
-            const SwampCellInfo info = computeSwampCellInfo(cellCornerXZ_WS);
-            putchar(info.swampy ? ('a' + (info.pondLevel - seaLevel) / swampLevelQuantize) : '.');
-        }
-        putchar('\n');
-    }
-}
-
 // y of the lava surface (the low-y lava fill writes LAVA_TOP at y == 4); cave structures
 // whose anchor sits at or below this are rejected unless flagged to allow lava.
 inline constexpr int lavaSurfaceY = 4;
@@ -629,11 +557,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     int* waterLevelArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
     int* swampCaveSealArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
-
-    // TEMP: per-column swamp debug data for the water-exposure detector
-    ivec2* debugCellCornerArray = threadMemoryAlloc.request<ivec2>(chunkSizeXZSquare);
-    float* debugNearestDistArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    float* debugMinDifferingEdgeArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
 
     float* swampWarpXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampWarpZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -758,7 +681,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const float swampShapeBaseHeight = terrainBaseHeight; // pond floor if swampy, else natural
                 float flattenMixMax = 0.f;
                 int swampCaveSeal = cell1.swampy ? cell1.pondLevel : 0;
-                float debugMinDifferingEdge = std::numeric_limits<float>::max(); // TEMP
                 for (int idx = 0; idx < numScannedCells; ++idx)
                 {
                     if (idx == nearestIdx)
@@ -784,7 +706,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     const float edgeDist = dists[idx] - dists[nearestIdx];
-                    debugMinDifferingEdge = min(debugMinDifferingEdge, edgeDist); // TEMP
 
                     // The multiplier flatten must ramp on edge distance alone — gating it on the dam
                     // rise (like the base raise below) would flip the noise amplitude discontinuously
@@ -828,11 +749,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 swampCaveSealArray[columnIdx] = swampCaveSeal;
-
-                // TEMP
-                debugCellCornerArray[columnIdx] = cellCorners[nearestIdx];
-                debugNearestDistArray[columnIdx] = dists[nearestIdx];
-                debugMinDifferingEdgeArray[columnIdx] = debugMinDifferingEdge;
             }
 
             waterLevelArray[columnIdx] = waterLevel;
@@ -852,15 +768,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     terrainNoiseMinY = std::max(terrainNoiseMinY, 0);
     terrainNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(chunkSizeY));
-    // TEMP: diagnostic for the empty-range assert
-    if (terrainNoiseMinY >= terrainNoiseMaxY)
-    {
-        const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
-        printf("TEMP: bad noise range at chunk (%d, %d): minY=%d maxY=%d baseMin=%f baseMax=%f camera=(%d, %d, %d)\n",
-               chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y,
-               terrainNoiseMinY, terrainNoiseMaxY, terrainBaseHeightMin, terrainBaseHeightMax,
-               cameraPosInt_WS.x, cameraPosInt_WS.y, cameraPosInt_WS.z);
-    }
     ASSERT(terrainNoiseMinY < terrainNoiseMaxY, "terrain noise range is empty or inverted");
 
     const uint terrainNoiseHeight = terrainNoiseMaxY - terrainNoiseMinY;
@@ -1185,107 +1092,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
 
             placeCaveStructuresForColumn(blockPosXZ_WS);
-        }
-    }
-
-    // TEMP: detects vertical walls — adjacent columns whose base heights jump. Enable with
-    // --debugBool1=true; remove along with the seed scanner.
-    if (SettingsManager::getAsBool("debugBool1"))
-    {
-        for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-        {
-            for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
-            {
-                const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-                for (int axis = 0; axis < 2; ++axis)
-                {
-                    const ivec2 neighborXZ = ivec2(blockX + (axis == 0 ? 1 : 0), blockZ + (axis == 1 ? 1 : 0));
-                    if (neighborXZ.x >= static_cast<int>(chunkSizeXZ) || neighborXZ.y >= static_cast<int>(chunkSizeXZ))
-                    {
-                        continue;
-                    }
-
-                    const uint neighborColumnIdx = neighborXZ.x + chunkSizeXZ * neighborXZ.y;
-                    const int surfaceDiff = abs(static_cast<int>(heightfield[columnIdx]) - static_cast<int>(heightfield[neighborColumnIdx]));
-                    if (heightfield[columnIdx] == 0 || heightfield[neighborColumnIdx] == 0 || surfaceDiff < 12)
-                    {
-                        continue;
-                    }
-
-                    printf("TEMP: wall at (%d, %d): base=%.1f cell=(%d,%d) water=%d d1=%.1f minEdge=%.1f | "
-                           "base=%.1f cell=(%d,%d) water=%d d1=%.1f minEdge=%.1f\n",
-                           chunkPosBlocksXZ_WS.x + static_cast<int>(blockX),
-                           chunkPosBlocksXZ_WS.y + static_cast<int>(blockZ),
-                           terrainBaseHeightArray[columnIdx],
-                           debugCellCornerArray[columnIdx].x,
-                           debugCellCornerArray[columnIdx].y,
-                           waterLevelArray[columnIdx],
-                           debugNearestDistArray[columnIdx],
-                           debugMinDifferingEdgeArray[columnIdx],
-                           terrainBaseHeightArray[neighborColumnIdx],
-                           debugCellCornerArray[neighborColumnIdx].x,
-                           debugCellCornerArray[neighborColumnIdx].y,
-                           waterLevelArray[neighborColumnIdx],
-                           debugNearestDistArray[neighborColumnIdx],
-                           debugMinDifferingEdgeArray[neighborColumnIdx]);
-                }
-            }
-        }
-
-        for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
-        {
-            for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
-            {
-                const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-                const int waterLevel = waterLevelArray[columnIdx];
-                if (waterLevel <= seaLevel)
-                {
-                    continue;
-                }
-
-                const uint baseBlockIdx = chunkSizeY * columnIdx;
-                for (int y = seaLevel; y <= waterLevel; ++y)
-                {
-                    if (Blocks::getBlockData(this->blocks[baseBlockIdx + y]).type != BlockType::WATER)
-                    {
-                        continue;
-                    }
-
-                    constexpr ivec2 neighborDirs[4] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
-                    for (const ivec2 neighborDir : neighborDirs)
-                    {
-                        const ivec2 neighborXZ = ivec2(blockX, blockZ) + neighborDir;
-                        if (neighborXZ.x < 0 || neighborXZ.x >= static_cast<int>(chunkSizeXZ) ||
-                            neighborXZ.y < 0 || neighborXZ.y >= static_cast<int>(chunkSizeXZ))
-                        {
-                            continue;
-                        }
-
-                        const uint neighborBlockIdx = chunkSizeY * (neighborXZ.x + chunkSizeXZ * neighborXZ.y) + y;
-                        if (this->blocks[neighborBlockIdx] == Block::AIR)
-                        {
-                            const uint neighborColumnIdx = neighborXZ.x + chunkSizeXZ * neighborXZ.y;
-                            printf("TEMP: water exposed to air at (%d, %d, %d): water=%d base=%.1f cell=(%d,%d) d1=%.1f minEdge=%.1f | "
-                                   "neighbor water=%d base=%.1f cell=(%d,%d) d1=%.1f minEdge=%.1f\n",
-                                   chunkPosBlocksXZ_WS.x + static_cast<int>(blockX),
-                                   y,
-                                   chunkPosBlocksXZ_WS.y + static_cast<int>(blockZ),
-                                   waterLevel,
-                                   terrainBaseHeightArray[columnIdx],
-                                   debugCellCornerArray[columnIdx].x,
-                                   debugCellCornerArray[columnIdx].y,
-                                   debugNearestDistArray[columnIdx],
-                                   debugMinDifferingEdgeArray[columnIdx],
-                                   waterLevelArray[neighborColumnIdx],
-                                   terrainBaseHeightArray[neighborColumnIdx],
-                                   debugCellCornerArray[neighborColumnIdx].x,
-                                   debugCellCornerArray[neighborColumnIdx].y,
-                                   debugNearestDistArray[neighborColumnIdx],
-                                   debugMinDifferingEdgeArray[neighborColumnIdx]);
-                        }
-                    }
-                }
-            }
         }
     }
 
