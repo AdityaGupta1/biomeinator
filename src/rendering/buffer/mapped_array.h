@@ -10,7 +10,7 @@
 
 #include "debug.h"
 
-#include <array>
+#include <vector>
 
 struct MappedArrayOptions
 {
@@ -32,21 +32,17 @@ private:
     MappedArrayOptions options{};
 
     uint32_t size{ 0 };
-    // Only the first getNumUploadSlots() entries are populated.
-    std::array<T*, Renderer::NUM_FRAMES_IN_FLIGHT> host_buffers{};
-    std::array<ComPtr<ID3D12Resource>, Renderer::NUM_FRAMES_IN_FLIGHT> upload_buffers{};
+    std::vector<T*> host_buffers;
+    std::vector<ComPtr<ID3D12Resource>> upload_buffers;
     // Single regardless of perFrameUpload: the GPU is its only accessor, and the copy's
     // state transitions already order the write against the shader read.
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
 
-    uint32_t getNumUploadSlots() const
-    {
-        return this->options.perFrameUpload ? Renderer::NUM_FRAMES_IN_FLIGHT : 1;
-    }
-
     uint32_t getUploadSlotIdx() const
     {
-        return this->options.perFrameUpload ? Renderer::getFrameIndex() : 0;
+        const uint32_t slotIdx = this->options.perFrameUpload ? Renderer::getFrameIndex() : 0;
+        ASSERT(slotIdx < this->upload_buffers.size());
+        return slotIdx;
     }
 
     struct DirtyRange
@@ -117,7 +113,10 @@ private:
 
         const std::wstring sizeStr = L"(size = " + std::to_wstring(sizeBytes) + L" bytes) ";
 
-        for (uint32_t slotIdx = 0; slotIdx < this->getNumUploadSlots(); ++slotIdx)
+        this->upload_buffers.resize(this->options.perFrameUpload ? Renderer::NUM_FRAMES_IN_FLIGHT : 1);
+        this->host_buffers.resize(this->upload_buffers.size());
+
+        for (size_t slotIdx = 0; slotIdx < this->upload_buffers.size(); ++slotIdx)
         {
             this->upload_buffers[slotIdx] = BufferHelper::createBasicBuffer(sizeBytes, &UPLOAD_HEAP);
             this->upload_buffers[slotIdx]->Map(0, nullptr, reinterpret_cast<void**>(&this->host_buffers[slotIdx]));
@@ -204,9 +203,9 @@ public:
         const uint32_t slotIdx = this->getUploadSlotIdx();
         T* const host_oldBuffer = this->host_buffers[slotIdx];
 
-        for (uint32_t i = 0; i < this->getNumUploadSlots(); ++i)
+        for (const ComPtr<ID3D12Resource>& upload_buffer : this->upload_buffers)
         {
-            toFreeList.pushResource(this->upload_buffers[i]);
+            toFreeList.pushResource(upload_buffer);
         }
         if (!this->options.uploadOnly)
         {
@@ -224,12 +223,13 @@ public:
 
     inline void reset()
     {
-        for (uint32_t slotIdx = 0; slotIdx < this->getNumUploadSlots(); ++slotIdx)
+        for (ComPtr<ID3D12Resource>& upload_buffer : this->upload_buffers)
         {
-            this->upload_buffers[slotIdx]->Unmap(0, nullptr);
-            this->upload_buffers[slotIdx].Reset();
-            this->host_buffers[slotIdx] = nullptr;
+            upload_buffer->Unmap(0, nullptr);
         }
+        this->upload_buffers.clear();
+        this->host_buffers.clear();
+
         this->dev_buffer.Reset();
     }
 
@@ -245,7 +245,7 @@ public:
 
     inline ID3D12Resource* getUploadBuffer() const
     {
-        return this->upload_buffers[this->getUploadSlotIdx()].Get();
+        return this->upload_buffers.empty() ? nullptr : this->upload_buffers[this->getUploadSlotIdx()].Get();
     }
 
     inline ID3D12Resource* getBuffer() const
