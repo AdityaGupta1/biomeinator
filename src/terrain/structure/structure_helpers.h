@@ -12,10 +12,10 @@
 namespace StructureHelpers
 {
 
-inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx, Block newBlock)
+inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx, Block newBlock, bool canReplaceWater = true)
 {
     Block& block = blocks[blockIdx];
-    if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
+    if (block == Block::AIR || (canReplaceWater && (block == Block::WATER || block == Block::WATER_TOP)))
     {
         block = newBlock;
     }
@@ -173,7 +173,7 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                     const glm::ivec3 pos_CS(centerPos_CS.x + dx, y + dy, centerPos_CS.z + dz);
                     if (Chunk::isInChunk(pos_CS))
                     {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false);
                     }
                 }
             }
@@ -206,7 +206,7 @@ inline void placeLeafBlob(std::vector<Block>& blocks, glm::ivec3 centerPos_CS, f
                 {
                     continue;
                 }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false);
             }
         }
     }

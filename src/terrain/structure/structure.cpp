@@ -36,7 +36,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                 const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                 if (hasLeaf && Chunk::isInChunk(leafPos_CS))
                 {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock);
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false);
                 }
             }
             else
@@ -47,7 +47,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                     const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                     if (Chunk::isInChunk(leafPos_CS))
                     {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock);
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false);
                     }
                 }
             }
@@ -435,6 +435,48 @@ fillStructureBlocksHeader(CYPRESS_TREE)
                     tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
                 }
             }
+        }
+    }
+
+    // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the
+    // already-generated column. Only grass or dirt counts as ground so knees can't stack on
+    // other structures' logs. The scan draws no RNG, keeping the cross-chunk stream intact.
+    const int numKnees = rng.nextInt(6, 13);
+    for (int i = 0; i < numKnees; ++i)
+    {
+        const float kneeAngle = rng.nextFloat(glm::two_pi<float>());
+        const float kneeDistance = rng.nextFloat(3.f, 8.f);
+        const int kneeHeight = rng.nextInt(1, 3);
+
+        const int kneeX_CS = structurePos_CS.x + static_cast<int>(glm::round(glm::cos(kneeAngle) * kneeDistance));
+        const int kneeZ_CS = structurePos_CS.z + static_cast<int>(glm::round(glm::sin(kneeAngle) * kneeDistance));
+        if (!Chunk::isInChunkXZ(ivec3(kneeX_CS, 0, kneeZ_CS)))
+        {
+            continue;
+        }
+
+        int groundY = -1;
+        for (int y = structurePos_CS.y + 2; y >= glm::max(structurePos_CS.y - 6, 0); --y)
+        {
+            const Block block = blocks[Chunk::blockPosToIdx(uvec3(kneeX_CS, y, kneeZ_CS))];
+            if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
+            {
+                continue;
+            }
+            if (block == Block::GRASS_BLOCK || block == Block::DIRT)
+            {
+                groundY = y;
+            }
+            break;
+        }
+        if (groundY == -1)
+        {
+            continue;
+        }
+
+        for (int y = groundY + 1; y <= groundY + kneeHeight; ++y)
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(kneeX_CS, y, kneeZ_CS)), Block::CYPRESS_LOG);
         }
     }
 
