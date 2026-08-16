@@ -1,4 +1,4 @@
-_Last edited: 2026-07-19_
+_Last edited: 2026-08-04_
 
 # Settings Manager
 
@@ -36,6 +36,8 @@ Settings are not passed to shaders directly. Each frame the renderer reads the r
 All settings and their defaults are defined in `parseArgs()` and are self-describing. A few non-obvious ones:
 
 - **`voxelMode`** (default `false`): The main switch between the two rendering modes. `true` = procedural voxel terrain; `false` = load a glTF scene specified by `--scene`. Voxel terrain is the primary purpose of the project.
+- **`antialiasingMode`**: Defaults to `DLSS` in voxel mode, `NONE` otherwise. Anything wanting a
+  deterministic mode (e.g. the test runner) must pass `--antialiasingMode` explicitly.
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
 - **`testOutput`**: If set to a `.png` path, the engine renders one frame, saves a screenshot, and exits. Used by automated tests.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.

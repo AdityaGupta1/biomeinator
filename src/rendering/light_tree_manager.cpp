@@ -328,12 +328,12 @@ void LightTreeManager::ensureCapacity(ToFreeList& toFreeList, uint32_t sparseCou
 
     if (this->dev_lightAux != nullptr)
     {
-        toFreeList.pushResource(this->dev_lightAux, false /*isMapped*/);
+        toFreeList.pushResource(this->dev_lightAux);
         this->dev_lightAux.Reset();
     }
     if (this->dev_lightToLeaf != nullptr)
     {
-        toFreeList.pushResource(this->dev_lightToLeaf, false /*isMapped*/);
+        toFreeList.pushResource(this->dev_lightToLeaf);
         this->dev_lightToLeaf.Reset();
     }
 
@@ -362,17 +362,17 @@ void LightTreeManager::ensureLightTreeCapacity(ToFreeList& toFreeList, uint32_t 
 
     if (this->dev_lightTree != nullptr)
     {
-        toFreeList.pushResource(this->dev_lightTree, false /*isMapped*/);
+        toFreeList.pushResource(this->dev_lightTree);
         this->dev_lightTree.Reset();
     }
     if (this->dev_mortonKeys != nullptr)
     {
-        toFreeList.pushResource(this->dev_mortonKeys, false /*isMapped*/);
+        toFreeList.pushResource(this->dev_mortonKeys);
         this->dev_mortonKeys.Reset();
     }
     if (this->dev_mortonValues != nullptr)
     {
-        toFreeList.pushResource(this->dev_mortonValues, false /*isMapped*/);
+        toFreeList.pushResource(this->dev_mortonValues);
         this->dev_mortonValues.Reset();
     }
 

@@ -45,8 +45,8 @@ struct GbufferData
 struct Vertex
 {
     float3 pos_OS;
-    float3 nor; // TODO: pack into one uint using octEncode
-    float2 uv; // TODO: pack into one uint?
+    uint packedNor; // octahedron-encoded, see packing.hlsli / util/packing.h
+    uint packedUv; // f16 pair
 };
 
 struct InstanceData

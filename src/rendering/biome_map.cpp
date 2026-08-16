@@ -138,7 +138,7 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     {
         if (dev_texture != nullptr)
         {
-            toFreeList.pushResource(dev_texture, false);
+            toFreeList.pushResource(dev_texture);
             toFreeList.pushDescriptor(srvIdx);
         }
 

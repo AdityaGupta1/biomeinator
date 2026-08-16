@@ -30,11 +30,12 @@ D3D12_GPU_VIRTUAL_ADDRESS ManagedBufferSection::getGpuVirtualAddress() const
     return this->getBuffer()->getGpuVirtualAddress() + this->offsetBytes;
 }
 
-void ManagedBufferSection::free() const
+void ManagedBufferSection::free()
 {
     if (this->sizeBytes > 0)
     {
         this->buffer->freeSection(*this);
+        *this = {};
     }
 }
 

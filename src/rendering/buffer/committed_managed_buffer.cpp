@@ -38,7 +38,7 @@ void CommittedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
 
     void* host_oldBuffer = this->host_buffer;
 
-    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer, this->options.isMapped);
+    ID3D12Resource* dev_oldBuffer = toFreeList.pushResource(this->dev_buffer);
     const size_t oldSizeBytes = this->bufferSizeBytes;
 
     this->initializeStorage(&toFreeList, newSizeBytes);

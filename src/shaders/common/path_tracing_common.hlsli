@@ -11,6 +11,7 @@
 #include "common/payload.hlsli"
 #include "common/water_waves.hlsli"
 #include "materials/materials.hlsli"
+#include "util/packing.hlsli"
 #include "util/ray.hlsli"
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
@@ -97,7 +98,8 @@ float4 getMaterialBaseColorAtHit(const Material material, const InstanceData ins
     loadVertsFromInstance(instanceData, triIdx, v0, v1, v2);
 
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-    const float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    const float2 uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
+                      unpackUintToFloat2(v2.packedUv) * bary.z;
 
     // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
     // adjustments, so skip the map sample and the aux texture sample
@@ -187,7 +189,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
 
-    const float3 hitNor_OS = v0.nor * bary.x + v1.nor * bary.y + v2.nor * bary.z;
+    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
     if (dot(nor_WS, -WorldRayDirection()) < 0.f)
     {
@@ -204,7 +206,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
     payload.hitInfo.hitNor_WS = nor_WS;
 
-    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
+                         unpackUintToFloat2(v2.packedUv) * bary.z;
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 

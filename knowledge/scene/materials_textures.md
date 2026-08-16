@@ -1,4 +1,4 @@
-_Last edited: 2026-08-01_
+_Last edited: 2026-08-04_
 
 # Materials and Textures
 
@@ -51,5 +51,12 @@ Two invariants:
   via its invalid-base-ID guard. The path tracer stays correct because `emissiveContrib` is
   computed at the top of the bounce loop before the split/bake, and `surfMaterial` is
   refetched from the hit buffer after each `TraceRay`.
-- The aux texture must be loaded linear (`loadTexture(..., sRGB=false)`) — mask and strength
+- The aux texture must be loaded linear (`LoadTextureOptions::sRGB = false`) — mask and strength
   values would be distorted by the sRGB transfer during mip downsampling and sampling.
+- The aux texture must inherit the diffuse texture's alpha channel
+  (`LoadTextureOptions::alphaOverride`) before its mips are built. `loadTexture` decides
+  premultiplied-alpha downsampling per tile from *that texture's own* alpha, and `aux_map.png`
+  is fully opaque, so without the override a cutout tile's mask would be box-averaged against the
+  texels the diffuse map cuts away. On an X-shaped block (~18% coverage) that drives the tint mask
+  toward zero within one mip, and since tint-masked texels are authored grayscale the block reads
+  gray at distance.

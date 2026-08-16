@@ -27,13 +27,17 @@ static void createMaterials(Scene* scene)
 {
     ToFreeList toFreeList{};
 
-    const uint32_t diffuseTextureId = loadTexture(scene, "diffuse.png");
+    std::vector<uint8_t> diffuseAlpha;
+    const uint32_t diffuseTextureId = loadTexture(scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha });
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
     }
 
-    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png", false /*sRGB*/, &sliceBiomeTintMask);
+    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png",
+                                              { .sRGB = false,
+                                                .outTileHasBiomeTintMask = &sliceBiomeTintMask,
+                                                .alphaOverride = &diffuseAlpha });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;

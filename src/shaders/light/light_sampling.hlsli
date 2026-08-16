@@ -143,8 +143,9 @@ bool traceToLight(const float3 surfPos_WS,
 
     Vertex v0, v1, v2;
     loadVertsFromInstance(lightInstanceData, light.triangleIdx, v0, v1, v2);
-    const float2 uv =
-        lightBary2.x * v0.uv + lightBary2.y * v1.uv + (1.f - lightBary2.x - lightBary2.y) * v2.uv;
+    const float2 uv = lightBary2.x * unpackUintToFloat2(v0.packedUv) +
+                      lightBary2.y * unpackUintToFloat2(v1.packedUv) +
+                      (1.f - lightBary2.x - lightBary2.y) * unpackUintToFloat2(v2.packedUv);
 
     const float coneWidth = getRayConeWidthAtDistance(rayCone, lightDistance);
     // Untinted because this ctx is only used for emission, which is never tinted

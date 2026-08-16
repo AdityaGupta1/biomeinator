@@ -794,7 +794,7 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
         Renderer::getDevice()->CreateShaderResourceView(dev_texture.Get(), &srvDesc, pendingTex.cpuHandle);
 
         this->textures.push_back(dev_texture);
-        toFreeList.pushResource(dev_uploadBuffer, false);
+        toFreeList.pushResource(dev_uploadBuffer);
     }
 
     this->pendingTextures.clear();
