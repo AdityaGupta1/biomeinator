@@ -3,8 +3,10 @@
 
 #include "terrain_materials.h"
 #include "terrain_materials_helpers.h"
+#include "terrain_omm.h"
 
 #include "rendering/buffer/to_free_list.h"
+#include "rendering/renderer.h"
 
 namespace TerrainMaterials
 {
@@ -32,6 +34,11 @@ static void createMaterials(Scene* scene)
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
+    }
+
+    if (Renderer::getUseOmms())
+    {
+        TerrainOmm::bake(diffuseAlpha, TERRAIN_TEXTURE_SIZE, TERRAIN_TILE_SIZE);
     }
 
     const uint32_t auxTextureId = loadTexture(scene, "aux_map.png",

@@ -316,6 +316,8 @@ struct RendererState
     bool testMode{ false };
     bool voxelMode{ false };
     bool useSer{ false };
+    // Voxel mode with raytracing tier 1.2: terrain alpha cutout resolves via opacity micromaps
+    bool useOmms{ false };
 
     // -- Swap chain --
     ComPtr<IDXGISwapChain3> swapChain;

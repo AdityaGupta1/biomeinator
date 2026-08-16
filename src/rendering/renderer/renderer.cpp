@@ -15,6 +15,7 @@
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
+#include "terrain/terrain_omm.h"
 #include "util/math.h"
 
 #include <algorithm>
@@ -579,6 +580,7 @@ void render()
 
     if (renderState.voxelMode)
     {
+        TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
@@ -992,6 +994,32 @@ void render()
 
     updateFps(deltaTime);
 
+    // TEMP: benchmark instrumentation
+    {
+        static const int benchmarkFrames = SettingsManager::getAsInt("benchmarkFrames");
+        static int quietFrames = 0;
+        static int measuredFrames = 0;
+        static double accumTime = 0.0;
+        if (benchmarkFrames > 0)
+        {
+            if (!Terrain::wasFrameQuiet() || renderState.scene.hasPendingBlasBuilds())
+            {
+                quietFrames = 0;
+            }
+            else if (++quietFrames > 120) // warmup after terrain settles
+            {
+                accumTime += deltaTime;
+                if (++measuredFrames >= benchmarkFrames)
+                {
+                    Logger::log("benchmark: %d frames, avg %.3f ms",
+                                measuredFrames, accumTime / measuredFrames * 1000.0);
+                    Renderer::destroy();
+                    exit(0);
+                }
+            }
+        }
+    }
+
     if (renderState.screenshotRequest.active)
     {
         finalizeQueuedScreenshot(); // this calls flush()
@@ -1144,6 +1172,11 @@ ID3D12Device5* getDevice()
 ID3D12CommandQueue* getGraphicsQueue()
 {
     return renderState.graphicsCmdQueue.Get();
+}
+
+bool getUseOmms()
+{
+    return renderState.useOmms;
 }
 
 const Camera& getCamera()

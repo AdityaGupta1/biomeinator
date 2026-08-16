@@ -9,6 +9,7 @@
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "terrain_materials.h"
+#include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
@@ -111,6 +112,9 @@ static std::mutex chunksToDestroyMutex;
 
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
+
+// TEMP: benchmark instrumentation
+static bool frameQuiet = false;
 
 // Test-mode-only import-completion gate. See knowledge/terrain/world_export_import.md
 // for timing/atomic-ordering rationale.
@@ -460,6 +464,16 @@ void update(ToFreeList& toFreeList)
     {
         chunk->destroyInstances(toFreeList);
     }
+
+    // TEMP: benchmark instrumentation
+    frameQuiet = tasksToEnqueue.empty() && chunksToGenerateTerrain.empty() && chunksToGenerateGeometry.empty() &&
+        chunksToCreateBlasNow.empty() && chunksToDestroyNow.empty();
+}
+
+// TEMP: benchmark instrumentation
+bool wasFrameQuiet()
+{
+    return frameQuiet;
 }
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;
@@ -1163,6 +1177,7 @@ bool pollTestModeImport()
 void shutdown()
 {
     threadPool.shutdown();
+    TerrainOmm::reset();
 }
 
 bool isCameraUnderwater()

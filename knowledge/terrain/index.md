@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-08-16_
 
 # Terrain Knowledgebase
 
@@ -18,4 +18,5 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [cave_structure_system.md](cave_structure_system.md) | Underground floor/ceiling structures, column-centric placement, CaveLayer capture, layer-index seed |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement |
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |
+| [terrain_omm.md](terrain_omm.md) | Opacity micromap baking for cutout tiles, exactness argument, build ordering |
 | [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |

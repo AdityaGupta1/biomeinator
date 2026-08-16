@@ -1,15 +1,37 @@
-_Last edited: 2026-08-02_
+_Last edited: 2026-08-16_
 
 # Acceleration Structures
 
-`src/rendering/buffer/acs_helper.h/cpp` — BLAS and TLAS construction.
+`src/rendering/buffer/acs_helper.h/cpp` — BLAS, TLAS, and OMM Array construction.
 
 ## Geometry Flags
 
-All BLAS geometry is built with `NO_DUPLICATE_ANYHIT_INVOCATION` (stored in
+BLAS geometry defaults to `NO_DUPLICATE_ANYHIT_INVOCATION` (stored in
 `GeometryWrapper::geometryFlags` so refits reuse the same flags): the anyhit shader mutates
 the payload (passthrough tint, stochastic alpha rng draws), which the spec allows to be
-invoked multiple times per triangle per ray without this flag.
+invoked multiple times per triangle per ray without this flag. `BlasBuildInputs::isOpaque`
+switches to `OPAQUE` instead — used for terrain chunks with no cutout faces, whose anyhit
+would only ever conclude alpha == 1 (the terrain material has no transmission, so no
+passthrough behavior is lost).
+
+## Opacity Micromaps
+
+There is a single OMM Array (built once by `buildOmmArray`, terrain cutout tiles; see
+[terrain → terrain_omm.md](../terrain/terrain_omm.md)); its GPU VA is kept in a static so
+`makeBlasBuildInputs` can link any BLAS whose `GeometryWrapper` has a valid
+`ommIdxsBufferSection` without the generic Scene/AcsHelper layers knowing about terrain.
+Ordering: `buildOmmArray` issues the UAV barrier on `sharedAcsBuffer` itself, so any later
+BLAS build (same or later command list) safely dereferences the array. The OMM Array result
+is sub-allocated from `sharedAcsBuffer` like BLASes/TLAS (spec allows intermixing); its
+128-byte alignment requirement is met because every section in that buffer is rounded to
+256 bytes. The R16 OMM index buffers live in the scene's idxs buffer — safe because all
+sections there (uint32 idx arrays, uint16 OMM idx arrays with even triangle counts) are
+multiples of 4 bytes, keeping offsets aligned.
+
+Traversal that can encounter OMM-linked triangles without opting in is undefined behavior,
+so the opt-in is set in both places whenever OMMs are active: pipeline flag in
+`makeRtPipeline`, and the `RAYQUERY_FLAG_ALLOW_OPACITY_MICROMAPS` template flag on the fog
+RayQuery (always set there — harmless when nothing is linked).
 
 ## Shared Buffers
 

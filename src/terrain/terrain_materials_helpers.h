@@ -25,6 +25,9 @@ namespace TerrainMaterials
 
 inline constexpr bool DEBUG_EXPORT_MIPMAPS = false;
 
+inline constexpr uint32_t TERRAIN_TEXTURE_SIZE = 512;
+inline constexpr uint32_t TERRAIN_TILE_SIZE = 16;
+
 static float linearize(uint8_t srgb)
 {
     const float c = srgb / 255.f;
@@ -210,8 +213,8 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename,
 
     const uint32_t w0 = static_cast<uint32_t>(width);
     const uint32_t h0 = static_cast<uint32_t>(height);
-    constexpr uint32_t textureSize = 512;
-    constexpr uint32_t tileSizeMip0 = 16;
+    constexpr uint32_t textureSize = TERRAIN_TEXTURE_SIZE;
+    constexpr uint32_t tileSizeMip0 = TERRAIN_TILE_SIZE;
     constexpr uint32_t numMips = 5;
     // Must match DEFAULT_TEX_NUM_BLOCKS_X in chunk.cpp.
     static_assert(textureSize / tileSizeMip0 == 32);

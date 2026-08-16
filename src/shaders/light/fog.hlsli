@@ -103,7 +103,11 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
+    // The OMM opt-in is required because traversal over OMM-linked terrain is otherwise
+    // undefined; with OMMs linked, terrain cutout resolves in hardware and never surfaces as
+    // a candidate below (the alpha test there remains for the non-OMM fallback and glTF mode)
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
+             RAYQUERY_FLAG_ALLOW_OPACITY_MICROMAPS> query;
     query.TraceRayInline(raytracingAcs, RAY_FLAG_NONE, 0xFF, ray);
 
     // SKIP_PROCEDURAL_PRIMITIVES means every candidate is a non-opaque triangle. Committing
