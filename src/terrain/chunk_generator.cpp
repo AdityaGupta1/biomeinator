@@ -256,10 +256,10 @@ inline constexpr float swampTerrainSurfaceMultiplier = 0.4f;
 // Swamp shaping is height-domain: natural terrain up to the pull-down start above the pond level
 // is pulled down to the marsh flat, then blends back to fully natural over the blend range. The
 // transition width therefore scales with the natural slope, and tall terrain is never fought —
-// hills form the shore instead of a dam wall. The pull-down start widens with the flood factor so
-// heavily flooded areas absorb more terrain into water.
+// hills form the shore instead of a dam wall. The band is deliberately NOT widened by the flood
+// factor: a spatially varying band start turns flood-factor contours on hillsides into sunken
+// dry shelves (trenches); deep flood expresses itself through the marsh floor depth instead.
 inline constexpr float swampPullDownStart = 14.f;
-inline constexpr float swampPullDownStartDeepFlood = 26.f;
 inline constexpr float swampPullDownBlendRange = 16.f;
 // Column positions are domain-warped before the cell lookup so pond shorelines and dam bands
 // wobble organically instead of following straight Voronoi edges. The amplitude must stay well
@@ -482,25 +482,66 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 const SwampCellInfo cell1 = getSwampCellInfo(cellCorners[nearestIdx]);
+                const float deepFloodMix = smoothstep(BiomeNoiseField::floodCellThreshold, 0.9f, BiomeNoiseField::computeFloodFactor(biomeNoise));
+
+                // Shape height this column would take under the given cell: pond-floor pull-down
+                // for swampy cells, untouched natural terrain otherwise. Natural terrain below the
+                // marsh floor is left untouched and becomes deeper open water.
+                const auto shapeHeightForCell = [&](const SwampCellInfo& cell, float& outNaturalMix)
+                {
+                    outNaturalMix = 1.f;
+                    if (!cell.swampy)
+                    {
+                        return naturalTerrain.baseHeight;
+                    }
+                    const float marshFloorHeight = static_cast<float>(cell.pondLevel) - glm::mix(2.f, 5.f, deepFloodMix);
+                    const float heightAboveLevel = naturalTerrain.baseHeight - static_cast<float>(cell.pondLevel);
+                    outNaturalMix = smoothstep(swampPullDownStart, swampPullDownStart + swampPullDownBlendRange, heightAboveLevel);
+                    if (naturalTerrain.baseHeight <= marshFloorHeight)
+                    {
+                        return naturalTerrain.baseHeight;
+                    }
+                    return glm::mix(marshFloorHeight, naturalTerrain.baseHeight, outNaturalMix);
+                };
+
+                float naturalMix1;
+                const float shapeHeight1 = shapeHeightForCell(cell1, naturalMix1);
                 if (cell1.swampy)
                 {
-                    const float deepFloodMix = smoothstep(BiomeNoiseField::floodCellThreshold, 0.9f, BiomeNoiseField::computeFloodFactor(biomeNoise));
-                    const float marshFloorHeight = static_cast<float>(cell1.pondLevel) - glm::mix(2.f, 5.f, deepFloodMix);
-                    const float heightAboveLevel = naturalTerrain.baseHeight - static_cast<float>(cell1.pondLevel);
-                    const float pullDownStart = glm::mix(swampPullDownStart, swampPullDownStartDeepFlood, deepFloodMix);
-                    const float naturalMix = smoothstep(pullDownStart, pullDownStart + swampPullDownBlendRange, heightAboveLevel);
-                    if (naturalTerrain.baseHeight > marshFloorHeight)
-                    {
-                        terrainBaseHeight = glm::mix(marshFloorHeight, naturalTerrain.baseHeight, naturalMix);
-                    }
-                    // Natural terrain below the marsh floor is left untouched and becomes deeper
-                    // open water. The multiplier flattens only where the base was modified.
+                    terrainBaseHeight = shapeHeight1;
+                    // The multiplier flattens only where the base was modified.
                     terrainSurfaceMultiplier = mixSurfaceMultiplierByAmplitude(
-                        swampTerrainSurfaceMultiplier, naturalTerrain.surfaceMultiplier, naturalMix);
+                        swampTerrainSurfaceMultiplier, naturalTerrain.surfaceMultiplier, naturalMix1);
                     waterLevel = cell1.pondLevel;
                 }
 
-                const float swampShapeBaseHeight = terrainBaseHeight; // pond floor if swampy, else natural
+                // Dam contributions below interpolate from an anchor blended across near-tied
+                // cells' shape heights, so the anchor stays continuous when the nearest-cell
+                // identity flips at a swampy/dry border. Anchoring at the own cell's shape height
+                // alone jumps there (marsh floor vs natural), cutting walls wherever a farther
+                // cell's partial dam wins the max on only one side of the border. Away from
+                // borders the weights collapse to the own cell and the anchor equals its shape.
+                constexpr float anchorBlendDist = 12.f;
+                float anchorBase = 0.f;
+                float anchorWeightSum = 0.f;
+                for (int idx = 0; idx < numScannedCells; ++idx)
+                {
+                    const float tieDist = dists[idx] - dists[nearestIdx];
+                    if (tieDist >= anchorBlendDist)
+                    {
+                        continue;
+                    }
+
+                    float unusedNaturalMix;
+                    const float shapeHeight = (idx == nearestIdx)
+                        ? shapeHeight1
+                        : shapeHeightForCell(getSwampCellInfo(cellCorners[idx]), unusedNaturalMix);
+                    const float weight = 1.f - smoothstep(0.f, anchorBlendDist, tieDist);
+                    anchorBase += weight * shapeHeight;
+                    anchorWeightSum += weight;
+                }
+                anchorBase /= anchorWeightSum; // the nearest cell always contributes weight 1
+
                 float flattenMixMax = 0.f;
                 int swampCaveSeal = cell1.swampy ? cell1.pondLevel : 0;
                 for (int idx = 0; idx < numScannedCells; ++idx)
@@ -540,8 +581,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         maxPondLevel = std::max(maxPondLevel, cell1.pondLevel);
                     }
-                    const float damHeight = max(naturalTerrain.baseHeight, static_cast<float>(maxPondLevel + 2));
-                    const float damRise = damHeight - swampShapeBaseHeight;
+                    // The artificial part of the dam (rise above natural terrain) decays past the
+                    // full-dam band: edgeDist dips along every Voronoi edge, not just this cell's
+                    // boundary, so without the decay a high pond paints ridges across unrelated
+                    // low terrain tens of blocks away.
+                    const float artificialRise = static_cast<float>(maxPondLevel + 2) - naturalTerrain.baseHeight;
+                    const float allowedArtificialRise = max(0.f, artificialRise - max(edgeDist - 6.f, 0.f));
+                    const float damHeight = naturalTerrain.baseHeight + allowedArtificialRise;
+                    const float damRise = damHeight - anchorBase;
                     if (damRise <= 0.f)
                     {
                         continue;
@@ -558,7 +605,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
-                    const float baseTowardDam = glm::mix(swampShapeBaseHeight, damHeight, damMix);
+                    const float baseTowardDam = glm::mix(anchorBase, damHeight, damMix);
                     terrainBaseHeight = max(terrainBaseHeight, baseTowardDam);
                 }
 
