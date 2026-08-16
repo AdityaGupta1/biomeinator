@@ -143,6 +143,8 @@ void setDirty()
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
 static bool cameraUnderwater = false;
+static Biome cameraBiome = Biome::OCEAN;
+static bool cameraBiomeValid = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
@@ -176,24 +178,29 @@ void update(ToFreeList& toFreeList)
     };
 
     cameraUnderwater = false;
+    cameraBiomeValid = false;
     {
-        if (cameraPosInt_WS.y >= 0 && cameraPosInt_WS.y < static_cast<int>(chunkSizeY))
-        {
-            const glm::ivec2 cameraChunkPos =
-                glm::ivec2(MathUtil::floorDiv(cameraPosInt_WS.x, static_cast<int>(chunkSizeXZ)),
-                           MathUtil::floorDiv(cameraPosInt_WS.z, static_cast<int>(chunkSizeXZ)));
+        const glm::ivec2 cameraChunkPos =
+            glm::ivec2(MathUtil::floorDiv(cameraPosInt_WS.x, static_cast<int>(chunkSizeXZ)),
+                       MathUtil::floorDiv(cameraPosInt_WS.z, static_cast<int>(chunkSizeXZ)));
 
-            const glm::ivec2 regionPos = glmUtil::floorDiv(cameraChunkPos, glm::ivec2(regionSideLength));
-            const auto regionIter = regions.find(regionPos);
-            if (regionIter != regions.end())
+        const glm::ivec2 regionPos = glmUtil::floorDiv(cameraChunkPos, glm::ivec2(regionSideLength));
+        const auto regionIter = regions.find(regionPos);
+        if (regionIter != regions.end())
+        {
+            const Chunk* cameraChunk = regionIter->second->getChunk(cameraChunkPos);
+            const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
+                                    !cameraChunk->getIsMarkedForDestruction();
+            if (chunkValid)
             {
-                const Chunk* cameraChunk = regionIter->second->getChunk(cameraChunkPos);
-                const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
-                                        !cameraChunk->getIsMarkedForDestruction();
-                if (chunkValid)
+                const int localX = cameraPosInt_WS.x - (cameraChunkPos.x * static_cast<int>(chunkSizeXZ));
+                const int localZ = cameraPosInt_WS.z - (cameraChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
+
+                cameraBiome = cameraChunk->getBiomes()[localX + static_cast<int>(chunkSizeXZ) * localZ];
+                cameraBiomeValid = true;
+
+                if (cameraPosInt_WS.y >= 0 && cameraPosInt_WS.y < static_cast<int>(chunkSizeY))
                 {
-                    const int localX = cameraPosInt_WS.x - (cameraChunkPos.x * static_cast<int>(chunkSizeXZ));
-                    const int localZ = cameraPosInt_WS.z - (cameraChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
                     const glm::uvec3 cameraBlockPos_CS{
                         static_cast<uint32_t>(localX),
                         static_cast<uint32_t>(cameraPosInt_WS.y),
@@ -1121,6 +1128,7 @@ static void resetTerrainState()
     thisFrameTasks.clear();
     lastChunkPos = { INT_MAX, INT_MAX };
     cameraUnderwater = false;
+    cameraBiomeValid = false;
     dirty.store(true, std::memory_order_release);
     expectedImportedChunks.store(0, std::memory_order_relaxed);
     importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
@@ -1168,6 +1176,16 @@ void shutdown()
 bool isCameraUnderwater()
 {
     return cameraUnderwater;
+}
+
+bool tryGetCameraBiome(Biome& outBiome)
+{
+    if (!cameraBiomeValid)
+    {
+        return false;
+    }
+    outBiome = cameraBiome;
+    return true;
 }
 
 glm::ivec3 getVoxelRenderBoundsMin_WS()

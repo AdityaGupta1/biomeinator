@@ -54,6 +54,7 @@ struct TopBlocks
 
 struct BiomeData
 {
+    const char* name{ "" };
     BiomeNoise biomeNoise{};
     TopBlocks topBlocks{};
     glm::vec3 grassTint{ 1.f, 1.f, 1.f }; // sRGB
