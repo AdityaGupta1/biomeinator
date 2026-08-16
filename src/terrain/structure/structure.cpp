@@ -382,6 +382,97 @@ fillStructureBlocksHeader(ACACIA_TREE)
     placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
+// Trilinear value noise in [-1, 1]; interpolating between position-seeded corner values keeps
+// neighboring blocks correlated, unlike a per-block RNG
+static float valueNoise3(vec3 pos)
+{
+    const vec3 posFloor = glm::floor(pos);
+    const vec3 posFract = pos - posFloor;
+    const vec3 t = posFract * posFract * (3.f - 2.f * posFract);
+    const ivec3 basePos = ivec3(posFloor);
+
+    float result = 0.f;
+    for (int cornerIdx = 0; cornerIdx < 8; ++cornerIdx)
+    {
+        const ivec3 corner(cornerIdx & 1, (cornerIdx >> 1) & 1, cornerIdx >> 2);
+        const ivec3 cornerPos = basePos + corner;
+        RandomNumberGenerator cornerRng = initRng(
+            static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
+        const vec3 weights = glm::mix(1.f - t, t, vec3(corner));
+        result += weights.x * weights.y * weights.z * (cornerRng.nextFloat() * 2.f - 1.f);
+    }
+    return result;
+}
+
+fillStructureBlocksHeader(CYPRESS_TREE)
+{
+    const ivec2 chunkPosXZ_WS =
+        ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
+
+    const float trunkHeight = rng.nextFloat(24.f, 35.f);
+    const int trunkTopY = static_cast<int>(trunkHeight);
+
+    // Trunk radius flares into a wide buttress at the base (sunk two blocks so it seats on
+    // slopes) and tapers quickly above it; noise wobble, faded out above the lower trunk,
+    // makes the buttress fluted instead of round
+    for (int y = -2; y <= trunkTopY; ++y)
+    {
+        const float trunkRatio = (y + 2.f) / (trunkHeight + 2.f);
+        const float flare = 0.73f + trunkRatio;
+        const float baseRadius = 0.5f * (1.3f + trunkRatio) / (flare * flare * flare * flare) + 0.5f;
+        const float wobbleStrength = 0.3f * (1.f - glm::smoothstep(0.15f, 0.55f, trunkRatio));
+        const int radiusCeil = static_cast<int>(glm::ceil(baseRadius * (1.f + wobbleStrength)));
+
+        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
+        {
+            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
+            {
+                const ivec3 pos_CS = structurePos_CS + ivec3(dx, y, dz);
+                const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
+                const float trunkRadius = baseRadius * (1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f));
+                if (dx * dx + dz * dz < trunkRadius * trunkRadius && Chunk::isInChunk(pos_CS))
+                {
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
+                }
+            }
+        }
+    }
+
+    // All branch wood is filled before any leaf caps so caps can't block the lines
+    // (tryPlaceStructureBlock is first-placed-wins), keeping branches connected to the trunk
+    const int numBranches = rng.nextInt(6, 11);
+    float branchHeight = trunkHeight - 1.f;
+    float branchAngle = rng.nextFloat(glm::two_pi<float>());
+
+    std::vector<vec3> branchTips;
+    branchTips.reserve(numBranches);
+    for (int i = 0; i < numBranches; ++i)
+    {
+        branchHeight -= rng.nextFloat(1.f, 4.6f);
+        branchAngle += glm::half_pi<float>() + rng.nextFloat(glm::pi<float>());
+
+        vec3 branchEnd(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
+        branchEnd *= rng.nextFloat(4.f, 5.5f);
+        branchEnd.y = rng.nextFloat(2.2f, 3.4f);
+        // Branches shrink toward the crown
+        branchEnd *= 1.f - 0.3f * (branchHeight / trunkHeight);
+
+        const vec3 branchStart = vec3(structurePos_CS) + vec3(0.f, branchHeight, 0.f);
+        branchEnd += branchStart;
+
+        fillLine(blocks, ivec3(glm::floor(branchStart)), ivec3(glm::floor(branchEnd)), Block::CYPRESS_LOG);
+        branchTips.push_back(branchEnd);
+    }
+
+    constexpr float leavesDroopChance = 0.2f;
+    placeLeafCap(blocks, structurePos_CS + ivec3(0, trunkTopY, 0), 3.f, 4.5f, 2.f, rng, Block::CYPRESS_LEAVES);
+    for (const vec3& branchTip : branchTips)
+    {
+        placeLeafCap(blocks, ivec3(glm::floor(branchTip)), 2.5f, 4.f, 2.f, rng, Block::CYPRESS_LEAVES,
+                     leavesDroopChance, chunkPosXZ_WS);
+    }
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
 {}
@@ -422,6 +513,9 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(BIRCH_TREE);
     STRUCTURE_BOUNDS_BY_NAME(BIRCH_TREE) = 3;
+
+    SET_FILL_STRUCTURE_FUNC(CYPRESS_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(CYPRESS_TREE) = 11;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {
