@@ -260,7 +260,7 @@ inline constexpr float swampTerrainSurfaceMultiplier = 0.4f;
 // factor: a spatially varying band start turns flood-factor contours on hillsides into sunken
 // dry shelves (trenches); deep flood expresses itself through the marsh floor depth instead.
 inline constexpr float swampPullDownStart = 14.f;
-inline constexpr float swampPullDownBlendRange = 16.f;
+inline constexpr float swampPullDownBlendRange = 22.f;
 // Column positions are domain-warped before the cell lookup so pond shorelines and dam bands
 // wobble organically instead of following straight Voronoi edges. The amplitude must stay well
 // under swampCellPadding so a warped column still finds its true nearest sites in the 3x3 scan.
@@ -581,12 +581,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         maxPondLevel = std::max(maxPondLevel, cell1.pondLevel);
                     }
-                    // The artificial part of the dam (rise above natural terrain) decays past the
-                    // full-dam band: edgeDist dips along every Voronoi edge, not just this cell's
-                    // boundary, so without the decay a high pond paints ridges across unrelated
-                    // low terrain tens of blocks away.
+                    // The artificial part of the dam (rise above natural terrain) is shaped by
+                    // three smooth factors: a proportional tail so the levee backside slopes down
+                    // instead of cliffing, a far-cell gate so a high pond can't paint ridges along
+                    // unrelated Voronoi edges tens of blocks from its region (edgeDist dips along
+                    // every edge, not just this cell's boundary), and a near-band override that
+                    // keeps the containment band at full height regardless of the gate.
                     const float artificialRise = static_cast<float>(maxPondLevel + 2) - naturalTerrain.baseHeight;
-                    const float allowedArtificialRise = max(0.f, artificialRise - max(edgeDist - 6.f, 0.f));
+                    const float backsideTail = 1.f - smoothstep(6.f, 6.f + 4.f * max(artificialRise, 1.f), edgeDist);
+                    const float farCellGate = 1.f - smoothstep(90.f, 130.f, dists[idx]);
+                    const float containmentBand = 1.f - smoothstep(6.f, 18.f, edgeDist);
+                    const float allowedArtificialRise =
+                        max(0.f, artificialRise) * backsideTail * max(farCellGate, containmentBand);
                     const float damHeight = naturalTerrain.baseHeight + allowedArtificialRise;
                     const float damRise = damHeight - anchorBase;
                     if (damRise <= 0.f)
