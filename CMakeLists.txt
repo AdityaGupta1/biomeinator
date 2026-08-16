@@ -19,6 +19,12 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glm)
 
+# Prefer the vendored dxc (matches the vendored dxcompiler.dll/dxil.dll and supports
+# newer shader models than the Windows SDK one)
+if(NOT DXC_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/dxc/bin/dxc.exe")
+    set(DXC_EXECUTABLE "${CMAKE_CURRENT_SOURCE_DIR}/external/dxc/bin/dxc.exe")
+endif()
+
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
     file(GLOB DXC_POSSIBLE_PATHS
@@ -70,7 +76,7 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
-SET(SHADER_VERSION "6_6")
+SET(SHADER_VERSION "6_9")
 
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
@@ -88,7 +94,9 @@ foreach(SHADER IN LISTS SHADER_FILES)
 
     if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
         set(DXC_TARGET "lib_${SHADER_VERSION}")
-        set(DXC_ENTRY "")
+        # Payload access qualifiers (default-on for lib_6_7+) ICE dxc 1.9 on our
+        # unannotated payload structs
+        set(DXC_ENTRY "-disable-payload-qualifiers")
     elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
         set(DXC_TARGET "vs_${SHADER_VERSION}")
         set(DXC_ENTRY "/E vsMain")
