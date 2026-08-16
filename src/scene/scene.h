@@ -212,9 +212,6 @@ public:
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);
 
-    // TEMP: benchmark instrumentation
-    bool hasPendingBlasBuilds() const;
-
     uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);
 
     uint32_t addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height);

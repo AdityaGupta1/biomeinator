@@ -59,9 +59,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
-    // TEMP: benchmark instrumentation
-    ADD_OPTION("benchmarkFrames", "TEMP: average frame time over N frames once terrain is quiet, then print and exit", int, "0");
-    ADD_OPTION("noOmms", "TEMP: disable opacity micromaps", bool, "false");
 
     ADD_OPTION("nrcEnabled", "Enable neural radiance cache (NRC)", bool, "false");
     ADD_OPTION("nrcResolveMode", "NRC resolve mode", uint32_t, "0");
@@ -139,9 +136,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("fogAmbientStrength", float);
     COPY_SETTING("renderDistance", int);
     COPY_SETTING("world", std::string);
-    // TEMP: benchmark instrumentation
-    COPY_SETTING("benchmarkFrames", int);
-    COPY_SETTING("noOmms", bool);
 
     COPY_SETTING("nrcEnabled", bool);
     COPY_SETTING("nrcResolveMode", uint32_t);

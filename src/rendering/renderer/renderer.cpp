@@ -994,32 +994,6 @@ void render()
 
     updateFps(deltaTime);
 
-    // TEMP: benchmark instrumentation
-    {
-        static const int benchmarkFrames = SettingsManager::getAsInt("benchmarkFrames");
-        static int quietFrames = 0;
-        static int measuredFrames = 0;
-        static double accumTime = 0.0;
-        if (benchmarkFrames > 0)
-        {
-            if (!Terrain::wasFrameQuiet() || renderState.scene.hasPendingBlasBuilds())
-            {
-                quietFrames = 0;
-            }
-            else if (++quietFrames > 120) // warmup after terrain settles
-            {
-                accumTime += deltaTime;
-                if (++measuredFrames >= benchmarkFrames)
-                {
-                    Logger::log("benchmark: %d frames, avg %.3f ms",
-                                measuredFrames, accumTime / measuredFrames * 1000.0);
-                    Renderer::destroy();
-                    exit(0);
-                }
-            }
-        }
-    }
-
     if (renderState.screenshotRequest.active)
     {
         finalizeQueuedScreenshot(); // this calls flush()
@@ -1045,6 +1019,12 @@ static void beginFrame()
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
+
+    // Every root signature declares CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, which requires the
+    // heap to be bound before any SetComputeRootSignature; bind it once up front so early
+    // compute passes (water displacement, light tree, biome map) are covered.
+    ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
+    renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 }
 
 static void submitCmd()

@@ -13,6 +13,10 @@ class ToFreeList;
 // Bakes opacity micromaps for the terrain's alpha-cutout texture array slices and builds the
 // shared OMM Array referenced by all terrain BLASes. Each cutout slice gets two 2-state OMMs
 // (one per quad triangle) that reproduce the point-sampled mip-0 alpha test exactly.
+//
+// NOTE: OMMs have no LOD, so distant foliage bypasses the coverage-preserving alpha mips and
+// reads thinner than the anyhit path rendered it; see the bad-interaction section in
+// knowledge/terrain/terrain_omm.md before changing distance behavior.
 namespace TerrainOmm
 {
 

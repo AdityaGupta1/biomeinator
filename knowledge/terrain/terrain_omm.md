@@ -17,9 +17,18 @@ micro-triangle centroid therefore reproduces the voxel-mode point-sampled alpha 
 bit-exactly at mip 0. Two OMMs per cutout slice (one per quad triangle) cover every face in
 the world.
 
-Distance behavior differs deliberately: OMMs have no LOD, so traversal always tests the
-mip-0 pattern instead of the coverage-preserving binarized mips — same coverage, more
-distant-foliage shimmer for the denoiser to absorb. Foliage goldens move because of this.
+## Known bad interaction with alpha mips
+
+OMMs have no LOD: traversal always tests the mip-0 pattern, while the anyhit path tested the
+coverage-preserving binarized mips selected by the ray cone. Those mips deliberately
+consolidate distant foliage (a far tile collapses toward solid-or-empty by coverage), so
+with OMMs distant foliage instead resolves to its true subpixel coverage — it reads thinner
+/ partially disappeared compared to the pre-OMM look, plus some added shimmer for the
+denoiser. This was accepted as the cost of the perf win. A 4-state variant was implemented
+and measured (unknown micro-tris where the mip chain disagrees with mip 0, anyhit at
+silhouettes only, occlusion rays forced 2-state): it restored the old distant look but kept
+only about half the win (−6% frame time vs −11% for 2-state on a foliage-heavy world), so it
+was removed — revive from history if the distant-foliage look ever matters more.
 
 ## Baking and ordering
 

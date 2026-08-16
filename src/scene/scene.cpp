@@ -462,12 +462,6 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
 
-// TEMP: benchmark instrumentation
-bool Scene::hasPendingBlasBuilds() const
-{
-    return !this->instancesReadyForBlasBuild.empty();
-}
-
 bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     if (this->instancesReadyForBlasBuild.empty())

@@ -113,9 +113,6 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
-// TEMP: benchmark instrumentation
-static bool frameQuiet = false;
-
 // Test-mode-only import-completion gate. See knowledge/terrain/world_export_import.md
 // for timing/atomic-ordering rationale.
 static std::atomic<uint32_t> expectedImportedChunks{ 0 };
@@ -464,16 +461,6 @@ void update(ToFreeList& toFreeList)
     {
         chunk->destroyInstances(toFreeList);
     }
-
-    // TEMP: benchmark instrumentation
-    frameQuiet = tasksToEnqueue.empty() && chunksToGenerateTerrain.empty() && chunksToGenerateGeometry.empty() &&
-        chunksToCreateBlasNow.empty() && chunksToDestroyNow.empty();
-}
-
-// TEMP: benchmark instrumentation
-bool wasFrameQuiet()
-{
-    return frameQuiet;
 }
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;

@@ -23,9 +23,6 @@ void setDirty();
 
 void update(ToFreeList& toFreeList);
 
-// TEMP: benchmark instrumentation
-bool wasFrameQuiet();
-
 bool isCameraUnderwater();
 
 void exportWorld();

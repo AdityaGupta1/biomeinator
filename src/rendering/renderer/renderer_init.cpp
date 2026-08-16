@@ -138,8 +138,7 @@ void initDevice()
 
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
     CHECK_HRESULT(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)));
-    renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2 &&
-        !SettingsManager::getAsBool("noOmms"); // TEMP: benchmark instrumentation
+    renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2;
     if (renderState.voxelMode)
     {
         if (renderState.useOmms)
