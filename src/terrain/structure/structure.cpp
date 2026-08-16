@@ -491,6 +491,10 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     for (int i = 0; i < numBranches; ++i)
     {
         branchHeight -= rng.nextFloat(1.f, 4.6f);
+        if (branchHeight < 5.f)
+        {
+            break;
+        }
         branchAngle += glm::half_pi<float>() + rng.nextFloat(glm::pi<float>());
 
         vec3 branchEnd(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
@@ -512,6 +516,68 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     {
         placeLeafCap(blocks, ivec3(glm::floor(branchTip)), 2.5f, 4.f, 2.f, rng, Block::CYPRESS_LEAVES,
                      leavesDroopChance, chunkPosXZ_WS);
+    }
+
+    // Spanish moss: strands hanging below leaf blocks that have air underneath, more likely on the
+    // lower caps. Chance and length come from a position-hashed RNG rather than the structure
+    // stream, and the scan draws no RNG, so the cross-chunk stream stays intact. The strand's
+    // bottom block is always the tip, even when water or terrain cuts the strand short.
+    constexpr float mossBaseChance = 0.45f;
+    constexpr int mossBoundsXZ = 11;
+    for (int dz = -mossBoundsXZ; dz <= mossBoundsXZ; ++dz)
+    {
+        for (int dx = -mossBoundsXZ; dx <= mossBoundsXZ; ++dx)
+        {
+            const int x_CS = structurePos_CS.x + dx;
+            const int z_CS = structurePos_CS.z + dz;
+            if (!Chunk::isInChunkXZ(ivec3(x_CS, 0, z_CS)))
+            {
+                continue;
+            }
+
+            for (int y = glm::max(structurePos_CS.y, 1); y <= structurePos_CS.y + trunkTopY + 5; ++y)
+            {
+                if (blocks[Chunk::blockPosToIdx(uvec3(x_CS, y, z_CS))] != Block::CYPRESS_LEAVES ||
+                    blocks[Chunk::blockPosToIdx(uvec3(x_CS, y - 1, z_CS))] != Block::AIR)
+                {
+                    continue;
+                }
+
+                const float mossChance =
+                    mossBaseChance * (1.f - glm::smoothstep(0.f, trunkHeight, static_cast<float>(y - structurePos_CS.y)));
+                RandomNumberGenerator mossRng =
+                    initRng(static_cast<uint32_t>(chunkPosXZ_WS.x + x_CS),
+                            static_cast<uint32_t>(chunkPosXZ_WS.y + z_CS), static_cast<uint32_t>(y), 0x9a7f3b21);
+                if (!mossRng.chance(mossChance))
+                {
+                    continue;
+                }
+                const int strandLength = mossRng.nextInt(1, 4);
+
+                uint32_t lastMossIdx = 0;
+                int numPlaced = 0;
+                for (int i = 1; i <= strandLength; ++i)
+                {
+                    const int strandY = y - i;
+                    if (strandY < 0)
+                    {
+                        break;
+                    }
+                    const uint32_t blockIdx = Chunk::blockPosToIdx(uvec3(x_CS, strandY, z_CS));
+                    if (blocks[blockIdx] != Block::AIR)
+                    {
+                        break;
+                    }
+                    blocks[blockIdx] = Block::SPANISH_MOSS;
+                    lastMossIdx = blockIdx;
+                    ++numPlaced;
+                }
+                if (numPlaced > 0)
+                {
+                    blocks[lastMossIdx] = Block::SPANISH_MOSS_TIP;
+                }
+            }
+        }
     }
 }
 

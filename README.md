@@ -66,7 +66,8 @@ Reference documentation vendored under `reference/` (not compiled into the proje
 - [DirectX-Specs](https://github.com/microsoft/DirectX-Specs) - docs under CC BY 4.0, code samples under MIT
 
 Block textures come from:
-- [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) by Acaitart
-- [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore
+- [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) by Acaitart - CC-BY
+- [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore - CC0
+- [Paler Gardens](https://modrinth.com/resourcepack/paler-gardens2) by autumnleavesfalling_2008 - MIT
 
 This project is not sponsored by, endorsed by, or affiliated with NVIDIA Corporation.

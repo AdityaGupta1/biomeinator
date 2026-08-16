@@ -536,6 +536,12 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
             }
             else if (neighborBlockData.type == BlockType::TRANSPARENT_CUTOUT)
             {
+                // X-shaped neighbors contribute no cube faces, so the shared-face dedupe below
+                // would leave a hole instead of removing a duplicate
+                if (neighborBlockData.shape == BlockShape::X_SHAPED)
+                {
+                    return true;
+                }
                 return all(lessThanEqual(thisPos_CS, neighborPos_CS));
             }
             return true;
@@ -618,7 +624,6 @@ void Chunk::createInstances()
     terrainEmissiveTriangleIdxs.reserve(512);
 
     const uint worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator rng = initRng(worldSeed ^ hash(392421012), this->chunkPos.x, this->chunkPos.y /*z*/);
 
     for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
@@ -647,7 +652,13 @@ void Chunk::createInstances()
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
-                        const vec2 jitter = (rng.nextFloat2() - 0.5f) * 0.4f;
+                        // Jitter is hashed from the world-space column position (not Y) so vertically
+                        // stacked X-shaped blocks, like Spanish moss strands, stay aligned
+                        const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
+                        RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
+                                                                  static_cast<uint>(columnPos_WS.x),
+                                                                  static_cast<uint>(columnPos_WS.y /*z*/));
+                        const vec2 jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
                         const uvec2 baseTexCoords = blockData.uvs[1]; // side
