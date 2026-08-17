@@ -30,6 +30,7 @@ std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
 
 void init()
 {
+    // clang-format off
     BLOCK_DATA_BY_NAME(AIR) = { .type = BlockType::AIR };
 
     BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::CUBE };
@@ -49,53 +50,54 @@ void init()
     BLOCK_DATA_BY_NAME(SNOWY_GRASS_BLOCK) = { .uvs = { uvec2(9, 0), uvec2(10, 0), uvec2(4, 0) } };
     BLOCK_DATA_BY_NAME(ICE) = { .uvs = { uvec2(11, 0) } };
     BLOCK_DATA_BY_NAME(OAK_LOG) = { .uvs = { uvec2(13, 0), uvec2(12, 0), uvec2(13, 0) } };
-    BLOCK_DATA_BY_NAME(OAK_LEAVES) = { .uvs = { uvec2(14, 0) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(OAK_LEAVES) = { .uvs = { uvec2(14, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(CACTUS) = { .uvs = { uvec2(15, 0) } };
-    BLOCK_DATA_BY_NAME(GRASS) = { .uvs = { uvec2(16, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(SHORT_GRASS) = { .uvs = { uvec2(20, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(GRASS) = { .uvs = { uvec2(16, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
+    BLOCK_DATA_BY_NAME(SHORT_GRASS) = { .uvs = { uvec2(20, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(DEAD_BUSH) = { .uvs = { uvec2(17, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = { uvec2(18, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = { uvec2(19, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = { uvec2(21, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = { uvec2(18, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
+    BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = { uvec2(19, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
+    BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = { uvec2(21, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(TINY_CACTUS) = { .uvs = { uvec2(22, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = { uvec2(23, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = { uvec2(23, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(BLACK_SAND) = { .uvs = { uvec2(24, 0) } };
     BLOCK_DATA_BY_NAME(GRAVEL) = { .uvs = { uvec2(25, 0) } };
     BLOCK_DATA_BY_NAME(PALM_LOG) = { .uvs = { uvec2(27, 0), uvec2(26, 0), uvec2(27, 0) } };
-    BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = { uvec2(28, 0) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = { uvec2(28, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(ACACIA_LOG) = { .uvs = { uvec2(30, 0), uvec2(29, 0), uvec2(30, 0) } };
-    BLOCK_DATA_BY_NAME(ACACIA_LEAVES) = { .uvs = { uvec2(31, 0) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(ACACIA_LEAVES) = { .uvs = { uvec2(31, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(MARBLE) = { .uvs = { uvec2(4, 1) } };
     BLOCK_DATA_BY_NAME(SCALESTONE) = { .uvs = { uvec2(1, 1) } };
     BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
     BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
     BLOCK_DATA_BY_NAME(RAINBOW_CRYSTAL) = { .uvs = { uvec2(26, 1) } };
     BLOCK_DATA_BY_NAME(CHERRY_LOG) = { .uvs = { uvec2(11, 1), uvec2(10, 1), uvec2(11, 1) } };
-    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_PINK) = { .uvs = { uvec2(12, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
-    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_WHITE) = { .uvs = { uvec2(13, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_PINK) = { .uvs = { uvec2(12, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
+    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_WHITE) = { .uvs = { uvec2(13, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(REDWOOD_LOG) = { .uvs = { uvec2(15, 1), uvec2(14, 1), uvec2(15, 1) } };
-    BLOCK_DATA_BY_NAME(REDWOOD_LEAVES) = { .uvs = { uvec2(16, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(REDWOOD_LEAVES) = { .uvs = { uvec2(16, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(BIRCH_LOG) = { .uvs = { uvec2(18, 1), uvec2(17, 1), uvec2(18, 1) } };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_GREEN) = { .uvs = { uvec2(19, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_YELLOW) = { .uvs = { uvec2(20, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_ORANGE) = { .uvs = { uvec2(21, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_GREEN) = { .uvs = { uvec2(19, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_YELLOW) = { .uvs = { uvec2(20, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
+    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_ORANGE) = { .uvs = { uvec2(21, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(FIR_LOG) = { .uvs = { uvec2(30, 1), uvec2(29, 1), uvec2(30, 1) } };
-    BLOCK_DATA_BY_NAME(FIR_LEAVES) = { .uvs = { uvec2(31, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(FIR_LEAVES) = { .uvs = { uvec2(31, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(PINE_LOG) = { .uvs = { uvec2(1, 2), uvec2(0, 2), uvec2(1, 2) } };
-    BLOCK_DATA_BY_NAME(PINE_LEAVES) = { .uvs = { uvec2(2, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(PINE_LEAVES) = { .uvs = { uvec2(2, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(COBBLESTONE) = { .uvs = { uvec2(3, 2) } };
     BLOCK_DATA_BY_NAME(MOSSY_COBBLESTONE) = { .uvs = { uvec2(4, 2) } };
     BLOCK_DATA_BY_NAME(MAHOGANY_LOG) = { .uvs = { uvec2(8, 1), uvec2(7, 1), uvec2(8, 1) } };
-    BLOCK_DATA_BY_NAME(MAHOGANY_LEAVES) = { .uvs = { uvec2(9, 1) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(MAHOGANY_LEAVES) = { .uvs = { uvec2(9, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(EUCALYPTUS_LOG) = { .uvs = { uvec2(6, 2), uvec2(5, 2), uvec2(6, 2) } };
-    BLOCK_DATA_BY_NAME(EUCALYPTUS_LEAVES) = { .uvs = { uvec2(7, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(EUCALYPTUS_LEAVES) = { .uvs = { uvec2(7, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(WILLOW_LOG) = { .uvs = { uvec2(9, 2), uvec2(8, 2), uvec2(9, 2) } };
-    BLOCK_DATA_BY_NAME(WILLOW_LEAVES) = { .uvs = { uvec2(10, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(WILLOW_LEAVES) = { .uvs = { uvec2(10, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(CYPRESS_LOG) = { .uvs = { uvec2(12, 2), uvec2(11, 2), uvec2(12, 2) } };
-    BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT };
+    BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(MUD) = { .uvs = { uvec2(14, 2) } };
     BLOCK_DATA_BY_NAME(SPANISH_MOSS) = { .uvs = { uvec2(15, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(SPANISH_MOSS_TIP) = { .uvs = { uvec2(16, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
+    // clang-format on
 }
 
 const BlockData& getBlockData(Block block)

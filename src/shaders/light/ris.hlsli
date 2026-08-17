@@ -27,6 +27,7 @@ float risTargetFunction(const AreaLight light, const float3 pointOnLight_WS, con
 
     // const float3 bsdfVal = evaluateBsdf(material, uv, wo_WS, wi_WS, surfNor_WS); // TODO: should this be included here, or maybe a proxy to save performance?
 
+    // absCosTheta keeps lights behind the surface plane viable, which diffuse transmission relies on
     const float cosThetaSurf = absCosTheta(wi_WS, surfNor_WS); // TODO: replace with cosTheta for non-transmissive materials? (will require more complex MIS weights for RIS sample generation)
 
     // return luminance(lightMaterial.getEmissiveColor() * bsdfVal) * cosThetaSurf;
