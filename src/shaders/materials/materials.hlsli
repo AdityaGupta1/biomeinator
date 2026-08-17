@@ -237,7 +237,7 @@ BsdfSample sampleBsdf(
         result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
         result.wasSpecular = true;
     }
-    else // diffuse or glossy transmission
+    else // (diffuse reflection or transmission) or (glossy transmission)
     {
         const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
 
@@ -253,8 +253,7 @@ BsdfSample sampleBsdf(
         else
         {
             // Diffuse transmission splits the diffuse lobe across both hemispheres; either pick has
-            // bsdf * cos / pdf = albedo, so path weights stay noise-free. The extra RNG draw is
-            // guarded so diffuseTransmission = 0 draws exactly as many random numbers as plain diffuse.
+            // bsdf * cos / pdf = albedo, so path weights stay noise-free.
             float3 lobeNor_WS = surfNor_WS;
             float lobeProbability = 1.f;
             if (material.diffuseTransmission > 0.f)
@@ -288,6 +287,8 @@ float bsdfPdf(
     {
         return 0.f;
     }
+
+    // Until roughness is added, we assume the material does not have glossy transmission at this point
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     if (isTransmission && material.diffuseTransmission <= 0.f)
