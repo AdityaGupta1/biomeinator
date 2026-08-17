@@ -677,7 +677,7 @@ void Chunk::createInstances()
                         }
                         if (blockData.translucent)
                         {
-                            faceData.flags |= TRIANGLE_FLAG_THIN_TRANSLUCENT;
+                            faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
                         }
                         faceData.texArraySliceIdx = texArraySliceIdx;
                         for (uint t = 0; t < 4; ++t)
@@ -740,7 +740,7 @@ void Chunk::createInstances()
                             }
                             if (blockData.translucent)
                             {
-                                faceData.flags |= TRIANGLE_FLAG_THIN_TRANSLUCENT;
+                                faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
                             }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);

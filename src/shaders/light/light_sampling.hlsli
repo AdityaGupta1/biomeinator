@@ -99,7 +99,7 @@ bool traceToLight(const float3 surfPos_WS,
     const float lightDistance = distance(surfPos_WS, pointOnLight_WS);
 
     RayDesc ray;
-    // Faceforwarding keeps the offset on the ray's side for thin-translucent surfaces sampling
+    // Faceforwarding keeps the offset on the ray's side for diffuse-transmission surfaces sampling
     // lights behind them; for opaque surfaces a backside direction contributes zero via the BSDF.
     setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, true /*faceforwardNormal*/);
     ray.TMin = 0.f;

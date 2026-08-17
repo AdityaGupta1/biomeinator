@@ -161,7 +161,7 @@ float3 evaluateBsdf(
     }
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
-    if (isTransmission && material.translucency <= 0.f)
+    if (isTransmission && material.diffuseTransmission <= 0.f)
     {
         return 0;
     }
@@ -171,7 +171,7 @@ float3 evaluateBsdf(
     if (isTransmission)
     {
         // Thin-wall diffuse transmission; no Fresnel term on the back side
-        return diffuseAlbedo * M_INV_PI * material.translucency;
+        return diffuseAlbedo * M_INV_PI * material.diffuseTransmission;
     }
 
     float fresnelReflectance = 0.f;
@@ -180,7 +180,7 @@ float3 evaluateBsdf(
         fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
     }
 
-    return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance) * (1.f - material.translucency);
+    return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance) * (1.f - material.diffuseTransmission);
 }
 
 struct BsdfSample
@@ -252,21 +252,21 @@ BsdfSample sampleBsdf(
         }
         else
         {
-            // Thin translucency splits the diffuse lobe across both hemispheres; either pick has
+            // Diffuse transmission splits the diffuse lobe across both hemispheres; either pick has
             // bsdf * cos / pdf = albedo, so path weights stay noise-free. The extra RNG draw is
-            // guarded so translucency = 0 draws exactly as many random numbers as plain diffuse.
+            // guarded so diffuseTransmission = 0 draws exactly as many random numbers as plain diffuse.
             float3 lobeNor_WS = surfNor_WS;
             float lobeProbability = 1.f;
-            if (material.translucency > 0.f)
+            if (material.diffuseTransmission > 0.f)
             {
-                if (rng.nextFloat() < material.translucency)
+                if (rng.nextFloat() < material.diffuseTransmission)
                 {
                     lobeNor_WS = -surfNor_WS;
-                    lobeProbability = material.translucency;
+                    lobeProbability = material.diffuseTransmission;
                 }
                 else
                 {
-                    lobeProbability = 1.f - material.translucency;
+                    lobeProbability = 1.f - material.diffuseTransmission;
                 }
             }
             result.wi_WS = sampleHemisphereCosineWeighted(lobeNor_WS, rng);
@@ -290,15 +290,15 @@ float bsdfPdf(
     }
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
-    if (isTransmission && material.translucency <= 0.f)
+    if (isTransmission && material.diffuseTransmission <= 0.f)
     {
         return 0.f;
     }
 
     // Must mirror the hemisphere split in sampleBsdf exactly or MIS breaks silently
     float pdf = isTransmission
-        ? hemisphereCosineWeightedPdf(wi_WS, -surfNor_WS) * material.translucency
-        : hemisphereCosineWeightedPdf(wi_WS, surfNor_WS) * (1.f - material.translucency);
+        ? hemisphereCosineWeightedPdf(wi_WS, -surfNor_WS) * material.diffuseTransmission
+        : hemisphereCosineWeightedPdf(wi_WS, surfNor_WS) * (1.f - material.diffuseTransmission);
 
     if (material.hasGlossyReflection())
     {
