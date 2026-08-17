@@ -123,6 +123,8 @@ void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, con
                 for (uint32_t x = 0; x < tileSize; ++x)
                 {
                     const uint8_t alpha = alphaAt(x, y);
+                    // 2-state OMMs reproduce the alpha test exactly only if cutout alpha is binary
+                    ASSERT(alpha == 0 || alpha == 255);
                     numOpaqueTexels += (alpha != 0) ? 1u : 0u;
                     hasTransparency |= (alpha < 255);
                 }
@@ -130,16 +132,6 @@ void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, con
             if (!hasTransparency)
             {
                 continue;
-            }
-
-            // 2-state OMMs reproduce the alpha test exactly only if cutout alpha is binary
-            for (uint32_t y = 0; y < tileSize; ++y)
-            {
-                for (uint32_t x = 0; x < tileSize; ++x)
-                {
-                    const uint8_t alpha = alphaAt(x, y);
-                    ASSERT(alpha == 0 || alpha == 255);
-                }
             }
 
             sliceCutoutIdxs[tileY * tilesPerAxis + tileX] = static_cast<int32_t>(ommDescs.size() / NUM_TRIS_PER_QUAD);

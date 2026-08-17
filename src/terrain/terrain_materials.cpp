@@ -29,17 +29,17 @@ static void createMaterials(Scene* scene)
 {
     ToFreeList toFreeList{};
 
-    const bool useOpaqueCutoutMips = Renderer::getUseOmms();
+    const bool useOmms = Renderer::getUseOmms();
 
     std::vector<uint8_t> diffuseAlpha;
     const uint32_t diffuseTextureId = loadTexture(
-        scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha, .useOpaqueCutoutMips = useOpaqueCutoutMips });
+        scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha, .useOpaqueCutoutMips = useOmms });
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
     }
 
-    if (Renderer::getUseOmms())
+    if (useOmms)
     {
         TerrainOmm::bake(diffuseAlpha, TERRAIN_TEXTURE_SIZE, TERRAIN_TILE_SIZE);
     }
@@ -48,7 +48,7 @@ static void createMaterials(Scene* scene)
                                               { .sRGB = false,
                                                 .outTileHasBiomeTintMask = &sliceBiomeTintMask,
                                                 .alphaOverride = &diffuseAlpha,
-                                                .useOpaqueCutoutMips = useOpaqueCutoutMips });
+                                                .useOpaqueCutoutMips = useOmms });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;

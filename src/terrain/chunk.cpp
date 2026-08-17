@@ -624,6 +624,16 @@ void Chunk::createInstances()
 
     const bool useOmms = TerrainOmm::isBaked();
     bool hasCutoutFaces = false;
+    const auto appendOmmIdxs = [&](const uint32_t texArraySliceIdx, const uint numTris)
+    {
+        const bool isCutout = TerrainOmm::sliceHasCutout(texArraySliceIdx);
+        hasCutoutFaces |= isCutout;
+        for (uint t = 0; t < numTris; ++t)
+        {
+            terrainOmmIdxs.emplace_back(isCutout ? TerrainOmm::getOmmIdx(texArraySliceIdx, t % 2)
+                                                 : TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+        }
+    };
 
     for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
@@ -688,13 +698,7 @@ void Chunk::createInstances()
 
                         if (useOmms)
                         {
-                            const bool isCutout = TerrainOmm::sliceHasCutout(texArraySliceIdx);
-                            hasCutoutFaces |= isCutout;
-                            for (uint t = 0; t < 4; ++t)
-                            {
-                                terrainOmmIdxs.emplace_back(isCutout ? TerrainOmm::getOmmIdx(texArraySliceIdx, t % 2)
-                                                                     : TerrainOmm::OMM_IDX_FULLY_OPAQUE);
-                            }
+                            appendOmmIdxs(texArraySliceIdx, 4);
                         }
                     }
                     else // BlockShape::LIQUID_TOP or BlockShape::CUBE
@@ -756,13 +760,7 @@ void Chunk::createInstances()
 
                             if (useOmms && !isWater)
                             {
-                                const bool isCutout = TerrainOmm::sliceHasCutout(texArraySliceIdx);
-                                hasCutoutFaces |= isCutout;
-                                for (uint t = 0; t < 2; ++t)
-                                {
-                                    terrainOmmIdxs.emplace_back(isCutout ? TerrainOmm::getOmmIdx(texArraySliceIdx, t)
-                                                                         : TerrainOmm::OMM_IDX_FULLY_OPAQUE);
-                                }
+                                appendOmmIdxs(texArraySliceIdx, 2);
                             }
 
                             if (blockData.emitsLight)

@@ -275,6 +275,18 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     dev_verts->beginBatchCopy(cmdList);
     dev_idxs->beginBatchCopy(cmdList);
 
+    const auto uploadIdxsSection = [&](const auto& host_idxs)
+    {
+        const ManagedBufferSection uploadBufferSection =
+            sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, host_idxs);
+
+        const ManagedBufferSection devBufferSection =
+            dev_idxs->copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, uploadBufferSection);
+
+        toFreeList.pushManagedBufferSection(uploadBufferSection);
+        return devBufferSection;
+    };
+
     for (const auto& inputs : allInputs)
     {
         const ManagedBufferSection vertsUploadBufferSection =
@@ -285,26 +297,14 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
-        ManagedBufferSection idxsUploadBufferSection = {};
         if (inputs.host_idxs)
         {
-            idxsUploadBufferSection = sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
-
-            inputs.outGeoWrapper->idxsBufferSection =
-                dev_idxs->copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, idxsUploadBufferSection);
-
-            toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
+            inputs.outGeoWrapper->idxsBufferSection = uploadIdxsSection(*inputs.host_idxs);
         }
 
         if (inputs.host_ommIdxs)
         {
-            const ManagedBufferSection ommIdxsUploadBufferSection =
-                sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_ommIdxs);
-
-            inputs.outGeoWrapper->ommIdxsBufferSection =
-                dev_idxs->copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, ommIdxsUploadBufferSection);
-
-            toFreeList.pushManagedBufferSection(ommIdxsUploadBufferSection);
+            inputs.outGeoWrapper->ommIdxsBufferSection = uploadIdxsSection(*inputs.host_ommIdxs);
         }
 
         inputs.outGeoWrapper->geometryFlags = inputs.isOpaque
