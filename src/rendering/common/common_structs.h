@@ -90,7 +90,7 @@ public:
 
     uint flags;
     float emissiveStrength;
-    uint pad2;
+    float translucency; // thin diffuse transmission fraction; > 0 only for thin foliage hits
     uint pad3;
 
     float3 baseColor;
@@ -130,6 +130,11 @@ public:
     bool hasDiffuseOrGlossyTransmission()
     {
         return bool(flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION);
+    }
+
+    bool hasThinTranslucency()
+    {
+        return hasDiffuse() && translucency > 0.f;
     }
 
     bool hasArrayTexture()
@@ -226,6 +231,8 @@ static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for p
 #define TRIANGLE_FLAG_IS_WATER_TOP (1 << 1)
 // Faces whose base color is replaced by luminance * biome map tint
 #define TRIANGLE_FLAG_BIOME_TINT (1 << 2)
+// Foliage faces shaded as thin translucent: diffuse splits into reflection and transmission
+#define TRIANGLE_FLAG_THIN_TRANSLUCENT (1 << 3)
 
 struct PerTriangleData
 {

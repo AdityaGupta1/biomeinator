@@ -118,6 +118,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const RayCone rayCone,
                                 const bool canPassthrough,
                                 const bool startUnderwater,
+                                const bool isTranslucent,
                                 inout RandomNumberGenerator rng)
 {
     DomeLightSample result;
@@ -126,14 +127,16 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     float pdf;
     wi_WS = generateDomeLightSampleDir(surfNor_WS, rng, pdf);
 
-    if (dot(wi_WS, surfNor_WS) < 0.f)
+    // Thin-translucent surfaces transmit backside samples, so only opaque surfaces get the
+    // rejection (which saves a shadow ray whenever the sun is below the shading point's horizon).
+    if (!isTranslucent && dot(wi_WS, surfNor_WS) < 0.f)
     {
         result.didReachDomeLight = false;
         return result;
     }
 
     RayDesc ray;
-    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, false /*faceforwardNormal*/);
+    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, true /*faceforwardNormal*/);
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 

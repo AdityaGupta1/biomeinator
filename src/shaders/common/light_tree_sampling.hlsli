@@ -90,6 +90,19 @@ float geomTermBound(float3 p, float3 N, float3 bboxMin, float3 bboxMax)
     return nrmMax * rsqrt(hyp2);
 }
 
+// Thin-translucent surfaces scatter into both hemispheres, so their bound must consider the
+// flipped normal too — otherwise a subtree entirely behind the surface plane would be pruned
+// even though transmission can still reach it.
+float geomTermBoundTwoSided(float3 p, float3 N, bool isTranslucent, float3 bboxMin, float3 bboxMax)
+{
+    float bound = geomTermBound(p, N, bboxMin, bboxMax);
+    if (isTranslucent)
+    {
+        bound = max(bound, geomTermBound(p, -N, bboxMin, bboxMax));
+    }
+    return bound;
+}
+
 // Squared distance from x to bbox (closest-point, 0 if x inside) and to the
 // farthest bbox corner.
 void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
@@ -113,8 +126,9 @@ void distanceSquaredToBbox(float3 x, float3 bboxMin, float3 bboxMax,
 // degenerate case where F = 0 collapses the descent to uniform.
 //
 // Dead-branch detection is purely geometric: core == 0 ⟺ flux == 0 (padding
-// leaf / empty subtree) or geomTermBound == 0 (entire bbox back-facing wrt N,
-// no light path possible for any BSDF). Both cases prune safely.
+// leaf / empty subtree) or the geometric bound == 0 (entire bbox back-facing
+// wrt N; translucent hits also check -N, so no reachable light path exists).
+// Both cases prune safely.
 //
 // Per-child ratios use the cross-multiplied form
 // (core1 · d_j^2) / (core1 · d_j^2 + core2 · d_i^2) instead of computing
@@ -128,11 +142,12 @@ void rtslChildProbs(LightTreeNode c1,
                     LightTreeNode c2,
                     float3 hitPos,
                     float3 hitNormal,
+                    bool isTranslucent,
                     out float p1,
                     out float p2)
 {
-    const float core1 = (c1.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
-    const float core2 = (c2.flux > 0.0f) ? (geomTermBound(hitPos, hitNormal, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
+    const float core1 = (c1.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, isTranslucent, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
+    const float core2 = (c2.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, isTranslucent, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
 
     if (core1 == 0.0f && core2 == 0.0f)
     {
@@ -188,6 +203,7 @@ void rtslChildProbs(LightTreeNode c1,
 bool selectLightFromSubtree(uint subtreeRoot,
                             float3 hitPos,
                             float3 hitNormal,
+                            bool isTranslucent,
                             inout RandomNumberGenerator rng,
                             out uint areaLightIdx,
                             out float pdfSelect)
@@ -215,7 +231,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, isTranslucent, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
@@ -261,7 +277,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
 // at this shading point. Used by the BSDF-hit emission MIS branch.
 // Must use the IDENTICAL weight formula as selectLightFromSubtree at each
 // internal node — see rtslChildProbs.
-float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal)
+float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, bool isTranslucent)
 {
     if (rtslParams.treeLeafCount == 0u)
     {
@@ -292,7 +308,7 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal)
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, isTranslucent, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
@@ -322,7 +338,8 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal)
 float lightPdfRtsl(const HitInfo hitInfo,
                    const float3 surfPos_WS,
                    const float3 surfNor_WS,
-                   const float3 wi_WS)
+                   const float3 wi_WS,
+                   const bool isTranslucent)
 {
     const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
     if (areaLightIdx == LIGHT_IDX_INVALID)
@@ -330,7 +347,7 @@ float lightPdfRtsl(const HitInfo hitInfo,
         return 0.f;
     }
 
-    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS);
+    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, isTranslucent);
     if (pdfSelect <= 0.f)
     {
         return 0.f;
@@ -356,6 +373,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const RayCone rayCone,
                                               const bool canPassthrough,
                                               const bool startUnderwater,
+                                              const bool isTranslucent,
                                               inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
@@ -364,7 +382,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     uint pickedLightIdx;
     float pdfSelect;
     const bool gotLight = selectLightFromSubtree(
-        0u, surfPos_WS, surfNor_WS, rng, pickedLightIdx, pdfSelect);
+        0u, surfPos_WS, surfNor_WS, isTranslucent, rng, pickedLightIdx, pdfSelect);
     if (!gotLight)
     {
         return result;

@@ -155,12 +155,24 @@ float3 evaluateBsdf(
     const float3 surfNor_WS,
     const TexSampleCtx texCtx)
 {
-    if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: revisit after adding roughness
+    if (!material.hasDiffuse()) // TODO: revisit after adding roughness
+    {
+        return 0;
+    }
+
+    const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
+    if (isTransmission && material.translucency <= 0.f)
     {
         return 0;
     }
 
     const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, texCtx).rgb;
+
+    if (isTransmission)
+    {
+        // Thin-wall diffuse transmission; no Fresnel term on the back side
+        return diffuseAlbedo * M_INV_PI * material.translucency;
+    }
 
     float fresnelReflectance = 0.f;
     if (material.hasGlossyReflection())
@@ -168,7 +180,7 @@ float3 evaluateBsdf(
         fresnelReflectance = walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
     }
 
-    return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance);
+    return diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance) * (1.f - material.translucency);
 }
 
 struct BsdfSample
@@ -240,8 +252,25 @@ BsdfSample sampleBsdf(
         }
         else
         {
-            result.wi_WS = sampleHemisphereCosineWeighted(surfNor_WS, rng);
-            result.pdf = absCosTheta(result.wi_WS, surfNor_WS) * oneMinusFresnelReflectance * M_INV_PI;
+            // Thin translucency splits the diffuse lobe across both hemispheres; either pick has
+            // bsdf * cos / pdf = albedo, so path weights stay noise-free. The extra RNG draw is
+            // guarded so translucency = 0 draws exactly as many random numbers as plain diffuse.
+            float3 lobeNor_WS = surfNor_WS;
+            float lobeProbability = 1.f;
+            if (material.translucency > 0.f)
+            {
+                if (rng.nextFloat() < material.translucency)
+                {
+                    lobeNor_WS = -surfNor_WS;
+                    lobeProbability = material.translucency;
+                }
+                else
+                {
+                    lobeProbability = 1.f - material.translucency;
+                }
+            }
+            result.wi_WS = sampleHemisphereCosineWeighted(lobeNor_WS, rng);
+            result.pdf = absCosTheta(result.wi_WS, lobeNor_WS) * oneMinusFresnelReflectance * M_INV_PI * lobeProbability;
             result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, texCtx);
         }
     }
@@ -255,12 +284,21 @@ float bsdfPdf(
     const float3 wi_WS,
     const float3 surfNor_WS)
 {
-    if (!material.hasDiffuse() || dot(wi_WS, surfNor_WS) < 0.f) // TODO: update this after adding roughness
+    if (!material.hasDiffuse()) // TODO: update this after adding roughness
     {
         return 0.f;
     }
 
-    float pdf = hemisphereCosineWeightedPdf(wi_WS, surfNor_WS);
+    const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
+    if (isTransmission && material.translucency <= 0.f)
+    {
+        return 0.f;
+    }
+
+    // Must mirror the hemisphere split in sampleBsdf exactly or MIS breaks silently
+    float pdf = isTransmission
+        ? hemisphereCosineWeightedPdf(wi_WS, -surfNor_WS) * material.translucency
+        : hemisphereCosineWeightedPdf(wi_WS, surfNor_WS) * (1.f - material.translucency);
 
     if (material.hasGlossyReflection())
     {
