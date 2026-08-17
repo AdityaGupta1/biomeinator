@@ -116,6 +116,7 @@ struct BlockData
     BlockType type{ BlockType::SOLID };
     BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
+    bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
 };
 
 namespace Blocks

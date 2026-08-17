@@ -45,6 +45,9 @@
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
+// Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
+static const float foliageDiffuseTransmission = 0.4f;
+
 #if !NRC_UPDATE
     RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
     RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
@@ -160,7 +163,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     }
 
     // data of last "real" bounce (i.e. not passthrough)
-    bool bounceWasSpecular = false;
+    bool bounceWasSpecular = false; // TODO: pack this and bounceHadDiffuseTransmission together (and see if they can be eliminated entirely)
+    bool bounceHadDiffuseTransmission = false;
     float bounceBsdfPdf = 0.f;
     float3 surfPos_WS, surfNor_WS;
 
@@ -181,6 +185,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     {
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+        if (bool(perTriData.flags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
+        {
+            surfMaterial.diffuseTransmission = foliageDiffuseTransmission;
+        }
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
             makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
@@ -297,7 +305,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
-            // bounceBsdfPdf and bounceWasSpecular are intentionally preserved from the last real BSDF sample
+            // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
         {
@@ -346,7 +354,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfMaterial.hasDiffuseTransmission(), payload.rng);
                 }
                 else if (useRis)
                 {
@@ -413,8 +422,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample =
-                        sampleDomeLight(surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rayCone,
+                        canPassthrough, isUnderwater, surfMaterial.hasDiffuseTransmission(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
@@ -467,6 +476,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;
+            bounceHadDiffuseTransmission = surfMaterial.hasDiffuseTransmission();
         } // !isPassthrough
 
         ray.TMin = 0.f;
@@ -610,7 +620,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (surfMaterial.hasEmission() && !bounceWasSpecular)
             {
                 const float bsdfSampleLightPdf = useRtsl
-                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction)
+                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceHadDiffuseTransmission)
                     : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
                 payload.pathWeight *= emissionMisWeight;

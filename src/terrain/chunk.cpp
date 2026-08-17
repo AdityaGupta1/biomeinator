@@ -675,6 +675,10 @@ void Chunk::createInstances()
                         {
                             faceData.flags = TRIANGLE_FLAG_BIOME_TINT;
                         }
+                        if (blockData.translucent)
+                        {
+                            faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
+                        }
                         faceData.texArraySliceIdx = texArraySliceIdx;
                         for (uint t = 0; t < 4; ++t)
                         {
@@ -733,6 +737,10 @@ void Chunk::createInstances()
                             if (TerrainMaterials::sliceHasBiomeTint(texArraySliceIdx))
                             {
                                 faceData.flags |= TRIANGLE_FLAG_BIOME_TINT;
+                            }
+                            if (blockData.translucent)
+                            {
+                                faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
                             }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);
