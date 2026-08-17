@@ -29,8 +29,11 @@ static void createMaterials(Scene* scene)
 {
     ToFreeList toFreeList{};
 
+    const bool useOpaqueCutoutMips = Renderer::getUseOmms();
+
     std::vector<uint8_t> diffuseAlpha;
-    const uint32_t diffuseTextureId = loadTexture(scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha });
+    const uint32_t diffuseTextureId = loadTexture(
+        scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha, .useOpaqueCutoutMips = useOpaqueCutoutMips });
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
@@ -44,7 +47,8 @@ static void createMaterials(Scene* scene)
     const uint32_t auxTextureId = loadTexture(scene, "aux_map.png",
                                               { .sRGB = false,
                                                 .outTileHasBiomeTintMask = &sliceBiomeTintMask,
-                                                .alphaOverride = &diffuseAlpha });
+                                                .alphaOverride = &diffuseAlpha,
+                                                .useOpaqueCutoutMips = useOpaqueCutoutMips });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;

@@ -181,6 +181,81 @@ static void quantizeAlphaToCoverageTile(
     }
 }
 
+// Makes a cutout tile's lower mips carry color only: every texel becomes fully opaque, with
+// uncovered texels taking the average color of their covered neighbors. Used when OMMs perform
+// the alpha test (always against mip 0), so the shading alpha must not cut coverage a second
+// time. Hits can only land over opaque mip-0 texels, so the dilated colors are defensive only.
+static void opaquifyCutoutMipTile(
+    std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+{
+    const uint32_t texelCount = tileSize * tileSize;
+    const auto texelAt = [&](uint32_t i) { return texelIdx(tileX + i % tileSize, tileY + i / tileSize, width); };
+
+    std::vector<bool> covered(texelCount);
+    uint32_t coveredCount = 0;
+    for (uint32_t i = 0; i < texelCount; ++i)
+    {
+        covered[i] = mip[texelAt(i) + 3] > 0;
+        coveredCount += covered[i] ? 1u : 0u;
+    }
+
+    while (coveredCount > 0 && coveredCount < texelCount)
+    {
+        const std::vector<bool> prevCovered = covered;
+        for (uint32_t i = 0; i < texelCount; ++i)
+        {
+            if (prevCovered[i])
+            {
+                continue;
+            }
+
+            const int32_t x = static_cast<int32_t>(i % tileSize);
+            const int32_t y = static_cast<int32_t>(i / tileSize);
+            uint32_t sum[3] = { 0, 0, 0 };
+            uint32_t numNeighbors = 0;
+            constexpr int32_t offsets[4][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+            for (const auto& offset : offsets)
+            {
+                const int32_t nx = x + offset[0];
+                const int32_t ny = y + offset[1];
+                if (nx < 0 || ny < 0 || nx >= static_cast<int32_t>(tileSize) || ny >= static_cast<int32_t>(tileSize))
+                {
+                    continue;
+                }
+
+                const uint32_t neighborIdx = static_cast<uint32_t>(ny) * tileSize + static_cast<uint32_t>(nx);
+                if (!prevCovered[neighborIdx])
+                {
+                    continue;
+                }
+
+                const size_t neighborTexel = texelAt(neighborIdx);
+                for (uint32_t ch = 0; ch < 3; ++ch)
+                {
+                    sum[ch] += mip[neighborTexel + ch];
+                }
+                ++numNeighbors;
+            }
+
+            if (numNeighbors > 0)
+            {
+                const size_t texel = texelAt(i);
+                for (uint32_t ch = 0; ch < 3; ++ch)
+                {
+                    mip[texel + ch] = static_cast<uint8_t>(sum[ch] / numNeighbors);
+                }
+                covered[i] = true;
+                ++coveredCount;
+            }
+        }
+    }
+
+    for (uint32_t i = 0; i < texelCount; ++i)
+    {
+        mip[texelAt(i) + 3] = 255;
+    }
+}
+
 struct LoadTextureOptions
 {
     bool sRGB = true;
@@ -192,6 +267,10 @@ struct LoadTextureOptions
     // Replaces the loaded alpha before mip generation, so a texture co-registered with a cutout
     // texture inherits its coverage weighting. See knowledge/scene/materials_textures.md.
     const std::vector<uint8_t>* alphaOverride = nullptr;
+    // When OMMs perform the cutout alpha test, lower mips carry color only: skip the
+    // coverage-preserving alpha quantization and make cutout tiles' mips fully opaque.
+    // See knowledge/terrain/terrain_omm.md.
+    bool useOpaqueCutoutMips = false;
 };
 
 static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename, const LoadTextureOptions& options = {})
@@ -285,11 +364,22 @@ static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename,
                 downsample2x2Tile(mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX,
                                   dstTileY, dstTileSize, hasTransparency /*premultiplyAlpha*/,
                                   options.sRGB /*srgbTransfer*/);
-                if (hasTransparency)
+                if (hasTransparency && !options.useOpaqueCutoutMips)
                 {
                     const float sourceCoverage =
                         computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
                     quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
+                }
+            }
+
+            // Opaquify only after the full cascade: the downsamples above weight colors by the
+            // previous mip's fractional alpha, which is the tile's true mip-0 coverage.
+            if (hasTransparency && options.useOpaqueCutoutMips)
+            {
+                for (uint32_t m = 1; m < numMips; ++m)
+                {
+                    const uint32_t mipTileSize = tileSizeMip0 >> m;
+                    opaquifyCutoutMipTile(mipData[m], w0 >> m, tileX * mipTileSize, tileY * mipTileSize, mipTileSize);
                 }
             }
         }

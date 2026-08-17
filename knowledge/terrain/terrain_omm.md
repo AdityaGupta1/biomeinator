@@ -17,18 +17,33 @@ micro-triangle centroid therefore reproduces the voxel-mode point-sampled alpha 
 bit-exactly at mip 0. Two OMMs per cutout slice (one per quad triangle) cover every face in
 the world.
 
-## Known bad interaction with alpha mips
+## Interaction with alpha mips: cutout mips are color-only under OMMs
 
-OMMs have no LOD: traversal always tests the mip-0 pattern, while the anyhit path tested the
-coverage-preserving binarized mips selected by the ray cone. Those mips deliberately
-consolidate distant foliage (a far tile collapses toward solid-or-empty by coverage), so
-with OMMs distant foliage instead resolves to its true subpixel coverage — it reads thinner
-/ partially disappeared compared to the pre-OMM look, plus some added shimmer for the
-denoiser. This was accepted as the cost of the perf win. A 4-state variant was implemented
-and measured (unknown micro-tris where the mip chain disagrees with mip 0, anyhit at
-silhouettes only, occlusion rays forced 2-state): it restored the old distant look but kept
-only about half the win (−6% frame time vs −11% for 2-state on a foliage-heavy world), so it
-was removed — revive from history if the distant-foliage look ever matters more.
+OMMs have no LOD: traversal always tests the mip-0 pattern, so under OMMs the texture's
+alpha channel is redundant for visibility — a delivered hit already means "opaque mip-0
+texel". Re-testing alpha at the ray-cone mip in shading would cull a second time with a
+*different* pattern: the coverage-preserving binarized mips redistribute coverage per level
+(they consolidate partial footprints to solid and zero out sparse ones — GRASS collapses to
+fully empty by mip 4), so distant cutout hits sampled alpha 0, path splitting routed them to
+passthrough, and distant foliage largely vanished for primary rays. Paths that never read
+alpha (secondary bounces, path splitting disabled, NRC update) instead shaded those texels
+opaque — occasionally black, where the premultiplied cascade had zero source alpha.
+
+So when `Renderer::getUseOmms()` is set, `LoadTextureOptions::useOpaqueCutoutMips` makes
+cutout tiles' lower mips carry color only: the alpha quantization is skipped so the
+downsample cascade weights colors by true mip-0 coverage (the quantized cascade distorted
+weights), every texel is forced fully opaque, and texels with zero coverage take dilated
+neighbor colors. The dilated colors are defensive — voxel mode point-samples and hits only
+land over opaque mip-0 texels, so they are never read. The anyhit fallback keeps the
+coverage-preserving quantized mips; it still alpha-tests at the cone mip.
+
+Distant foliage therefore resolves to its true subpixel coverage — thinner than the pre-OMM
+consolidated-mip look, plus some added shimmer for the denoiser. This was accepted as the
+cost of the perf win. A 4-state variant was implemented and measured (unknown micro-tris
+where the mip chain disagrees with mip 0, anyhit at silhouettes only, occlusion rays forced
+2-state): it restored the old distant look but kept only about half the win (−6% frame time
+vs −11% for 2-state on a foliage-heavy world), so it was removed — revive from history if
+the distant-foliage look ever matters more.
 
 ## Baking and ordering
 
