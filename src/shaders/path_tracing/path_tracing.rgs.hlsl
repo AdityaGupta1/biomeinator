@@ -163,7 +163,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     }
 
     // data of last "real" bounce (i.e. not passthrough)
-    bool bounceWasSpecular = false;
+    bool bounceWasSpecular = false; // TODO: pack this and bounceHadDiffuseTransmission together (and see if they can be eliminated entirely)
     bool bounceHadDiffuseTransmission = false;
     float bounceBsdfPdf = 0.f;
     float3 surfPos_WS, surfNor_WS;
@@ -305,7 +305,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
-            // bounceBsdfPdf and bounceWasSpecular are intentionally preserved from the last real BSDF sample
+            // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
         {
