@@ -626,7 +626,7 @@ void Chunk::createInstances()
     bool hasCutoutFaces = false;
     const auto appendOmmIdxs = [&](const uint32_t texArraySliceIdx, const uint numTris)
     {
-        const bool isCutout = TerrainOmm::sliceHasCutout(texArraySliceIdx);
+        const bool isCutout = TerrainOmm::texArraySliceHasCutout(texArraySliceIdx);
         hasCutoutFaces |= isCutout;
         for (uint t = 0; t < numTris; ++t)
         {

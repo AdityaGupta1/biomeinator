@@ -17,7 +17,7 @@ static constexpr uint32_t NUM_TRIS_PER_QUAD = 2;
 
 static uint32_t ommSubdivisionLevel = 0;
 
-static std::vector<int32_t> sliceCutoutIdxs; // -1 for slices with no transparency
+static std::vector<int32_t> texArraySliceCutoutIdxs; // -1 for slices with no transparency
 static std::vector<uint8_t> ommData;         // OC1 2-state bitmasks, one per cutout-slice triangle
 static std::vector<D3D12_RAYTRACING_OPACITY_MICROMAP_DESC> ommDescs;
 
@@ -106,7 +106,7 @@ void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, con
     };
 
     const uint32_t tilesPerAxis = textureSize / tileSize;
-    sliceCutoutIdxs.assign(static_cast<size_t>(tilesPerAxis) * tilesPerAxis, -1);
+    texArraySliceCutoutIdxs.assign(static_cast<size_t>(tilesPerAxis) * tilesPerAxis, -1);
 
     for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
     {
@@ -134,7 +134,7 @@ void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, con
                 continue;
             }
 
-            sliceCutoutIdxs[tileY * tilesPerAxis + tileX] = static_cast<int32_t>(ommDescs.size() / NUM_TRIS_PER_QUAD);
+            texArraySliceCutoutIdxs[tileY * tilesPerAxis + tileX] = static_cast<int32_t>(ommDescs.size() / NUM_TRIS_PER_QUAD);
 
             uint32_t numOpaqueMicroTris = 0;
             for (uint32_t triInQuad = 0; triInQuad < NUM_TRIS_PER_QUAD; ++triInQuad)
@@ -184,16 +184,16 @@ bool isBaked()
     return baked;
 }
 
-bool sliceHasCutout(const uint32_t sliceIdx)
+bool texArraySliceHasCutout(const uint32_t texArraySliceIdx)
 {
-    return baked && sliceIdx < sliceCutoutIdxs.size() && sliceCutoutIdxs[sliceIdx] >= 0;
+    return baked && texArraySliceIdx < texArraySliceCutoutIdxs.size() && texArraySliceCutoutIdxs[texArraySliceIdx] >= 0;
 }
 
-uint16_t getOmmIdx(const uint32_t sliceIdx, const uint32_t triInQuad)
+uint16_t getOmmIdx(const uint32_t texArraySliceIdx, const uint32_t triInQuad)
 {
-    ASSERT(sliceHasCutout(sliceIdx));
+    ASSERT(texArraySliceHasCutout(texArraySliceIdx));
     ASSERT(triInQuad < NUM_TRIS_PER_QUAD);
-    return static_cast<uint16_t>(sliceCutoutIdxs[sliceIdx] * NUM_TRIS_PER_QUAD + triInQuad);
+    return static_cast<uint16_t>(texArraySliceCutoutIdxs[texArraySliceIdx] * NUM_TRIS_PER_QUAD + triInQuad);
 }
 
 void buildArrayIfPending(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
@@ -222,7 +222,7 @@ void reset()
     ommArraySection.free();
     ommData.clear();
     ommDescs.clear();
-    sliceCutoutIdxs.clear();
+    texArraySliceCutoutIdxs.clear();
     baked = false;
     buildPending = false;
 }

@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-21_
 
 # Terrain Opacity Micromaps
 
@@ -44,6 +44,34 @@ where the mip chain disagrees with mip 0, anyhit at silhouettes only, occlusion 
 2-state): it restored the old distant look but kept only about half the win (−6% frame time
 vs −11% for 2-state on a foliage-heavy world), so it was removed — revive from history if
 the distant-foliage look ever matters more.
+
+## Traversal semantics: 2-state OMMs never invoke anyhit or produce candidates
+
+The DXR spec ([reference → Raytracing.md](../../reference/DirectX-Specs/d3d/Raytracing.md),
+"Opacity micromaps and TraceRayInline") defines OMM hit classification as happening entirely
+in traversal, before any shader involvement:
+
+> - If it is opaque, then the hit is committed.
+> - If it is transparent the hit is ignored and traversal resumes.
+> - If it is unknown, a candidate hit is returned.
+
+(The TraceRay section is identical except "unknown" invokes the anyhit shader.) Only the
+*unknown* state reaches shader code, and 2-state OMMs have no unknown state — so OMM-linked
+terrain contributes zero anyhit invocations and zero RayQuery candidates. Opaque hits also
+interact with `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` normally, with no explicit commit
+needed. Consequences:
+
+- The alpha test in the fog occlusion RayQuery loop (`fog.hlsli`) is unreachable for
+  OMM-linked terrain; it stays for the non-OMM fallback and glTF cutout materials, which
+  still surface non-opaque candidates. Non-OMM non-opaque geometry (water, material-less
+  instances) still enters the loop as before.
+- The spec also states the geometry opaque/non-opaque flag "is ignored for triangles which
+  have linked OMMs", so terrain's `NO_DUPLICATE_ANYHIT_INVOCATION` flag does not force
+  candidates either.
+- The opt-ins (`D3D12_RAYTRACING_PIPELINE_FLAG_ALLOW_OPACITY_MICROMAPS`,
+  `RAYQUERY_FLAG_ALLOW_OPACITY_MICROMAPS`) are still required even though no OMM candidate
+  is ever handled: per spec, encountering an OMM during traversal without the flag is
+  undefined behavior.
 
 ## Baking and ordering
 

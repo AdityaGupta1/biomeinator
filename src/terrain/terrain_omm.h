@@ -20,8 +20,9 @@ class ToFreeList;
 namespace TerrainOmm
 {
 
-// R16 encoding of D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE (-2)
-inline constexpr uint16_t OMM_IDX_FULLY_OPAQUE = 0xFFFE;
+// R16 encoding of the special index (-2), which marks a triangle as having no OMM
+inline constexpr uint16_t OMM_IDX_FULLY_OPAQUE =
+    static_cast<uint16_t>(D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE);
 
 // mip0Alpha is one byte per texel of the full texture atlas (textureSize x textureSize),
 // split into (textureSize / tileSize)^2 slices indexed as tileY * tilesPerAxis + tileX
@@ -29,10 +30,10 @@ void bake(const std::vector<uint8_t>& mip0Alpha, uint32_t textureSize, uint32_t 
 
 bool isBaked();
 
-bool sliceHasCutout(uint32_t sliceIdx);
+bool texArraySliceHasCutout(uint32_t texArraySliceIdx);
 
 // OMM Array entry for one triangle of a cutout slice's quad (triInQuad 0 = (0,1,2), 1 = (0,2,3))
-uint16_t getOmmIdx(uint32_t sliceIdx, uint32_t triInQuad);
+uint16_t getOmmIdx(uint32_t texArraySliceIdx, uint32_t triInQuad);
 
 // Builds the OMM Array on the first call after bake(); no-op on later calls
 void buildArrayIfPending(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);

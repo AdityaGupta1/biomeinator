@@ -147,7 +147,7 @@ void initDevice()
         }
         else
         {
-            Logger::logWarning("Raytracing tier 1.2 not supported, terrain alpha cutout falls back to anyhit");
+            Logger::logWarning("Raytracing tier 1.2 not supported, disabling opacity micromaps");
         }
     }
 
