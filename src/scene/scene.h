@@ -104,6 +104,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(Vertex),
             .bufferCreationFlags = {
                 .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, // deformable instance displacement writes verts in place
             },
@@ -114,6 +115,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(uint32_t),
         },
     };
     ReservedManagedBuffer managedPerTriDatasBuffer{
@@ -121,6 +123,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(PerTriangleData),
         },
     };
 
@@ -179,6 +182,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(AreaLight),
         },
     };
     uint32_t numAreaLights{ 0 };

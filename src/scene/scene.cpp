@@ -728,8 +728,8 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                 const uint32_t rowPitch = mipWidth * 4;
                 const size_t expectedMipSizeBytes = static_cast<size_t>(rowPitch) * mipHeight;
                 ASSERT(pendingTex.sliceMipData[slice][m].size() == expectedMipSizeBytes);
-                const uint32_t rowPitchAligned = MathUtil::roundUp(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-                totalUploadSizeBytes = MathUtil::roundUp(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+                const uint32_t rowPitchAligned = MathUtil::roundUpToPow2(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+                totalUploadSizeBytes = MathUtil::roundUpToPow2(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
                 mipLayouts[slice * numMips + m] = { totalUploadSizeBytes, rowPitch, rowPitchAligned, mipWidth, mipHeight };
                 totalUploadSizeBytes += rowPitchAligned * mipHeight;
             }
