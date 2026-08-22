@@ -3,15 +3,6 @@
 
 #pragma once
 
-#include "biome.h"
-#include "block.h"
-
-#include <vector>
-
-#include <glm/glm.hpp>
-
-class ThreadMemoryAllocator;
-
 namespace ChunkGenerator
 {
 

@@ -4,7 +4,6 @@
 #include "chunk.h"
 
 #include "block.h"
-#include "chunk_generator.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"

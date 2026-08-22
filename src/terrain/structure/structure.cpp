@@ -524,10 +524,10 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     // stream. The strand's bottom block is always the tip, even when water or terrain cuts the
     // strand short.
     constexpr float mossBaseChance = 0.45f;
-    constexpr int mossBoundsXZ = 11;
-    for (int dz = -mossBoundsXZ; dz <= mossBoundsXZ; ++dz)
+    const StructureBounds& mossBounds = Structures::getStructureBounds(structure.type);
+    for (int dz = mossBounds.minDiffXZ.y /*z*/; dz <= mossBounds.maxDiffXZ.y /*z*/; ++dz)
     {
-        for (int dx = -mossBoundsXZ; dx <= mossBoundsXZ; ++dx)
+        for (int dx = mossBounds.minDiffXZ.x; dx <= mossBounds.maxDiffXZ.x; ++dx)
         {
             const int x_CS = structurePos_CS.x + dx;
             const int z_CS = structurePos_CS.z + dz;
