@@ -40,6 +40,7 @@ struct ManagedBufferOptions
 {
     bool isResizable{ false };
     bool isMapped{ false };
+    size_t alignmentBytes{ 0 }; // if nonzero, requested section sizes are rounded up to a multiple of this
     BufferHelper::BufferCreationFlags bufferCreationFlags{};
 };
 

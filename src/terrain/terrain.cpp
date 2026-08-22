@@ -9,6 +9,7 @@
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "terrain_materials.h"
+#include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "multithreading/thread_pool.h"
 #include "rendering/buffer/to_free_list.h"
@@ -1171,6 +1172,7 @@ bool pollTestModeImport()
 void shutdown()
 {
     threadPool.shutdown();
+    TerrainOmm::reset();
 }
 
 bool isCameraUnderwater()

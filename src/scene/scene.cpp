@@ -27,11 +27,13 @@ void Instance::stealVectors(Instance* other)
     ASSERT(other->host_verts.empty());
     ASSERT(other->host_idxs.empty());
     ASSERT(other->host_perTriDatas.empty());
+    ASSERT(other->host_ommIdxs.empty());
     ASSERT(other->host_areaLights.empty());
 
     this->host_verts = std::move(other->host_verts);
     this->host_idxs = std::move(other->host_idxs);
     this->host_perTriDatas = std::move(other->host_perTriDatas);
+    this->host_ommIdxs = std::move(other->host_ommIdxs);
     this->host_areaLights = std::move(other->host_areaLights);
 }
 
@@ -40,14 +42,17 @@ void Instance::reset(bool alsoFreeFromScene)
     this->geoWrapper.blasBufferSection.free();
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
+    this->geoWrapper.ommIdxsBufferSection.free();
     this->perTriDatasBufferSection.free();
     this->areaLightsBufferSection.free();
 
     this->host_verts.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
+    this->host_ommIdxs.clear();
     this->host_areaLights.clear();
     this->isGeometryFinalized = false;
+    this->isOpaque = false;
 
     if (alsoFreeFromScene)
     {
@@ -153,6 +158,11 @@ void Instance::setMaterialIdx(uint32_t id)
 void Instance::setIsDeformable(bool deformable)
 {
     this->isDeformable = deformable;
+}
+
+void Instance::setIsOpaque(bool opaque)
+{
+    this->isOpaque = opaque;
 }
 
 void Scene::init()
@@ -510,7 +520,14 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             blasInputs.host_idxs = &instance->host_idxs;
         }
 
+        if (instance->host_ommIdxs.size() > 0)
+        {
+            ASSERT(instance->host_ommIdxs.size() == instance->getTriCount());
+            blasInputs.host_ommIdxs = &instance->host_ommIdxs;
+        }
+
         blasInputs.allowUpdate = instance->isDeformable;
+        blasInputs.isOpaque = instance->isOpaque;
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
@@ -711,8 +728,8 @@ void Scene::uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeLis
                 const uint32_t rowPitch = mipWidth * 4;
                 const size_t expectedMipSizeBytes = static_cast<size_t>(rowPitch) * mipHeight;
                 ASSERT(pendingTex.sliceMipData[slice][m].size() == expectedMipSizeBytes);
-                const uint32_t rowPitchAligned = MathUtil::roundUp(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-                totalUploadSizeBytes = MathUtil::roundUp(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+                const uint32_t rowPitchAligned = MathUtil::roundUpToPow2(rowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+                totalUploadSizeBytes = MathUtil::roundUpToPow2(totalUploadSizeBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
                 mipLayouts[slice * numMips + m] = { totalUploadSizeBytes, rowPitch, rowPitchAligned, mipWidth, mipHeight };
                 totalUploadSizeBytes += rowPitchAligned * mipHeight;
             }

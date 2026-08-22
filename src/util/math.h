@@ -19,10 +19,16 @@ inline constexpr bool isPowerOfTwo(size_t x)
     return x > 0 && (x & (x - 1)) == 0;
 }
 
-inline constexpr size_t roundUp(size_t size, size_t multiple)
+inline constexpr size_t roundUpToPow2(size_t size, size_t multiple)
 {
     ASSERT(isPowerOfTwo(multiple));
     return (size + multiple - 1) & ~(multiple - 1);
+}
+
+inline constexpr size_t roundUp(size_t size, size_t multiple)
+{
+    ASSERT(multiple > 0);
+    return ((size + multiple - 1) / multiple) * multiple;
 }
 
 }

@@ -21,6 +21,8 @@ struct GeometryWrapper
 
     ManagedBufferSection vertsBufferSection{};
     ManagedBufferSection idxsBufferSection{};
+    // R16 per-triangle OMM index buffer; a valid section makes the geometry OMM_TRIANGLES
+    ManagedBufferSection ommIdxsBufferSection{};
 
     // nonzero only for BLASes built with allowUpdate
     size_t updateScratchSizeBytes{ 0 };
@@ -33,13 +35,32 @@ struct BlasBuildInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
+    // Per-triangle OMM Array indices (or special indices); requires a built OMM Array
+    const std::vector<uint16_t>* host_ommIdxs{ nullptr };
 
     bool allowUpdate{ false };
+    // Marks the whole geometry opaque so traversal never invokes anyhit for it
+    bool isOpaque{ false };
 
     GeometryWrapper* outGeoWrapper{ nullptr };
 };
 
 void init();
+
+struct OmmArrayBuildInputs
+{
+    // Raw OC1 bitmask data, indexed by the descs' ByteOffset
+    const std::vector<uint8_t>* host_ommData{ nullptr };
+    const std::vector<D3D12_RAYTRACING_OPACITY_MICROMAP_DESC>* host_ommDescs{ nullptr };
+    D3D12_RAYTRACING_OPACITY_MICROMAP_HISTOGRAM_ENTRY histogram{};
+
+    ManagedBufferSection* outOmmArray{ nullptr };
+};
+
+// Builds an OMM Array into the shared AS buffer and issues a UAV barrier so later BLAS builds
+// can reference it. The array's GPU VA is retained for OMM-linked BLAS builds (makeBlases
+// inputs with host_ommIdxs), which must therefore come after the single buildOmmArray call.
+void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const OmmArrayBuildInputs& inputs);
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,

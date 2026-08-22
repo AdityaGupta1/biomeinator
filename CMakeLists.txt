@@ -19,6 +19,12 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glm)
 
+# Prefer the vendored dxc (matches the vendored dxcompiler.dll/dxil.dll and supports
+# newer shader models than the Windows SDK one)
+if(NOT DXC_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/dxc/bin/dxc.exe")
+    set(DXC_EXECUTABLE "${CMAKE_CURRENT_SOURCE_DIR}/external/dxc/bin/dxc.exe")
+endif()
+
 # Try to find dxc automatically
 if(NOT DXC_EXECUTABLE)
     file(GLOB DXC_POSSIBLE_PATHS
@@ -70,7 +76,7 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
-SET(SHADER_VERSION "6_6")
+SET(SHADER_VERSION "6_9")
 
 # Compile shaders to headers
 set(COMPILED_HEADERS "")

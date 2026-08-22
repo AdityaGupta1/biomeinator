@@ -37,6 +37,12 @@ struct RandomNumberGenerator
     }
 };
 
+// dxc complains when calling nextFloat() directly on payload rng with access qualifiers, so use this function instead
+float nextFloat(inout RandomNumberGenerator rng)
+{
+    return rng.nextFloat();
+}
+
 RandomNumberGenerator initRng(uint seed)
 {
     RandomNumberGenerator rng;

@@ -7,6 +7,7 @@
 #include "chunk_generator.h"
 #include "terrain.h"
 #include "terrain_materials.h"
+#include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_structs.h"
@@ -606,6 +607,7 @@ void Chunk::createInstances()
     std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
     std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
     std::vector<PerTriangleData>& terrainPerTriDatas = this->terrainInstance->host_perTriDatas;
+    std::vector<uint16_t>& terrainOmmIdxs = this->terrainInstance->host_ommIdxs;
     std::vector<uint32_t> terrainEmissiveTriangleIdxs;
     std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
@@ -624,6 +626,19 @@ void Chunk::createInstances()
     terrainEmissiveTriangleIdxs.reserve(512);
 
     const uint worldSeed = SettingsManager::getWorldSeed();
+
+    const bool useOmms = TerrainOmm::isBaked();
+    bool hasCutoutFaces = false;
+    const auto appendOmmIdxs = [&](const uint32_t texArraySliceIdx, const uint numTris)
+    {
+        const bool isCutout = TerrainOmm::texArraySliceHasCutout(texArraySliceIdx);
+        hasCutoutFaces |= isCutout;
+        for (uint t = 0; t < numTris; ++t)
+        {
+            terrainOmmIdxs.emplace_back(isCutout ? TerrainOmm::getOmmIdx(texArraySliceIdx, t % 2)
+                                                 : TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+        }
+    };
 
     for (const uvec3& segmentPos : this->segmentsToGenerate)
     {
@@ -695,6 +710,11 @@ void Chunk::createInstances()
                         {
                             terrainPerTriDatas.emplace_back(faceData);
                         }
+
+                        if (useOmms)
+                        {
+                            appendOmmIdxs(texArraySliceIdx, 4);
+                        }
                     }
                     else // BlockShape::LIQUID_TOP or BlockShape::CUBE
                     {
@@ -757,6 +777,11 @@ void Chunk::createInstances()
                             perTriDatas.emplace_back(faceData);
                             perTriDatas.emplace_back(faceData);
 
+                            if (useOmms && !isWater)
+                            {
+                                appendOmmIdxs(texArraySliceIdx, 2);
+                            }
+
                             if (blockData.emitsLight)
                             {
                                 // water does not emit light so it will never reach this
@@ -772,6 +797,14 @@ void Chunk::createInstances()
 
     ASSERT(terrainVerts.size() > 0);
     ASSERT(terrainIdxs.size() > 0);
+
+    if (useOmms && !hasCutoutFaces)
+    {
+        // No cutout faces means no OMM linkage is needed: the whole geometry can be flagged
+        // opaque instead, which also skips anyhit entirely
+        terrainOmmIdxs.clear();
+    }
+    this->terrainInstance->setIsOpaque(useOmms && !hasCutoutFaces);
 
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);

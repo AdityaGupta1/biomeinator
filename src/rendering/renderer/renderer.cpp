@@ -15,6 +15,7 @@
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
+#include "terrain/terrain_omm.h"
 #include "util/math.h"
 
 #include <algorithm>
@@ -579,6 +580,7 @@ void render()
 
     if (renderState.voxelMode)
     {
+        TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
@@ -1150,6 +1152,11 @@ ID3D12Device5* getDevice()
 ID3D12CommandQueue* getGraphicsQueue()
 {
     return renderState.graphicsCmdQueue.Get();
+}
+
+bool getUseOmms()
+{
+    return renderState.useOmms;
 }
 
 const Camera& getCamera()

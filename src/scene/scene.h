@@ -46,6 +46,8 @@ private:
     bool isScheduledForDeletion{ false };
     // If true, geometry gets displaced by a compute pass every frame and its BLAS refit instead of rebuilt
     bool isDeformable{ false };
+    // If true, the BLAS geometry is flagged opaque so traversal never invokes anyhit for it
+    bool isOpaque{ false };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -66,6 +68,8 @@ public:
     std::vector<Vertex> host_verts{};
     std::vector<uint32_t> host_idxs{};
     std::vector<PerTriangleData> host_perTriDatas{};
+    // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
+    std::vector<uint16_t> host_ommIdxs{};
 
     void setTransform(const DirectX::XMFLOAT3X4& transform);
     void setTransformOffset(glm::ivec3 offset);
@@ -85,6 +89,8 @@ public:
     void setMaterialIdx(uint32_t id);
 
     void setIsDeformable(bool deformable);
+
+    void setIsOpaque(bool opaque);
 };
 
 class Scene
@@ -98,6 +104,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(Vertex),
             .bufferCreationFlags = {
                 .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, // deformable instance displacement writes verts in place
             },
@@ -108,6 +115,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(uint32_t),
         },
     };
     ReservedManagedBuffer managedPerTriDatasBuffer{
@@ -115,6 +123,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(PerTriangleData),
         },
     };
 
@@ -173,6 +182,7 @@ private:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
+            .alignmentBytes = sizeof(AreaLight),
         },
     };
     uint32_t numAreaLights{ 0 };
