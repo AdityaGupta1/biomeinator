@@ -25,10 +25,10 @@ inline constexpr float biomeNoiseScale = 1000.f;
 static int fieldSeed;
 static ivec2 noiseOffsetXZ;
 
-void init(uint32_t seed)
+void init(uint32_t worldSeed)
 {
-    fieldSeed = static_cast<int>(seed ^ hash(719023919));
-    RandomNumberGenerator rng = initRng(seed ^ hash(8810091029));
+    fieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
     noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
 
     {
@@ -126,7 +126,7 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
 BiomeNoise sampleAt(vec2 posXZ_WS)
 {
     const float x = posXZ_WS.x + noiseOffsetXZ.x;
-    const float z = posXZ_WS.y + noiseOffsetXZ.y;
+    const float z = posXZ_WS.y + noiseOffsetXZ.y /*z*/;
     return {
         .temperature = fnTemperature->GenSingle2D(x, z, fieldSeed),
         .humidity = fnHumidity->GenSingle2D(x, z, fieldSeed),

@@ -21,10 +21,9 @@ struct BiomeNoiseGrids
     float* inland;
 };
 
-// A cell floods when the flood factor at its site exceeds floodCellThreshold. Columns are painted
-// with the swamp biome above the slightly looser floodTintThreshold, which usually covers pond
-// banks — but flooding is decided at the cell site while the biome is per-column, so the two are
-// deliberately not 1:1 and flooded terrain near the swamp region's edge can keep another biome.
+// A cell floods when the flood factor at its site exceeds floodCellThreshold; columns are painted
+// with the swamp biome above the looser floodTintThreshold. Deliberately not 1:1 — see
+// knowledge/terrain/swamp_generation.md.
 inline constexpr float floodCellThreshold = 0.3f;
 inline constexpr float floodTintThreshold = 0.25f;
 

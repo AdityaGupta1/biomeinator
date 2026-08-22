@@ -36,7 +36,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                 const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                 if (hasLeaf && Chunk::isInChunk(leafPos_CS))
                 {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false);
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false /*canReplaceWater*/);
                 }
             }
             else
@@ -47,7 +47,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                     const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                     if (Chunk::isInChunk(leafPos_CS))
                     {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false);
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false /*canReplaceWater*/);
                     }
                 }
             }
@@ -548,7 +548,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
                     mossBaseChance * (1.f - glm::smoothstep(0.f, trunkHeight, static_cast<float>(y - structurePos_CS.y)));
                 RandomNumberGenerator mossRng =
                     initRng(worldSeed ^ hash(812930471), static_cast<uint32_t>(chunkPosXZ_WS.x + x_CS),
-                            static_cast<uint32_t>(chunkPosXZ_WS.y + z_CS), static_cast<uint32_t>(y));
+                            static_cast<uint32_t>(chunkPosXZ_WS.y /*z*/ + z_CS), static_cast<uint32_t>(y));
                 if (!mossRng.chance(mossChance))
                 {
                     continue;

@@ -165,7 +165,7 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                                                              static_cast<uint32_t>(columnPosXZ_WS.y /*z*/));
                     if (droopRng.chance(droopChance))
                     {
-                        droopDepth = droopRng.nextInt(2);
+                        droopDepth = 1;
                     }
                 }
 
@@ -174,7 +174,7 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                     const glm::ivec3 pos_CS(centerPos_CS.x + dx, y + dy, centerPos_CS.z + dz);
                     if (Chunk::isInChunk(pos_CS))
                     {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false);
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
                     }
                 }
             }
@@ -207,7 +207,7 @@ inline void placeLeafBlob(std::vector<Block>& blocks, glm::ivec3 centerPos_CS, f
                 {
                     continue;
                 }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false);
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
             }
         }
     }
