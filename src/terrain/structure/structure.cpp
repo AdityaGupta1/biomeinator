@@ -384,7 +384,7 @@ fillStructureBlocksHeader(ACACIA_TREE)
 
 // Trilinear value noise in [-1, 1]; interpolating between position-seeded corner values keeps
 // neighboring blocks correlated, unlike a per-block RNG
-static float valueNoise3(vec3 pos)
+static float valueNoise3(vec3 pos, uint seed)
 {
     const vec3 posFloor = glm::floor(pos);
     const vec3 posFract = pos - posFloor;
@@ -397,7 +397,7 @@ static float valueNoise3(vec3 pos)
         const ivec3 corner(cornerIdx & 1, (cornerIdx >> 1) & 1, cornerIdx >> 2);
         const ivec3 cornerPos = basePos + corner;
         RandomNumberGenerator cornerRng = initRng(
-            static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
+            seed, static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
         const vec3 weights = glm::mix(1.f - t, t, vec3(corner));
         result += weights.x * weights.y * weights.z * (cornerRng.nextFloat() * 2.f - 1.f);
     }
@@ -408,6 +408,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
 {
     const ivec2 chunkPosXZ_WS =
         ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
+    const uint worldSeed = SettingsManager::getWorldSeed();
 
     const float trunkHeight = rng.nextFloat(24.f, 35.f);
     const int trunkTopY = static_cast<int>(trunkHeight);
@@ -429,7 +430,8 @@ fillStructureBlocksHeader(CYPRESS_TREE)
             {
                 const ivec3 pos_CS = structurePos_CS + ivec3(dx, y, dz);
                 const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
-                const float trunkRadius = baseRadius * (1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f));
+                const float trunkRadius =
+                    baseRadius * (1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f, worldSeed ^ hash(602149583)));
                 if (dx * dx + dz * dz < trunkRadius * trunkRadius && Chunk::isInChunk(pos_CS))
                 {
                     tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
@@ -439,8 +441,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     }
 
     // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the
-    // already-generated column. Only grass, dirt, or mud counts as ground so knees can't stack
-    // on other structures' logs. The scan draws no RNG, keeping the cross-chunk stream intact.
+    // already-generated column
     const int numKnees = rng.nextInt(6, 13);
     for (int i = 0; i < numKnees; ++i)
     {
@@ -520,8 +521,8 @@ fillStructureBlocksHeader(CYPRESS_TREE)
 
     // Spanish moss: strands hanging below leaf blocks that have air underneath, more likely on the
     // lower caps. Chance and length come from a position-hashed RNG rather than the structure
-    // stream, and the scan draws no RNG, so the cross-chunk stream stays intact. The strand's
-    // bottom block is always the tip, even when water or terrain cuts the strand short.
+    // stream. The strand's bottom block is always the tip, even when water or terrain cuts the
+    // strand short.
     constexpr float mossBaseChance = 0.45f;
     constexpr int mossBoundsXZ = 11;
     for (int dz = -mossBoundsXZ; dz <= mossBoundsXZ; ++dz)
@@ -546,15 +547,15 @@ fillStructureBlocksHeader(CYPRESS_TREE)
                 const float mossChance =
                     mossBaseChance * (1.f - glm::smoothstep(0.f, trunkHeight, static_cast<float>(y - structurePos_CS.y)));
                 RandomNumberGenerator mossRng =
-                    initRng(static_cast<uint32_t>(chunkPosXZ_WS.x + x_CS),
-                            static_cast<uint32_t>(chunkPosXZ_WS.y + z_CS), static_cast<uint32_t>(y), 0x9a7f3b21);
+                    initRng(worldSeed ^ hash(812930471), static_cast<uint32_t>(chunkPosXZ_WS.x + x_CS),
+                            static_cast<uint32_t>(chunkPosXZ_WS.y + z_CS), static_cast<uint32_t>(y));
                 if (!mossRng.chance(mossChance))
                 {
                     continue;
                 }
                 const int strandLength = mossRng.nextInt(1, 4);
 
-                uint32_t lastMossIdx = 0;
+                uint lastMossIdx = 0;
                 int numPlaced = 0;
                 for (int i = 1; i <= strandLength; ++i)
                 {
@@ -563,7 +564,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
                     {
                         break;
                     }
-                    const uint32_t blockIdx = Chunk::blockPosToIdx(uvec3(x_CS, strandY, z_CS));
+                    const uint blockIdx = Chunk::blockPosToIdx(uvec3(x_CS, strandY, z_CS));
                     if (blocks[blockIdx] != Block::AIR)
                     {
                         break;

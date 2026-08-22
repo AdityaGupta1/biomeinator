@@ -361,7 +361,7 @@ target_compile_definitions(BiomeinatorTests PRIVATE
 # ==================================================
 
 # Local web tool for exploring the biome field: serves an interactive seed map and searches for
-# seeds with a target biome near spawn. Links only the biome/noise modules, not the engine.
+# seeds with a target biome near spawn.
 set(BIOME_SCANNER_SRC
     "${SRC_DIR}/scanner/main.cpp"
     "${SRC_DIR}/logger.cpp"

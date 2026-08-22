@@ -22,8 +22,9 @@ struct BiomeNoiseGrids
 };
 
 // A cell floods when the flood factor at its site exceeds floodCellThreshold. Columns are painted
-// with the swamp biome above the slightly looser floodTintThreshold so the biome always covers
-// pond banks.
+// with the swamp biome above the slightly looser floodTintThreshold, which usually covers pond
+// banks — but flooding is decided at the cell site while the biome is per-column, so the two are
+// deliberately not 1:1 and flooded terrain near the swamp region's edge can keep another biome.
 inline constexpr float floodCellThreshold = 0.3f;
 inline constexpr float floodTintThreshold = 0.25f;
 
@@ -44,15 +45,15 @@ BiomeNoise sampleAt(glm::vec2 posXZ_WS);
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
 
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
-// give balanced water/land (swamp); values toward 1 give mostly-water terrain (future igapo and
-// varzea, currently also covered by the swamp biome). Computed from smooth fields only, never the
-// jittered biome — per-column jitter would give adjacent columns different heights/water levels.
+// give balanced water/land; values toward 1 give mostly-water terrain. Computed from smooth
+// fields only, never the jittered biome — per-column jitter would give adjacent columns different
+// heights/water levels.
 // The inland gate keeps flooded cell sites far enough from the coast that a cell's area can't
 // reach the ocean.
 float computeFloodFactor(const BiomeNoise& biomeNoise);
 
 // The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever the flood
-// factor is high, so the biome exactly tracks the terrain that floods.
+// factor is high.
 Biome biomeFromNoise(const BiomeNoise& biomeNoise);
 
 // Batch-evaluates the surface biome noise on a uniform XZ grid (one sample per texel center,

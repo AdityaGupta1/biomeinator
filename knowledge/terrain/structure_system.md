@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-22_
 
 # Structure System
 
@@ -41,7 +41,7 @@ Only writes if the target is AIR/WATER/WATER_TOP. This means structures can't ca
 generated terrain, so a fill function can scan a column downward to seat sub-features on local
 ground (cypress knees do this). Two constraints: the scan must draw no RNG — all params are
 drawn unconditionally before it — so the stream invariant below holds, and accepted ground
-blocks are whitelisted (grass/dirt) because the scan also sees previously filled structure
-blocks, whose presence can vary with fill order.
+blocks are whitelisted to natural ground blocks because the scan also sees previously filled
+structure blocks, whose presence can vary with fill order.
 
 **RNG stream invariant:** every chunk overlapping a structure fills it with an identically-seeded RNG, so a fill function must consume the same RNG stream in every chunk. Draw all randomness unconditionally (or gated only on RNG-derived/chunk-independent conditions) before any chunk-bounds check — never inside an `isInChunk` branch that affects later draws. The helpers are safe because they clip internally after their own draws.

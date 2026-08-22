@@ -75,9 +75,9 @@ void scrollBiomes(const glm::ivec2 shiftTexels, const int blocksPerTexel)
         const int destX = shiftTexels.x > 0 ? n - stripWidth : 0;
         scratchBiomes.resize(static_cast<size_t>(stripWidth) * n);
         BiomeNoiseField::fillBiomeRect(scratchBiomes.data(),
-                                      originBlocksXZ_WS + glm::ivec2(destX * blocksPerTexel, 0),
-                                      glm::uvec2(stripWidth, n),
-                                      blocksPerTexel);
+                                       originBlocksXZ_WS + glm::ivec2(destX * blocksPerTexel, 0),
+                                       glm::uvec2(stripWidth, n),
+                                       blocksPerTexel);
         for (int z = 0; z < n; ++z)
         {
             memcpy(&biomes[static_cast<size_t>(z) * n + destX],
@@ -92,9 +92,9 @@ void scrollBiomes(const glm::ivec2 shiftTexels, const int blocksPerTexel)
         const int stripHeight = std::min(std::abs(shiftTexels.y), n);
         const int destZ = shiftTexels.y > 0 ? n - stripHeight : 0;
         BiomeNoiseField::fillBiomeRect(&biomes[static_cast<size_t>(destZ) * n],
-                                      originBlocksXZ_WS + glm::ivec2(0, destZ * blocksPerTexel),
-                                      glm::uvec2(n, stripHeight),
-                                      blocksPerTexel);
+                                       originBlocksXZ_WS + glm::ivec2(0, destZ * blocksPerTexel),
+                                       glm::uvec2(n, stripHeight),
+                                       blocksPerTexel);
     }
 }
 

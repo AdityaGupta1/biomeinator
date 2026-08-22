@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Aditya Gupta -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -284,7 +286,7 @@ function biomeAtBlock(x, z)
     return grid.data[tx + grid.w * tz];
 }
 
-// --- interaction ---
+// --- Interaction ---
 
 let dragging = false;
 let lastMouse = null;
@@ -380,7 +382,7 @@ document.getElementById("resetView").addEventListener("click", () =>
     refetch();
 });
 
-// --- seed search ---
+// --- Seed search ---
 
 document.getElementById("searchGo").addEventListener("click", async () =>
 {
@@ -430,7 +432,7 @@ function renderSearchResults(results)
     }
 }
 
-// --- init ---
+// --- Init ---
 
 async function init()
 {

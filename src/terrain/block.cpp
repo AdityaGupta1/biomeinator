@@ -95,8 +95,8 @@ void init()
     BLOCK_DATA_BY_NAME(CYPRESS_LOG) = { .uvs = { uvec2(12, 2), uvec2(11, 2), uvec2(12, 2) } };
     BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
     BLOCK_DATA_BY_NAME(MUD) = { .uvs = { uvec2(14, 2) } };
-    BLOCK_DATA_BY_NAME(SPANISH_MOSS) = { .uvs = { uvec2(15, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true  };
-    BLOCK_DATA_BY_NAME(SPANISH_MOSS_TIP) = { .uvs = { uvec2(16, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true  };
+    BLOCK_DATA_BY_NAME(SPANISH_MOSS) = { .uvs = { uvec2(15, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
+    BLOCK_DATA_BY_NAME(SPANISH_MOSS_TIP) = { .uvs = { uvec2(16, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     // clang-format on
 }
 

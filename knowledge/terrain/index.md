@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-22_
 
 # Terrain Knowledgebase
 
@@ -21,3 +21,4 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [terrain_omm.md](terrain_omm.md) | Opacity micromap baking for cutout tiles, exactness argument, build ordering |
 | [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |
 | [biome_scanner.md](biome_scanner.md) | BiomeScanner web tool, biome_noise module extraction rationale |
+| [swamp_generation.md](swamp_generation.md) | Cellular pond/dam design, window stability, cave sealing |

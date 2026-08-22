@@ -5,6 +5,7 @@
 
 #include "../block.h"
 #include "../chunk.h"
+#include "settings_manager.h"
 #include "util/rng.h"
 
 #include <vector>
@@ -159,7 +160,8 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                 if (droopChance > 0.f && y == centerPos_CS.y)
                 {
                     const glm::ivec2 columnPosXZ_WS = chunkPosXZ_WS + glm::ivec2(centerPos_CS.x + dx, centerPos_CS.z + dz);
-                    const float droopRand = initRng(static_cast<uint32_t>(columnPosXZ_WS.x),
+                    const float droopRand = initRng(SettingsManager::getWorldSeed() ^ hash(273904811),
+                                                    static_cast<uint32_t>(columnPosXZ_WS.x),
                                                     static_cast<uint32_t>(columnPosXZ_WS.y /*z*/))
                                                 .nextFloat();
                     if (droopRand < droopChance)
