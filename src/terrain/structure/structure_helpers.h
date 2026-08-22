@@ -160,13 +160,12 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                 if (droopChance > 0.f && y == centerPos_CS.y)
                 {
                     const glm::ivec2 columnPosXZ_WS = chunkPosXZ_WS + glm::ivec2(centerPos_CS.x + dx, centerPos_CS.z + dz);
-                    const float droopRand = initRng(SettingsManager::getWorldSeed() ^ hash(273904811),
-                                                    static_cast<uint32_t>(columnPosXZ_WS.x),
-                                                    static_cast<uint32_t>(columnPosXZ_WS.y /*z*/))
-                                                .nextFloat();
-                    if (droopRand < droopChance)
+                    RandomNumberGenerator droopRng = initRng(SettingsManager::getWorldSeed() ^ hash(273904811),
+                                                             static_cast<uint32_t>(columnPosXZ_WS.x),
+                                                             static_cast<uint32_t>(columnPosXZ_WS.y /*z*/));
+                    if (droopRng.chance(droopChance))
                     {
-                        droopDepth = static_cast<int>(droopRand * 10.f);
+                        droopDepth = droopRng.nextInt(2);
                     }
                 }
 

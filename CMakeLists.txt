@@ -364,12 +364,14 @@ target_compile_definitions(BiomeinatorTests PRIVATE
 # seeds with a target biome near spawn.
 set(BIOME_SCANNER_SRC
     "${SRC_DIR}/scanner/main.cpp"
+    "${SRC_DIR}/scanner/index.html"
     "${SRC_DIR}/logger.cpp"
     "${SRC_DIR}/terrain/biome.cpp"
     "${SRC_DIR}/terrain/biome_noise.cpp"
     "${SRC_DIR}/terrain/structure/decorator.cpp"
     "${SRC_DIR}/terrain/structure/structure_gen.cpp"
 )
+assign_source_group("src" "${SRC_DIR}" "${BIOME_SCANNER_SRC}")
 
 add_executable(BiomeScanner ${BIOME_SCANNER_SRC})
 target_include_directories(BiomeScanner PRIVATE

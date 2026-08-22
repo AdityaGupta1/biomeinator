@@ -19,7 +19,7 @@ namespace
 {
 
 // Map display colors, chunkbase-style. Not the in-game grass tints — those are all similar greens
-// and would be unreadable as a map palette.
+// and would be unreadable as a map palette. One entry per Biome, in enum order.
 constexpr std::array<const char*, static_cast<size_t>(Biome::COUNT)> biomeMapColors = {
     "#2e5cb8", // OCEAN
     "#fade55", // BEACH
@@ -50,6 +50,8 @@ void ensureSeed(uint32_t seed)
         seedInitialized = true;
     }
 }
+
+constexpr int64_t maxTexelsPerRequest = 8'000'000;
 
 bool tryGetIntParam(const httplib::Request& req, const char* name, int64_t& outValue)
 {
@@ -124,7 +126,9 @@ int main(int argc, char** argv)
             setBadRequest(res, "required params: seed, x0, z0, w, h, step");
             return;
         }
-        if (numTexelsX <= 0 || numTexelsZ <= 0 || numTexelsX * numTexelsZ > 8'000'000 || texelSizeBlocks <= 0)
+        // Each axis is capped before multiplying so the product can't overflow
+        if (numTexelsX <= 0 || numTexelsZ <= 0 || numTexelsX > maxTexelsPerRequest ||
+            numTexelsZ > maxTexelsPerRequest || numTexelsX * numTexelsZ > maxTexelsPerRequest || texelSizeBlocks <= 0)
         {
             setBadRequest(res, "invalid dimensions");
             return;
@@ -155,14 +159,15 @@ int main(int argc, char** argv)
             setBadRequest(res, "required params: biome, radius, seedStart, seedCount, step");
             return;
         }
+        // The radius cap also keeps the arithmetic below far from overflow
         if (biomeId < 0 || biomeId >= static_cast<int64_t>(Biome::COUNT) || radiusBlocks <= 0 ||
-            seedCount <= 0 || seedCount > 1000 || texelSizeBlocks <= 0)
+            radiusBlocks > maxTexelsPerRequest || seedCount <= 0 || seedCount > 1000 || texelSizeBlocks <= 0)
         {
             setBadRequest(res, "invalid params");
             return;
         }
         const int64_t texelsPerSide = 2 * radiusBlocks / texelSizeBlocks;
-        if (texelsPerSide <= 0 || texelsPerSide * texelsPerSide > 8'000'000)
+        if (texelsPerSide <= 0 || texelsPerSide * texelsPerSide > maxTexelsPerRequest)
         {
             setBadRequest(res, "invalid radius/step");
             return;

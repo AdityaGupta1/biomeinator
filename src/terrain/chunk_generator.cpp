@@ -271,6 +271,9 @@ inline constexpr float swampPullDownBlendRange = 22.f;
 // under swampCellPadding so a warped column still finds its true nearest sites in the 5x5 scan.
 inline constexpr float swampWarpAmplitude = 18.f;
 inline constexpr float swampWarpFineAmplitude = 6.f;
+// Edge distance within which a dam stays at full height; must exceed the warp jitter between
+// adjacent columns so open water can never sit directly next to an unraised column
+inline constexpr float swampDamCoreDist = 6.f;
 
 struct NaturalTerrain
 {
@@ -517,7 +520,7 @@ static SwampShaping computeSwampShaping(vec2 warpedPosXZ_WS,
         // containment band overrides the gate: a genuine dam's cell site can legitimately sit
         // beyond the gate distance, and the dam is the only water containment.
         const float farCellGate = 1.f - smoothstep(90.f, 130.f, dists[idx]);
-        const float containmentBand = 1.f - smoothstep(6.f, 18.f, edgeDist);
+        const float containmentBand = 1.f - smoothstep(swampDamCoreDist, 18.f, edgeDist);
         const float cellGate = max(farCellGate, containmentBand);
 
         // Seal caves below any pond close enough for its water to reach this column.
@@ -529,7 +532,7 @@ static SwampShaping computeSwampShaping(vec2 warpedPosXZ_WS,
 
         // The flatten ramps on edge distance (not dam rise) so the noise amplitude never flips
         // discontinuously along the contour where the natural height crosses the dam height.
-        flattenMixMax = max(flattenMixMax, (1.f - smoothstep(6.f, 60.f, edgeDist)) * cellGate);
+        flattenMixMax = max(flattenMixMax, (1.f - smoothstep(swampDamCoreDist, 60.f, edgeDist)) * cellGate);
 
         int maxPondLevel = neighborCell.swampy ? neighborCell.pondLevel : seaLevel;
         if (cell1.swampy)
@@ -540,7 +543,8 @@ static SwampShaping computeSwampShaping(vec2 warpedPosXZ_WS,
         // slopes down instead of cliffing; the gate then scales the whole profile toward the
         // anchor so gated-out cells contribute nothing, not even their natural-height floor.
         const float artificialRise = static_cast<float>(maxPondLevel + 2) - naturalTerrain.baseHeight;
-        const float backsideTail = 1.f - smoothstep(6.f, 6.f + 4.f * max(artificialRise, 1.f), edgeDist);
+        const float backsideTail =
+            1.f - smoothstep(swampDamCoreDist, swampDamCoreDist + 4.f * max(artificialRise, 1.f), edgeDist);
         const float damHeight =
             glm::mix(anchorBase, naturalTerrain.baseHeight + max(0.f, artificialRise) * backsideTail, cellGate);
         const float damRise = damHeight - anchorBase;
@@ -549,11 +553,10 @@ static SwampShaping computeSwampShaping(vec2 warpedPosXZ_WS,
             continue;
         }
 
-        // Constant-slope bank: full dam within edge 6 (so warp jitter between adjacent columns
-        // can never step from open water straight to an unraised column), then a fixed run of
-        // blocks per block of rise.
-        const float fadeEndDist = 6.f + min(10.f * damRise, 64.f);
-        const float damMix = 1.f - smoothstep(6.f, fadeEndDist, edgeDist);
+        // Constant-slope bank: full dam within the core distance, then a fixed run of blocks per
+        // block of rise.
+        const float fadeEndDist = swampDamCoreDist + min(10.f * damRise, 64.f);
+        const float damMix = 1.f - smoothstep(swampDamCoreDist, fadeEndDist, edgeDist);
         if (damMix <= 0.f)
         {
             continue;
