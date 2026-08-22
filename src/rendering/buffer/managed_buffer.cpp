@@ -7,6 +7,7 @@
 #include "to_free_list.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
+#include "util/math.h"
 
 #include "debug.h"
 
@@ -182,6 +183,11 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
                                                     ToFreeList* toFreeList,
                                                     size_t sizeBytes)
 {
+    if (this->options.alignmentBytes != 0)
+    {
+        sizeBytes = MathUtil::roundUp(sizeBytes, this->options.alignmentBytes);
+    }
+
     const auto sizeIter = this->freeBySize.lower_bound(sizeBytes);
     if (sizeIter != this->freeBySize.end())
     {

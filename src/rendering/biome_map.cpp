@@ -132,7 +132,7 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     filledWorldSeed = worldSeed;
 
     const uint32_t rowPitchBytes = texelsPerSide * 4;
-    const uint32_t rowPitchBytesAligned = MathUtil::roundUp(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+    const uint32_t rowPitchBytesAligned = MathUtil::roundUpToPow2(rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
     if (needsRecreate)
     {

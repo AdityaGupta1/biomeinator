@@ -10,7 +10,6 @@
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
-#include "util/math.h"
 #include "util/util.h"
 
 namespace AcsHelper
@@ -21,6 +20,7 @@ static CommittedManagedBuffer sharedAcsScratchBuffer{
     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
     {
         .isResizable = true,
+        .alignmentBytes = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
         .bufferCreationFlags = {
             .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
         },
@@ -41,6 +41,7 @@ static ReservedManagedBuffer sharedAcsBuffer{
     D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
     {
         .isResizable = true,
+        .alignmentBytes = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
         .bufferCreationFlags = {
             .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
         },
@@ -87,14 +88,11 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
     {
         const auto& buildInfo = buildInfos[i];
 
-        const size_t acsSizeBytes = MathUtil::roundUp(buildInfo.prebuildInfo.ResultDataMaxSizeInBytes,
-                                                      D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
-        *buildInfo.outAcs = sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, acsSizeBytes);
+        *buildInfo.outAcs =
+            sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, buildInfo.prebuildInfo.ResultDataMaxSizeInBytes);
 
-        const size_t scratchSizeBytes = MathUtil::roundUp(buildInfo.prebuildInfo.ScratchDataSizeInBytes,
-                                                          D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
         ManagedBufferSection sharedAcsScratchSection =
-            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
+            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, buildInfo.prebuildInfo.ScratchDataSizeInBytes);
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = buildInfo.outAcs->getGpuVirtualAddress(),
@@ -229,10 +227,8 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
         // ALLOW_UPDATE must stay set or no further updates are allowed
         buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
 
-        const size_t scratchSizeBytes = MathUtil::roundUp(geoWrapper->updateScratchSizeBytes,
-                                                          D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
         const ManagedBufferSection scratchSection =
-            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
+            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, geoWrapper->updateScratchSizeBytes);
 
         const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = geoWrapper->blasBufferSection.getGpuVirtualAddress(),

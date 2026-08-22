@@ -1,4 +1,4 @@
-_Last edited: 2026-08-04_
+_Last edited: 2026-08-22_
 
 # ManagedBuffer
 
@@ -11,6 +11,8 @@ The allocator tracks free regions using two mirrored maps kept in sync at all ti
 - `freeBySize` — keyed by size, used for O(log n) best-fit lookup on allocation.
 
 **Allocation** (`findFreeSection`) — finds the smallest free block that fits, carves out the requested size, and returns a `ManagedBufferSection` (offset + size + pointer back to the owning buffer). If no block fits and the buffer is resizable, `ensureCapacity` is called first.
+
+**Alignment** (`ManagedBufferOptions::alignmentBytes`) — the allocator never aligns *offsets*; instead, requested sizes are rounded up to a multiple of the buffer's alignment. Because the buffer starts as one free block at offset 0 and split/merge preserves the multiples, all offsets stay aligned — but only because alignment is uniform per buffer. This is why alignment is a construction option rather than a `findFreeSection` parameter: a single unaligned allocation would silently misalign every later offset in the buffer. The AS buffers use 256 (D3D12 requirement for dest/scratch VAs); the typed scene buffers use their element size, which keeps the byte-offset → element-index conversions in scene.cpp exact (they truncate silently otherwise).
 
 **Deallocation** (`freeSection`, called via `ManagedBufferSection::free()`) — returns the section to the free list and merges it with adjacent free neighbors to prevent fragmentation.
 

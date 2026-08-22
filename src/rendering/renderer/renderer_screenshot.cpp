@@ -35,7 +35,7 @@ void captureQueuedScreenshot()
 
     renderState.screenshotRequest.rowPitchBytes = width * 4;
     renderState.screenshotRequest.rowPitchBytesAligned =
-        MathUtil::roundUp(renderState.screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        MathUtil::roundUpToPow2(renderState.screenshotRequest.rowPitchBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
     const uint32_t readbackSizeBytes = renderState.screenshotRequest.rowPitchBytesAligned * height;
 
     renderState.screenshotRequest.readbackBuffer = BufferHelper::createBasicBuffer(readbackSizeBytes, &READBACK_HEAP);
