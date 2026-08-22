@@ -14,17 +14,17 @@
 #define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
 
-struct Payload
+struct [raypayload] Payload
 {
-    uint flags;
-    float3 pathWeight;
+    uint flags : read(caller, anyhit, closesthit, miss) : write(caller, closesthit, miss);
+    float3 pathWeight : read(caller, anyhit) : write(caller, anyhit);
 
-    uint materialIdx;
-    RandomNumberGenerator rng;
-    float waterEntryT; // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
-    float waterExitT;  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
+    uint materialIdx : read(caller) : write(caller, closesthit);
+    RandomNumberGenerator rng : read(caller, anyhit) : write(caller, anyhit);
+    float waterEntryT : read(caller, anyhit) : write(caller, anyhit); // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
+    float waterExitT : read(caller, anyhit) : write(caller, anyhit);  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
 
-    RayCone rayCone;
+    RayCone rayCone : read(caller, anyhit) : write(caller);
 
-    HitInfo hitInfo;
+    HitInfo hitInfo : read(caller) : write(closesthit);
 };

@@ -94,9 +94,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
 
     if (FILE_NAME MATCHES "\\.rgs\\.hlsl$")
         set(DXC_TARGET "lib_${SHADER_VERSION}")
-        # Payload access qualifiers (default-on for lib_6_7+) ICE dxc 1.9 on our
-        # unannotated payload structs
-        set(DXC_ENTRY "-disable-payload-qualifiers")
+        set(DXC_ENTRY "")
     elseif (FILE_NAME MATCHES "\\.vs\\.hlsl$")
         set(DXC_TARGET "vs_${SHADER_VERSION}")
         set(DXC_ENTRY "/E vsMain")
