@@ -39,6 +39,9 @@ extern DescriptorHeapAllocator sharedDescHeapAlloc;
 ID3D12Device5* getDevice();
 ID3D12CommandQueue* getGraphicsQueue();
 
+// Whether terrain alpha cutout uses opacity micromaps (voxel mode + raytracing tier 1.2)
+bool getUseOmms();
+
 const Camera& getCamera();
 void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 

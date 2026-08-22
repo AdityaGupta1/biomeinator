@@ -3,8 +3,10 @@
 
 #include "terrain_materials.h"
 #include "terrain_materials_helpers.h"
+#include "terrain_omm.h"
 
 #include "rendering/buffer/to_free_list.h"
+#include "rendering/renderer.h"
 
 namespace TerrainMaterials
 {
@@ -27,17 +29,26 @@ static void createMaterials(Scene* scene)
 {
     ToFreeList toFreeList{};
 
+    const bool useOmms = Renderer::getUseOmms();
+
     std::vector<uint8_t> diffuseAlpha;
-    const uint32_t diffuseTextureId = loadTexture(scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha });
+    const uint32_t diffuseTextureId = loadTexture(
+        scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha, .useOpaqueCutoutMips = useOmms });
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
     }
 
+    if (useOmms)
+    {
+        TerrainOmm::bake(diffuseAlpha, TERRAIN_TEXTURE_SIZE, TERRAIN_TILE_SIZE);
+    }
+
     const uint32_t auxTextureId = loadTexture(scene, "aux_map.png",
                                               { .sRGB = false,
                                                 .outTileHasBiomeTintMask = &sliceBiomeTintMask,
-                                                .alphaOverride = &diffuseAlpha });
+                                                .alphaOverride = &diffuseAlpha,
+                                                .useOpaqueCutoutMips = useOmms });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;

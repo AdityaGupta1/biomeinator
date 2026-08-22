@@ -136,6 +136,21 @@ void initDevice()
         adapter.Reset();
     }
 
+    D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
+    CHECK_HRESULT(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)));
+    renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2;
+    if (renderState.voxelMode)
+    {
+        if (renderState.useOmms)
+        {
+            Logger::log("Raytracing tier 1.2 supported, using opacity micromaps");
+        }
+        else
+        {
+            Logger::logWarning("Raytracing tier 1.2 not supported, disabling opacity micromaps");
+        }
+    }
+
     D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };

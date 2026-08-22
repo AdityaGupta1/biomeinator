@@ -57,6 +57,12 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
         .MaxTraceRecursionDepth = 1,
         .Flags = D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
     };
+    // Traversal over OMM-linked geometry without this opt-in is undefined behavior; the spec
+    // notes a small cost to setting it when unused, so gate it
+    if (Renderer::getUseOmms())
+    {
+        pipelineCfg.Flags |= D3D12_RAYTRACING_PIPELINE_FLAG_ALLOW_OPACITY_MICROMAPS;
+    }
 
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
     {
