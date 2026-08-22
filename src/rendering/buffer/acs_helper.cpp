@@ -10,6 +10,7 @@
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
+#include "util/math.h"
 #include "util/util.h"
 
 #include <cstring>
@@ -305,6 +306,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
             inputs.outGeoWrapper->ommIdxsBufferSection = uploadIdxsSection(*inputs.host_ommIdxs);
         }
 
+        ASSERT(!(inputs.isOpaque && inputs.host_ommIdxs)); // fully opaque geometry has no use for OMMs
         inputs.outGeoWrapper->geometryFlags = inputs.isOpaque
             ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE
             : D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;

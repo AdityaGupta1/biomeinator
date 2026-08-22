@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-22_
 
 # Acceleration Structures
 
@@ -24,9 +24,9 @@ Ordering: `buildOmmArray` issues the UAV barrier on `sharedAcsBuffer` itself, so
 BLAS build (same or later command list) safely dereferences the array. The OMM Array result
 is sub-allocated from `sharedAcsBuffer` like BLASes/TLAS (spec allows intermixing); its
 128-byte alignment requirement is met because every section in that buffer is rounded to
-256 bytes. The R16 OMM index buffers live in the scene's idxs buffer — safe because all
-sections there (uint32 idx arrays, uint16 OMM idx arrays with even triangle counts) are
-multiples of 4 bytes, keeping offsets aligned.
+256 bytes. The R16 OMM index buffers live in the scene's idxs buffer — safe because the
+buffer's `alignmentBytes` rounds every section size to a multiple of 4, keeping all
+offsets aligned.
 
 Traversal that can encounter OMM-linked triangles without opting in is undefined behavior,
 so the opt-in is set in both places whenever OMMs are active: pipeline flag in
