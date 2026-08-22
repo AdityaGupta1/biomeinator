@@ -107,7 +107,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     const uint2 nrcPixelIdx = DispatchRaysIndex().xy;
     NrcBuffers nrcBufs = (NrcBuffers)0;
     NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBufs, nrcPixelIdx);
-    NrcPathState nrcPathState = NrcCreatePathState(nrcConstants, payload.rng.nextFloat());
+    NrcPathState nrcPathState = NrcCreatePathState(nrcConstants, nextFloat(payload.rng));
 #endif
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
@@ -318,7 +318,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #endif
                 {
                     const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-                    if (payload.rng.nextFloat() >= survivalProbability)
+                    if (nextFloat(payload.rng) >= survivalProbability)
                     {
                         rrShouldTerminate = true;
                     }
