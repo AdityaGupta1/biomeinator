@@ -8,8 +8,8 @@
 #include <glm/glm.hpp>
 
 // The surface biome noise fields (temperature/humidity/peak/inland) and biome classification from
-// them. Independent of chunk generation, rendering, and settings so tools can evaluate the biome
-// field for a seed without linking the engine.
+// them. Independent of chunk generation, rendering, and settings so tools (e.g. BiomeScanner) can
+// evaluate the biome field for a seed without linking the engine.
 namespace BiomeNoiseFields
 {
 

@@ -42,6 +42,7 @@ This project uses various third-party libraries:
 - [json](https://github.com/nlohmann/json) - MIT
 - [stb](https://github.com/nothings/stb) - MIT
 - [cxxopts](https://github.com/jarro2783/cxxopts) - MIT
+- [cpp-httplib](https://github.com/yhirose/cpp-httplib) - MIT
 - [Dear ImGui](https://github.com/ocornut/imgui) - MIT
 - [ImPlot](https://github.com/epezent/implot) - MIT
 - [DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler) - University of Illinois Open Source
