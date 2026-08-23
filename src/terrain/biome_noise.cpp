@@ -21,6 +21,7 @@ static FN::SmartNode<FN::Generator> fnPeak;
 static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
+// Shared by fillGrids and sampleAt so single-point samples match the grids
 static int noiseFieldSeed;
 static ivec2 noiseOffsetXZ;
 
@@ -122,6 +123,18 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
     fill(grids.inland, fnInland);
 }
 
+BiomeNoise sampleAt(vec2 posXZ_WS)
+{
+    const float x = posXZ_WS.x + noiseOffsetXZ.x;
+    const float z = posXZ_WS.y + noiseOffsetXZ.y /*z*/;
+    return {
+        .temperature = fnTemperature->GenSingle2D(x, z, noiseFieldSeed),
+        .humidity = fnHumidity->GenSingle2D(x, z, noiseFieldSeed),
+        .peak = fnPeak->GenSingle2D(x, z, noiseFieldSeed),
+        .inland = fnInland->GenSingle2D(x, z, noiseFieldSeed),
+    };
+}
+
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
 {
     return {
@@ -130,6 +143,26 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
         .peak = grids.peak[idx],
         .inland = grids.inland[idx],
     };
+}
+
+float computeFloodFactor(const BiomeNoise& biomeNoise)
+{
+    // min, not product: the factor is limited by its worst axis, instead of requiring every axis
+    // to be near-perfect at once.
+    return min(min(smoothstep(-0.1f, 0.35f, biomeNoise.temperature),
+                   smoothstep(0.0f, 0.45f, biomeNoise.humidity)),
+               min(smoothstep(-0.1f, -0.55f, biomeNoise.peak),
+                   min(smoothstep(0.2f, 0.3f, biomeNoise.inland),
+                       smoothstep(0.85f, 0.75f, biomeNoise.inland))));
+}
+
+Biome biomeFromNoise(const BiomeNoise& biomeNoise)
+{
+    if (computeFloodFactor(biomeNoise) > floodTintThreshold)
+    {
+        return Biome::SWAMP;
+    }
+    return Biomes::getClosestBiome(biomeNoise);
 }
 
 void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
@@ -151,7 +184,7 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
 
     for (uint32_t idx = 0; idx < numSamples; ++idx)
     {
-        outBiomes[idx] = Biomes::getClosestBiome(noiseAt(grids, idx));
+        outBiomes[idx] = biomeFromNoise(noiseAt(grids, idx));
     }
 }
 

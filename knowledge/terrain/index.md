@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-23_
 
 # Terrain Knowledgebase
 
@@ -20,3 +20,4 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |
 | [terrain_omm.md](terrain_omm.md) | Opacity micromap baking for cutout tiles, exactness argument, build ordering |
 | [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |
+| [swamp_generation.md](swamp_generation.md) | Cellular pond/dam design, window stability, cave sealing |

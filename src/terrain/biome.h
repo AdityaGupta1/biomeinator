@@ -23,6 +23,7 @@ struct BiomeNoise
     static BiomeNoise randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng);
 };
 
+// Serialized by value in world exports — only append new biomes.
 enum class Biome : uint8_t
 {
     OCEAN,
@@ -40,6 +41,8 @@ enum class Biome : uint8_t
     ICE_FIELDS,
     MOUNTAINS,
 
+    SWAMP,
+
     COUNT
 };
 
@@ -47,6 +50,10 @@ struct TopBlocks
 {
     Block top{ Block::GRASS_BLOCK };
     Block mid{ Block::DIRT };
+    // When set (non-AIR), replaces a grass top block underwater (instead of the global dirt
+    // fallback) or in the noise-driven shore band just above water level.
+    Block underwaterTop{ Block::AIR };
+    Block shoreTop{ Block::AIR };
 };
 
 struct BiomeData
