@@ -7,6 +7,7 @@
 #include "biome_noise.h"
 #include "cave_biome.h"
 #include "chunk.h"
+#include "swamp_shaping.h"
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -56,6 +57,7 @@ void init()
 {
     worldSeed = SettingsManager::getWorldSeed();
     BiomeNoiseFields::init(worldSeed);
+    SwampShaping::init(worldSeed);
     noiseOffsetXZ = BiomeNoiseFields::getNoiseOffsetXZ();
 
     {
@@ -254,316 +256,6 @@ inline constexpr float surfaceValBound = 1.2f; // noise is approximately between
 
 inline constexpr int seaLevel = SEA_LEVEL;
 
-// Swamps are cellular ponds contained by dam bands along cell borders. Design rationale and
-// invariants: knowledge/terrain/swamp_generation.md.
-inline constexpr int swampCellSize = 128;
-inline constexpr int swampCellPadding = 32;
-inline constexpr int swampLevelQuantize = 4;
-inline constexpr float swampTerrainSurfaceMultiplier = 0.4f;
-// Band above the pond level over which pulled-down marsh terrain blends back to natural
-inline constexpr float swampPullDownStart = 14.f;
-inline constexpr float swampPullDownBlendRange = 22.f;
-// Domain-warp amplitude for cell lookups; must stay well under swampCellPadding so a warped
-// column still finds its true nearest sites in the 5x5 scan
-inline constexpr float swampWarpAmplitude = 18.f;
-inline constexpr float swampWarpFineAmplitude = 6.f;
-// Edge distance within which a dam stays at full height; must exceed the warp jitter between
-// adjacent columns so open water can never sit directly next to an unraised column
-inline constexpr float swampDamCoreDist = 6.f;
-// The far-cell gate must reach zero before the closest possible site distance at which adjacent
-// columns' scan windows can disagree about a cell, or contributions seam along the window-flip
-// contour; both bounds scale with swampCellSize
-inline constexpr float swampFarCellGateStartDist = 90.f;
-inline constexpr float swampFarCellGateEndDist = 130.f;
-// Edge-distance ends of the containment band and surface-noise flatten ramps (both start at
-// swampDamCoreDist); the containment band must also reach zero before the window shifts
-inline constexpr float swampContainmentBandEndDist = 18.f;
-inline constexpr float swampFlattenFadeEndDist = 60.f;
-
-struct NaturalTerrain
-{
-    float baseHeight;
-    float surfaceMultiplier;
-};
-
-struct SwampCellInfo
-{
-    bool swampy;
-    int pondLevel;
-};
-
-// Blends surface multipliers linearly in amplitude (1 / multiplier) space: the surface offset is
-// noise / multiplier, so mixing multipliers directly compresses most of the amplitude change into
-// the low-multiplier end of the ramp and produces steep slopes there.
-static float mixSurfaceMultiplierByAmplitude(float multA, float multB, float t)
-{
-    return 1.f / glm::mix(1.f / multA, 1.f / multB, t);
-}
-
-static NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise)
-{
-    const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
-
-    float baseHeight = 140.f;
-    baseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
-    const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
-    baseHeight += inlandHeightModifier * 90.f;
-    const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
-    baseHeight = glm::mix(baseHeight, static_cast<float>(seaLevel + 8), seaLevelPullFactor);
-
-    float surfaceMultiplier = 0.02f;
-    surfaceMultiplier -= scaledPeak * 0.008f;
-    surfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
-
-    return { baseHeight, surfaceMultiplier };
-}
-
-// Swamp cells use a plain square grid, NOT gridCellCornerForPosXZ_WS — that helper's staggered
-// odd-row x shift would make corner + offset * swampCellSize enumerate cells that don't exist.
-static ivec2 swampCellCornerForPosXZ_WS(ivec2 posXZ_WS)
-{
-    return ivec2(MathUtil::floorDiv(posXZ_WS.x, swampCellSize) * swampCellSize,
-                 MathUtil::floorDiv(posXZ_WS.y /*z*/, swampCellSize) * swampCellSize);
-}
-
-static ivec2 swampCellSiteXZ_WS(ivec2 cellCornerXZ_WS)
-{
-    RandomNumberGenerator rng = initRng(worldSeed ^ hash(529817231), cellCornerXZ_WS.x, cellCornerXZ_WS.y /*z*/);
-    constexpr int innerSide = swampCellSize - 2 * swampCellPadding;
-    return cellCornerXZ_WS + ivec2(swampCellPadding) + ivec2(rng.nextInt(innerSide), rng.nextInt(innerSide));
-}
-
-static SwampCellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
-{
-    const ivec2 siteXZ_WS = swampCellSiteXZ_WS(cellCornerXZ_WS);
-    const BiomeNoise siteNoise = BiomeNoiseFields::sampleAt(vec2(siteXZ_WS));
-
-    // The pond level tracks the second-lowest of nine natural-height samples across the cell
-    float minNaturalBase = computeNaturalTerrain(siteNoise).baseHeight;
-    float secondMinNaturalBase = std::numeric_limits<float>::max();
-    for (int sampleIdx = 0; sampleIdx < 9; ++sampleIdx)
-    {
-        if (sampleIdx == 4)
-        {
-            continue; // cell center: the (jittered) site sample already covers it
-        }
-
-        const ivec2 sampleXZ_WS = cellCornerXZ_WS + (swampCellSize / 2) * ivec2(sampleIdx % 3, sampleIdx / 3);
-        const float sampleBase = computeNaturalTerrain(BiomeNoiseFields::sampleAt(vec2(sampleXZ_WS))).baseHeight;
-        if (sampleBase < minNaturalBase)
-        {
-            secondMinNaturalBase = minNaturalBase;
-            minNaturalBase = sampleBase;
-        }
-        else
-        {
-            secondMinNaturalBase = min(secondMinNaturalBase, sampleBase);
-        }
-    }
-
-    const int naturalBase = static_cast<int>(std::floor(secondMinNaturalBase));
-    return {
-        .swampy = BiomeNoiseFields::computeFloodFactor(siteNoise) > BiomeNoiseFields::floodCellThreshold,
-        .pondLevel = std::max((naturalBase - 2) / swampLevelQuantize * swampLevelQuantize, seaLevel + 3),
-    };
-}
-
-struct SwampShaping
-{
-    float baseHeight;
-    float surfaceMultiplier;
-    int waterLevel;
-    int caveSeal;
-};
-
-// Computes swamp pond/dam shaping for one column: the nearest cell site decides its pond, and
-// every other scanned site contributes a dam barrier profile. Design rationale and
-// window-stability rules: knowledge/terrain/swamp_generation.md.
-static SwampShaping computeSwampShaping(vec2 warpedPosXZ_WS,
-                                        const BiomeNoise& biomeNoise,
-                                        const NaturalTerrain& naturalTerrain,
-                                        std::vector<std::pair<ivec2, SwampCellInfo>>& cellCache)
-{
-    const auto getSwampCellInfo = [&cellCache](ivec2 cellCornerXZ_WS) -> SwampCellInfo
-    {
-        for (const auto& [cachedCorner, cachedInfo] : cellCache)
-        {
-            if (cachedCorner == cellCornerXZ_WS)
-            {
-                return cachedInfo;
-            }
-        }
-        return cellCache.emplace_back(cellCornerXZ_WS, computeSwampCellInfo(cellCornerXZ_WS)).second;
-    };
-
-    const ivec2 centerCellCornerXZ_WS = swampCellCornerForPosXZ_WS(ivec2(floor(warpedPosXZ_WS)));
-
-    // 5x5, not 3x3: a 3x3 window can miss the true nearest site for one of two adjacent columns
-    constexpr int swampCellScanRadius = 2;
-    constexpr int swampCellScanWidth = 2 * swampCellScanRadius + 1;
-    constexpr int numScannedCells = swampCellScanWidth * swampCellScanWidth;
-    float dists[numScannedCells];
-    ivec2 cellCorners[numScannedCells];
-    int nearestIdx = 0;
-    for (int offsetZ = -swampCellScanRadius; offsetZ <= swampCellScanRadius; ++offsetZ)
-    {
-        for (int offsetX = -swampCellScanRadius; offsetX <= swampCellScanRadius; ++offsetX)
-        {
-            const int idx = (offsetX + swampCellScanRadius) + swampCellScanWidth * (offsetZ + swampCellScanRadius);
-            cellCorners[idx] = centerCellCornerXZ_WS + ivec2(offsetX, offsetZ) * swampCellSize;
-            dists[idx] = length(vec2(swampCellSiteXZ_WS(cellCorners[idx])) - warpedPosXZ_WS);
-            if (dists[idx] < dists[nearestIdx])
-            {
-                nearestIdx = idx;
-            }
-        }
-    }
-
-    const SwampCellInfo cell1 = getSwampCellInfo(cellCorners[nearestIdx]);
-    const float deepFloodMix =
-        smoothstep(BiomeNoiseFields::floodCellThreshold, 0.9f, BiomeNoiseFields::computeFloodFactor(biomeNoise));
-
-    // Shape height this column would take under the given cell: pond-floor pull-down for swampy
-    // cells, untouched natural terrain otherwise. Natural terrain below the marsh floor is left
-    // untouched and becomes deeper open water.
-    const auto shapeHeightForCell = [&](const SwampCellInfo& cell, float& outNaturalMix)
-    {
-        outNaturalMix = 1.f;
-        if (!cell.swampy)
-        {
-            return naturalTerrain.baseHeight;
-        }
-        const float marshFloorHeight = static_cast<float>(cell.pondLevel) - glm::mix(2.f, 5.f, deepFloodMix);
-        const float heightAboveLevel = naturalTerrain.baseHeight - static_cast<float>(cell.pondLevel);
-        outNaturalMix = smoothstep(swampPullDownStart, swampPullDownStart + swampPullDownBlendRange, heightAboveLevel);
-        if (naturalTerrain.baseHeight <= marshFloorHeight)
-        {
-            return naturalTerrain.baseHeight;
-        }
-        return glm::mix(marshFloorHeight, naturalTerrain.baseHeight, outNaturalMix);
-    };
-
-    SwampShaping result = {
-        .baseHeight = naturalTerrain.baseHeight,
-        .surfaceMultiplier = naturalTerrain.surfaceMultiplier,
-        .waterLevel = seaLevel,
-        .caveSeal = 0,
-    };
-
-    float naturalMix1;
-    const float shapeHeight1 = shapeHeightForCell(cell1, naturalMix1);
-    if (cell1.swampy)
-    {
-        result.baseHeight = shapeHeight1;
-        // The multiplier flattens only where the base was modified.
-        result.surfaceMultiplier =
-            mixSurfaceMultiplierByAmplitude(swampTerrainSurfaceMultiplier, naturalTerrain.surfaceMultiplier, naturalMix1);
-        result.waterLevel = cell1.pondLevel;
-        result.caveSeal = cell1.pondLevel;
-    }
-
-    // Anchor for the dam contributions below, blended across near-tied cells' shape heights so it
-    // stays continuous when the nearest-cell identity flips
-    constexpr float anchorBlendDist = 12.f;
-    float anchorBase = 0.f;
-    float anchorWeightSum = 0.f;
-    for (int idx = 0; idx < numScannedCells; ++idx)
-    {
-        const float tieDist = dists[idx] - dists[nearestIdx];
-        if (tieDist >= anchorBlendDist)
-        {
-            continue;
-        }
-
-        float unusedNaturalMix;
-        const float shapeHeight = (idx == nearestIdx)
-            ? shapeHeight1
-            : shapeHeightForCell(getSwampCellInfo(cellCorners[idx]), unusedNaturalMix);
-        const float weight = 1.f - smoothstep(0.f, anchorBlendDist, tieDist);
-        anchorBase += weight * shapeHeight;
-        anchorWeightSum += weight;
-    }
-    anchorBase /= anchorWeightSum; // the nearest cell always contributes weight 1
-
-    float flattenMixMax = 0.f;
-    for (int idx = 0; idx < numScannedCells; ++idx)
-    {
-        if (idx == nearestIdx)
-        {
-            continue;
-        }
-
-        const SwampCellInfo neighborCell = getSwampCellInfo(cellCorners[idx]);
-        if (cell1.swampy)
-        {
-            if (neighborCell.swampy && neighborCell.pondLevel == cell1.pondLevel)
-            {
-                continue; // same level: ponds merge, no dam between them
-            }
-        }
-        else if (!neighborCell.swampy)
-        {
-            continue;
-        }
-
-        const float edgeDist = dists[idx] - dists[nearestIdx];
-
-        // The containment band overrides the gate: the dam is the only water containment
-        const float farCellGate = 1.f - smoothstep(swampFarCellGateStartDist, swampFarCellGateEndDist, dists[idx]);
-        const float containmentBand = 1.f - smoothstep(swampDamCoreDist, swampContainmentBandEndDist, edgeDist);
-        const float cellGate = max(farCellGate, containmentBand);
-
-        // Seal caves below any pond close enough for its water to reach this column.
-        if (neighborCell.swampy)
-        {
-            result.caveSeal =
-                std::max(result.caveSeal, static_cast<int>(static_cast<float>(neighborCell.pondLevel) * cellGate));
-        }
-
-        // The flatten ramps on edge distance, not dam rise
-        flattenMixMax = max(flattenMixMax, (1.f - smoothstep(swampDamCoreDist, swampFlattenFadeEndDist, edgeDist)) * cellGate);
-
-        int maxPondLevel = neighborCell.swampy ? neighborCell.pondLevel : seaLevel;
-        if (cell1.swampy)
-        {
-            maxPondLevel = std::max(maxPondLevel, cell1.pondLevel);
-        }
-        // The backside tail slopes the levee backside down instead of cliffing; the gate scales
-        // the whole profile toward the anchor
-        const float artificialRise = static_cast<float>(maxPondLevel + 2) - naturalTerrain.baseHeight;
-        const float backsideTail =
-            1.f - smoothstep(swampDamCoreDist, swampDamCoreDist + 4.f * max(artificialRise, 1.f), edgeDist);
-        const float damHeight =
-            glm::mix(anchorBase, naturalTerrain.baseHeight + max(0.f, artificialRise) * backsideTail, cellGate);
-        const float damRise = damHeight - anchorBase;
-        if (damRise <= 0.f)
-        {
-            continue;
-        }
-
-        // Constant-slope bank: a fixed run of blocks per block of rise
-        const float fadeEndDist = swampDamCoreDist + min(10.f * damRise, 64.f);
-        const float damMix = 1.f - smoothstep(swampDamCoreDist, fadeEndDist, edgeDist);
-        if (damMix <= 0.f)
-        {
-            continue;
-        }
-
-        const float baseTowardDam = glm::mix(anchorBase, damHeight, damMix);
-        result.baseHeight = max(result.baseHeight, baseTowardDam);
-    }
-
-    // Applied to swampy columns too: their naturalMix-based multiplier must still reach the
-    // flattened value at borders so it meets the neighbor side continuously.
-    if (flattenMixMax > 0.f)
-    {
-        result.surfaceMultiplier =
-            mixSurfaceMultiplierByAmplitude(result.surfaceMultiplier, swampTerrainSurfaceMultiplier, flattenMixMax);
-    }
-
-    return result;
-}
-
 // y of the lava surface (the low-y lava fill writes LAVA_TOP at y == 4); cave structures
 // whose anchor sits at or below this are rejected unless flagged to allow lava.
 inline constexpr int lavaSurfaceY = 4;
@@ -621,9 +313,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y /*z*/);
 
-    // A chunk touches only a handful of unique swamp cells, so cache their info (each computation
-    // costs several single-point noise samples).
-    std::vector<std::pair<ivec2, SwampCellInfo>> swampCellCache;
+    SwampShaping::ChunkContext swampContext =
+        SwampShaping::makeChunkContext(chunkPosBlocksXZ_WS, static_cast<int>(chunkSizeXZ));
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -638,11 +329,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            const NaturalTerrain naturalTerrain = computeNaturalTerrain(biomeNoise);
+            const BiomeNoiseFields::NaturalTerrain naturalTerrain = BiomeNoiseFields::computeNaturalTerrain(biomeNoise);
             const vec2 warpedPosXZ_WS = vec2(blockPosXZ_WS) +
-                swampWarpAmplitude * vec2(swampWarpXNoise[columnIdx], swampWarpZNoise[columnIdx]) +
-                swampWarpFineAmplitude * vec2(swampWarpFineXNoise[columnIdx], swampWarpFineZNoise[columnIdx]);
-            const SwampShaping swampShaping = computeSwampShaping(warpedPosXZ_WS, biomeNoise, naturalTerrain, swampCellCache);
+                SwampShaping::swampWarpAmplitude * vec2(swampWarpXNoise[columnIdx], swampWarpZNoise[columnIdx]) +
+                SwampShaping::swampWarpFineAmplitude * vec2(swampWarpFineXNoise[columnIdx], swampWarpFineZNoise[columnIdx]);
+            const SwampShaping::Shaping swampShaping =
+                SwampShaping::computeShaping(warpedPosXZ_WS, biomeNoise, naturalTerrain, swampContext);
             const float terrainBaseHeight = swampShaping.baseHeight;
             const float terrainSurfaceMultiplier = swampShaping.surfaceMultiplier;
             const int waterLevel = swampShaping.waterLevel;

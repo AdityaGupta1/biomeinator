@@ -43,6 +43,16 @@ BiomeNoise sampleAt(glm::vec2 posXZ_WS);
 
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
 
+// Natural (pre-swamp-shaping) terrain profile of a column, derived purely from its smooth biome
+// noise.
+struct NaturalTerrain
+{
+    float baseHeight;
+    float surfaceMultiplier;
+};
+
+NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise);
+
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
 // give balanced water/land; values toward 1 give mostly-water terrain. Computed from smooth
 // fields only, never the jittered biome — per-column jitter would give adjacent columns different

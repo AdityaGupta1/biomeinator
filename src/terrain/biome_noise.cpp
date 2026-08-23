@@ -3,6 +3,7 @@
 
 #include "biome_noise.h"
 
+#include "rendering/common/common_settings.h"
 #include "util/rng.h"
 
 #include <vector>
@@ -145,15 +146,35 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
     };
 }
 
+NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise)
+{
+    const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
+
+    float baseHeight = 140.f;
+    baseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
+    const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
+    baseHeight += inlandHeightModifier * 90.f;
+    const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
+    baseHeight = glm::mix(baseHeight, static_cast<float>(SEA_LEVEL + 8), seaLevelPullFactor);
+
+    float surfaceMultiplier = 0.02f;
+    surfaceMultiplier -= scaledPeak * 0.008f;
+    surfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
+
+    return { baseHeight, surfaceMultiplier };
+}
+
 float computeFloodFactor(const BiomeNoise& biomeNoise)
 {
+    const float temperatureFactor = smoothstep(-0.1f, 0.35f, biomeNoise.temperature);
+    const float humidityFactor = smoothstep(0.0f, 0.45f, biomeNoise.humidity);
+    const float flatFactor = smoothstep(-0.1f, -0.55f, biomeNoise.peak);
+    const float inlandFactor =
+        min(smoothstep(0.2f, 0.3f, biomeNoise.inland), smoothstep(0.85f, 0.75f, biomeNoise.inland));
+
     // min, not product: the factor is limited by its worst axis, instead of requiring every axis
     // to be near-perfect at once.
-    return min(min(smoothstep(-0.1f, 0.35f, biomeNoise.temperature),
-                   smoothstep(0.0f, 0.45f, biomeNoise.humidity)),
-               min(smoothstep(-0.1f, -0.55f, biomeNoise.peak),
-                   min(smoothstep(0.2f, 0.3f, biomeNoise.inland),
-                       smoothstep(0.85f, 0.75f, biomeNoise.inland))));
+    return min(min(temperatureFactor, humidityFactor), min(flatFactor, inlandFactor));
 }
 
 Biome biomeFromNoise(const BiomeNoise& biomeNoise)

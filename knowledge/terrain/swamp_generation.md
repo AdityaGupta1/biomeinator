@@ -1,10 +1,10 @@
-_Last edited: 2026-08-22_
+_Last edited: 2026-08-23_
 
 # Swamp Generation
 
 Swamps are cellular ponds: a sparse jittered grid of cell sites (`swampCellSize`), where each
 swampy cell floods to its own flat water level derived from the local natural terrain. All
-per-column shaping happens in `computeSwampShaping` (`chunk_generator.cpp`).
+per-column shaping happens in `SwampShaping::computeShaping` (`swamp_shaping.cpp`).
 
 ## Ponds and dams
 
