@@ -382,28 +382,6 @@ fillStructureBlocksHeader(ACACIA_TREE)
     placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
-// Trilinear value noise in [-1, 1]; interpolating between position-seeded corner values keeps
-// neighboring blocks correlated, unlike a per-block RNG
-static float valueNoise3(vec3 pos, uint seed)
-{
-    const vec3 posFloor = glm::floor(pos);
-    const vec3 posFract = pos - posFloor;
-    const vec3 t = posFract * posFract * (3.f - 2.f * posFract);
-    const ivec3 basePos = ivec3(posFloor);
-
-    float result = 0.f;
-    for (int cornerIdx = 0; cornerIdx < 8; ++cornerIdx)
-    {
-        const ivec3 corner(cornerIdx & 1, (cornerIdx >> 1) & 1, cornerIdx >> 2);
-        const ivec3 cornerPos = basePos + corner;
-        RandomNumberGenerator cornerRng = initRng(
-            seed, static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
-        const vec3 weights = glm::mix(1.f - t, t, vec3(corner));
-        result += weights.x * weights.y * weights.z * (cornerRng.nextFloat() * 2.f - 1.f);
-    }
-    return result;
-}
-
 fillStructureBlocksHeader(CYPRESS_TREE)
 {
     const ivec2 chunkPosXZ_WS =

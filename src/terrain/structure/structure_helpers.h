@@ -22,6 +22,28 @@ inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx
     }
 }
 
+// Trilinear value noise in [-1, 1]; interpolating between position-seeded corner values keeps
+// neighboring blocks correlated, unlike a per-block RNG
+inline float valueNoise3(glm::vec3 pos, uint32_t seed)
+{
+    const glm::vec3 posFloor = glm::floor(pos);
+    const glm::vec3 posFract = pos - posFloor;
+    const glm::vec3 t = posFract * posFract * (3.f - 2.f * posFract);
+    const glm::ivec3 basePos = glm::ivec3(posFloor);
+
+    float result = 0.f;
+    for (int cornerIdx = 0; cornerIdx < 8; ++cornerIdx)
+    {
+        const glm::ivec3 corner(cornerIdx & 1, (cornerIdx >> 1) & 1, cornerIdx >> 2);
+        const glm::ivec3 cornerPos = basePos + corner;
+        RandomNumberGenerator cornerRng = initRng(
+            seed, static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
+        const glm::vec3 weights = glm::mix(glm::vec3(1.f) - t, t, glm::vec3(corner));
+        result += weights.x * weights.y * weights.z * (cornerRng.nextFloat() * 2.f - 1.f);
+    }
+    return result;
+}
+
 // True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
 // blocks land here. Lets the per-chunk fill passes skip structures that only overhang neighbors.
 inline bool structureAabbRejectsChunk(glm::ivec2 minXZ_CS, glm::ivec2 maxXZ_CS)
