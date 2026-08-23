@@ -3,7 +3,14 @@
 
 #include "block.h"
 
+#include "logger.h"
+
 #include <array>
+#include <filesystem>
+#include <fstream>
+#include <json.hpp>
+#include <string>
+#include <unordered_map>
 
 using namespace glm;
 
@@ -25,88 +32,104 @@ namespace Blocks
 
 std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
 
-#define BLOCK_DATA(block) blockDatas[static_cast<size_t>(block)]
-#define BLOCK_DATA_BY_NAME(blockName) blockDatas[static_cast<size_t>(Block::blockName)]
+static std::unordered_map<std::string_view, Block> blocksById;
+
+static const std::unordered_map<std::string, BlockType> blockTypesByName = {
+    { "air", BlockType::AIR },
+    { "water", BlockType::WATER },
+    { "solid", BlockType::SOLID },
+    { "transparent_cutout", BlockType::TRANSPARENT_CUTOUT },
+};
+
+static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
+    { "cube", BlockShape::CUBE },
+    { "x_shaped", BlockShape::X_SHAPED },
+    { "liquid_top", BlockShape::LIQUID_TOP },
+};
+
+static uvec2 parseUv(const nlohmann::json& uvJson)
+{
+    return uvec2(uvJson.at(0).get<uint32_t>(), uvJson.at(1).get<uint32_t>());
+}
+
+static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& outData)
+{
+    std::ifstream file(jsonPath);
+    if (!file)
+    {
+        Logger::logError("blocks: failed to open %s", jsonPath.generic_string().c_str());
+        return false;
+    }
+
+    nlohmann::json blockJson;
+    try
+    {
+        blockJson = nlohmann::json::parse(file);
+
+        if (blockJson.contains("uvs"))
+        {
+            const nlohmann::json& uvsJson = blockJson["uvs"];
+            if (uvsJson.is_array())
+            {
+                outData.uvs = BlockUvs(parseUv(uvsJson));
+            }
+            else
+            {
+                outData.uvs = BlockUvs(parseUv(uvsJson.at("top")),
+                                       parseUv(uvsJson.at("side")),
+                                       parseUv(uvsJson.at("bottom")));
+            }
+        }
+
+        if (blockJson.contains("type"))
+        {
+            outData.type = blockTypesByName.at(blockJson["type"].get<std::string>());
+        }
+
+        if (blockJson.contains("shape"))
+        {
+            outData.shape = blockShapesByName.at(blockJson["shape"].get<std::string>());
+        }
+
+        outData.emitsLight = blockJson.value("emitsLight", false);
+        outData.translucent = blockJson.value("translucent", false);
+    }
+    catch (const std::exception& e)
+    {
+        Logger::logError("blocks: failed to parse %s: %s", jsonPath.generic_string().c_str(), e.what());
+        return false;
+    }
+
+    return true;
+}
 
 void init()
 {
-    // clang-format off
-    BLOCK_DATA_BY_NAME(AIR) = { .type = BlockType::AIR };
+    namespace fs = std::filesystem;
 
-    BLOCK_DATA_BY_NAME(WATER) = { .type = BlockType::WATER, .shape = BlockShape::CUBE };
-    BLOCK_DATA_BY_NAME(WATER_TOP) = { .type = BlockType::WATER, .shape = BlockShape::LIQUID_TOP };
+    blocksById.reserve(blockIdNames.size());
+    for (size_t i = 0; i < blockIdNames.size(); ++i)
+    {
+        blocksById.emplace(blockIdNames[i], static_cast<Block>(i));
+    }
 
-    BLOCK_DATA_BY_NAME(LAVA) = { .uvs = { uvec2(0, 1) }, .emitsLight = true };
-    BLOCK_DATA_BY_NAME(LAVA_TOP) = { .uvs = { uvec2(0, 1) }, .shape = BlockShape::LIQUID_TOP, .emitsLight = true };
-
-    BLOCK_DATA_BY_NAME(BEDROCK) = { .uvs = { uvec2(5, 0) } };
-    BLOCK_DATA_BY_NAME(STONE) = { .uvs = { uvec2(0, 0) } };
-    BLOCK_DATA_BY_NAME(LAMP) = { .uvs = { uvec2(1, 0) }, .emitsLight = true };
-    BLOCK_DATA_BY_NAME(DIRT) = { .uvs = { uvec2(4, 0) } };
-    BLOCK_DATA_BY_NAME(GRASS_BLOCK) = { .uvs = { uvec2(2, 0), uvec2(3, 0), uvec2(4, 0) } };
-    BLOCK_DATA_BY_NAME(SAND) = { .uvs = { uvec2(6, 0) } };
-    BLOCK_DATA_BY_NAME(SANDSTONE) = { .uvs = { uvec2(8, 0), uvec2(7, 0), uvec2(8, 0) } };
-    BLOCK_DATA_BY_NAME(SNOW) = { .uvs = { uvec2(9, 0) } };
-    BLOCK_DATA_BY_NAME(SNOWY_GRASS_BLOCK) = { .uvs = { uvec2(9, 0), uvec2(10, 0), uvec2(4, 0) } };
-    BLOCK_DATA_BY_NAME(ICE) = { .uvs = { uvec2(11, 0) } };
-    BLOCK_DATA_BY_NAME(OAK_LOG) = { .uvs = { uvec2(13, 0), uvec2(12, 0), uvec2(13, 0) } };
-    BLOCK_DATA_BY_NAME(OAK_LEAVES) = { .uvs = { uvec2(14, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(CACTUS) = { .uvs = { uvec2(15, 0) } };
-    BLOCK_DATA_BY_NAME(GRASS) = { .uvs = { uvec2(16, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(SHORT_GRASS) = { .uvs = { uvec2(20, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(DEAD_BUSH) = { .uvs = { uvec2(17, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(DEAD_GRASS_1) = { .uvs = { uvec2(18, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(DEAD_GRASS_2) = { .uvs = { uvec2(19, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(GOLDENROD) = { .uvs = { uvec2(21, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(TINY_CACTUS) = { .uvs = { uvec2(22, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(PINK_DAFFODIL) = { .uvs = { uvec2(23, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(BLACK_SAND) = { .uvs = { uvec2(24, 0) } };
-    BLOCK_DATA_BY_NAME(GRAVEL) = { .uvs = { uvec2(25, 0) } };
-    BLOCK_DATA_BY_NAME(PALM_LOG) = { .uvs = { uvec2(27, 0), uvec2(26, 0), uvec2(27, 0) } };
-    BLOCK_DATA_BY_NAME(PALM_LEAVES) = { .uvs = { uvec2(28, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(ACACIA_LOG) = { .uvs = { uvec2(30, 0), uvec2(29, 0), uvec2(30, 0) } };
-    BLOCK_DATA_BY_NAME(ACACIA_LEAVES) = { .uvs = { uvec2(31, 0) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(MARBLE) = { .uvs = { uvec2(4, 1) } };
-    BLOCK_DATA_BY_NAME(SCALESTONE) = { .uvs = { uvec2(1, 1) } };
-    BLOCK_DATA_BY_NAME(HELLSTONE) = { .uvs = { uvec2(27, 1) } };
-    BLOCK_DATA_BY_NAME(MOSS) = { .uvs = { uvec2(28, 1) } };
-    BLOCK_DATA_BY_NAME(RAINBOW_CRYSTAL) = { .uvs = { uvec2(26, 1) } };
-    BLOCK_DATA_BY_NAME(CHERRY_LOG) = { .uvs = { uvec2(11, 1), uvec2(10, 1), uvec2(11, 1) } };
-    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_PINK) = { .uvs = { uvec2(12, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(CHERRY_LEAVES_WHITE) = { .uvs = { uvec2(13, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(REDWOOD_LOG) = { .uvs = { uvec2(15, 1), uvec2(14, 1), uvec2(15, 1) } };
-    BLOCK_DATA_BY_NAME(REDWOOD_LEAVES) = { .uvs = { uvec2(16, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(BIRCH_LOG) = { .uvs = { uvec2(18, 1), uvec2(17, 1), uvec2(18, 1) } };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_GREEN) = { .uvs = { uvec2(19, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_YELLOW) = { .uvs = { uvec2(20, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(BIRCH_LEAVES_ORANGE) = { .uvs = { uvec2(21, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(FIR_LOG) = { .uvs = { uvec2(30, 1), uvec2(29, 1), uvec2(30, 1) } };
-    BLOCK_DATA_BY_NAME(FIR_LEAVES) = { .uvs = { uvec2(31, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(PINE_LOG) = { .uvs = { uvec2(1, 2), uvec2(0, 2), uvec2(1, 2) } };
-    BLOCK_DATA_BY_NAME(PINE_LEAVES) = { .uvs = { uvec2(2, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(COBBLESTONE) = { .uvs = { uvec2(3, 2) } };
-    BLOCK_DATA_BY_NAME(MOSSY_COBBLESTONE) = { .uvs = { uvec2(4, 2) } };
-    BLOCK_DATA_BY_NAME(MAHOGANY_LOG) = { .uvs = { uvec2(8, 1), uvec2(7, 1), uvec2(8, 1) } };
-    BLOCK_DATA_BY_NAME(MAHOGANY_LEAVES) = { .uvs = { uvec2(9, 1) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(EUCALYPTUS_LOG) = { .uvs = { uvec2(6, 2), uvec2(5, 2), uvec2(6, 2) } };
-    BLOCK_DATA_BY_NAME(EUCALYPTUS_LEAVES) = { .uvs = { uvec2(7, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(WILLOW_LOG) = { .uvs = { uvec2(9, 2), uvec2(8, 2), uvec2(9, 2) } };
-    BLOCK_DATA_BY_NAME(WILLOW_LEAVES) = { .uvs = { uvec2(10, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(CYPRESS_LOG) = { .uvs = { uvec2(12, 2), uvec2(11, 2), uvec2(12, 2) } };
-    BLOCK_DATA_BY_NAME(CYPRESS_LEAVES) = { .uvs = { uvec2(13, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .translucent = true };
-    BLOCK_DATA_BY_NAME(MUD) = { .uvs = { uvec2(14, 2) } };
-    BLOCK_DATA_BY_NAME(SPANISH_MOSS) = { .uvs = { uvec2(15, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(SPANISH_MOSS_TIP) = { .uvs = { uvec2(16, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(BROWN_MUSHROOM) = { .uvs = { uvec2(17, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
-    BLOCK_DATA_BY_NAME(BLUE_ORCHID) = { .uvs = { uvec2(18, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(CATTAIL) = { .uvs = { uvec2(19, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(CATTAIL_TIP) = { .uvs = { uvec2(20, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    // clang-format on
+    const fs::path blocksDir = fs::path(TARGET_FILE_DIR) / "assets/blocks";
+    for (size_t i = 0; i < blockIdNames.size(); ++i)
+    {
+        const fs::path jsonPath = blocksDir / (std::string(blockIdNames[i]) + ".json");
+        parseBlockJson(jsonPath, blockDatas[i]);
+    }
 }
 
 const BlockData& getBlockData(Block block)
 {
-    return BLOCK_DATA(block);
+    return blockDatas[static_cast<size_t>(block)];
+}
+
+Block fromId(std::string_view id)
+{
+    const auto it = blocksById.find(id);
+    return it != blocksById.end() ? it->second : Block::COUNT;
 }
 
 } // namespace Blocks

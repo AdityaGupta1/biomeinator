@@ -1,8 +1,23 @@
-_Last edited: 2026-07-29_
+_Last edited: 2026-08-23_
 
 # Block System
 
 `src/terrain/block.h/cpp` — block enum and per-block metadata looked up via `Blocks::getBlockData()`.
+
+## JSON-Defined Blocks
+
+Each block is a JSON file in `assets/blocks/` (type, shape, translucency, emission, atlas UVs);
+`Blocks::init()` parses them at runtime from the build's copied assets. The `Block` enum itself is
+generated at CMake configure time (`block_ids.h.in` → `build/generated/block_ids.h`) from the JSON
+**filenames only** — adding a block means adding a JSON file and reconfiguring, and a content edit
+needs no rebuild at all. Ordering is air-first-then-alphabetical, so enum values are **not stable
+across builds**; world exports stay valid because they carry a name palette (see
+[world_export_import.md](world_export_import.md)). `AIR == 0` is the one fixed value — chunk block
+storage assumes it, enforced by a `static_assert` in `block.h`.
+
+A block JSON that fails to open or parse logs an error and leaves that block's `BlockData` at
+defaults (solid cube, no UVs) rather than aborting — same spirit as `loadTexture`'s missing-file
+handling.
 
 ## BlockType Drives Meshing
 

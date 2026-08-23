@@ -3,86 +3,13 @@
 
 #pragma once
 
+#include "block_ids.h"
+
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <string_view>
 
-using BlockId = uint16_t;
-
-// Serialized by value in world exports — only append new types.
-enum class Block : BlockId
-{
-    AIR = 0,
-
-    WATER,
-    WATER_TOP,
-
-    BEDROCK,
-    STONE,
-    LAMP,
-    DIRT,
-    GRASS_BLOCK,
-    SAND,
-    SANDSTONE,
-    SNOW,
-    SNOWY_GRASS_BLOCK,
-    ICE,
-    OAK_LOG,
-    OAK_LEAVES,
-    CACTUS,
-    GRASS,
-    SHORT_GRASS,
-    DEAD_BUSH,
-    DEAD_GRASS_1,
-    DEAD_GRASS_2,
-    GOLDENROD,
-    TINY_CACTUS,
-    PINK_DAFFODIL,
-    BLACK_SAND,
-    GRAVEL,
-    PALM_LOG,
-    PALM_LEAVES,
-    ACACIA_LOG,
-    ACACIA_LEAVES,
-    LAVA,
-    LAVA_TOP,
-    MARBLE,
-    SCALESTONE,
-    HELLSTONE,
-    MOSS,
-    RAINBOW_CRYSTAL,
-    CHERRY_LOG,
-    CHERRY_LEAVES_PINK,
-    CHERRY_LEAVES_WHITE,
-    REDWOOD_LOG,
-    REDWOOD_LEAVES,
-    BIRCH_LOG,
-    BIRCH_LEAVES_GREEN,
-    BIRCH_LEAVES_YELLOW,
-    BIRCH_LEAVES_ORANGE,
-    FIR_LOG,
-    FIR_LEAVES,
-    PINE_LOG,
-    PINE_LEAVES,
-    COBBLESTONE,
-    MOSSY_COBBLESTONE,
-    MAHOGANY_LOG,
-    MAHOGANY_LEAVES,
-    EUCALYPTUS_LOG,
-    EUCALYPTUS_LEAVES,
-    WILLOW_LOG,
-    WILLOW_LEAVES,
-    CYPRESS_LOG,
-    CYPRESS_LEAVES,
-    MUD,
-    SPANISH_MOSS,
-    SPANISH_MOSS_TIP,
-    BROWN_MUSHROOM,
-    BLUE_ORCHID,
-    CATTAIL,
-    CATTAIL_TIP,
-
-    COUNT
-};
+static_assert(static_cast<BlockId>(Block::AIR) == 0, "Chunk block storage assumes AIR == 0");
 
 enum class BlockType : uint8_t
 {
@@ -132,5 +59,8 @@ namespace Blocks
 void init();
 
 const BlockData& getBlockData(Block block);
+
+// Returns Block::COUNT if no block has the given id.
+Block fromId(std::string_view id);
 
 } // namespace Blocks

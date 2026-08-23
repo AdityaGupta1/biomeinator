@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 Aditya Gupta
+
+// Generated from assets/blocks/*.json by CMake — do not edit.
+
+#pragma once
+
+#include <array>
+#include <cstdint>
+
+using BlockId = uint16_t;
+
+// Values are assigned at configure time (air first, then alphabetical) and are not stable
+// across builds; world exports map them to string ids via a block palette in world.json.
+enum class Block : BlockId
+{
+@BLOCK_ENUM_ENTRIES@
+    COUNT
+};
+
+namespace Blocks
+{
+
+// String ids (JSON filenames without extension), indexed by Block value.
+inline constexpr std::array<const char*, static_cast<size_t>(Block::COUNT)> blockIdNames = {
+@BLOCK_ID_NAME_ENTRIES@
+};
+
+} // namespace Blocks
