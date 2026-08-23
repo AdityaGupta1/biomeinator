@@ -73,6 +73,9 @@ enum class Block : BlockId
     WILLOW_LEAVES,
     CYPRESS_LOG,
     CYPRESS_LEAVES,
+    MUD,
+    SPANISH_MOSS,
+    SPANISH_MOSS_TIP,
 
     COUNT
 };
