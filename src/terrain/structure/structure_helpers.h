@@ -163,6 +163,8 @@ inline void placeLeafCap(std::vector<Block>& blocks,
     const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
     const int yMax = centerPos_CS.y + (int)glm::floor(maxHeight - 0.5f);
 
+    const uint32_t droopSeed = SettingsManager::getWorldSeed() ^ hash(273904811);
+
     for (int y = centerPos_CS.y; y <= yMax; ++y)
     {
         const float posY = y - centerPos_CS.y + 0.5f;
@@ -182,7 +184,7 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                 if (droopChance > 0.f && y == centerPos_CS.y)
                 {
                     const glm::ivec2 columnPosXZ_WS = chunkPosXZ_WS + glm::ivec2(centerPos_CS.x + dx, centerPos_CS.z + dz);
-                    RandomNumberGenerator droopRng = initRng(SettingsManager::getWorldSeed() ^ hash(273904811),
+                    RandomNumberGenerator droopRng = initRng(droopSeed,
                                                              static_cast<uint32_t>(columnPosXZ_WS.x),
                                                              static_cast<uint32_t>(columnPosXZ_WS.y /*z*/));
                     if (droopRng.chance(droopChance))

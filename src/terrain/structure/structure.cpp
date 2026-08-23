@@ -391,6 +391,9 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     const float trunkHeight = rng.nextFloat(24.f, 35.f);
     const int trunkTopY = static_cast<int>(trunkHeight);
 
+    // The knee and moss scans below index columns by Y without per-block chunk-bounds checks
+    ASSERT(structurePos_CS.y + trunkTopY + 5 < static_cast<int>(chunkSizeY), "cypress tree extends past the world top");
+
     // Trunk radius flares into a wide buttress at the base (sunk two blocks so it seats on
     // slopes) and tapers quickly above it; noise wobble, faded out above the lower trunk,
     // makes the buttress fluted instead of round
@@ -407,10 +410,21 @@ fillStructureBlocksHeader(CYPRESS_TREE)
             for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
             {
                 const ivec3 pos_CS = structurePos_CS + ivec3(dx, y, dz);
-                const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
-                const float trunkRadius =
-                    baseRadius * (1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f, worldSeed ^ hash(602149583)));
-                if (dx * dx + dz * dz < trunkRadius * trunkRadius && Chunk::isInChunk(pos_CS))
+                if (!Chunk::isInChunk(pos_CS))
+                {
+                    continue;
+                }
+
+                // The wobble noise is position-hashed, not drawn from the structure RNG stream, so
+                // skipping it per chunk is safe
+                float trunkRadius = baseRadius;
+                if (wobbleStrength > 0.f)
+                {
+                    const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
+                    trunkRadius *= 1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f, worldSeed ^ hash(602149583));
+                }
+
+                if (dx * dx + dz * dz < trunkRadius * trunkRadius)
                 {
                     tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
                 }
