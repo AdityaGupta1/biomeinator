@@ -51,8 +51,8 @@ static ivec2 noiseOffsetXZ;
 void init()
 {
     worldSeed = SettingsManager::getWorldSeed();
-    BiomeNoiseField::init(worldSeed);
-    noiseOffsetXZ = BiomeNoiseField::getNoiseOffsetXZ();
+    BiomeNoiseFields::init(worldSeed);
+    noiseOffsetXZ = BiomeNoiseFields::getNoiseOffsetXZ();
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
@@ -232,13 +232,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const BiomeNoiseField::BiomeNoiseGrids biomeNoiseGrids = {
+    const BiomeNoiseFields::BiomeNoiseGrids biomeNoiseGrids = {
         .temperature = temperatureNoise,
         .humidity = humidityNoise,
         .peak = peakNoise,
         .inland = inlandNoise,
     };
-    BiomeNoiseField::fillGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
+    BiomeNoiseFields::fillGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -259,7 +259,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
-            const BiomeNoise biomeNoise = BiomeNoiseField::noiseAt(biomeNoiseGrids, columnIdx);
+            const BiomeNoise biomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const Biome biome = Biomes::getClosestBiome(BiomeNoise::randomOffset(biomeNoise, rng));
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);

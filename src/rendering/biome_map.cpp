@@ -74,7 +74,7 @@ void scrollBiomes(const glm::ivec2 shiftTexels, const int blocksPerTexel)
         const int stripWidth = std::min(std::abs(shiftTexels.x), n);
         const int destX = shiftTexels.x > 0 ? n - stripWidth : 0;
         scratchBiomes.resize(static_cast<size_t>(stripWidth) * n);
-        BiomeNoiseField::fillBiomeRect(scratchBiomes.data(),
+        BiomeNoiseFields::fillBiomeRect(scratchBiomes.data(),
                                        originBlocksXZ_WS + glm::ivec2(destX * blocksPerTexel, 0),
                                        glm::uvec2(stripWidth, n),
                                        blocksPerTexel);
@@ -91,7 +91,7 @@ void scrollBiomes(const glm::ivec2 shiftTexels, const int blocksPerTexel)
         // New rows; contiguous in the array, so fill in place
         const int stripHeight = std::min(std::abs(shiftTexels.y), n);
         const int destZ = shiftTexels.y > 0 ? n - stripHeight : 0;
-        BiomeNoiseField::fillBiomeRect(&biomes[static_cast<size_t>(destZ) * n],
+        BiomeNoiseFields::fillBiomeRect(&biomes[static_cast<size_t>(destZ) * n],
                                        originBlocksXZ_WS + glm::ivec2(0, destZ * blocksPerTexel),
                                        glm::uvec2(n, stripHeight),
                                        blocksPerTexel);
@@ -188,7 +188,7 @@ void update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
     else
     {
         biomes.resize(static_cast<size_t>(texelsPerSide) * texelsPerSide);
-        BiomeNoiseField::fillBiomeRect(
+        BiomeNoiseFields::fillBiomeRect(
             biomes.data(), originBlocksXZ_WS, glm::uvec2(texelsPerSide, texelsPerSide), blocksPerTexel);
     }
 

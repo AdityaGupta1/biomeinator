@@ -12,7 +12,7 @@
 using namespace glm;
 namespace FN = FastNoise;
 
-namespace BiomeNoiseField
+namespace BiomeNoiseFields
 {
 
 static FN::SmartNode<FN::Generator> fnTemperature;
@@ -21,12 +21,12 @@ static FN::SmartNode<FN::Generator> fnPeak;
 static FN::SmartNode<FN::Generator> fnInland;
 inline constexpr float biomeNoiseScale = 1000.f;
 
-static int fieldSeed;
+static int noiseFieldSeed;
 static ivec2 noiseOffsetXZ;
 
 void init(uint32_t worldSeed)
 {
-    fieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
+    noiseFieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
     noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
 
@@ -114,7 +114,7 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
                              numSamples.y,
                              stepBlocks,
                              stepBlocks,
-                             fieldSeed);
+                             noiseFieldSeed);
     };
     fill(grids.temperature, fnTemperature);
     fill(grids.humidity, fnHumidity);
@@ -155,4 +155,4 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
     }
 }
 
-} // namespace BiomeNoiseField
+} // namespace BiomeNoiseFields

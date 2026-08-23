@@ -10,7 +10,7 @@
 // The surface biome noise fields (temperature/humidity/peak/inland) and biome classification from
 // them. Independent of chunk generation, rendering, and settings so tools can evaluate the biome
 // field for a seed without linking the engine.
-namespace BiomeNoiseField
+namespace BiomeNoiseFields
 {
 
 struct BiomeNoiseGrids
@@ -39,4 +39,4 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
 // per-column jitter chunk generation applies, so results are the macro biome field.
 void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks);
 
-} // namespace BiomeNoiseField
+} // namespace BiomeNoiseFields
