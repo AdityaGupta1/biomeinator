@@ -5,6 +5,7 @@
 
 #include "../block.h"
 #include "../chunk.h"
+#include "settings_manager.h"
 #include "util/rng.h"
 
 #include <vector>
@@ -12,13 +13,35 @@
 namespace StructureHelpers
 {
 
-inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx, Block newBlock)
+inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx, Block newBlock, bool canReplaceWater = true)
 {
     Block& block = blocks[blockIdx];
-    if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
+    if (block == Block::AIR || (canReplaceWater && (block == Block::WATER || block == Block::WATER_TOP)))
     {
         block = newBlock;
     }
+}
+
+// Trilinear value noise in [-1, 1]; interpolating between position-seeded corner values keeps
+// neighboring blocks correlated, unlike a per-block RNG
+inline float valueNoise3(glm::vec3 pos, uint32_t seed)
+{
+    const glm::vec3 posFloor = glm::floor(pos);
+    const glm::vec3 posFract = pos - posFloor;
+    const glm::vec3 t = posFract * posFract * (3.f - 2.f * posFract);
+    const glm::ivec3 basePos = glm::ivec3(posFloor);
+
+    float result = 0.f;
+    for (int cornerIdx = 0; cornerIdx < 8; ++cornerIdx)
+    {
+        const glm::ivec3 corner(cornerIdx & 1, (cornerIdx >> 1) & 1, cornerIdx >> 2);
+        const glm::ivec3 cornerPos = basePos + corner;
+        RandomNumberGenerator cornerRng = initRng(
+            seed, static_cast<uint32_t>(cornerPos.x), static_cast<uint32_t>(cornerPos.y), static_cast<uint32_t>(cornerPos.z));
+        const glm::vec3 weights = glm::mix(glm::vec3(1.f) - t, t, glm::vec3(corner));
+        result += weights.x * weights.y * weights.z * (cornerRng.nextFloat() * 2.f - 1.f);
+    }
+    return result;
 }
 
 // True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
@@ -124,17 +147,23 @@ inline void fillSpline(std::vector<Block>& blocks, const std::vector<glm::vec3>&
     }
 }
 
+// With a nonzero droopChance, some bottom-layer columns (hashed by world XZ so the choice is
+// chunk-independent) extend one block further down, imitating hanging moss
 inline void placeLeafCap(std::vector<Block>& blocks,
                   glm::ivec3 centerPos_CS,
                   float minRadius,
                   float maxRadius,
                   float maxHeight,
                   RandomNumberGenerator& rng,
-                  Block block)
+                  Block block,
+                  float droopChance,
+                  glm::ivec2 chunkPosXZ_WS)
 {
     const float radiusMultiplier = rng.nextFloat(0.9f, 1.1f);
     const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
     const int yMax = centerPos_CS.y + (int)glm::floor(maxHeight - 0.5f);
+
+    const uint32_t droopSeed = SettingsManager::getWorldSeed() ^ hash(273904811);
 
     for (int y = centerPos_CS.y; y <= yMax; ++y)
     {
@@ -150,16 +179,42 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                 {
                     continue;
                 }
-                const glm::ivec3 pos_CS(centerPos_CS.x + dx, y, centerPos_CS.z + dz);
-                if (!Chunk::isInChunk(pos_CS))
-                {
-                    continue;
-                }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
 
+                int droopDepth = 0;
+                if (droopChance > 0.f && y == centerPos_CS.y)
+                {
+                    const glm::ivec2 columnPosXZ_WS = chunkPosXZ_WS + glm::ivec2(centerPos_CS.x + dx, centerPos_CS.z + dz);
+                    RandomNumberGenerator droopRng = initRng(droopSeed,
+                                                             static_cast<uint32_t>(columnPosXZ_WS.x),
+                                                             static_cast<uint32_t>(columnPosXZ_WS.y /*z*/));
+                    if (droopRng.chance(droopChance))
+                    {
+                        droopDepth = 1;
+                    }
+                }
+
+                for (int dy = -droopDepth; dy <= 0; ++dy)
+                {
+                    const glm::ivec3 pos_CS(centerPos_CS.x + dx, y + dy, centerPos_CS.z + dz);
+                    if (Chunk::isInChunk(pos_CS))
+                    {
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
+                    }
+                }
             }
         }
     }
+}
+
+inline void placeLeafCap(std::vector<Block>& blocks,
+                  glm::ivec3 centerPos_CS,
+                  float minRadius,
+                  float maxRadius,
+                  float maxHeight,
+                  RandomNumberGenerator& rng,
+                  Block block)
+{
+    placeLeafCap(blocks, centerPos_CS, minRadius, maxRadius, maxHeight, rng, block, 0.f /*droopChance*/, {});
 }
 
 // Roughly spherical blob of leaves, slightly squashed in y, radius jittered ±10%
@@ -187,7 +242,7 @@ inline void placeLeafBlob(std::vector<Block>& blocks, glm::ivec3 centerPos_CS, f
                 {
                     continue;
                 }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
             }
         }
     }

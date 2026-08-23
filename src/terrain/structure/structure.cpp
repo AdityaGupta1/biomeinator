@@ -36,7 +36,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                 const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                 if (hasLeaf && Chunk::isInChunk(leafPos_CS))
                 {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock);
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false /*canReplaceWater*/);
                 }
             }
             else
@@ -47,7 +47,7 @@ static void placeBlobCanopy(std::vector<Block>& blocks, ivec3 trunkTopPos_CS, Ra
                     const ivec3 leafPos_CS(blockX, baseY + dy, blockZ);
                     if (Chunk::isInChunk(leafPos_CS))
                     {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock);
+                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(leafPos_CS)), leafBlock, false /*canReplaceWater*/);
                     }
                 }
             }
@@ -382,6 +382,198 @@ fillStructureBlocksHeader(ACACIA_TREE)
     placeLeafCap(blocks, secondaryBranchEnd, 2.f, 4.f, 2.f, rng, Block::ACACIA_LEAVES);
 }
 
+fillStructureBlocksHeader(CYPRESS_TREE)
+{
+    const ivec2 chunkPosXZ_WS =
+        ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
+    const uint worldSeed = SettingsManager::getWorldSeed();
+
+    const float trunkHeight = rng.nextFloat(24.f, 35.f);
+    const int trunkTopY = static_cast<int>(trunkHeight);
+
+    // The knee and moss scans below index columns by Y without per-block chunk-bounds checks
+    ASSERT(structurePos_CS.y + trunkTopY + 5 < static_cast<int>(chunkSizeY), "cypress tree extends past the world top");
+
+    // Trunk radius flares into a wide buttress at the base (sunk two blocks so it seats on
+    // slopes) and tapers quickly above it; noise wobble, faded out above the lower trunk,
+    // makes the buttress fluted instead of round
+    for (int y = -2; y <= trunkTopY; ++y)
+    {
+        const float trunkRatio = (y + 2.f) / (trunkHeight + 2.f);
+        const float flare = 0.73f + trunkRatio;
+        const float baseRadius = 0.5f * (1.3f + trunkRatio) / (flare * flare * flare * flare) + 0.5f;
+        const float wobbleStrength = 0.3f * (1.f - glm::smoothstep(0.15f, 0.55f, trunkRatio));
+        const int radiusCeil = static_cast<int>(glm::ceil(baseRadius * (1.f + wobbleStrength)));
+
+        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
+        {
+            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
+            {
+                const ivec3 pos_CS = structurePos_CS + ivec3(dx, y, dz);
+                if (!Chunk::isInChunk(pos_CS))
+                {
+                    continue;
+                }
+
+                // The wobble noise is position-hashed, not drawn from the structure RNG stream, so
+                // skipping it per chunk is safe
+                float trunkRadius = baseRadius;
+                if (wobbleStrength > 0.f)
+                {
+                    const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
+                    trunkRadius *= 1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f, worldSeed ^ hash(602149583));
+                }
+
+                if (dx * dx + dz * dz < trunkRadius * trunkRadius)
+                {
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
+                }
+            }
+        }
+    }
+
+    // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the
+    // already-generated column
+    const int numKnees = rng.nextInt(6, 13);
+    for (int i = 0; i < numKnees; ++i)
+    {
+        const float kneeAngle = rng.nextFloat(glm::two_pi<float>());
+        const float kneeDistance = rng.nextFloat(3.f, 8.f);
+        const int kneeHeight = rng.nextInt(1, 3);
+
+        const int kneeX_CS = structurePos_CS.x + static_cast<int>(glm::round(glm::cos(kneeAngle) * kneeDistance));
+        const int kneeZ_CS = structurePos_CS.z + static_cast<int>(glm::round(glm::sin(kneeAngle) * kneeDistance));
+        if (!Chunk::isInChunkXZ(ivec3(kneeX_CS, 0, kneeZ_CS)))
+        {
+            continue;
+        }
+
+        int groundY = -1;
+        for (int y = structurePos_CS.y + 2; y >= glm::max(structurePos_CS.y - 6, 0); --y)
+        {
+            const Block block = blocks[Chunk::blockPosToIdx(uvec3(kneeX_CS, y, kneeZ_CS))];
+            if (block == Block::AIR || block == Block::WATER || block == Block::WATER_TOP)
+            {
+                continue;
+            }
+            if (block == Block::GRASS_BLOCK || block == Block::DIRT || block == Block::MUD)
+            {
+                groundY = y;
+            }
+            break;
+        }
+        if (groundY == -1)
+        {
+            continue;
+        }
+
+        for (int y = groundY + 1; y <= groundY + kneeHeight; ++y)
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(kneeX_CS, y, kneeZ_CS)), Block::CYPRESS_LOG);
+        }
+    }
+
+    // All branch wood is filled before any leaf caps so caps can't block the lines
+    // (tryPlaceStructureBlock is first-placed-wins), keeping branches connected to the trunk
+    const int numBranches = rng.nextInt(6, 11);
+    float branchHeight = trunkHeight - 1.f;
+    float branchAngle = rng.nextFloat(glm::two_pi<float>());
+
+    std::vector<vec3> branchTips;
+    branchTips.reserve(numBranches);
+    for (int i = 0; i < numBranches; ++i)
+    {
+        branchHeight -= rng.nextFloat(1.f, 4.6f);
+        if (branchHeight < 5.f)
+        {
+            break;
+        }
+        branchAngle += glm::half_pi<float>() + rng.nextFloat(glm::pi<float>());
+
+        vec3 branchEnd(glm::cos(branchAngle), 0.f, glm::sin(branchAngle));
+        branchEnd *= rng.nextFloat(4.f, 5.5f);
+        branchEnd.y = rng.nextFloat(2.2f, 3.4f);
+        // Branches shrink toward the crown
+        branchEnd *= 1.f - 0.3f * (branchHeight / trunkHeight);
+
+        const vec3 branchStart = vec3(structurePos_CS) + vec3(0.f, branchHeight, 0.f);
+        branchEnd += branchStart;
+
+        fillLine(blocks, ivec3(glm::floor(branchStart)), ivec3(glm::floor(branchEnd)), Block::CYPRESS_LOG);
+        branchTips.push_back(branchEnd);
+    }
+
+    constexpr float leavesDroopChance = 0.2f;
+    placeLeafCap(blocks, structurePos_CS + ivec3(0, trunkTopY, 0), 3.f, 4.5f, 2.f, rng, Block::CYPRESS_LEAVES);
+    for (const vec3& branchTip : branchTips)
+    {
+        placeLeafCap(blocks, ivec3(glm::floor(branchTip)), 2.5f, 4.f, 2.f, rng, Block::CYPRESS_LEAVES,
+                     leavesDroopChance, chunkPosXZ_WS);
+    }
+
+    // Spanish moss: strands hanging below leaf blocks that have air underneath, more likely on the
+    // lower caps. Chance and length come from a position-hashed RNG rather than the structure
+    // stream. The strand's bottom block is always the tip, even when water or terrain cuts the
+    // strand short.
+    constexpr float mossBaseChance = 0.45f;
+    const StructureBounds& mossBounds = Structures::getStructureBounds(structure.type);
+    for (int dz = mossBounds.minDiffXZ.y /*z*/; dz <= mossBounds.maxDiffXZ.y /*z*/; ++dz)
+    {
+        for (int dx = mossBounds.minDiffXZ.x; dx <= mossBounds.maxDiffXZ.x; ++dx)
+        {
+            const int x_CS = structurePos_CS.x + dx;
+            const int z_CS = structurePos_CS.z + dz;
+            if (!Chunk::isInChunkXZ(ivec3(x_CS, 0, z_CS)))
+            {
+                continue;
+            }
+
+            for (int y = glm::max(structurePos_CS.y, 1); y <= structurePos_CS.y + trunkTopY + 5; ++y)
+            {
+                if (blocks[Chunk::blockPosToIdx(uvec3(x_CS, y, z_CS))] != Block::CYPRESS_LEAVES ||
+                    blocks[Chunk::blockPosToIdx(uvec3(x_CS, y - 1, z_CS))] != Block::AIR)
+                {
+                    continue;
+                }
+
+                const float mossChance =
+                    mossBaseChance * (1.f - glm::smoothstep(0.f, trunkHeight, static_cast<float>(y - structurePos_CS.y)));
+                RandomNumberGenerator mossRng =
+                    initRng(worldSeed ^ hash(812930471), static_cast<uint32_t>(chunkPosXZ_WS.x + x_CS),
+                            static_cast<uint32_t>(chunkPosXZ_WS.y /*z*/ + z_CS), static_cast<uint32_t>(y));
+                if (!mossRng.chance(mossChance))
+                {
+                    continue;
+                }
+                const int strandLength = mossRng.nextInt(1, 4);
+
+                uint lastMossIdx = 0;
+                int numPlaced = 0;
+                for (int i = 1; i <= strandLength; ++i)
+                {
+                    const int strandY = y - i;
+                    if (strandY < 0)
+                    {
+                        break;
+                    }
+                    const uint blockIdx = Chunk::blockPosToIdx(uvec3(x_CS, strandY, z_CS));
+                    if (blocks[blockIdx] != Block::AIR)
+                    {
+                        break;
+                    }
+                    blocks[blockIdx] = Block::SPANISH_MOSS;
+                    lastMossIdx = blockIdx;
+                    ++numPlaced;
+                }
+                if (numPlaced > 0)
+                {
+                    blocks[lastMossIdx] = Block::SPANISH_MOSS_TIP;
+                }
+            }
+        }
+    }
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
 {}
@@ -422,6 +614,9 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(BIRCH_TREE);
     STRUCTURE_BOUNDS_BY_NAME(BIRCH_TREE) = 3;
+
+    SET_FILL_STRUCTURE_FUNC(CYPRESS_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(CYPRESS_TREE) = 11;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {

@@ -18,6 +18,7 @@ enum class StructureType : uint8_t
     ACACIA_TREE,
     LARGE_OAK_TREE,
     BIRCH_TREE,
+    CYPRESS_TREE,
 
     COUNT
 };
