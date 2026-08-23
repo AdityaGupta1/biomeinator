@@ -17,6 +17,8 @@
 #include "rendering/common/common_enums.h"
 #include "settings_manager.h"
 #include "settings_gui_helpers.h"
+#include "terrain/biome.h"
+#include "terrain/terrain.h"
 
 using WindowManager::hwnd;
 
@@ -251,6 +253,10 @@ void imguiEndFrame(double deltaTime)
     {
         const glm::vec3 cameraPos_WS = renderState.camera.getPos_WS();
         ImGui::Text("Position: (%.2f, %.2f, %.2f)", cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z);
+
+        Biome cameraBiome;
+        ImGui::Text("Biome: %s",
+                    Terrain::tryGetCameraBiome(cameraBiome) ? Biomes::getBiomeData(cameraBiome).name : "unknown");
     }
     ImGui::End();
 

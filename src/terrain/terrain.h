@@ -10,6 +10,7 @@
 class Chunk;
 class Scene;
 class ToFreeList;
+enum class Biome : uint8_t;
 
 namespace Terrain
 {
@@ -24,6 +25,10 @@ void setDirty();
 void update(ToFreeList& toFreeList);
 
 bool isCameraUnderwater();
+
+// Biome of the camera's column from the loaded chunk's per-column biomes (jittered, exactly what
+// generated). False while the camera's chunk isn't loaded yet.
+bool tryGetCameraBiome(Biome& outBiome);
 
 void exportWorld();
 void importWorld();
