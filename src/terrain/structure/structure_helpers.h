@@ -156,8 +156,8 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                   float maxHeight,
                   RandomNumberGenerator& rng,
                   Block block,
-                  float droopChance = 0.f,
-                  glm::ivec2 chunkPosXZ_WS = {})
+                  float droopChance,
+                  glm::ivec2 chunkPosXZ_WS)
 {
     const float radiusMultiplier = rng.nextFloat(0.9f, 1.1f);
     const int maxRadiusCeil = (int)glm::ceil(maxRadius * radiusMultiplier);
@@ -204,6 +204,17 @@ inline void placeLeafCap(std::vector<Block>& blocks,
             }
         }
     }
+}
+
+inline void placeLeafCap(std::vector<Block>& blocks,
+                  glm::ivec3 centerPos_CS,
+                  float minRadius,
+                  float maxRadius,
+                  float maxHeight,
+                  RandomNumberGenerator& rng,
+                  Block block)
+{
+    placeLeafCap(blocks, centerPos_CS, minRadius, maxRadius, maxHeight, rng, block, 0.f /*droopChance*/, {});
 }
 
 // Roughly spherical blob of leaves, slightly squashed in y, radius jittered ±10%
