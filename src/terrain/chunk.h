@@ -121,7 +121,6 @@ private:
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures);
     void runStructuresAndDecoratorPass();
-    bool hasAdjacentWater(glm::ivec3 pos_CS) const;
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
 

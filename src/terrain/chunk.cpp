@@ -157,29 +157,6 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
-// Only checks within this chunk: neighbor chunks' blocks may be concurrently written by their
-// own structure fill, so reading them would make generation nondeterministic.
-bool Chunk::hasAdjacentWater(glm::ivec3 pos_CS) const
-{
-    for (uint dirIdx = 0; dirIdx < 4; ++dirIdx)
-    {
-        const glm::ivec2 offset = neighborOffset(static_cast<NeighborDirection>(dirIdx));
-        const glm::ivec3 neighborPos_CS = pos_CS + glm::ivec3(offset.x, 0, offset.y /*z*/);
-        if (!isInChunk(neighborPos_CS))
-        {
-            continue;
-        }
-
-        const Block neighborBlock = this->blocks[blockPosToIdx(neighborPos_CS)];
-        if (Blocks::getBlockData(neighborBlock).type == BlockType::WATER)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void Chunk::runStructuresAndDecoratorPass()
 {
     for (const Chunk* structureNeighbor : this->structureNeighbors)
@@ -215,24 +192,10 @@ void Chunk::runStructuresAndDecoratorPass()
 
                 if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
                 {
-                    const DecoratorEntry* entry = decorator.getEntry(decoratorRng.nextFloat(), bottomBlock);
-                    if (entry != nullptr && entry->needsAdjacentWater &&
-                        !this->hasAdjacentWater(glm::ivec3(blockX, blockY - 1, blockZ)))
+                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    if (decoratorBlock != Block::AIR)
                     {
-                        entry = nullptr;
-                    }
-
-                    if (entry != nullptr)
-                    {
-                        if (entry->topBlock == Block::AIR)
-                        {
-                            thisBlock = entry->block;
-                        }
-                        else if (blockY + 1 < chunkSizeY && this->blocks[baseBlockIdx + blockY + 1] == Block::AIR)
-                        {
-                            thisBlock = entry->block;
-                            this->blocks[baseBlockIdx + blockY + 1] = entry->topBlock;
-                        }
+                        thisBlock = decoratorBlock;
                     }
                 }
 

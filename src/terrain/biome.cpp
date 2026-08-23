@@ -226,9 +226,6 @@ void init()
         data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::BROWN_MUSHROOM, 1.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::BLUE_ORCHID, 1.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::CATTAIL, 4.f, { Block::MUD }, Block::CATTAIL_TIP);
         data.decorator.addEntry(Block::AIR, 10.f);
     }
 
