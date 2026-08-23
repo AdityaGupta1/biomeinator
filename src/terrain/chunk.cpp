@@ -536,13 +536,13 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
             }
             else if (neighborBlockData.type == BlockType::TRANSPARENT_CUTOUT)
             {
-                // X-shaped neighbors contribute no cube faces, so the shared-face dedupe below
-                // would leave a hole instead of removing a duplicate
-                if (neighborBlockData.shape == BlockShape::X_SHAPED)
+                // Dedupe shared faces only against cube neighbors; other shapes contribute no
+                // cube faces, so deduping against them would leave a hole
+                if (neighborBlockData.shape == BlockShape::CUBE)
                 {
-                    return true;
+                    return all(lessThanEqual(thisPos_CS, neighborPos_CS));
                 }
-                return all(lessThanEqual(thisPos_CS, neighborPos_CS));
+                return true;
             }
             return true;
         }
