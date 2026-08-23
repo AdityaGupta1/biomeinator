@@ -666,8 +666,7 @@ void Chunk::createInstances()
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
-                        // Jitter is hashed from the world-space column position (not Y) so vertically
-                        // stacked X-shaped blocks stay aligned
+                        // Jitter is hashed from the world-space XZ position so vertically stacked X-shaped blocks stay aligned
                         const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
                         RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
                                                                   static_cast<uint>(columnPos_WS.x),
