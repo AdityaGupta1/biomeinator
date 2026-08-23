@@ -1,4 +1,4 @@
-_Last edited: 2026-08-01_
+_Last edited: 2026-08-23_
 
 # Biome Color Map
 
@@ -10,7 +10,7 @@ camera. Shaders sample it for triangles flagged `TRIANGLE_FLAG_BIOME_TINT`
 ## Filled From Noise, Not From Chunks
 
 The fill re-evaluates the surface biome noise per texel center
-(`ChunkGenerator::fillBiomeRect`) instead of reading loaded chunks' `biomes` arrays.
+(`BiomeNoiseField::fillBiomeRect`) instead of reading loaded chunks' `biomes` arrays.
 This avoids depending on chunk load state at the map edges, avoids racing the worker
 threads that generate chunks, and skips the per-column jitter so the coarse map shows the
 smooth macro biome field. Bicubic B-spline sampling (two offset hardware bilinear taps per
