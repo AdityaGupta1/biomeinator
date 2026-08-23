@@ -394,9 +394,10 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     // The knee and moss scans below index columns by Y without per-block chunk-bounds checks
     ASSERT(structurePos_CS.y + trunkTopY + 5 < static_cast<int>(chunkSizeY), "cypress tree extends past the world top");
 
-    // Trunk radius flares into a wide buttress at the base (sunk two blocks so it seats on
-    // slopes) and tapers quickly above it; noise wobble, faded out above the lower trunk,
-    // makes the buttress fluted instead of round
+    // Trunk radius flares into a wide buttress at the base (sunk two blocks and rooted down to
+    // local ground so it seats on slopes) and tapers quickly above it; noise wobble, faded out
+    // above the lower trunk, makes the buttress fluted instead of round
+    constexpr int maxRootDepth = 10;
     for (int y = -2; y <= trunkTopY; ++y)
     {
         const float trunkRatio = (y + 2.f) / (trunkHeight + 2.f);
@@ -427,6 +428,22 @@ fillStructureBlocksHeader(CYPRESS_TREE)
                 if (dx * dx + dz * dz < trunkRadius * trunkRadius)
                 {
                     tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
+
+                    // Root the buttress down to local ground so the rim doesn't float where the
+                    // terrain drops within the footprint; the scan draws no RNG
+                    if (y == -2)
+                    {
+                        for (int rootY = pos_CS.y - 1; rootY >= glm::max(pos_CS.y - maxRootDepth, 0); --rootY)
+                        {
+                            const uint blockIdx = Chunk::blockPosToIdx(uvec3(pos_CS.x, rootY, pos_CS.z));
+                            const Block block = blocks[blockIdx];
+                            if (block != Block::AIR && block != Block::WATER && block != Block::WATER_TOP)
+                            {
+                                break;
+                            }
+                            blocks[blockIdx] = Block::CYPRESS_LOG;
+                        }
+                    }
                 }
             }
         }

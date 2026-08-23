@@ -7,6 +7,7 @@
 #include "biome_noise.h"
 #include "cave_biome.h"
 #include "chunk.h"
+#include "swamp_shaping.h"
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -45,6 +46,10 @@ inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
 static FN::SmartNode<FN::Generator> fnCaveHumidity;
 
+static FN::SmartNode<FN::Generator> fnSwampWarp;
+static FN::SmartNode<FN::Generator> fnSwampWarpFine;
+static FN::SmartNode<FN::Generator> fnSwampShore;
+
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
 
@@ -52,6 +57,7 @@ void init()
 {
     worldSeed = SettingsManager::getWorldSeed();
     BiomeNoiseFields::init(worldSeed);
+    SwampShaping::init(worldSeed);
     noiseOffsetXZ = BiomeNoiseFields::getNoiseOffsetXZ();
 
     {
@@ -65,6 +71,36 @@ void init()
         fnFractal->SetOctaveCount(5);
 
         fnTerrainBase = fnFractal;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(918273645);
+        fnSimplex->SetScale(90.0f);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnSwampWarp = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(131071193);
+        fnSimplex->SetScale(32.0f);
+        fnSimplex->SetOutputMin(-1.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnSwampWarpFine = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(561203987);
+        fnSimplex->SetScale(30.0f);
+        fnSimplex->SetOutputMin(-1.5f);
+        fnSimplex->SetOutputMax(1.5f);
+
+        fnSwampShore = fnSimplex;
     }
 
     {
@@ -242,15 +278,43 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    int* waterLevelArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
+    int* swampCaveSealArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
+
+    float* swampWarpXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* swampWarpZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* swampWarpFineXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* swampWarpFineZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    const auto fillSwampNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
+    {
+        fn->GenUniformGrid2D(data,
+                             chunkPosBlocksXZ_WS.x + noiseOffsetXZ.x,
+                             chunkPosBlocksXZ_WS.y + noiseOffsetXZ.y /*z*/,
+                             chunkSizeXZ,
+                             chunkSizeXZ,
+                             1.f,
+                             1.f,
+                             static_cast<int>(worldSeed ^ hash(seedSalt)));
+    };
+    fillSwampNoise(swampWarpXNoise, fnSwampWarp, 651209371);
+    fillSwampNoise(swampWarpZNoise, fnSwampWarp, 287119023);
+    fillSwampNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
+    fillSwampNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
+    fillSwampNoise(swampShoreNoise, fnSwampShore, 190283475);
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
+    int waterLevelMax = seaLevel;
     float terrainBaseHeightMin = std::numeric_limits<float>::max();
     float terrainBaseHeightMax = std::numeric_limits<float>::lowest();
 
     std::set<Biome> biomeSet;
 
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(330910521), chunkPosBlocksXZ_WS.x, chunkPosBlocksXZ_WS.y /*z*/);
+
+    SwampShaping::ChunkContext swampContext =
+        SwampShaping::makeChunkContext(chunkPosBlocksXZ_WS, static_cast<int>(chunkSizeXZ));
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -260,25 +324,24 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
 
             const BiomeNoise biomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
-            const Biome biome = Biomes::getClosestBiome(BiomeNoise::randomOffset(biomeNoise, rng));
+            const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
+            const Biome biome = BiomeNoiseFields::biomeFromNoise(jitteredBiomeNoise);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
-            const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
+            const BiomeNoiseFields::NaturalTerrain naturalTerrain = BiomeNoiseFields::computeNaturalTerrain(biomeNoise);
+            const vec2 warpedPosXZ_WS = vec2(blockPosXZ_WS) +
+                SwampShaping::swampWarpAmplitude * vec2(swampWarpXNoise[columnIdx], swampWarpZNoise[columnIdx]) +
+                SwampShaping::swampWarpFineAmplitude * vec2(swampWarpFineXNoise[columnIdx], swampWarpFineZNoise[columnIdx]);
+            const SwampShaping::Shaping swampShaping =
+                SwampShaping::computeShaping(warpedPosXZ_WS, biomeNoise, naturalTerrain, swampContext);
+            const float terrainBaseHeight = swampShaping.baseHeight;
+            const float terrainSurfaceMultiplier = swampShaping.surfaceMultiplier;
+            const int waterLevel = swampShaping.waterLevel;
+            swampCaveSealArray[columnIdx] = swampShaping.caveSeal;
 
-            float terrainBaseHeight = 140.f;
-            {
-                terrainBaseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
-                const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
-                terrainBaseHeight += inlandHeightModifier * 90.f;
-                const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
-                terrainBaseHeight = glm::mix(terrainBaseHeight, static_cast<float>(seaLevel + 8), seaLevelPullFactor);
-            }
-            float terrainSurfaceMultiplier = 0.02f;
-            {
-                terrainSurfaceMultiplier -= scaledPeak * 0.008f;
-                terrainSurfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
-            }
+            waterLevelArray[columnIdx] = waterLevel;
+            waterLevelMax = std::max(waterLevelMax, waterLevel);
 
             terrainBaseHeightArray[columnIdx] = terrainBaseHeight;
             terrainSurfaceMultiplierArray[columnIdx] = terrainSurfaceMultiplier;
@@ -329,7 +392,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
     const uint caveWorleyNoiseSize = chunkSizeXZSquare * caveWorleyNoiseHeight;
     const uint caveSimplexNoiseSize = chunkSizeXZSquare * caveSimplexNoiseHeight;
-    const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, seaLevel));
+    const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, waterLevelMax));
 
     // Reused scratch: holds one column's air pockets at a time, cleared and refilled per column.
     std::vector<CaveLayer> columnLayers;
@@ -408,6 +471,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float terrainBaseHeight = terrainBaseHeightArray[columnIdx];
             const float terrainSurfaceMultiplier = terrainSurfaceMultiplierArray[columnIdx];
+            const int waterLevel = waterLevelArray[columnIdx];
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
@@ -498,6 +562,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                         float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
                         caveSurfaceVal -= glm::smoothstep(240.0f, 320.0f, static_cast<float>(y)) * 0.8f;
+                        // Seal caves at and below nearby pond levels
+                        // (knowledge/terrain/swamp_generation.md)
+                        const int swampCaveSeal = swampCaveSealArray[columnIdx];
+                        if (swampCaveSeal > 0)
+                        {
+                            caveSurfaceVal -= smoothstep(static_cast<float>(swampCaveSeal + 10), static_cast<float>(swampCaveSeal + 4), static_cast<float>(y)) * 1.5f;
+                        }
                         isCave = caveNoiseVal < caveSurfaceVal;
                     }
 
@@ -525,9 +596,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         block = rng.nextFloat() < 0.04f ? Block::LAMP : baseBlock;
                     }
                 }
-                else if (y <= seaLevel)
+                else if (y <= static_cast<uint>(waterLevel))
                 {
-                    block = (y == seaLevel) ? Block::WATER_TOP : Block::WATER;
+                    block = (y == static_cast<uint>(waterLevel)) ? Block::WATER_TOP : Block::WATER;
                 }
 
                 this->blocks[blockIdx] = block;
@@ -570,6 +641,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             if (topBlockY != 0)
             {
+                const bool topBlockUnderwater =
+                    Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
+
+                // Shore band whose height above water level undulates with low-frequency noise
+                bool topBlockOnShore = false;
+                if (!topBlockUnderwater && topBlocks.shoreTop != Block::AIR)
+                {
+                    const int heightAboveWater = static_cast<int>(topBlockY) - waterLevel;
+                    topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
+                }
+
                 for (uint y = topBlockY; y > topBlockY - 5; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -579,7 +661,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         break;
                     }
 
-                    const Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
+                    if (newBlock == Block::GRASS_BLOCK)
+                    {
+                        if (topBlockUnderwater)
+                        {
+                            newBlock = (topBlocks.underwaterTop != Block::AIR) ? topBlocks.underwaterTop : Block::DIRT;
+                        }
+                        else if (topBlockOnShore)
+                        {
+                            newBlock = topBlocks.shoreTop;
+                        }
+                    }
                     block = newBlock;
                 }
             }
