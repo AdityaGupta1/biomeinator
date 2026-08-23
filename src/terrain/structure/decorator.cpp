@@ -5,23 +5,28 @@
 
 #include "debug.h"
 
-void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks)
+void Decorator::addEntry(DecoratorEntry entry)
 {
-    ASSERT(weight > 0.f);
-    this->entries.push_back({
-        block,
-        weight,
-        std::unordered_set<Block>(groundBlocks),
-    });
-    totalWeight += weight;
+    ASSERT(entry.weight > 0.f);
+    totalWeight += entry.weight;
+    this->entries.push_back(std::move(entry));
 }
 
-Block Decorator::getBlock(float rndSample, Block bottomBlock) const
+void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks)
+{
+    this->addEntry({
+        .block = block,
+        .weight = weight,
+        .groundBlocks = std::unordered_set<Block>(groundBlocks),
+    });
+}
+
+const DecoratorEntry* Decorator::getEntry(float rndSample, Block bottomBlock) const
 {
     if (this->isEmpty())
     {
         ASSERT(false, "empty decorators should not be called");
-        return Block::AIR;
+        return nullptr;
     }
 
     rndSample *= this->totalWeight;
@@ -41,7 +46,7 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
 
     const DecoratorEntry& entry = this->entries[entryIdx];
     const bool groundBlockValid = entry.groundBlocks.empty() || entry.groundBlocks.contains(bottomBlock);
-    return groundBlockValid ? entry.block : Block::AIR;
+    return groundBlockValid && entry.block != Block::AIR ? &entry : nullptr;
 }
 
 bool Decorator::isEmpty() const

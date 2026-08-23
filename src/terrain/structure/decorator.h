@@ -13,6 +13,8 @@ struct DecoratorEntry
     Block block{ Block::AIR };
     float weight{ 1.f };
     std::unordered_set<Block> groundBlocks{};
+    Block topBlock{ Block::AIR }; // placed directly above block, for two-tall plants
+    bool needsAdjacentWater{ false }; // ground block must have water horizontally adjacent
 };
 
 class Decorator
@@ -22,9 +24,10 @@ private:
     float totalWeight{ 0.f };
 
 public:
+    void addEntry(DecoratorEntry entry);
     void addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks = {});
 
-    Block getBlock(float rndSample, Block bottomBlock) const;
+    const DecoratorEntry* getEntry(float rndSample, Block bottomBlock) const;
 
     bool isEmpty() const;
 };

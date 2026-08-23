@@ -76,6 +76,10 @@ enum class Block : BlockId
     MUD,
     SPANISH_MOSS,
     SPANISH_MOSS_TIP,
+    BROWN_MUSHROOM,
+    BLUE_ORCHID,
+    CATTAIL,
+    CATTAIL_TIP,
 
     COUNT
 };
