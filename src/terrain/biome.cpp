@@ -37,6 +37,9 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
 
 #define BIOME_DATA(biome) biomeDatas[static_cast<size_t>(biome)]
 #define BIOME_DATA_BY_NAME(biomeName) biomeDatas[static_cast<size_t>(Biome::biomeName)]
+#define BIOME_INIT(biomeName, displayName) \
+    BiomeData& data = BIOME_DATA_BY_NAME(biomeName); \
+    data.name = displayName
 
 static std::vector<Biome> oceanBiomes;
 static std::vector<Biome> beachBiomes;
@@ -51,7 +54,7 @@ void init()
 
     // OCEAN
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(OCEAN);
+        BIOME_INIT(OCEAN, "ocean");
         oceanBiomes.push_back(Biome::OCEAN);
         data.biomeNoise = {
             .temperature = 0.0f,
@@ -71,7 +74,7 @@ void init()
 
     // BEACH
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(BEACH);
+        BIOME_INIT(BEACH, "beach");
         beachBiomes.push_back(Biome::BEACH);
         data.biomeNoise = {
             .temperature = 0.3f,
@@ -90,7 +93,7 @@ void init()
 
     // GRAVEL_BEACH
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(GRAVEL_BEACH);
+        BIOME_INIT(GRAVEL_BEACH, "gravel beach");
         beachBiomes.push_back(Biome::GRAVEL_BEACH);
         data.biomeNoise = {
             .temperature = -0.2f,
@@ -106,7 +109,7 @@ void init()
 
     // BLACK_SAND_BEACH
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(BLACK_SAND_BEACH);
+        BIOME_INIT(BLACK_SAND_BEACH, "black sand beach");
         beachBiomes.push_back(Biome::BLACK_SAND_BEACH);
         data.biomeNoise = {
             .temperature = -0.6f,
@@ -126,7 +129,7 @@ void init()
 
     // PLAINS
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(PLAINS);
+        BIOME_INIT(PLAINS, "plains");
         lowlandBiomes.push_back(Biome::PLAINS);
         data.biomeNoise = {
             .temperature = 0.0f,
@@ -143,7 +146,7 @@ void init()
 
     // DESERT
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(DESERT);
+        BIOME_INIT(DESERT, "desert");
         lowlandBiomes.push_back(Biome::DESERT);
         data.biomeNoise = {
             .temperature = 1.0f,
@@ -167,7 +170,7 @@ void init()
 
     // FOREST
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(FOREST);
+        BIOME_INIT(FOREST, "forest");
         lowlandBiomes.push_back(Biome::FOREST);
         data.biomeNoise = {
             .temperature = -0.1f,
@@ -195,7 +198,7 @@ void init()
 
     // TUNDRA
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(TUNDRA);
+        BIOME_INIT(TUNDRA, "tundra");
         lowlandBiomes.push_back(Biome::TUNDRA);
         data.biomeNoise = {
             .temperature = -0.7f,
@@ -215,7 +218,7 @@ void init()
 
     // SAVANNA
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(SAVANNA);
+        BIOME_INIT(SAVANNA, "savanna");
         highlandBiomes.push_back(Biome::SAVANNA);
         data.biomeNoise = {
             .temperature = 0.6f,
@@ -234,7 +237,7 @@ void init()
 
     // ICE_FIELDS
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(ICE_FIELDS);
+        BIOME_INIT(ICE_FIELDS, "ice fields");
         highlandBiomes.push_back(Biome::ICE_FIELDS);
         data.biomeNoise = {
             .temperature = -0.85f,
@@ -250,7 +253,7 @@ void init()
 
     // MOUNTAINS
     {
-        BiomeData& data = BIOME_DATA_BY_NAME(MOUNTAINS);
+        BIOME_INIT(MOUNTAINS, "mountains");
         highlandBiomes.push_back(Biome::MOUNTAINS);
         data.biomeNoise = {
             .temperature = -0.4f,
