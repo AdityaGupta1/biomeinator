@@ -223,10 +223,11 @@ void init()
         data.structureGens = {
             { StructureType::CYPRESS_TREE, 23, 4, STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER },
         };
-        data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::GOLDENROD, 1.f, { Block::GRASS_BLOCK });
-        data.decorator.addEntry(Block::AIR, 10.f);
+        data.decorator.addEntry(Block::GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::BLUE_ORCHID, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::BROWN_MUSHROOM, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 15.f);
     }
 
     // ==================================================

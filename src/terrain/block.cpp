@@ -97,7 +97,7 @@ void init()
     BLOCK_DATA_BY_NAME(MUD) = { .uvs = { uvec2(14, 2) } };
     BLOCK_DATA_BY_NAME(SPANISH_MOSS) = { .uvs = { uvec2(15, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(SPANISH_MOSS_TIP) = { .uvs = { uvec2(16, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
-    BLOCK_DATA_BY_NAME(BROWN_MUSHROOM) = { .uvs = { uvec2(17, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
+    BLOCK_DATA_BY_NAME(BROWN_MUSHROOM) = { .uvs = { uvec2(17, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED };
     BLOCK_DATA_BY_NAME(BLUE_ORCHID) = { .uvs = { uvec2(18, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(CATTAIL) = { .uvs = { uvec2(19, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
     BLOCK_DATA_BY_NAME(CATTAIL_TIP) = { .uvs = { uvec2(20, 2) }, .type = BlockType::TRANSPARENT_CUTOUT, .shape = BlockShape::X_SHAPED, .translucent = true };
