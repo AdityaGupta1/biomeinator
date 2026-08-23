@@ -4,7 +4,6 @@
 #include "chunk.h"
 
 #include "block.h"
-#include "chunk_generator.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
@@ -537,7 +536,13 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
             }
             else if (neighborBlockData.type == BlockType::TRANSPARENT_CUTOUT)
             {
-                return all(lessThanEqual(thisPos_CS, neighborPos_CS));
+                // Dedupe shared faces only against cube neighbors; other shapes contribute no
+                // cube faces, so deduping against them would leave a hole
+                if (neighborBlockData.shape == BlockShape::CUBE)
+                {
+                    return all(lessThanEqual(thisPos_CS, neighborPos_CS));
+                }
+                return true;
             }
             return true;
         }
@@ -620,7 +625,6 @@ void Chunk::createInstances()
     terrainEmissiveTriangleIdxs.reserve(512);
 
     const uint worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator rng = initRng(worldSeed ^ hash(392421012), this->chunkPos.x, this->chunkPos.y /*z*/);
 
     const bool useOmms = TerrainOmm::isBaked();
     bool hasCutoutFaces = false;
@@ -662,7 +666,12 @@ void Chunk::createInstances()
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
-                        const vec2 jitter = (rng.nextFloat2() - 0.5f) * 0.4f;
+                        // Jitter is hashed from the world-space XZ position so vertically stacked X-shaped blocks stay aligned
+                        const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
+                        RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
+                                                                  static_cast<uint>(columnPos_WS.x),
+                                                                  static_cast<uint>(columnPos_WS.y /*z*/));
+                        const vec2 jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
                         const uvec2 baseTexCoords = blockData.uvs[1]; // side
