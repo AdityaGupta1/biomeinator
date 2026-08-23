@@ -1,8 +1,8 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-08-23_
 
 # Biome System
 
-`src/terrain/biome.h/cpp` — distributes 11 biomes using a 4D noise-space selection system.
+`src/terrain/biome.h/cpp` — distributes surface biomes using a 4D noise-space selection system; the swamp biome sits outside the Voronoi selection and overrides it wherever the flood factor is high (see [swamp_generation.md](swamp_generation.md)).
 
 This entry covers **surface** biomes. Underground stone is themed separately by
 the 3D [cave_biome_system.md](cave_biome_system.md).
