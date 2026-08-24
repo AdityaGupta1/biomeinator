@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "sandstone_top",
+        "side": "sandstone_side",
+        "bottom": "sandstone_top"
+    }
+}

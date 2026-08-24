@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "eucalyptus_log_top",
+        "side": "eucalyptus_log_side",
+        "bottom": "eucalyptus_log_top"
+    }
+}

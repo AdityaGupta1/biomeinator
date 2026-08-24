@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "acacia_log_top",
+        "side": "acacia_log_side",
+        "bottom": "acacia_log_top"
+    }
+}

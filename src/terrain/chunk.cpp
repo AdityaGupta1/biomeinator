@@ -22,12 +22,6 @@
 using namespace glm;
 using namespace DirectX;
 
-#define DEFAULT_TEX_NUM_BLOCKS_X 32
-#define DEFAULT_TEX_NUM_BLOCKS_Y 32
-// Must match tilesPerAxis in terrain_materials_helpers.h (slice ordering: tileY*N + tileX).
-static_assert(DEFAULT_TEX_NUM_BLOCKS_X == DEFAULT_TEX_NUM_BLOCKS_Y);
-static_assert(DEFAULT_TEX_NUM_BLOCKS_X == 32);
-
 Chunk::Chunk(ivec2 chunkPos, Region* region)
     : chunkPos(chunkPos), region(region)
 {}
@@ -674,8 +668,7 @@ void Chunk::createInstances()
                         const vec2 jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
-                        const uvec2 baseTexCoords = blockData.uvs[1]; // side
-                        const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
+                        const uint32_t texArraySliceIdx = blockData.texSlices[1]; // top; all faces of an X-shaped block share one texture
                         for (uint i = 0; i < 8; ++i)
                         {
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
@@ -735,8 +728,7 @@ void Chunk::createInstances()
                             const uint baseVertIdx = static_cast<uint>(verts.size());
 
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
-                            const uvec2 baseTexCoords = blockData.uvs[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                            const uint32_t texArraySliceIdx = baseTexCoords.y * DEFAULT_TEX_NUM_BLOCKS_X + baseTexCoords.x;
+                            const uint32_t texArraySliceIdx = blockData.texSlices[glm::max(static_cast<int>(faceIdx) - 3, 0)];
                             for (uint i = 0; i < 4; ++i)
                             {
                                 vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);

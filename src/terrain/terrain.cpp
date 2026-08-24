@@ -81,9 +81,12 @@ void init(Scene* scene)
 {
     Terrain::scene = scene;
     Terrain::testMode = SettingsManager::isTestMode();
+
+    // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
+    // loads textures for
+    Blocks::init();
     TerrainMaterials::init(scene);
 
-    Blocks::init();
     Biomes::init();
     CaveBiomes::init();
     Structures::init();
@@ -472,7 +475,7 @@ void update(ToFreeList& toFreeList)
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;
 static constexpr uint16_t worldRegionVersion = 5;
-static constexpr uint32_t worldJsonVersion = 1;
+static constexpr uint32_t worldJsonVersion = 2;
 
 static_assert(sizeof(Block) == sizeof(uint16_t), "World export format assumes 2-byte Block");
 static_assert(sizeof(Biome) == sizeof(uint8_t), "World export format assumes 1-byte Biome");
@@ -707,6 +710,10 @@ void exportWorld()
     worldJson["renderDistance"] = renderDistance;
     worldJson["worldSeed"] = worldSeed;
 
+    // Block palette: serialized block values index into this array, so imports are
+    // independent of the current build's Block enum values.
+    worldJson["blocks"] = Blocks::blockIdNames;
+
     nlohmann::json regionsArray = nlohmann::json::array();
     for (const glm::ivec2& pos : regionPositions)
     {
@@ -770,6 +777,7 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
     requireField("renderDistance");
     requireField("worldSeed");
     requireField("regions");
+    requireField("blocks");
     if (missingField)
     {
         return false;
@@ -786,11 +794,35 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
     return true;
 }
 
+// Maps each palette index in an imported world to the corresponding Block in this build.
+// Unknown block ids map to AIR so worlds survive block removals/renames.
+static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson)
+{
+    std::vector<Block> remapTable;
+    remapTable.reserve(paletteJson.size());
+    for (const nlohmann::json& entry : paletteJson)
+    {
+        const std::string blockIdName = entry.get<std::string>();
+        const Block block = Blocks::fromId(blockIdName);
+        if (block == Block::COUNT)
+        {
+            Logger::logError("world import: unknown block id '%s'; mapping to air", blockIdName.c_str());
+            remapTable.push_back(Block::AIR);
+        }
+        else
+        {
+            remapTable.push_back(block);
+        }
+    }
+    return remapTable;
+}
+
 static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                            const glm::ivec2& regionPos,
                            const glm::ivec2& cameraChunkPos,
                            int createBlasDistance,
                            Region& region,
+                           const std::vector<Block>& blockRemapTable,
                            std::vector<char>& blockBiomeBuffer,
                            std::vector<char>& structuresBuffer,
                            uint32_t& outChunksImported,
@@ -917,6 +949,19 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                blockBiomeBuffer.data() + numChunkBlocks * sizeof(Block),
                chunkSizeXZSquare * sizeof(Biome));
 
+        for (Block& block : blocks)
+        {
+            const size_t paletteIdx = static_cast<size_t>(block);
+            if (paletteIdx >= blockRemapTable.size())
+            {
+                Logger::logError("world import: block value %zu exceeds palette size %zu in %s",
+                                 paletteIdx, blockRemapTable.size(),
+                                 regionFilePath.generic_string().c_str());
+                return false;
+            }
+            block = blockRemapTable[paletteIdx];
+        }
+
         const int32_t chunkLocalX = localIdx % static_cast<int32_t>(regionSideLength);
         const int32_t chunkLocalZ = localIdx / static_cast<int32_t>(regionSideLength);
         const glm::ivec2 chunkPos = region.regionPosChunks + glm::ivec2(chunkLocalX, chunkLocalZ);
@@ -1033,6 +1078,8 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         glm::ivec2(static_cast<int>(chunkSizeXZ)));
     const int createBlasDistance = SettingsManager::getAsInt("renderDistance") + 1;
 
+    const std::vector<Block> blockRemapTable = buildBlockRemapTable(worldJson["blocks"]);
+
     std::vector<char> blockBiomeBuffer(blockBiomePayloadSize);
     std::vector<char> structuresBuffer(structuresScratchSize);
 
@@ -1051,7 +1098,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         Region& region = *regionIter->second;
 
         if (!loadRegionFile(regionFilePath, regionPos, cameraChunkPos, createBlasDistance,
-                            region, blockBiomeBuffer, structuresBuffer,
+                            region, blockRemapTable, blockBiomeBuffer, structuresBuffer,
                             totalChunksImported, chunksWithinBlasDistance))
         {
             return false;

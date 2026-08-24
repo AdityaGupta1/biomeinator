@@ -5,6 +5,7 @@
 #include "terrain_materials_helpers.h"
 #include "terrain_omm.h"
 
+#include "block.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/renderer.h"
 
@@ -31,9 +32,12 @@ static void createMaterials(Scene* scene)
 
     const bool useOmms = Renderer::getUseOmms();
 
-    std::vector<uint8_t> diffuseAlpha;
-    const uint32_t diffuseTextureId = loadTexture(
-        scene, "diffuse.png", { .outAlphaChannel = &diffuseAlpha, .useOpaqueCutoutMips = useOmms });
+    const std::vector<std::string>& textureNames = Blocks::getTextureNames();
+    ASSERT(!textureNames.empty());
+
+    std::vector<std::vector<uint8_t>> diffuseAlphas;
+    const uint32_t diffuseTextureId = loadBlockTextureArray(
+        scene, textureNames, "", { .outAlphaChannels = &diffuseAlphas, .useOpaqueCutoutMips = useOmms });
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
@@ -41,14 +45,15 @@ static void createMaterials(Scene* scene)
 
     if (useOmms)
     {
-        TerrainOmm::bake(diffuseAlpha, TERRAIN_TEXTURE_SIZE, TERRAIN_TILE_SIZE);
+        TerrainOmm::bake(diffuseAlphas, TERRAIN_TILE_SIZE);
     }
 
-    const uint32_t auxTextureId = loadTexture(scene, "aux_map.png",
-                                              { .sRGB = false,
-                                                .outTileHasBiomeTintMask = &sliceBiomeTintMask,
-                                                .alphaOverride = &diffuseAlpha,
-                                                .useOpaqueCutoutMips = useOmms });
+    const uint32_t auxTextureId = loadBlockTextureArray(scene, textureNames, ".aux",
+                                                        { .sRGB = false,
+                                                          .outSliceHasBiomeTintMask = &sliceBiomeTintMask,
+                                                          .alphaOverrides = &diffuseAlphas,
+                                                          .useOpaqueCutoutMips = useOmms,
+                                                          .missingFilesAreZero = true });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;

@@ -57,9 +57,33 @@ endif()
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SHADER_DIR "${SRC_DIR}/shaders")
 set(COMMON_DIR "${SRC_DIR}/rendering/common")
+set(GENERATED_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated")
 set(GENERATED_SHADER_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated_shaders")
 
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS_DIR})
+
+# Generate the Block enum from assets/blocks/*.json filenames: air first (chunk block
+# storage assumes AIR == 0), then alphabetical.
+file(GLOB BLOCK_JSON_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/blocks/*.json")
+set(BLOCK_NAMES "")
+foreach(BLOCK_JSON IN LISTS BLOCK_JSON_FILES)
+    get_filename_component(BLOCK_NAME "${BLOCK_JSON}" NAME_WE)
+    list(APPEND BLOCK_NAMES "${BLOCK_NAME}")
+endforeach()
+list(REMOVE_ITEM BLOCK_NAMES "air")
+list(SORT BLOCK_NAMES)
+list(PREPEND BLOCK_NAMES "air")
+
+set(BLOCK_ENUM_ENTRY_LIST "")
+set(BLOCK_ID_NAME_ENTRY_LIST "")
+foreach(BLOCK_NAME IN LISTS BLOCK_NAMES)
+    string(TOUPPER "${BLOCK_NAME}" BLOCK_ENUM_NAME)
+    list(APPEND BLOCK_ENUM_ENTRY_LIST "    ${BLOCK_ENUM_NAME},")
+    list(APPEND BLOCK_ID_NAME_ENTRY_LIST "    \"${BLOCK_NAME}\",")
+endforeach()
+list(JOIN BLOCK_ENUM_ENTRY_LIST "\n" BLOCK_ENUM_ENTRIES)
+list(JOIN BLOCK_ID_NAME_ENTRY_LIST "\n" BLOCK_ID_NAME_ENTRIES)
+configure_file("${SRC_DIR}/terrain/block_ids.h.in" "${GENERATED_HEADERS_DIR}/block_ids.h" @ONLY)
 
 file(GLOB_RECURSE SRC_FILES
     CONFIGURE_DEPENDS
@@ -239,6 +263,7 @@ add_executable(Biomeinator
 
 target_include_directories(Biomeinator PRIVATE
     ${SRC_DIR}
+    ${GENERATED_HEADERS_DIR}
     ${GENERATED_SHADER_HEADERS_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/DirectX-Headers/include/directx"
@@ -380,6 +405,7 @@ assign_source_group("src" "${SRC_DIR}" "${BIOME_SCANNER_SRC}")
 add_executable(BiomeScanner ${BIOME_SCANNER_SRC})
 target_include_directories(BiomeScanner PRIVATE
     ${SRC_DIR}
+    ${GENERATED_HEADERS_DIR}
     "${EXT}/cpp-httplib/include"
     "${EXT}/FastNoise2/include"
     "${EXT}/json/include"

@@ -13,7 +13,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [chunk_generator.md](chunk_generator.md) | FastNoise2-based height maps, cave generation, biome allocation |
 | [biome_system.md](biome_system.md) | Voronoi biome distribution, BiomeNoise parameters, swamp override |
 | [cave_biome_system.md](cave_biome_system.md) | 3D cave biome noise, downsampled classification, surface bias, stone theming |
-| [block_system.md](block_system.md) | Block enum, BlockData (textures, type, shape), emissive blocks |
+| [block_system.md](block_system.md) | JSON block definitions, generated Block enum, BlockData, emissive blocks |
 | [structure_system.md](structure_system.md) | StructureGen grid placement, structure types, StructureBounds |
 | [cave_structure_system.md](cave_structure_system.md) | Underground floor/ceiling structures, column-centric placement, CaveLayer capture, layer-index seed |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement |

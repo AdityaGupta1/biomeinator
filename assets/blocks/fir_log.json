@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "fir_log_top",
+        "side": "fir_log_side",
+        "bottom": "fir_log_top"
+    }
+}

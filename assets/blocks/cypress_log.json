@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "cypress_log_top",
+        "side": "cypress_log_side",
+        "bottom": "cypress_log_top"
+    }
+}

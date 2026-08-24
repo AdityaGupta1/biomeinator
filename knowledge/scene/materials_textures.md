@@ -1,4 +1,4 @@
-_Last edited: 2026-08-04_
+_Last edited: 2026-08-24_
 
 # Materials and Textures
 
@@ -24,7 +24,7 @@ Texture upload requires a command list (for `CopyTextureRegion`), but textures m
 
 `PendingTexture` stores `sliceMipData[slice][mip]` + `arraySize`. Subresource index is computed via `D3D12CalcSubresource(mip, slice, ...)`. Row pitch is aligned to `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` per row; each mip start in the upload buffer is aligned to `D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT`.
 
-The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) generates mip chains CPU-side then splits them into per-tile slices.
+The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) loads one 16×16 PNG per texture array slice from `assets/blocks/textures/` (slice order from `Blocks::getTextureNames()`) and generates each slice's mip chain CPU-side.
 
 ## Texture2D vs Texture2DArray
 
@@ -38,7 +38,9 @@ Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF
 ## Packed Aux (Terrain)
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
-r = per-texel emissive strength, g = biome tint mask. Emission *color* comes from the base
+r = per-texel emissive strength, g = biome tint mask. Aux data is authored as an optional
+`<name>.aux.png` companion next to each block texture — most textures have none, and missing
+files load as zero-filled slices. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
 "emissive texels are pure emitters" behavior that `isPureEmitter` and NRC rely on. There is
 no separate `emission.png` anymore.
@@ -54,9 +56,10 @@ Two invariants:
 - The aux texture must be loaded linear (`LoadTextureOptions::sRGB = false`) — mask and strength
   values would be distorted by the sRGB transfer during mip downsampling and sampling.
 - The aux texture must inherit the diffuse texture's alpha channel
-  (`LoadTextureOptions::alphaOverride`) before its mips are built. `loadTexture` decides
-  premultiplied-alpha downsampling per tile from *that texture's own* alpha, and `aux_map.png`
-  is fully opaque, so without the override a cutout tile's mask would be box-averaged against the
+  (`LoadTextureOptions::alphaOverrides`) before its mips are built. `loadBlockTextureArray` decides
+  premultiplied-alpha downsampling per tile from *that texture's own* alpha, and aux tiles are
+  authored fully opaque (or absent, loading as zero-filled), so without the override a cutout
+  tile's mask would be box-averaged against the
   texels the diffuse map cuts away. On an X-shaped block (~18% coverage) that drives the tint mask
   toward zero within one mip, and since tint-masked texels are authored grayscale the block reads
   gray at distance.

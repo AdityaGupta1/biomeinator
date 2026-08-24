@@ -3,86 +3,14 @@
 
 #pragma once
 
+#include "block_ids.h"
+
 #include <cstdint>
-#include <glm/glm.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
 
-using BlockId = uint16_t;
-
-// Serialized by value in world exports — only append new types.
-enum class Block : BlockId
-{
-    AIR = 0,
-
-    WATER,
-    WATER_TOP,
-
-    BEDROCK,
-    STONE,
-    LAMP,
-    DIRT,
-    GRASS_BLOCK,
-    SAND,
-    SANDSTONE,
-    SNOW,
-    SNOWY_GRASS_BLOCK,
-    ICE,
-    OAK_LOG,
-    OAK_LEAVES,
-    CACTUS,
-    GRASS,
-    SHORT_GRASS,
-    DEAD_BUSH,
-    DEAD_GRASS_1,
-    DEAD_GRASS_2,
-    GOLDENROD,
-    TINY_CACTUS,
-    PINK_DAFFODIL,
-    BLACK_SAND,
-    GRAVEL,
-    PALM_LOG,
-    PALM_LEAVES,
-    ACACIA_LOG,
-    ACACIA_LEAVES,
-    LAVA,
-    LAVA_TOP,
-    MARBLE,
-    SCALESTONE,
-    HELLSTONE,
-    MOSS,
-    RAINBOW_CRYSTAL,
-    CHERRY_LOG,
-    CHERRY_LEAVES_PINK,
-    CHERRY_LEAVES_WHITE,
-    REDWOOD_LOG,
-    REDWOOD_LEAVES,
-    BIRCH_LOG,
-    BIRCH_LEAVES_GREEN,
-    BIRCH_LEAVES_YELLOW,
-    BIRCH_LEAVES_ORANGE,
-    FIR_LOG,
-    FIR_LEAVES,
-    PINE_LOG,
-    PINE_LEAVES,
-    COBBLESTONE,
-    MOSSY_COBBLESTONE,
-    MAHOGANY_LOG,
-    MAHOGANY_LEAVES,
-    EUCALYPTUS_LOG,
-    EUCALYPTUS_LEAVES,
-    WILLOW_LOG,
-    WILLOW_LEAVES,
-    CYPRESS_LOG,
-    CYPRESS_LEAVES,
-    MUD,
-    SPANISH_MOSS,
-    SPANISH_MOSS_TIP,
-    BROWN_MUSHROOM,
-    BLUE_ORCHID,
-    CATTAIL,
-    CATTAIL_TIP,
-
-    COUNT
-};
+static_assert(static_cast<BlockId>(Block::AIR) == 0, "Chunk block storage assumes AIR == 0");
 
 enum class BlockType : uint8_t
 {
@@ -103,23 +31,26 @@ enum class BlockShape : uint8_t
     COUNT
 };
 
-struct BlockUvs
+// Slice value for untextured blocks (air, water); never sampled
+inline constexpr uint32_t TEX_SLICE_INVALID = ~0u;
+
+struct BlockTexSlices
 {
 private:
-    glm::uvec2 uvs[3]; // integer position in block texture grid
-                       // order = side, top, bottom
+    // Texture array slice per face; order = side, top, bottom
+    uint32_t slices[3]{ TEX_SLICE_INVALID, TEX_SLICE_INVALID, TEX_SLICE_INVALID };
 
 public:
-    BlockUvs() = default;
-    BlockUvs(glm::uvec2 all);
-    BlockUvs(glm::uvec2 top, glm::uvec2 side, glm::uvec2 bottom);
+    BlockTexSlices() = default;
+    explicit BlockTexSlices(uint32_t all);
+    BlockTexSlices(uint32_t top, uint32_t side, uint32_t bottom);
 
-    const glm::uvec2& operator[](uint32_t idx) const;
+    uint32_t operator[](uint32_t idx) const;
 };
 
 struct BlockData
 {
-    BlockUvs uvs{};
+    BlockTexSlices texSlices{};
     BlockType type{ BlockType::SOLID };
     BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
@@ -132,5 +63,11 @@ namespace Blocks
 void init();
 
 const BlockData& getBlockData(Block block);
+
+// Returns Block::COUNT if no block has the given id.
+Block fromId(std::string_view id);
+
+// Distinct texture names referenced by the block definitions; index = texture array slice
+const std::vector<std::string>& getTextureNames();
 
 } // namespace Blocks

@@ -24,9 +24,8 @@ namespace TerrainOmm
 inline constexpr uint16_t OMM_IDX_FULLY_OPAQUE =
     static_cast<uint16_t>(D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE);
 
-// mip0Alpha is one byte per texel of the full texture atlas (textureSize x textureSize),
-// split into (textureSize / tileSize)^2 slices indexed as tileY * tilesPerAxis + tileX
-void bake(const std::vector<uint8_t>& mip0Alpha, uint32_t textureSize, uint32_t tileSize);
+// sliceMip0Alphas holds one byte per texel per texture array slice (tileSize x tileSize each)
+void bake(const std::vector<std::vector<uint8_t>>& sliceMip0Alphas, uint32_t tileSize);
 
 bool isBaked();
 

@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "birch_log_top",
+        "side": "birch_log_side",
+        "bottom": "birch_log_top"
+    }
+}

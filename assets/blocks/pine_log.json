@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "pine_log_top",
+        "side": "pine_log_side",
+        "bottom": "pine_log_top"
+    }
+}

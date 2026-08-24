@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "redwood_log_top",
+        "side": "redwood_log_side",
+        "bottom": "redwood_log_top"
+    }
+}

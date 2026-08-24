@@ -1,0 +1,6 @@
+{
+    "textures": "goldenrod",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "translucent": true
+}

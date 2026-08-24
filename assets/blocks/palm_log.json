@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "palm_log_top",
+        "side": "palm_log_side",
+        "bottom": "palm_log_top"
+    }
+}
