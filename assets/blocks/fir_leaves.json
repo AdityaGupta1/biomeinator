@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        31,
-        1
-    ],
+    "textures": "fir_leaves",
     "type": "transparent_cutout",
     "translucent": true
 }

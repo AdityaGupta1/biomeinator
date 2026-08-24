@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        23,
-        0
-    ],
+    "textures": "pink_daffodil",
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "translucent": true

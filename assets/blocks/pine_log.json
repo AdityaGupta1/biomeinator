@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            1,
-            2
-        ],
-        "side": [
-            0,
-            2
-        ],
-        "bottom": [
-            1,
-            2
-        ]
+    "textures": {
+        "top": "pine_log_top",
+        "side": "pine_log_side",
+        "bottom": "pine_log_top"
     }
 }

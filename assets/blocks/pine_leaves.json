@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        2,
-        2
-    ],
+    "textures": "pine_leaves",
     "type": "transparent_cutout",
     "translucent": true
 }

@@ -81,9 +81,12 @@ void init(Scene* scene)
 {
     Terrain::scene = scene;
     Terrain::testMode = SettingsManager::isTestMode();
+
+    // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
+    // loads textures for
+    Blocks::init();
     TerrainMaterials::init(scene);
 
-    Blocks::init();
     Biomes::init();
     CaveBiomes::init();
     Structures::init();

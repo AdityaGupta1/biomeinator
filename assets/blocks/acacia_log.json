@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            30,
-            0
-        ],
-        "side": [
-            29,
-            0
-        ],
-        "bottom": [
-            30,
-            0
-        ]
+    "textures": {
+        "top": "acacia_log_top",
+        "side": "acacia_log_side",
+        "bottom": "acacia_log_top"
     }
 }

@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        16,
-        1
-    ],
+    "textures": "redwood_leaves",
     "type": "transparent_cutout",
     "translucent": true
 }

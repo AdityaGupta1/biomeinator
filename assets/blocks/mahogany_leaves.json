@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        9,
-        1
-    ],
+    "textures": "mahogany_leaves",
     "type": "transparent_cutout",
     "translucent": true
 }

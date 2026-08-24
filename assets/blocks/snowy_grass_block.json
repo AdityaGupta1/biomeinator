@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            9,
-            0
-        ],
-        "side": [
-            10,
-            0
-        ],
-        "bottom": [
-            4,
-            0
-        ]
+    "textures": {
+        "top": "snow",
+        "side": "snowy_grass_block_side",
+        "bottom": "dirt"
     }
 }

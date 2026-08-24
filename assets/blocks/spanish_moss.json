@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        15,
-        2
-    ],
+    "textures": "spanish_moss",
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "translucent": true

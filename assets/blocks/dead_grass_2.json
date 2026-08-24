@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        19,
-        0
-    ],
+    "textures": "dead_grass_2",
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "translucent": true

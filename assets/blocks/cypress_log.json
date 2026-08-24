@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            12,
-            2
-        ],
-        "side": [
-            11,
-            2
-        ],
-        "bottom": [
-            12,
-            2
-        ]
+    "textures": {
+        "top": "cypress_log_top",
+        "side": "cypress_log_side",
+        "bottom": "cypress_log_top"
     }
 }

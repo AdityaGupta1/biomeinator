@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        10,
-        2
-    ],
+    "textures": "willow_leaves",
     "type": "transparent_cutout",
     "translucent": true
 }

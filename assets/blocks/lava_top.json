@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        0,
-        1
-    ],
+    "textures": "lava",
     "shape": "liquid_top",
     "emitsLight": true
 }

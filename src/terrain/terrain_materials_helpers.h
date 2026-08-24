@@ -18,6 +18,7 @@
 #include <shlobj.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <string>
 #include <vector>
 
 namespace TerrainMaterials
@@ -25,7 +26,6 @@ namespace TerrainMaterials
 
 inline constexpr bool DEBUG_EXPORT_MIPMAPS = false;
 
-inline constexpr uint32_t TERRAIN_TEXTURE_SIZE = 512;
 inline constexpr uint32_t TERRAIN_TILE_SIZE = 16;
 
 static float linearize(uint8_t srgb)
@@ -45,13 +45,13 @@ static size_t texelIdx(uint32_t x, uint32_t y, uint32_t width)
     return (static_cast<size_t>(y) * width + x) * 4;
 }
 
-static bool tileHasTransparency(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+static bool tileHasTransparency(const std::vector<uint8_t>& mip, uint32_t tileSize)
 {
     for (uint32_t y = 0; y < tileSize; ++y)
     {
         for (uint32_t x = 0; x < tileSize; ++x)
         {
-            if (mip[texelIdx(tileX + x, tileY + y, width) + 3] < 255)
+            if (mip[texelIdx(x, y, tileSize) + 3] < 255)
             {
                 return true;
             }
@@ -61,13 +61,13 @@ static bool tileHasTransparency(const std::vector<uint8_t>& mip, uint32_t width,
 }
 
 // The aux map's g channel is the biome tint mask (see MATERIAL_FLAG_PACKED_AUX)
-static bool tileHasBiomeTintMask(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+static bool tileHasBiomeTintMask(const std::vector<uint8_t>& mip, uint32_t tileSize)
 {
     for (uint32_t y = 0; y < tileSize; ++y)
     {
         for (uint32_t x = 0; x < tileSize; ++x)
         {
-            if (mip[texelIdx(tileX + x, tileY + y, width) + 1] > 0)
+            if (mip[texelIdx(x, y, tileSize) + 1] > 0)
             {
                 return true;
             }
@@ -76,7 +76,7 @@ static bool tileHasBiomeTintMask(const std::vector<uint8_t>& mip, uint32_t width
     return false;
 }
 
-static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+static float computeOpaqueFraction(const std::vector<uint8_t>& mip, uint32_t tileSize)
 {
     const uint32_t texelCount = tileSize * tileSize;
     if (texelCount == 0)
@@ -89,18 +89,18 @@ static float computeOpaqueFractionTile(const std::vector<uint8_t>& mip, uint32_t
     {
         for (uint32_t x = 0; x < tileSize; ++x)
         {
-            opaqueCount += mip[texelIdx(tileX + x, tileY + y, width) + 3] > 0 ? 1u : 0u;
+            opaqueCount += mip[texelIdx(x, y, tileSize) + 3] > 0 ? 1u : 0u;
         }
     }
     return static_cast<float>(opaqueCount) / static_cast<float>(texelCount);
 }
 
-static void downsample2x2Tile(
-    const std::vector<uint8_t>& src, uint32_t srcWidth, std::vector<uint8_t>& dst, uint32_t dstWidth, uint32_t srcTileX,
-    uint32_t srcTileY, uint32_t dstTileX, uint32_t dstTileY, uint32_t dstTileSize,
+static void downsample2x2(
+    const std::vector<uint8_t>& src, std::vector<uint8_t>& dst, uint32_t dstTileSize,
     const bool premultiplyAlpha, const bool srgbTransfer)
 {
     constexpr float alphaEpsilon = 1e-6f;
+    const uint32_t srcTileSize = dstTileSize * 2;
     const auto decode = [srgbTransfer](uint8_t v) { return srgbTransfer ? linearize(v) : v / 255.f; };
     const auto encode = [srgbTransfer](float v)
     {
@@ -110,13 +110,13 @@ static void downsample2x2Tile(
     {
         for (uint32_t x = 0; x < dstTileSize; ++x)
         {
-            const uint32_t sx = srcTileX + x * 2;
-            const uint32_t sy = srcTileY + y * 2;
-            const uint8_t* p00 = src.data() + texelIdx(sx, sy, srcWidth);
-            const uint8_t* p10 = src.data() + texelIdx(sx + 1, sy, srcWidth);
-            const uint8_t* p01 = src.data() + texelIdx(sx, sy + 1, srcWidth);
-            const uint8_t* p11 = src.data() + texelIdx(sx + 1, sy + 1, srcWidth);
-            uint8_t* out = dst.data() + texelIdx(dstTileX + x, dstTileY + y, dstWidth);
+            const uint32_t sx = x * 2;
+            const uint32_t sy = y * 2;
+            const uint8_t* p00 = src.data() + texelIdx(sx, sy, srcTileSize);
+            const uint8_t* p10 = src.data() + texelIdx(sx + 1, sy, srcTileSize);
+            const uint8_t* p01 = src.data() + texelIdx(sx, sy + 1, srcTileSize);
+            const uint8_t* p11 = src.data() + texelIdx(sx + 1, sy + 1, srcTileSize);
+            uint8_t* out = dst.data() + texelIdx(x, y, dstTileSize);
             const float a00 = p00[3] / 255.f;
             const float a10 = p10[3] / 255.f;
             const float a01 = p01[3] / 255.f;
@@ -150,8 +150,7 @@ static void downsample2x2Tile(
     }
 }
 
-static void quantizeAlphaToCoverageTile(
-    std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize, float sourceCoverage)
+static void quantizeAlphaToCoverage(std::vector<uint8_t>& mip, uint32_t tileSize, float sourceCoverage)
 {
     const uint32_t texelCount = tileSize * tileSize;
     const uint32_t targetOpaque = static_cast<uint32_t>(std::clamp(
@@ -164,7 +163,7 @@ static void quantizeAlphaToCoverageTile(
     const auto alphaAt = [&](uint32_t i) {
         const uint32_t x = i % tileSize;
         const uint32_t y = i / tileSize;
-        return mip[texelIdx(tileX + x, tileY + y, width) + 3];
+        return mip[texelIdx(x, y, tileSize) + 3];
     };
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
         const uint8_t alphaA = alphaAt(a);
@@ -177,7 +176,7 @@ static void quantizeAlphaToCoverageTile(
         const uint32_t i = order[rank];
         const uint32_t x = i % tileSize;
         const uint32_t y = i / tileSize;
-        mip[texelIdx(tileX + x, tileY + y, width) + 3] = rank < targetOpaque ? 255 : 0;
+        mip[texelIdx(x, y, tileSize) + 3] = rank < targetOpaque ? 255 : 0;
     }
 }
 
@@ -185,11 +184,10 @@ static void quantizeAlphaToCoverageTile(
 // uncovered texels taking the average color of their covered neighbors. Used when OMMs perform
 // the alpha test (always against mip 0), so the shading alpha must not cut coverage a second
 // time. Hits can only land over opaque mip-0 texels, so the dilated colors are defensive only.
-static void opaquifyCutoutMipTile(
-    std::vector<uint8_t>& mip, uint32_t width, uint32_t tileX, uint32_t tileY, uint32_t tileSize)
+static void opaquifyCutoutMip(std::vector<uint8_t>& mip, uint32_t tileSize)
 {
     const uint32_t texelCount = tileSize * tileSize;
-    const auto texelAt = [&](uint32_t i) { return texelIdx(tileX + i % tileSize, tileY + i / tileSize, width); };
+    const auto texelAt = [&](uint32_t i) { return texelIdx(i % tileSize, i / tileSize, tileSize); };
 
     std::vector<bool> covered(texelCount);
     uint32_t coveredCount = 0;
@@ -256,216 +254,185 @@ static void opaquifyCutoutMipTile(
     }
 }
 
+// Writes a tile's mip chain as a horizontal strip PNG to the Downloads folder
+static void debugExportMipmaps(const std::string& fileName, const std::vector<std::vector<uint8_t>>& mipData)
+{
+    namespace fs = std::filesystem;
+
+    uint32_t atlasWidth = 0;
+    for (uint32_t m = 0; m < mipData.size(); ++m)
+    {
+        atlasWidth += std::max(1u, TERRAIN_TILE_SIZE >> m);
+    }
+
+    std::vector<uint8_t> atlasData(static_cast<size_t>(atlasWidth) * TERRAIN_TILE_SIZE * 4, 0);
+    uint32_t xOffset = 0;
+    for (uint32_t m = 0; m < mipData.size(); ++m)
+    {
+        const uint32_t mipSize = std::max(1u, TERRAIN_TILE_SIZE >> m);
+        for (uint32_t y = 0; y < mipSize; ++y)
+        {
+            uint8_t* dstRow = atlasData.data() + (static_cast<size_t>(y) * atlasWidth + xOffset) * 4;
+            const uint8_t* srcRow = mipData[m].data() + static_cast<size_t>(y) * mipSize * 4;
+            std::memcpy(dstRow, srcRow, static_cast<size_t>(mipSize) * 4);
+        }
+        xOffset += mipSize;
+    }
+
+    fs::path downloadsPath = fs::current_path();
+    PWSTR downloadsPathWide = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, KF_FLAG_DEFAULT, nullptr, &downloadsPathWide)))
+    {
+        downloadsPath = fs::path(downloadsPathWide);
+        CoTaskMemFree(downloadsPathWide);
+    }
+
+    const fs::path debugOutputPath = downloadsPath / (fileName + "_mipmap.png");
+    const int writeResult = stbi_write_png(
+        debugOutputPath.generic_string().c_str(),
+        static_cast<int>(atlasWidth),
+        static_cast<int>(TERRAIN_TILE_SIZE),
+        4,
+        atlasData.data(),
+        static_cast<int>(atlasWidth * 4));
+    if (writeResult == 0)
+    {
+        Logger::logError("Failed to write mip debug texture to: %s", debugOutputPath.generic_string().c_str());
+    }
+}
+
 struct LoadTextureOptions
 {
     bool sRGB = true;
-    // One bool per tile, indexed like the returned array's slices: whether the tile has any biome
-    // tint mask coverage at mip 0. Only meaningful for the aux map.
-    std::vector<bool>* outTileHasBiomeTintMask = nullptr;
-    // Mip 0 alpha channel, one byte per texel
-    std::vector<uint8_t>* outAlphaChannel = nullptr;
-    // Replaces the loaded alpha before mip generation, so a texture co-registered with a cutout
-    // texture inherits its coverage weighting. See knowledge/scene/materials_textures.md.
-    const std::vector<uint8_t>* alphaOverride = nullptr;
+    // One bool per texture array slice: whether the tile has any biome tint mask coverage at
+    // mip 0. Only meaningful for the aux maps.
+    std::vector<bool>* outSliceHasBiomeTintMask = nullptr;
+    // Mip 0 alpha channel per slice, one byte per texel
+    std::vector<std::vector<uint8_t>>* outAlphaChannels = nullptr;
+    // Replaces each slice's loaded alpha before mip generation, so a texture co-registered
+    // with a cutout texture inherits its coverage weighting.
+    // See knowledge/scene/materials_textures.md.
+    const std::vector<std::vector<uint8_t>>* alphaOverrides = nullptr;
     // When OMMs perform the cutout alpha test, lower mips carry color only: skip the
     // coverage-preserving alpha quantization and make cutout tiles' mips fully opaque.
     // See knowledge/terrain/terrain_omm.md.
     bool useOpaqueCutoutMips = false;
+    // Missing files load as zero-filled tiles instead of failing the whole array; aux maps
+    // exist only for the textures with emissive/tint data
+    bool missingFilesAreZero = false;
 };
 
-static uint32_t loadTexture(Scene* scene, const std::filesystem::path& filename, const LoadTextureOptions& options = {})
+// Loads one TERRAIN_TILE_SIZE^2 PNG per texture name from assets/blocks/textures/ into a
+// texture array whose slice indices match the given order (see Blocks::getTextureNames())
+static uint32_t loadBlockTextureArray(Scene* scene,
+                                      const std::vector<std::string>& textureNames,
+                                      const std::string& fileNameSuffix,
+                                      const LoadTextureOptions& options = {})
 {
     namespace fs = std::filesystem;
 
-    const fs::path fullPath = fs::path(TARGET_FILE_DIR) / fs::path("assets/textures/") / filename;
+    const fs::path texturesDir = fs::path(TARGET_FILE_DIR) / fs::path("assets/blocks/textures/");
 
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    unsigned char* data = stbi_load(fullPath.generic_string().c_str(), &width, &height, &channels, 4);
-
-    if (data == nullptr)
-    {
-        Logger::logError("Failed to load texture from: %s", fullPath.generic_string().c_str());
-        return TEXTURE_ID_INVALID;
-    }
-
-    const uint32_t w0 = static_cast<uint32_t>(width);
-    const uint32_t h0 = static_cast<uint32_t>(height);
     constexpr uint32_t numMips = 5;
-    // Must match DEFAULT_TEX_NUM_BLOCKS_X in chunk.cpp.
-    static_assert(TERRAIN_TEXTURE_SIZE / TERRAIN_TILE_SIZE == 32);
-    ASSERT(w0 == TERRAIN_TEXTURE_SIZE && h0 == TERRAIN_TEXTURE_SIZE);
+    static_assert(TERRAIN_TILE_SIZE >> (numMips - 1) == 1);
+    constexpr size_t texelCount = static_cast<size_t>(TERRAIN_TILE_SIZE) * TERRAIN_TILE_SIZE;
 
-    const size_t texelCount = static_cast<size_t>(w0) * h0;
-    std::vector<std::vector<uint8_t>> mipData(numMips);
-
-    // Mip 0: copy raw stb_image data
-    mipData[0].resize(texelCount * 4);
-    std::memcpy(mipData[0].data(), data, mipData[0].size());
-    stbi_image_free(data);
-
-    if (options.alphaOverride != nullptr)
-    {
-        ASSERT(options.alphaOverride->size() == texelCount);
-        for (size_t i = 0; i < texelCount; ++i)
-        {
-            mipData[0][i * 4 + 3] = (*options.alphaOverride)[i];
-        }
-    }
-
-    if (options.outAlphaChannel != nullptr)
-    {
-        options.outAlphaChannel->resize(texelCount);
-        for (size_t i = 0; i < texelCount; ++i)
-        {
-            (*options.outAlphaChannel)[i] = mipData[0][i * 4 + 3];
-        }
-    }
-
-    for (uint32_t m = 1; m < numMips; ++m)
-    {
-        const uint32_t wDst = w0 >> m;
-        const uint32_t hDst = h0 >> m;
-        mipData[m].resize(static_cast<size_t>(wDst) * hDst * 4);
-    }
-
-    const uint32_t tilesPerAxis = TERRAIN_TEXTURE_SIZE / TERRAIN_TILE_SIZE;
-    if (options.outTileHasBiomeTintMask != nullptr)
-    {
-        options.outTileHasBiomeTintMask->resize(static_cast<size_t>(tilesPerAxis) * tilesPerAxis);
-    }
-    for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
-    {
-        for (uint32_t tileX = 0; tileX < tilesPerAxis; ++tileX)
-        {
-            const uint32_t mip0TileX = tileX * TERRAIN_TILE_SIZE;
-            const uint32_t mip0TileY = tileY * TERRAIN_TILE_SIZE;
-            if (options.outTileHasBiomeTintMask != nullptr)
-            {
-                (*options.outTileHasBiomeTintMask)[tileY * tilesPerAxis + tileX] =
-                    tileHasBiomeTintMask(mipData[0], w0, mip0TileX, mip0TileY, TERRAIN_TILE_SIZE);
-            }
-            const bool hasTransparency = tileHasTransparency(mipData[0], w0, mip0TileX, mip0TileY, TERRAIN_TILE_SIZE);
-
-            for (uint32_t m = 1; m < numMips; ++m)
-            {
-                const uint32_t srcWidth = w0 >> (m - 1);
-                const uint32_t dstWidth = w0 >> m;
-                const uint32_t srcTileSize = TERRAIN_TILE_SIZE >> (m - 1);
-                const uint32_t dstTileSize = TERRAIN_TILE_SIZE >> m;
-                const uint32_t srcTileX = tileX * srcTileSize;
-                const uint32_t srcTileY = tileY * srcTileSize;
-                const uint32_t dstTileX = tileX * dstTileSize;
-                const uint32_t dstTileY = tileY * dstTileSize;
-
-                downsample2x2Tile(mipData[m - 1], srcWidth, mipData[m], dstWidth, srcTileX, srcTileY, dstTileX,
-                                  dstTileY, dstTileSize, hasTransparency /*premultiplyAlpha*/,
-                                  options.sRGB /*srgbTransfer*/);
-                if (hasTransparency && !options.useOpaqueCutoutMips)
-                {
-                    const float sourceCoverage =
-                        computeOpaqueFractionTile(mipData[m - 1], srcWidth, srcTileX, srcTileY, srcTileSize);
-                    quantizeAlphaToCoverageTile(mipData[m], dstWidth, dstTileX, dstTileY, dstTileSize, sourceCoverage);
-                }
-            }
-
-            // Opaquify only after the full cascade: the downsamples above weight colors by the
-            // previous mip's fractional alpha, which is the tile's true mip-0 coverage.
-            if (hasTransparency && options.useOpaqueCutoutMips)
-            {
-                for (uint32_t m = 1; m < numMips; ++m)
-                {
-                    const uint32_t mipTileSize = TERRAIN_TILE_SIZE >> m;
-                    opaquifyCutoutMipTile(mipData[m], w0 >> m, tileX * mipTileSize, tileY * mipTileSize, mipTileSize);
-                }
-            }
-        }
-    }
-
-    if constexpr (DEBUG_EXPORT_MIPMAPS)
-    {
-        std::vector<uint32_t> mipWidths(numMips);
-        std::vector<uint32_t> mipHeights(numMips);
-        uint32_t atlasWidth = 0;
-        uint32_t atlasHeight = 0;
-        for (uint32_t m = 0; m < numMips; ++m)
-        {
-            const uint32_t w = std::max(1u, w0 >> m);
-            const uint32_t h = std::max(1u, h0 >> m);
-            mipWidths[m] = w;
-            mipHeights[m] = h;
-            atlasWidth += w;
-            atlasHeight = std::max(atlasHeight, h);
-        }
-
-        std::vector<uint8_t> atlasData(static_cast<size_t>(atlasWidth) * atlasHeight * 4, 0);
-        uint32_t xOffset = 0;
-        for (uint32_t m = 0; m < numMips; ++m)
-        {
-            const uint32_t w = mipWidths[m];
-            const uint32_t h = mipHeights[m];
-            const uint8_t* src = mipData[m].data();
-            for (uint32_t y = 0; y < h; ++y)
-            {
-                uint8_t* dstRow = atlasData.data() + (static_cast<size_t>(y) * atlasWidth + xOffset) * 4;
-                const uint8_t* srcRow = src + static_cast<size_t>(y) * w * 4;
-                std::memcpy(dstRow, srcRow, static_cast<size_t>(w) * 4);
-            }
-            xOffset += w;
-        }
-
-        fs::path downloadsPath = fs::current_path();
-        PWSTR downloadsPathWide = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, KF_FLAG_DEFAULT, nullptr, &downloadsPathWide)))
-        {
-            downloadsPath = fs::path(downloadsPathWide);
-            CoTaskMemFree(downloadsPathWide);
-        }
-
-        const fs::path debugOutputPath = downloadsPath / (filename.stem().string() + "_mipmap.png");
-        const int writeResult = stbi_write_png(
-            debugOutputPath.generic_string().c_str(),
-            static_cast<int>(atlasWidth),
-            static_cast<int>(atlasHeight),
-            4,
-            atlasData.data(),
-            static_cast<int>(atlasWidth * 4));
-        if (writeResult == 0)
-        {
-            Logger::logError("Failed to write mip debug texture to: %s", debugOutputPath.generic_string().c_str());
-        }
-    }
-
-    // Atlas mip chain -> per-tile slices. Order: tileY * tilesPerAxis + tileX (matches chunk.cpp).
-    const uint32_t numSlices = tilesPerAxis * tilesPerAxis;
+    const uint32_t numSlices = static_cast<uint32_t>(textureNames.size());
     std::vector<std::vector<std::vector<uint8_t>>> sliceMipData(numSlices);
+
+    if (options.outSliceHasBiomeTintMask != nullptr)
+    {
+        options.outSliceHasBiomeTintMask->resize(numSlices);
+    }
+    if (options.outAlphaChannels != nullptr)
+    {
+        options.outAlphaChannels->resize(numSlices);
+    }
+
     for (uint32_t slice = 0; slice < numSlices; ++slice)
     {
-        sliceMipData[slice].resize(numMips);
-    }
+        const std::string fileName = textureNames[slice] + fileNameSuffix;
+        const fs::path fullPath = texturesDir / (fileName + ".png");
 
-    for (uint32_t m = 0; m < numMips; ++m)
-    {
-        const uint32_t mipWidth = w0 >> m;
-        const uint32_t mipTileSize = std::max(1u, TERRAIN_TILE_SIZE >> m);
-        const uint32_t bytesPerTile = mipTileSize * mipTileSize * 4;
-        for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
+        std::vector<std::vector<uint8_t>>& mipData = sliceMipData[slice];
+        mipData.resize(numMips);
+        mipData[0].resize(texelCount * 4, 0);
+
+        if (fs::exists(fullPath))
         {
-            for (uint32_t tileX = 0; tileX < tilesPerAxis; ++tileX)
+            int width = 0;
+            int height = 0;
+            int channels = 0;
+            unsigned char* data = stbi_load(fullPath.generic_string().c_str(), &width, &height, &channels, 4);
+            if (data == nullptr)
             {
-                const uint32_t slice = tileY * tilesPerAxis + tileX;
-                std::vector<uint8_t>& dst = sliceMipData[slice][m];
-                dst.resize(bytesPerTile);
-                const uint32_t srcTileX = tileX * mipTileSize;
-                const uint32_t srcTileY = tileY * mipTileSize;
-                for (uint32_t y = 0; y < mipTileSize; ++y)
-                {
-                    const uint8_t* srcRow = mipData[m].data() + texelIdx(srcTileX, srcTileY + y, mipWidth);
-                    uint8_t* dstRow = dst.data() + static_cast<size_t>(y) * mipTileSize * 4;
-                    std::memcpy(dstRow, srcRow, static_cast<size_t>(mipTileSize) * 4);
-                }
+                Logger::logError("Failed to load texture from: %s", fullPath.generic_string().c_str());
+                return TEXTURE_ID_INVALID;
             }
+
+            ASSERT(width == TERRAIN_TILE_SIZE && height == TERRAIN_TILE_SIZE);
+            std::memcpy(mipData[0].data(), data, mipData[0].size());
+            stbi_image_free(data);
+        }
+        else if (!options.missingFilesAreZero)
+        {
+            Logger::logError("Failed to load texture from: %s", fullPath.generic_string().c_str());
+            return TEXTURE_ID_INVALID;
+        }
+
+        if (options.alphaOverrides != nullptr)
+        {
+            const std::vector<uint8_t>& alphaOverride = (*options.alphaOverrides)[slice];
+            ASSERT(alphaOverride.size() == texelCount);
+            for (size_t i = 0; i < texelCount; ++i)
+            {
+                mipData[0][i * 4 + 3] = alphaOverride[i];
+            }
+        }
+
+        if (options.outAlphaChannels != nullptr)
+        {
+            std::vector<uint8_t>& outAlpha = (*options.outAlphaChannels)[slice];
+            outAlpha.resize(texelCount);
+            for (size_t i = 0; i < texelCount; ++i)
+            {
+                outAlpha[i] = mipData[0][i * 4 + 3];
+            }
+        }
+
+        if (options.outSliceHasBiomeTintMask != nullptr)
+        {
+            (*options.outSliceHasBiomeTintMask)[slice] = tileHasBiomeTintMask(mipData[0], TERRAIN_TILE_SIZE);
+        }
+
+        const bool hasTransparency = tileHasTransparency(mipData[0], TERRAIN_TILE_SIZE);
+
+        for (uint32_t m = 1; m < numMips; ++m)
+        {
+            const uint32_t dstTileSize = TERRAIN_TILE_SIZE >> m;
+            mipData[m].resize(static_cast<size_t>(dstTileSize) * dstTileSize * 4);
+            downsample2x2(mipData[m - 1], mipData[m], dstTileSize, hasTransparency /*premultiplyAlpha*/,
+                          options.sRGB /*srgbTransfer*/);
+            if (hasTransparency && !options.useOpaqueCutoutMips)
+            {
+                const float sourceCoverage = computeOpaqueFraction(mipData[m - 1], TERRAIN_TILE_SIZE >> (m - 1));
+                quantizeAlphaToCoverage(mipData[m], dstTileSize, sourceCoverage);
+            }
+        }
+
+        // Opaquify only after the full cascade: the downsamples above weight colors by the
+        // previous mip's fractional alpha, which is the tile's true mip-0 coverage.
+        if (hasTransparency && options.useOpaqueCutoutMips)
+        {
+            for (uint32_t m = 1; m < numMips; ++m)
+            {
+                opaquifyCutoutMip(mipData[m], TERRAIN_TILE_SIZE >> m);
+            }
+        }
+
+        if constexpr (DEBUG_EXPORT_MIPMAPS)
+        {
+            debugExportMipmaps(fileName, mipData);
         }
     }
 

@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            27,
-            0
-        ],
-        "side": [
-            26,
-            0
-        ],
-        "bottom": [
-            27,
-            0
-        ]
+    "textures": {
+        "top": "palm_log_top",
+        "side": "palm_log_side",
+        "bottom": "palm_log_top"
     }
 }

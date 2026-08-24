@@ -9,22 +9,19 @@
 #include <filesystem>
 #include <fstream>
 #include <json.hpp>
-#include <string>
 #include <unordered_map>
 
-using namespace glm;
-
-BlockUvs::BlockUvs(uvec2 all)
-    : BlockUvs(all, all, all)
+BlockTexSlices::BlockTexSlices(uint32_t all)
+    : BlockTexSlices(all, all, all)
 {}
 
-BlockUvs::BlockUvs(uvec2 top, uvec2 side, uvec2 bottom)
-    : uvs{ side, top, bottom }
+BlockTexSlices::BlockTexSlices(uint32_t top, uint32_t side, uint32_t bottom)
+    : slices{ side, top, bottom }
 {}
 
-const glm::uvec2& BlockUvs::operator[](uint32_t idx) const
+uint32_t BlockTexSlices::operator[](uint32_t idx) const
 {
-    return this->uvs[idx];
+    return this->slices[idx];
 }
 
 namespace Blocks
@@ -33,6 +30,9 @@ namespace Blocks
 std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
 
 static std::unordered_map<std::string_view, Block> blocksById;
+
+static std::vector<std::string> textureNames;
+static std::unordered_map<std::string, uint32_t> sliceByTextureName;
 
 static const std::unordered_map<std::string, BlockType> blockTypesByName = {
     { "air", BlockType::AIR },
@@ -47,9 +47,17 @@ static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "liquid_top", BlockShape::LIQUID_TOP },
 };
 
-static uvec2 parseUv(const nlohmann::json& uvJson)
+// Slices are assigned in first-reference order, which is deterministic because blocks are
+// parsed in enum order and faces in top/side/bottom order
+static uint32_t resolveTextureSlice(const std::string& textureName)
 {
-    return uvec2(uvJson.at(0).get<uint32_t>(), uvJson.at(1).get<uint32_t>());
+    const auto [it, inserted] = sliceByTextureName.try_emplace(textureName,
+                                                              static_cast<uint32_t>(textureNames.size()));
+    if (inserted)
+    {
+        textureNames.push_back(textureName);
+    }
+    return it->second;
 }
 
 static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& outData)
@@ -66,18 +74,19 @@ static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
     {
         blockJson = nlohmann::json::parse(file);
 
-        if (blockJson.contains("uvs"))
+        if (blockJson.contains("textures"))
         {
-            const nlohmann::json& uvsJson = blockJson["uvs"];
-            if (uvsJson.is_array())
+            const nlohmann::json& texturesJson = blockJson["textures"];
+            if (texturesJson.is_string())
             {
-                outData.uvs = BlockUvs(parseUv(uvsJson));
+                outData.texSlices = BlockTexSlices(resolveTextureSlice(texturesJson.get<std::string>()));
             }
             else
             {
-                outData.uvs = BlockUvs(parseUv(uvsJson.at("top")),
-                                       parseUv(uvsJson.at("side")),
-                                       parseUv(uvsJson.at("bottom")));
+                const uint32_t top = resolveTextureSlice(texturesJson.at("top").get<std::string>());
+                const uint32_t side = resolveTextureSlice(texturesJson.at("side").get<std::string>());
+                const uint32_t bottom = resolveTextureSlice(texturesJson.at("bottom").get<std::string>());
+                outData.texSlices = BlockTexSlices(top, side, bottom);
             }
         }
 
@@ -130,6 +139,11 @@ Block fromId(std::string_view id)
 {
     const auto it = blocksById.find(id);
     return it != blocksById.end() ? it->second : Block::COUNT;
+}
+
+const std::vector<std::string>& getTextureNames()
+{
+    return textureNames;
 }
 
 } // namespace Blocks

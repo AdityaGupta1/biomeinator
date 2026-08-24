@@ -88,11 +88,10 @@ static void microTriCentroid(const uint32_t index, const uint32_t level, float& 
     outV = static_cast<float>(iv) * levelScale + d / 3.f;
 }
 
-void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, const uint32_t tileSize)
+void bake(const std::vector<std::vector<uint8_t>>& sliceMip0Alphas, const uint32_t tileSize)
 {
     ASSERT(!baked);
     ASSERT(std::has_single_bit(tileSize));
-    ASSERT(mip0Alpha.size() == static_cast<size_t>(textureSize) * textureSize);
 
     ommSubdivisionLevel = static_cast<uint32_t>(std::countr_zero(tileSize));
     const uint32_t numMicroTrisPerOmm = tileSize * tileSize; // 4^level
@@ -105,74 +104,72 @@ void bake(const std::vector<uint8_t>& mip0Alpha, const uint32_t textureSize, con
         { { 1.f, 0.f }, { 0.f, 1.f }, { 1.f, 1.f } },
     };
 
-    const uint32_t tilesPerAxis = textureSize / tileSize;
-    texArraySliceCutoutIdxs.assign(static_cast<size_t>(tilesPerAxis) * tilesPerAxis, -1);
+    texArraySliceCutoutIdxs.assign(sliceMip0Alphas.size(), -1);
 
-    for (uint32_t tileY = 0; tileY < tilesPerAxis; ++tileY)
+    for (uint32_t sliceIdx = 0; sliceIdx < sliceMip0Alphas.size(); ++sliceIdx)
     {
-        for (uint32_t tileX = 0; tileX < tilesPerAxis; ++tileX)
+        const std::vector<uint8_t>& sliceAlpha = sliceMip0Alphas[sliceIdx];
+        ASSERT(sliceAlpha.size() == static_cast<size_t>(tileSize) * tileSize);
+        const auto alphaAt = [&](uint32_t texelX, uint32_t texelY) {
+            return sliceAlpha[static_cast<size_t>(texelY) * tileSize + texelX];
+        };
+
+        uint32_t numOpaqueTexels = 0;
+        bool hasTransparency = false;
+        for (uint32_t y = 0; y < tileSize; ++y)
         {
-            const auto alphaAt = [&](uint32_t texelX, uint32_t texelY) {
-                return mip0Alpha[static_cast<size_t>(tileY * tileSize + texelY) * textureSize + tileX * tileSize + texelX];
-            };
-
-            uint32_t numOpaqueTexels = 0;
-            bool hasTransparency = false;
-            for (uint32_t y = 0; y < tileSize; ++y)
+            for (uint32_t x = 0; x < tileSize; ++x)
             {
-                for (uint32_t x = 0; x < tileSize; ++x)
-                {
-                    const uint8_t alpha = alphaAt(x, y);
-                    // 2-state OMMs reproduce the alpha test exactly only if cutout alpha is binary
-                    ASSERT(alpha == 0 || alpha == 255);
-                    numOpaqueTexels += (alpha != 0) ? 1u : 0u;
-                    hasTransparency |= (alpha < 255);
-                }
+                const uint8_t alpha = alphaAt(x, y);
+                // 2-state OMMs reproduce the alpha test exactly only if cutout alpha is binary
+                ASSERT(alpha == 0 || alpha == 255);
+                numOpaqueTexels += (alpha != 0) ? 1u : 0u;
+                hasTransparency |= (alpha < 255);
             }
-            if (!hasTransparency)
-            {
-                continue;
-            }
-
-            texArraySliceCutoutIdxs[tileY * tilesPerAxis + tileX] = static_cast<int32_t>(ommDescs.size() / NUM_TRIS_PER_QUAD);
-
-            uint32_t numOpaqueMicroTris = 0;
-            for (uint32_t triInQuad = 0; triInQuad < NUM_TRIS_PER_QUAD; ++triInQuad)
-            {
-                const uint32_t maskOffsetBytes = static_cast<uint32_t>(ommData.size());
-                ommData.resize(ommData.size() + maskSizeBytes, 0);
-                ommDescs.push_back({
-                    .ByteOffset = maskOffsetBytes,
-                    .SubdivisionLevel = static_cast<UINT>(ommSubdivisionLevel),
-                    .Format = D3D12_RAYTRACING_OPACITY_MICROMAP_FORMAT_OC1_2_STATE,
-                });
-
-                const auto& cornerUvs = triCornerUvs[triInQuad];
-                for (uint32_t microTriIdx = 0; microTriIdx < numMicroTrisPerOmm; ++microTriIdx)
-                {
-                    float baryU, baryV;
-                    microTriCentroid(microTriIdx, ommSubdivisionLevel, baryU, baryV);
-
-                    // Each micro-triangle lies entirely inside one texel, so sampling the
-                    // centroid reproduces the point-sampled alpha test exactly
-                    const float baryW = 1.f - baryU - baryV;
-                    const float texU = cornerUvs[0][0] * baryW + cornerUvs[1][0] * baryU + cornerUvs[2][0] * baryV;
-                    const float texV = cornerUvs[0][1] * baryW + cornerUvs[1][1] * baryU + cornerUvs[2][1] * baryV;
-                    const uint32_t texelX = std::min(tileSize - 1, static_cast<uint32_t>(texU * tileSize));
-                    const uint32_t texelY = std::min(tileSize - 1, static_cast<uint32_t>(texV * tileSize));
-
-                    if (alphaAt(texelX, texelY) != 0)
-                    {
-                        ommData[maskOffsetBytes + microTriIdx / 8] |= 1u << (microTriIdx % 8);
-                        ++numOpaqueMicroTris;
-                    }
-                }
-            }
-
-            // The quad's two micromaps together cover each texel with exactly two
-            // micro-triangles, so opaque micro-tris must be exactly twice the opaque texels
-            ASSERT(numOpaqueMicroTris == numOpaqueTexels * 2);
         }
+        if (!hasTransparency)
+        {
+            continue;
+        }
+
+        texArraySliceCutoutIdxs[sliceIdx] = static_cast<int32_t>(ommDescs.size() / NUM_TRIS_PER_QUAD);
+
+        uint32_t numOpaqueMicroTris = 0;
+        for (uint32_t triInQuad = 0; triInQuad < NUM_TRIS_PER_QUAD; ++triInQuad)
+        {
+            const uint32_t maskOffsetBytes = static_cast<uint32_t>(ommData.size());
+            ommData.resize(ommData.size() + maskSizeBytes, 0);
+            ommDescs.push_back({
+                .ByteOffset = maskOffsetBytes,
+                .SubdivisionLevel = static_cast<UINT>(ommSubdivisionLevel),
+                .Format = D3D12_RAYTRACING_OPACITY_MICROMAP_FORMAT_OC1_2_STATE,
+            });
+
+            const auto& cornerUvs = triCornerUvs[triInQuad];
+            for (uint32_t microTriIdx = 0; microTriIdx < numMicroTrisPerOmm; ++microTriIdx)
+            {
+                float baryU, baryV;
+                microTriCentroid(microTriIdx, ommSubdivisionLevel, baryU, baryV);
+
+                // Each micro-triangle lies entirely inside one texel, so sampling the
+                // centroid reproduces the point-sampled alpha test exactly
+                const float baryW = 1.f - baryU - baryV;
+                const float texU = cornerUvs[0][0] * baryW + cornerUvs[1][0] * baryU + cornerUvs[2][0] * baryV;
+                const float texV = cornerUvs[0][1] * baryW + cornerUvs[1][1] * baryU + cornerUvs[2][1] * baryV;
+                const uint32_t texelX = std::min(tileSize - 1, static_cast<uint32_t>(texU * tileSize));
+                const uint32_t texelY = std::min(tileSize - 1, static_cast<uint32_t>(texV * tileSize));
+
+                if (alphaAt(texelX, texelY) != 0)
+                {
+                    ommData[maskOffsetBytes + microTriIdx / 8] |= 1u << (microTriIdx % 8);
+                    ++numOpaqueMicroTris;
+                }
+            }
+        }
+
+        // The quad's two micromaps together cover each texel with exactly two
+        // micro-triangles, so opaque micro-tris must be exactly twice the opaque texels
+        ASSERT(numOpaqueMicroTris == numOpaqueTexels * 2);
     }
 
     baked = true;

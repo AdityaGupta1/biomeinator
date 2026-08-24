@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        20,
-        1
-    ],
+    "textures": "birch_leaves_yellow",
     "type": "transparent_cutout",
     "translucent": true
 }

@@ -1,7 +1,4 @@
 {
-    "uvs": [
-        0,
-        1
-    ],
+    "textures": "lava",
     "emitsLight": true
 }

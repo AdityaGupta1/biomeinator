@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            15,
-            1
-        ],
-        "side": [
-            14,
-            1
-        ],
-        "bottom": [
-            15,
-            1
-        ]
+    "textures": {
+        "top": "redwood_log_top",
+        "side": "redwood_log_side",
+        "bottom": "redwood_log_top"
     }
 }

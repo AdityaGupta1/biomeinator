@@ -1,16 +1,7 @@
 {
-    "uvs": {
-        "top": [
-            9,
-            2
-        ],
-        "side": [
-            8,
-            2
-        ],
-        "bottom": [
-            9,
-            2
-        ]
+    "textures": {
+        "top": "willow_log_top",
+        "side": "willow_log_side",
+        "bottom": "willow_log_top"
     }
 }

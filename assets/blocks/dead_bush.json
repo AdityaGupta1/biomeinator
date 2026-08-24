@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        17,
-        0
-    ],
+    "textures": "dead_bush",
     "type": "transparent_cutout",
     "shape": "x_shaped"
 }

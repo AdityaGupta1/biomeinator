@@ -1,8 +1,5 @@
 {
-    "uvs": [
-        20,
-        2
-    ],
+    "textures": "cattail_tip",
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "translucent": true
