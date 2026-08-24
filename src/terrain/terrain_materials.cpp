@@ -32,7 +32,6 @@ static void createMaterials(Scene* scene)
 
     const bool useOmms = Renderer::getUseOmms();
 
-    // Slice order comes from the block definitions, which Blocks::init() must have parsed
     const std::vector<std::string>& textureNames = Blocks::getTextureNames();
     ASSERT(!textureNames.empty());
 

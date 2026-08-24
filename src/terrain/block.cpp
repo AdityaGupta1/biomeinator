@@ -74,13 +74,13 @@ static T parseNamedValue(const std::unordered_map<std::string, T>& valuesByName,
     return it->second;
 }
 
-static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& outData)
+static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& outData)
 {
     std::ifstream file(jsonPath);
     if (!file)
     {
         Logger::logError("blocks: failed to open %s", jsonPath.generic_string().c_str());
-        return false;
+        return;
     }
 
     nlohmann::json blockJson;
@@ -120,10 +120,7 @@ static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
     catch (const std::exception& e)
     {
         Logger::logError("blocks: failed to parse %s: %s", jsonPath.generic_string().c_str(), e.what());
-        return false;
     }
-
-    return true;
 }
 
 void init()

@@ -712,12 +712,7 @@ void exportWorld()
 
     // Block palette: serialized block values index into this array, so imports are
     // independent of the current build's Block enum values.
-    nlohmann::json blocksArray = nlohmann::json::array();
-    for (const char* blockIdName : Blocks::blockIdNames)
-    {
-        blocksArray.push_back(blockIdName);
-    }
-    worldJson["blocks"] = blocksArray;
+    worldJson["blocks"] = Blocks::blockIdNames;
 
     nlohmann::json regionsArray = nlohmann::json::array();
     for (const glm::ivec2& pos : regionPositions)

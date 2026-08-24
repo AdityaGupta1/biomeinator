@@ -42,7 +42,7 @@ private:
 
 public:
     BlockTexSlices() = default;
-    BlockTexSlices(uint32_t all);
+    explicit BlockTexSlices(uint32_t all);
     BlockTexSlices(uint32_t top, uint32_t side, uint32_t bottom);
 
     uint32_t operator[](uint32_t idx) const;
