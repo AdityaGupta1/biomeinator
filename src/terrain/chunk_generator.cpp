@@ -14,6 +14,7 @@
 #include "util/glm_util.h"
 #include "util/rng.h"
 
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -279,7 +280,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* terrainBaseHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* terrainSurfaceMultiplierArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     int* waterLevelArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
-    int* swampCaveSealArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
+    SwampShaping::CaveSeal* swampCaveSealsArray =
+        threadMemoryAlloc.request<SwampShaping::CaveSeal>(chunkSizeXZSquare * SwampShaping::maxCaveSeals);
+    int* swampNumCaveSealsArray = threadMemoryAlloc.request<int>(chunkSizeXZSquare);
 
     float* swampWarpXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampWarpZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
@@ -338,7 +341,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float terrainBaseHeight = swampShaping.baseHeight;
             const float terrainSurfaceMultiplier = swampShaping.surfaceMultiplier;
             const int waterLevel = swampShaping.waterLevel;
-            swampCaveSealArray[columnIdx] = swampShaping.caveSeal;
+            std::copy_n(swampShaping.caveSeals,
+                        swampShaping.numCaveSeals,
+                        &swampCaveSealsArray[columnIdx * SwampShaping::maxCaveSeals]);
+            swampNumCaveSealsArray[columnIdx] = swampShaping.numCaveSeals;
 
             waterLevelArray[columnIdx] = waterLevel;
             waterLevelMax = std::max(waterLevelMax, waterLevel);
@@ -562,13 +568,19 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                         float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
                         caveSurfaceVal -= glm::smoothstep(240.0f, 320.0f, static_cast<float>(y)) * 0.8f;
-                        // Seal caves at and below nearby pond levels
+                        // Seal caves in a band around nearby pond waterlines
                         // (knowledge/terrain/swamp_generation.md)
-                        const int swampCaveSeal = swampCaveSealArray[columnIdx];
-                        if (swampCaveSeal > 0)
+                        float swampSealSub = 0.f;
+                        for (int sealIdx = 0; sealIdx < swampNumCaveSealsArray[columnIdx]; ++sealIdx)
                         {
-                            caveSurfaceVal -= smoothstep(static_cast<float>(swampCaveSeal + 10), static_cast<float>(swampCaveSeal + 4), static_cast<float>(y)) * 1.5f;
+                            const SwampShaping::CaveSeal& seal =
+                                swampCaveSealsArray[columnIdx * SwampShaping::maxCaveSeals + sealIdx];
+                            const float sealLevel = static_cast<float>(seal.level);
+                            const float band = smoothstep(sealLevel + 10.f, sealLevel + 4.f, static_cast<float>(y)) *
+                                smoothstep(sealLevel - 44.f, sealLevel - 12.f, static_cast<float>(y));
+                            swampSealSub = glm::max(swampSealSub, band * seal.strength * 1.5f);
                         }
+                        caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
                     }
 
