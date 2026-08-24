@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-08-24_
 
 # Block System
 
@@ -19,7 +19,7 @@ Texture names in the JSONs refer to 16×16 PNGs in `assets/blocks/textures/` (sh
 between blocks, e.g. `dirt` is also grass/snowy-grass bottom); `Blocks::init()` resolves them
 to texture array slice indices, assigned in first-reference order — see
 [greedy_meshing.md](greedy_meshing.md) for the ordering invariant and
-[scene → materials_textures.md](../scene/materials_textures.md) for the `<name>_aux.png`
+[scene → materials_textures.md](../scene/materials_textures.md) for the `<name>.aux.png`
 companions.
 
 A block JSON that fails to open or parse logs an error and leaves that block's `BlockData` at
@@ -40,4 +40,4 @@ The non-obvious culling rules in `shouldGenerateFace`:
 
 ## Emissive
 
-`LAMP`, `LAVA`, and `LAVA_TOP` have `emitsLight = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding an emissive block means setting this flag *and* authoring its texels in the assets: emission color lives in the block's diffuse texture (with zero diffuse implied) and per-texel strength in the red channel of its `<name>_aux.png` companion in `assets/blocks/textures/` — see [scene → materials_textures.md](../scene/materials_textures.md).
+`LAMP`, `LAVA`, and `LAVA_TOP` have `emitsLight = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding an emissive block means setting this flag *and* authoring its texels in the assets: emission color lives in the block's diffuse texture (with zero diffuse implied) and per-texel strength in the red channel of its `<name>.aux.png` companion in `assets/blocks/textures/` — see [scene → materials_textures.md](../scene/materials_textures.md).

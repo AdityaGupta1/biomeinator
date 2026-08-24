@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-08-24_
 
 # Materials and Textures
 
@@ -39,7 +39,7 @@ Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask. Aux data is authored as an optional
-`<name>_aux.png` companion next to each block texture — most textures have none, and missing
+`<name>.aux.png` companion next to each block texture — most textures have none, and missing
 files load as zero-filled slices. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
 "emissive texels are pure emitters" behavior that `isPureEmitter` and NRC rely on. There is

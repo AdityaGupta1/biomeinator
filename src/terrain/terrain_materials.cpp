@@ -48,7 +48,7 @@ static void createMaterials(Scene* scene)
         TerrainOmm::bake(diffuseAlphas, TERRAIN_TILE_SIZE);
     }
 
-    const uint32_t auxTextureId = loadBlockTextureArray(scene, textureNames, "_aux",
+    const uint32_t auxTextureId = loadBlockTextureArray(scene, textureNames, ".aux",
                                                         { .sRGB = false,
                                                           .outSliceHasBiomeTintMask = &sliceBiomeTintMask,
                                                           .alphaOverrides = &diffuseAlphas,
