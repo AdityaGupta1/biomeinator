@@ -70,6 +70,14 @@ cell contributes nothing, not even its natural-height floor.
 ## Cave sealing
 
 Bank columns have high base heights, so the base-relative cave fade alone would leave caves open
-below a neighboring pond's waterline and expose its water sideways. Each column therefore lowers
-the cave carving threshold at and below the max gate-scaled pond level of the swampy cells in its
-scan window.
+at a neighboring pond's waterline and expose its water sideways. Each column therefore lowers the
+cave carving threshold in a *band* around the pond level of every swampy cell in its scan window —
+bounded below as well as above, so deep caves under swamps survive. The lower fade is much longer
+than the upper one: a short ramp makes the carve threshold cross the noise at nearly the same y
+everywhere, capping caves with flat roofs along the band bottom. The far-cell gate fades each
+seal's strength, never its level: scaling the level would slide the sealed band down through
+unrelated deep caves as the gate falls off.
+
+Multiple nearby ponds can have different levels, so a column keeps a small list of (level,
+strength) seals and the carve pass takes the max subtraction across them; collapsing to a single
+max level would pop the band discontinuously where a far cell crosses the gate boundary.

@@ -27,12 +27,23 @@ struct CellInfo
     int pondLevel;
 };
 
+// One nearby pond whose waterline the column must keep caves away from; strength fades with the
+// contributing cell's gate so the seal stays continuous across the scan-window flip.
+struct CaveSeal
+{
+    int level;
+    float strength;
+};
+
+inline constexpr int maxCaveSeals = 4;
+
 struct Shaping
 {
     float baseHeight;
     float surfaceMultiplier;
     int waterLevel;
-    int caveSeal;
+    CaveSeal caveSeals[maxCaveSeals];
+    int numCaveSeals;
 };
 
 // Per-chunk scratch: cell sites precomputed for every cell any of the chunk's columns can scan,

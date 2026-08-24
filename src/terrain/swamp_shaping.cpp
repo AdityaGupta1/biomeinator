@@ -206,7 +206,34 @@ Shaping computeShaping(vec2 warpedPosXZ_WS,
         .baseHeight = naturalTerrain.baseHeight,
         .surfaceMultiplier = naturalTerrain.surfaceMultiplier,
         .waterLevel = seaLevel,
-        .caveSeal = 0,
+        .numCaveSeals = 0,
+    };
+
+    const auto addCaveSeal = [&result](int level, float strength)
+    {
+        for (int sealIdx = 0; sealIdx < result.numCaveSeals; ++sealIdx)
+        {
+            if (result.caveSeals[sealIdx].level == level)
+            {
+                result.caveSeals[sealIdx].strength = max(result.caveSeals[sealIdx].strength, strength);
+                return;
+            }
+        }
+        if (result.numCaveSeals < maxCaveSeals)
+        {
+            result.caveSeals[result.numCaveSeals++] = { .level = level, .strength = strength };
+            return;
+        }
+        // Full: fold into the closest-level entry instead of dropping the contribution outright
+        int closestIdx = 0;
+        for (int sealIdx = 1; sealIdx < maxCaveSeals; ++sealIdx)
+        {
+            if (abs(result.caveSeals[sealIdx].level - level) < abs(result.caveSeals[closestIdx].level - level))
+            {
+                closestIdx = sealIdx;
+            }
+        }
+        result.caveSeals[closestIdx].strength = max(result.caveSeals[closestIdx].strength, strength);
     };
 
     float nearestNaturalMix;
@@ -218,7 +245,7 @@ Shaping computeShaping(vec2 warpedPosXZ_WS,
         result.surfaceMultiplier =
             mixSurfaceMultiplierByAmplitude(swampTerrainSurfaceMultiplier, naturalTerrain.surfaceMultiplier, nearestNaturalMix);
         result.waterLevel = nearestCell.pondLevel;
-        result.caveSeal = nearestCell.pondLevel;
+        addCaveSeal(nearestCell.pondLevel, 1.f);
     }
 
     // Anchor for the dam contributions below, blended across near-tied cells' shape heights so it
@@ -277,11 +304,11 @@ Shaping computeShaping(vec2 warpedPosXZ_WS,
             continue;
         }
 
-        // Seal caves below any pond close enough for its water to reach this column.
+        // Seal caves around the waterline of any pond close enough for its water to reach this
+        // column; the gate fades the seal's strength, never its level.
         if (neighborCell.swampy)
         {
-            result.caveSeal =
-                std::max(result.caveSeal, static_cast<int>(static_cast<float>(neighborCell.pondLevel) * cellGate));
+            addCaveSeal(neighborCell.pondLevel, cellGate);
         }
 
         // The flatten ramps on edge distance, not dam rise
