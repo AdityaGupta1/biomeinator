@@ -63,8 +63,7 @@ set(GENERATED_SHADER_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated_shaders")
 file(MAKE_DIRECTORY ${GENERATED_SHADER_HEADERS_DIR})
 
 # Generate the Block enum from assets/blocks/*.json filenames: air first (chunk block
-# storage assumes AIR == 0), then alphabetical. Only filenames matter here; the file
-# contents are parsed at runtime by Blocks::init().
+# storage assumes AIR == 0), then alphabetical.
 file(GLOB BLOCK_JSON_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/blocks/*.json")
 set(BLOCK_NAMES "")
 foreach(BLOCK_JSON IN LISTS BLOCK_JSON_FILES)

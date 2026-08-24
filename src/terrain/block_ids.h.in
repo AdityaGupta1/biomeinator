@@ -10,8 +10,7 @@
 
 using BlockId = uint16_t;
 
-// Values are assigned at configure time (air first, then alphabetical) and are not stable
-// across builds; world exports map them to string ids via a block palette in world.json.
+// Values are not stable across builds; world exports use a string-id palette.
 enum class Block : BlockId
 {
 @BLOCK_ENUM_ENTRIES@

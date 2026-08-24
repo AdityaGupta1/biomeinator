@@ -31,16 +31,14 @@ enum class BlockShape : uint8_t
     COUNT
 };
 
-// Slice value for blocks with no textures (air, water); their materials have no textures so
-// the slice is never sampled, and out-of-range lookups (biome tint, OMM cutout) return false
+// Slice value for untextured blocks (air, water); never sampled
 inline constexpr uint32_t TEX_SLICE_INVALID = ~0u;
 
 struct BlockTexSlices
 {
 private:
+    // Texture array slice per face; order = side, top, bottom
     uint32_t slices[3]{ TEX_SLICE_INVALID, TEX_SLICE_INVALID, TEX_SLICE_INVALID };
-    // texture array slice per face
-    // order = side, top, bottom
 
 public:
     BlockTexSlices() = default;

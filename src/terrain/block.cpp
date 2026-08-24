@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <json.hpp>
+#include <stdexcept>
 #include <unordered_map>
 
 BlockTexSlices::BlockTexSlices(uint32_t all)
@@ -47,8 +48,7 @@ static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "liquid_top", BlockShape::LIQUID_TOP },
 };
 
-// Slices are assigned in first-reference order, which is deterministic because blocks are
-// parsed in enum order and faces in top/side/bottom order
+// Slices are assigned in first-reference order
 static uint32_t resolveTextureSlice(const std::string& textureName)
 {
     const auto [it, inserted] = sliceByTextureName.try_emplace(textureName,
@@ -56,6 +56,20 @@ static uint32_t resolveTextureSlice(const std::string& textureName)
     if (inserted)
     {
         textureNames.push_back(textureName);
+    }
+    return it->second;
+}
+
+template <typename T>
+static T parseNamedValue(const std::unordered_map<std::string, T>& valuesByName,
+                         const nlohmann::json& nameJson,
+                         const char* fieldName)
+{
+    const std::string name = nameJson.get<std::string>();
+    const auto it = valuesByName.find(name);
+    if (it == valuesByName.end())
+    {
+        throw std::runtime_error("unknown " + std::string(fieldName) + " '" + name + "'");
     }
     return it->second;
 }
@@ -92,12 +106,12 @@ static bool parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
 
         if (blockJson.contains("type"))
         {
-            outData.type = blockTypesByName.at(blockJson["type"].get<std::string>());
+            outData.type = parseNamedValue(blockTypesByName, blockJson["type"], "type");
         }
 
         if (blockJson.contains("shape"))
         {
-            outData.shape = blockShapesByName.at(blockJson["shape"].get<std::string>());
+            outData.shape = parseNamedValue(blockShapesByName, blockJson["shape"], "shape");
         }
 
         outData.emitsLight = blockJson.value("emitsLight", false);
@@ -116,15 +130,11 @@ void init()
 {
     namespace fs = std::filesystem;
 
+    const fs::path blocksDir = fs::path(TARGET_FILE_DIR) / "assets/blocks";
     blocksById.reserve(blockIdNames.size());
     for (size_t i = 0; i < blockIdNames.size(); ++i)
     {
         blocksById.emplace(blockIdNames[i], static_cast<Block>(i));
-    }
-
-    const fs::path blocksDir = fs::path(TARGET_FILE_DIR) / "assets/blocks";
-    for (size_t i = 0; i < blockIdNames.size(); ++i)
-    {
         const fs::path jsonPath = blocksDir / (std::string(blockIdNames[i]) + ".json");
         parseBlockJson(jsonPath, blockDatas[i]);
     }

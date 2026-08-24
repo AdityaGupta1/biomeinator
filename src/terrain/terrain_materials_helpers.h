@@ -358,7 +358,7 @@ static uint32_t loadBlockTextureArray(Scene* scene,
         mipData.resize(numMips);
         mipData[0].resize(texelCount * 4, 0);
 
-        if (fs::exists(fullPath))
+        if (fs::exists(fullPath) || !options.missingFilesAreZero)
         {
             int width = 0;
             int height = 0;
@@ -373,11 +373,6 @@ static uint32_t loadBlockTextureArray(Scene* scene,
             ASSERT(width == TERRAIN_TILE_SIZE && height == TERRAIN_TILE_SIZE);
             std::memcpy(mipData[0].data(), data, mipData[0].size());
             stbi_image_free(data);
-        }
-        else if (!options.missingFilesAreZero)
-        {
-            Logger::logError("Failed to load texture from: %s", fullPath.generic_string().c_str());
-            return TEXTURE_ID_INVALID;
         }
 
         if (options.alphaOverrides != nullptr)
