@@ -1,4 +1,4 @@
-_Last edited: 2026-08-03_
+_Last edited: 2026-08-30_
 
 # Path Tracing Shader
 
@@ -52,9 +52,9 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
    The Fresnel decision (reflect vs transmit/diffuse) is stochastic — a random number is compared against the Walter Fresnel reflectance.
 
-7. **Direct light sampling** (MIS/RIS only, non-delta surfaces) — two independent strategies, both MIS-weighted against the BSDF sample using the balance heuristic:
+7. **Direct light sampling** (MIS/RTSL only, non-delta surfaces) — two independent strategies, both MIS-weighted against the BSDF sample using the balance heuristic:
 
-   - **Area lights**: in MIS mode, one light is picked uniformly and a shadow ray is traced. In RIS mode, multiple candidate lights are resampled to pick one with importance proportional to a target function, then a shadow ray is traced. The MIS weight uses the solid-angle pdf of the chosen light.
+   - **Area lights**: in MIS mode, one light is picked uniformly and a shadow ray is traced. In RTSL mode, the light tree picks a light instead. The MIS weight uses the solid-angle pdf of the chosen light.
 
    - **Dome light** (voxel mode only): a direction is sampled uniformly within the sun's spherical cap and a shadow ray is traced. If it misses all geometry, the dome light radiance (sun or sky gradient) is added. This is separate from area light sampling because the two can't produce each other's samples (dome light can't hit area lights and vice versa), so their MIS weights are independent.
 
@@ -121,7 +121,7 @@ flag-still-set means occluded. Consequences:
 - Area-light shadow rays no longer verify they hit the sampled light triangle; instead
   `traceToLight` stops `TMax` just short of the light and treats any committed hit as
   occlusion. Le is evaluated analytically from the sampled point's barycentrics
-  (`lightBary2`, threaded from `sampleAreaLightPoint` through all three sampling modes) —
+  (`lightBary2`, threaded from `sampleAreaLightPoint` through both sampling modes) —
   needed because with no closest hit there is no interpolated UV, and emissive textures
   (packed-aux lamps/lava) still require one.
 - **TMax gotcha:** the shadow-ray origin is offset along the surface normal, which shifts

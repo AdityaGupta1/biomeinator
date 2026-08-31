@@ -13,7 +13,6 @@
 #include "light/dome_light.hlsli"
 #include "light/fog.hlsli"
 #include "light/light_sampling.hlsli"
-#include "light/ris.hlsli"
 #include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
@@ -111,9 +110,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #endif
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    const bool useRis = (samplingMode == SamplingMode::RIS);
     const bool useRtsl = (samplingMode == SamplingMode::RTSL);
-    const bool doMis = (samplingMode == SamplingMode::MIS || useRis || useRtsl);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
 
     RayDesc ray;
     ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
@@ -194,7 +192,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
-        // In RIS mode, only include emission if this is the first bounce (pathDepth == 0) or the previous event was a delta event (specular)
         float3 emissiveContrib = 0.f;
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
@@ -357,21 +354,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
                         surfMaterial.hasDiffuseTransmission(), payload.rng);
                 }
-                else if (useRis)
-                {
-                    const bool isFirstNonDeltaSurface = !hasEncounteredNonDeltaSurface;
-                    bool isBsdfSampleUnused;
-                    const RisSample risSample = generateDirectLightingRisSample(surfPos_WS,
-                                                                                surfNor_WS,
-                                                                                surfMaterial,
-                                                                                payload.hitInfo.uv,
-                                                                                wo_WS,
-                                                                                isFirstNonDeltaSurface,
-                                                                                payload.rng,
-                                                                                isBsdfSampleUnused);
-                    // this checks if risSample.lightIdx == LIGHT_IDX_INVALID
-                    lightSample = evaluateRisSample(risSample, surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
-                }
                 else
                 {
                     lightSample =
@@ -389,29 +371,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
                     const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    if (useRis)
-                    {
-                        const float W = lightSample.pdfOrW_Y;
+                    const float lightPdf = lightSample.pdf;
+                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
 
-                        const AreaLight light = areaLights[lightSample.lightIdx];
-
-                        float3 lightNor_WS;
-                        float lightArea;
-                        getLightNormalAndArea(light, lightNor_WS, lightArea);
-
-                        // TODO: use lightPdfUniform function?
-                        const float r2 = distance2(surfPos_WS, lightSample.pointOnLight_WS);
-                        const float lightPdf = r2 / (absCosTheta(-lightSample.wi_WS, lightNor_WS) * lightArea * sceneParams.numAreaLights);
-
-                        contribution *= W * balanceHeuristic(lightPdf, lightSampleBsdfPdf);
-                    }
-                    else
-                    {
-                        const float lightPdf = lightSample.pdfOrW_Y;
-                        const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
-
-                        contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
-                    }
+                    contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
 
                     pathColor += contribution;
                 }

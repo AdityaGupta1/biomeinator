@@ -54,10 +54,9 @@ AreaLight sampleLightUniform(const float3 surfPos_WS,
                              inout RandomNumberGenerator rng,
                              out float3 pointOnLight_WS,
                              out float2 lightBary2,
-                             out float lightPdf,
-                             out uint lightIdx)
+                             out float lightPdf)
 {
-    lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
+    const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const AreaLight light = areaLights[lightIdx];
 
@@ -71,12 +70,10 @@ AreaLight sampleLightUniform(const float3 surfPos_WS,
 
 struct DirectLightingSample
 {
-    uint lightIdx;
     bool didHitLight;
-    float3 pointOnLight_WS;
     float3 wi_WS;
     float3 Le;
-    float pdfOrW_Y;
+    float pdf;
 };
 
 // Occlusion-style shadow ray: TMax stops just short of the light's plane, so any committed
@@ -169,10 +166,8 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
     float3 pointOnLight_WS;
     float2 lightBary2;
     float lightPdf;
-    uint lightIdx;
-    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightBary2, lightPdf, lightIdx);
+    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightBary2, lightPdf);
 
-    result.pointOnLight_WS = pointOnLight_WS;
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
     float3 Le;
@@ -183,10 +178,9 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
         return result;
     }
 
-    result.lightIdx = lightIdx;
     result.didHitLight = true;
     result.Le = Le;
-    result.pdfOrW_Y = lightPdf;
+    result.pdf = lightPdf;
 
     return result;
 }

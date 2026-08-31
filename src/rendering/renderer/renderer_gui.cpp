@@ -75,7 +75,6 @@ void updateFps(double deltaTime)
 static const std::vector<const char*> samplingModeComboOptions = {
     "naive",
     "MIS",
-    "RIS",
     "RTSL",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {

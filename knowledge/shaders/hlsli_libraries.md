@@ -1,4 +1,4 @@
-_Last edited: 2026-07-25_
+_Last edited: 2026-08-30_
 
 # HLSL Utility Libraries
 
@@ -19,7 +19,6 @@ _Last edited: 2026-07-25_
 - **`materials/water.hlsli`** — water absorption and underwater logic. Included from
   `path_tracing_common.hlsli` so its helpers are available to `AnyHit` and every consumer
   of the common header (e.g. `dome_light.hlsli`, `light_sampling.hlsli`).
-- **`light/ris.hlsli`** — Resampled Importance Sampling for direct area light sampling.
 - **`light/dome_light.hlsli`** — dome light (sun + sky gradient), voxel mode only. The sun
   direction is a closed-form function of `renderParams.animTime` rather than integrated state, so
   scrubbing time in either direction always reproduces the same sky.

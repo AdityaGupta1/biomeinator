@@ -8,7 +8,6 @@
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
-#include "light/ris.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"

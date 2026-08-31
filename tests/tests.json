@@ -128,20 +128,6 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=12",
-                "--samplingMode=3"
-            ],
-            "golden": "gltf/cornell_box/golden.png",
-            "threshold": 0.015
-        },
-        {
-            "name": "cornell_box_ris",
-            "scene": "gltf/cornell_box/cornell_box.gltf",
-            "args": [
-                "--width=540",
-                "--height=540",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=12",
                 "--samplingMode=2"
             ],
             "golden": "gltf/cornell_box/golden.png",

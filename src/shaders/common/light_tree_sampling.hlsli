@@ -362,12 +362,12 @@ float lightPdfRtsl(const HitInfo hitInfo,
 }
 
 // =============================================
-// Forward NEE entry point — mirrors sampleDirectLightingUniform / evaluateRisSample
+// Forward NEE entry point — mirrors sampleDirectLightingUniform
 // =============================================
 
 // One-light-sample-per-pixel RTSL NEE. Returns the picked light's contribution
-// (or didHitLight=false on null sample). pdfOrW_Y is the true selection pdf
-// times the area-to-solid-angle pdf — flows into the non-RIS MIS branch.
+// (or didHitLight=false on null sample). pdf is the true selection pdf
+// times the area-to-solid-angle pdf — flows into the MIS balance heuristic.
 DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const float3 surfNor_WS,
                                               const RayCone rayCone,
@@ -403,11 +403,9 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
         return result;
     }
 
-    result.lightIdx = pickedLightIdx;
     result.didHitLight = true;
-    result.pointOnLight_WS = pointOnLight_WS;
     result.wi_WS = wi_WS;
     result.Le = Le;
-    result.pdfOrW_Y = pdfSelect * lightSamplePdf;
+    result.pdf = pdfSelect * lightSamplePdf;
     return result;
 }
