@@ -154,8 +154,6 @@ filtering so interpolation is in linear color space.
   fully independent.
 - **Orphan water backface handling** (`path_tracing.rgs.hlsl:57`): keys off payload
   flags and entry T only; unaffected.
-- **NRC**: absorption folds into `pathWeight` exactly as today; the cache trains on
-  actual path radiance and learns the per-biome color automatically.
 - **DLSS guide buffers**: the G-buffer pass applies no absorption, so first-hit albedo
   guides are unchanged.
 

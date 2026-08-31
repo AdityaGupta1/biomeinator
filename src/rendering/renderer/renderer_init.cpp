@@ -264,10 +264,6 @@ void initRtTargets()
         renderState.allRtTargets.push_back(rtTarget);
     }
 
-    // nrcDebugTarget is added after the copy so it's in autoTransitionRtTargets but NOT in
-    // allRtTargets — it has custom dimensions and is handled separately in resize().
-    renderState.autoTransitionRtTargets.push_back(&renderState.nrcDebugTarget);
-
     resize();
 }
 

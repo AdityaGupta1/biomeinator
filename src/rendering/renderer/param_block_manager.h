@@ -5,7 +5,6 @@
 
 #include "rendering/dxr_includes.h"
 #include "rendering/common/common_params.h"
-#include "NrcStructures.h"
 
 class ParamBlockManager
 {
@@ -21,13 +20,11 @@ public:
     RenderParams* renderParams{ nullptr };
     RtslParams* rtslParams{ nullptr };
     DebugParams* debugParams{ nullptr };
-    NrcConstants* nrcConstants{ nullptr };
 
     void init();
     void reset();
 
     D3D12_GPU_VIRTUAL_ADDRESS getParamBufferGpuAddress() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getNrcConstantsGpuAddress() const;
 
     void setName(const std::wstring& name);
 };

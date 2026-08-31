@@ -103,21 +103,6 @@
 #define SKY_REGISTER_LUT_SAMPLER 0
 
 // =============================================
-#define NRC_REGISTER_SPACE 7
-// =============================================
-
-// b#
-#define NRC_REGISTER_NRC_CONSTANTS 0
-
-// u#
-#define NRC_REGISTER_QUERY_PATH_INFO 0
-#define NRC_REGISTER_TRAINING_PATH_INFO 1
-#define NRC_REGISTER_TRAINING_PATH_VERTICES 2
-#define NRC_REGISTER_QUERY_RADIANCE_PARAMS 3
-#define NRC_REGISTER_COUNTERS_DATA 4
-#define NRC_REGISTER_QUERY_RADIANCE 5
-
-// =============================================
 // fake UAV slot for SER
 // =============================================
 

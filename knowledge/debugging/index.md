@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-08-30_
 
 # Debugging Knowledgebase
 
@@ -9,7 +9,8 @@ the offending command was recorded.
 Entries here may carry a `.patch` alongside them. Instrumentation too invasive to keep in the
 tree, but too laborious to work out from scratch again, is recorded as a reference diff.
 Those are snapshots to read and reimplement from, not patches to apply — they go stale as the
-surrounding code moves.
+surrounding code moves, and may reference code that has since been removed entirely. Do not
+"fix up" a patch to track the tree; adapt its ideas to the current code when reapplying.
 
 | Entry | Description |
 |---|---|

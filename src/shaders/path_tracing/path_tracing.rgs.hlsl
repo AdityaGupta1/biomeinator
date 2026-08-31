@@ -18,39 +18,13 @@
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-#if NRC_UPDATE || NRC_QUERY
-    #define NRC_USE_CUSTOM_BUFFER_ACCESSORS 1
-    #define NRC_BUFFER_QUERY_PATH_INFO nrcQueryPathInfo
-    #define NRC_BUFFER_TRAINING_PATH_INFO nrcTrainingPathInfo
-    #define NRC_BUFFER_TRAINING_PATH_VERTICES nrcTrainingPathVertices
-    #define NRC_BUFFER_QUERY_RADIANCE_PARAMS nrcQueryRadianceParams
-    #define NRC_BUFFER_QUERY_COUNTERS_DATA nrcCountersData
-
-    #include "NrcStructures.h"
-
-    cbuffer NrcConstantBuffer : REGISTER_B(NRC, NRC_CONSTANTS)
-    {
-        NrcConstants nrcConstants;
-    };
-
-    RWStructuredBuffer<NrcPackedQueryPathInfo> nrcQueryPathInfo : REGISTER_U(NRC, QUERY_PATH_INFO);
-    RWStructuredBuffer<NrcPackedTrainingPathInfo> nrcTrainingPathInfo : REGISTER_U(NRC, TRAINING_PATH_INFO);
-    RWStructuredBuffer<NrcPackedPathVertex> nrcTrainingPathVertices : REGISTER_U(NRC, TRAINING_PATH_VERTICES);
-    RWStructuredBuffer<NrcRadianceParams> nrcQueryRadianceParams : REGISTER_U(NRC, QUERY_RADIANCE_PARAMS);
-    RWStructuredBuffer<uint> nrcCountersData : REGISTER_U(NRC, COUNTERS_DATA);
-
-    #include "Nrc.hlsli"
-#endif
-
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
 // Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
 static const float foliageDiffuseTransmission = 0.4f;
 
-#if !NRC_UPDATE
-    RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
-    RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
-#endif
+RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
+RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
 // Detects hitting a water backface without having crossed a water front face or started
 // underwater — happens when partially loaded chunks leave water volumes open. Paths are
@@ -100,15 +74,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
 
-#if NRC_UPDATE || NRC_QUERY
-    // NRC frameDimensions match full dispatch (e.g. doubled width when path splitting).
-    // Do not use getPixelIdx() here - it collapses split lanes to the same coordinate.
-    const uint2 nrcPixelIdx = DispatchRaysIndex().xy;
-    NrcBuffers nrcBufs = (NrcBuffers)0;
-    NrcContext nrcCtx = NrcCreateContext(nrcConstants, nrcBufs, nrcPixelIdx);
-    NrcPathState nrcPathState = NrcCreatePathState(nrcConstants, nextFloat(payload.rng));
-#endif
-
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRtsl = (samplingMode == SamplingMode::RTSL);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
@@ -127,20 +92,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     if (isOrphanWaterBackfaceHit(payload))
     {
-#if NRC_UPDATE || NRC_QUERY
-        NrcUpdateOnMiss(nrcPathState);
-        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
-#endif
         return;
     }
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
         const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
-#if NRC_UPDATE || NRC_QUERY
-        NrcUpdateOnMiss(nrcPathState);
-        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, domeLightColor);
-#endif
         pathColor += payload.pathWeight * domeLightColor;
         if (sceneParams.voxelMode == 1)
         {
@@ -153,10 +110,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     if (payload.materialIdx == MATERIAL_IDX_INVALID)
     {
-#if NRC_UPDATE || NRC_QUERY
-        NrcUpdateOnMiss(nrcPathState);
-        NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
-#endif
         return;
     }
 
@@ -200,7 +153,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         const float3 wo_WS = -ray.Direction;
 
-#if !NRC_UPDATE
         if (pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
@@ -210,39 +162,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 break;
             }
         }
-#endif
 
         // Resolve the sampled base color once per bounce so downstream albedo and BSDF reads take
         // the constant-color path instead of re-sampling the base and aux textures every call.
         surfMaterial.baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
         surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-
-#if NRC_UPDATE || NRC_QUERY
-        NrcSurfaceAttributes nrcSurfAttr;
-        nrcSurfAttr.encodedPosition = NrcEncodePosition(payload.hitInfo.hitPos_WS, nrcConstants);
-        nrcSurfAttr.roughness = surfMaterial.isDelta() ? 0.0f : 1.0f;
-        nrcSurfAttr.specularF0 = surfMaterial.hasGlossyReflection()
-            ? surfMaterial.glossyReflectionTint : float3(0, 0, 0);
-        nrcSurfAttr.diffuseReflectance = surfMaterial.hasDiffuse()
-            ? getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb
-            : float3(0, 0, 0);
-        nrcSurfAttr.shadingNormal = payload.hitInfo.hitNor_WS;
-        nrcSurfAttr.viewVector = wo_WS;
-        nrcSurfAttr.isDeltaLobe = surfMaterial.isDelta();
-
-        const float nrcHitDist = distance(
-            (pathDepth == 0) ? cameraParams.pos_WS : ray.Origin,
-            payload.hitInfo.hitPos_WS);
-
-        const NrcProgressState nrcProgress = NrcUpdateOnHit(
-            nrcCtx, nrcPathState, nrcSurfAttr, nrcHitDist, pathDepth,
-            payload.pathWeight, pathColor);
-
-        if (nrcProgress == NrcProgressState::TerminateImmediately)
-        {
-            break;
-        }
-#endif
 
         // In voxel mode all terrain shares one material with hasDiffuse=true; emissive blocks
         // like LAMP/LAVA have zero diffuse in the texture, so skip scatter work in that case
@@ -309,35 +233,15 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // russian roulette
             if (pathDepth >= 2)
             {
-                bool rrShouldTerminate = false;
-#if NRC_UPDATE || NRC_QUERY
-                if (NrcCanUseRussianRoulette(nrcPathState))
-#endif
-                {
-                    const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
-                    if (nextFloat(payload.rng) >= survivalProbability)
-                    {
-                        rrShouldTerminate = true;
-                    }
-                    else
-                    {
-                        payload.pathWeight /= survivalProbability;
-                    }
-                }
-                if (rrShouldTerminate)
+                const float survivalProbability = max(saturate(luminance(payload.pathWeight)), 0.1f);
+                if (nextFloat(payload.rng) >= survivalProbability)
                 {
                     break;
                 }
+                payload.pathWeight /= survivalProbability;
             }
 
             const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfTexCtx, payload.rng);
-
-#if NRC_UPDATE || NRC_QUERY
-            NrcSetBrdfPdf(nrcPathState, surfBsdfSample.pdf);
-            // NRC updates this flag before BSDF sampling, but mixed materials only reveal
-            // whether the outgoing lobe is delta after sampling.
-            NrcSetFlag(nrcPathState.packedData, nrcPathFlagPreviousHitWasDeltaLobe, surfBsdfSample.wasSpecular);
-#endif
 
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
@@ -411,13 +315,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 hasEncounteredNonDeltaSurface = true;
             }
-
-#if NRC_UPDATE || NRC_QUERY
-            if (nrcProgress == NrcProgressState::TerminateAfterDirectLighting)
-            {
-                break;
-            }
-#endif
 
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
@@ -548,17 +445,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);
             }
 
-#if NRC_UPDATE || NRC_QUERY
-            NrcUpdateOnMiss(nrcPathState);
-#endif
             pathColor += domeLightContrib;
             break;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
         {
-#if NRC_UPDATE || NRC_QUERY
-            NrcUpdateOnMiss(nrcPathState);
-#endif
             break;
         }
 
@@ -592,25 +483,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
         }
     }
-
-#if NRC_UPDATE || NRC_QUERY
-    NrcWriteFinalPathInfo(nrcCtx, nrcPathState, payload.pathWeight, pathColor);
-#endif
 }
 
 [shader("raygeneration")]
 void RayGeneration()
 {
-#if NRC_UPDATE
-    const uint2 trainingPixelIdx = DispatchRaysIndex().xy;
-    const uint2 pixelIdx = min(
-        uint2(trainingPixelIdx * uint2(renderParams.renderSize) / nrcConstants.trainingDimensions),
-        uint2(renderParams.renderSize) - 1);
-    const uint pathSplitIdx = 0;
-#else
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
-#endif
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
 
@@ -620,11 +499,7 @@ void RayGeneration()
     payload.materialIdx = gbufferData.materialIdx;
     payload.flags = gbufferData.payloadFlags;
     payload.pathWeight = float3(1.f, 1.f, 1.f);
-#if NRC_UPDATE
-    payload.rng = initRng(constantParams.rngSeed, 391827465, linearPixelIdx, renderParams.frameNumber);
-#else
     payload.rng = initRng(constantParams.rngSeed, 987654103, linearPixelIdx * (pathSplitIdx + 1), renderParams.frameNumber);
-#endif
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
     payload.rayCone.angle = getRayConePixelAngle();
@@ -636,7 +511,6 @@ void RayGeneration()
     float3 outPtDiffuseAlbedo = 0.f;
     pathTraceRay(payload, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo);
 
-#if !NRC_UPDATE
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)
     {
@@ -648,5 +522,4 @@ void RayGeneration()
     }
 
     ptDiffuseAlbedoRawBufferOut[writePixelIdx] = float4(outPtDiffuseAlbedo, 0.f);
-#endif
 }

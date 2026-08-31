@@ -1,4 +1,4 @@
-_Last edited: 2026-04-27_
+_Last edited: 2026-08-30_
 
 # DLSS
 
@@ -10,7 +10,7 @@ resolution to viewport resolution while denoising the path-traced output.
 Streamline is integrated using **manual hooking** (`PreferenceFlags::eUseManualHooking`).
 This avoids routing every D3D12/DXGI call through SL proxy objects — only the calls SL
 actually intercepts go through proxies. This reduces CPU overhead and prevents third-party
-libraries (NVAPI, NRC, ImGui) from receiving unexpected proxy interfaces.
+libraries (NVAPI, ImGui) from receiving unexpected proxy interfaces.
 
 `RendererState` stores both native and proxy variants of `device`, `swapChain`, and
 `factory`. The native variant is the primary one used by most code. The proxy variants
@@ -21,7 +21,7 @@ libraries (NVAPI, NRC, ImGui) from receiving unexpected proxy interfaces.
 - **Device proxy**: `CreateCommandQueue`
 - **SwapChain proxy**: `Present`, `GetBuffer`, `ResizeBuffers`, `GetCurrentBackBufferIndex`
 
-Everything else — descriptor heaps, root signatures, PSOs, render target views, NVAPI, NRC,
+Everything else — descriptor heaps, root signatures, PSOs, render target views, NVAPI,
 ImGui — uses the native interfaces. Adding a new D3D12 call site almost always means using
 the native `renderState.device`; only add a proxy call if `sl_hooks.h` lists that specific
 API.

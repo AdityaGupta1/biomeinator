@@ -1,4 +1,4 @@
-_Last edited: 2026-08-21_
+_Last edited: 2026-08-30_
 
 # Terrain Opacity Micromaps
 
@@ -26,7 +26,7 @@ texel". Re-testing alpha at the ray-cone mip in shading would cull a second time
 (they consolidate partial footprints to solid and zero out sparse ones — GRASS collapses to
 fully empty by mip 4), so distant cutout hits sampled alpha 0, path splitting routed them to
 passthrough, and distant foliage largely vanished for primary rays. Paths that never read
-alpha (secondary bounces, path splitting disabled, NRC update) instead shaded those texels
+alpha (secondary bounces, path splitting disabled) instead shaded those texels
 opaque — occasionally black, where the premultiplied cascade had zero source alpha.
 
 So when `Renderer::getUseOmms()` is set, `LoadTextureOptions::useOpaqueCutoutMips` makes

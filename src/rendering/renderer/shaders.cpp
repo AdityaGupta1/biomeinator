@@ -18,9 +18,6 @@
 #include "light_tree/light_tree_leaf_populate.cs.fxh"
 #include "light_tree/light_tree_morton_emit.cs.fxh"
 #include "light_tree/light_tree_scene_bbox_reset.cs.fxh"
-#include "nrc/nrc_query.rgs.fxh"
-#include "nrc/nrc_resolve.cs.fxh"
-#include "nrc/nrc_update.rgs.fxh"
 #include "path_tracing/collect.cs.fxh"
 #include "path_tracing/gbuffer.rgs.fxh"
 #include "path_tracing/path_tracing.rgs.fxh"
@@ -49,9 +46,6 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(light_tree_leaf_populate_cs),
     REGISTER_SHADER(light_tree_morton_emit_cs),
     REGISTER_SHADER(light_tree_scene_bbox_reset_cs),
-    REGISTER_SHADER(nrc_query_rgs),
-    REGISTER_SHADER(nrc_resolve_cs),
-    REGISTER_SHADER(nrc_update_rgs),
     REGISTER_SHADER(path_tracing_rgs),
     REGISTER_SHADER(multi_scattering_lut_cs),
     REGISTER_SHADER(postprocess_ps),

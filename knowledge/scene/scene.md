@@ -1,4 +1,4 @@
-_Last edited: 2026-07-24_
+_Last edited: 2026-08-30_
 
 # Scene
 
@@ -64,13 +64,6 @@ Indirection array mapping dense sampling indices `[0, numAreaLights)` to sparse 
 buffer indices. Needed because area lights live in a managed buffer where freed/reordered
 instances leave gaps, but uniform sampling needs a contiguous range. Rebuilt every TLAS
 rebuild.
-
-## Bounds
-
-Tracks optional world-space bounds for glTF geometry, used by NRC for
-`sceneBoundsMin/Max`. Voxel mode uses terrain bounds instead. Bounds intentionally match
-the glTF loader's current flat (no parent/child hierarchy) transform behavior — if hierarchy
-support is added, bounds expansion should follow.
 
 ## Reset
 

@@ -121,8 +121,6 @@ bounces with no cleanup.
   split 0; split 1 replaces the material wholesale with a passthrough (no diffuse →
   `hasThinTranslucency()` false). The Fresnel split can't trigger for leaves (no glossy
   reflection). No changes.
-- **NRC**: `nrcSurfAttr` needs no change — roughness/delta classification is unaffected,
-  and the cache is trained on actual path radiance, so it learns the transmitted light.
 - **`ptDiffuseAlbedo`**: computed from `pathWeight` after the BSDF weight is applied
   (`path_tracing.rgs.hlsl:463`), so it picks up the τ split automatically.
 - **G-buffer pass**: outputs geometry and first-hit albedo only; first-order guide

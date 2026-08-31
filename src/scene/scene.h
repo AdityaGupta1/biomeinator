@@ -157,10 +157,6 @@ private:
     glm::ivec3 globalInstanceOffset{};
     glm::ivec3 prevGlobalInstanceOffset{};
 
-    bool hasSceneBounds{ false };
-    glm::vec3 sceneBoundsMin_WS{};
-    glm::vec3 sceneBoundsMax_WS{};
-
     uint32_t nextMaterialIdx{ 0 };
     MappedArray<::Material> mappedMaterialsArray;
 
@@ -224,11 +220,6 @@ public:
                              uint32_t width,
                              uint32_t height,
                              DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
-
-    void expandBounds(const glm::vec3& pos_WS);
-    bool hasBounds() const;
-    const glm::vec3& getBoundsMin_WS() const;
-    const glm::vec3& getBoundsMax_WS() const;
 
     const glm::ivec3& getGlobalInstanceOffset() const;
     const glm::ivec3& getPrevGlobalInstanceOffset() const;

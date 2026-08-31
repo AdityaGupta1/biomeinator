@@ -1,4 +1,4 @@
-_Last edited: 2026-08-04_
+_Last edited: 2026-08-30_
 
 # Common CPU/GPU Structs
 
@@ -42,7 +42,7 @@ Structs that are uploaded to the GPU each frame (or once at init) via `ParamBloc
 
 **`SceneParams`** — scene-level flags: `voxelMode`, `numAreaLights`, `cameraUnderwater`, voxel world bounds.
 
-**`RenderParams`**, **`RadianceCacheParams`**, **`DebugParams`** — mirrors of the corresponding settings groups. Field names match the setting names closely enough to cross-reference directly.
+**`RenderParams`**, **`DebugParams`** — mirrors of the corresponding settings groups. Field names match the setting names closely enough to cross-reference directly.
 
 **`HeapIndices`** — bindless descriptor heap indices for all render targets, populated each frame as targets are allocated.
 

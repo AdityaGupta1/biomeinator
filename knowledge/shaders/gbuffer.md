@@ -1,4 +1,4 @@
-_Last edited: 2026-07-18_
+_Last edited: 2026-08-30_
 
 # G-Buffer Shader
 
@@ -10,9 +10,7 @@ rays and outputs the G-buffer plus DLSS guide buffers. See
 
 Primary rays are separated from the main path tracer so that:
 1. DLSS guide buffers can be written at render resolution from just the first hit.
-2. NRC update can dispatch at a smaller training resolution while still reading the
-   full-resolution G-buffer for its starting hit.
-3. The path tracer avoids re-tracing primary rays — it reads `GbufferData` directly.
+2. The path tracer avoids re-tracing primary rays — it reads `GbufferData` directly.
 
 ## Non-Obvious Details
 

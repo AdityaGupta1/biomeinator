@@ -2,7 +2,7 @@ _Last edited: 2026-08-30_
 
 # Path Tracing Shader
 
-`src/shaders/path_tracing/path_tracing.rgs.hlsl` — the main rendering shader. Compiled in three variants: plain (no cache), NRC update (`NRC_UPDATE`), and NRC query (`NRC_QUERY`). `RayGeneration()` chooses the variant-specific pixel coordinate, then `pathTraceRay()` drives the shared path loop with `#if NRC_UPDATE || NRC_QUERY` blocks controlling NRC API calls. See [radiance_cache.md](radiance_cache.md) for details on the NRC shader integration.
+`src/shaders/path_tracing/path_tracing.rgs.hlsl` — the main rendering shader. `RayGeneration()` computes the pixel coordinate, then `pathTraceRay()` drives the path loop.
 
 This shader does NOT trace primary rays. It reads the G-buffer to get the primary hit, then traces secondary rays from there. See [render_passes.md](../rendering/render_passes.md) for the full pass sequence.
 
@@ -34,7 +34,7 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 1. **Emission** — if the surface emits light, add its contribution weighted by `pathWeight`. On the first bounce, only `pathSplitIdx == 0` handles emission to avoid double-counting when path splitting.
 
-2. **Path splitting** (first bounce only, non-NRC_UPDATE) — `trySplitMaterial()` deterministically splits the material into two lobes across the two path split indices. Two kinds of splits:
+2. **Path splitting** (first bounce only) — `trySplitMaterial()` deterministically splits the material into two lobes across the two path split indices. Two kinds of splits:
    - **Alpha transparency**: split 0 = opaque (weighted by alpha), split 1 = transparent passthrough (weighted by 1-alpha).
    - **Fresnel**: split 0 = diffuse/transmission + emission (weighted by 1-F), split 1 = specular reflection (weighted by F).
    If the material can't be split, split index 1 early-returns.
@@ -60,28 +60,11 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 8. **Trace next ray** — `TraceRay` from the BSDF-sampled direction. Update material, ray cone width, segment absorption.
 
-9. **NRC early termination** (NRC variants only) — `NrcUpdateOnHit()` is called at each hit with surface attributes. The returned `NrcProgressState` controls whether the path continues, terminates after direct lighting, or terminates immediately. NRC decides when it can predict the remaining indirect radiance.
-
-10. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, apply MIS weighting against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling).
+9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, apply MIS weighting against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling).
 
 ### ptDiffuseAlbedo Output
 
 Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser input for first-bounce diffuse albedo. When the first bounce is specular with path splitting enabled, it looks through to the second hit's base color or emission, modulated by the first bounce's specular tint. It also implicitly captures volume absorption and other effects accumulated in `pathWeight` up to that point.
-
----
-
-## NRC Shader Variants
-
-When compiled with `NRC_UPDATE`, the shader runs at reduced `trainingDimensions`; each training thread maps back to a render-resolution G-buffer pixel before entering the shared path loop. When compiled with `NRC_QUERY`, it runs at full `frameDimensions`. Both variants:
-
-- Create an `NrcContext` and `NrcPathState` at the start of `pathTraceRay()`.
-- Call `NrcUpdateOnHit()` at each hit with `NrcSurfaceAttributes` and check the returned `NrcProgressState`.
-- Call `NrcUpdateOnMiss()` on miss.
-- Call `NrcSetBrdfPdf()` after BSDF sampling.
-- Gate Russian roulette with `NrcCanUseRussianRoulette()`.
-- Call `NrcWriteFinalPathInfo()` after the bounce loop.
-
-Path splitting and `ptDiffuseAlbedo` output are disabled in the update variant.
 
 ---
 
@@ -100,7 +83,6 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
   - In-scattering (sun march + ambient) runs only at path depths ≤ 1 (half steps on bounce segments); deeper bounces keep transmittance only.
   - `renderParams.fogSigmaS` is computed per frame on the CPU (`computeFogSigmaS` in renderer.cpp): a fixed peak coefficient times a time-of-day smoothstep ramp peaking at sunrise/sunset times the `fogScatteringMultiplier` setting. `fogSigmaS = 0` (mid-day, or multiplier 0) must skip the entire fog block (including the march's RNG draws) so renders stay bit-identical with fog off.
   - Sea level comes from `SEA_LEVEL` in `common_settings.h` (shared with `chunk_generator.cpp`); fog height math adds `globalInstanceOffset.y` to get true world Y.
-  - NRC only sees fog transmittance (via `pathWeight`); the cache tail is fogless — accepted for now (see `plans/god_rays.md`).
 
 ---
 

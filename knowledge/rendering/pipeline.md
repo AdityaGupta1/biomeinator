@@ -1,4 +1,4 @@
-_Last edited: 2026-08-02_
+_Last edited: 2026-08-30_
 
 # DXR Pipeline
 
@@ -27,7 +27,7 @@ usage predictable.
 
 ## Root Signatures
 
-Each pass (gbuffer, path tracing, collect, NRC resolve, postprocess, debug view) has its own
+Each pass (gbuffer, path tracing, collect, postprocess, debug view) has its own
 root signature. They all use `CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED` for bindless descriptor
 heap access. Root parameters are inline CBVs/SRVs/UAVs (not descriptor tables) — resources
 are bound by GPU virtual address.

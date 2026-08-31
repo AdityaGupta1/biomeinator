@@ -229,10 +229,6 @@ void Scene::reset()
     this->isTlasDirty = false;
     this->tlasBufferSection.free();
 
-    this->hasSceneBounds = false;
-    this->sceneBoundsMin_WS = {};
-    this->sceneBoundsMax_WS = {};
-
     this->nextMaterialIdx = 0;
 
     for (ComPtr<ID3D12Resource>& texture : this->textures)
@@ -349,35 +345,6 @@ uint32_t Scene::addTextureArray(std::vector<std::vector<std::vector<uint8_t>>>&&
     const uint32_t arraySize = static_cast<uint32_t>(sliceMipData.size());
     this->pendingTextures.push_back({ std::move(sliceMipData), width, height, arraySize, cpuHandle, format });
     return texId;
-}
-
-void Scene::expandBounds(const glm::vec3& pos_WS)
-{
-    if (!this->hasSceneBounds)
-    {
-        this->sceneBoundsMin_WS = pos_WS;
-        this->sceneBoundsMax_WS = pos_WS;
-        this->hasSceneBounds = true;
-        return;
-    }
-
-    this->sceneBoundsMin_WS = glm::min(this->sceneBoundsMin_WS, pos_WS);
-    this->sceneBoundsMax_WS = glm::max(this->sceneBoundsMax_WS, pos_WS);
-}
-
-bool Scene::hasBounds() const
-{
-    return this->hasSceneBounds;
-}
-
-const glm::vec3& Scene::getBoundsMin_WS() const
-{
-    return this->sceneBoundsMin_WS;
-}
-
-const glm::vec3& Scene::getBoundsMax_WS() const
-{
-    return this->sceneBoundsMax_WS;
 }
 
 bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)

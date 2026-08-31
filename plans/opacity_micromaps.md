@@ -71,8 +71,7 @@ path tracing shaders — in practice bump globally). In exchange:
   NVAPI SER dependency.
 - Caveat: shipping SM 6.9 DXIL requires driver support; if the driver lacks it,
   `CreateStateObject` fails outright. If that's a concern, compile the fog query in two
-  variants (the NRC-style variant infrastructure already exists) and pick at PSO creation
-  based on the tier check.
+  variants and pick at PSO creation based on the tier check.
 
 ## Implementation sketch
 

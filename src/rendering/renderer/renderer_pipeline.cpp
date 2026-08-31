@@ -150,14 +150,6 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 
-        ptParams[PT_PARAM_IDX(NRC_CONSTANTS)] = MAKE_PARAM(CBV, NRC, NRC_CONSTANTS);
-
-        ptParams[PT_PARAM_IDX(NRC_QUERY_PATH_INFO)] = MAKE_PARAM(UAV, NRC, QUERY_PATH_INFO);
-        ptParams[PT_PARAM_IDX(NRC_TRAINING_PATH_INFO)] = MAKE_PARAM(UAV, NRC, TRAINING_PATH_INFO);
-        ptParams[PT_PARAM_IDX(NRC_TRAINING_PATH_VERTICES)] = MAKE_PARAM(UAV, NRC, TRAINING_PATH_VERTICES);
-        ptParams[PT_PARAM_IDX(NRC_QUERY_RADIANCE_PARAMS)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE_PARAMS);
-        ptParams[PT_PARAM_IDX(NRC_COUNTERS_DATA)] = MAKE_PARAM(UAV, NRC, COUNTERS_DATA);
-
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
 
@@ -189,21 +181,6 @@ void initRootSignature()
 
         serializeAndCreateRootSignature(collectParams.data(), static_cast<uint32_t>(collectParams.size()),
                                         nullptr, 0, renderState.collectRootSig);
-    }
-
-    // ===================================
-    // NRC RESOLVE
-    // ===================================
-    {
-        std::array<D3D12_ROOT_PARAMETER1, NRC_RESOLVE_PARAM_IDX(COUNT)> nrcResolveParams;
-
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS)] = MAKE_PARAM(CBV, NRC, NRC_CONSTANTS);
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO)] = MAKE_PARAM(UAV, NRC, QUERY_PATH_INFO);
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE)] = MAKE_PARAM(UAV, NRC, QUERY_RADIANCE);
-        nrcResolveParams[NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PATH_TRACING_RAW_BUFFER_OUT);
-
-        serializeAndCreateRootSignature(nrcResolveParams.data(), static_cast<uint32_t>(nrcResolveParams.size()),
-                                        nullptr, 0, renderState.nrcResolveRootSig);
     }
 
     // ===================================
@@ -285,10 +262,6 @@ void initPipeline()
 
         makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", renderState.gbufferRootSig.Get(),
                              renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
-        makeCommonRtPipeline(L"nrcUpdate", "nrc_update_rgs", renderState.ptRootSig.Get(),
-                             renderState.nrcUpdatePso, renderState.dev_nrcUpdateShaderIds, renderState.nrcUpdateDispatchDesc);
-        makeCommonRtPipeline(L"nrcQuery", "nrc_query_rgs", renderState.ptRootSig.Get(),
-                             renderState.nrcQueryPso, renderState.dev_nrcQueryShaderIds, renderState.nrcQueryDispatchDesc);
         makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs", renderState.ptRootSig.Get(),
                              renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
     }
@@ -302,17 +275,6 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("collect_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.collectPso)));
         renderState.collectPso->SetName(L"collectPso");
-    }
-
-    // ===================================
-    // NRC RESOLVE
-    // ===================================
-    {
-        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
-        psoDesc.pRootSignature = renderState.nrcResolveRootSig.Get();
-        psoDesc.CS = makeShaderBytecode(getShader("nrc_resolve_cs"));
-        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.nrcResolvePso)));
-        renderState.nrcResolvePso->SetName(L"nrcResolvePso");
     }
 
     {

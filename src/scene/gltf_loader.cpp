@@ -419,12 +419,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                     Util::octEncode({ n[0], n[1], n[2] }),
                     Util::packFloat2ToUint(uv.x, uv.y),
                 };
-
-                DirectX::XMFLOAT3 pos_WS;
-                DirectX::XMStoreFloat3(
-                    &pos_WS,
-                    DirectX::XMVector3Transform(DirectX::XMLoadFloat3(&host_verts[v].pos_OS), transform));
-                scene.expandBounds({ pos_WS.x, pos_WS.y, pos_WS.z });
             }
 
             std::vector<uint32_t>& host_idxs = instance->host_idxs;

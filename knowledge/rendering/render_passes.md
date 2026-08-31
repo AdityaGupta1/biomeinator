@@ -1,4 +1,4 @@
-_Last edited: 2026-04-25_
+_Last edited: 2026-08-30_
 
 # Render Passes
 
@@ -7,15 +7,9 @@ All passes are recorded into a single command list per frame and submitted toget
 ## Pass Sequence
 
 ```
-[NRC BeginFrame]               (only if nrcEnabled)
-  ↓
 G-Buffer
   ↓
-[NRC Update dispatch]          (only if nrcEnabled)
-  ↓
-Path Tracing / NRC Query
-  ↓
-[QueryAndTrain → Custom Resolve]  (only if nrcEnabled)
+Path Tracing
   ↓
 Collect
   ↓
@@ -35,26 +29,6 @@ Present
 Traces one ray per pixel to find the primary hit. Writes a flat `GbufferData[]` buffer (`dev_gbuffer`) at render resolution — not a texture, just a raw structured buffer indexed by `pixelIdx`. The G-buffer is then transitioned to `NON_PIXEL_SHADER_RESOURCE` before the next passes read it.
 
 The G-buffer also outputs the per-pixel data that DLSS needs: motion vectors, linear depth, normals+roughness, diffuse albedo, specular albedo, specular hit distance. These are written as UAV `RtTarget`s rather than into the `dev_gbuffer` buffer.
-
----
-
-## NRC (Neural Radiance Cache, optional)
-
-Runs when `nrcEnabled`. Uses NVIDIA's NRC SDK to train a neural network each frame that predicts indirect radiance. See [shaders → radiance_cache.md](../shaders/radiance_cache.md) for shader-side details.
-
-**BeginFrame** — called before the frame's ray tracing work. Populates `NrcConstants` used by update, query, and resolve.
-
-**NRC Update** (ray generation) — dispatches at `trainingDimensions` (smaller than render resolution). Traces paths from G-buffer hits and writes training data (path vertices + radiance) for the neural network.
-
-**NRC Query** (ray generation) — dispatches at `frameDimensions` (render resolution, doubled width if path splitting). Paths terminate early when NRC determines it can predict the remaining radiance, writing a query point.
-
-**QueryAndTrain** — SDK call after the query dispatch. Trains the network and fills the `QueryRadiance` buffer.
-
-**Custom Resolve** (compute) — reads `QueryPathInfo` and `QueryRadiance`, multiplies by prefix throughput, writes to `dev_pathTracingRawBuffer`. Dispatches at `frameDimensions`.
-
-**EndFrame** — called after command list submission.
-
-When NRC is disabled, a single plain path tracing dispatch runs instead.
 
 ---
 
@@ -82,7 +56,7 @@ The raw buffers exist because accumulation needs to work in linear HDR — you c
 
 ## Postprocess / Debug View (rasterization)
 
-A full-screen triangle (3 vertices, no vertex buffer) draws to the swap chain back buffer. Normally uses the postprocess pipeline, which samples `preTonemappedColorSrvIdx` (already tonemapped by collect) and outputs it. If a debug view is active, the debug view pipeline is used instead, which visualises a selected `RtTarget` with optional scale and tonemapping. NRC debug resolve modes redirect the debug view to the NRC debug target.
+A full-screen triangle (3 vertices, no vertex buffer) draws to the swap chain back buffer. Normally uses the postprocess pipeline, which samples `preTonemappedColorSrvIdx` (already tonemapped by collect) and outputs it. If a debug view is active, the debug view pipeline is used instead, which visualises a selected `RtTarget` with optional scale and tonemapping.
 
 ImGui is rendered on top of the postprocess output before the back buffer transitions back to `PRESENT`.
 

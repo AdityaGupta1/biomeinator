@@ -1,4 +1,4 @@
-_Last edited: 2026-08-24_
+_Last edited: 2026-08-30_
 
 # Materials and Textures
 
@@ -42,7 +42,7 @@ r = per-texel emissive strength, g = biome tint mask. Aux data is authored as an
 `<name>.aux.png` companion next to each block texture — most textures have none, and missing
 files load as zero-filled slices. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
-"emissive texels are pure emitters" behavior that `isPureEmitter` and NRC rely on. There is
+"emissive texels are pure emitters" behavior that `isPureEmitter` relies on. There is
 no separate `emission.png` anymore.
 
 Two invariants:

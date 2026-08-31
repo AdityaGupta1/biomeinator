@@ -23,10 +23,6 @@
 #include <cmath>
 #include <thread>
 
-#include "NrcD3d12.h"
-#undef min
-#undef max
-
 #include "settings_manager.h"
 #include "logger.h"
 
@@ -115,11 +111,6 @@ void init()
         }
     }
 
-    if (SettingsManager::getAsBool("nrcEnabled"))
-    {
-        initNrc();
-    }
-
     if (!renderState.testMode)
     {
         SetForegroundWindow(hwnd);
@@ -130,10 +121,6 @@ void loadScene(const std::string& filePathStr)
 {
     flush();
     GltfLoader::loadGltf(filePathStr, renderState.scene);
-    if (renderState.nrcContext != nullptr)
-    {
-        configureNrc();
-    }
     renderState.dlss.needsReset = true;
 }
 
@@ -260,10 +247,6 @@ void resize()
         rtTarget->init();
     }
 
-    renderState.nrcDebugTarget.reset();
-    renderState.nrcDebugTarget.setDimensions(renderState.renderWidth * (doPathSplitting ? 2 : 1), renderState.renderHeight);
-    renderState.nrcDebugTarget.init();
-
     for (auto& frame : renderState.frameCtxs)
     {
         auto& uav = frame.paramBlockManager.heapIndices->uav;
@@ -305,13 +288,6 @@ void resize()
     renderState.camera.setJitterHaltonSequenceLength(jitterHaltonSequenceLength);
 
     renderState.frameTimeBuffer.clear();
-
-    if (renderState.nrcContext != nullptr)
-    {
-        // TODO: try to avoid fully destroying and recreating NRC on resize
-        destroyNrc();
-        initNrc();
-    }
 }
 
 void queueResize()
@@ -342,15 +318,6 @@ static void bindSceneSrvs(uint32_t baseIdx)
     renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 7, renderState.scene.getDevAreaLightSamplingStructureAddress());
 }
 
-static void bindNrcBuffers(const nrc::d3d12::Buffers* nrcBuffers, uint32_t baseIdx)
-{
-    renderState.cmdList->SetComputeRootUnorderedAccessView(baseIdx + 0, (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(baseIdx + 1, (*nrcBuffers)[nrc::BufferIdx::TrainingPathInfo].resource->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(baseIdx + 2, (*nrcBuffers)[nrc::BufferIdx::TrainingPathVertices].resource->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(baseIdx + 3, (*nrcBuffers)[nrc::BufferIdx::QueryRadianceParams].resource->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(baseIdx + 4, (*nrcBuffers)[nrc::BufferIdx::Counter].resource->GetGPUVirtualAddress());
-}
-
 static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 {
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
@@ -364,32 +331,7 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
 {
-    // ===================================
-    // NRC UPDATE
-    // ===================================
-
-    if (renderState.nrcContext != nullptr)
-    {
-        renderState.cmdList->SetPipelineState1(renderState.nrcUpdatePso.Get());
-        renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
-
-        bindPtCommonParams(paramBlockManager);
-        renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-        bindNrcBuffers(renderState.nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
-
-        renderState.nrcUpdateDispatchDesc.Width = paramBlockManager.nrcConstants->trainingDimensions.x;
-        renderState.nrcUpdateDispatchDesc.Height = paramBlockManager.nrcConstants->trainingDimensions.y;
-        renderState.cmdList->DispatchRays(&renderState.nrcUpdateDispatchDesc);
-
-        BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
-    }
-
-    // ===================================
-    // PATH TRACING (or NRC QUERY)
-    // ===================================
-
-    const bool useNrcQuery = (renderState.nrcContext != nullptr);
-    renderState.cmdList->SetPipelineState1(useNrcQuery ? renderState.nrcQueryPso.Get() : renderState.ptPso.Get());
+    renderState.cmdList->SetPipelineState1(renderState.ptPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
 
     bindPtCommonParams(paramBlockManager);
@@ -397,66 +339,9 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-    if (useNrcQuery)
-    {
-        renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-        bindNrcBuffers(renderState.nrcContext->GetBuffers(), PT_PARAM_IDX(NRC_QUERY_PATH_INFO));
-    }
-
-    D3D12_DISPATCH_RAYS_DESC& activePtDispatchDesc = useNrcQuery ? renderState.nrcQueryDispatchDesc : renderState.ptDispatchDesc;
-    activePtDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
-    activePtDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
-    renderState.cmdList->DispatchRays(&activePtDispatchDesc);
-
-    // ===================================
-    // NRC RESOLVE
-    // ===================================
-
-    if (useNrcQuery)
-    {
-        BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
-
-        renderState.nrcContext->QueryAndTrain(renderState.cmdList.Get(), nullptr);
-
-        ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
-        renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-        BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
-
-        const NrcResolveMode resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
-        const bool useBuiltinResolve = (resolveMode != NrcResolveMode::AddQueryResultToOutput);
-
-        if (useBuiltinResolve)
-        {
-            renderState.nrcDebugTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            renderState.nrcContext->Resolve(renderState.cmdList.Get(), renderState.nrcDebugTarget.getTarget());
-            renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
-        }
-        else
-        {
-            const nrc::d3d12::Buffers* nrcBuffers = renderState.nrcContext->GetBuffers();
-            renderState.cmdList->SetPipelineState(renderState.nrcResolvePso.Get());
-            renderState.cmdList->SetComputeRootSignature(renderState.nrcResolveRootSig.Get());
-
-            renderState.cmdList->SetComputeRootConstantBufferView(NRC_RESOLVE_PARAM_IDX(NRC_CONSTANTS), paramBlockManager.getNrcConstantsGpuAddress());
-            renderState.cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(QUERY_PATH_INFO),
-                (*nrcBuffers)[nrc::BufferIdx::QueryPathInfo].resource->GetGPUVirtualAddress());
-            renderState.cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(QUERY_RADIANCE),
-                (*nrcBuffers)[nrc::BufferIdx::QueryRadiance].resource->GetGPUVirtualAddress());
-            renderState.cmdList->SetComputeRootUnorderedAccessView(
-                NRC_RESOLVE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT),
-                renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
-
-            const uint32_t nrcResolveDispatchWidth =
-                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.x, NRC_RESOLVE_WORKGROUP_SIZE_X);
-            const uint32_t nrcResolveDispatchHeight =
-                Util::calculateDispatchSize(paramBlockManager.nrcConstants->frameDimensions.y, NRC_RESOLVE_WORKGROUP_SIZE_Y);
-            renderState.cmdList->Dispatch(nrcResolveDispatchWidth, nrcResolveDispatchHeight, 1);
-        }
-
-        BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
-    }
+    renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+    renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
+    renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);
 }
 
 static void beginFrame();
@@ -680,56 +565,6 @@ void render()
     debugParams->debugFloat1 = SettingsManager::getAsFloat("debugFloat1");
     debugParams->debugFloat2 = SettingsManager::getAsFloat("debugFloat2");
     debugParams->debugFloat3 = SettingsManager::getAsFloat("debugFloat3");
-
-    const bool nrcEnabled = SettingsManager::getAsBool("nrcEnabled");
-    static bool nrcPrevEnabled = SettingsManager::getAsBool("nrcEnabled");
-    if (nrcEnabled != nrcPrevEnabled)
-    {
-        if (nrcEnabled)
-        {
-            initNrc();
-        }
-        else
-        {
-            destroyNrc();
-        }
-    }
-    nrcPrevEnabled = nrcEnabled;
-
-    static uint32_t nrcPrevMaxPathDepth = 0;
-    const uint32_t maxPathDepth = SettingsManager::getAsUint("maxPathDepth");
-    if (renderState.nrcContext != nullptr && maxPathDepth != nrcPrevMaxPathDepth)
-    {
-        configureNrc();
-    }
-    nrcPrevMaxPathDepth = maxPathDepth;
-
-    if (renderState.nrcContext != nullptr)
-    {
-        nrc::FrameSettings frameSettings;
-        frameSettings.maxExpectedAverageRadianceValue = SettingsManager::getAsFloat("nrcMaxRadiance");
-        frameSettings.terminationHeuristicThreshold = SettingsManager::getAsFloat("nrcTerminationThreshold");
-        frameSettings.trainingTerminationHeuristicThreshold = SettingsManager::getAsFloat("nrcTrainingTerminationThreshold");
-        frameSettings.resolveMode = static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode"));
-        frameSettings.skipDeltaVertices = SettingsManager::getAsBool("nrcSkipDeltaVertices");
-        frameSettings.trainTheCache = SettingsManager::getAsBool("nrcTrainTheCache");
-        frameSettings.learningRate = SettingsManager::getAsFloat("nrcLearningRate");
-        renderState.nrcContext->BeginFrame(renderState.cmdList.Get(), frameSettings);
-        renderState.nrcContext->PopulateShaderConstants(*paramBlockManager.nrcConstants);
-    }
-    else
-    {
-        memset(paramBlockManager.nrcConstants, 0, sizeof(NrcConstants));
-    }
-
-    const bool nrcDebugModeActive = (renderState.nrcContext != nullptr) &&
-        (static_cast<NrcResolveMode>(SettingsManager::getAsUint("nrcResolveMode")) != NrcResolveMode::AddQueryResultToOutput);
-    if (nrcDebugModeActive)
-    {
-        debugOutputTarget = &renderState.nrcDebugTarget;
-        debugParams->debugOutputSrvIdx = renderState.nrcDebugTarget.getSrvIdx();
-        debugParams->debugOutputNumChannels = renderState.nrcDebugTarget.debugOutputNumChannels;
-    }
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = renderState.scene.getNumAreaLights();
@@ -963,13 +798,7 @@ void render()
     BufferHelper::stateTransitionResourceBarrier(
         renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
-    const bool nrcFrameActive = renderState.nrcContext != nullptr;
     submitCmd();
-
-    if (nrcFrameActive)
-    {
-        renderState.nrcContext->EndFrame(renderState.graphicsCmdQueue.Get());
-    }
 
     frameCtx.fenceValue = renderState.fence.signal(renderState.graphicsCmdQueue.Get());
 
@@ -1085,30 +914,22 @@ void destroy()
     renderState.dev_pathTracingRawBuffer.Reset();
     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
 
-    destroyNrc();
-
     renderState.screenshotRequest.readbackBuffer.Reset();
 
     renderState.gbufferPso.Reset();
     renderState.ptPso.Reset();
     renderState.collectPso.Reset();
-    renderState.nrcResolvePso.Reset();
-    renderState.nrcUpdatePso.Reset();
-    renderState.nrcQueryPso.Reset();
     renderState.postprocessPso.Reset();
     renderState.debugViewPso.Reset();
 
     renderState.gbufferRootSig.Reset();
     renderState.ptRootSig.Reset();
     renderState.collectRootSig.Reset();
-    renderState.nrcResolveRootSig.Reset();
     renderState.postprocessRootSig.Reset();
     renderState.debugViewRootSig.Reset();
 
     renderState.dev_gbufferShaderIds.Reset();
     renderState.dev_ptShaderIds.Reset();
-    renderState.dev_nrcUpdateShaderIds.Reset();
-    renderState.dev_nrcQueryShaderIds.Reset();
 
     renderState.proxySwapChain.Reset();
     renderState.swapChain.Reset();

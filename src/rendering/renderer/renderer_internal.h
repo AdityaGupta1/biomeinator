@@ -31,8 +31,6 @@
 #include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
 
-namespace nrc { namespace d3d12 { class Context; } }
-
 namespace Renderer
 {
 
@@ -147,14 +145,6 @@ enum class PtParam
     PATH_TRACING_RAW_BUFFER_OUT,
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
 
-    NRC_CONSTANTS,
-
-    NRC_QUERY_PATH_INFO,
-    NRC_TRAINING_PATH_INFO,
-    NRC_TRAINING_PATH_VERTICES,
-    NRC_QUERY_RADIANCE_PARAMS,
-    NRC_COUNTERS_DATA,
-
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
 
@@ -185,22 +175,9 @@ enum class CollectParam
     COUNT
 };
 
-enum class NrcResolveParam
-{
-    NRC_CONSTANTS,
-
-    QUERY_PATH_INFO,
-    QUERY_RADIANCE,
-
-    PATH_TRACING_RAW_BUFFER_OUT,
-
-    COUNT
-};
-
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
-#define NRC_RESOLVE_PARAM_IDX(param) static_cast<uint32_t>(NrcResolveParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
 
@@ -240,9 +217,6 @@ void initCommand();
 void initConstantParams();
 void initRootSignature();
 void initPipeline();
-void configureNrc();
-void initNrc();
-void destroyNrc();
 void initImgui();
 void imguiBeginFrame();
 void imguiEndFrame(double deltaTime);
@@ -310,7 +284,6 @@ struct RendererState
     Camera camera;
     LightTreeManager lightTreeManager;
     GpuRadixSort gpuRadixSort;
-    nrc::d3d12::Context* nrcContext{ nullptr };
 
     // -- Mode flags --
     bool testMode{ false };
@@ -340,8 +313,6 @@ struct RendererState
     RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
     RtTarget debugTarget{ L"debugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
-
-    RtTarget nrcDebugTarget{ L"nrcDebugTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
     // clang-format on
 
     std::vector<RtTarget*> allRtTargets;
@@ -366,7 +337,6 @@ struct RendererState
     ComPtr<ID3D12RootSignature> gbufferRootSig;
     ComPtr<ID3D12RootSignature> ptRootSig;
     ComPtr<ID3D12RootSignature> collectRootSig;
-    ComPtr<ID3D12RootSignature> nrcResolveRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
 
@@ -380,15 +350,6 @@ struct RendererState
     D3D12_DISPATCH_RAYS_DESC ptDispatchDesc{};
 
     ComPtr<ID3D12PipelineState> collectPso;
-    ComPtr<ID3D12PipelineState> nrcResolvePso;
-
-    ComPtr<ID3D12StateObject> nrcUpdatePso;
-    ComPtr<ID3D12Resource> dev_nrcUpdateShaderIds;
-    D3D12_DISPATCH_RAYS_DESC nrcUpdateDispatchDesc{};
-
-    ComPtr<ID3D12StateObject> nrcQueryPso;
-    ComPtr<ID3D12Resource> dev_nrcQueryShaderIds;
-    D3D12_DISPATCH_RAYS_DESC nrcQueryDispatchDesc{};
 
     ComPtr<ID3D12PipelineState> postprocessPso;
     ComPtr<ID3D12PipelineState> debugViewPso;

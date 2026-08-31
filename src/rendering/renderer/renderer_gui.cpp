@@ -10,8 +10,6 @@
 #include <imgui_impl_dx12.h>
 #include <implot.h>
 
-#include "NrcD3d12.h"
-
 #include "rendering/camera.h"
 #include "rendering/window_manager.h"
 #include "rendering/common/common_enums.h"
@@ -132,32 +130,6 @@ void imguiEndFrame(double deltaTime)
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
-        }
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Radiance Cache");
-        const bool didNrcChange = SettingsGuiHelpers::Checkbox("Enable NRC", "nrcEnabled");
-        renderState.didPathTracingSettingsChange |= didNrcChange;
-        renderState.needsResize |= didNrcChange;
-
-        if (ImGui::CollapsingHeader("NRC Settings"))
-        {
-            {
-                int nrcResolveModeInt = static_cast<int>(SettingsManager::getAsUint("nrcResolveMode"));
-                SettingsGuiHelpers::ScopedItemWidth width(SettingsGuiHelpers::comboWidth);
-                if (ImGui::Combo("NRC resolve mode", &nrcResolveModeInt, nrc::GetImGuiResolveModeComboString()))
-                {
-                    SettingsManager::setAsUint("nrcResolveMode", static_cast<uint32_t>(nrcResolveModeInt));
-                    renderState.didPathTracingSettingsChange = true;
-                }
-            }
-
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Max radiance", "nrcMaxRadiance", 0.01f, 100.0f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Termination threshold", "nrcTerminationThreshold", 0.001f, 1.0f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Training termination threshold", "nrcTrainingTerminationThreshold", 0.001f, 1.0f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Skip delta vertices", "nrcSkipDeltaVertices");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Train the cache", "nrcTrainTheCache");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Learning rate", "nrcLearningRate", 0.0001f, 0.1f);
         }
 
         SettingsGuiHelpers::VerticalSpacing();

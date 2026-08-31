@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-08-30_
 
 # Param Blocks
 
@@ -8,9 +8,7 @@ upload buffer. One instance per [frame context](frame_contexts.md).
 ## Single Buffer Layout
 
 All param structs are laid out contiguously in one buffer: `HeapIndices`, `ConstantParams`,
-`CameraParams`, `SceneParams`, `RenderParams`, `DebugParams`. `NrcConstants` is placed at a
-separate `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT`-aligned offset because it's bound
-as a separate root CBV (NRC SDK expects its own buffer address).
+`CameraParams`, `SceneParams`, `RenderParams`, `DebugParams`.
 
 ## 16-Byte Alignment Invariant
 
