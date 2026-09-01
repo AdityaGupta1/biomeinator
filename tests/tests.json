@@ -458,7 +458,7 @@
                 "--tonemapping=0"
             ],
             "golden": "gltf/rough_reflection/golden_blender_no_tonemap.png",
-            "threshold": 0.015
+            "threshold": 0.01
         },
         {
             "name": "diffuse_albedo_modulation",
