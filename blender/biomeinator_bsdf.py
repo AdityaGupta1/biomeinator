@@ -25,9 +25,25 @@ bl_info = {
 NODE_GROUP_NAME = 'Biomeinator BSDF'
 
 
+def _upgrade_node_group(ng):
+    hasRoughness = any(item.item_type == 'SOCKET' and item.in_out == 'INPUT' and item.name == 'Roughness'
+                       for item in ng.interface.items_tree)
+    if hasRoughness:
+        return
+    sock = ng.interface.new_socket(name='Roughness', in_out='INPUT', socket_type='NodeSocketFloat')
+    sock.default_value = 0.0
+    sock.min_value = 0.0
+    sock.max_value = 1.0
+    sock.subtype = 'FACTOR'
+    group_in = next(n for n in ng.nodes if n.type == 'GROUP_INPUT')
+    glossy = next(n for n in ng.nodes if n.type == 'BSDF_GLOSSY')
+    ng.links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
+
+
 def ensure_node_group():
     existing = bpy.data.node_groups.get(NODE_GROUP_NAME)
     if existing is not None:
+        _upgrade_node_group(existing)
         return existing
 
     ng = bpy.data.node_groups.new(NODE_GROUP_NAME, 'ShaderNodeTree')
@@ -48,6 +64,10 @@ def ensure_node_group():
     add_input('Diffuse', 'NodeSocketBool', True)
     add_input('Specular', 'NodeSocketBool', False)
     add_input('Specular Tint', 'NodeSocketColor', (1.0, 1.0, 1.0, 1.0))
+    # Applies only to specular reflection; rough transmission is not supported by the engine.
+    # The Fresnel-node lobe mix uses the macro normal; revisit matching the microfacet normal
+    # (Cycles' per-half-vector Fresnel, e.g. via an OSL dielectric_bsdf closure) later.
+    add_input('Roughness', 'NodeSocketFloat', 0.0, min_value=0.0, max_value=1.0, subtype='FACTOR')
     add_input('Transmission', 'NodeSocketBool', False)
     add_input('IOR', 'NodeSocketFloat', 1.45, min_value=0.0)
     add_input('Emission Color', 'NodeSocketColor', (1.0, 1.0, 1.0, 1.0))
@@ -71,7 +91,6 @@ def ensure_node_group():
 
     glossy = nodes.new('ShaderNodeBsdfAnisotropic')
     glossy.distribution = 'MULTI_GGX'
-    glossy.inputs['Roughness'].default_value = 0.0
     glossy.location = (-400, -100)
 
     fresnel = nodes.new('ShaderNodeFresnel')
@@ -121,6 +140,7 @@ def ensure_node_group():
     links.new(group_in.outputs['Base Color'], refraction.inputs['Color'])
     links.new(group_in.outputs['IOR'], refraction.inputs['IOR'])
     links.new(group_in.outputs['Specular Tint'], glossy.inputs['Color'])
+    links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
     links.new(group_in.outputs['IOR'], fresnel.inputs['IOR'])
 
     links.new(group_in.outputs['Diffuse'], has_base.inputs[0])
@@ -209,7 +229,8 @@ def _push_principled_proxy(material):
     _copy_input(node_tree, group_node, 'Specular Tint' if specularOnly else 'Base Color',
                 principled, 'Base Color')
     principled.inputs['Metallic'].default_value = 1.0 if specularOnly else 0.0
-    principled.inputs['Roughness'].default_value = 0.0
+    roughnessInput = group_node.inputs.get('Roughness')
+    principled.inputs['Roughness'].default_value = roughnessInput.default_value if roughnessInput is not None else 0.0
     principled.inputs['Transmission Weight'].default_value = 1.0 if hasTransmission else 0.0
     # Specular IOR Level 0.5 is the exporter's specularFactor 1 (extension omitted);
     # 0 exports specularFactor 0, which the loader reads as "no specular lobe".
@@ -235,6 +256,20 @@ def _pop_principled_proxy(state):
         node_tree.links.new(orig_from_socket, output.inputs['Surface'])
 
 
+def _make_material_factors_explicit(filepath):
+    """The glTF exporter omits spec-default factors (e.g. roughnessFactor 1.0), so a rough
+    material can silently depend on the loader's defaults; write them explicitly instead."""
+    import json
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    for mat in data.get('materials', []):
+        pbr = mat.setdefault('pbrMetallicRoughness', {})
+        pbr.setdefault('metallicFactor', 1.0)
+        pbr.setdefault('roughnessFactor', 1.0)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent='\t', separators=(',', ':'))
+
+
 def export_gltf(filepath):
     proxies = []
     for material in bpy.data.materials:
@@ -246,6 +281,7 @@ def export_gltf(filepath):
     finally:
         for state in reversed(proxies):
             _pop_principled_proxy(state)
+    _make_material_factors_explicit(filepath)
 
 
 class BIOMEINATOR_OT_export_gltf(bpy.types.Operator):

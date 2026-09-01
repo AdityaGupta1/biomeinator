@@ -136,6 +136,9 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             hasGlossyTransmission = false;
 
             const auto& pbr = gltfMat.pbrMetallicRoughness;
+            // tinygltf's defaults match the glTF spec defaults, so this is correct even when the
+            // pbrMetallicRoughness struct is absent
+            material.roughness = static_cast<float>(pbr.roughnessFactor);
             // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
             // Ideally, I would use some JSON utils to check this for real. But this works for now.
             const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
@@ -265,6 +268,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             if (hasGlossyTransmission)
             {
                 hasDiffuse = false;
+                material.roughness = 0.f; // rough glossy transmission is not supported
             }
         }
 

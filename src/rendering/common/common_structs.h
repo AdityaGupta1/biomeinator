@@ -91,7 +91,7 @@ public:
     uint flags;
     float emissiveStrength;
     float diffuseTransmission; // thin-wall diffuse transmission fraction; > 0 only for thin foliage hits
-    uint pad3;
+    float roughness; // GGX roughness (alpha = roughness^2) for glossy reflection; 0 = perfectly specular
 
     float3 baseColor;
     uint baseColorTextureId;
@@ -124,7 +124,7 @@ public:
 
     bool isDelta()
     {
-        return (flags & MATERIAL_FLAGS_GLOSSY) && !(flags & MATERIAL_FLAG_DIFFUSE); // TODO: update after adding roughness
+        return (flags & MATERIAL_FLAGS_GLOSSY) && !(flags & MATERIAL_FLAG_DIFFUSE) && roughness == 0.f;
     }
 
     bool hasDiffuseOrGlossyTransmission()

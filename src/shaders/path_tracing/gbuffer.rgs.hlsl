@@ -58,21 +58,20 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
             prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
         }
 
-        // TODO: eventually set roughness
-
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
         {
             const Material surfMaterial = getMaterialFromPayload(payload);
 
             if (surfMaterial.hasGlossyReflection())
             {
+                roughness = surfMaterial.roughness;
                 const float alpha = roughness * roughness;
                 const float nDotV = dot(hitNor_WS, -ray.Direction);
                 specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.glossyReflectionTint, alpha, nDotV);
             }
             else
             {
-                roughness = 1.f; // for now, roughness is 0.f for all materials that have glossy reflection and 1.f otherwise
+                roughness = 1.f;
             }
         }
     }

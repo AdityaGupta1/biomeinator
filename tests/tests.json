@@ -447,6 +447,20 @@
             "threshold": 0.002
         },
         {
+            "name": "rough_reflection_blender_no_tonemap",
+            "scene": "gltf/rough_reflection/rough_reflection.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "gltf/rough_reflection/golden_blender_no_tonemap.png",
+            "threshold": 0.015
+        },
+        {
             "name": "diffuse_albedo_modulation",
             "scene": "gltf/diffuse_albedo_modulation/diffuse_albedo_modulation.gltf",
             "args": [
