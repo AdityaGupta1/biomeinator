@@ -202,8 +202,10 @@ def _push_principled_proxy(material):
     principled = node_tree.nodes.new('ShaderNodeBsdfPrincipled')
     principled.name = 'biomeinator_export_proxy'
 
-    # metallicFactor 1 marks the material specular-only for the loader, with the tint
-    # carried in baseColor; everything else exports as a dielectric.
+    # metallicFactor 1 marks the material specular-only for the loader; everything else
+    # exports as a dielectric. The loader reads the specular tint only from
+    # KHR_materials_specular's specularColorFactor, so the tint always goes through the
+    # Principled Specular Tint socket.
     _copy_input(node_tree, group_node, 'Specular Tint' if specularOnly else 'Base Color',
                 principled, 'Base Color')
     principled.inputs['Metallic'].default_value = 1.0 if specularOnly else 0.0
@@ -212,7 +214,7 @@ def _push_principled_proxy(material):
     # Specular IOR Level 0.5 is the exporter's specularFactor 1 (extension omitted);
     # 0 exports specularFactor 0, which the loader reads as "no specular lobe".
     principled.inputs['Specular IOR Level'].default_value = 0.5 if hasSpecular else 0.0
-    if hasSpecular and not specularOnly:
+    if hasSpecular:
         _copy_input(node_tree, group_node, 'Specular Tint', principled, 'Specular Tint')
     _copy_input(node_tree, group_node, 'IOR', principled, 'IOR')
     _copy_input(node_tree, group_node, 'Emission Color', principled, 'Emission Color')

@@ -1,5 +1,6 @@
 build/
 out/
+__pycache__/
 .vs/
 .cursor/plans/
 .claude/settings.local.json
