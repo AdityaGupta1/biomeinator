@@ -210,7 +210,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=12"
+                "--maxPathDepth=20"
             ],
             "golden": "gltf/evil_room/golden.png",
             "threshold": 0.02
@@ -223,7 +223,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=12",
+                "--maxPathDepth=20",
                 "--tonemapping=0"
             ],
             "golden": "gltf/evil_room/golden_blender_no_tonemap.png",
