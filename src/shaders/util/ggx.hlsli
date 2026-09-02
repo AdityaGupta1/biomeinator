@@ -8,7 +8,8 @@
 #include "util/rng.hlsli"
 
 // Isotropic GGX microfacet distribution with the height-correlated Smith masking-shadowing term.
-// alpha = roughness^2 everywhere.
+// The distribution/masking functions take alpha = roughness^2; the albedo table lookups take
+// roughness directly, matching the tables' parameterization.
 
 float ggxDistribution(const float alpha, const float cosThetaH)
 {

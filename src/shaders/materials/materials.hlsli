@@ -14,18 +14,12 @@ StructuredBuffer<Material> materials : REGISTER_T(RT, MATERIALS);
 
 SamplerState texSampler : REGISTER_S(RT, TEX_SAMPLER);
 
-// "An Inexpensive BRDF Model for Physically-based Rendering", Schlick, 1994
-float schlickFresnel(const float eta, const float cosThetaWo)
-{
-    float R0 = (1.f - eta) / (1.f + eta);
-    R0 = R0 * R0;
-    return R0 + (1.f - R0) * pow(1.f - cosThetaWo, 5.f);
-}
-
 // "Microfacet Models for Refraction through Rough Surfaces", Walter et al., 2007
 float walterFresnel(const float eta, const float cosThetaWo)
 {
-    const float c = cosThetaWo;
+    // Interpolated shading normals can push cosThetaWo negative at silhouettes; clamp to the
+    // grazing limit (F = 1) so lobe weights stay in [0, 1]
+    const float c = max(cosThetaWo, 0.f);
     float g = eta * eta - 1.f + c * c;
 
     if (g < 0.f) // total internal reflection
