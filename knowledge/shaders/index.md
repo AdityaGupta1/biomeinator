@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-02_
 
 # Shaders Knowledgebase
 
@@ -9,6 +9,7 @@ Shaders are organized into subdirectories under `src/shaders/`: `common/` (share
 | Entry | Description |
 |---|---|
 | [path_tracing.md](path_tracing.md) | Main path tracer: MIS/RTSL, path splitting |
+| [materials.md](materials.md) | Material lobes, the two Fresnel conventions, rough glass, energy compensation, shading normal |
 | [gbuffer.md](gbuffer.md) | G-buffer ray generation shader, DLSS input outputs |
 | [collect.md](collect.md) | Temporal accumulation compute shader, tonemapping (AGX, Khronos) |
 | [common_structs.md](common_structs.md) | CPU/GPU shared structs, params, registers, enums, hit groups |

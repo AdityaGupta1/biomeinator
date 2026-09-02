@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-02_
 
 # HLSL Utility Libraries
 
@@ -10,7 +10,8 @@ _Last edited: 2026-08-30_
   sampling. Declares TLAS, geometry buffers, and the hit shaders (`AnyHit`,
   `ClosestHit_Primary`). See [path_tracing.md](path_tracing.md).
 - **`common/payload.hlsli`** — `Payload` struct passed through `TraceRay`.
-- **`materials/materials.hlsli`** — BSDF evaluation and sampling, bindless texture reads.
+- **`materials/materials.hlsli`** — BSDF evaluation and sampling, bindless texture reads
+  (design in [materials.md](materials.md)).
   All material color samplers take a `TexSampleCtx { mipLevel, arraySliceIdx }` rather
   than a bare mip. `sampleTexture` casts the bindless descriptor to `Texture2D` or
   `Texture2DArray` based on `material.hasArrayTexture()` — that flag must agree with
@@ -31,6 +32,12 @@ _Last edited: 2026-08-30_
   matters for reproducibility.
 - **`util/sampling.hlsli`** — cosine-weighted hemisphere and spherical cap sampling.
 - **`util/math.hlsli`** — TBN construction, cosTheta, coordinate helpers.
+- **`util/ggx.hlsli`** / **`util/ggx_tables.hlsli`** — GGX distribution, Smith masking, VNDF
+  sampling, refraction half vector/Jacobian, and the albedo tables (copied from Cycles,
+  Apache-2.0) behind multiple-scattering compensation. Distribution functions take
+  `alpha = roughness²`; table lookups take roughness.
+- **`util/shading_normal.hlsli`** — Cycles' `ensure_valid_specular_reflection` port (Apache-2.0),
+  applied in `ClosestHit_Primary` for materials with glossy lobes.
 - **`util/color.hlsli`** — luminance, sRGB conversion, DLSS specular albedo helper.
 - **`util/ray.hlsli`** — ray evaluation and ray cone helpers.
 - **`util/packing.hlsli`** — octahedral normal encoding/decoding.

@@ -93,7 +93,7 @@ public:
     uint flags;
     float emissiveStrength;
     float diffuseTransmission; // thin-wall diffuse transmission fraction; > 0 only for thin foliage hits
-    float roughness; // GGX roughness (alpha = roughness^2) for glossy reflection; 0 = perfectly specular
+    float roughness; // GGX roughness (alpha = roughness^2) for glossy reflection and transmission; 0 = perfectly specular
 
     float3 baseColor;
     uint baseColorTextureId;
@@ -137,6 +137,18 @@ public:
     bool hasDiffuseTransmission()
     {
         return hasDiffuse() && diffuseTransmission > 0.f;
+    }
+
+    bool hasRoughGlossyTransmission()
+    {
+        return hasGlossyTransmission() && roughness > 0.f;
+    }
+
+    // Light arriving from behind the shading normal can scatter towards the viewer, so light sampling
+    // must consider both hemispheres
+    bool acceptsBacksideLight()
+    {
+        return hasDiffuseTransmission() || hasRoughGlossyTransmission();
     }
 
     bool hasArrayTexture()

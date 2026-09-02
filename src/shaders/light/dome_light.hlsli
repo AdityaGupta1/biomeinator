@@ -118,7 +118,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const RayCone rayCone,
                                 const bool canPassthrough,
                                 const bool startUnderwater,
-                                const bool hasDiffuseTransmission,
+                                const bool acceptsBacksideLight,
                                 inout RandomNumberGenerator rng)
 {
     DomeLightSample result;
@@ -127,9 +127,9 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     float pdf;
     wi_WS = generateDomeLightSampleDir(surfNor_WS, rng, pdf);
 
-    // Surfaces with diffuse transmission transmit backside samples, so only opaque surfaces get the
+    // Surfaces that accept backside light transmit backside samples, so only opaque surfaces get the
     // rejection (which saves a shadow ray whenever the sun is below the shading point's horizon).
-    if (!hasDiffuseTransmission && dot(wi_WS, surfNor_WS) < 0.f)
+    if (!acceptsBacksideLight && dot(wi_WS, surfNor_WS) < 0.f)
     {
         result.didReachDomeLight = false;
         return result;

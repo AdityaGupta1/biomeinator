@@ -36,21 +36,21 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 2. **Path splitting** (first bounce only) — `trySplitMaterial()` deterministically splits the material into two lobes across the two path split indices. Two kinds of splits:
    - **Alpha transparency**: split 0 = opaque (weighted by alpha), split 1 = transparent passthrough (weighted by 1-alpha).
-   - **Fresnel**: split 0 = diffuse/transmission + emission (weighted by 1-F), split 1 = specular reflection (weighted by F).
+   - **Fresnel**: split 0 = diffuse/transmission + emission (weighted by 1-F), split 1 = specular reflection (weighted by F). Not applied to rough glass, whose Fresnel is per microfacet.
    If the material can't be split, split index 1 early-returns.
 
-3. **Passthrough check** — after `refractionIndirectPassthrough` is enabled and a non-delta surface has been encountered, delta transmissive surfaces are treated as passthrough: the path weight is tinted by the base color, but the position/normal from the previous "real" bounce are preserved. The motivation is noise reduction when sampling lights through surfaces like water — shadow rays use the same passthrough logic, so indirect paths and direct estimates stay consistent. This sacrifices some accuracy but is worth it for real-time.
+3. **Passthrough check** — after `refractionIndirectPassthrough` is enabled and a non-delta surface has been encountered, delta transmissive surfaces (rough glass is a real bounce) are treated as passthrough: the path weight is tinted by the base color, but the position/normal from the previous "real" bounce are preserved. The motivation is noise reduction when sampling lights through surfaces like water — shadow rays use the same passthrough logic, so indirect paths and direct estimates stay consistent. This sacrifices some accuracy but is worth it for real-time.
 
 4. **SER reordering** — `NvReorderThread()` sorts threads by a coherence hint (first bounce, passthrough, or scattering non-delta surface) to improve warp occupancy.
 
 5. **Russian roulette** — from depth 2 onward, paths may be terminated probabilistically based on luminance of `pathWeight`, with a minimum 10% survival probability.
 
-6. **BSDF sampling** — `sampleBsdf()` picks a direction:
-   - **Specular reflection**: perfect mirror via `reflect()`, weighted by `glossyReflectionTint * fresnelReflectance`.
-   - **Glossy transmission**: `refract()` through the surface, weighted by base color.
+6. **BSDF sampling** — `sampleBsdf()` picks a direction (lobe model in [materials.md](materials.md)):
+   - **Glossy reflection**: mirror `reflect()` when roughness is 0, otherwise a GGX VNDF half vector; weighted by `glossyReflectionTint` and the macro-normal Fresnel.
+   - **Dielectric (reflection + transmission)**: one VNDF half vector (the normal when roughness is 0), with the per-microfacet Fresnel choosing `reflect()` or `refract()` about it; transmission is weighted by base color.
    - **Diffuse**: cosine-weighted hemisphere sampling with Lambertian BRDF, accounting for Fresnel reflection loss.
 
-   The Fresnel decision (reflect vs transmit/diffuse) is stochastic — a random number is compared against the Walter Fresnel reflectance.
+   The Fresnel decision is stochastic — a random number is compared against the Walter Fresnel reflectance. Rough samples finish through the shared `evaluateBsdf`/`bsdfPdf` so the estimator agrees with NEE's MIS terms.
 
 7. **Direct light sampling** (MIS/RTSL only, non-delta surfaces) — two independent strategies, both MIS-weighted against the BSDF sample using the balance heuristic:
 

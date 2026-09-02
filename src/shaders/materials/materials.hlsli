@@ -158,6 +158,97 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     return walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
 }
 
+// Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
+// Its two lobes share one microfacet normal, so unlike glossyReflectionProbability the Fresnel weight is
+// evaluated per microfacet from the half vector that maps wo to wi, and the lobe that produced wi is
+// identified by wi's hemisphere. Mirrors Cycles' bsdf_microfacet_eval for CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID.
+struct DielectricLobeTerms
+{
+    bool isValid;
+    bool isTransmission;
+    float fresnelReflectance;
+    float cosThetaWo;
+    float cosThetaWoH;
+    float d;
+    float g1Wo;
+    float g2;
+    float jacobian; // |d(omega_h) / d(omega_i)| for the lobe that produced wi
+};
+
+DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
+{
+    DielectricLobeTerms terms;
+    terms.isValid = false;
+    terms.isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
+    terms.cosThetaWo = cosTheta(wo_WS, surfNor_WS);
+    if (terms.cosThetaWo <= 0.f)
+    {
+        return terms;
+    }
+
+    float3 h_WS = terms.isTransmission ? refractionHalfVector(wo_WS, wi_WS, material.ior) : normalize(wo_WS + wi_WS);
+    // D, G and Fresnel are symmetric in the half vector's sign, so keep it on wo's side (the refraction half
+    // vector points to the lower-ior side, which is behind the surface when leaving the denser medium)
+    if (dot(h_WS, surfNor_WS) < 0.f)
+    {
+        h_WS = -h_WS;
+    }
+    terms.cosThetaWoH = dot(wo_WS, h_WS);
+    if (terms.cosThetaWoH <= 0.f) // no visible microfacet maps wo to wi
+    {
+        return terms;
+    }
+
+    const float alpha = material.roughness * material.roughness;
+    terms.fresnelReflectance = material.hasGlossyReflection() ? walterFresnel(material.ior, terms.cosThetaWoH) : 0.f;
+    terms.d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
+    terms.g1Wo = ggxSmithG1(alpha, terms.cosThetaWo);
+    terms.g2 = ggxSmithG2(alpha, terms.cosThetaWo, absCosTheta(wi_WS, surfNor_WS));
+    terms.jacobian = terms.isTransmission
+        ? refractionJacobian(material.ior, terms.cosThetaWoH, dot(wi_WS, h_WS))
+        : 1.f / (4.f * terms.cosThetaWoH);
+    terms.isValid = true;
+    return terms;
+}
+
+float dielectricLobeWeight(const DielectricLobeTerms terms)
+{
+    return terms.isTransmission ? (1.f - terms.fresnelReflectance) : terms.fresnelReflectance;
+}
+
+// pdf (in solid angle of wi) of sampling wi in sampleDielectricBsdf: VNDF density of the half vector times the
+// probability of picking the lobe, mapped to wi through the lobe's Jacobian
+float dielectricPdf(const DielectricLobeTerms terms)
+{
+    if (!terms.isValid)
+    {
+        return 0.f;
+    }
+    return dielectricLobeWeight(terms) * terms.g1Wo * terms.d * terms.cosThetaWoH / terms.cosThetaWo * terms.jacobian;
+}
+
+float3 dielectricBsdf(const Material material,
+                      const float2 uv,
+                      const float3 wi_WS,
+                      const float3 surfNor_WS,
+                      const TexSampleCtx texCtx,
+                      const DielectricLobeTerms terms)
+{
+    if (!terms.isValid)
+    {
+        return 0.f;
+    }
+    const float3 baseColor = getMaterialBaseColor(material, uv, texCtx).rgb;
+    const float3 tint = terms.isTransmission ? baseColor : material.glossyReflectionTint;
+    // Cycles' Multiscatter GGX glass uses the transmission tint as the single-scattering albedo for both lobes
+    const float3 multipleScatteringCompensation = material.hasGlossyReflection()
+        ? ggxGlassEnergyCompensation(material.roughness, terms.cosThetaWo, material.ior, baseColor)
+        : 1.f;
+    // D * G2 * |wo.h| * J / cosThetaWo is Cycles' eval, which includes the |cosThetaWi| factor
+    return tint * dielectricLobeWeight(terms) * multipleScatteringCompensation * terms.d * terms.g2 * terms.cosThetaWoH *
+           terms.jacobian / (terms.cosThetaWo * absCosTheta(wi_WS, surfNor_WS));
+}
+
 float3 evaluateBsdf(const Material material,
                     const float2 uv,
                     const float3 wo_WS,
@@ -165,6 +256,15 @@ float3 evaluateBsdf(const Material material,
                     const float3 surfNor_WS,
                     const TexSampleCtx texCtx)
 {
+    if (material.hasGlossyTransmission())
+    {
+        if (material.roughness == 0.f) // delta lobes can't be evaluated for arbitrary directions
+        {
+            return 0.f;
+        }
+        return dielectricBsdf(material, uv, wi_WS, surfNor_WS, texCtx, dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
+    }
+
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
 
@@ -211,6 +311,15 @@ float3 evaluateBsdf(const Material material,
 
 float bsdfPdf(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
 {
+    if (material.hasGlossyTransmission())
+    {
+        if (material.roughness == 0.f)
+        {
+            return 0.f;
+        }
+        return dielectricPdf(dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
+    }
+
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
 
@@ -253,6 +362,97 @@ struct BsdfSample
     bool wasSpecular;
 };
 
+bool chooseReflection(const float fresnelReflectance, inout RandomNumberGenerator rng)
+{
+    if (fresnelReflectance <= 0.f)
+    {
+        return false;
+    }
+    if (fresnelReflectance >= 1.f)
+    {
+        return true;
+    }
+    return rng.nextFloat() < fresnelReflectance;
+}
+
+// Mirrors Cycles' bsdf_microfacet_sample for the glass closure: one VNDF half vector, with the per-microfacet
+// Fresnel choosing between reflecting and refracting about it. Total internal reflection at the microfacet
+// simply reflects, so no energy is lost to rejected samples.
+BsdfSample sampleDielectricBsdf(const Material material,
+                                const float2 uv,
+                                const float3 wo_WS,
+                                const float3 surfNor_WS,
+                                const TexSampleCtx texCtx,
+                                inout RandomNumberGenerator rng)
+{
+    BsdfSample result;
+    result.bsdfValue = 0.f;
+    result.wasSpecular = false;
+
+    if (cosTheta(wo_WS, surfNor_WS) <= 0.f) // no valid microfacets from below the shading normal
+    {
+        result.wi_WS = surfNor_WS;
+        result.pdf = 1.f;
+        result.wasSpecular = true;
+        return result;
+    }
+
+    const bool isDelta = material.roughness == 0.f;
+    // Not a ternary: HLSL evaluates both operands, and the VNDF sample would consume random numbers
+    float3 h_WS = surfNor_WS;
+    if (!isDelta)
+    {
+        h_WS = sampleGgxVndf(wo_WS, surfNor_WS, material.roughness * material.roughness, rng);
+    }
+    const float fresnelReflectance = material.hasGlossyReflection() ? walterFresnel(material.ior, dot(wo_WS, h_WS)) : 0.f;
+    const bool chooseReflect = chooseReflection(fresnelReflectance, rng);
+
+    if (chooseReflect)
+    {
+        result.wi_WS = normalize(reflect(-wo_WS, h_WS));
+    }
+    else
+    {
+        // ior parameter here is ratio of "from medium ior" over "to medium ior"
+        // e.g. 1.f / 1.5f for going from air to glass
+        const float3 refracted_WS = refract(-wo_WS, h_WS, 1.f / material.ior);
+        if (!any(refracted_WS))
+        {
+            // Total internal reflection with no reflection lobe to fall back on (transmission-only materials, e.g.
+            // the transmission half of a path split): the sample is lost. Keep a valid direction so the zero-weight
+            // path doesn't feed NaNs into later bounces.
+            result.wi_WS = normalize(reflect(-wo_WS, h_WS));
+            result.pdf = 1.f;
+            result.wasSpecular = true;
+            return result;
+        }
+        result.wi_WS = normalize(refracted_WS);
+    }
+
+    if (isDelta)
+    {
+        // pdf cancels out with the lobe weight in bsdfValue, so the actual bsdf value is the lobe's tint times the
+        // implicit Fresnel weight from the random chance of choosing that lobe
+        result.pdf = chooseReflect ? fresnelReflectance : (1.f - fresnelReflectance);
+        result.bsdfValue = (chooseReflect ? material.glossyReflectionTint : getMaterialBaseColor(material, uv, texCtx).rgb) * result.pdf;
+        result.wasSpecular = true;
+        return result;
+    }
+
+    if ((cosTheta(result.wi_WS, surfNor_WS) > 0.f) != chooseReflect) // sample crossed the surface plane the wrong way
+    {
+        result.bsdfValue = 0.f;
+        result.pdf = 1.f;
+        return result;
+    }
+
+    // Use the full lobe value and pdf so the estimator stays consistent with the values NEE uses for MIS
+    const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, result.wi_WS, surfNor_WS);
+    result.pdf = dielectricPdf(terms);
+    result.bsdfValue = dielectricBsdf(material, uv, result.wi_WS, surfNor_WS, texCtx, terms);
+    return result;
+}
+
 BsdfSample sampleBsdf(const Material material,
                       const float2 uv,
                       const float3 wo_WS,
@@ -269,20 +469,13 @@ BsdfSample sampleBsdf(const Material material,
         return result;
     }
 
+    if (material.hasGlossyTransmission())
+    {
+        return sampleDielectricBsdf(material, uv, wo_WS, surfNor_WS, texCtx, rng);
+    }
+
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
-    bool chooseReflect;
-    if (fresnelReflectance <= 0.f)
-    {
-        chooseReflect = false;
-    }
-    else if (fresnelReflectance >= 1.f)
-    {
-        chooseReflect = true;
-    }
-    else
-    {
-        chooseReflect = (rng.nextFloat() < fresnelReflectance);
-    }
+    const bool chooseReflect = chooseReflection(fresnelReflectance, rng);
 
     if (chooseReflect)
     {
@@ -306,18 +499,6 @@ BsdfSample sampleBsdf(const Material material,
             result.pdf = 1.f;
             return result;
         }
-    }
-    else if (material.hasGlossyTransmission()) // never combined with diffuse (see MATERIAL_FLAG_GLOSSY_TRANSMISSION)
-    {
-        // TODO: update this block after adding roughness for transmission
-        const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
-        // ior parameter here is ratio of "from medium ior" over "to medium ior"
-        // e.g. 1.f / 1.5f for going from air to glass
-        result.wi_WS = normalize(refract(-wo_WS, surfNor_WS, 1.f / material.ior));
-        result.pdf = oneMinusFresnelReflectance;
-        result.bsdfValue = getMaterialBaseColor(material, uv, texCtx).rgb * oneMinusFresnelReflectance;
-        result.wasSpecular = true;
-        return result;
     }
     else
     {
@@ -393,7 +574,9 @@ bool trySplitMaterial(inout Material surfMaterial,
         }
     }
 
-    if (surfMaterial.hasGlossyReflection() && (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission()))
+    // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them
+    if (surfMaterial.hasGlossyReflection() && (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission())
+        && !surfMaterial.hasRoughGlossyTransmission())
     {
         const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfNor_WS));
 

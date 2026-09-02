@@ -268,7 +268,6 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             if (hasGlossyTransmission)
             {
                 hasDiffuse = false;
-                material.roughness = 0.f; // rough glossy transmission is not supported
             }
         }
 

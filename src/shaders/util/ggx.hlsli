@@ -84,17 +84,89 @@ float ggxAverageAlbedo(const float roughness)
     return lerp(ggxEavgTable[x0], ggxEavgTable[x1], x - x0);
 }
 
-// Multiple-scattering energy compensation factor for the single-scattering GGX reflection lobe,
-// following Cycles' microfacet_ggx_preserve_energy: the lobe is scaled so a white lobe reflects all
-// energy, with the multiple-scattering bounces tinted by the single-scattering albedo Fss.
-// (Cycles splits this into energy_scale = 1/E and a darkening weight; their product is this factor.)
-float3 ggxEnergyCompensation(const float roughness, const float cosThetaV, const float3 fss)
+float ggxGlassETableRead(const bool useInverseTable, const uint idx)
 {
-    const float e = ggxDirectionalAlbedo(roughness, cosThetaV);
-    const float eAvg = ggxAverageAlbedo(roughness);
+    return useInverseTable ? ggxGlassInvETable[idx] : ggxGlassETable[idx];
+}
+
+float ggxGlassEavgTableRead(const bool useInverseTable, const uint idx)
+{
+    return useInverseTable ? ggxGlassInvEavgTable[idx] : ggxGlassEavgTable[idx];
+}
+
+// The glass tables' ior axis is parameterized by z = sqrt((ior - 1) / (ior + 1)) for ior >= 1; a relative ior
+// below 1 uses the inverse tables with 1/ior
+float ggxGlassTableZ(inout float ior, out bool useInverseTable)
+{
+    useInverseTable = ior < 1.f;
+    if (useInverseTable)
+    {
+        ior = 1.f / ior;
+    }
+    return saturate(sqrt((ior - 1.f) / (ior + 1.f))) * 15.f;
+}
+
+// Clamped trilinear lookup of the glass directional albedo, matching Cycles' lookup_table_read_3D
+float ggxGlassDirectionalAlbedo(const float roughness, const float cosThetaV, float ior)
+{
+    bool useInverseTable;
+    const float z = ggxGlassTableZ(ior, useInverseTable);
+    const float x = saturate(roughness) * 15.f;
+    const float y = saturate(cosThetaV) * 15.f;
+    const uint x0 = min(uint(x), 15u);
+    const uint y0 = min(uint(y), 15u);
+    const uint z0 = min(uint(z), 15u);
+    const uint x1 = min(x0 + 1u, 15u);
+    const uint y1 = min(y0 + 1u, 15u);
+    const uint z1 = min(z0 + 1u, 15u);
+    const float tx = x - x0;
+    const float ty = y - y0;
+    const float tz = z - z0;
+
+    const uint slice0 = z0 * 256u;
+    const uint slice1 = z1 * 256u;
+    const float row00 = lerp(ggxGlassETableRead(useInverseTable, slice0 + y0 * 16u + x0), ggxGlassETableRead(useInverseTable, slice0 + y0 * 16u + x1), tx);
+    const float row01 = lerp(ggxGlassETableRead(useInverseTable, slice0 + y1 * 16u + x0), ggxGlassETableRead(useInverseTable, slice0 + y1 * 16u + x1), tx);
+    const float row10 = lerp(ggxGlassETableRead(useInverseTable, slice1 + y0 * 16u + x0), ggxGlassETableRead(useInverseTable, slice1 + y0 * 16u + x1), tx);
+    const float row11 = lerp(ggxGlassETableRead(useInverseTable, slice1 + y1 * 16u + x0), ggxGlassETableRead(useInverseTable, slice1 + y1 * 16u + x1), tx);
+    return lerp(lerp(row00, row01, ty), lerp(row10, row11, ty), tz);
+}
+
+float ggxGlassAverageAlbedo(const float roughness, float ior)
+{
+    bool useInverseTable;
+    const float z = ggxGlassTableZ(ior, useInverseTable);
+    const float x = saturate(roughness) * 15.f;
+    const uint x0 = min(uint(x), 15u);
+    const uint z0 = min(uint(z), 15u);
+    const uint x1 = min(x0 + 1u, 15u);
+    const uint z1 = min(z0 + 1u, 15u);
+    const float row0 = lerp(ggxGlassEavgTableRead(useInverseTable, z0 * 16u + x0), ggxGlassEavgTableRead(useInverseTable, z0 * 16u + x1), x - x0);
+    const float row1 = lerp(ggxGlassEavgTableRead(useInverseTable, z1 * 16u + x0), ggxGlassEavgTableRead(useInverseTable, z1 * 16u + x1), x - x0);
+    return lerp(row0, row1, z - z0);
+}
+
+// Multiple-scattering energy compensation factor for a single-scattering GGX lobe with directional albedo e and
+// average albedo eAvg, following Cycles' microfacet_ggx_preserve_energy: the lobe is scaled so a white lobe
+// scatters all energy, with the multiple-scattering bounces tinted by the single-scattering albedo Fss.
+// (Cycles splits this into energy_scale = 1/E and a darkening weight; their product is this factor.)
+float3 ggxEnergyCompensationFromAlbedo(const float e, const float eAvg, const float3 fss)
+{
     const float missingFactor = (1.f - e) / e;
     const float3 fms = fss * eAvg / (1.f - fss * (1.f - eAvg));
     return 1.f + fms * missingFactor;
+}
+
+float3 ggxEnergyCompensation(const float roughness, const float cosThetaV, const float3 fss)
+{
+    return ggxEnergyCompensationFromAlbedo(ggxDirectionalAlbedo(roughness, cosThetaV), ggxAverageAlbedo(roughness), fss);
+}
+
+// For the dielectric (reflection + transmission) lobe; Cycles uses the transmission tint as Fss
+float3 ggxGlassEnergyCompensation(const float roughness, const float cosThetaV, const float ior, const float3 fss)
+{
+    return ggxEnergyCompensationFromAlbedo(
+        ggxGlassDirectionalAlbedo(roughness, cosThetaV, ior), ggxGlassAverageAlbedo(roughness, ior), fss);
 }
 
 // pdf (in solid angle of wi) of reflecting wo about a VNDF-sampled half vector
@@ -108,4 +180,18 @@ float ggxVndfReflectionPdf(const float alpha, const float3 wo_WS, const float3 w
     const float3 h_WS = normalize(wo_WS + wi_WS);
     const float d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
     return ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
+}
+
+// "Microfacet Models for Refraction through Rough Surfaces", Walter et al., 2007. ior is the relative ior of the
+// side wi is on; the half vector (eq. 16) points towards the lower-ior side, and the Jacobian (eq. 17) maps the
+// half vector's solid angle to wi's.
+float3 refractionHalfVector(const float3 wo_WS, const float3 wi_WS, const float ior)
+{
+    return normalize(-(ior * wi_WS + wo_WS));
+}
+
+float refractionJacobian(const float ior, const float cosThetaWoH, const float cosThetaWiH)
+{
+    const float denom = ior * cosThetaWiH + cosThetaWoH;
+    return ior * ior * abs(cosThetaWiH) / (denom * denom);
 }

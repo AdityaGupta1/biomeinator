@@ -13,6 +13,7 @@
 #include "materials/materials.hlsli"
 #include "util/packing.hlsli"
 #include "util/ray.hlsli"
+#include "util/shading_normal.hlsli"
 
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
@@ -115,8 +116,9 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     }
 
     const Material material = materials[materialIdx];
+    // Only specular transmission can be passed through without scattering; rough glass is a real bounce
     const bool testRefractionPassthrough =
-        bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission();
+        bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission() && material.isDelta();
     const bool testAlphaCutout =
         material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
 
@@ -187,8 +189,20 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
-    if (dot(nor_WS, -WorldRayDirection()) < 0.f)
+    // Geometric normal, oriented to agree with the interpolated normal so no winding convention is assumed
+    float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
+    if (dot(geoNor_WS, nor_WS) < 0.f)
     {
+        geoNor_WS = -geoNor_WS;
+    }
+
+    // Which side of the surface the ray is on is decided by the geometric normal: the interpolated normal can
+    // face away from the ray on grazing hits of coarse meshes, and treating those as backfaces would invert the
+    // IOR for them
+    const float3 wo_WS = -WorldRayDirection();
+    if (dot(geoNor_WS, wo_WS) < 0.f)
+    {
+        geoNor_WS = -geoNor_WS;
         nor_WS = -nor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
@@ -199,6 +213,21 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
         nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+    }
+    else
+    {
+        // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
+        // correction ensures); other materials keep the plain interpolated normal, facing the ray
+        const uint materialIdx = instanceData.materialIdx;
+        const bool hasGlossyLobe = materialIdx != MATERIAL_IDX_INVALID && bool(materials[materialIdx].flags & MATERIAL_FLAGS_GLOSSY);
+        if (hasGlossyLobe)
+        {
+            nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
+        }
+        else if (dot(nor_WS, wo_WS) < 0.f)
+        {
+            nor_WS = -nor_WS;
+        }
     }
     payload.hitInfo.hitNor_WS = nor_WS;
 
