@@ -6,6 +6,7 @@
 Material::Material()
     : flags(MATERIAL_FLAG_DIFFUSE),
       diffuseTransmission(0.f),
+      roughness(0.f),
       baseColor{ 1, 1, 1 },
       baseColorTextureId(TEXTURE_ID_INVALID),
       glossyReflectionTint{ 1, 1, 1 },

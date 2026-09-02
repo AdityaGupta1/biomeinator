@@ -210,7 +210,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=12"
+                "--maxPathDepth=20"
             ],
             "golden": "gltf/evil_room/golden.png",
             "threshold": 0.02
@@ -223,7 +223,7 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=12",
+                "--maxPathDepth=20",
                 "--tonemapping=0"
             ],
             "golden": "gltf/evil_room/golden_blender_no_tonemap.png",
@@ -445,6 +445,20 @@
             ],
             "golden": "gltf/refraction_passthrough_specular_chain/golden.png",
             "threshold": 0.002
+        },
+        {
+            "name": "rough_reflection_blender_no_tonemap",
+            "scene": "gltf/rough_reflection/rough_reflection.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=4096",
+                "--maxPathDepth=12",
+                "--tonemapping=0"
+            ],
+            "golden": "gltf/rough_reflection/golden_blender_no_tonemap.png",
+            "threshold": 0.01
         },
         {
             "name": "diffuse_albedo_modulation",

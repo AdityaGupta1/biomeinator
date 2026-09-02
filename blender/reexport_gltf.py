@@ -63,6 +63,8 @@ def convert_material(material, ng):
         group.inputs['Diffuse'].default_value = hasDiffuse
         group.inputs['Specular'].default_value = hasSpecular
         group.inputs['Transmission'].default_value = hasTransmission
+        if hasSpecular:
+            group.inputs['Roughness'].default_value = surface_node.inputs['Roughness'].default_value
         _copy_to_group(node_tree, surface_node, 'Base Color', group, 'Base Color')
         if isMetal:
             _copy_to_group(node_tree, surface_node, 'Base Color', group, 'Specular Tint')
@@ -79,6 +81,7 @@ def convert_material(material, ng):
     elif surface_node.type == 'BSDF_GLOSSY':
         group.inputs['Diffuse'].default_value = False
         group.inputs['Specular'].default_value = True
+        group.inputs['Roughness'].default_value = surface_node.inputs['Roughness'].default_value
         _copy_to_group(node_tree, surface_node, 'Color', group, 'Specular Tint')
     elif surface_node.type == 'MIX_SHADER':
         def linked_node(socket):
