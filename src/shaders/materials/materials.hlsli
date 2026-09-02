@@ -158,18 +158,17 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     return walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
 }
 
-float3 evaluateBsdf(
-    const Material material,
-    const float2 uv,
-    const float3 wo_WS,
-    const float3 wi_WS,
-    const float3 surfNor_WS,
-    const TexSampleCtx texCtx)
+float3 evaluateBsdf(const Material material,
+                    const float2 uv,
+                    const float3 wo_WS,
+                    const float3 wi_WS,
+                    const float3 surfNor_WS,
+                    const TexSampleCtx texCtx)
 {
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
 
-    float3 bsdf = 0;
+    float3 bsdf = 0.f;
 
     if (material.hasDiffuse())
     {
@@ -185,7 +184,6 @@ float3 evaluateBsdf(
         }
     }
 
-    // The specular lobe (roughness = 0) is a delta distribution and can't be evaluated for arbitrary directions
     if (material.hasGlossyReflection() && material.roughness > 0.f && !isTransmission)
     {
         const float cosThetaWo = cosTheta(wo_WS, surfNor_WS);
@@ -196,24 +194,22 @@ float3 evaluateBsdf(
             const float3 h_WS = normalize(wo_WS + wi_WS);
             const float d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
             const float g = ggxSmithG2(alpha, cosThetaWo, cosThetaWi);
-            // The glossy lobe matches Cycles' Glossy BSDF node (Multiscatter GGX): constant Fresnel
-            // with the tint as the single-scattering albedo. Any dielectric Fresnel weighting is
-            // applied outside the lobe via fresnelReflectance, mirroring the Blender node group's
-            // Fresnel-node mix.
-            const float3 msCompensation =
+            // The glossy lobe matches Cycles' Glossy BSDF node (Multiscatter GGX): constant Fresnel with the tint as
+            // the single-scattering albedo. Any dielectric Fresnel weighting is applied outside the lobe via
+            // fresnelReflectance, mirroring the Blender node group's Fresnel-node mix.
+            const float3 multipleScatteringCompensation =
                 ggxEnergyCompensation(material.roughness, cosThetaWo, material.glossyReflectionTint);
-            bsdf += material.glossyReflectionTint * fresnelReflectance * msCompensation * d * g / (4.f * cosThetaWo * cosThetaWi);
+            bsdf += material.glossyReflectionTint * fresnelReflectance * multipleScatteringCompensation * d * g /
+                    (4.f * cosThetaWo * cosThetaWi);
         }
     }
+
+    // The specular lobe (roughness = 0) is a delta distribution and can't be evaluated for arbitrary directions.
 
     return bsdf;
 }
 
-float bsdfPdf(
-    const Material material,
-    const float3 wo_WS,
-    const float3 wi_WS,
-    const float3 surfNor_WS)
+float bsdfPdf(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
 {
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
@@ -223,9 +219,20 @@ float bsdfPdf(
     if (material.hasDiffuse())
     {
         // Must mirror the hemisphere split in sampleBsdf exactly or MIS breaks silently
-        const float diffusePdf = isTransmission
-            ? hemisphereCosineWeightedPdf(wi_WS, -surfNor_WS) * material.diffuseTransmission
-            : hemisphereCosineWeightedPdf(wi_WS, surfNor_WS) * (1.f - material.diffuseTransmission);
+        float3 diffuseNor_WS;
+        float diffuseHemisphereWeight;
+        if (isTransmission)
+        {
+            diffuseNor_WS = -surfNor_WS;
+            diffuseHemisphereWeight = material.diffuseTransmission;
+        }
+        else
+        {
+            diffuseNor_WS = surfNor_WS;
+            diffuseHemisphereWeight = 1.f - material.diffuseTransmission;
+        }
+
+        const float diffusePdf = hemisphereCosineWeightedPdf(wi_WS, diffuseNor_WS) * diffuseHemisphereWeight;
         pdf += diffusePdf * (1.f - fresnelReflectance);
     }
 
@@ -246,16 +253,15 @@ struct BsdfSample
     bool wasSpecular;
 };
 
-BsdfSample sampleBsdf(
-    const Material material,
-    const float2 uv,
-    const float3 wo_WS,
-    const float3 surfNor_WS,
-    const TexSampleCtx texCtx,
-    inout RandomNumberGenerator rng)
+BsdfSample sampleBsdf(const Material material,
+                      const float2 uv,
+                      const float3 wo_WS,
+                      const float3 surfNor_WS,
+                      const TexSampleCtx texCtx,
+                      inout RandomNumberGenerator rng)
 {
     BsdfSample result;
-    result.bsdfValue = float3(0, 0, 0);
+    result.bsdfValue = 0.f;
     result.wasSpecular = false;
 
     if (!material.canScatter())
@@ -278,29 +284,32 @@ BsdfSample sampleBsdf(
         chooseReflect = (rng.nextFloat() < fresnelReflectance);
     }
 
-    if (chooseReflect && material.roughness == 0.f)
-    {
-        result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
-        // pdf cancels out with the `* fresnelReflectance` in bsdfValue, so actual bsdf value is material.glossyReflectionTint * implicit fresnelReflectance from random chance of choosing reflection
-        result.pdf = fresnelReflectance;
-        result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
-        result.wasSpecular = true;
-        return result;
-    }
-
     if (chooseReflect)
     {
+        if (material.roughness == 0.f)
+        {
+            result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
+            // pdf cancels out with the `* fresnelReflectance` in bsdfValue, so actual bsdf value is
+            // material.glossyReflectionTint * implicit fresnelReflectance from random chance of choosing reflection
+            result.pdf = fresnelReflectance;
+            result.bsdfValue = material.glossyReflectionTint * fresnelReflectance;
+            result.wasSpecular = true;
+            return result;
+        }
+
         const float alpha = material.roughness * material.roughness;
         const float3 h_WS = sampleGgxVndf(wo_WS, surfNor_WS, alpha, rng);
         result.wi_WS = normalize(reflect(-wo_WS, h_WS));
-        if (cosTheta(result.wi_WS, surfNor_WS) <= 0.f)
+        if (cosTheta(result.wi_WS, surfNor_WS) <= 0.f) // sample fell below the horizon
         {
-            result.pdf = 1.f; // sample fell below the horizon; the zero bsdfValue kills the path
+            result.bsdfValue = 0.f;
+            result.pdf = 1.f;
             return result;
         }
     }
     else if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
     {
+        // TODO: update this block after adding roughness for transmission
         const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
         // ior parameter here is ratio of "from medium ior" over "to medium ior"
         // e.g. 1.f / 1.5f for going from air to glass
