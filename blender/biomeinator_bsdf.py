@@ -277,7 +277,7 @@ def export_gltf(filepath):
         if state is not None:
             proxies.append(state)
     try:
-        bpy.ops.export_scene.gltf(filepath=filepath, export_format='GLTF_SEPARATE')
+        bpy.ops.export_scene.gltf(filepath=filepath, export_format='GLTF_SEPARATE', export_keep_originals=True)
     finally:
         for state in reversed(proxies):
             _pop_principled_proxy(state)

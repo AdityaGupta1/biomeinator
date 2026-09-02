@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-01_
 
 # Scene Knowledgebase
 
@@ -11,3 +11,4 @@ Ray-traceable scene graph, instance and geometry management, materials, and glTF
 | [transform_system.md](transform_system.md) | Float Transform + integer TransformOffset for precision in large worlds |
 | [materials_textures.md](materials_textures.md) | Material mapped array, pending texture upload, mip chain generation |
 | [gltf_loader.md](gltf_loader.md) | glTF 2.0 import via tinygltf into Scene instances |
+| [blender_export.md](blender_export.md) | Blender addon and headless script that export test scenes to glTF |
