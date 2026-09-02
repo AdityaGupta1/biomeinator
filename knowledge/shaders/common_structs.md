@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-01_
 
 # Common CPU/GPU Structs
 
@@ -23,6 +23,8 @@ POD structs that need to be accessible on both CPU and GPU. These live in GPU bu
 **`InstanceData`** — per-instance GPU record: offsets into the shared vertex/index/per-tri/area-light buffers, a `transformOffset` (integer world-space offset to avoid float precision loss), and a `materialIdx`.
 
 **`Material`** — PBR material with a `flags` bitfield (diffuse / glossy reflection / glossy transmission). Helper methods (`hasDiffuse()`, `isDelta()`, `canScatter()`, etc.) are compiled only in C++ via `#ifdef __cplusplus`.
+
+Diffuse and glossy transmission are mutually exclusive: a transmissive material is a pure dielectric (specular reflection + transmission) with no diffuse lobe, mirroring the Blender node group where the Transmission toggle replaces the diffuse base. The glTF loader drops the diffuse flag when transmission is present and `Scene::addMaterial` asserts the invariant, so shader code may assume `hasDiffuse()` and `hasGlossyTransmission()` never hold together.
 
 **`AreaLight`** — triangle light source. Positions do not include `transformOffset` or `globalInstanceOffset` — shaders must apply those offsets.
 

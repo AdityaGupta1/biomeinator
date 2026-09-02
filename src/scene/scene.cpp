@@ -304,6 +304,9 @@ void Scene::freeInstance(Instance* instance)
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
+    ASSERT((material->flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION) != MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION,
+           "Diffuse and glossy transmission are mutually exclusive");
+
     if (this->nextMaterialIdx >= this->mappedMaterialsArray.getSize())
     {
         this->mappedMaterialsArray.resize(toFreeList, this->mappedMaterialsArray.getSize() * 2);

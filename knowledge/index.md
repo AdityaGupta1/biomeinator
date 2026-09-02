@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-09-01_
 
 # Knowledgebase Index
 
@@ -16,4 +16,5 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [util/](util/index.md) | Math helpers, RNG, Halton sequence, ring buffer |
 | [build/](build/index.md) | Shader compilation pipeline, third-party dependencies |
 | [debugging/](debugging/index.md) | GPU fault diagnosis: Aftermath crash dumps, and instrumentation kept as applyable patches |
+| [tests/](tests/index.md) | Golden image tests: runner, golden image types, Blender reference renders |
 | [reference/](reference/index.md) | Vendored upstream docs (DirectX-Specs) for agent reference |

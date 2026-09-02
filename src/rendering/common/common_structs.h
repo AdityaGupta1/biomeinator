@@ -71,6 +71,8 @@ struct InstanceData
 
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
+// Mutually exclusive with MATERIAL_FLAG_DIFFUSE: glossy transmission replaces the diffuse base lobe entirely
+// (enforced in Scene::addMaterial)
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
 // Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)

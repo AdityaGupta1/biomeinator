@@ -2,8 +2,14 @@
 
 The node group mirrors the renderer's material model (see
 src/rendering/common/common_structs.h): diffuse, specular reflection, and specular
-transmission lobes toggled by boolean sockets, with the specular lobe Fresnel-blended
-over the base lobe exactly like the renderer's walterFresnel-based lobe selection.
+transmission lobes toggled by boolean sockets. Specular reflection over diffuse is
+Fresnel-blended with the macro normal exactly like the renderer's walterFresnel-based
+lobe selection; specular reflection + transmission is a single dielectric closure
+(OSL dielectric_bsdf, per-microfacet Fresnel, Multiscatter GGX) with the reflection and
+transmission lobes tinted separately. Transmission replaces diffuse entirely.
+
+The dielectric closure is an OSL Script node, so scenes using transmissive materials
+must render with Cycles' Open Shading Language option enabled.
 
 Export goes through the standard glTF exporter: each material using the node group is
 temporarily rewired to an equivalent Principled BSDF (chosen so the exporter emits the
@@ -23,21 +29,191 @@ bl_info = {
 }
 
 NODE_GROUP_NAME = 'Biomeinator BSDF'
+DIELECTRIC_SCRIPT_NAME = 'biomeinator_dielectric.osl'
+DIELECTRIC_NODE_NAME = 'Dielectric'
+
+# dielectric_bsdf takes alpha (not roughness) and does not flip the IOR on backfaces itself,
+# matching what Cycles' own glass node shader does before calling the closure.
+DIELECTRIC_OSL = '''\
+shader biomeinator_dielectric(color ReflectionTint = 1.0,
+                              color TransmissionTint = 1.0,
+                              float Roughness = 0.0,
+                              float IOR = 1.45,
+                              output closure color BSDF = 0)
+{
+    float alpha = clamp(Roughness, 0.0, 1.0);
+    alpha = alpha * alpha;
+    float eta = max(IOR, 1e-5);
+    eta = backfacing() ? 1.0 / eta : eta;
+    BSDF = dielectric_bsdf(N, vector(0.0), ReflectionTint, TransmissionTint, alpha, alpha, eta, "multi_ggx");
+}
+'''
+
+
+def _ensure_dielectric_script():
+    text = bpy.data.texts.get(DIELECTRIC_SCRIPT_NAME)
+    if text is None:
+        text = bpy.data.texts.new(DIELECTRIC_SCRIPT_NAME)
+    if text.as_string() != DIELECTRIC_OSL:
+        text.clear()
+        text.write(DIELECTRIC_OSL)
+    return text
+
+
+def _compile_script_node(script_node):
+    from cycles import osl as cycles_osl
+    messages = []
+
+    def report(level, message):
+        messages.append((level, message))
+
+    if not cycles_osl.update_script_node(script_node, report):
+        raise RuntimeError('Failed to compile %s: %s' % (DIELECTRIC_SCRIPT_NAME, messages))
+
+
+def _build_nodes(ng):
+    """(Re)creates the group's internal nodes; the interface sockets are left untouched."""
+    nodes = ng.nodes
+    links = ng.links
+    nodes.clear()
+
+    group_in = nodes.new('NodeGroupInput')
+    group_in.location = (-1000, 0)
+
+    diffuse = nodes.new('ShaderNodeBsdfDiffuse')
+    diffuse.location = (-600, 400)
+
+    refraction = nodes.new('ShaderNodeBsdfRefraction')
+    refraction.distribution = 'GGX'
+    refraction.location = (-600, 200)
+
+    dielectric = nodes.new('ShaderNodeScript')
+    dielectric.name = DIELECTRIC_NODE_NAME
+    dielectric.label = 'Dielectric (Specular + Transmission)'
+    dielectric.mode = 'INTERNAL'
+    dielectric.script = _ensure_dielectric_script()
+    dielectric.location = (-600, 0)
+    _compile_script_node(dielectric)
+
+    glossy = nodes.new('ShaderNodeBsdfAnisotropic')
+    glossy.distribution = 'MULTI_GGX'
+    glossy.location = (-600, -250)
+
+    fresnel = nodes.new('ShaderNodeFresnel')
+    fresnel.location = (-800, -450)
+
+    is_glass = nodes.new('ShaderNodeMath')
+    is_glass.operation = 'MULTIPLY'
+    is_glass.label = 'isGlass = Specular * Transmission'
+    is_glass.location = (-800, -600)
+
+    fresnel_or_one = nodes.new('ShaderNodeMix')
+    fresnel_or_one.data_type = 'FLOAT'
+    fresnel_or_one.label = 'mix(1, Fresnel, Diffuse)'
+    fresnel_or_one.location = (-600, -450)
+    fresnel_or_one.inputs['A'].default_value = 1.0
+
+    not_glass = nodes.new('ShaderNodeMath')
+    not_glass.operation = 'SUBTRACT'
+    not_glass.label = '1 - isGlass'
+    not_glass.location = (-600, -600)
+    not_glass.inputs[0].default_value = 1.0
+
+    spec_fac_no_glass = nodes.new('ShaderNodeMath')
+    spec_fac_no_glass.operation = 'MULTIPLY'
+    spec_fac_no_glass.label = 'Specular * (1 - isGlass)'
+    spec_fac_no_glass.location = (-400, -600)
+
+    spec_fac = nodes.new('ShaderNodeMath')
+    spec_fac.operation = 'MULTIPLY'
+    spec_fac.label = 'specFac = that * mix(1, Fresnel, Diffuse)'
+    spec_fac.location = (-200, -450)
+
+    mix_base = nodes.new('ShaderNodeMixShader')
+    mix_base.label = 'Diffuse vs Refraction'
+    mix_base.location = (-350, 300)
+
+    mix_glass = nodes.new('ShaderNodeMixShader')
+    mix_glass.label = 'base vs Dielectric'
+    mix_glass.location = (-150, 200)
+
+    mix_spec = nodes.new('ShaderNodeMixShader')
+    mix_spec.label = 'base vs Specular (Fresnel)'
+    mix_spec.location = (50, 100)
+
+    emission = nodes.new('ShaderNodeEmission')
+    emission.location = (50, -100)
+
+    add_emission = nodes.new('ShaderNodeAddShader')
+    add_emission.location = (250, 0)
+
+    transparent = nodes.new('ShaderNodeBsdfTransparent')
+    transparent.location = (250, 150)
+
+    mix_alpha = nodes.new('ShaderNodeMixShader')
+    mix_alpha.label = 'Alpha cutout'
+    mix_alpha.location = (450, 50)
+
+    group_out = nodes.new('NodeGroupOutput')
+    group_out.location = (650, 50)
+
+    links.new(group_in.outputs['Base Color'], diffuse.inputs['Color'])
+    links.new(group_in.outputs['Base Color'], refraction.inputs['Color'])
+    links.new(group_in.outputs['Roughness'], refraction.inputs['Roughness'])
+    links.new(group_in.outputs['IOR'], refraction.inputs['IOR'])
+    links.new(group_in.outputs['Specular Tint'], dielectric.inputs['ReflectionTint'])
+    links.new(group_in.outputs['Base Color'], dielectric.inputs['TransmissionTint'])
+    links.new(group_in.outputs['Roughness'], dielectric.inputs['Roughness'])
+    links.new(group_in.outputs['IOR'], dielectric.inputs['IOR'])
+    links.new(group_in.outputs['Specular Tint'], glossy.inputs['Color'])
+    links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
+    links.new(group_in.outputs['IOR'], fresnel.inputs['IOR'])
+
+    links.new(group_in.outputs['Specular'], is_glass.inputs[0])
+    links.new(group_in.outputs['Transmission'], is_glass.inputs[1])
+    links.new(group_in.outputs['Diffuse'], fresnel_or_one.inputs['Factor'])
+    links.new(fresnel.outputs['Fac'], fresnel_or_one.inputs['B'])
+    links.new(is_glass.outputs['Value'], not_glass.inputs[1])
+    links.new(group_in.outputs['Specular'], spec_fac_no_glass.inputs[0])
+    links.new(not_glass.outputs['Value'], spec_fac_no_glass.inputs[1])
+    links.new(spec_fac_no_glass.outputs['Value'], spec_fac.inputs[0])
+    links.new(fresnel_or_one.outputs['Result'], spec_fac.inputs[1])
+
+    links.new(group_in.outputs['Transmission'], mix_base.inputs['Fac'])
+    links.new(diffuse.outputs['BSDF'], mix_base.inputs[1])
+    links.new(refraction.outputs['BSDF'], mix_base.inputs[2])
+
+    links.new(is_glass.outputs['Value'], mix_glass.inputs['Fac'])
+    links.new(mix_base.outputs['Shader'], mix_glass.inputs[1])
+    links.new(dielectric.outputs['BSDF'], mix_glass.inputs[2])
+
+    links.new(spec_fac.outputs['Value'], mix_spec.inputs['Fac'])
+    links.new(mix_glass.outputs['Shader'], mix_spec.inputs[1])
+    links.new(glossy.outputs['BSDF'], mix_spec.inputs[2])
+
+    links.new(group_in.outputs['Emission Color'], emission.inputs['Color'])
+    links.new(group_in.outputs['Emission Strength'], emission.inputs['Strength'])
+    links.new(mix_spec.outputs['Shader'], add_emission.inputs[0])
+    links.new(emission.outputs['Emission'], add_emission.inputs[1])
+
+    links.new(group_in.outputs['Alpha'], mix_alpha.inputs['Fac'])
+    links.new(transparent.outputs['BSDF'], mix_alpha.inputs[1])
+    links.new(add_emission.outputs['Shader'], mix_alpha.inputs[2])
+
+    links.new(mix_alpha.outputs['Shader'], group_out.inputs['BSDF'])
 
 
 def _upgrade_node_group(ng):
     hasRoughness = any(item.item_type == 'SOCKET' and item.in_out == 'INPUT' and item.name == 'Roughness'
                        for item in ng.interface.items_tree)
-    if hasRoughness:
-        return
-    sock = ng.interface.new_socket(name='Roughness', in_out='INPUT', socket_type='NodeSocketFloat')
-    sock.default_value = 0.0
-    sock.min_value = 0.0
-    sock.max_value = 1.0
-    sock.subtype = 'FACTOR'
-    group_in = next(n for n in ng.nodes if n.type == 'GROUP_INPUT')
-    glossy = next(n for n in ng.nodes if n.type == 'BSDF_GLOSSY')
-    ng.links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
+    if not hasRoughness:
+        sock = ng.interface.new_socket(name='Roughness', in_out='INPUT', socket_type='NodeSocketFloat')
+        sock.default_value = 0.0
+        sock.min_value = 0.0
+        sock.max_value = 1.0
+        sock.subtype = 'FACTOR'
+    if ng.nodes.get(DIELECTRIC_NODE_NAME) is None:
+        _build_nodes(ng)
 
 
 def ensure_node_group():
@@ -64,9 +240,6 @@ def ensure_node_group():
     add_input('Diffuse', 'NodeSocketBool', True)
     add_input('Specular', 'NodeSocketBool', False)
     add_input('Specular Tint', 'NodeSocketColor', (1.0, 1.0, 1.0, 1.0))
-    # Applies only to specular reflection; rough transmission is not supported by the engine.
-    # The Fresnel-node lobe mix uses the macro normal; revisit matching the microfacet normal
-    # (Cycles' per-half-vector Fresnel, e.g. via an OSL dielectric_bsdf closure) later.
     add_input('Roughness', 'NodeSocketFloat', 0.0, min_value=0.0, max_value=1.0, subtype='FACTOR')
     add_input('Transmission', 'NodeSocketBool', False)
     add_input('IOR', 'NodeSocketFloat', 1.45, min_value=0.0)
@@ -76,98 +249,7 @@ def ensure_node_group():
 
     ng.interface.new_socket(name='BSDF', in_out='OUTPUT', socket_type='NodeSocketShader')
 
-    nodes = ng.nodes
-    links = ng.links
-
-    group_in = nodes.new('NodeGroupInput')
-    group_in.location = (-800, 0)
-
-    diffuse = nodes.new('ShaderNodeBsdfDiffuse')
-    diffuse.location = (-400, 300)
-
-    refraction = nodes.new('ShaderNodeBsdfRefraction')
-    refraction.distribution = 'GGX'
-    refraction.location = (-400, 100)
-
-    glossy = nodes.new('ShaderNodeBsdfAnisotropic')
-    glossy.distribution = 'MULTI_GGX'
-    glossy.location = (-400, -100)
-
-    fresnel = nodes.new('ShaderNodeFresnel')
-    fresnel.location = (-600, -300)
-
-    has_base = nodes.new('ShaderNodeMath')
-    has_base.operation = 'MAXIMUM'
-    has_base.label = 'hasBase = max(Diffuse, Transmission)'
-    has_base.location = (-600, -450)
-
-    fresnel_or_one = nodes.new('ShaderNodeMix')
-    fresnel_or_one.data_type = 'FLOAT'
-    fresnel_or_one.label = 'mix(1, Fresnel, hasBase)'
-    fresnel_or_one.location = (-400, -350)
-    fresnel_or_one.inputs['A'].default_value = 1.0
-
-    spec_fac = nodes.new('ShaderNodeMath')
-    spec_fac.operation = 'MULTIPLY'
-    spec_fac.label = 'specFac = Specular * that'
-    spec_fac.location = (-200, -350)
-
-    mix_base = nodes.new('ShaderNodeMixShader')
-    mix_base.label = 'Diffuse vs Transmission'
-    mix_base.location = (-150, 250)
-
-    mix_spec = nodes.new('ShaderNodeMixShader')
-    mix_spec.label = 'base vs Specular (Fresnel)'
-    mix_spec.location = (50, 100)
-
-    emission = nodes.new('ShaderNodeEmission')
-    emission.location = (50, -100)
-
-    add_emission = nodes.new('ShaderNodeAddShader')
-    add_emission.location = (250, 0)
-
-    transparent = nodes.new('ShaderNodeBsdfTransparent')
-    transparent.location = (250, 150)
-
-    mix_alpha = nodes.new('ShaderNodeMixShader')
-    mix_alpha.label = 'Alpha cutout'
-    mix_alpha.location = (450, 50)
-
-    group_out = nodes.new('NodeGroupOutput')
-    group_out.location = (650, 50)
-
-    links.new(group_in.outputs['Base Color'], diffuse.inputs['Color'])
-    links.new(group_in.outputs['Base Color'], refraction.inputs['Color'])
-    links.new(group_in.outputs['IOR'], refraction.inputs['IOR'])
-    links.new(group_in.outputs['Specular Tint'], glossy.inputs['Color'])
-    links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
-    links.new(group_in.outputs['IOR'], fresnel.inputs['IOR'])
-
-    links.new(group_in.outputs['Diffuse'], has_base.inputs[0])
-    links.new(group_in.outputs['Transmission'], has_base.inputs[1])
-    links.new(has_base.outputs['Value'], fresnel_or_one.inputs['Factor'])
-    links.new(fresnel.outputs['Fac'], fresnel_or_one.inputs['B'])
-    links.new(group_in.outputs['Specular'], spec_fac.inputs[0])
-    links.new(fresnel_or_one.outputs['Result'], spec_fac.inputs[1])
-
-    links.new(group_in.outputs['Transmission'], mix_base.inputs['Fac'])
-    links.new(diffuse.outputs['BSDF'], mix_base.inputs[1])
-    links.new(refraction.outputs['BSDF'], mix_base.inputs[2])
-
-    links.new(spec_fac.outputs['Value'], mix_spec.inputs['Fac'])
-    links.new(mix_base.outputs['Shader'], mix_spec.inputs[1])
-    links.new(glossy.outputs['BSDF'], mix_spec.inputs[2])
-
-    links.new(group_in.outputs['Emission Color'], emission.inputs['Color'])
-    links.new(group_in.outputs['Emission Strength'], emission.inputs['Strength'])
-    links.new(mix_spec.outputs['Shader'], add_emission.inputs[0])
-    links.new(emission.outputs['Emission'], add_emission.inputs[1])
-
-    links.new(group_in.outputs['Alpha'], mix_alpha.inputs['Fac'])
-    links.new(transparent.outputs['BSDF'], mix_alpha.inputs[1])
-    links.new(add_emission.outputs['Shader'], mix_alpha.inputs[2])
-
-    links.new(mix_alpha.outputs['Shader'], group_out.inputs['BSDF'])
+    _build_nodes(ng)
 
     return ng
 
