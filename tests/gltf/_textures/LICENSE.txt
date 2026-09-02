@@ -1,0 +1,7 @@
+Copyright (c) 2026 Aditya Gupta. All rights reserved.
+
+The image files in this directory are not covered by the MIT license in the repository root.
+
+As the sole exception to the above, permission is granted to any person obtaining a copy of this repository to reproduce, distribute, and modify these images as an integral part of the repository, including in forks and in automated builds and tests. No other permission is granted; in particular, the images may not be used, distributed, or made available separately from this repository.
+
+THE IMAGES ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE IMAGES OR THE USE OR OTHER DEALINGS IN THE IMAGES.

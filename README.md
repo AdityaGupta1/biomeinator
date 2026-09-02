@@ -69,4 +69,6 @@ Block textures come from:
 - [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore - CC0
 - [Paler Gardens](https://modrinth.com/resourcepack/paler-gardens2) by autumnleavesfalling_2008 - MIT
 
+Test scene textures in `tests/gltf/_textures/` are my own work and are **not** covered by this project's MIT license; see [tests/gltf/_textures/LICENSE.txt](tests/gltf/_textures/LICENSE.txt).
+
 This project is not sponsored by, endorsed by, or affiliated with NVIDIA Corporation.
