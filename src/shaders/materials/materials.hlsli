@@ -307,7 +307,7 @@ BsdfSample sampleBsdf(const Material material,
             return result;
         }
     }
-    else if (material.hasGlossyTransmission()) // glossy transmission overrides diffuse
+    else if (material.hasGlossyTransmission()) // never combined with diffuse (see MATERIAL_FLAG_GLOSSY_TRANSMISSION)
     {
         // TODO: update this block after adding roughness for transmission
         const float oneMinusFresnelReflectance = 1.f - fresnelReflectance;
