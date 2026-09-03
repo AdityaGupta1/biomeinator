@@ -233,7 +233,7 @@ float dielectricLobeWeight(const DielectricLobeTerms terms)
 
 // pdf (in solid angle of wi) of sampling wi in sampleDielectricBsdf: VNDF density of the half vector times the
 // probability of picking the lobe, mapped to wi through the lobe's Jacobian
-float dielectricPdf(const DielectricLobeTerms terms)
+float dielectricBsdfPdf(const DielectricLobeTerms terms)
 {
     if (!terms.isValid)
     {
@@ -242,7 +242,7 @@ float dielectricPdf(const DielectricLobeTerms terms)
     return dielectricLobeWeight(terms) * terms.g1Wo * terms.d * terms.cosThetaWoH / terms.cosThetaWo * terms.jacobian;
 }
 
-float3 dielectricBsdf(const Material material, const float2 uv, const TexSampleCtx texCtx, const DielectricLobeTerms terms)
+float3 evaluateDielectricBsdf(const Material material, const float2 uv, const TexSampleCtx texCtx, const DielectricLobeTerms terms)
 {
     if (!terms.isValid)
     {
@@ -268,7 +268,7 @@ float3 evaluateBsdf(const Material material,
 {
     if (material.hasGlossyTransmission())
     {
-        return dielectricBsdf(material, uv, texCtx, dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
+        return evaluateDielectricBsdf(material, uv, texCtx, dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
     }
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
@@ -319,7 +319,7 @@ float bsdfPdf(const Material material, const float3 wo_WS, const float3 wi_WS, c
 {
     if (material.hasGlossyTransmission())
     {
-        return dielectricPdf(dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
+        return dielectricBsdfPdf(dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
     }
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
@@ -444,12 +444,12 @@ BsdfSample sampleDielectricBsdf(const Material material,
 
     // Use the full lobe value and pdf so the estimator stays consistent with the values NEE uses for MIS
     const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, result.wi_WS, surfNor_WS);
-    result.pdf = dielectricPdf(terms);
+    result.pdf = dielectricBsdfPdf(terms);
     if (result.pdf <= 0.f) // the half vector reconstructed from wi can disagree with the sampled one at float precision
     {
         return deadBsdfSample(result.wi_WS);
     }
-    result.bsdfValue = dielectricBsdf(material, uv, texCtx, terms);
+    result.bsdfValue = evaluateDielectricBsdf(material, uv, texCtx, terms);
     return result;
 }
 
