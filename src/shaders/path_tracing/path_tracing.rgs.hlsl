@@ -332,6 +332,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
             }
 
+            if (all(payload.pathWeight == 0.f)) // dead BSDF sample; nothing further can contribute
+            {
+                break;
+            }
+
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
