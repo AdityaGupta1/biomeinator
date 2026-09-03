@@ -372,7 +372,7 @@
                 "--width=540",
                 "--height=540",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=4096",
+                "--maxAccumulatedFrames=8192",
                 "--maxPathDepth=12"
             ],
             "golden": "gltf/glass_different_roughness/golden.png",
@@ -385,13 +385,13 @@
                 "--width=540",
                 "--height=540",
                 "--antialiasingMode=1",
-                "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=12",
+                "--maxAccumulatedFrames=16384",
+                "--maxPathDepth=64",
                 "--tonemapping=0",
                 "--refractionIndirectPassthrough=false"
             ],
             "golden": "gltf/glass_different_roughness/golden_blender_no_tonemap.png",
-            "threshold": 0.015
+            "threshold": 0.02
         },
         {
             "name": "glass_diamonds",

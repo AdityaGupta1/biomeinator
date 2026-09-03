@@ -1,4 +1,4 @@
-_Last edited: 2026-09-01_
+_Last edited: 2026-09-02_
 
 # Golden Image Tests
 
@@ -46,3 +46,13 @@ save the one render twice: `save_render` with the scene's view transform for
 again for `golden_blender_no_tonemap.png`. The `.blend` must be saved with the tonemapped view
 transform, not Raw. Scenes with transmissive materials need Cycles' Open Shading Language
 option on, because the node group's dielectric is an OSL closure.
+
+Scenes with *rough* transmission additionally set `cycles.emission_sampling = 'NONE'` on every
+emitter material and 64 bounces in the `.blend` (`glass_different_roughness` is set up this way,
+with 32768 samples). Cycles' `bsdf_microfacet_eval` for the glass closure credits refraction
+directions its sampler can never produce, and eval is only used by light sampling, so turning
+light sampling off makes Cycles' rough glass consistent with its own sampler (and with the
+engine, see [shaders → materials.md](../shaders/materials.md)); the high bounce count removes
+the two renderers' different bounce-limit accounting on long silhouette paths. The matching
+`_blender_no_tonemap` entry runs with `--maxPathDepth=64` and 16384 frames, and its threshold
+(0.02) is set by the combined noise floor (~0.016), not by model differences.

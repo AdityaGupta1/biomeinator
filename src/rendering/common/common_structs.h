@@ -71,8 +71,9 @@ struct InstanceData
 
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
-// Mutually exclusive with MATERIAL_FLAG_DIFFUSE: glossy transmission replaces the diffuse base lobe entirely
-// (enforced in Scene::addMaterial)
+// Mutually exclusive with MATERIAL_FLAG_DIFFUSE: glossy transmission replaces the diffuse base lobe entirely.
+// Roughness > 0 is only supported together with MATERIAL_FLAG_GLOSSY_REFLECTION (the dielectric lobe), so
+// transmission-only materials are delta. Both enforced in Scene::addMaterial.
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
 // Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
@@ -93,7 +94,7 @@ public:
     uint flags;
     float emissiveStrength;
     float diffuseTransmission; // thin-wall diffuse transmission fraction; > 0 only for thin foliage hits
-    float roughness; // GGX roughness (alpha = roughness^2) for glossy reflection; 0 = perfectly specular
+    float roughness; // GGX roughness (alpha = roughness^2) for glossy reflection and transmission; 0 = perfectly specular
 
     float3 baseColor;
     uint baseColorTextureId;
@@ -124,9 +125,20 @@ public:
         return emissiveStrength > 0.f;
     }
 
+    bool hasGlossy()
+    {
+        return bool(flags & MATERIAL_FLAGS_GLOSSY);
+    }
+
     bool isDelta()
     {
-        return (flags & MATERIAL_FLAGS_GLOSSY) && !(flags & MATERIAL_FLAG_DIFFUSE) && roughness == 0.f;
+        return hasGlossy() && !hasDiffuse() && roughness == 0.f;
+    }
+
+    // Perfectly specular transmission is the only kind a ray can pass through instead of scattering at
+    bool isDeltaTransmission()
+    {
+        return hasGlossyTransmission() && isDelta();
     }
 
     bool hasDiffuseOrGlossyTransmission()
@@ -137,6 +149,18 @@ public:
     bool hasDiffuseTransmission()
     {
         return hasDiffuse() && diffuseTransmission > 0.f;
+    }
+
+    bool hasRoughGlossyTransmission()
+    {
+        return hasGlossyTransmission() && roughness > 0.f;
+    }
+
+    // Light arriving from behind the shading normal can scatter towards the viewer, so light sampling
+    // must consider both hemispheres
+    bool acceptsBacksideLight()
+    {
+        return hasDiffuseTransmission() || hasRoughGlossyTransmission();
     }
 
     bool hasArrayTexture()

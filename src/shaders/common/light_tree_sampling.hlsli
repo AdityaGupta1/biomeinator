@@ -90,13 +90,13 @@ float geomTermBound(float3 p, float3 N, float3 bboxMin, float3 bboxMax)
     return nrmMax * rsqrt(hyp2);
 }
 
-// Surfaces with diffuse transmission scatter into both hemispheres, so their bound must consider
-// the flipped normal too — otherwise a subtree entirely behind the surface plane would be pruned
-// even though transmission can still reach it.
-float geomTermBoundTwoSided(float3 p, float3 N, bool hasDiffuseTransmission, float3 bboxMin, float3 bboxMax)
+// Surfaces that accept backside light (diffuse or rough transmission) scatter into both hemispheres,
+// so their bound must consider the flipped normal too — otherwise a subtree entirely behind the
+// surface plane would be pruned even though transmission can still reach it.
+float geomTermBoundTwoSided(float3 p, float3 N, bool acceptsBacksideLight, float3 bboxMin, float3 bboxMax)
 {
     float bound = geomTermBound(p, N, bboxMin, bboxMax);
-    if (hasDiffuseTransmission)
+    if (acceptsBacksideLight)
     {
         bound = max(bound, geomTermBound(p, -N, bboxMin, bboxMax));
     }
@@ -142,12 +142,12 @@ void rtslChildProbs(LightTreeNode c1,
                     LightTreeNode c2,
                     float3 hitPos,
                     float3 hitNormal,
-                    bool hasDiffuseTransmission,
+                    bool acceptsBacksideLight,
                     out float p1,
                     out float p2)
 {
-    const float core1 = (c1.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, hasDiffuseTransmission, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
-    const float core2 = (c2.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, hasDiffuseTransmission, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
+    const float core1 = (c1.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
+    const float core2 = (c2.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
 
     if (core1 == 0.0f && core2 == 0.0f)
     {
@@ -203,7 +203,7 @@ void rtslChildProbs(LightTreeNode c1,
 bool selectLightFromSubtree(uint subtreeRoot,
                             float3 hitPos,
                             float3 hitNormal,
-                            bool hasDiffuseTransmission,
+                            bool acceptsBacksideLight,
                             inout RandomNumberGenerator rng,
                             out uint areaLightIdx,
                             out float pdfSelect)
@@ -231,7 +231,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, hasDiffuseTransmission, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, acceptsBacksideLight, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
@@ -277,7 +277,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
 // at this shading point. Used by the BSDF-hit emission MIS branch.
 // Must use the IDENTICAL weight formula as selectLightFromSubtree at each
 // internal node — see rtslChildProbs.
-float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, bool hasDiffuseTransmission)
+float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal, bool acceptsBacksideLight)
 {
     if (rtslParams.treeLeafCount == 0u)
     {
@@ -308,7 +308,7 @@ float evaluateLightSelectPdf(uint areaLightIdx, float3 hitPos, float3 hitNormal,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, hasDiffuseTransmission, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos, hitNormal, acceptsBacksideLight, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
@@ -339,7 +339,7 @@ float lightPdfRtsl(const HitInfo hitInfo,
                    const float3 surfPos_WS,
                    const float3 surfNor_WS,
                    const float3 wi_WS,
-                   const bool hasDiffuseTransmission)
+                   const bool acceptsBacksideLight)
 {
     const uint areaLightIdx = getAreaLightIdxFromHit(hitInfo);
     if (areaLightIdx == LIGHT_IDX_INVALID)
@@ -347,7 +347,7 @@ float lightPdfRtsl(const HitInfo hitInfo,
         return 0.f;
     }
 
-    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, hasDiffuseTransmission);
+    const float pdfSelect = evaluateLightSelectPdf(areaLightIdx, surfPos_WS, surfNor_WS, acceptsBacksideLight);
     if (pdfSelect <= 0.f)
     {
         return 0.f;
@@ -373,7 +373,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const RayCone rayCone,
                                               const bool canPassthrough,
                                               const bool startUnderwater,
-                                              const bool hasDiffuseTransmission,
+                                              const bool acceptsBacksideLight,
                                               inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
@@ -382,7 +382,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
     uint pickedLightIdx;
     float pdfSelect;
     const bool gotLight = selectLightFromSubtree(
-        0u, surfPos_WS, surfNor_WS, hasDiffuseTransmission, rng, pickedLightIdx, pdfSelect);
+        0u, surfPos_WS, surfNor_WS, acceptsBacksideLight, rng, pickedLightIdx, pdfSelect);
     if (!gotLight)
     {
         return result;
