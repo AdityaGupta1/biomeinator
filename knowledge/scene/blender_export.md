@@ -1,4 +1,4 @@
-_Last edited: 2026-09-01_
+_Last edited: 2026-09-02_
 
 # Blender glTF Export
 
@@ -18,7 +18,10 @@ Specular reflection + transmission is one OSL `dielectric_bsdf` closure with per
 Fresnel and `multi_ggx` energy compensation — the Glass BSDF node would do the same but tints
 both lobes with one colour, whereas the engine (and `glass_diamonds`) tint reflection and
 transmission separately. Transmission replaces diffuse entirely, matching the engine invariant
-that a transmissive material has no diffuse lobe.
+that a transmissive material has no diffuse lobe. Transmission without Specular must keep
+Roughness at 0: the engine only supports rough transmission inside the dielectric closure
+(asserted in `Scene::addMaterial`), so the Refraction node's roughness input exists only for
+socket parity and exporting it non-zero fails at load.
 
 `dielectric_bsdf` gotchas, both handled inside the embedded OSL text: it takes alpha
 (roughness²), and it does not flip the IOR on backfaces (Cycles' own glass node shader does

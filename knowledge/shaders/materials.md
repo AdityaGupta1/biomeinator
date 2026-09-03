@@ -36,11 +36,12 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   is flipped onto the shading normal's side; D, G and Fresnel are symmetric in that sign.
 - The refraction formula yields *some* half vector for every `wi` below the surface, including ones
   that put `wo` and `wi` on the same side of `h`, which no refraction can produce. Evaluation must
-  return zero (value and pdf) for those, not just for `wo·h <= 0`: without the `wi·h < 0` test the
-  transmission pdf integrated to 1.16 at roughness 1 and NEE credited unreachable directions, so
-  light-sampled renders gained up to 8% energy while BSDF-sampled ones were fine. Cycles' eval has
+  return zero (value and pdf) for those, not just for `wo·h <= 0`; otherwise NEE credits unreachable
+  directions and light-sampled renders come out brighter than BSDF-sampled ones. Cycles' eval has
   the same gap (a TODO in `bsdf_microfacet_eval`), which is why its light-sampled rough glass is too
   bright — see [tests → golden_tests.md](../tests/golden_tests.md) for how the reference avoids it.
+- A relative IOR within `DIELECTRIC_PASSTHROUGH_IOR_EPSILON` of 1 is sampled as a delta passthrough
+  (as Cycles does): refraction then gives `wi = -wo`, for which the half vector degenerates.
 - The refraction Jacobian `ior² |wi·h| / (ior wi·h + wo·h)²` is what Cycles' `sqr(ior * inv_len_H)`
   term is. There is **no η² radiance scaling** anywhere: Cycles applies none, and the delta path
   (throughput = tint) already matches it. Value and pdf share the Jacobian, so BSDF-sampled
@@ -48,13 +49,11 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
 - Multiple-scattering compensation for glass uses Cycles' IOR-indexed tables
   (`ggxGlassETable` etc. in `ggx_tables.hlsli`, `16³` over roughness/cosθ/`z = sqrt((ior-1)/(ior+1))`,
   with the `Inv` pair for relative IOR < 1 looked up with `1/ior`) and the same `1 + Fms(1-E)/E`
-  form as reflection, with the transmission tint as Fss. The compensation is large: at roughness 1
-  the inside interface of glass has E ≈ 0.42, i.e. more than 2× boost. Monte Carlo of the
-  implemented lobe reproduces the entering (ior > 1) table to four digits at every grid point, but
-  the inverse table only if refracted samples that surface on the reflection side are *not* killed:
-  Cycles ships inverse tables that disagree with its own sampler (up to 17% high at grazing exit,
-  so exiting glass is under-compensated). The tables are kept as-is so the engine and Cycles stay
-  identical in BSDF-sampled transport, which they are to within 0.3%.
+  form as reflection, with the transmission tint as Fss. The compensation is large at high
+  roughness (more than 2× for the inside interface at roughness 1). Cycles' inverse tables
+  disagree with its own sampler — they count refracted samples that surface on the reflection
+  side, which the sampler kills — so exiting glass at grazing angles is under-compensated. They
+  are kept as-is so the engine and Cycles stay identical in BSDF-sampled transport.
 - Samples that end up on the wrong side of the surface for their lobe are killed (value 0, pdf 1)
   and the path continues with zero weight — kill-and-continue is unbiased, and the pdf needs no
   renormalisation because it is the true sampling density. Killed samples must still carry a valid
@@ -86,7 +85,7 @@ predicate that tells light sampling a surface can scatter light arriving from be
 normal: it widens the light-tree bounds, disables the dome-light backside rejection, and is stored
 per bounce for the BSDF-hit emission MIS weight. Forward selection and pdf evaluation must use the
 same value or the MIS weights disagree. Rough glass is not passthrough: the anyhit shader lets
-`REFRACTION_PASSTHROUGH` shadow rays through delta transmission only.
+`PAYLOAD_FLAG_REFRACTION_PASSTHROUGH` rays through `isDeltaTransmission()` materials only.
 
 `trySplitMaterial` does not split rough glass, since a split on the macro-normal Fresnel would
 mis-weight lobes whose Fresnel is per microfacet.
@@ -96,5 +95,7 @@ mis-weight lobes whose Fresnel is per microfacet.
 `ClosestHit_Primary` decides backfacing from the geometric normal (the interpolated normal can face
 away from the ray on grazing hits, which would invert the IOR for them) and, for materials with a
 glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflection`
-(`util/shading_normal.hlsli`) so reflections never point into the surface. Other materials keep the
-plain interpolated normal, flipped to face the ray as before.
+(`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops use the wave
+normal instead; other materials keep the plain interpolated normal, flipped to face the ray. The
+bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
+too, whereas Cycles bends only the specular closures' normal (a silhouette-only difference).

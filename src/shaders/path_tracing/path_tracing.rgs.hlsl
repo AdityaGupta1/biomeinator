@@ -201,7 +201,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         // canPassthrough = has the path encountered a non-delta surface (including this one)
         // isPassthrough = this intersection has glossy transmission and should be passed through
         const bool canPassthrough = bool(renderParams.refractionIndirectPassthrough) && (!isDeltaSurface || hasEncounteredNonDeltaSurface);
-        const bool isPassthrough = canPassthrough && surfMaterial.hasGlossyTransmission() && isDeltaSurface;
+        const bool isPassthrough = canPassthrough && surfMaterial.isDeltaTransmission();
 
         // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last
         // "real" bounce's information. This is important for matching MIS weights with direct light sampling, which

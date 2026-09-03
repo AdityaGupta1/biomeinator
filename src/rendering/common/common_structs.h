@@ -71,8 +71,9 @@ struct InstanceData
 
 #define MATERIAL_FLAG_DIFFUSE (1 << 0)
 #define MATERIAL_FLAG_GLOSSY_REFLECTION (1 << 1) // glossy includes specular (roughness = 0) and glossy (roughness > 0)
-// Mutually exclusive with MATERIAL_FLAG_DIFFUSE: glossy transmission replaces the diffuse base lobe entirely
-// (enforced in Scene::addMaterial)
+// Mutually exclusive with MATERIAL_FLAG_DIFFUSE: glossy transmission replaces the diffuse base lobe entirely.
+// Roughness > 0 is only supported together with MATERIAL_FLAG_GLOSSY_REFLECTION (the dielectric lobe), so
+// transmission-only materials are delta. Both enforced in Scene::addMaterial.
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
 // Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
@@ -124,9 +125,20 @@ public:
         return emissiveStrength > 0.f;
     }
 
+    bool hasGlossyLobe()
+    {
+        return bool(flags & MATERIAL_FLAGS_GLOSSY);
+    }
+
     bool isDelta()
     {
-        return (flags & MATERIAL_FLAGS_GLOSSY) && !(flags & MATERIAL_FLAG_DIFFUSE) && roughness == 0.f;
+        return hasGlossyLobe() && !hasDiffuse() && roughness == 0.f;
+    }
+
+    // Perfectly specular transmission is the only kind a ray can pass through instead of scattering at
+    bool isDeltaTransmission()
+    {
+        return hasGlossyTransmission() && isDelta();
     }
 
     bool hasDiffuseOrGlossyTransmission()

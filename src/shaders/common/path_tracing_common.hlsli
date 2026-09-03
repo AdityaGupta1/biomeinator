@@ -118,7 +118,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     const Material material = materials[materialIdx];
     // Only specular transmission can be passed through without scattering; rough glass is a real bounce
     const bool testRefractionPassthrough =
-        bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission() && material.isDelta();
+        bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.isDeltaTransmission();
     const bool testAlphaCutout =
         material.hasDiffuse() && material.baseColorTextureId != TEXTURE_ID_INVALID;
 
@@ -177,6 +177,7 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
     const InstanceData instanceData = instanceDatas[InstanceID()];
+    const uint materialIdx = instanceData.materialIdx;
 
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
@@ -218,8 +219,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     {
         // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
         // correction ensures); other materials keep the plain interpolated normal, facing the ray
-        const uint materialIdx = instanceData.materialIdx;
-        const bool hasGlossyLobe = materialIdx != MATERIAL_IDX_INVALID && bool(materials[materialIdx].flags & MATERIAL_FLAGS_GLOSSY);
+        const bool hasGlossyLobe = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossyLobe();
         if (hasGlossyLobe)
         {
             nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
@@ -236,7 +236,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
-    payload.materialIdx = instanceData.materialIdx;
+    payload.materialIdx = materialIdx;
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

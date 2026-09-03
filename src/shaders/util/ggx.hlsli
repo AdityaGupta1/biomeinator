@@ -62,26 +62,34 @@ float3 sampleGgxVndf(const float3 wo_WS, const float3 surfNor_WS, const float al
     return normalize(mul(tbn, h_TS));
 }
 
-// Clamped bilinear lookup of the directional albedo table, matching Cycles' lookup_table_read_2D
+static const uint GGX_TABLE_SIZE = 32u; // per axis of ggxETable / ggxEavgTable
+static const uint GGX_GLASS_TABLE_SIZE = 16u; // per axis of the ggxGlass*Table set
+
+// Maps a [0, 1] table coordinate to the bracketing indices of a size-wide axis and returns the lerp factor between
+// them; clamped like Cycles' lookup_table_read
+float tableAxis(const float coord, const uint size, out uint idx0, out uint idx1)
+{
+    const float x = saturate(coord) * float(size - 1u);
+    idx0 = min(uint(x), size - 1u);
+    idx1 = min(idx0 + 1u, size - 1u);
+    return x - idx0;
+}
+
 float ggxDirectionalAlbedo(const float roughness, const float cosThetaV)
 {
-    const float x = saturate(roughness) * 31.f;
-    const float y = saturate(cosThetaV) * 31.f;
-    const uint x0 = min(uint(x), 31u);
-    const uint y0 = min(uint(y), 31u);
-    const uint x1 = min(x0 + 1u, 31u);
-    const uint y1 = min(y0 + 1u, 31u);
-    const float row0 = lerp(ggxETable[y0 * 32 + x0], ggxETable[y0 * 32 + x1], x - x0);
-    const float row1 = lerp(ggxETable[y1 * 32 + x0], ggxETable[y1 * 32 + x1], x - x0);
-    return lerp(row0, row1, y - y0);
+    uint x0, x1, y0, y1;
+    const float tx = tableAxis(roughness, GGX_TABLE_SIZE, x0, x1);
+    const float ty = tableAxis(cosThetaV, GGX_TABLE_SIZE, y0, y1);
+    const float row0 = lerp(ggxETable[y0 * GGX_TABLE_SIZE + x0], ggxETable[y0 * GGX_TABLE_SIZE + x1], tx);
+    const float row1 = lerp(ggxETable[y1 * GGX_TABLE_SIZE + x0], ggxETable[y1 * GGX_TABLE_SIZE + x1], tx);
+    return lerp(row0, row1, ty);
 }
 
 float ggxAverageAlbedo(const float roughness)
 {
-    const float x = saturate(roughness) * 31.f;
-    const uint x0 = min(uint(x), 31u);
-    const uint x1 = min(x0 + 1u, 31u);
-    return lerp(ggxEavgTable[x0], ggxEavgTable[x1], x - x0);
+    uint x0, x1;
+    const float tx = tableAxis(roughness, GGX_TABLE_SIZE, x0, x1);
+    return lerp(ggxEavgTable[x0], ggxEavgTable[x1], tx);
 }
 
 float ggxGlassETableRead(const bool useInverseTable, const uint idx)
@@ -96,54 +104,46 @@ float ggxGlassEavgTableRead(const bool useInverseTable, const uint idx)
 
 // The glass tables' ior axis is parameterized by z = sqrt((ior - 1) / (ior + 1)) for ior >= 1; a relative ior
 // below 1 uses the inverse tables with 1/ior
-float ggxGlassTableZ(inout float ior, out bool useInverseTable)
+float ggxGlassTableZ(const float ior, out bool useInverseTable)
 {
     useInverseTable = ior < 1.f;
-    if (useInverseTable)
-    {
-        ior = 1.f / ior;
-    }
-    return saturate(sqrt((ior - 1.f) / (ior + 1.f))) * 15.f;
+    const float tableIor = useInverseTable ? 1.f / ior : ior;
+    return sqrt((tableIor - 1.f) / (tableIor + 1.f));
 }
 
-// Clamped trilinear lookup of the glass directional albedo, matching Cycles' lookup_table_read_3D
-float ggxGlassDirectionalAlbedo(const float roughness, const float cosThetaV, float ior)
+float ggxGlassDirectionalAlbedo(const float roughness, const float cosThetaV, const float ior)
 {
     bool useInverseTable;
     const float z = ggxGlassTableZ(ior, useInverseTable);
-    const float x = saturate(roughness) * 15.f;
-    const float y = saturate(cosThetaV) * 15.f;
-    const uint x0 = min(uint(x), 15u);
-    const uint y0 = min(uint(y), 15u);
-    const uint z0 = min(uint(z), 15u);
-    const uint x1 = min(x0 + 1u, 15u);
-    const uint y1 = min(y0 + 1u, 15u);
-    const uint z1 = min(z0 + 1u, 15u);
-    const float tx = x - x0;
-    const float ty = y - y0;
-    const float tz = z - z0;
+    uint x0, x1, y0, y1, z0, z1;
+    const float tx = tableAxis(roughness, GGX_GLASS_TABLE_SIZE, x0, x1);
+    const float ty = tableAxis(cosThetaV, GGX_GLASS_TABLE_SIZE, y0, y1);
+    const float tz = tableAxis(z, GGX_GLASS_TABLE_SIZE, z0, z1);
 
-    const uint slice0 = z0 * 256u;
-    const uint slice1 = z1 * 256u;
-    const float row00 = lerp(ggxGlassETableRead(useInverseTable, slice0 + y0 * 16u + x0), ggxGlassETableRead(useInverseTable, slice0 + y0 * 16u + x1), tx);
-    const float row01 = lerp(ggxGlassETableRead(useInverseTable, slice0 + y1 * 16u + x0), ggxGlassETableRead(useInverseTable, slice0 + y1 * 16u + x1), tx);
-    const float row10 = lerp(ggxGlassETableRead(useInverseTable, slice1 + y0 * 16u + x0), ggxGlassETableRead(useInverseTable, slice1 + y0 * 16u + x1), tx);
-    const float row11 = lerp(ggxGlassETableRead(useInverseTable, slice1 + y1 * 16u + x0), ggxGlassETableRead(useInverseTable, slice1 + y1 * 16u + x1), tx);
-    return lerp(lerp(row00, row01, ty), lerp(row10, row11, ty), tz);
+    const uint sliceSize = GGX_GLASS_TABLE_SIZE * GGX_GLASS_TABLE_SIZE;
+    const uint row00 = z0 * sliceSize + y0 * GGX_GLASS_TABLE_SIZE;
+    const uint row01 = z0 * sliceSize + y1 * GGX_GLASS_TABLE_SIZE;
+    const uint row10 = z1 * sliceSize + y0 * GGX_GLASS_TABLE_SIZE;
+    const uint row11 = z1 * sliceSize + y1 * GGX_GLASS_TABLE_SIZE;
+    const float e00 = lerp(ggxGlassETableRead(useInverseTable, row00 + x0), ggxGlassETableRead(useInverseTable, row00 + x1), tx);
+    const float e01 = lerp(ggxGlassETableRead(useInverseTable, row01 + x0), ggxGlassETableRead(useInverseTable, row01 + x1), tx);
+    const float e10 = lerp(ggxGlassETableRead(useInverseTable, row10 + x0), ggxGlassETableRead(useInverseTable, row10 + x1), tx);
+    const float e11 = lerp(ggxGlassETableRead(useInverseTable, row11 + x0), ggxGlassETableRead(useInverseTable, row11 + x1), tx);
+    return lerp(lerp(e00, e01, ty), lerp(e10, e11, ty), tz);
 }
 
-float ggxGlassAverageAlbedo(const float roughness, float ior)
+float ggxGlassAverageAlbedo(const float roughness, const float ior)
 {
     bool useInverseTable;
     const float z = ggxGlassTableZ(ior, useInverseTable);
-    const float x = saturate(roughness) * 15.f;
-    const uint x0 = min(uint(x), 15u);
-    const uint z0 = min(uint(z), 15u);
-    const uint x1 = min(x0 + 1u, 15u);
-    const uint z1 = min(z0 + 1u, 15u);
-    const float row0 = lerp(ggxGlassEavgTableRead(useInverseTable, z0 * 16u + x0), ggxGlassEavgTableRead(useInverseTable, z0 * 16u + x1), x - x0);
-    const float row1 = lerp(ggxGlassEavgTableRead(useInverseTable, z1 * 16u + x0), ggxGlassEavgTableRead(useInverseTable, z1 * 16u + x1), x - x0);
-    return lerp(row0, row1, z - z0);
+    uint x0, x1, z0, z1;
+    const float tx = tableAxis(roughness, GGX_GLASS_TABLE_SIZE, x0, x1);
+    const float tz = tableAxis(z, GGX_GLASS_TABLE_SIZE, z0, z1);
+    const uint row0 = z0 * GGX_GLASS_TABLE_SIZE;
+    const uint row1 = z1 * GGX_GLASS_TABLE_SIZE;
+    const float e0 = lerp(ggxGlassEavgTableRead(useInverseTable, row0 + x0), ggxGlassEavgTableRead(useInverseTable, row0 + x1), tx);
+    const float e1 = lerp(ggxGlassEavgTableRead(useInverseTable, row1 + x0), ggxGlassEavgTableRead(useInverseTable, row1 + x1), tx);
+    return lerp(e0, e1, tz);
 }
 
 // Multiple-scattering energy compensation factor for a single-scattering GGX lobe with directional albedo e and
@@ -162,7 +162,7 @@ float3 ggxEnergyCompensation(const float roughness, const float cosThetaV, const
     return ggxEnergyCompensationFromAlbedo(ggxDirectionalAlbedo(roughness, cosThetaV), ggxAverageAlbedo(roughness), fss);
 }
 
-// For the dielectric (reflection + transmission) lobe; Cycles uses the transmission tint as Fss
+// For the dielectric (reflection + transmission) lobe
 float3 ggxGlassEnergyCompensation(const float roughness, const float cosThetaV, const float ior, const float3 fss)
 {
     return ggxEnergyCompensationFromAlbedo(

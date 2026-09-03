@@ -268,6 +268,10 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             if (hasGlossyTransmission)
             {
                 hasDiffuse = false;
+                if (!hasPbr)
+                {
+                    material.roughness = 0.f; // glTF's default roughness of 1 would make unspecified glass fully rough
+                }
             }
         }
 
