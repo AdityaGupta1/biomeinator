@@ -87,8 +87,9 @@ per bounce for the BSDF-hit emission MIS weight. Forward selection and pdf evalu
 same value or the MIS weights disagree. Rough glass is not passthrough: the anyhit shader lets
 `PAYLOAD_FLAG_REFRACTION_PASSTHROUGH` rays through `isDeltaTransmission()` materials only.
 
-`trySplitMaterial` does not split rough glass, since a split on the macro-normal Fresnel would
-mis-weight lobes whose Fresnel is per microfacet.
+`trySplitMaterial` only splits at roughness 0 for now (#372). Rough glass could never be split
+this way, since a split on the macro-normal Fresnel would mis-weight lobes whose Fresnel is per
+microfacet; other rough glossy materials simply aren't split yet.
 
 ## Shading normal
 

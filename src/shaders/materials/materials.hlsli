@@ -573,7 +573,8 @@ bool trySplitMaterial(inout Material surfMaterial,
         }
     }
 
-    // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them
+    // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them;
+    // other rough glossy materials could be split but aren't yet
     // TODO: split rough materials too (see #372)
     if (surfMaterial.hasGlossyReflection() &&
         (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission()) && surfMaterial.roughness == 0.f)
