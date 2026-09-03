@@ -364,19 +364,6 @@ struct BsdfSample
     bool wasSpecular;
 };
 
-bool chooseReflection(const float fresnelReflectance, inout RandomNumberGenerator rng)
-{
-    if (fresnelReflectance <= 0.f)
-    {
-        return false;
-    }
-    if (fresnelReflectance >= 1.f)
-    {
-        return true;
-    }
-    return rng.nextFloat() < fresnelReflectance;
-}
-
 // A sample with no throughput. It keeps a valid direction so the zero-weight path doesn't feed NaN geometry into
 // later bounces.
 BsdfSample deadBsdfSample(const float3 wi_WS)
@@ -411,7 +398,7 @@ BsdfSample sampleDielectricBsdf(const Material material,
         h_WS = sampleGgxVndf(wo_WS, surfNor_WS, material.roughness * material.roughness, rng); // consumes random numbers, so not a ternary
     }
     const float fresnelReflectance = material.hasGlossyReflection() ? walterFresnel(material.ior, dot(wo_WS, h_WS)) : 0.f;
-    const bool chooseReflect = chooseReflection(fresnelReflectance, rng);
+    const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
     const float3 reflected_WS = normalize(reflect(-wo_WS, h_WS));
 
     BsdfSample result;
@@ -488,7 +475,7 @@ BsdfSample sampleBsdf(const Material material,
     }
 
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
-    const bool chooseReflect = chooseReflection(fresnelReflectance, rng);
+    const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
 
     if (chooseReflect)
     {
@@ -586,8 +573,9 @@ bool trySplitMaterial(inout Material surfMaterial,
     }
 
     // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them
-    if (surfMaterial.hasGlossyReflection() && (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission())
-        && !surfMaterial.hasRoughGlossyTransmission())
+    // TODO: split rough materials too (see #372)
+    if (surfMaterial.hasGlossyReflection() &&
+        (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission()) && surfMaterial.roughness == 0.f)
     {
         const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfNor_WS));
 
