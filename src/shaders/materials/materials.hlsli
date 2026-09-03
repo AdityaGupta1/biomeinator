@@ -412,7 +412,7 @@ BsdfSample sampleDielectricBsdf(const Material material,
         // ior parameter here is ratio of "from medium ior" over "to medium ior"
         // e.g. 1.f / 1.5f for going from air to glass
         const float3 refracted_WS = refract(-wo_WS, h_WS, 1.f / material.ior);
-        if (!any(refracted_WS))
+        if (all(refracted_WS == 0.f)) // refract() returns zero on total internal reflection
         {
             // Total internal reflection with no reflection lobe to fall back on (transmission-only materials, e.g.
             // the transmission half of a path split): the sample is lost
@@ -423,8 +423,9 @@ BsdfSample sampleDielectricBsdf(const Material material,
 
     if (isDelta)
     {
-        // pdf cancels out with the lobe weight in bsdfValue, so the actual bsdf value is the lobe's tint times the
-        // implicit Fresnel weight from the random chance of choosing that lobe
+        // The Fresnel weighting is already applied by the random choice of lobe, so the throughput bsdfValue / pdf
+        // must reduce to the lobe's tint: pdf is the probability of having chosen this lobe, and bsdfValue carries
+        // the same factor so the two cancel
         result.pdf = chooseReflect ? fresnelReflectance : (1.f - fresnelReflectance);
         if (chooseReflect)
         {
