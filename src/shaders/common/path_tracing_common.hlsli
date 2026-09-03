@@ -226,6 +226,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         }
         else if (dot(nor_WS, wo_WS) < 0.f)
         {
+            // TODO: mirror Cycles instead, keeping the normal and killing samples that go under the geometric normal (see #371)
             nor_WS = -nor_WS;
         }
     }
