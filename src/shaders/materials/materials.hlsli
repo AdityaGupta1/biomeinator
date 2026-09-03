@@ -194,7 +194,10 @@ DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo
         h_WS = -h_WS;
     }
     terms.cosThetaWoH = dot(wo_WS, h_WS);
-    if (terms.cosThetaWoH <= 0.f) // no visible microfacet maps wo to wi
+    const float cosThetaWiH = dot(wi_WS, h_WS);
+    // No microfacet maps wo to wi unless wo sees its front and a refracted wi leaves through its back; the
+    // refraction half vector formula still yields a same-side h for directions no refraction can reach
+    if (terms.cosThetaWoH <= 0.f || (terms.isTransmission && cosThetaWiH >= 0.f))
     {
         return terms;
     }
@@ -205,7 +208,7 @@ DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo
     terms.g1Wo = ggxSmithG1(alpha, terms.cosThetaWo);
     terms.g2 = ggxSmithG2(alpha, terms.cosThetaWo, absCosTheta(wi_WS, surfNor_WS));
     terms.jacobian = terms.isTransmission
-        ? refractionJacobian(material.ior, terms.cosThetaWoH, dot(wi_WS, h_WS))
+        ? refractionJacobian(material.ior, terms.cosThetaWoH, cosThetaWiH)
         : 1.f / (4.f * terms.cosThetaWoH);
     terms.isValid = true;
     return terms;

@@ -34,6 +34,13 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
 - Evaluation reconstructs the half vector from `(wo, wi)`: `wo + wi` for reflection, Walter's
   `-(ior * wi + wo)` for refraction. The refraction half vector points to the lower-IOR side, so it
   is flipped onto the shading normal's side; D, G and Fresnel are symmetric in that sign.
+- The refraction formula yields *some* half vector for every `wi` below the surface, including ones
+  that put `wo` and `wi` on the same side of `h`, which no refraction can produce. Evaluation must
+  return zero (value and pdf) for those, not just for `wo·h <= 0`: without the `wi·h < 0` test the
+  transmission pdf integrated to 1.16 at roughness 1 and NEE credited unreachable directions, so
+  light-sampled renders gained up to 8% energy while BSDF-sampled ones were fine. Cycles' eval has
+  the same gap (a TODO in `bsdf_microfacet_eval`), which is why its light-sampled rough glass is too
+  bright — see [tests → golden_tests.md](../tests/golden_tests.md) for how the reference avoids it.
 - The refraction Jacobian `ior² |wi·h| / (ior wi·h + wo·h)²` is what Cycles' `sqr(ior * inv_len_H)`
   term is. There is **no η² radiance scaling** anywhere: Cycles applies none, and the delta path
   (throughput = tint) already matches it. Value and pdf share the Jacobian, so BSDF-sampled
@@ -42,8 +49,12 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   (`ggxGlassETable` etc. in `ggx_tables.hlsli`, `16³` over roughness/cosθ/`z = sqrt((ior-1)/(ior+1))`,
   with the `Inv` pair for relative IOR < 1 looked up with `1/ior`) and the same `1 + Fms(1-E)/E`
   form as reflection, with the transmission tint as Fss. The compensation is large: at roughness 1
-  the inside interface of glass has E ≈ 0.42, i.e. more than 2× boost. Verified against Cycles by
-  Monte Carlo of the implemented lobe (albedo 0.893 / 0.417 vs table 0.893 / 0.422).
+  the inside interface of glass has E ≈ 0.42, i.e. more than 2× boost. Monte Carlo of the
+  implemented lobe reproduces the entering (ior > 1) table to four digits at every grid point, but
+  the inverse table only if refracted samples that surface on the reflection side are *not* killed:
+  Cycles ships inverse tables that disagree with its own sampler (up to 17% high at grazing exit,
+  so exiting glass is under-compensated). The tables are kept as-is so the engine and Cycles stay
+  identical in BSDF-sampled transport, which they are to within 0.3%.
 - Samples that end up on the wrong side of the surface for their lobe are killed (value 0, pdf 1)
   and the path continues with zero weight — kill-and-continue is unbiased, and the pdf needs no
   renormalisation because it is the true sampling density. Killed samples must still carry a valid
@@ -52,6 +63,21 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
 - `bsdfPdf` must mirror `sampleBsdf`'s lobe structure exactly (including the diffuse-transmission
   hemisphere split) or MIS silently breaks; `sampleBsdf` finishes non-delta samples through the
   same `evaluateBsdf`/`bsdfPdf` used by NEE for that reason.
+
+## Verifying energy behaviour
+
+A furnace (glass spheres inside a large inward-facing emitter of radiance < 1, plus a white
+diffuse control sphere, `--maxPathDepth=64`) must read the emitter's radiance everywhere; it
+exposes lobes that credit unreachable directions but is blind to two other things, so use it
+together with a real scene:
+
+- It cannot see NEE *magnitude* inconsistencies (the light pdf is negligible against a huge
+  emitter) or directional errors (the incident radiance is uniform). Compare `--samplingMode=0`
+  (naive) against MIS/RTSL on a scene with a small light for those; they must agree.
+- Bounce limits: Cycles' `max_bounces = N` allows N scatter events plus a final emission hit, the
+  engine's `--maxPathDepth=N` allows N - 1, and silhouette paths through low-roughness glass are
+  long (repeated internal reflection), so at 12 bounces the rims of a roughness-0.25 sphere come
+  out ~5% darker than Cycles' even though both lobes are identical. Compare at 64.
 
 ## Light sampling interaction
 
