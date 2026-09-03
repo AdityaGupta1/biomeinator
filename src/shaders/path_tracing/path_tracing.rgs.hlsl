@@ -268,15 +268,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 {
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
-                    const float3 bsdfVal = evaluateBsdf(
-                        surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfTexCtx);
+                    const BsdfEval bsdfEval =
+                        evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfTexCtx);
 
                     float3 contribution =
-                        payload.pathWeight * bsdfVal * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+                        payload.pathWeight * bsdfEval.value * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
 
-                    const float lightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, lightSample.wi_WS, surfNor_WS);
-                    const float lightPdf = lightSample.pdf;
-                    const float balanceHeuristicDenominator = lightPdf + lightSampleBsdfPdf;
+                    const float balanceHeuristicDenominator = lightSample.pdf + bsdfEval.pdf;
 
                     contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
 
@@ -295,14 +293,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
-                        const float3 bsdfVal = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfTexCtx);
+                        const BsdfEval bsdfEval = evaluateBsdf(
+                            surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfTexCtx);
 
-                        float3 contribution = payload.pathWeight * bsdfVal *
+                        float3 contribution = payload.pathWeight * bsdfEval.value *
                                               absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
 
-                        const float domeLightPdf = domeLightSample.pdf;
-                        const float domeLightSampleBsdfPdf = bsdfPdf(surfMaterial, wo_WS, domeLightSample.wi_WS, surfNor_WS);
-                        const float balanceHeuristicDenominator = domeLightPdf + domeLightSampleBsdfPdf;
+                        const float balanceHeuristicDenominator = domeLightSample.pdf + bsdfEval.pdf;
 
                         contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
 

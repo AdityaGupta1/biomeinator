@@ -59,9 +59,10 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   renormalisation because it is the true sampling density. Killed samples must still carry a valid
   direction: an uninitialised or zero direction feeds NaN geometry into the next bounce, and the
   accumulation then loses the whole pixel sample.
-- `bsdfPdf` must mirror `sampleBsdf`'s lobe structure exactly (including the diffuse-transmission
-  hemisphere split) or MIS silently breaks; `sampleBsdf` finishes non-delta samples through the
-  same `evaluateBsdf`/`bsdfPdf` used by NEE for that reason.
+- `evaluateBsdf` returns value and pdf together (`BsdfEval`): they share their terms, and the pdf
+  must mirror `sampleBsdf`'s lobe structure exactly (including the diffuse-transmission hemisphere
+  split) or MIS silently breaks. `sampleBsdf` finishes non-delta samples through the same
+  `evaluateBsdf` NEE uses for that reason.
 
 ## Verifying energy behaviour
 

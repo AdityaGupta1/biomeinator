@@ -50,7 +50,7 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
    - **Dielectric (reflection + transmission)**: one VNDF half vector (the normal when roughness is 0), with the per-microfacet Fresnel choosing `reflect()` or `refract()` about it; transmission is weighted by base color.
    - **Diffuse**: cosine-weighted hemisphere sampling with Lambertian BRDF, accounting for Fresnel reflection loss.
 
-   The Fresnel decision is stochastic — a random number is compared against the Walter Fresnel reflectance. Rough samples finish through the shared `evaluateBsdf`/`bsdfPdf` so the estimator agrees with NEE's MIS terms.
+   The Fresnel decision is stochastic — a random number is compared against the Walter Fresnel reflectance. Rough samples finish through the shared `evaluateBsdf` (value and pdf together) so the estimator agrees with NEE's MIS terms.
 
 7. **Direct light sampling** (MIS/RTSL only, non-delta surfaces) — two independent strategies, both MIS-weighted against the BSDF sample using the balance heuristic:
 

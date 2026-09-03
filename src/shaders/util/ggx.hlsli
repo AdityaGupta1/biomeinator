@@ -169,19 +169,6 @@ float3 ggxGlassEnergyCompensation(const float roughness, const float cosThetaV, 
         ggxGlassDirectionalAlbedo(roughness, cosThetaV, ior), ggxGlassAverageAlbedo(roughness, ior), fss);
 }
 
-// pdf (in solid angle of wi) of reflecting wo about a VNDF-sampled half vector
-float ggxVndfReflectionPdf(const float alpha, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
-{
-    const float cosThetaWo = cosTheta(wo_WS, surfNor_WS);
-    if (cosThetaWo <= 0.f)
-    {
-        return 0.f;
-    }
-    const float3 h_WS = normalize(wo_WS + wi_WS);
-    const float d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
-    return ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
-}
-
 // "Microfacet Models for Refraction through Rough Surfaces", Walter et al., 2007. ior is the relative ior of the
 // side wi is on; the half vector (eq. 16) points towards the lower-ior side, and the Jacobian (eq. 17) maps the
 // half vector's solid angle to wi's.

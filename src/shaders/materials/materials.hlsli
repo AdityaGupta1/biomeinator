@@ -143,7 +143,7 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
 }
 
 // Probability of choosing the glossy reflection lobe in sampleBsdf; also the Fresnel weight applied
-// to that lobe, so it cancels out of the sampling weight. evaluateBsdf and bsdfPdf must use the exact
+// to that lobe, so it cancels out of the sampling weight. sampleBsdf and evaluateBsdf must use the exact
 // same value or MIS breaks silently.
 float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfNor_WS)
 {
@@ -259,35 +259,60 @@ float3 evaluateDielectricBsdf(const Material material, const float2 uv, const Te
            terms.jacobian / (terms.cosThetaWo * terms.absCosThetaWi);
 }
 
-float3 evaluateBsdf(const Material material,
-                    const float2 uv,
-                    const float3 wo_WS,
-                    const float3 wi_WS,
-                    const float3 surfNor_WS,
-                    const TexSampleCtx texCtx)
+struct BsdfEval
 {
+    float3 value;
+    float pdf; // in solid angle of wi: the density sampleBsdf draws non-delta samples from
+};
+
+// Value and pdf of the full mixture over every lobe that could have produced wi. They are computed together because
+// they share their terms and MIS needs them to agree exactly. Delta lobes (roughness = 0) can't be evaluated for
+// arbitrary directions and contribute nothing here.
+BsdfEval evaluateBsdf(const Material material,
+                      const float2 uv,
+                      const float3 wo_WS,
+                      const float3 wi_WS,
+                      const float3 surfNor_WS,
+                      const TexSampleCtx texCtx)
+{
+    BsdfEval result;
+    result.value = 0.f;
+    result.pdf = 0.f;
+
     if (material.hasGlossyTransmission())
     {
-        return evaluateDielectricBsdf(material, uv, texCtx, dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
+        const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS);
+        result.value = evaluateDielectricBsdf(material, uv, texCtx, terms);
+        result.pdf = dielectricBsdfPdf(terms);
+        return result;
     }
 
     const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
 
-    float3 bsdf = 0.f;
-
     if (material.hasDiffuse())
     {
-        const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, texCtx).rgb;
+        // Must mirror the hemisphere split in sampleBsdf exactly or MIS breaks silently. Thin-wall diffuse
+        // transmission has no Fresnel term on the back side, but the pdf of picking either hemisphere does.
+        float3 diffuseNor_WS;
+        float diffuseHemisphereWeight;
+        float diffuseFresnelWeight;
         if (isTransmission)
         {
-            // Thin-wall diffuse transmission; no Fresnel term on the back side
-            bsdf += diffuseAlbedo * M_INV_PI * material.diffuseTransmission;
+            diffuseNor_WS = -surfNor_WS;
+            diffuseHemisphereWeight = material.diffuseTransmission;
+            diffuseFresnelWeight = 1.f;
         }
         else
         {
-            bsdf += diffuseAlbedo * M_INV_PI * (1.f - fresnelReflectance) * (1.f - material.diffuseTransmission);
+            diffuseNor_WS = surfNor_WS;
+            diffuseHemisphereWeight = 1.f - material.diffuseTransmission;
+            diffuseFresnelWeight = 1.f - fresnelReflectance;
         }
+
+        const float3 diffuseAlbedo = getMaterialBaseColor(material, uv, texCtx).rgb;
+        result.value += diffuseAlbedo * M_INV_PI * diffuseHemisphereWeight * diffuseFresnelWeight;
+        result.pdf += hemisphereCosineWeightedPdf(wi_WS, diffuseNor_WS) * diffuseHemisphereWeight * (1.f - fresnelReflectance);
     }
 
     if (material.hasGlossyReflection() && material.roughness > 0.f && !isTransmission)
@@ -299,61 +324,20 @@ float3 evaluateBsdf(const Material material,
             const float alpha = material.roughness * material.roughness;
             const float3 h_WS = normalize(wo_WS + wi_WS);
             const float d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
-            const float g = ggxSmithG2(alpha, cosThetaWo, cosThetaWi);
+            const float g2 = ggxSmithG2(alpha, cosThetaWo, cosThetaWi);
             // The glossy lobe matches Cycles' Glossy BSDF node (Multiscatter GGX): constant Fresnel with the tint as
             // the single-scattering albedo. Any dielectric Fresnel weighting is applied outside the lobe via
             // fresnelReflectance, mirroring the Blender node group's Fresnel-node mix.
             const float3 multipleScatteringCompensation =
                 ggxEnergyCompensation(material.roughness, cosThetaWo, material.glossyReflectionTint);
-            bsdf += material.glossyReflectionTint * fresnelReflectance * multipleScatteringCompensation * d * g /
-                    (4.f * cosThetaWo * cosThetaWi);
+            result.value += material.glossyReflectionTint * fresnelReflectance * multipleScatteringCompensation * d * g2 /
+                            (4.f * cosThetaWo * cosThetaWi);
+            // VNDF density of the half vector, mapped to wi through the reflection Jacobian
+            result.pdf += fresnelReflectance * ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
         }
     }
 
-    // The specular lobe (roughness = 0) is a delta distribution and can't be evaluated for arbitrary directions.
-
-    return bsdf;
-}
-
-float bsdfPdf(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
-{
-    if (material.hasGlossyTransmission())
-    {
-        return dielectricBsdfPdf(dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS));
-    }
-
-    const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
-
-    float pdf = 0.f;
-
-    if (material.hasDiffuse())
-    {
-        // Must mirror the hemisphere split in sampleBsdf exactly or MIS breaks silently
-        float3 diffuseNor_WS;
-        float diffuseHemisphereWeight;
-        if (isTransmission)
-        {
-            diffuseNor_WS = -surfNor_WS;
-            diffuseHemisphereWeight = material.diffuseTransmission;
-        }
-        else
-        {
-            diffuseNor_WS = surfNor_WS;
-            diffuseHemisphereWeight = 1.f - material.diffuseTransmission;
-        }
-
-        const float diffusePdf = hemisphereCosineWeightedPdf(wi_WS, diffuseNor_WS) * diffuseHemisphereWeight;
-        pdf += diffusePdf * (1.f - fresnelReflectance);
-    }
-
-    if (material.hasGlossyReflection() && material.roughness > 0.f && !isTransmission)
-    {
-        const float alpha = material.roughness * material.roughness;
-        pdf += fresnelReflectance * ggxVndfReflectionPdf(alpha, wo_WS, wi_WS, surfNor_WS);
-    }
-
-    return pdf;
+    return result;
 }
 
 struct BsdfSample
@@ -513,8 +497,9 @@ BsdfSample sampleBsdf(const Material material,
 
     // Non-delta sample: use the full mixture bsdf and pdf over all lobes that could have produced
     // wi_WS, keeping the estimator consistent with the values NEE uses for MIS
-    result.pdf = bsdfPdf(material, wo_WS, result.wi_WS, surfNor_WS);
-    result.bsdfValue = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, texCtx);
+    const BsdfEval eval = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, texCtx);
+    result.pdf = eval.pdf;
+    result.bsdfValue = eval.value;
     return result;
 }
 
