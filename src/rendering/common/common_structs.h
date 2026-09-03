@@ -125,14 +125,14 @@ public:
         return emissiveStrength > 0.f;
     }
 
-    bool hasGlossyLobe()
+    bool hasGlossy()
     {
         return bool(flags & MATERIAL_FLAGS_GLOSSY);
     }
 
     bool isDelta()
     {
-        return hasGlossyLobe() && !hasDiffuse() && roughness == 0.f;
+        return hasGlossy() && !hasDiffuse() && roughness == 0.f;
     }
 
     // Perfectly specular transmission is the only kind a ray can pass through instead of scattering at

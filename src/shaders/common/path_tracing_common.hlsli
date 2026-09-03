@@ -219,8 +219,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     {
         // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
         // correction ensures); other materials keep the plain interpolated normal, facing the ray
-        const bool hasGlossyLobe = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossyLobe();
-        if (hasGlossyLobe)
+        const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossy();
+        if (hasGlossy)
         {
             nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
         }

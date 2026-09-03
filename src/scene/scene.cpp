@@ -306,10 +306,9 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
 {
     ASSERT((material->flags & MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION) != MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION,
            "Diffuse and glossy transmission are mutually exclusive");
-    ASSERT(!(material->flags & MATERIAL_FLAG_GLOSSY_TRANSMISSION) || (material->flags & MATERIAL_FLAG_GLOSSY_REFLECTION)
-               || material->roughness == 0.f,
-           "Rough transmission is only supported as part of the dielectric lobe (glossy reflection + transmission); "
-           "transmission-only materials must be perfectly specular");
+    const bool isTransmissionOnly = (material->flags & MATERIAL_FLAGS_GLOSSY) == MATERIAL_FLAG_GLOSSY_TRANSMISSION;
+    ASSERT(!(isTransmissionOnly && material->roughness > 0.f),
+           "Transmission-only materials must be perfectly specular");
 
     if (this->nextMaterialIdx >= this->mappedMaterialsArray.getSize())
     {
