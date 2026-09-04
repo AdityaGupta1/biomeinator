@@ -57,6 +57,7 @@ int main(int argc, char** argv)
 
     optionAdder("h,help", "Print this message");
     ADD_OPTION("f,filter", "Test filter (regex)", std::string, ".*");
+    ADD_OPTION("e,extraArgs", "Extra Biomeinator args appended to every test's args", std::string, "");
 
 #undef ADD_OPTION
 
@@ -71,6 +72,7 @@ int main(int argc, char** argv)
     const std::string& testFilterStr = parseResult["filter"].as<std::string>();
     printf("Filtering tests with regex: %s\n", testFilterStr.c_str());
     const std::regex testFilter(parseResult["filter"].as<std::string>());
+    const std::string& extraArgs = parseResult["extraArgs"].as<std::string>();
 
     const auto testsOutputPath = std::filesystem::path(CMAKE_BINARY_DIR) / "test_output";
     printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
@@ -149,6 +151,10 @@ int main(int argc, char** argv)
         for (const std::string& arg : test.args)
         {
             command += " " + arg;
+        }
+        if (!extraArgs.empty())
+        {
+            command += " " + extraArgs;
         }
         std::cout << command << std::endl << std::endl;
         const int ret = std::system(command.c_str());

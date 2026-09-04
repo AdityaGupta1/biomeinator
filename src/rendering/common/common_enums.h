@@ -33,6 +33,7 @@ enum class SamplingMode : uint
     NAIVE,
     MIS,
     RTSL,
+    RESTIR_PT, // RTSL NEE plus path resampling
 
     COUNT
 };

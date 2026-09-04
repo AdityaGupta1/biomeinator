@@ -1,11 +1,13 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-03_
 
 # Golden Image Tests
 
 `BiomeinatorTests.exe` (`src/tests/main.cpp`) reads `tests/tests.json`, launches
 `Biomeinator.exe` once per entry with the entry's args plus `--testOutput=<path>` (camera locked,
 GUI hidden, animation paused), and compares the screenshot against the entry's golden with
-RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name. Every run writes
+RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name; `-e "<args>"` appends
+extra Biomeinator args to every test (e.g. `-e "--samplingMode=3"` runs the suite against the
+same goldens with a feature toggled). Every run writes
 `<name>_GENERATED.png`, `<name>_GOLDEN.png` and `<name>_DIFF.png` to `build/test_output/`,
 which is the place to look when a test fails.
 

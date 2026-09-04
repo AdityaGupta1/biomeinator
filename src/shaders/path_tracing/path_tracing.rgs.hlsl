@@ -15,6 +15,7 @@
 #include "light/light_sampling.hlsli"
 #include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
+#include "restir/path_tree_reservoir.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
@@ -69,13 +70,29 @@ float applySegmentFog(inout Payload payload, const float3 origin_WS, const float
     return fogTransmittance;
 }
 
-void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
+// Routes a complete path's contribution to the reservoir when ReSTIR PT is on, otherwise
+// straight into pathColor. Terms that are not resampled paths (primary emission, primary miss,
+// fog in-scatter) always go straight into pathColor.
+void addPathCandidate(inout PathTreeReservoir reservoir, const float3 F, inout float3 pathColor)
+{
+    if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
+    {
+        reservoir.addCandidate(F);
+    }
+    else
+    {
+        pathColor += F;
+    }
+}
+
+void pathTraceRay(inout Payload payload, inout PathTreeReservoir reservoir, const uint2 pixelIdx, const uint pathSplitIdx,
+    out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    const bool useRtsl = (samplingMode == SamplingMode::RTSL);
+    const bool useRtsl = (samplingMode == SamplingMode::RTSL || samplingMode == SamplingMode::RESTIR_PT);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
 
     RayDesc ray;
@@ -174,10 +191,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         bool isPureEmitter = false;
         if (any(emissiveContrib > 0))
         {
-            pathColor += emissiveContrib;
             if (pathDepth == 0)
             {
+                pathColor += emissiveContrib;
                 ptDiffuseAlbedo += applyReinhard(emissiveContrib);
+            }
+            else
+            {
+                addPathCandidate(reservoir, emissiveContrib, pathColor);
             }
 
             const bool isDiffuseOnly = surfMaterial.hasDiffuse()
@@ -278,7 +299,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     contribution /= balanceHeuristicDenominator; // light pdf in balance heuristic numerator cancels out with divide by pdf
 
-                    pathColor += contribution;
+                    addPathCandidate(reservoir, contribution, pathColor);
                 }
 
                 // ------------------------------
@@ -303,7 +324,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                         contribution /= balanceHeuristicDenominator; // dome light pdf in balance heuristic numerator cancels out with divide by pdf
 
-                        pathColor += contribution;
+                        addPathCandidate(reservoir, contribution, pathColor);
                     }
                 }
             }
@@ -447,7 +468,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);
             }
 
-            pathColor += domeLightContrib;
+            addPathCandidate(reservoir, domeLightContrib, pathColor);
             break;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
@@ -509,9 +530,14 @@ void RayGeneration()
         ? payload.rayCone.angle * distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
         : 0.f;
 
+    // Separate stream from the path's RNG so resampling draws never perturb the path itself
+    PathTreeReservoir reservoir =
+        initPathTreeReservoir(initRng(constantParams.rngSeed, 192837465, linearPixelIdx * 2 + pathSplitIdx, renderParams.frameNumber));
+
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
-    pathTraceRay(payload, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo);
+    pathTraceRay(payload, reservoir, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo);
+    pathColor += reservoir.resolve();
 
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
     if ((AntialiasingMode)renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE && renderParams.accumulatedFrameNumber > 0)

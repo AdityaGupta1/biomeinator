@@ -74,6 +74,7 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "naive",
     "MIS",
     "RTSL",
+    "ReSTIR PT",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",

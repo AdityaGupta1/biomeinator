@@ -1,4 +1,4 @@
-_Last edited: 2026-09-01_
+_Last edited: 2026-09-03_
 
 # Knowledgebase Index
 
@@ -9,6 +9,7 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [rendering/](rendering/index.md) | Render passes, pipeline, camera, frame management, DLSS, NVAPI |
 | [gpu/](gpu/index.md) | D3D12 resource management: buffers, descriptors, acceleration structures |
 | [shaders/](shaders/index.md) | HLSL shaders, utility libraries, build-time compilation |
+| [restir/](restir/index.md) | ReSTIR PT: design decisions and staged build-up towards ReSTIR PT Enhanced |
 | [scene/](scene/index.md) | Scene graph, instances, materials, textures, glTF loading |
 | [terrain/](terrain/index.md) | Terrain generation, chunks, biomes, structures, meshing |
 | [multithreading/](multithreading/index.md) | Thread pool, parallel chunk generation pipeline |
