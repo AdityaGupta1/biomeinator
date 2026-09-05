@@ -146,8 +146,11 @@ split slots (canonical, M = 1), reprojects the current primary hit into the prev
 `worldToPrevClipMat` and the previous jitter, validates the previous G-buffer hit there (same
 surface within a few pixel footprints, normals agree), and pairs the canonical with that pixel's
 history reservoir under the same pairwise MIS as spatial reuse. The history is confidence-capped
-(`restirTemporalConfidenceCap`, 20 by default), so M saturates at 21 after temporal and about 84
-after three spatial partners; the `CONFIDENCE` debug view shows M / 100.
+(`restirTemporalConfidenceCap`); the `CONFIDENCE` debug view shows M / 100. The paper's default cap
+of 20 makes the noise nearly static from frame to frame, which DLSS-RR then treats as signal (smoothed
+noise on far cave geometry), so the default is 2: a visible gain over spatial-only without the
+artifacts. Shading the temporal merge with vector-valued weights was tried and dropped, since the
+fresh path's share is only 1 / (cap + 1) of the canonical term and the denoiser averages that away.
 
 Both shifts of the pair are real replays: the history path is rebuilt at this frame's pixel, and
 this pixel's path is rebuilt at the previous frame's pixel from the previous G-buffer and camera
