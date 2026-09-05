@@ -61,7 +61,10 @@ bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> g
 // Deforming geometry (water) moves between frames, so anything stored on it last frame no longer
 // matches the surface the current scene traces against. The two temporal shifts then stop being
 // inverses of each other and the pairwise MIS no longer partitions unity, which biases the result
-// upward. Such history is not reused.
+// upward. Such history is not reused. The proper fix is storing reconnection vertices (and the
+// previous primary hits) as instance/triangle/barycentrics and rebuilding them on the current
+// mesh at replay, as the reference implementation does; that keeps temporal reuse on water and
+// is also the first step of the reservoir compression.
 bool isOnDeformingGeometry(const HitInfo hitInfo)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
