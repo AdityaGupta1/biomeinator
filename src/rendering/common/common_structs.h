@@ -52,15 +52,27 @@ struct PathReservoir
 
     uint seed;
     uint flags;
+    float M; // confidence weight
     float rcLightPdf; // light sampling pdf from the rc vertex, for MIS when the rc vertex precedes the light vertex
-    uint pad0;
 
     HitInfo rcHit; // reconnection vertex; unused when it is the dome
 
     float3 rcWi; // direction leaving the rc vertex toward the next vertex, or the dome direction
-    uint pad1;
+    float rcJacobianTerms; // product of the path's pdf and geometry terms across the reconnection, the shift Jacobian's denominator
 
     float3 rcRadiance; // radiance arriving at the rc vertex along rcWi, excluding the segment before it
+    uint pad0;
+};
+
+// A neighbor's path shifted into a pixel, as produced by the spatial shift pass
+struct ShiftedPath
+{
+    float3 F; // integrand of the shifted path at the destination pixel (0 if the shift is undefined)
+    float jacobian;
+
+    float rcJacobianTerms; // the shifted path's own terms, stored with it if resampling selects it
+    uint pad0;
+    uint pad1;
     uint pad2;
 };
 

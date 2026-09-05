@@ -13,6 +13,7 @@
 
 #define uint uint32_t
 #define uint2 DirectX::XMUINT2
+#define uint4 DirectX::XMUINT4
 
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
@@ -152,6 +153,24 @@ struct RtslParams
     uint treeLeafCount; // M (pow2-rounded numAreaLights), 0 = empty / disabled
     uint pad0;
     uint pad1;
+};
+
+#define RESTIR_MAX_SPATIAL_NEIGHBORS 3
+
+// Per-frame transform of a pairing texture: flips, transpose and offset (see shaders/restir/pairing.hlsli)
+#define RESTIR_PAIRING_FLIP_X (1 << 0)
+#define RESTIR_PAIRING_FLIP_Y (1 << 1)
+#define RESTIR_PAIRING_TRANSPOSE (1 << 2)
+
+struct RestirParams
+{
+    uint spatialNeighborCount; // pairing textures used this frame; 0 disables spatial reuse
+    uint pad0;
+    uint pad1;
+    uint pad2;
+
+    uint4 pairingTransforms[RESTIR_MAX_SPATIAL_NEIGHBORS]; // x = texture size, y = RESTIR_PAIRING_* flags, zw = offset
+    uint4 pairingBufferOffsets; // first texel of each pairing texture in the pairing buffer
 };
 
 struct DebugParams

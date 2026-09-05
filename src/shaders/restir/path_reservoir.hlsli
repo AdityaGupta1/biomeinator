@@ -24,6 +24,7 @@
 #define PATH_FLAGS_TECHNIQUE_MASK 0x3
 #define PATH_FLAGS_SPLIT_IDX (1 << 12)
 #define PATH_FLAGS_RC_HIT_BACKFACE (1 << 13)
+#define PATH_FLAGS_RC_PREV_LOBE_DIFFUSE (1 << 14) // lobe sampled at the vertex before the rc vertex; else glossy or dielectric
 
 uint getPathLength(const uint flags)
 {
@@ -54,10 +55,12 @@ struct PathCandidate
     uint pathTechnique;
     uint rcVertexIdx;
     bool rcHitIsBackface;
+    bool rcPrevLobeDiffuse;
     HitInfo rcHit;
     float3 rcWi;
     float3 rcRadiance;
     float rcLightPdf;
+    float rcJacobianTerms;
 };
 
 PathReservoir makeEmptyPathReservoir()
@@ -67,8 +70,8 @@ PathReservoir makeEmptyPathReservoir()
     reservoir.W = 0.f;
     reservoir.seed = 0;
     reservoir.flags = 0;
+    reservoir.M = 0.f;
     reservoir.rcLightPdf = 0.f;
-    reservoir.pad0 = 0;
     reservoir.rcHit.hitPos_WS = 0.f;
     reservoir.rcHit.instanceId = 0;
     reservoir.rcHit.hitNor_WS = 0.f;
@@ -77,9 +80,9 @@ PathReservoir makeEmptyPathReservoir()
     reservoir.rcHit.pad0 = 0;
     reservoir.rcHit.pad1 = 0;
     reservoir.rcWi = 0.f;
-    reservoir.pad1 = 0;
+    reservoir.rcJacobianTerms = 0.f;
     reservoir.rcRadiance = 0.f;
-    reservoir.pad2 = 0;
+    reservoir.pad0 = 0;
     return reservoir;
 }
 
@@ -116,19 +119,22 @@ struct PathTreeReservoir
                          (candidate.rcVertexIdx << PATH_FLAGS_RC_VERTEX_SHIFT) |
                          (candidate.pathTechnique << PATH_FLAGS_TECHNIQUE_SHIFT) |
                          (splitIdx != 0 ? PATH_FLAGS_SPLIT_IDX : 0) |
-                         (candidate.rcHitIsBackface ? PATH_FLAGS_RC_HIT_BACKFACE : 0);
+                         (candidate.rcHitIsBackface ? PATH_FLAGS_RC_HIT_BACKFACE : 0) |
+                         (candidate.rcPrevLobeDiffuse ? PATH_FLAGS_RC_PREV_LOBE_DIFFUSE : 0);
         selected.rcLightPdf = candidate.rcLightPdf;
         selected.rcHit = candidate.rcHit;
         selected.rcWi = candidate.rcWi;
+        selected.rcJacobianTerms = candidate.rcJacobianTerms;
         selected.rcRadiance = candidate.rcRadiance;
     }
 
-    // W = weightSum / pHat(selected)
+    // W = weightSum / pHat(selected). One path tree is one unit of confidence, empty or not.
     PathReservoir finalize()
     {
         PathReservoir result = selected;
         const float pHat = luminance(result.F);
         result.W = (weightSum > 0.f && pHat > 0.f) ? weightSum / pHat : 0.f;
+        result.M = 1.f;
         return result;
     }
 };

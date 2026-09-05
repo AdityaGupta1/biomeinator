@@ -95,6 +95,50 @@ normal, and using that plane made rays self-occlude on the target (evil_room's s
 objects). Those rays are instead aimed from the offset origin exactly at the target and stopped at
 distance minus epsilon, which reproduces the original closest-hit ray.
 
+## Stage 3: paired spatial reuse
+
+Three passes per frame in ReSTIR PT mode: initial sampling (raygen, one thread per pixel slot),
+the spatial shift (the same raygen with `PtPass::SPATIAL_SHIFT` in a root constant, one thread per
+pixel), and the resample compute pass, which also does the shading. The pass index is a root
+constant because the global params cbuffer is uploaded once per frame.
+
+**Shift pass.** Each pixel first merges its two split slots into one canonical reservoir (exact,
+unit MIS weights, deterministic per pixel and frame so partners recompute the same merge), then for
+every pairing texture shifts its partner's path to itself: replay from this pixel's primary hit with
+the partner's stored path. Because the pairing is symmetric, that single evaluation is both this
+pixel's candidate from the partner and the partner's MIS term for this pixel's own path. Results go
+to `dev_shifted`, one `ShiftedPath` per pixel per texture.
+
+**Shift definition.** Replay at a foreign pixel *is* the hybrid shift. Two checks make it
+invertible (GRIS 7.4): no pair on the offset path before the stored rc vertex may pass the
+reconnection criteria, and the pair (y_{j-1}, x_j) must pass them; the base path's lobe type at
+x_{j-1} must exist at y_{j-1} and supplies the roughness. NEE light vertices are exempt from the
+second check since NEE paths always reconnect to their light. A path stored without reconnection
+is likewise undefined wherever the offset path would reconnect. Undefined shifts return zero and
+the MIS weights hand their share to the canonical sample, so they cost variance, never bias.
+
+**Jacobian.** Enhanced Eq. 2 in primary sample space: the shifted path's pdf and geometry terms
+across the reconnection over the base path's. The base terms are stored as one product
+(`rcJacobianTerms`); the technique's pdf at a light vertex is the light pdf for NEE paths and the
+BSDF pdf otherwise, the dome has no geometry term, and a final NEE segment contributes no pdf at
+the rc vertex since light sampling ignores the incoming direction. A shifted path that gets
+selected carries its own terms forward.
+
+**Resample pass.** Confidence-weighted defensive pairwise MIS (GRIS Eq. 38 with each pHat times its
+reservoir's M, verified to sum to 1). The partner's view of the canonical path,
+`pHat_partner(T^-1(x_c)) * |dT^-1|`, is luminance of this pixel's path shifted to the partner times
+that Jacobian; the canonical's view of the partner's path is luminance of the partner's stored F
+over the Jacobian of the shift into this pixel. Partners on screen count toward the neighbor
+confidence whether or not their shift succeeded. The result is written back into slot 0 of
+`dev_reservoirs` (the initial slots are dead after the shift pass) and shaded into the raw buffer.
+
+**Verification.** `--restirDebugMode=3` pairs every pixel with itself. With partner == self the
+weights are 7/16 for the canonical and 3/16 per neighbor, all with the same pHat and W, so the output
+must equal `--restirSpatialNeighbors=0` pixel-exact; and if a self-shift fails a criteria check at
+float precision, the canonical MIS term absorbs it and the output is still exact. This is the check
+that the MIS, merge and Jacobian plumbing cancel correctly. With real partners, goldens must still
+match in mean, since spatial reuse within a frame is unbiased.
+
 ## RNG streams
 
 Every draw comes from `initRng(pathSeed, index, purpose)` with purposes for BSDF, NEE area, NEE dome,
@@ -109,9 +153,9 @@ vertex replays the same alpha decisions. Resampling draws are a separate stream 
 
 ## Memory
 
-Reservoirs are 112 bytes and allocated for both split slots regardless of sampling mode
-(2 x 112 B per pixel). Enhanced compresses to 64 bytes; that is a later, measured step, and the
-self-replay error view is the tool to measure what precision loss costs.
+Per pixel: 2 x 112 B initial reservoirs, 112 B merged, and 3 x 32 B shifted paths, allocated
+regardless of sampling mode. Enhanced compresses reservoirs to 64 bytes; that is a later, measured
+step, and the self-replay error view is the tool to measure what precision loss costs.
 
 ## Storing world positions
 

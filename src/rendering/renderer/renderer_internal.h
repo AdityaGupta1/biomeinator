@@ -146,6 +146,11 @@ enum class PtParam
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
     RESERVOIRS_OUT,
 
+    PASS_CONSTANTS,
+    PAIRING_TEXTURES_IN,
+    RESERVOIRS_MERGED_OUT,
+    SHIFTED_OUT,
+
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
 
@@ -176,9 +181,24 @@ enum class CollectParam
     COUNT
 };
 
+enum class RestirResampleParam
+{
+    GLOBAL_PARAMS,
+
+    RESERVOIRS_MERGED_IN,
+    SHIFTED_IN,
+    PAIRING_TEXTURES_IN,
+
+    RESERVOIRS_OUT,
+    PATH_TRACING_RAW_BUFFER_OUT,
+
+    COUNT
+};
+
 #define GBUFFER_PARAM_IDX(param) static_cast<uint32_t>(GbufferParam::param)
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
+#define RESTIR_RESAMPLE_PARAM_IDX(param) static_cast<uint32_t>(RestirResampleParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
 
@@ -216,6 +236,7 @@ void initSwapChain();
 void initRtTargets();
 void initCommand();
 void initConstantParams();
+void initRestirPairingTextures();
 void initRootSignature();
 void initPipeline();
 void initImgui();
@@ -323,7 +344,16 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_gbuffer;
     ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
     ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
-    ComPtr<ID3D12Resource> dev_reservoirs;
+    ComPtr<ID3D12Resource> dev_reservoirs; // one per pixel slot from initial sampling; slot 0 also receives the resampled result
+    ComPtr<ID3D12Resource> dev_reservoirsMerged; // one per pixel, the split slots merged
+    ComPtr<ID3D12Resource> dev_shifted; // ShiftedPath per pixel per pairing texture
+    ComPtr<ID3D12Resource> dev_pairingTextures; // all pairing textures packed, see initRestirPairingTextures
+    struct PairingTextureInfo
+    {
+        uint32_t size;
+        uint32_t bufferOffset;
+    };
+    std::vector<PairingTextureInfo> pairingTextures;
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
 
     // -- Viewport and dimensions --
@@ -339,6 +369,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> gbufferRootSig;
     ComPtr<ID3D12RootSignature> ptRootSig;
     ComPtr<ID3D12RootSignature> collectRootSig;
+    ComPtr<ID3D12RootSignature> restirResampleRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
 
@@ -352,6 +383,7 @@ struct RendererState
     D3D12_DISPATCH_RAYS_DESC ptDispatchDesc{};
 
     ComPtr<ID3D12PipelineState> collectPso;
+    ComPtr<ID3D12PipelineState> restirResamplePso;
 
     ComPtr<ID3D12PipelineState> postprocessPso;
     ComPtr<ID3D12PipelineState> debugViewPso;

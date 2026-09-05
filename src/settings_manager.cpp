@@ -35,7 +35,8 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL, 3=ReSTIR PT)", uint32_t, "2");
-    ADD_OPTION("restirDebugMode", "ReSTIR PT debug mode (0=off, 1=self replay, 2=self replay error)", uint32_t, "0");
+    ADD_OPTION("restirDebugMode", "ReSTIR PT debug mode (0=off, 1=self replay, 2=self replay error, 3=spatial self)", uint32_t, "0");
+    ADD_OPTION("restirSpatialNeighbors", "ReSTIR PT paired spatial neighbors per pixel (0-3)", uint32_t, "3");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
@@ -106,6 +107,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("restirDebugMode", uint32_t);
+    COPY_SETTING("restirSpatialNeighbors", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);

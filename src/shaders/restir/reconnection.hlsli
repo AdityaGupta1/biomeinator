@@ -23,17 +23,28 @@ float reconnectionFootprintThreshold(const float3 cameraPos_WS, const float3 pri
     return reconnectionFootprintScale * dist2 * (4.f * M_PI) / cosTheta;
 }
 
-// The footprint at `to` of a direction sampled at `from` with solid-angle pdf `pdf` is
-// 1 / (pdf * G(from -> to)); passes if it is at least `threshold`
-bool passesFootprintTest(const float pdf, const float3 from_WS, const float3 to_WS, const float3 toNor_WS, const float threshold)
+// Solid angle to area conversion at `to` for a direction sampled at `from`: |cos| at `to` over the
+// squared distance. Zero for coincident points.
+float reconnectionGeometryTerm(const float3 from_WS, const float3 to_WS, const float3 toNor_WS)
 {
     const float3 toVec = to_WS - from_WS;
     const float dist2 = dot(toVec, toVec);
     if (dist2 <= 0.f)
     {
+        return 0.f;
+    }
+    return absCosTheta(toVec * rsqrt(dist2), toNor_WS) / dist2;
+}
+
+// The footprint at `to` of a direction sampled at `from` with solid-angle pdf `pdf` is
+// 1 / (pdf * G(from -> to)); passes if it is at least `threshold`
+bool passesFootprintTest(const float pdf, const float3 from_WS, const float3 to_WS, const float3 toNor_WS, const float threshold)
+{
+    const float geometryTerm = reconnectionGeometryTerm(from_WS, to_WS, toNor_WS);
+    if (geometryTerm <= 0.f)
+    {
         return false;
     }
-    const float geometryTerm = absCosTheta(toVec * rsqrt(dist2), toNor_WS) / dist2;
     return pdf * geometryTerm * threshold <= 1.f;
 }
 

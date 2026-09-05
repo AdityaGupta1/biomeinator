@@ -17,6 +17,7 @@
 #include "terrain/terrain.h"
 #include "terrain/terrain_omm.h"
 #include "util/math.h"
+#include "util/rng.h"
 
 #include <algorithm>
 #include <chrono>
@@ -80,6 +81,7 @@ void init()
     initRtTargets();
     initCommand();
     initConstantParams();
+    initRestirPairingTextures();
 
     renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
 
@@ -226,6 +228,18 @@ void resize()
         reservoirsSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     renderState.dev_reservoirs->SetName(L"dev_reservoirs");
 
+    const uint32_t pixelCount = renderState.renderWidth * renderState.renderHeight;
+    renderState.dev_reservoirsMerged.Reset();
+    renderState.dev_reservoirsMerged = BufferHelper::createBasicBuffer(
+        pixelCount * sizeof(PathReservoir), &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_reservoirsMerged->SetName(L"dev_reservoirsMerged");
+
+    renderState.dev_shifted.Reset();
+    renderState.dev_shifted = BufferHelper::createBasicBuffer(
+        pixelCount * RESTIR_MAX_SPATIAL_NEIGHBORS * sizeof(ShiftedPath), &DEFAULT_HEAP,
+        { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_shifted->SetName(L"dev_shifted");
+
     const uint32_t rtvIncrementSize = renderState.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
@@ -336,7 +350,9 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
                                                           renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
 }
 
-static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
+// Initial sampling runs one thread per pixel slot (doubled width with path splitting); the spatial
+// shift runs one thread per pixel
+static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPass pass, const uint32_t dispatchWidth)
 {
     renderState.cmdList->SetPipelineState1(renderState.ptPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
@@ -346,10 +362,42 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_OUT), renderState.dev_reservoirs->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRoot32BitConstant(PT_PARAM_IDX(PASS_CONSTANTS), static_cast<uint32_t>(pass), 0);
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_MERGED_OUT), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHIFTED_OUT), renderState.dev_shifted->GetGPUVirtualAddress());
 
-    renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+    renderState.ptDispatchDesc.Width = dispatchWidth;
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);
+}
+
+// Paired spatial reuse: shift each pixel's partners' paths to it, then resample. Adds the resampled
+// path's contribution to slot 0 of the raw path tracing buffer.
+static void dispatchRestirSpatialReuse(ParamBlockManager& paramBlockManager)
+{
+    BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirs.Get());
+    dispatchPathTracing(paramBlockManager, PtPass::SPATIAL_SHIFT, renderState.gbufferDispatchDesc.Width);
+
+    {
+        BufferHelper::TransitionBatch batch;
+        batch.addUavBarrier(renderState.dev_reservoirsMerged.Get());
+        batch.addUavBarrier(renderState.dev_shifted.Get());
+        batch.submit(renderState.cmdList.Get());
+    }
+
+    renderState.cmdList->SetPipelineState(renderState.restirResamplePso.Get());
+    renderState.cmdList->SetComputeRootSignature(renderState.restirResampleRootSig.Get());
+    renderState.cmdList->SetComputeRootConstantBufferView(RESTIR_RESAMPLE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_MERGED_IN), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(SHIFTED_IN), renderState.dev_shifted->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_OUT), renderState.dev_reservoirs->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
+
+    const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.renderWidth, RESTIR_RESAMPLE_WORKGROUP_SIZE_X);
+    const uint32_t dispatchHeight = Util::calculateDispatchSize(renderState.renderHeight, RESTIR_RESAMPLE_WORKGROUP_SIZE_Y);
+    renderState.cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 }
 
 static void beginFrame();
@@ -539,6 +587,25 @@ void render()
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
     renderParams->restirDebugMode = SettingsManager::getAsUint("restirDebugMode");
 
+    // Pairing textures are self-inverting, so each gets a fresh flip/mirror/transpose/offset every frame
+    auto& restirParams = paramBlockManager.restirParams;
+    const bool useRestirPt = renderParams->samplingMode == static_cast<uint32_t>(SamplingMode::RESTIR_PT);
+    restirParams->spatialNeighborCount =
+        useRestirPt ? std::min(SettingsManager::getAsUint("restirSpatialNeighbors"), static_cast<uint32_t>(RESTIR_MAX_SPATIAL_NEIGHBORS)) : 0u;
+    uint32_t pairingBufferOffsets[4] = { 0, 0, 0, 0 };
+    for (uint32_t textureIdx = 0; textureIdx < RESTIR_MAX_SPATIAL_NEIGHBORS; ++textureIdx)
+    {
+        const auto& texture = renderState.pairingTextures[textureIdx];
+        RandomNumberGenerator rng =
+            initRng(paramBlockManager.constantParams->rngSeed, 7771u, renderParams->frameNumber, textureIdx);
+        const uint32_t transformFlags = rng.nextUint() & (RESTIR_PAIRING_FLIP_X | RESTIR_PAIRING_FLIP_Y | RESTIR_PAIRING_TRANSPOSE);
+        const uint32_t offsetX = static_cast<uint32_t>(rng.nextInt(static_cast<int>(texture.size)));
+        const uint32_t offsetY = static_cast<uint32_t>(rng.nextInt(static_cast<int>(texture.size)));
+        restirParams->pairingTransforms[textureIdx] = { texture.size, transformFlags, offsetX, offsetY };
+        pairingBufferOffsets[textureIdx] = texture.bufferOffset;
+    }
+    restirParams->pairingBufferOffsets = { pairingBufferOffsets[0], pairingBufferOffsets[1], pairingBufferOffsets[2], pairingBufferOffsets[3] };
+
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (renderState.debugViewComboMap.contains(debugViewSettingStr))
@@ -683,7 +750,17 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-        dispatchPathTracing(paramBlockManager, doPathSplitting);
+        dispatchPathTracing(paramBlockManager, PtPass::INITIAL_SAMPLING, renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1));
+
+        // The self-replay debug modes shade inside initial sampling; everything else in ReSTIR PT mode
+        // shades in the resample pass
+        const RestirDebugMode restirDebugMode = static_cast<RestirDebugMode>(SettingsManager::getAsUint("restirDebugMode"));
+        const bool restirShadesInResample =
+            restirDebugMode != RestirDebugMode::SELF_REPLAY && restirDebugMode != RestirDebugMode::SELF_REPLAY_ERROR;
+        if (paramBlockManager.renderParams->samplingMode == static_cast<uint32_t>(SamplingMode::RESTIR_PT) && restirShadesInResample)
+        {
+            dispatchRestirSpatialReuse(paramBlockManager);
+        }
 
         // ===================================
         // COLLECT
@@ -923,18 +1000,23 @@ void destroy()
     renderState.dev_pathTracingRawBuffer.Reset();
     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
     renderState.dev_reservoirs.Reset();
+    renderState.dev_reservoirsMerged.Reset();
+    renderState.dev_shifted.Reset();
+    renderState.dev_pairingTextures.Reset();
 
     renderState.screenshotRequest.readbackBuffer.Reset();
 
     renderState.gbufferPso.Reset();
     renderState.ptPso.Reset();
     renderState.collectPso.Reset();
+    renderState.restirResamplePso.Reset();
     renderState.postprocessPso.Reset();
     renderState.debugViewPso.Reset();
 
     renderState.gbufferRootSig.Reset();
     renderState.ptRootSig.Reset();
     renderState.collectRootSig.Reset();
+    renderState.restirResampleRootSig.Reset();
     renderState.postprocessRootSig.Reset();
     renderState.debugViewRootSig.Reset();
 

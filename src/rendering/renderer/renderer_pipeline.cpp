@@ -151,6 +151,18 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(RESERVOIRS_OUT)] = MAKE_PARAM(UAV, PT, RESERVOIRS_OUT);
 
+        ptParams[PT_PARAM_IDX(PASS_CONSTANTS)] = {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+            .Constants = {
+                .ShaderRegister = PT_REGISTER_PASS_CONSTANTS,
+                .RegisterSpace = PT_REGISTER_SPACE,
+                .Num32BitValues = 1,
+            },
+        };
+        ptParams[PT_PARAM_IDX(PAIRING_TEXTURES_IN)] = MAKE_PARAM(SRV, PT, PAIRING_TEXTURES_IN);
+        ptParams[PT_PARAM_IDX(RESERVOIRS_MERGED_OUT)] = MAKE_PARAM(UAV, PT, RESERVOIRS_MERGED_OUT);
+        ptParams[PT_PARAM_IDX(SHIFTED_OUT)] = MAKE_PARAM(UAV, PT, SHIFTED_OUT);
+
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
 
@@ -182,6 +194,23 @@ void initRootSignature()
 
         serializeAndCreateRootSignature(collectParams.data(), static_cast<uint32_t>(collectParams.size()),
                                         nullptr, 0, renderState.collectRootSig);
+    }
+
+    // ===================================
+    // RESTIR SPATIAL RESAMPLE
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, RESTIR_RESAMPLE_PARAM_IDX(COUNT)> params;
+
+        params[RESTIR_RESAMPLE_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_MERGED_IN)] = MAKE_PARAM(SRV, RESTIR, RESERVOIRS_MERGED_IN);
+        params[RESTIR_RESAMPLE_PARAM_IDX(SHIFTED_IN)] = MAKE_PARAM(SRV, RESTIR, SHIFTED_IN);
+        params[RESTIR_RESAMPLE_PARAM_IDX(PAIRING_TEXTURES_IN)] = MAKE_PARAM(SRV, RESTIR, PAIRING_TEXTURES_IN);
+        params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_OUT)] = MAKE_PARAM(UAV, RESTIR, RESERVOIRS_OUT);
+        params[RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
+
+        serializeAndCreateRootSignature(params.data(), static_cast<uint32_t>(params.size()),
+                                        nullptr, 0, renderState.restirResampleRootSig);
     }
 
     // ===================================
@@ -276,6 +305,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("collect_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.collectPso)));
         renderState.collectPso->SetName(L"collectPso");
+    }
+
+    // ===================================
+    // RESTIR SPATIAL RESAMPLE
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.restirResampleRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("spatial_resample_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.restirResamplePso)));
+        renderState.restirResamplePso->SetName(L"restirResamplePso");
     }
 
     {

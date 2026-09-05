@@ -11,6 +11,13 @@
 #define COLLECT_WORKGROUP_SIZE_Y 16
 
 // =============================================
+// RESTIR
+// =============================================
+
+#define RESTIR_RESAMPLE_WORKGROUP_SIZE_X 16
+#define RESTIR_RESAMPLE_WORKGROUP_SIZE_Y 16
+
+// =============================================
 // WATER DISPLACE
 // =============================================
 

@@ -41,13 +41,32 @@
 #define PT_REGISTER_SPACE 2
 // =============================================
 
+// b#
+#define PT_REGISTER_PASS_CONSTANTS 0
+
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
+#define PT_REGISTER_PAIRING_TEXTURES_IN 1
 
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
 #define PT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT 1
 #define PT_REGISTER_RESERVOIRS_OUT 2
+#define PT_REGISTER_RESERVOIRS_MERGED_OUT 3
+#define PT_REGISTER_SHIFTED_OUT 4
+
+// =============================================
+#define RESTIR_REGISTER_SPACE 2
+// =============================================
+
+// t#
+#define RESTIR_REGISTER_RESERVOIRS_MERGED_IN 0
+#define RESTIR_REGISTER_SHIFTED_IN 1
+#define RESTIR_REGISTER_PAIRING_TEXTURES_IN 2
+
+// u#
+#define RESTIR_REGISTER_RESERVOIRS_OUT 0
+#define RESTIR_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 1
 
 // =============================================
 #define COLLECT_REGISTER_SPACE 2

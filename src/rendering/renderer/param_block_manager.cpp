@@ -12,13 +12,14 @@ static_assert(sizeof(CameraParams) % 16 == 0, "CameraParams size must be a multi
 static_assert(sizeof(SceneParams) % 16 == 0, "SceneParams size must be a multiple of 16 bytes");
 static_assert(sizeof(RenderParams) % 16 == 0, "RenderParams size must be a multiple of 16 bytes");
 static_assert(sizeof(RtslParams) % 16 == 0, "RtslParams size must be a multiple of 16 bytes");
+static_assert(sizeof(RestirParams) % 16 == 0, "RestirParams size must be a multiple of 16 bytes");
 static_assert(sizeof(DebugParams) % 16 == 0, "DebugParams size must be a multiple of 16 bytes");
 
 void ParamBlockManager::init()
 {
     constexpr uint32_t bufferSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
                                     sizeof(SceneParams) + sizeof(RenderParams) + sizeof(RtslParams) +
-                                    sizeof(DebugParams);
+                                    sizeof(RestirParams) + sizeof(DebugParams);
     this->dev_paramBuffer = BufferHelper::createBasicBuffer(bufferSize, &UPLOAD_HEAP);
     this->dev_paramBuffer->Map(0, nullptr, &this->host_paramBuffer);
 
@@ -30,7 +31,8 @@ void ParamBlockManager::init()
     this->sceneParams = reinterpret_cast<SceneParams*>(this->cameraParams + 1);
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
     this->rtslParams = reinterpret_cast<RtslParams*>(this->renderParams + 1);
-    this->debugParams = reinterpret_cast<DebugParams*>(this->rtslParams + 1);
+    this->restirParams = reinterpret_cast<RestirParams*>(this->rtslParams + 1);
+    this->debugParams = reinterpret_cast<DebugParams*>(this->restirParams + 1);
 }
 
 void ParamBlockManager::reset()

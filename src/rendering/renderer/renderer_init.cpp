@@ -3,6 +3,8 @@
 
 #include "renderer_internal.h"
 
+#include "rendering/restir/pairing_texture.h"
+
 #include <random>
 
 #include <sl_security.h>
@@ -277,6 +279,34 @@ void initCommand()
     CHECK_HRESULT(renderState.device->CreateCommandList1(
         0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&renderState.cmdList)));
     renderState.cmdList->SetName(L"main cmdList");
+}
+
+// The three pairing textures of ReSTIR PT Enhanced's paired spatial reuse, generated once and packed
+// into one buffer as int8 delta pairs. Different sizes keep their tilings from lining up.
+void initRestirPairingTextures()
+{
+    constexpr uint32_t sizes[RESTIR_MAX_SPATIAL_NEIGHBORS] = { 254, 230, 210 };
+    constexpr float sigma = 16.f; // same mean neighbor distance as a 30 pixel uniform disk
+
+    std::vector<uint32_t> packed;
+    renderState.pairingTextures.clear();
+    for (uint32_t textureIdx = 0; textureIdx < RESTIR_MAX_SPATIAL_NEIGHBORS; ++textureIdx)
+    {
+        const PairingTexture texture = generatePairingTexture(sizes[textureIdx], sigma, textureIdx + 1);
+        renderState.pairingTextures.push_back({ .size = texture.size, .bufferOffset = static_cast<uint32_t>(packed.size()) });
+        for (const PairingTexture::Delta delta : texture.deltas)
+        {
+            packed.push_back(static_cast<uint8_t>(delta.x) | (static_cast<uint32_t>(static_cast<uint8_t>(delta.y)) << 8));
+        }
+    }
+
+    const uint64_t sizeBytes = packed.size() * sizeof(uint32_t);
+    renderState.dev_pairingTextures = BufferHelper::createBasicBuffer(sizeBytes, &UPLOAD_HEAP);
+    renderState.dev_pairingTextures->SetName(L"dev_pairingTextures");
+    void* host = nullptr;
+    CHECK_HRESULT(renderState.dev_pairingTextures->Map(0, nullptr, &host));
+    memcpy(host, packed.data(), sizeBytes);
+    renderState.dev_pairingTextures->Unmap(0, nullptr);
 }
 
 void initConstantParams()

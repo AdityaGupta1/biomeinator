@@ -19,6 +19,7 @@ public:
     SceneParams* sceneParams{ nullptr };
     RenderParams* renderParams{ nullptr };
     RtslParams* rtslParams{ nullptr };
+    RestirParams* restirParams{ nullptr };
     DebugParams* debugParams{ nullptr };
 
     void init();

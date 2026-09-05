@@ -38,11 +38,21 @@ enum class SamplingMode : uint
     COUNT
 };
 
+// Which raygen the path tracing pipeline runs (PassConstants in path_tracing.rgs.hlsl)
+enum class PtPass : uint
+{
+    INITIAL_SAMPLING,
+    SPATIAL_SHIFT,
+
+    COUNT
+};
+
 enum class RestirDebugMode : uint
 {
     OFF,
     SELF_REPLAY,       // shade with the selected path re-traced from its own reservoir instead of the stored F
     SELF_REPLAY_ERROR, // relative error of the re-traced F against the stored F, scaled by 100
+    SPATIAL_SELF,      // spatial reuse with every pixel paired to itself; must reproduce no reuse exactly
 
     COUNT
 };

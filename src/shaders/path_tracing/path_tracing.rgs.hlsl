@@ -15,6 +15,7 @@
 #include "light/light_sampling.hlsli"
 #include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
+#include "restir/pairing.hlsli"
 #include "restir/path_reservoir.hlsli"
 #include "restir/reconnection.hlsli"
 #include "util/color.hlsli"
@@ -28,6 +29,14 @@ static const float foliageDiffuseTransmission = 0.4f;
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
 RWStructuredBuffer<PathReservoir> reservoirsOut : REGISTER_U(PT, RESERVOIRS_OUT);
+RWStructuredBuffer<PathReservoir> reservoirsMergedOut : REGISTER_U(PT, RESERVOIRS_MERGED_OUT);
+RWStructuredBuffer<ShiftedPath> shiftedOut : REGISTER_U(PT, SHIFTED_OUT);
+StructuredBuffer<uint> pairingTextures : REGISTER_T(PT, PAIRING_TEXTURES_IN);
+
+cbuffer PassConstants : REGISTER_B(PT, PASS_CONSTANTS)
+{
+    uint ptPass; // PtPass
+};
 
 // Every random draw comes from a stream keyed by the path seed, a vertex (or segment) index and its
 // purpose. Random replay can then reproduce one vertex's BSDF or light draw on its own, and draws
@@ -148,7 +157,10 @@ struct RcState
     uint vertexIdx; // 0 = none yet
     HitInfo hit;
     bool hitIsBackface;
+    bool prevLobeDiffuse; // lobe sampled at the vertex before
     float3 wi; // direction sampled at the rc vertex
+    float prevPdfTimesGeom; // pdf of the direction that reached the rc vertex, times its geometry term
+    float pdf; // pdf of wi
 };
 
 // Routes a complete path's contribution to the reservoir when ReSTIR PT is on, otherwise
@@ -175,6 +187,8 @@ PathCandidate makePathCandidate(const float3 F, const float rrProduct, const uin
     candidate.pathTechnique = pathTechnique;
     candidate.rcVertexIdx = 0;
     candidate.rcHitIsBackface = false;
+    candidate.rcPrevLobeDiffuse = false;
+    candidate.rcJacobianTerms = 0.f;
     candidate.rcHit.hitPos_WS = 0.f;
     candidate.rcHit.instanceId = 0;
     candidate.rcHit.hitNor_WS = 0.f;
@@ -190,29 +204,35 @@ PathCandidate makePathCandidate(const float3 F, const float rrProduct, const uin
 
 // Reconnection data for a candidate whose rc vertex x_j was found before its light vertex x_k. When
 // j == k - 1 the stored direction is the final segment's and the stored radiance excludes the path
-// MIS weight, which replay recomputes from its own bsdf pdf against rcLightPdf.
+// MIS weight, which replay recomputes from its own bsdf pdf against rcLightPdf. A final NEE segment
+// contributes no pdf to the Jacobian terms since light sampling ignores the incoming direction.
 void setCandidateRcFromState(inout PathCandidate candidate, const RcState rc, const float3 finalSegmentDir,
-    const float3 radianceIfRcPrecedesLight, const float3 radianceOtherwise, const float lightPdf)
+    const float3 radianceIfRcPrecedesLight, const float3 radianceOtherwise, const float lightPdf, const bool finalSegmentIsNee)
 {
     const bool rcPrecedesLight = (rc.vertexIdx + 1 == candidate.pathLength);
     candidate.rcVertexIdx = rc.vertexIdx;
     candidate.rcHit = rc.hit;
     candidate.rcHitIsBackface = rc.hitIsBackface;
+    candidate.rcPrevLobeDiffuse = rc.prevLobeDiffuse;
     candidate.rcWi = rcPrecedesLight ? finalSegmentDir : rc.wi;
     candidate.rcRadiance = rcPrecedesLight ? radianceIfRcPrecedesLight : radianceOtherwise;
     candidate.rcLightPdf = lightPdf;
+    candidate.rcJacobianTerms = rc.prevPdfTimesGeom * ((rcPrecedesLight && finalSegmentIsNee) ? 1.f : rc.pdf);
 }
 
 // Reconnection data for a candidate that reconnects straight to its light vertex. For the dome, the
-// hit is unused and the direction identifies the vertex.
+// hit is unused and the direction identifies the vertex. `jacobianTerms` is the technique's pdf of
+// the light vertex times its geometry term.
 void setCandidateRcAtLightVertex(inout PathCandidate candidate, const HitInfo lightHit, const bool lightHitIsBackface,
-    const float3 domeDir, const float3 emission)
+    const float3 domeDir, const float3 emission, const float jacobianTerms, const bool prevLobeDiffuse)
 {
     candidate.rcVertexIdx = candidate.pathLength;
     candidate.rcHit = lightHit;
     candidate.rcHitIsBackface = lightHitIsBackface;
+    candidate.rcPrevLobeDiffuse = prevLobeDiffuse;
     candidate.rcWi = domeDir;
     candidate.rcRadiance = emission;
+    candidate.rcJacobianTerms = jacobianTerms;
 }
 
 // Occlusion ray from a path vertex to the reconnection vertex (or the dome), returning the segment's
@@ -291,11 +311,13 @@ bool traceReconnectionRay(const float3 surfPos_WS,
     return true;
 }
 
-// Completes a replayed path at x_{j-1} by connecting to the stored reconnection vertex x_j. Returns
-// the product of every factor from x_{j-1}'s scatter onward, to be multiplied by the throughput at
-// x_{j-1}. The Jacobian is 1 when the path is replayed at its own pixel. The connecting segment is
-// traced the way the original technique traced it: an NEE light vertex gets a shadow ray (own rng
-// stream, no fog), anything else the BSDF segment's stream and fog.
+// Completes a replayed path at y_{j-1} by connecting to the stored reconnection vertex x_j. Returns
+// the product of every factor from y_{j-1}'s scatter onward, to be multiplied by the throughput at
+// y_{j-1}, plus the shift's Jacobian (Lin et al. 2026 Eq. 2) and the shifted path's own Jacobian
+// terms. Returns zero when the shift is undefined: the offset path would have reconnected earlier,
+// or would not reconnect here, so the mapping has no inverse (GRIS Section 7.4). The connecting
+// segment is traced the way the original technique traced it: an NEE light vertex gets a shadow ray
+// (own rng stream, no fog), anything else the BSDF segment's stream and fog.
 float3 evaluateReconnection(const ReplayTarget replay,
                             const Payload payload,
                             const Material surfMaterial,
@@ -307,8 +329,18 @@ float3 evaluateReconnection(const ReplayTarget replay,
                             const bool canPassthrough,
                             const uint pathSeed,
                             const uint vertexIdx,
-                            const uint pathDepth)
+                            const uint pathDepth,
+                            const float bounceLobeRoughness,
+                            const float bounceBsdfPdf,
+                            const float3 prevSurfPos_WS,
+                            const float3 prevSurfNor_WS,
+                            const float footprintThreshold,
+                            out float jacobian,
+                            out float jacobianTerms)
 {
+    jacobian = 0.f;
+    jacobianTerms = 0.f;
+
     const PathReservoir path = replay.path;
     const bool rcIsLightVertex = (replay.rcVertexIdx == replay.pathLength);
     const bool rcIsDome = rcIsLightVertex && isDomeTechnique(replay.pathTechnique);
@@ -333,6 +365,21 @@ float3 evaluateReconnection(const ReplayTarget replay,
     }
     const float3 prevFactor = prevEval.value * absCosTheta(wi_WS, surfNor_WS);
 
+    // The pair ending at this vertex must not qualify, or the offset path would have reconnected earlier
+    if (vertexIdx >= 2 && isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, surfPos_WS,
+                              surfNor_WS, prevEval.pdf, false, surfMaterial.hasGlossy(), footprintThreshold))
+    {
+        return 0.f;
+    }
+
+    // The base path's lobe at x_{j-1} must exist here, and its roughness is this surface's
+    const bool prevLobeDiffuse = bool(path.flags & PATH_FLAGS_RC_PREV_LOBE_DIFFUSE);
+    if (prevLobeDiffuse ? !surfMaterial.hasDiffuse() : !surfMaterial.hasGlossy())
+    {
+        return 0.f;
+    }
+    const float prevLobeRoughness = prevLobeDiffuse ? 1.f : surfMaterial.roughness;
+
     const bool isUnderwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
     float3 transmittance;
     if (!traceReconnectionRay(surfPos_WS, surfNor_WS, wi_WS, rcIsDome, rcIsNeeLightVertex, path.rcHit.hitPos_WS, path.rcHit.hitNor_WS,
@@ -343,9 +390,26 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     if (rcIsLightVertex)
     {
-        float lightPdf = rcIsDome
+        const float lightPdf = rcIsDome
             ? domeLightPdf(wi_WS, surfNor_WS)
             : lightPdfRtsl(path.rcHit, surfPos_WS, surfNor_WS, wi_WS, surfMaterial.acceptsBacksideLight());
+
+        // NEE paths always reconnect to their light; BSDF-sampled light vertices only where the criteria hold
+        if (!rcIsNeeLightVertex)
+        {
+            const bool qualifies = rcIsDome
+                ? isDomeReconnectionVertex(prevLobeRoughness)
+                : isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, path.rcHit.hitPos_WS,
+                      path.rcHit.hitNor_WS, 0.f, false, false, footprintThreshold);
+            if (!qualifies)
+            {
+                return 0.f;
+            }
+        }
+
+        const float techniquePdf = rcIsNeeLightVertex ? lightPdf : prevEval.pdf;
+        jacobianTerms = techniquePdf * (rcIsDome ? 1.f : reconnectionGeometryTerm(surfPos_WS, path.rcHit.hitPos_WS, path.rcHit.hitNor_WS));
+        jacobian = (path.rcJacobianTerms > 0.f) ? jacobianTerms / path.rcJacobianTerms : 0.f;
 
         // With their path MIS weights applied, NEE and BSDF sampling of the light vertex both reduce to
         // f * cos * Le / (p_light + p_bsdf)
@@ -384,6 +448,13 @@ float3 evaluateReconnection(const ReplayTarget replay,
     const BsdfEval rcEval = evaluateBsdf(rcMaterial, rcHit.uv, -wi_WS, path.rcWi, rcHit.hitNor_WS, rcTexCtx);
     const float3 rcFactor = rcEval.value * absCosTheta(path.rcWi, rcHit.hitNor_WS);
 
+    // The offset path must reconnect here too
+    if (!isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, rcHit.hitPos_WS, rcHit.hitNor_WS,
+            rcEval.pdf, false, rcMaterial.hasGlossy(), footprintThreshold))
+    {
+        return 0.f;
+    }
+
     // When x_j precedes the light vertex, the final segment's path MIS weight is recomputed here
     const bool rcPrecedesLight = (replay.rcVertexIdx + 1 == replay.pathLength);
     const float rcDenominator = rcPrecedesLight ? (path.rcLightPdf + rcEval.pdf) : rcEval.pdf;
@@ -392,14 +463,22 @@ float3 evaluateReconnection(const ReplayTarget replay,
         return 0.f;
     }
 
+    const bool finalSegmentIsNee = rcPrecedesLight &&
+        (replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA || replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME);
+    jacobianTerms = prevEval.pdf * reconnectionGeometryTerm(surfPos_WS, rcHit.hitPos_WS, rcHit.hitNor_WS) *
+                    (finalSegmentIsNee ? 1.f : rcEval.pdf);
+    jacobian = (path.rcJacobianTerms > 0.f) ? jacobianTerms / path.rcJacobianTerms : 0.f;
+
     return prevFactor / prevEval.pdf * transmittance * rcFactor / rcDenominator * path.rcRadiance;
 }
 
 // Traces one path tree from the primary hit in the gbuffer. In initial sampling mode every complete
 // path is fed to the reservoir (ReSTIR PT) or summed into pathColor (other modes), and the terms
 // that are not resampled paths (primary emission and miss, fog in-scatter) go straight to pathColor.
-// In replay mode only the target path is rebuilt from its seed and its integrand is returned;
-// nothing is accumulated and no roulette is applied.
+// In replay mode only the target path is rebuilt from its seed and its integrand is returned along
+// with the shift's Jacobian and the rebuilt path's own Jacobian terms; nothing is accumulated and no
+// roulette is applied. Replaying at a pixel other than the path's own is the hybrid shift, and the
+// result is zero wherever the shift is undefined.
 float3 pathTraceRay(inout Payload payload,
                     inout PathTreeReservoir reservoir,
                     const ReplayTarget replay,
@@ -407,10 +486,14 @@ float3 pathTraceRay(inout Payload payload,
                     const uint pathSplitIdx,
                     const uint pathSeed,
                     out float3 pathColor,
-                    out float3 ptDiffuseAlbedo)
+                    out float3 ptDiffuseAlbedo,
+                    out float replayJacobian,
+                    out float replayJacobianTerms)
 {
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
+    replayJacobian = 1.f; // random replay has unit Jacobian
+    replayJacobianTerms = 0.f;
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRestirPt = (samplingMode == SamplingMode::RESTIR_PT);
@@ -466,6 +549,7 @@ float3 pathTraceRay(inout Payload payload,
     bool bounceAcceptedBacksideLight = false;
     float bounceBsdfPdf = 0.f;
     float bounceLobeRoughness = 0.f;
+    bool bounceSampledDiffuse = false;
     float3 surfPos_WS, surfNor_WS;
     // the real bounce before that, for the reconnection test between the two
     float3 prevSurfPos_WS = cameraParams.pos_WS;
@@ -496,7 +580,10 @@ float3 pathTraceRay(inout Payload payload,
     rc.vertexIdx = 0;
     rc.hit = payload.hitInfo;
     rc.hitIsBackface = false;
+    rc.prevLobeDiffuse = false;
     rc.wi = 0.f;
+    rc.prevPdfTimesGeom = 0.f;
+    rc.pdf = 0.f;
 
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
@@ -565,11 +652,15 @@ float3 pathTraceRay(inout Payload payload,
                 }
                 const float3 F = throughput * Le * misWeight;
 
+                const bool lightVertexQualifies = useRestirPt &&
+                    isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, surfPos_WS, surfNor_WS,
+                        payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, 0.f, false, false, footprintThreshold);
                 if (isReplay)
                 {
                     if (replay.pathTechnique == PATH_TECHNIQUE_BSDF_EMISSION && vertexIdx == replay.pathLength && replay.rcVertexIdx == 0)
                     {
-                        return F;
+                        // A path stored without reconnection is undefined where the offset path would reconnect
+                        return lightVertexQualifies ? 0.f : F;
                     }
                 }
                 else
@@ -577,12 +668,14 @@ float3 pathTraceRay(inout Payload payload,
                     PathCandidate candidate = makePathCandidate(F, rrProduct, vertexIdx, PATH_TECHNIQUE_BSDF_EMISSION);
                     if (rc.vertexIdx != 0)
                     {
-                        setCandidateRcFromState(candidate, rc, ray.Direction, rcThroughput * Le, rcThroughput * Le * misWeight, lightPdf);
+                        setCandidateRcFromState(candidate, rc, ray.Direction, rcThroughput * Le, rcThroughput * Le * misWeight, lightPdf, false);
                     }
-                    else if (useRestirPt && isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, surfPos_WS, surfNor_WS,
-                                 payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, 0.f, false, false, footprintThreshold))
+                    else if (lightVertexQualifies)
                     {
-                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT), 0.f, Le);
+                        const float jacobianTerms =
+                            bounceBsdfPdf * reconnectionGeometryTerm(surfPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
+                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT), 0.f, Le,
+                            jacobianTerms, bounceSampledDiffuse);
                     }
                     addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
                 }
@@ -648,7 +741,8 @@ float3 pathTraceRay(inout Payload payload,
             if (isReplay && replay.rcVertexIdx != 0 && vertexIdx + 1 == replay.rcVertexIdx)
             {
                 return throughput * evaluateReconnection(replay, payload, surfMaterial, payload.hitInfo.uv, wo_WS, surfPos_WS,
-                    surfNor_WS, surfTexCtx, canPassthrough, pathSeed, vertexIdx, pathDepth);
+                    surfNor_WS, surfTexCtx, canPassthrough, pathSeed, vertexIdx, pathDepth, bounceLobeRoughness, bounceBsdfPdf,
+                    prevSurfPos_WS, prevSurfNor_WS, footprintThreshold, replayJacobian, replayJacobianTerms);
             }
 
             if (isReplay && vertexIdx >= replay.pathLength) // the target path ended here without matching
@@ -673,15 +767,24 @@ float3 pathTraceRay(inout Payload payload,
             const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfTexCtx, bsdfRng);
 
             // The reconnection vertex is the first x_j (j >= 2) whose pair with x_{j-1} passes the criteria.
-            // Decided before this vertex's light samples, since those paths reconnect here too.
-            if (useRestirPt && !isReplay && rc.vertexIdx == 0 && vertexIdx >= 2 &&
+            // Decided before this vertex's light samples, since those paths reconnect here too. In replay,
+            // a pair qualifying before the stored rc vertex means the offset path would have reconnected
+            // earlier, so the shift is undefined.
+            if (useRestirPt && vertexIdx >= 2 && (isReplay ? true : rc.vertexIdx == 0) &&
                 isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, surfPos_WS, surfNor_WS,
                     surfBsdfSample.pdf, surfBsdfSample.wasSpecular, surfMaterial.hasGlossy(), footprintThreshold))
             {
+                if (isReplay)
+                {
+                    return 0.f;
+                }
                 rc.vertexIdx = vertexIdx;
                 rc.hit = payload.hitInfo;
                 rc.hitIsBackface = bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT);
+                rc.prevLobeDiffuse = bounceSampledDiffuse;
                 rc.wi = surfBsdfSample.wi_WS;
+                rc.prevPdfTimesGeom = bounceBsdfPdf * reconnectionGeometryTerm(prevSurfPos_WS, surfPos_WS, surfNor_WS);
+                rc.pdf = surfBsdfSample.pdf;
             }
 
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
@@ -733,12 +836,15 @@ float3 pathTraceRay(inout Payload payload,
                         if (rc.vertexIdx != 0)
                         {
                             setCandidateRcFromState(candidate, rc, lightSample.wi_WS, lightSample.Le * lightSample.transmittance,
-                                rcThroughput * lightFactor, lightSample.pdf);
+                                rcThroughput * lightFactor, lightSample.pdf, true);
                         }
                         else
                         {
                             // Forced light reconnection (Lin et al. 2026, Section 6.2.3): replay never re-samples lights
-                            setCandidateRcAtLightVertex(candidate, lightSample.lightHit, false, 0.f, lightSample.Le);
+                            const float jacobianTerms = lightSample.pdf *
+                                reconnectionGeometryTerm(surfPos_WS, lightSample.lightHit.hitPos_WS, lightSample.lightHit.hitNor_WS);
+                            setCandidateRcAtLightVertex(candidate, lightSample.lightHit, false, 0.f, lightSample.Le, jacobianTerms,
+                                surfBsdfSample.sampledDiffuse);
                             candidate.rcLightPdf = lightSample.pdf;
                         }
                         addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
@@ -776,11 +882,12 @@ float3 pathTraceRay(inout Payload payload,
                         if (rc.vertexIdx != 0)
                         {
                             setCandidateRcFromState(candidate, rc, domeLightSample.wi_WS, domeLightSample.Le * domeLightSample.transmittance,
-                                rcThroughput * lightFactor, domeLightSample.pdf);
+                                rcThroughput * lightFactor, domeLightSample.pdf, true);
                         }
                         else
                         {
-                            setCandidateRcAtLightVertex(candidate, rc.hit, false, domeLightSample.wi_WS, domeLightSample.Le);
+                            setCandidateRcAtLightVertex(candidate, rc.hit, false, domeLightSample.wi_WS, domeLightSample.Le,
+                                domeLightSample.pdf, surfBsdfSample.sampledDiffuse);
                         }
                         addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
                     }
@@ -821,6 +928,7 @@ float3 pathTraceRay(inout Payload payload,
             bounceWasSpecular = surfBsdfSample.wasSpecular;
             bounceAcceptedBacksideLight = surfMaterial.acceptsBacksideLight();
             bounceLobeRoughness = surfBsdfSample.lobeRoughness;
+            bounceSampledDiffuse = surfBsdfSample.sampledDiffuse;
             ++vertexIdx;
         } // !isPassthrough
 
@@ -926,21 +1034,22 @@ float3 pathTraceRay(inout Payload payload,
             }
             const float3 F = throughput * missDomeLightColor * misWeight;
 
+            const bool domeQualifies = useRestirPt && isDomeReconnectionVertex(bounceLobeRoughness);
             if (isReplay)
             {
                 const bool matches = replay.pathTechnique == PATH_TECHNIQUE_BSDF_DOME && vertexIdx == replay.pathLength && replay.rcVertexIdx == 0;
-                return matches ? F : 0.f;
+                return (matches && !domeQualifies) ? F : 0.f;
             }
 
             PathCandidate candidate = makePathCandidate(F, rrProduct, vertexIdx, PATH_TECHNIQUE_BSDF_DOME);
             if (rc.vertexIdx != 0)
             {
                 setCandidateRcFromState(candidate, rc, ray.Direction, rcThroughput * missDomeLightColor,
-                    rcThroughput * missDomeLightColor * misWeight, domePdf);
+                    rcThroughput * missDomeLightColor * misWeight, domePdf, false);
             }
-            else if (useRestirPt && isDomeReconnectionVertex(bounceLobeRoughness))
+            else if (domeQualifies)
             {
-                setCandidateRcAtLightVertex(candidate, rc.hit, false, ray.Direction, missDomeLightColor);
+                setCandidateRcAtLightVertex(candidate, rc.hit, false, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
             }
             addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
             break;
@@ -969,8 +1078,33 @@ float3 pathTraceRay(inout Payload payload,
     return 0.f;
 }
 
-[shader("raygeneration")]
-void RayGeneration()
+// Shifts a stored path to `pixelIdx` by replaying it from that pixel's primary hit
+ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbufferData, const uint2 pixelIdx)
+{
+    ShiftedPath shifted;
+    shifted.F = 0.f;
+    shifted.jacobian = 0.f;
+    shifted.rcJacobianTerms = 0.f;
+    shifted.pad0 = 0;
+    shifted.pad1 = 0;
+    shifted.pad2 = 0;
+    if (path.W <= 0.f)
+    {
+        return shifted;
+    }
+
+    Payload payload = initPayloadFromGbuffer(gbufferData);
+    PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0, 0);
+    const uint pathSplitIdx = bool(path.flags & PATH_FLAGS_SPLIT_IDX) ? 1 : 0;
+    float3 unusedColor, unusedAlbedo;
+    shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, pathSplitIdx, path.seed,
+        unusedColor, unusedAlbedo, shifted.jacobian, shifted.rcJacobianTerms);
+    return shifted;
+}
+
+// Initial sampling: one path tree per pixel slot. In ReSTIR PT mode the reservoir is stored and,
+// outside the self-replay debug modes, shaded later by the resample pass.
+void initialSamplingRayGen()
 {
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
@@ -988,7 +1122,9 @@ void RayGeneration()
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
-    pathTraceRay(payload, reservoir, noReplay(), pixelIdx, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo);
+    float unusedJacobian, unusedJacobianTerms;
+    pathTraceRay(payload, reservoir, noReplay(), pixelIdx, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo,
+        unusedJacobian, unusedJacobianTerms);
 
     if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
     {
@@ -996,28 +1132,16 @@ void RayGeneration()
         const PathReservoir stored = reservoirsOut[slotIdx];
 
         const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
-        if (debugMode == RestirDebugMode::OFF)
+        if (debugMode == RestirDebugMode::SELF_REPLAY || debugMode == RestirDebugMode::SELF_REPLAY_ERROR)
         {
-            pathColor += stored.F * stored.W;
-        }
-        else
-        {
-            float3 replayedF = 0.f;
-            if (stored.W > 0.f)
-            {
-                Payload replayPayload = initPayloadFromGbuffer(gbufferData);
-                float3 unusedColor, unusedAlbedo;
-                replayedF = pathTraceRay(replayPayload, reservoir, makeReplayTarget(stored), pixelIdx, pathSplitIdx, stored.seed,
-                    unusedColor, unusedAlbedo);
-            }
-
+            const ShiftedPath replayed = shiftPathToPixel(stored, gbufferData, pixelIdx);
             if (debugMode == RestirDebugMode::SELF_REPLAY)
             {
-                pathColor += replayedF * stored.W;
+                pathColor += replayed.F * stored.W;
             }
-            else // SELF_REPLAY_ERROR
+            else
             {
-                pathColor = (stored.W > 0.f) ? 100.f * abs(replayedF - stored.F) / max(luminance(stored.F), 1e-6f) : 0.f;
+                pathColor = (stored.W > 0.f) ? 100.f * abs(replayed.F - stored.F) / max(luminance(stored.F), 1e-6f) : 0.f;
                 outPtDiffuseAlbedo = 0.f;
             }
         }
@@ -1033,4 +1157,72 @@ void RayGeneration()
     }
 
     ptDiffuseAlbedoRawBufferOut[slotIdx] = float4(outPtDiffuseAlbedo, 0.f);
+}
+
+// The two split slots of a pixel sample disjoint parts of path space, so merging them is exact
+// resampling with unit MIS weights. Deterministic per pixel and frame so every thread that needs a
+// pixel's merged reservoir computes the same one.
+PathReservoir mergeSlotReservoirs(const uint2 pixelIdx)
+{
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+    if (!bool(renderParams.doPathSplitting))
+    {
+        return reservoirsOut[linearPixelIdx];
+    }
+
+    const PathReservoir slot0 = reservoirsOut[linearPixelIdx * 2];
+    const PathReservoir slot1 = reservoirsOut[linearPixelIdx * 2 + 1];
+    const float weight0 = slot0.W * luminance(slot0.F);
+    const float weight1 = slot1.W * luminance(slot1.F);
+    const float weightSum = weight0 + weight1;
+
+    RandomNumberGenerator rng = initRng(constantParams.rngSeed, 555111, linearPixelIdx, renderParams.frameNumber);
+    PathReservoir merged = slot1;
+    if (rng.nextFloat() * weightSum < weight0)
+    {
+        merged = slot0;
+    }
+    const float pHat = luminance(merged.F);
+    merged.W = (weightSum > 0.f && pHat > 0.f) ? weightSum / pHat : 0.f;
+    merged.M = 1.f;
+    return merged;
+}
+
+// Paired spatial reuse, first pass: each pixel shifts every partner's path to itself. The pairing is
+// symmetric, so this one evaluation per pair serves both the partner's candidate at this pixel and
+// this pixel's MIS term at the partner.
+void spatialShiftRayGen()
+{
+    const uint2 pixelIdx = DispatchRaysIndex().xy;
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+    const uint pixelCount = renderParams.renderSize.x * renderParams.renderSize.y;
+    const bool pairWithSelf = (RestirDebugMode)renderParams.restirDebugMode == RestirDebugMode::SPATIAL_SELF;
+
+    reservoirsMergedOut[linearPixelIdx] = mergeSlotReservoirs(pixelIdx);
+
+    const GbufferData gbufferData = gbufferIn[linearPixelIdx];
+    for (uint textureIdx = 0; textureIdx < restirParams.spatialNeighborCount; ++textureIdx)
+    {
+        uint2 partnerIdx = pixelIdx;
+        const bool hasPartner = pairWithSelf || getPairedPixel(pairingTextures, textureIdx, pixelIdx, partnerIdx);
+        PathReservoir partner = makeEmptyPathReservoir();
+        if (hasPartner)
+        {
+            partner = mergeSlotReservoirs(partnerIdx);
+        }
+        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shiftPathToPixel(partner, gbufferData, pixelIdx);
+    }
+}
+
+[shader("raygeneration")]
+void RayGeneration()
+{
+    if ((PtPass)ptPass == PtPass::SPATIAL_SHIFT)
+    {
+        spatialShiftRayGen();
+    }
+    else
+    {
+        initialSamplingRayGen();
+    }
 }
