@@ -56,6 +56,7 @@ enum class RestirDebugMode : uint
     SPATIAL_SELF,      // spatial reuse with every pixel paired to itself; must reproduce no reuse exactly
     CONFIDENCE,        // final reservoir M / 100 as gray
     SHIFT_SUCCESS,     // R: temporal shift succeeded, G: fraction of spatial partner shifts that succeeded, B: fraction of partners on screen
+    DUPLICATION,       // previous frame's duplication map (fraction of the 17x17 window sharing the pixel's path seed)
 
     COUNT
 };

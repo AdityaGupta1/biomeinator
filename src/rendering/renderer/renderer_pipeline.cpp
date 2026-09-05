@@ -164,6 +164,7 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(SHIFTED_OUT)] = MAKE_PARAM(UAV, PT, SHIFTED_OUT);
         ptParams[PT_PARAM_IDX(GBUFFER_PREV_IN)] = MAKE_PARAM(SRV, PT, GBUFFER_PREV_IN);
         ptParams[PT_PARAM_IDX(RESERVOIRS_HISTORY_IN)] = MAKE_PARAM(SRV, PT, RESERVOIRS_HISTORY_IN);
+        ptParams[PT_PARAM_IDX(DUPLICATION_MAP_IN)] = MAKE_PARAM(SRV, PT, DUPLICATION_MAP_IN);
 
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
@@ -210,9 +211,25 @@ void initRootSignature()
         params[RESTIR_RESAMPLE_PARAM_IDX(PAIRING_TEXTURES_IN)] = MAKE_PARAM(SRV, RESTIR, PAIRING_TEXTURES_IN);
         params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_HISTORY_OUT)] = MAKE_PARAM(UAV, RESTIR, RESERVOIRS_HISTORY_OUT);
         params[RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
+        params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIR_SEEDS_OUT)] = MAKE_PARAM(UAV, RESTIR, RESERVOIR_SEEDS_OUT);
+        params[RESTIR_RESAMPLE_PARAM_IDX(DUPLICATION_MAP_IN)] = MAKE_PARAM(SRV, RESTIR, DUPLICATION_MAP_IN);
 
         serializeAndCreateRootSignature(params.data(), static_cast<uint32_t>(params.size()),
                                         nullptr, 0, renderState.restirResampleRootSig);
+    }
+
+    // ===================================
+    // RESTIR DUPLICATION MAP
+    // ===================================
+    {
+        std::array<D3D12_ROOT_PARAMETER1, RESTIR_DUPLICATION_PARAM_IDX(COUNT)> params;
+
+        params[RESTIR_DUPLICATION_PARAM_IDX(GLOBAL_PARAMS)] = MAKE_PARAM(CBV, COMMON, GLOBAL_PARAMS);
+        params[RESTIR_DUPLICATION_PARAM_IDX(RESERVOIR_SEEDS_IN)] = MAKE_PARAM(SRV, RESTIR_DUP, RESERVOIR_SEEDS_IN);
+        params[RESTIR_DUPLICATION_PARAM_IDX(DUPLICATION_MAP_OUT)] = MAKE_PARAM(UAV, RESTIR_DUP, DUPLICATION_MAP_OUT);
+
+        serializeAndCreateRootSignature(params.data(), static_cast<uint32_t>(params.size()),
+                                        nullptr, 0, renderState.restirDuplicationRootSig);
     }
 
     // ===================================
@@ -318,6 +335,17 @@ void initPipeline()
         psoDesc.CS = makeShaderBytecode(getShader("spatial_resample_cs"));
         CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.restirResamplePso)));
         renderState.restirResamplePso->SetName(L"restirResamplePso");
+    }
+
+    // ===================================
+    // RESTIR DUPLICATION MAP
+    // ===================================
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc{};
+        psoDesc.pRootSignature = renderState.restirDuplicationRootSig.Get();
+        psoDesc.CS = makeShaderBytecode(getShader("duplication_map_cs"));
+        CHECK_HRESULT(renderState.device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&renderState.restirDuplicationPso)));
+        renderState.restirDuplicationPso->SetName(L"restirDuplicationPso");
     }
 
     {

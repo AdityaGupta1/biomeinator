@@ -83,6 +83,7 @@ static const std::vector<const char*> restirDebugModeComboOptions = {
     "spatial self",
     "confidence",
     "shift success",
+    "duplication",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",
@@ -129,6 +130,9 @@ void imguiEndFrame(double deltaTime)
         {
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Temporal reuse", "restirTemporalReuse");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Temporal confidence cap", "restirTemporalConfidenceCap", 0, 64);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Decorrelation", "restirDecorrelation");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation min cap", "restirDecorrelationMinCap", 0.f, 20.f);
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation exponent", "restirDecorrelationExponent", 0.01f, 1.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Spatial neighbors", "restirSpatialNeighbors", 0, RESTIR_MAX_SPATIAL_NEIGHBORS);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("ReSTIR debug", "restirDebugMode", restirDebugModeComboOptions);
         }

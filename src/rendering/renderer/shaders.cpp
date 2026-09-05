@@ -24,6 +24,7 @@
 #include "postprocess/debug_view.ps.fxh"
 #include "postprocess/postprocess.ps.fxh"
 #include "postprocess/postprocess.vs.fxh"
+#include "restir/duplication_map.cs.fxh"
 #include "restir/spatial_resample.cs.fxh"
 #include "sky/multi_scattering_lut.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
@@ -35,6 +36,7 @@
 static const std::unordered_map<std::string_view, std::span<const unsigned char>> s_shaders = {
     REGISTER_SHADER(collect_cs),
     REGISTER_SHADER(debug_view_ps),
+    REGISTER_SHADER(duplication_map_cs),
     REGISTER_SHADER(emitter_collect_cs),
     REGISTER_SHADER(gbuffer_rgs),
     REGISTER_SHADER(gpu_sort_downsweep_cs),

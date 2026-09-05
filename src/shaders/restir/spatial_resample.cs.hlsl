@@ -18,6 +18,8 @@ StructuredBuffer<ShiftedPath> shiftedIn : REGISTER_T(RESTIR, SHIFTED_IN);
 StructuredBuffer<uint> pairingTextures : REGISTER_T(RESTIR, PAIRING_TEXTURES_IN);
 RWStructuredBuffer<PathReservoir> reservoirsHistoryOut : REGISTER_U(RESTIR, RESERVOIRS_HISTORY_OUT);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
+RWStructuredBuffer<uint> reservoirSeedsOut : REGISTER_U(RESTIR, RESERVOIR_SEEDS_OUT);
+StructuredBuffer<float> duplicationMapIn : REGISTER_T(RESTIR, DUPLICATION_MAP_IN); // previous frame's, for the debug view
 
 // Paired spatial resampling with pairwise MIS (restir/pairwise_mis.hlsli). The pixel's own reservoir
 // after temporal reuse is the canonical sample; each partner's path arrives already shifted into
@@ -125,12 +127,18 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     selected.M = totalConfidence;
 
     reservoirsHistoryOut[linearPixelIdx] = selected;
+    reservoirSeedsOut[linearPixelIdx] = (selected.W > 0.f) ? selected.seed : 0u;
 
     const uint slotIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1);
     const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
     if (debugMode == RestirDebugMode::CONFIDENCE)
     {
         pathTracingRawBufferOut[slotIdx].xyz = selected.M / 100.f;
+        return;
+    }
+    if (debugMode == RestirDebugMode::DUPLICATION)
+    {
+        pathTracingRawBufferOut[slotIdx].xyz = duplicationMapIn[linearPixelIdx];
         return;
     }
     if (debugMode == RestirDebugMode::SHIFT_SUCCESS)

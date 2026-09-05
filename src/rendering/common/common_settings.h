@@ -17,6 +17,10 @@
 #define RESTIR_RESAMPLE_WORKGROUP_SIZE_X 16
 #define RESTIR_RESAMPLE_WORKGROUP_SIZE_Y 16
 
+#define RESTIR_DUPLICATION_WORKGROUP_SIZE_X 16
+#define RESTIR_DUPLICATION_WORKGROUP_SIZE_Y 16
+#define RESTIR_DUPLICATION_RADIUS 8 // 17x17 window
+
 // =============================================
 // WATER DISPLACE
 // =============================================

@@ -190,6 +190,19 @@ motion match the stationary gains; the `SHIFT_SUCCESS` view averages over the wh
 the scene in view or the empty pixels dominate it. Animated geometry still silently invalidates
 stored rc vertices, and disocclusions get no history.
 
+## Stage 5: decorrelation with duplication maps
+
+Enhanced Section 5, behind `restirDecorrelation` (default on; turn it off for golden comparisons,
+since it is the one deliberately biased piece). After the spatial resample writes the frame's final
+reservoirs, `restir/duplication_map.cs.hlsl` counts, for each pixel, how many of the surrounding
+17x17 reservoirs carry the same path seed (a shifted copy of the same initial sample), over 288.
+Seeds come from a compact per-pixel buffer the resample pass writes, since reading 288 full
+reservoirs per pixel would be far too much bandwidth; empty reservoirs write seed 0 and never
+match. The next frame's temporal pass looks the score up at the reprojected pixel and caps the
+history at `lerp(cap, minCap, score^exponent)`, so a sample that has already spread stops being
+trusted and cannot keep spreading. Defaults follow the paper: minCap 1, exponent 0.1. The
+`DUPLICATION` debug view shows the previous frame's map.
+
 ## RNG streams
 
 Every draw comes from `initRng(pathSeed, index, purpose)` with purposes for BSDF, NEE area, NEE dome,

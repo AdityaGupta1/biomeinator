@@ -152,6 +152,7 @@ enum class PtParam
     SHIFTED_OUT,
     GBUFFER_PREV_IN,
     RESERVOIRS_HISTORY_IN,
+    DUPLICATION_MAP_IN,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -193,6 +194,18 @@ enum class RestirResampleParam
 
     RESERVOIRS_HISTORY_OUT,
     PATH_TRACING_RAW_BUFFER_OUT,
+    RESERVOIR_SEEDS_OUT,
+    DUPLICATION_MAP_IN,
+
+    COUNT
+};
+
+enum class RestirDuplicationParam
+{
+    GLOBAL_PARAMS,
+
+    RESERVOIR_SEEDS_IN,
+    DUPLICATION_MAP_OUT,
 
     COUNT
 };
@@ -201,6 +214,7 @@ enum class RestirResampleParam
 #define PT_PARAM_IDX(param) static_cast<uint32_t>(PtParam::param)
 #define COLLECT_PARAM_IDX(param) static_cast<uint32_t>(CollectParam::param)
 #define RESTIR_RESAMPLE_PARAM_IDX(param) static_cast<uint32_t>(RestirResampleParam::param)
+#define RESTIR_DUPLICATION_PARAM_IDX(param) static_cast<uint32_t>(RestirDuplicationParam::param)
 #define POSTPROCESS_PARAM_IDX(param) static_cast<uint32_t>(PostprocessParam::param)
 #define DEBUG_VIEW_PARAM_IDX(param) static_cast<uint32_t>(DebugViewParam::param)
 
@@ -352,6 +366,8 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_reservoirsMerged; // one per pixel, after the temporal pass
     ComPtr<ID3D12Resource> dev_reservoirsHistory[2]; // one per pixel, the final reservoirs of a frame, ping-pong by frame parity
     bool restirHistoryValid{ false }; // the previous frame wrote its history reservoirs and nothing invalidated them
+    ComPtr<ID3D12Resource> dev_reservoirSeeds; // path seed per pixel of the final reservoirs, input to the duplication map
+    ComPtr<ID3D12Resource> dev_duplicationMap; // duplication score per pixel, read by the next frame's temporal pass
     ComPtr<ID3D12Resource> dev_shifted; // ShiftedPath per pixel per pairing texture
     ComPtr<ID3D12Resource> dev_pairingTextures; // all pairing textures packed, see initRestirPairingTextures
     struct PairingTextureInfo
@@ -376,6 +392,7 @@ struct RendererState
     ComPtr<ID3D12RootSignature> ptRootSig;
     ComPtr<ID3D12RootSignature> collectRootSig;
     ComPtr<ID3D12RootSignature> restirResampleRootSig;
+    ComPtr<ID3D12RootSignature> restirDuplicationRootSig;
     ComPtr<ID3D12RootSignature> postprocessRootSig;
     ComPtr<ID3D12RootSignature> debugViewRootSig;
 
@@ -390,6 +407,7 @@ struct RendererState
 
     ComPtr<ID3D12PipelineState> collectPso;
     ComPtr<ID3D12PipelineState> restirResamplePso;
+    ComPtr<ID3D12PipelineState> restirDuplicationPso;
 
     ComPtr<ID3D12PipelineState> postprocessPso;
     ComPtr<ID3D12PipelineState> debugViewPso;

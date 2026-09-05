@@ -41,6 +41,9 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("restirSpatialNeighbors", "ReSTIR PT paired spatial neighbors per pixel (0-3)", uint32_t, "3");
     ADD_OPTION("restirTemporalReuse", "ReSTIR PT temporal reuse", bool, "true");
     ADD_OPTION("restirTemporalConfidenceCap", "ReSTIR PT confidence cap on the temporal neighbor (0 disables its contribution)", uint32_t, "20");
+    ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "true");
+    ADD_OPTION("restirDecorrelationMinCap", "Confidence cap where the duplication score is 1", float, "1");
+    ADD_OPTION("restirDecorrelationExponent", "Duplication score exponent driving the cap reduction", float, "0.1");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
@@ -122,6 +125,9 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("restirSpatialNeighbors", uint32_t);
     COPY_SETTING("restirTemporalReuse", bool);
     COPY_SETTING("restirTemporalConfidenceCap", uint32_t);
+    COPY_SETTING("restirDecorrelation", bool);
+    COPY_SETTING("restirDecorrelationMinCap", float);
+    COPY_SETTING("restirDecorrelationExponent", float);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);

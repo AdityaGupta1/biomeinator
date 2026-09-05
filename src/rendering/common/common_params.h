@@ -167,7 +167,12 @@ struct RestirParams
     uint spatialNeighborCount; // pairing textures used this frame; 0 disables spatial reuse
     uint temporalHistoryValid; // the history reservoirs and previous gbuffer hold last frame's ReSTIR output
     float temporalConfidenceCap; // M cap applied to the temporal neighbor
+    uint decorrelationEnabled; // lower the cap where the duplication map is high (Enhanced, Section 5)
+
+    float decorrelationMinCap; // cap used where the duplication score is 1
+    float decorrelationExponent; // score^exponent drives the cap reduction; smaller reacts faster
     uint pad0;
+    uint pad1;
 
     uint4 pairingTransforms[RESTIR_MAX_SPATIAL_NEIGHBORS]; // x = texture size, y = RESTIR_PAIRING_* flags, zw = offset
     uint4 pairingBufferOffsets; // first texel of each pairing texture in the pairing buffer

@@ -36,6 +36,7 @@ RWStructuredBuffer<ShiftedPath> shiftedOut : REGISTER_U(PT, SHIFTED_OUT);
 StructuredBuffer<uint> pairingTextures : REGISTER_T(PT, PAIRING_TEXTURES_IN);
 StructuredBuffer<GbufferData> gbufferPrevIn : REGISTER_T(PT, GBUFFER_PREV_IN);
 StructuredBuffer<PathReservoir> reservoirsHistoryIn : REGISTER_T(PT, RESERVOIRS_HISTORY_IN);
+StructuredBuffer<float> duplicationMapIn : REGISTER_T(PT, DUPLICATION_MAP_IN);
 
 cbuffer PassConstants : REGISTER_B(PT, PASS_CONSTANTS)
 {
@@ -1240,7 +1241,15 @@ void temporalRayGen()
         reservoirsMergedOut[linearPixelIdx] = canonical;
         return;
     }
-    history.M = min(history.M, restirParams.temporalConfidenceCap);
+    // Decorrelation (Enhanced, Section 5): where last frame's reservoirs around the history pixel
+    // mostly held copies of one sample, trust the history less so the copy stops spreading
+    float confidenceCap = restirParams.temporalConfidenceCap;
+    if (bool(restirParams.decorrelationEnabled))
+    {
+        const float duplication = duplicationMapIn[prevLinearPixelIdx];
+        confidenceCap = lerp(confidenceCap, restirParams.decorrelationMinCap, pow(duplication, restirParams.decorrelationExponent));
+    }
+    history.M = min(history.M, confidenceCap);
     history.rcHit.hitPos_WS += prevToCurrent;
     GbufferData prevGbufferData = gbufferPrevIn[prevLinearPixelIdx];
     prevGbufferData.hitInfo.hitPos_WS += prevToCurrent;
