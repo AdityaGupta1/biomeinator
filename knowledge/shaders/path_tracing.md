@@ -43,7 +43,7 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 4. **SER reordering** — `NvReorderThread()` sorts threads by a coherence hint (first bounce, passthrough, or scattering non-delta surface) to improve warp occupancy.
 
-5. **Russian roulette** — from depth 2 onward, paths may be terminated probabilistically based on luminance of `pathWeight`, with a minimum 10% survival probability.
+5. **Russian roulette** — from depth 2 onward, paths may be terminated probabilistically based on luminance of the throughput, with a minimum 10% survival probability. Never applied in ReSTIR replay mode (see [restir → design.md](../restir/design.md)).
 
 6. **BSDF sampling** — `sampleBsdf()` picks a direction (lobe model in [materials.md](materials.md)):
    - **Glossy reflection**: mirror `reflect()` when roughness is 0, otherwise a GGX VNDF half vector; weighted by `glossyReflectionTint` and the macro-normal Fresnel.
@@ -61,6 +61,8 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 8. **Trace next ray** — `TraceRay` from the BSDF-sampled direction. Update material, ray cone width, segment absorption.
 
 9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, its emission is MIS-weighted against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling). Like the NEE and dome-light cases, the weight is applied to the emission contribution only, never to `pathWeight`: a path that continues past the emissive vertex can only have been produced by BSDF sampling (NEE terminates at the light), so its continuation must keep full throughput. This only matters for a surface that both emits and scatters (glTF materials may; voxel emissive texels have zero diffuse and never do).
+
+The loop also serves ReSTIR PT: every complete path is a candidate for the pixel's reservoir, and the same loop replays a stored path from its seed. RNG draws are per-vertex, per-purpose streams for that reason. See [restir → design.md](../restir/design.md).
 
 ### ptDiffuseAlbedo Output
 

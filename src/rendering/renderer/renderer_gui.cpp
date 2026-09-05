@@ -76,6 +76,11 @@ static const std::vector<const char*> samplingModeComboOptions = {
     "RTSL",
     "ReSTIR PT",
 };
+static const std::vector<const char*> restirDebugModeComboOptions = {
+    "off",
+    "self replay",
+    "self replay error",
+};
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",
     "accumulate",
@@ -117,6 +122,10 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+        if (SettingsManager::getAsUint("samplingMode") == static_cast<uint32_t>(SamplingMode::RESTIR_PT))
+        {
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("ReSTIR debug", "restirDebugMode", restirDebugModeComboOptions);
+        }
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Materials");

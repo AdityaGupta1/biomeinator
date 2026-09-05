@@ -42,6 +42,28 @@ struct GbufferData
     uint pad1;
 };
 
+// One resampled path per pixel slot for ReSTIR PT. Holds what random replay and reconnection need to
+// rebuild the path at another pixel; see knowledge/restir/design.md. Field packing is in
+// shaders/restir/path_reservoir.hlsli.
+struct PathReservoir
+{
+    float3 F; // integrand of the selected path, without Russian roulette division
+    float W;  // unbiased contribution weight
+
+    uint seed;
+    uint flags;
+    float rcLightPdf; // light sampling pdf from the rc vertex, for MIS when the rc vertex precedes the light vertex
+    uint pad0;
+
+    HitInfo rcHit; // reconnection vertex; unused when it is the dome
+
+    float3 rcWi; // direction leaving the rc vertex toward the next vertex, or the dome direction
+    uint pad1;
+
+    float3 rcRadiance; // radiance arriving at the rc vertex along rcWi, excluding the segment before it
+    uint pad2;
+};
+
 struct Vertex
 {
     float3 pos_OS;

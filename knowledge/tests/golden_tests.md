@@ -7,7 +7,9 @@ _Last edited: 2026-09-03_
 GUI hidden, animation paused), and compares the screenshot against the entry's golden with
 RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name; `-e "<args>"` appends
 extra Biomeinator args to every test (e.g. `-e "--samplingMode=3"` runs the suite against the
-same goldens with a feature toggled). Every run writes
+same goldens with a feature toggled). `--rngSeed=N` makes a run's sampling deterministic (0, the
+default, draws a fresh seed), which is what lets two renders of a glTF scene be compared
+pixel-exact. Every run writes
 `<name>_GENERATED.png`, `<name>_GOLDEN.png` and `<name>_DIFF.png` to `build/test_output/`,
 which is the place to look when a test fails.
 

@@ -38,6 +38,15 @@ enum class SamplingMode : uint
     COUNT
 };
 
+enum class RestirDebugMode : uint
+{
+    OFF,
+    SELF_REPLAY,       // shade with the selected path re-traced from its own reservoir instead of the stored F
+    SELF_REPLAY_ERROR, // relative error of the re-traced F against the stored F, scaled by 100
+
+    COUNT
+};
+
 #ifdef __cplusplus
 #undef uint
 #endif

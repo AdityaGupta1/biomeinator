@@ -144,6 +144,7 @@ enum class PtParam
 
     PATH_TRACING_RAW_BUFFER_OUT,
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
+    RESERVOIRS_OUT,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -322,6 +323,7 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_gbuffer;
     ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
     ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
+    ComPtr<ID3D12Resource> dev_reservoirs;
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, NUM_FRAMES_IN_FLIGHT> rtvHeapCpuHandles{};
 
     // -- Viewport and dimensions --

@@ -99,7 +99,8 @@ struct DomeLightSample
 {
     bool didReachDomeLight;
     float3 wi_WS;
-    float3 Le;
+    float3 Le; // dome radiance, before transmittance
+    float3 transmittance; // passthrough tint and water absorption along the shadow ray
     float pdf;
 };
 
@@ -119,7 +120,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const bool canPassthrough,
                                 const bool startUnderwater,
                                 const bool acceptsBacksideLight,
-                                inout RandomNumberGenerator rng)
+                                inout RandomNumberGenerator rng,
+                                const RandomNumberGenerator shadowRng)
 {
     DomeLightSample result;
 
@@ -150,7 +152,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    domeLightPayload.rng = rng;
+    domeLightPayload.rng = shadowRng;
     domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
     domeLightPayload.rayCone = rayCone;
@@ -161,14 +163,13 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
     result.wi_WS = wi_WS;
     result.pdf = pdf;
+    result.Le = float3(0.f, 0.f, 0.f);
+    result.transmittance = float3(0.f, 0.f, 0.f);
     if (result.didReachDomeLight)
     {
         const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight * passthroughAbsorption;
-    }
-    else
-    {
-        result.Le = float3(0.f, 0.f, 0.f);
+        result.Le = getDomeLightColor(ray.Direction);
+        result.transmittance = domeLightPayload.pathWeight * passthroughAbsorption;
     }
     return result;
 }

@@ -346,6 +346,7 @@ struct BsdfSample
     float pdf;
     float3 bsdfValue;
     bool wasSpecular;
+    float lobeRoughness; // roughness of the sampled lobe: 1 for diffuse, 0 for delta lobes
 };
 
 // A sample with no throughput. It keeps a valid direction so the zero-weight path doesn't feed NaN geometry into
@@ -357,6 +358,7 @@ BsdfSample deadBsdfSample(const float3 wi_WS)
     result.bsdfValue = 0.f;
     result.pdf = 1.f;
     result.wasSpecular = false;
+    result.lobeRoughness = 0.f;
     return result;
 }
 
@@ -387,6 +389,7 @@ BsdfSample sampleDielectricBsdf(const Material material,
 
     BsdfSample result;
     result.wasSpecular = isDelta;
+    result.lobeRoughness = material.roughness;
     if (chooseReflect)
     {
         result.wi_WS = reflected_WS;
@@ -448,6 +451,7 @@ BsdfSample sampleBsdf(const Material material,
     BsdfSample result;
     result.bsdfValue = 0.f;
     result.wasSpecular = false;
+    result.lobeRoughness = 0.f;
 
     if (!material.canScatter())
     {
@@ -464,6 +468,7 @@ BsdfSample sampleBsdf(const Material material,
 
     if (chooseReflect)
     {
+        result.lobeRoughness = material.roughness;
         if (material.roughness == 0.f)
         {
             result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
@@ -485,6 +490,7 @@ BsdfSample sampleBsdf(const Material material,
     }
     else
     {
+        result.lobeRoughness = 1.f;
         // Diffuse transmission splits the diffuse lobe across both hemispheres; when diffuse is the
         // only non-delta lobe, either pick has bsdf * cos / pdf = albedo, so path weights stay noise-free.
         float3 lobeNor_WS = surfNor_WS;

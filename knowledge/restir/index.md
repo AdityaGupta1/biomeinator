@@ -8,4 +8,4 @@ verifiable step at a time. Shaders live in `src/shaders/restir/`; it is the `RES
 
 | Entry | Description |
 |---|---|
-| [design.md](design.md) | What is and is not a resampled path, why, and the constraints later stages inherit |
+| [design.md](design.md) | What is and is not a resampled path, reservoir contents and their semantics, replay, RNG streams, reconnection criteria |

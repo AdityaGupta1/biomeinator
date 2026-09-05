@@ -47,6 +47,7 @@
 // u#
 #define PT_REGISTER_PATH_TRACING_RAW_BUFFER_OUT 0
 #define PT_REGISTER_PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT 1
+#define PT_REGISTER_RESERVOIRS_OUT 2
 
 // =============================================
 #define COLLECT_REGISTER_SPACE 2

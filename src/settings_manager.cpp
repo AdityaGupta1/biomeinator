@@ -35,6 +35,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL, 3=ReSTIR PT)", uint32_t, "2");
+    ADD_OPTION("restirDebugMode", "ReSTIR PT debug mode (0=off, 1=self replay, 2=self replay error)", uint32_t, "0");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
@@ -45,6 +46,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("noJitter", "Disable jitter", bool, "false");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
+    ADD_OPTION("rngSeed", "Rendering RNG seed (0 = random per run)", uint32_t, "0");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
     ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
     ADD_OPTION("animTime", "Initial world animation time in seconds (0 = sunrise)", float, "150");
@@ -103,6 +105,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("samplingMode", uint32_t);
+    COPY_SETTING("restirDebugMode", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);
@@ -113,6 +116,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("noJitter", bool);
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
+    COPY_SETTING("rngSeed", uint32_t);
     COPY_SETTING("movementSpeed", float);
     COPY_SETTING("animTimePaused", bool);
     COPY_SETTING("animTime", float);
@@ -148,6 +152,12 @@ void parseArgs(const int argc, const char* const* argv)
     if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {
         std::cerr << "Invalid samplingMode option" << std::endl;
+        exit(1);
+    }
+
+    if (getAsUint("restirDebugMode") >= static_cast<uint32_t>(RestirDebugMode::COUNT))
+    {
+        std::cerr << "Invalid restirDebugMode option" << std::endl;
         exit(1);
     }
 

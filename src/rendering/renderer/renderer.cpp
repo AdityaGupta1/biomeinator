@@ -219,6 +219,13 @@ void resize()
         pathTracingRawBufferSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     renderState.dev_ptDiffuseAlbedoRawBuffer->SetName(L"dev_ptDiffuseAlbedoRawBuffer");
 
+    renderState.dev_reservoirs.Reset();
+    const uint32_t reservoirsSizeBytes =
+        renderState.renderWidth * renderState.renderHeight * (doPathSplitting ? 2 : 1) * sizeof(PathReservoir);
+    renderState.dev_reservoirs = BufferHelper::createBasicBuffer(
+        reservoirsSizeBytes, &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_reservoirs->SetName(L"dev_reservoirs");
+
     const uint32_t rtvIncrementSize = renderState.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
@@ -338,6 +345,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_OUT), renderState.dev_reservoirs->GetGPUVirtualAddress());
 
     renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
@@ -529,6 +537,7 @@ void render()
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
+    renderParams->restirDebugMode = SettingsManager::getAsUint("restirDebugMode");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -913,6 +922,7 @@ void destroy()
     renderState.dev_gbuffer.Reset();
     renderState.dev_pathTracingRawBuffer.Reset();
     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
+    renderState.dev_reservoirs.Reset();
 
     renderState.screenshotRequest.readbackBuffer.Reset();
 

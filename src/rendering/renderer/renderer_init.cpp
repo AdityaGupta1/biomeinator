@@ -281,10 +281,14 @@ void initCommand()
 
 void initConstantParams()
 {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint32_t> dist(0, std::numeric_limits<uint32_t>::max());
-    const uint32_t rngSeed = dist(gen);
+    uint32_t rngSeed = SettingsManager::getAsUint("rngSeed");
+    if (rngSeed == 0)
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> dist(1, std::numeric_limits<uint32_t>::max());
+        rngSeed = dist(gen);
+    }
 
     for (auto& frame : renderState.frameCtxs)
     {

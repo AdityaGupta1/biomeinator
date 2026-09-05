@@ -72,8 +72,10 @@ struct DirectLightingSample
 {
     bool didHitLight;
     float3 wi_WS;
-    float3 Le;
+    float3 Le; // emission at the sampled point, before transmittance
+    float3 transmittance; // passthrough tint and water absorption along the shadow ray
     float pdf;
+    HitInfo lightHit; // the sampled point as a hit, for reconnection and light pdf lookup
 };
 
 // Occlusion-style shadow ray: TMax stops just short of the light's plane, so any committed
@@ -90,9 +92,10 @@ bool traceToLight(const float3 surfPos_WS,
                   const RayCone rayCone,
                   const bool canPassthrough,
                   const bool startUnderwater,
-                  inout RandomNumberGenerator rng,
-                  out float3 Le)
+                  const RandomNumberGenerator shadowRng,
+                  out DirectLightingSample result)
 {
+    result.didHitLight = false;
     const float lightDistance = distance(surfPos_WS, pointOnLight_WS);
 
     RayDesc ray;
@@ -122,7 +125,7 @@ bool traceToLight(const float3 surfPos_WS,
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
-    lightPayload.rng = rng;
+    lightPayload.rng = shadowRng;
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
     lightPayload.rayCone = rayCone;
@@ -149,39 +152,41 @@ bool traceToLight(const float3 surfPos_WS,
     const float coneWidth = getRayConeWidthAtDistance(rayCone, lightDistance);
     // Untinted because this ctx is only used for emission, which is never tinted
     const TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
-    Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption;
+
+    result.didHitLight = true;
+    result.wi_WS = wi_WS;
+    result.Le = getMaterialEmissiveColor(material, uv, texCtx);
+    result.transmittance = lightPayload.pathWeight * passthroughAbsorption;
+    result.lightHit.hitPos_WS = pointOnLight_WS;
+    result.lightHit.instanceId = light.instanceId;
+    result.lightHit.hitNor_WS = lightNor_WS;
+    result.lightHit.triangleIdx = light.triangleIdx;
+    result.lightHit.uv = uv;
+    result.lightHit.pad0 = 0;
+    result.lightHit.pad1 = 0;
     return true;
 }
 
+// `rng` drives light selection and point sampling; `shadowRng` drives the shadow ray's anyhit
+// decisions so a reconnection ray to the same light point can reproduce them
 DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
                                                  const float3 surfNor_WS,
                                                  const RayCone rayCone,
                                                  const bool canPassthrough,
                                                  const bool startUnderwater,
-                                                 inout RandomNumberGenerator rng)
+                                                 inout RandomNumberGenerator rng,
+                                                 const RandomNumberGenerator shadowRng)
 {
-    DirectLightingSample result;
-    result.didHitLight = false;
-
     float3 pointOnLight_WS;
     float2 lightBary2;
     float lightPdf;
     const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightBary2, lightPdf);
 
-    result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
+    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
-    float3 Le;
-    const bool didHitLight = traceToLight(
-        surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
-    if (!didHitLight)
-    {
-        return result;
-    }
-
-    result.didHitLight = true;
-    result.Le = Le;
+    DirectLightingSample result;
+    traceToLight(surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, shadowRng, result);
     result.pdf = lightPdf;
-
     return result;
 }
 

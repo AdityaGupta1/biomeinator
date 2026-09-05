@@ -1,4 +1,4 @@
-_Last edited: 2026-09-03_
+_Last edited: 2026-09-04_
 
 # ReSTIR PT Design
 
@@ -45,11 +45,78 @@ into one canonical reservoir with MIS weights of 1, which is exact. Splitting's 
 survives as "two initial candidate trees per pixel, one per lobe". Two reservoirs per pixel
 remains a possible knob if a dim lobe under a bright one proves temporally unstable.
 
+## Stage 2: replayable paths and the reservoir buffer
+
+`PathReservoir` (shared struct in `common_structs.h`, one per pixel slot in `dev_reservoirs`) stores
+what rebuilding the selected path anywhere needs: the path seed, length, technique, reconnection
+vertex index, the rc vertex itself, the direction leaving it, the radiance arriving along that
+direction, and the light pdf for MIS. `pathTraceRay` is one loop with two modes: initial sampling
+feeds candidates to the reservoir; replay rebuilds one stored path from its seed and returns its
+integrand. Keeping both in one function is what guarantees they agree.
+
+**Vertex indexing follows the papers**, x1 = primary hit, x_k = light vertex, and passthrough hits
+are not vertices. Every candidate is identified by (k, technique, j) with j the rc vertex (0 = none).
+The four techniques (NEE area, NEE dome, BSDF-hit emission, BSDF miss to dome) are disjoint
+domains. A reservoir's `F` excludes the Russian roulette division: the resampling weight is still
+`luminance(F_withRR)`, since that already equals `pHat / p_source` with roulette folded into the
+source pdf, and the shading output is unchanged because the roulette factor cancels in `F * W`.
+
+**Reconnection data semantics.** `rcRadiance` is everything after the rc vertex x_j *excluding* the
+segment x_{j-1} to x_j, which replay re-traces (visibility, passthrough tint, absorption, fog). When
+j == k (rc is the light vertex, always the case for NEE paths per Enhanced 6.2.3, and for BSDF light
+hits when x_{k-1} passes the criteria) it is the raw emission and replay recomputes both pdfs. When
+j == k - 1 it is emission times the final segment's transmittance, with the path MIS weight left out
+so replay can recompute it from its own bsdf pdf against the stored `rcLightPdf`. Otherwise it
+includes the MIS weight and every factor from x_j's scatter onward. With their MIS weights applied,
+NEE and BSDF sampling of a light vertex both reduce to `f cos Le / (p_light + p_bsdf)`, which is why
+replay treats them identically once reconnected.
+
+**Reconnection criteria** (`restir/reconnection.hlsli`) are Enhanced's, not the 2022 thresholds:
+single-vertex roughness of the sampled lobe at x_{j-1} (>= 0.2, so delta lobes never reconnect) and
+the dual footprint test against `0.0002 * primary footprint`. The inverse test is skipped for
+diffuse-only and light vertices. The decision is made at x_j *after* its BSDF sample (the inverse
+test needs that pdf) and *before* x_j's light samples, since those paths reconnect at x_j too.
+`BsdfSample::lobeRoughness` exists for this.
+
+**What replay reproduces exactly and what it does not.** The self-replay debug modes
+(`--restirDebugMode=1|2`) re-trace each pixel's own stored path and either shade with it or show
+the relative error (x100). With `--rngSeed` fixed, mode 0 and mode 1 renders of a glTF scene
+compare pixel-exact except for a handful of pixels; voxel worlds cannot be compared across runs at
+low frame counts because chunk streaming timing differs, so use the error view for those. Known
+inexact cases: rough glass, where `evaluateBsdf`'s half-vector reconstruction occasionally disagrees
+with the sampled one at float precision (sparse dots on rough spheres); grazing hits on smooth
+curved surfaces, where the re-aimed reconnection ray can graze the surface before the target;
+water absorption on a reconnection segment, which uses the shadow-ray entry/exit formulation.
+
+**Reconnection ray TMax.** An NEE light point carries its triangle's geometric normal, so the ray
+can stop short of the light's *plane* like `traceToLight` (the offset origin makes the plane
+crossing earlier than the distance at oblique angles). A BSDF-sampled hit only has its shading
+normal, and using that plane made rays self-occlude on the target (evil_room's specular-coated
+objects). Those rays are instead aimed from the offset origin exactly at the target and stopped at
+distance minus epsilon, which reproduces the original closest-hit ray.
+
 ## RNG streams
 
-Resampling draws use their own RNG stream (seeded separately in `RayGeneration`), never the
-path's. Random replay will have to reproduce a path's BSDF and light draws exactly from its
-seed, so anything that consumes the path RNG but is not part of the path parameterization
-must be moved off it before replay exists: the fog march, stochastic alpha in `AnyHit`, and
-Russian roulette (Enhanced applies roulette only at initial sampling, folded into the source
-pdf; `F` already carries `1/survival`, which is that formulation).
+Every draw comes from `initRng(pathSeed, index, purpose)` with purposes for BSDF, NEE area, NEE dome,
+their shadow rays, fog, the traced ray's anyhit, and roulette (`PATH_RNG_*` in the rgs). BSDF and
+light purposes are keyed by vertex index, so replay can reproduce one vertex's draw without
+re-running anything before it and passthrough hits on one path do not shift the streams of the
+other. Ray and fog streams are keyed by loop iteration, which is deterministic per path but can
+differ between a base and an offset path across passthrough surfaces (only alpha decisions and fog
+jitter are affected). Shadow rays have their own streams so a reconnection ray to an NEE light
+vertex replays the same alpha decisions. Resampling draws are a separate stream seeded in
+`RayGeneration`.
+
+## Memory
+
+Reservoirs are 112 bytes and allocated for both split slots regardless of sampling mode
+(2 x 112 B per pixel). Enhanced compresses to 64 bytes; that is a later, measured step, and the
+self-replay error view is the tool to measure what precision loss costs.
+
+## Storing world positions
+
+`rcHit` stores world-space position and shading normal rather than barycentrics, because
+`InstanceData` has no full object-to-world matrix on the GPU (glTF instances can scale and rotate).
+The normal is stored as oriented for the original incoming ray; replay flips it (and the backface
+IOR) when reconnecting from the other side. Voxel mode's floating origin (`globalInstanceOffset`)
+means stored positions go stale when it changes; temporal reuse must handle that.
