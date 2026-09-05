@@ -1,8 +1,10 @@
-_Last edited: 2026-09-03_
+_Last edited: 2026-09-04_
 
 # Golden Image Tests
 
-`BiomeinatorTests.exe` (`src/tests/main.cpp`) reads `tests/tests.json`, launches
+`BiomeinatorTests.exe --unit` runs CPU-only unit checks of pure engine code (`src/tests/unit_tests.cpp`,
+currently the ReSTIR pairing textures) and exits without touching the GPU. Without `--unit` it is
+the golden image runner: it reads `tests/tests.json`, launches
 `Biomeinator.exe` once per entry with the entry's args plus `--testOutput=<path>` (camera locked,
 GUI hidden, animation paused), and compares the screenshot against the entry's golden with
 RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name; `-e "<args>"` appends

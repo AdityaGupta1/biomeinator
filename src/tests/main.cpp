@@ -1,4 +1,5 @@
 #include "test_loader.h"
+#include "unit_tests.h"
 
 #define CXXOPTS_NO_EXCEPTIONS
 #include <cxxopts.hpp>
@@ -58,6 +59,7 @@ int main(int argc, char** argv)
     optionAdder("h,help", "Print this message");
     ADD_OPTION("f,filter", "Test filter (regex)", std::string, ".*");
     ADD_OPTION("e,extraArgs", "Extra Biomeinator args appended to every test's args", std::string, "");
+    optionAdder("u,unit", "Run the CPU unit tests instead of the golden image tests");
 
 #undef ADD_OPTION
 
@@ -67,6 +69,11 @@ int main(int argc, char** argv)
     {
         std::cout << options.help() << std::endl;
         exit(0);
+    }
+
+    if (parseResult.count("unit"))
+    {
+        return runUnitTests() ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     const std::string& testFilterStr = parseResult["filter"].as<std::string>();

@@ -364,13 +364,19 @@ foreach(FILE IN LISTS TESTS_SRC)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(BiomeinatorTests ${TESTS_SRC})
+# Pure engine code exercised by the unit tests
+set(UNIT_TESTED_SRC
+    "${SRC_DIR}/rendering/restir/pairing_texture.cpp"
+)
+
+add_executable(BiomeinatorTests ${TESTS_SRC} ${UNIT_TESTED_SRC})
 target_include_directories(BiomeinatorTests PRIVATE
     ${SRC_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/json/include"
     "${EXT}/stb/include"
 )
+target_link_libraries(BiomeinatorTests PRIVATE glm::glm-header-only)
 add_dependencies(BiomeinatorTests Biomeinator)
 target_compile_definitions(BiomeinatorTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"

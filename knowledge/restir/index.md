@@ -1,4 +1,4 @@
-_Last edited: 2026-09-03_
+_Last edited: 2026-09-04_
 
 # ReSTIR PT
 
@@ -9,3 +9,4 @@ verifiable step at a time. Shaders live in `src/shaders/restir/`; it is the `RES
 | Entry | Description |
 |---|---|
 | [design.md](design.md) | What is and is not a resampled path, reservoir contents and their semantics, replay, RNG streams, reconnection criteria |
+| [pairing_textures.md](pairing_textures.md) | Self-inverting neighbor pairing for paired spatial reuse: generation, tiling, per-frame transform, unit checks |
