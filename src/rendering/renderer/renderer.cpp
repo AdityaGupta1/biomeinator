@@ -557,6 +557,13 @@ void render()
         playerInput = WindowManager::getPlayerInput();
     }
     renderState.camera.processInput(deltaTime, playerInput);
+    if (renderState.frameNumber < SettingsManager::getAsUint("scriptedCameraFrames"))
+    {
+        renderState.camera.applyScriptedMotion(
+            { SettingsManager::getAsFloat("scriptedCameraRightPerFrame"), SettingsManager::getAsFloat("scriptedCameraUpPerFrame"),
+              SettingsManager::getAsFloat("scriptedCameraForwardPerFrame") },
+            glm::radians(SettingsManager::getAsFloat("scriptedCameraYawDegreesPerFrame")));
+    }
 
     if (renderState.voxelMode)
     {

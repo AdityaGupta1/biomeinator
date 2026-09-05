@@ -168,12 +168,22 @@ shades with the vector-valued weights of Enhanced 6.3, the RGB sum of every cand
 The reservoir itself still resamples on scalar weights. Debug views: `CONFIDENCE` (M / 100) and
 `SHIFT_SUCCESS` (temporal and spatial shift success rates, partners on screen).
 
-**What is still missing for moving cameras:** stored world positions go stale when voxel mode's
-floating origin moves (`prevGlobalInstanceOffset` is available to correct them), animated geometry
-invalidates stored rc vertices silently, and disocclusions simply get no history. Validation so far
-is stationary-camera only: goldens must still match in mean, since the per-frame estimate stays
-unbiased under the M cap (GRIS 6.4), though accumulation converges more slowly because frames are
-correlated.
+**Reprojection.** A pixel is identified by its *area* in the previous frame, `floor(prevUv *
+size)`, never by the jittered sample position. Subtracting the previous jitter made a still camera
+pull history from the up-left neighbor whenever this frame's jitter was smaller, and at 20:1
+confidence that reads as the whole image swimming down-right. Positions stored last frame (history
+rc vertices, the previous G-buffer, the previous camera) are moved into this frame's render space by
+`prevGlobalInstanceOffset - globalInstanceOffset` before use, so the voxel floating origin can move
+between frames.
+
+**Moving-camera validation** uses the `scriptedCamera*` settings (deterministic per-frame
+translation and yaw for N frames, then the camera holds), a converged RTSL reference accumulated at
+the final pose, and single frames captured on the first static frame, whose history was built
+entirely through the motion. Because the accumulation counter resets on every camera change, that
+first static frame is what `--antialiasingMode=0 --maxAccumulatedFrames=1` captures. Gains under
+motion match the stationary gains; the `SHIFT_SUCCESS` view averages over the whole frame, so keep
+the scene in view or the empty pixels dominate it. Animated geometry still silently invalidates
+stored rc vertices, and disocclusions get no history.
 
 ## RNG streams
 

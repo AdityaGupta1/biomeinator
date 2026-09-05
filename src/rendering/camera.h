@@ -62,6 +62,8 @@ public:
     void setJitterHaltonSequenceLength(uint32_t sequenceLength);
 
     void processInput(double deltaTime, const PlayerInput& input);
+    // Deterministic per-frame motion for tests: camera-relative translation and a yaw step
+    void applyScriptedMotion(DirectX::XMFLOAT3 linearMovement, float dTheta);
     bool update();
     void setAspectRatio(float aspectRatio);
 

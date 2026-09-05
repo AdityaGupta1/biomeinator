@@ -1219,12 +1219,18 @@ void temporalRayGen()
         return;
     }
 
+    // Everything stored last frame lives in last frame's render space; replay traces the current scene
+    const float3 prevToCurrent = prevFrameToCurrentOffset();
     const uint prevLinearPixelIdx = prevPixelIdx.y * renderParams.renderSize.x + prevPixelIdx.x;
     PathReservoir history = reservoirsHistoryIn[prevLinearPixelIdx];
     history.M = min(history.M, restirParams.temporalConfidenceCap);
+    history.rcHit.hitPos_WS += prevToCurrent;
+    GbufferData prevGbufferData = gbufferPrevIn[prevLinearPixelIdx];
+    prevGbufferData.hitInfo.hitPos_WS += prevToCurrent;
 
     const ShiftedPath historyAtCanonical = shiftPathToPixel(history, gbufferData, pixelIdx, cameraParams.pos_WS);
-    const ShiftedPath canonicalAtHistory = shiftPathToPixel(canonical, gbufferPrevIn[prevLinearPixelIdx], prevPixelIdx, cameraParams.prevPos_WS);
+    const ShiftedPath canonicalAtHistory =
+        shiftPathToPixel(canonical, prevGbufferData, prevPixelIdx, cameraParams.prevPos_WS + prevToCurrent);
 
     const float neighborConfidence = history.M;
     const float totalConfidence = canonical.M + neighborConfidence;

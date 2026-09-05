@@ -8,10 +8,18 @@
 #include "common/global_params.hlsli"
 #include "util/math.hlsli"
 
+// Translation that brings a position stored in the previous frame's render space into this frame's,
+// nonzero only when the voxel floating origin moved between the frames
+float3 prevFrameToCurrentOffset()
+{
+    return float3(cameraParams.prevGlobalInstanceOffset - cameraParams.globalInstanceOffset);
+}
+
 // Finds the previous frame's pixel that saw this frame's primary hit and checks that it saw the same
 // surface: the previous hit must exist, lie within a few pixel footprints of the current one and face
-// the same way. Positions are compared in this frame's world space, which assumes the floating origin
-// did not move between the frames.
+// the same way. A pixel is identified by its area, ignoring jitter: with a still camera every pixel
+// reprojects onto itself, otherwise sub-pixel jitter would pick a neighbor whenever it shrank and the
+// reused history would visibly drift.
 bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> gbufferPrevIn, out uint2 prevPixelIdx)
 {
     prevPixelIdx = 0;
@@ -23,7 +31,7 @@ bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> g
     }
     const float2 prevNdc = prevClip.xy / prevClip.w;
     const float2 prevUv = float2(prevNdc.x * 0.5f + 0.5f, 0.5f - prevNdc.y * 0.5f);
-    const float2 prevPixel = prevUv * float2(renderParams.renderSize) - cameraParams.prevJitter;
+    const float2 prevPixel = prevUv * float2(renderParams.renderSize);
     if (any(prevPixel < 0.f) || any(prevPixel >= float2(renderParams.renderSize)))
     {
         return false;
@@ -38,7 +46,8 @@ bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> g
 
     const float distToCamera = distance(cameraParams.pos_WS, hitInfo.hitPos_WS);
     const float pixelFootprint = distToCamera * 2.f * cameraParams.tanHalfFovY / float(renderParams.renderSize.y);
-    if (distance(prevGbuffer.hitInfo.hitPos_WS, hitInfo.hitPos_WS) > 4.f * pixelFootprint)
+    const float3 prevHitPos_WS = prevGbuffer.hitInfo.hitPos_WS + prevFrameToCurrentOffset();
+    if (distance(prevHitPos_WS, hitInfo.hitPos_WS) > 4.f * pixelFootprint)
     {
         return false;
     }

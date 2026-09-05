@@ -208,6 +208,16 @@ void Camera::processInput(double deltaTime, const PlayerInput& input)
     this->params.jitter = this->jitterHalton.next();
 }
 
+void Camera::applyScriptedMotion(XMFLOAT3 linearMovement, float dTheta)
+{
+    this->moveLinear(linearMovement);
+    if (dTheta != 0.f)
+    {
+        this->rotate(dTheta, 0.f);
+    }
+    this->areMatricesDirty = true;
+}
+
 bool Camera::update()
 {
     const Scene& scene = Renderer::getScene();
