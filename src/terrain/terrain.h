@@ -33,7 +33,8 @@ bool tryGetCameraBiome(Biome& outBiome);
 void exportWorld();
 void importWorld();
 void reimportWorld(const std::filesystem::path& worldDir);
-bool pollTestModeImport();
+// True once every imported chunk is queued for its BLAS (or no import is running)
+bool pollWorldImport();
 
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();

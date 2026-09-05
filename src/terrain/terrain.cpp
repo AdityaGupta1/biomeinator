@@ -1105,12 +1105,9 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         }
     }
 
-    if (testMode)
-    {
-        expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
-        importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
-        worldImportActive.store(true, std::memory_order_release);
-    }
+    expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
+    importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
+    worldImportActive.store(true, std::memory_order_release);
 
     Renderer::restoreCameraFromImport(cameraPosInt, cameraPosFloat, phi, theta);
     setDirty();
@@ -1197,7 +1194,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool pollTestModeImport()
+bool pollWorldImport()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {

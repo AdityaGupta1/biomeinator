@@ -6,6 +6,7 @@
 #include "../rendering/common/common_structs.h"
 
 #include "common/global_params.hlsli"
+#include "common/path_tracing_common.hlsli"
 #include "util/math.hlsli"
 
 // Translation that brings a position stored in the previous frame's render space into this frame's,
@@ -44,12 +45,26 @@ bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> g
         return false;
     }
 
+    // Same surface: the previous hit lies close to the current hit's tangent plane and faces the same
+    // way. A plain distance would reject grazing surfaces, where one pixel of jitter moves the hit by
+    // a footprint over cos(theta) along the surface.
     const float distToCamera = distance(cameraParams.pos_WS, hitInfo.hitPos_WS);
     const float pixelFootprint = distToCamera * 2.f * cameraParams.tanHalfFovY / float(renderParams.renderSize.y);
     const float3 prevHitPos_WS = prevGbuffer.hitInfo.hitPos_WS + prevFrameToCurrentOffset();
-    if (distance(prevHitPos_WS, hitInfo.hitPos_WS) > 4.f * pixelFootprint)
+    if (abs(dot(prevHitPos_WS - hitInfo.hitPos_WS, hitInfo.hitNor_WS)) > 2.f * pixelFootprint)
     {
         return false;
     }
     return dot(prevGbuffer.hitInfo.hitNor_WS, hitInfo.hitNor_WS) > 0.9f;
+}
+
+// Deforming geometry (water) moves between frames, so anything stored on it last frame no longer
+// matches the surface the current scene traces against. The two temporal shifts then stop being
+// inverses of each other and the pairwise MIS no longer partitions unity, which biases the result
+// upward. Such history is not reused.
+bool isOnDeformingGeometry(const HitInfo hitInfo)
+{
+    const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
+    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 }

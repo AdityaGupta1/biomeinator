@@ -1235,6 +1235,11 @@ void temporalRayGen()
     const float3 prevToCurrent = prevFrameToCurrentOffset();
     const uint prevLinearPixelIdx = prevPixelIdx.y * renderParams.renderSize.x + prevPixelIdx.x;
     PathReservoir history = reservoirsHistoryIn[prevLinearPixelIdx];
+    if (isOnDeformingGeometry(gbufferData.hitInfo) || (getRcVertexIdx(history.flags) != 0 && isOnDeformingGeometry(history.rcHit)))
+    {
+        reservoirsMergedOut[linearPixelIdx] = canonical;
+        return;
+    }
     history.M = min(history.M, restirParams.temporalConfidenceCap);
     history.rcHit.hitPos_WS += prevToCurrent;
     GbufferData prevGbufferData = gbufferPrevIn[prevLinearPixelIdx];
