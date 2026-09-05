@@ -121,6 +121,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     bool hasEncounteredNonDeltaSurface = false;
 
+    // Emission seen at the primary hit, kept apart from the scattered part of the albedo guide so the
+    // specular look-through below can modulate the scattered part alone; folded in after the loop.
+    float3 ptEmissiveAlbedo = 0.f;
+
     if (sceneParams.voxelMode == 1 && debugParams.colorChunks == 1)
     {
         float3 surfPos_WS = payload.hitInfo.hitPos_WS;
@@ -149,6 +153,18 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             emissiveContrib = payload.pathWeight * getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfTexCtx);
+
+            // MIS against direct light sampling from the previous real vertex. Only the emission term is weighted:
+            // a path continuing past this surface can only come from BSDF sampling (NEE terminates at the light),
+            // so the continuation keeps its full throughput.
+            // No need to consider dome light pdf here because dome light sampling can't hit area lights.
+            if (pathDepth > 0 && doMis && !bounceWasSpecular)
+            {
+                const float bsdfSampleLightPdf = useRtsl
+                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceAcceptedBacksideLight)
+                    : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
+                emissiveContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
+            }
         }
 
         const float3 wo_WS = -ray.Direction;
@@ -177,7 +193,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             pathColor += emissiveContrib;
             if (pathDepth == 0)
             {
-                ptDiffuseAlbedo += applyReinhard(emissiveContrib);
+                ptEmissiveAlbedo = applyReinhard(emissiveContrib);
             }
 
             const bool isDiffuseOnly = surfMaterial.hasDiffuse()
@@ -326,7 +342,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             if (pathDepth == 0)
             {
-                ptDiffuseAlbedo = payload.pathWeight; // this assumes that emissive surfaces will not scatter (since emissiveContrib is added to ptDiffuseAlbedo earlier)
+                ptDiffuseAlbedo = payload.pathWeight;
             }
 
             if (all(payload.pathWeight == 0.f)) // dead BSDF sample; nothing further can contribute
@@ -380,7 +396,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         if (pathDepth == 0)
         {
-            // at this point, ptDiffuseAlbedo = first bounce path weight or emission
+            // at this point, ptDiffuseAlbedo = first bounce path weight
 
             if (bounceWasSpecular)
             {
@@ -390,7 +406,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 }
                 else
                 {
-                    bool secondHitHasDiffuseAlbedo = false;
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
@@ -400,23 +415,15 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                             secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
                         if (surfMaterial.hasDiffuse())
                         {
-                            const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
-                            if (any(baseColor > 0.f))
-                            {
-                                secondHitDiffuseAlbedo = baseColor;
-                                secondHitHasDiffuseAlbedo = true;
-                            }
+                            secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
                         }
-                        if (!secondHitHasDiffuseAlbedo && surfMaterial.hasEmission())
+                        if (surfMaterial.hasEmission())
                         {
-                            const float3 emissiveColor = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx);
-                            if (any(emissiveColor > 0.f))
-                            {
-                                secondHitDiffuseAlbedo = applyReinhard(emissiveColor);
-                                secondHitHasDiffuseAlbedo = true;
-                            }
+                            secondHitDiffuseAlbedo +=
+                                applyReinhard(getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx));
                         }
                     }
+                    const bool secondHitHasDiffuseAlbedo = any(secondHitDiffuseAlbedo > 0.f);
 
                     if (secondHitHasDiffuseAlbedo)
                     {
@@ -468,23 +475,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
             }
         }
-
-        if (doMis)
-        {
-            // no need to consider dome light pdf here because dome light sampling can't hit area lights
-
-            if (surfMaterial.hasEmission() && !bounceWasSpecular)
-            {
-                const float bsdfSampleLightPdf = useRtsl
-                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceAcceptedBacksideLight)
-                    : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
-                const float emissionMisWeight = balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
-                payload.pathWeight *= emissionMisWeight;
-            }
-
-            // if BSDF sampling hit something other than a light, lightPdf = 0 so misWeight = 1
-        }
     }
+
+    ptDiffuseAlbedo = saturate(ptDiffuseAlbedo + ptEmissiveAlbedo);
 }
 
 [shader("raygeneration")]

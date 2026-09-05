@@ -119,159 +119,146 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
         }
 
-        const bool hasEmission = material.emissiveStrength > 0;
+        // Emission is independent of the scattering lobes: an emissive material keeps whatever
+        // lobes its PBR parameters describe, and a pure emitter is simply one whose base color is
+        // black and whose specular is off.
+        bool hasDiffuse = false;
+        bool hasGlossyReflection = true;
+        bool hasGlossyTransmission = false;
 
-        bool hasDiffuse, hasGlossyReflection, hasGlossyTransmission;
-
-        if (hasEmission)
+        const auto& pbr = gltfMat.pbrMetallicRoughness;
+        // tinygltf's defaults match the glTF spec defaults, so this is correct even when the
+        // pbrMetallicRoughness struct is absent
+        material.roughness = static_cast<float>(pbr.roughnessFactor);
+        // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
+        // Ideally, I would use some JSON utils to check this for real. But this works for now.
+        const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
+        // Use metallicFactor to determine if material is metallic (specular-only) or dielectric (can have diffuse)
+        // metallicFactor == 1.0 (default) = metallic/specular only
+        // metallicFactor == 0 = dielectric, can have diffuse
+        const bool isMetallic = pbr.metallicFactor >= 1.0;
+        if (hasPbr)
         {
-            hasDiffuse = false;
-            hasGlossyReflection = false;
-            hasGlossyTransmission = false;
-        }
-        else
-        {
-            hasDiffuse = false;
-            hasGlossyReflection = true;
-            hasGlossyTransmission = false;
-
-            const auto& pbr = gltfMat.pbrMetallicRoughness;
-            // tinygltf's defaults match the glTF spec defaults, so this is correct even when the
-            // pbrMetallicRoughness struct is absent
-            material.roughness = static_cast<float>(pbr.roughnessFactor);
-            // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
-            // Ideally, I would use some JSON utils to check this for real. But this works for now.
-            const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
-            if (hasPbr)
+            if (isMetallic)
             {
-                // Use metallicFactor to determine if material is metallic (specular-only) or dielectric (can have diffuse)
-                // metallicFactor == 1.0 (default) = metallic/specular only
-                // metallicFactor == 0 = dielectric, can have diffuse
-                const bool isMetallic = pbr.metallicFactor >= 1.0;
-
-                if (isMetallic)
+                // Metallic material: specular only, no diffuse
+                hasDiffuse = false;
+            }
+            else
+            {
+                // Dielectric material: can have diffuse
+                if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
                 {
-                    // Metallic material: specular only, no diffuse
-                    hasDiffuse = false;
+                    const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
+
+                    if (texIdx < model.textures.size())
+                    {
+                        const int imgIdx = model.textures[texIdx].source;
+
+                        if (imgIdx >= 0 && imgIdx < textureIds.size())
+
+                        {
+                            material.baseColorTextureId = textureIds[imgIdx];
+                            hasDiffuse = true;
+                        }
+                    }
                 }
                 else
                 {
-                    // Dielectric material: can have diffuse
-                    if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
+                    material.baseColor = {
+                        static_cast<float>(pbr.baseColorFactor[0]),
+                        static_cast<float>(pbr.baseColorFactor[1]),
+                        static_cast<float>(pbr.baseColorFactor[2]),
+                    };
+
+                    hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
+                }
+            }
+        }
+
+        const auto specularExtIt = gltfMat.extensions.find("KHR_materials_specular");
+        if (specularExtIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = specularExtIt->second;
+            if (ext.IsObject())
+            {
+                if (ext.Has("specularFactor"))
+                {
+                    const tinygltf::Value& val = ext.Get("specularFactor");
+                    if (val.IsNumber())
                     {
-                        const int texIdx = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
-
-                        if (texIdx < model.textures.size())
+                        const double specularFactor = val.GetNumberAsDouble();
+                        // For metallic materials (specular-only), always allow specular reflection
+                        // even if specularFactor is 0 (it might just mean no specular color tint)
+                        // For dielectric materials, respect specularFactor
+                        if (isMetallic)
                         {
-                            const int imgIdx = model.textures[texIdx].source;
-
-                            if (imgIdx >= 0 && imgIdx < textureIds.size())
-
-                            {
-                                material.baseColorTextureId = textureIds[imgIdx];
-                                hasDiffuse = true;
-                            }
+                            hasGlossyReflection = true;
+                        }
+                        else
+                        {
+                            hasGlossyReflection = specularFactor != 0.0;
                         }
                     }
-                    else
+                }
+
+                if (hasGlossyReflection && ext.Has("specularColorFactor"))
+                {
+                    const tinygltf::Value& val = ext.Get("specularColorFactor");
+                    if (val.IsArray() && val.ArrayLen() >= 3)
                     {
-                        material.baseColor = {
-                            static_cast<float>(pbr.baseColorFactor[0]),
-                            static_cast<float>(pbr.baseColorFactor[1]),
-                            static_cast<float>(pbr.baseColorFactor[2]),
+                        material.glossyReflectionTint = {
+                            static_cast<float>(val.Get(0).GetNumberAsDouble()),
+                            static_cast<float>(val.Get(1).GetNumberAsDouble()),
+                            static_cast<float>(val.Get(2).GetNumberAsDouble()),
                         };
-
-                        hasDiffuse = !(material.baseColor.x == 0 && material.baseColor.y == 0 && material.baseColor.z == 0);
                     }
                 }
             }
+        }
 
-            const auto specularExtIt = gltfMat.extensions.find("KHR_materials_specular");
-            if (specularExtIt != gltfMat.extensions.end())
+        const auto transmissionExtIt = gltfMat.extensions.find("KHR_materials_transmission");
+        if (transmissionExtIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = transmissionExtIt->second;
+            if (ext.IsObject() && ext.Has("transmissionFactor"))
             {
-                const tinygltf::Value& ext = specularExtIt->second;
-                if (ext.IsObject())
+                const tinygltf::Value& val = ext.Get("transmissionFactor");
+                if (val.IsNumber())
                 {
-                    if (ext.Has("specularFactor"))
+                    const double transmissionFactor = val.GetNumberAsDouble();
+                    if (transmissionFactor > 0.0)
                     {
-                        const tinygltf::Value& val = ext.Get("specularFactor");
-                        if (val.IsNumber())
-                        {
-                            const double specularFactor = val.GetNumberAsDouble();
-                            // For metallic materials (specular-only), always allow specular reflection
-                            // even if specularFactor is 0 (it might just mean no specular color tint)
-                            // For dielectric materials, respect specularFactor
-                            if (!hasDiffuse)
-                            {
-                                // Metallic/specular-only material: keep specular enabled
-                                hasGlossyReflection = true;
-                            }
-                            else
-                            {
-                                // Dielectric material with diffuse: respect specularFactor
-                                hasGlossyReflection = specularFactor != 0.0;
-                            }
-                        }
-                    }
-
-                    if (hasGlossyReflection && ext.Has("specularColorFactor"))
-                    {
-                        const tinygltf::Value& val = ext.Get("specularColorFactor");
-                        if (val.IsArray() && val.ArrayLen() >= 3)
-                        {
-                            material.glossyReflectionTint = {
-                                static_cast<float>(val.Get(0).GetNumberAsDouble()),
-                                static_cast<float>(val.Get(1).GetNumberAsDouble()),
-                                static_cast<float>(val.Get(2).GetNumberAsDouble()),
-                            };
-                        }
+                        hasGlossyTransmission = true;
                     }
                 }
             }
+        }
 
-            const auto transmissionExtIt = gltfMat.extensions.find("KHR_materials_transmission");
-            if (transmissionExtIt != gltfMat.extensions.end())
+        const auto iorExtIt = gltfMat.extensions.find("KHR_materials_ior");
+        if (iorExtIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = iorExtIt->second;
+            if (ext.IsObject() && ext.Has("ior"))
             {
-                const tinygltf::Value& ext = transmissionExtIt->second;
-                if (ext.IsObject() && ext.Has("transmissionFactor"))
+                const tinygltf::Value& val = ext.Get("ior");
+                if (val.IsNumber())
                 {
-                    const tinygltf::Value& val = ext.Get("transmissionFactor");
-                    if (val.IsNumber())
+                    const double ior = val.GetNumberAsDouble();
+                    if (ior > 0.0)
                     {
-                        const double transmissionFactor = val.GetNumberAsDouble();
-                        if (transmissionFactor > 0.0)
-                        {
-                            hasGlossyTransmission = true;
-                        }
+                        material.ior = static_cast<float>(ior);
                     }
                 }
             }
+        }
 
-            const auto iorExtIt = gltfMat.extensions.find("KHR_materials_ior");
-            if (iorExtIt != gltfMat.extensions.end())
+        if (hasGlossyTransmission)
+        {
+            hasDiffuse = false;
+            if (!hasPbr)
             {
-                const tinygltf::Value& ext = iorExtIt->second;
-                if (ext.IsObject() && ext.Has("ior"))
-                {
-                    const tinygltf::Value& val = ext.Get("ior");
-                    if (val.IsNumber())
-                    {
-                        const double ior = val.GetNumberAsDouble();
-                        if (ior > 0.0)
-                        {
-                            material.ior = static_cast<float>(ior);
-                        }
-                    }
-                }
-            }
-
-            if (hasGlossyTransmission)
-            {
-                hasDiffuse = false;
-                if (!hasPbr)
-                {
-                    material.roughness = 0.f; // glTF's default roughness of 1 would make unspecified glass fully rough
-                }
+                material.roughness = 0.f; // glTF's default roughness of 1 would make unspecified glass fully rough
             }
         }
 

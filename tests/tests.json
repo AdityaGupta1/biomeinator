@@ -608,6 +608,33 @@
             "threshold": 0.01
         },
         {
+            "name": "diffuse_and_emission_blender_no_tonemap",
+            "scene": "gltf/diffuse_and_emission/diffuse_and_emission.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=2",
+                "--tonemapping=0"
+            ],
+            "golden": "gltf/diffuse_and_emission/golden_blender_no_tonemap.png",
+            "threshold": 0.005
+        },
+        {
+            "name": "diffuse_and_emission_diffuse_albedo",
+            "scene": "gltf/diffuse_and_emission/diffuse_and_emission.gltf",
+            "args": [
+                "--width=960",
+                "--height=540",
+                "--antialiasingMode=0",
+                "--maxPathDepth=2",
+                "--debugView=\"diffuseAlbedo\""
+            ],
+            "golden": "gltf/diffuse_and_emission/golden_diffuseAlbedo.png",
+            "threshold": 0.0001
+        },
+        {
             "name": "water_absorption",
             "world": "voxel/water_absorption",
             "args": [

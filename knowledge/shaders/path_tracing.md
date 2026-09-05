@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-04_
 
 # Path Tracing Shader
 
@@ -32,7 +32,7 @@ The G-buffer provides the first hit. Before the loop starts:
 
 Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
-1. **Emission** — if the surface emits light, add its contribution weighted by `pathWeight`. On the first bounce, only `pathSplitIdx == 0` handles emission to avoid double-counting when path splitting.
+1. **Emission** — if the surface emits light, add its contribution weighted by `pathWeight`. On the first bounce, only `pathSplitIdx == 0` handles emission to avoid double-counting when path splitting. At later depths the emission is MIS-weighted against the previous real vertex's light sampling pdf (see step 9).
 
 2. **Path splitting** (first bounce only) — `trySplitMaterial()` deterministically splits the material into two lobes across the two path split indices. Two kinds of splits:
    - **Alpha transparency**: split 0 = opaque (weighted by alpha), split 1 = transparent passthrough (weighted by 1-alpha).
@@ -60,11 +60,13 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 8. **Trace next ray** — `TraceRay` from the BSDF-sampled direction. Update material, ray cone width, segment absorption.
 
-9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, apply MIS weighting against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling).
+9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, its emission is MIS-weighted against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling). Like the NEE and dome-light cases, the weight is applied to the emission contribution only, never to `pathWeight`: a path that continues past the emissive vertex can only have been produced by BSDF sampling (NEE terminates at the light), so its continuation must keep full throughput. This only matters for a surface that both emits and scatters (glTF materials may; voxel emissive texels have zero diffuse and never do).
 
 ### ptDiffuseAlbedo Output
 
-Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser input for first-bounce diffuse albedo. When the first bounce is specular with path splitting enabled, it looks through to the second hit's base color or emission, modulated by the first bounce's specular tint. It also implicitly captures volume absorption and other effects accumulated in `pathWeight` up to that point.
+Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser input for first-bounce diffuse albedo. When the first bounce is specular with path splitting enabled, it looks through to the second hit's base color plus Reinhard-compressed emission, modulated by the first bounce's specular tint. It also implicitly captures volume absorption and other effects accumulated in `pathWeight` up to that point.
+
+Emission stands in for albedo in this guide (a bright emitter must not read as a black surface), compressed with Reinhard so it stays in range. A surface can both emit and scatter, so the primary hit's emission is kept in a separate `ptEmissiveAlbedo` and summed (saturated) into the guide only after the loop: the specular look-through above scales and zeroes the scattered part, and must not touch the emission part. Pure emitters and pure scatterers get exactly one of the two terms, so this is a no-op for them; the `diffuse_albedo_modulation_*` and `diffuse_and_emission_diffuse_albedo` goldens pin all three cases.
 
 ---
 
