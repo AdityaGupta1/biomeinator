@@ -597,6 +597,15 @@ void render()
 
     const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
 
+    // Frame-sequence captures key on the raw frame counter so animation, camera motion and chunk
+    // streaming (which all reset accumulation) cannot stall them
+    const uint32_t testOutputFrameInterval = SettingsManager::getAsUint("testOutputFrameInterval");
+    const bool sequenceCapture = renderState.testMode && testOutputFrameInterval > 0;
+    if (sequenceCapture && !waitingForImport && renderState.frameNumber > 0 && renderState.frameNumber % testOutputFrameInterval == 0)
+    {
+        queueScreenshot(true /*useTestOutputPath*/);
+    }
+
     if (resetAccumulation)
     {
         renderState.accumulatedFrameNumber = 0;
@@ -608,7 +617,7 @@ void render()
         {
             renderState.stopAccumulating = true;
 
-            if (renderState.testMode)
+            if (renderState.testMode && !sequenceCapture)
             {
                 queueScreenshot(true /*useTestOutputPath*/);
             }
@@ -652,11 +661,12 @@ void render()
     }
     restirParams->pairingBufferOffsets = { pairingBufferOffsets[0], pairingBufferOffsets[1], pairingBufferOffsets[2], pairingBufferOffsets[3] };
 
-    // History survives camera motion (reprojection handles it) but not scene or path tracing changes,
-    // which can invalidate stored paths
+    // History survives camera motion (reprojection handles it) and scene topology changes (chunk
+    // streaming would otherwise reset it constantly; stored paths re-trace visibility against the
+    // current scene anyway), but not path tracing setting changes, which redefine what a path is
     const bool temporalReuse = useRestirPt && SettingsManager::getAsBool("restirTemporalReuse");
     restirParams->temporalHistoryValid =
-        (temporalReuse && renderState.restirHistoryValid && !didSceneChange && !renderState.didPathTracingSettingsChange) ? 1u : 0u;
+        (temporalReuse && renderState.restirHistoryValid && !renderState.didPathTracingSettingsChange) ? 1u : 0u;
     restirParams->temporalConfidenceCap = static_cast<float>(SettingsManager::getAsUint("restirTemporalConfidenceCap"));
 
     RtTarget* debugOutputTarget = nullptr;
@@ -968,8 +978,11 @@ void render()
     if (renderState.screenshotRequest.active)
     {
         finalizeQueuedScreenshot(); // this calls flush()
+        renderState.screenshotRequest.active = false;
 
-        if (renderState.testMode)
+        const bool sequenceDone = SettingsManager::getAsUint("testOutputFrameInterval") == 0 ||
+            ++renderState.screenshotRequest.sequenceCapturesDone >= SettingsManager::getAsUint("testOutputFrameCount");
+        if (renderState.testMode && sequenceDone)
         {
             Renderer::destroy();
             exit(0);

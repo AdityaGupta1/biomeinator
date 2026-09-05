@@ -1109,6 +1109,18 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
     float3 unusedColor, unusedAlbedo;
     shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, cameraPos_WS, pathSplitIdx, path.seed,
         unusedColor, unusedAlbedo, shifted.jacobian, shifted.rcJacobianTerms);
+
+    // Extreme Jacobians come from near-specular pdf ratios and are singularities for resampling
+    // (GRIS 5.4); rejecting them symmetrically keeps the shift invertible, so this only shrinks its
+    // domain and stays unbiased. Non-finite results are treated as undefined shifts too.
+    const bool jacobianExtreme = shifted.jacobian < 1e-4f || shifted.jacobian > 1e4f;
+    const bool resultNonFinite = any(isnan(shifted.F)) || any(isinf(shifted.F)) || isnan(shifted.jacobian) || isinf(shifted.jacobian);
+    if (jacobianExtreme || resultNonFinite)
+    {
+        shifted.F = 0.f;
+        shifted.jacobian = 0.f;
+        shifted.rcJacobianTerms = 0.f;
+    }
     return shifted;
 }
 

@@ -21,6 +21,7 @@ void queueScreenshot(const bool useTestOutputPath)
 {
     renderState.screenshotRequest.active = true;
     renderState.screenshotRequest.useTestOutputPath = useTestOutputPath;
+    renderState.screenshotRequest.frameNumber = renderState.frameNumber;
 }
 
 void captureQueuedScreenshot()
@@ -89,6 +90,10 @@ void finalizeQueuedScreenshot()
     if (renderState.screenshotRequest.useTestOutputPath)
     {
         path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
+        if (SettingsManager::getAsUint("testOutputFrameInterval") > 0)
+        {
+            path.replace_filename(path.stem().string() + "_" + std::to_string(renderState.screenshotRequest.frameNumber) + ".png");
+        }
         std::filesystem::create_directories(path.parent_path());
     }
     else

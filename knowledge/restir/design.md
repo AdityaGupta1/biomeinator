@@ -157,8 +157,13 @@ approximation.
 
 **Buffers that cross frames** ping-pong by frame parity: the G-buffer (`dev_gbuffers`) and the
 history reservoirs (`dev_reservoirsHistory`), which the spatial resample pass writes. History is
-valid only if the previous frame ran ReSTIR reuse and neither the scene nor path tracing settings
-changed; camera motion is handled by reprojection, resizes reset the frame counter.
+valid only if the previous frame ran ReSTIR reuse and path tracing settings did not change; camera
+motion is handled by reprojection, resizes reset the frame counter. Scene topology changes do *not*
+invalidate it: in voxel mode a new chunk enters the TLAS on most frames while moving, and dropping
+history on each one read as the image "resetting" at every chunk boundary. Light indices survive a
+rebuild (per-triangle light index plus the instance's buffer offset are fixed while the instance
+lives, and the tree is rebuilt the same frame). The one stale case is an instance id reused after a
+chunk beyond render distance is freed, which a stored path at that distance essentially never hits.
 
 **Color noise.** Resampling selects by luminance, so `F * W` of the selected path carries one
 path's chroma however many candidates were merged: with temporal and spatial reuse the luminance

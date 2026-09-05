@@ -271,6 +271,8 @@ struct ScreenshotRequest
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
+    uint32_t frameNumber{ 0 }; // frame the capture was queued on, for frame-sequence file names
+    uint32_t sequenceCapturesDone{ 0 };
 };
 
 struct RendererState

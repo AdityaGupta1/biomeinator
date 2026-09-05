@@ -34,6 +34,8 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
+    ADD_OPTION("testOutputFrameInterval", "Instead of one screenshot after accumulation, write <testOutput stem>_<frame>.png every N frames", uint32_t, "0");
+    ADD_OPTION("testOutputFrameCount", "Number of frame-interval screenshots to write before exiting", uint32_t, "1");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL, 3=ReSTIR PT)", uint32_t, "2");
     ADD_OPTION("restirDebugMode", "ReSTIR PT debug mode (0=off, 1=self replay, 2=self replay error, 3=spatial self)", uint32_t, "0");
     ADD_OPTION("restirSpatialNeighbors", "ReSTIR PT paired spatial neighbors per pixel (0-3)", uint32_t, "3");
@@ -112,6 +114,8 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
+    COPY_SETTING("testOutputFrameInterval", uint32_t);
+    COPY_SETTING("testOutputFrameCount", uint32_t);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("restirDebugMode", uint32_t);
     COPY_SETTING("restirSpatialNeighbors", uint32_t);
