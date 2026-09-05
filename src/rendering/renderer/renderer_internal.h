@@ -150,6 +150,8 @@ enum class PtParam
     PAIRING_TEXTURES_IN,
     RESERVOIRS_MERGED_OUT,
     SHIFTED_OUT,
+    GBUFFER_PREV_IN,
+    RESERVOIRS_HISTORY_IN,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -189,7 +191,7 @@ enum class RestirResampleParam
     SHIFTED_IN,
     PAIRING_TEXTURES_IN,
 
-    RESERVOIRS_OUT,
+    RESERVOIRS_HISTORY_OUT,
     PATH_TRACING_RAW_BUFFER_OUT,
 
     COUNT
@@ -341,11 +343,13 @@ struct RendererState
     std::vector<RtTarget*> autoTransitionRtTargets;
 
     // -- Intermediate buffers --
-    ComPtr<ID3D12Resource> dev_gbuffer;
+    ComPtr<ID3D12Resource> dev_gbuffers[2]; // ping-pong by frame parity; ReSTIR temporal reuse reads the previous one
     ComPtr<ID3D12Resource> dev_pathTracingRawBuffer;
     ComPtr<ID3D12Resource> dev_ptDiffuseAlbedoRawBuffer;
     ComPtr<ID3D12Resource> dev_reservoirs; // one per pixel slot from initial sampling; slot 0 also receives the resampled result
-    ComPtr<ID3D12Resource> dev_reservoirsMerged; // one per pixel, the split slots merged
+    ComPtr<ID3D12Resource> dev_reservoirsMerged; // one per pixel, after the temporal pass
+    ComPtr<ID3D12Resource> dev_reservoirsHistory[2]; // one per pixel, the final reservoirs of a frame, ping-pong by frame parity
+    bool restirHistoryValid{ false }; // the previous frame wrote its history reservoirs and nothing invalidated them
     ComPtr<ID3D12Resource> dev_shifted; // ShiftedPath per pixel per pairing texture
     ComPtr<ID3D12Resource> dev_pairingTextures; // all pairing textures packed, see initRestirPairingTextures
     struct PairingTextureInfo

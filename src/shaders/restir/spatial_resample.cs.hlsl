@@ -8,6 +8,7 @@
 
 #include "common/global_params.hlsli"
 #include "restir/pairing.hlsli"
+#include "restir/pairwise_mis.hlsli"
 #include "restir/path_reservoir.hlsli"
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
@@ -15,13 +16,16 @@
 StructuredBuffer<PathReservoir> reservoirsMergedIn : REGISTER_T(RESTIR, RESERVOIRS_MERGED_IN);
 StructuredBuffer<ShiftedPath> shiftedIn : REGISTER_T(RESTIR, SHIFTED_IN);
 StructuredBuffer<uint> pairingTextures : REGISTER_T(RESTIR, PAIRING_TEXTURES_IN);
-RWStructuredBuffer<PathReservoir> reservoirsOut : REGISTER_U(RESTIR, RESERVOIRS_OUT);
+RWStructuredBuffer<PathReservoir> reservoirsHistoryOut : REGISTER_U(RESTIR, RESERVOIRS_HISTORY_OUT);
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
 
-// Paired spatial resampling with the confidence-weighted defensive pairwise MIS of GRIS (Lin et al.
-// 2022, Eq. 38, with each pHat scaled by its reservoir's M). The pixel's own merged reservoir is the
-// canonical sample; each partner's path arrives already shifted into this pixel by the shift pass,
-// which also shifted this pixel's path to the partner for the canonical MIS term.
+// Paired spatial resampling with pairwise MIS (restir/pairwise_mis.hlsli). The pixel's own reservoir
+// after temporal reuse is the canonical sample; each partner's path arrives already shifted into
+// this pixel by the shift pass, which also shifted this pixel's path to the partner for the
+// canonical MIS term. The result becomes next frame's temporal history. Shading uses the
+// vector-valued resampling weights (Lin et al. 2026, Section 6.3): the RGB sum of every candidate's
+// weighted contribution has the same expectation as F * W of the selected path but averages the
+// partners' uncorrelated chroma noise, which scalar selection by luminance leaves in place.
 [shader("compute")]
 [numthreads(RESTIR_RESAMPLE_WORKGROUP_SIZE_X, RESTIR_RESAMPLE_WORKGROUP_SIZE_Y, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -70,17 +74,17 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
         const ShiftedPath canonicalAtPartner = shiftedIn[textureIdx * pixelCount + partnerLinearIdx[textureIdx]];
         const float pHatFromPartner = luminance(canonicalAtPartner.F) * canonicalAtPartner.jacobian;
-        const float denominator = canonical.M * canonicalPHat + neighborConfidence * pHatFromPartner;
-        if (denominator > 0.f)
-        {
-            canonicalMis += (canonical.M / totalConfidence) * reservoirsMergedIn[partnerLinearIdx[textureIdx]].M * canonicalPHat / denominator;
-        }
+        canonicalMis += pairwiseMisCanonicalTerm(canonical.M, reservoirsMergedIn[partnerLinearIdx[textureIdx]].M, neighborConfidence,
+            totalConfidence, canonicalPHat, pHatFromPartner);
     }
 
     PathReservoir selected = canonical;
     float selectedPHat = canonicalPHat;
     float weightSum = canonicalMis * canonicalPHat * canonical.W;
+    float3 shadedSum = canonicalMis * canonical.F * canonical.W;
     RandomNumberGenerator rng = initRng(constantParams.rngSeed, 616161, linearPixelIdx, renderParams.frameNumber);
+    uint partnersOnScreen = 0;
+    uint spatialShiftsSucceeded = 0;
 
     for (uint textureIdx = 0; textureIdx < RESTIR_MAX_SPATIAL_NEIGHBORS; ++textureIdx)
     {
@@ -91,14 +95,15 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const PathReservoir partner = reservoirsMergedIn[partnerLinearIdx[textureIdx]];
         const ShiftedPath partnerAtCanonical = shiftedIn[textureIdx * pixelCount + linearPixelIdx];
         const float pHat = luminance(partnerAtCanonical.F);
+        ++partnersOnScreen;
         if (pHat <= 0.f || partnerAtCanonical.jacobian <= 0.f || partner.W <= 0.f)
         {
             continue;
         }
+        ++spatialShiftsSucceeded;
         // The partner's own target evaluated at its path, mapped into this pixel's measure
         const float pHatFromPartner = luminance(partner.F) / partnerAtCanonical.jacobian;
-        const float denominator = canonical.M * pHat + neighborConfidence * pHatFromPartner;
-        const float mis = (neighborConfidence / totalConfidence) * partner.M * pHatFromPartner / denominator;
+        const float mis = pairwiseMisNeighbor(canonical.M, partner.M, neighborConfidence, totalConfidence, pHat, pHatFromPartner);
         const float weight = mis * pHat * partner.W * partnerAtCanonical.jacobian;
         if (weight <= 0.f)
         {
@@ -106,6 +111,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
 
         weightSum += weight;
+        shadedSum += mis * partnerAtCanonical.F * partner.W * partnerAtCanonical.jacobian;
         if (rng.nextFloat() * weightSum < weight)
         {
             selected = partner;
@@ -118,7 +124,22 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     selected.W = (weightSum > 0.f && selectedPHat > 0.f) ? weightSum / selectedPHat : 0.f;
     selected.M = totalConfidence;
 
+    reservoirsHistoryOut[linearPixelIdx] = selected;
+
     const uint slotIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1);
-    reservoirsOut[slotIdx] = selected;
-    pathTracingRawBufferOut[slotIdx].xyz += selected.F * selected.W;
+    const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
+    if (debugMode == RestirDebugMode::CONFIDENCE)
+    {
+        pathTracingRawBufferOut[slotIdx].xyz = selected.M / 100.f;
+        return;
+    }
+    if (debugMode == RestirDebugMode::SHIFT_SUCCESS)
+    {
+        pathTracingRawBufferOut[slotIdx].xyz = float3(
+            bool(canonical.debugFlags & RESERVOIR_DEBUG_TEMPORAL_SHIFT_SUCCEEDED) ? 1.f : 0.f,
+            partnersOnScreen > 0 ? float(spatialShiftsSucceeded) / float(partnersOnScreen) : 0.f,
+            float(partnersOnScreen) / float(max(restirParams.spatialNeighborCount, 1u)));
+        return;
+    }
+    pathTracingRawBufferOut[slotIdx].xyz += shadedSum;
 }

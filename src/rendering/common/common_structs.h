@@ -61,8 +61,10 @@ struct PathReservoir
     float rcJacobianTerms; // product of the path's pdf and geometry terms across the reconnection, the shift Jacobian's denominator
 
     float3 rcRadiance; // radiance arriving at the rc vertex along rcWi, excluding the segment before it
-    uint pad0;
+    uint debugFlags; // RESERVOIR_DEBUG_*, only for the debug views
 };
+
+#define RESERVOIR_DEBUG_TEMPORAL_SHIFT_SUCCEEDED (1 << 0)
 
 // A neighbor's path shifted into a pixel, as produced by the spatial shift pass
 struct ShiftedPath

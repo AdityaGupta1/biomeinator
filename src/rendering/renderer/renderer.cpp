@@ -202,11 +202,15 @@ void resize()
         renderState.frameLatencyWaitable = renderState.swapChain->GetFrameLatencyWaitableObject();
     }
 
-    renderState.dev_gbuffer.Reset();
-    renderState.dev_gbuffer = BufferHelper::createBasicBuffer(renderState.renderWidth * renderState.renderHeight * sizeof(GbufferData),
-                                                              &DEFAULT_HEAP,
-                                                              { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
-    renderState.dev_gbuffer->SetName(L"dev_gbuffer");
+    for (uint32_t bufferIdx = 0; bufferIdx < 2; ++bufferIdx)
+    {
+        renderState.dev_gbuffers[bufferIdx].Reset();
+        renderState.dev_gbuffers[bufferIdx] = BufferHelper::createBasicBuffer(
+            renderState.renderWidth * renderState.renderHeight * sizeof(GbufferData), &DEFAULT_HEAP,
+            { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+        renderState.dev_gbuffers[bufferIdx]->SetName(bufferIdx == 0 ? L"dev_gbuffer0" : L"dev_gbuffer1");
+    }
+    renderState.restirHistoryValid = false;
 
     renderState.dev_pathTracingRawBuffer.Reset();
     const bool doPathSplitting = SettingsManager::getAsBool("doPathSplitting");
@@ -233,6 +237,14 @@ void resize()
     renderState.dev_reservoirsMerged = BufferHelper::createBasicBuffer(
         pixelCount * sizeof(PathReservoir), &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     renderState.dev_reservoirsMerged->SetName(L"dev_reservoirsMerged");
+
+    for (uint32_t bufferIdx = 0; bufferIdx < 2; ++bufferIdx)
+    {
+        renderState.dev_reservoirsHistory[bufferIdx].Reset();
+        renderState.dev_reservoirsHistory[bufferIdx] = BufferHelper::createBasicBuffer(
+            pixelCount * sizeof(PathReservoir), &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+        renderState.dev_reservoirsHistory[bufferIdx]->SetName(bufferIdx == 0 ? L"dev_reservoirsHistory0" : L"dev_reservoirsHistory1");
+    }
 
     renderState.dev_shifted.Reset();
     renderState.dev_shifted = BufferHelper::createBasicBuffer(
@@ -339,11 +351,32 @@ static void bindSceneSrvs(uint32_t baseIdx)
     renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 7, renderState.scene.getDevAreaLightSamplingStructureAddress());
 }
 
+// Frame-parity ping-pong of the resources ReSTIR temporal reuse carries across frames
+static ID3D12Resource* currentGbuffer()
+{
+    return renderState.dev_gbuffers[renderState.frameNumber & 1].Get();
+}
+
+static ID3D12Resource* previousGbuffer()
+{
+    return renderState.dev_gbuffers[(renderState.frameNumber + 1) & 1].Get();
+}
+
+static ID3D12Resource* currentReservoirsHistory()
+{
+    return renderState.dev_reservoirsHistory[renderState.frameNumber & 1].Get();
+}
+
+static ID3D12Resource* previousReservoirsHistory()
+{
+    return renderState.dev_reservoirsHistory[(renderState.frameNumber + 1) & 1].Get();
+}
+
 static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 {
     renderState.cmdList->SetComputeRootConstantBufferView(PT_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
     bindSceneSrvs(PT_PARAM_IDX(RAYTRACING_ACS));
-    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), renderState.dev_gbuffer->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_IN), currentGbuffer()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TREE),
                                                           renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
@@ -366,17 +399,23 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_MERGED_OUT), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHIFTED_OUT), renderState.dev_shifted->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_PREV_IN), previousGbuffer()->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RESERVOIRS_HISTORY_IN), previousReservoirsHistory()->GetGPUVirtualAddress());
 
     renderState.ptDispatchDesc.Width = dispatchWidth;
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);
 }
 
-// Paired spatial reuse: shift each pixel's partners' paths to it, then resample. Adds the resampled
-// path's contribution to slot 0 of the raw path tracing buffer.
-static void dispatchRestirSpatialReuse(ParamBlockManager& paramBlockManager)
+// Temporal reuse (merges each pixel's slots with its reprojected history), then paired spatial
+// reuse: shift each pixel's partners' paths to it and resample. The resample pass writes this
+// frame's history reservoirs and adds the resampled path's contribution to slot 0 of the raw path
+// tracing buffer.
+static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
 {
     BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirs.Get());
+    dispatchPathTracing(paramBlockManager, PtPass::TEMPORAL, renderState.gbufferDispatchDesc.Width);
+    BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirsMerged.Get());
     dispatchPathTracing(paramBlockManager, PtPass::SPATIAL_SHIFT, renderState.gbufferDispatchDesc.Width);
 
     {
@@ -392,7 +431,7 @@ static void dispatchRestirSpatialReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_MERGED_IN), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(SHIFTED_IN), renderState.dev_shifted->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_OUT), renderState.dev_reservoirs->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_HISTORY_OUT), currentReservoirsHistory()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
 
     const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.renderWidth, RESTIR_RESAMPLE_WORKGROUP_SIZE_X);
@@ -606,6 +645,13 @@ void render()
     }
     restirParams->pairingBufferOffsets = { pairingBufferOffsets[0], pairingBufferOffsets[1], pairingBufferOffsets[2], pairingBufferOffsets[3] };
 
+    // History survives camera motion (reprojection handles it) but not scene or path tracing changes,
+    // which can invalidate stored paths
+    const bool temporalReuse = useRestirPt && SettingsManager::getAsBool("restirTemporalReuse");
+    restirParams->temporalHistoryValid =
+        (temporalReuse && renderState.restirHistoryValid && !didSceneChange && !renderState.didPathTracingSettingsChange) ? 1u : 0u;
+    restirParams->temporalConfidenceCap = static_cast<float>(SettingsManager::getAsUint("restirTemporalConfidenceCap"));
+
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
     if (renderState.debugViewComboMap.contains(debugViewSettingStr))
@@ -736,7 +782,7 @@ void render()
 
         renderState.cmdList->SetComputeRootConstantBufferView(GBUFFER_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
         bindSceneSrvs(GBUFFER_PARAM_IDX(RAYTRACING_ACS));
-        renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), renderState.dev_gbuffer->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootUnorderedAccessView(GBUFFER_PARAM_IDX(GBUFFER_OUT), currentGbuffer()->GetGPUVirtualAddress());
 
         const D3D12_RESOURCE_DESC& pathTracingTargetDesc = renderState.pathTracingTarget.getTarget()->GetDesc();
         renderState.gbufferDispatchDesc.Width = static_cast<uint32_t>(pathTracingTargetDesc.Width);
@@ -746,7 +792,7 @@ void render()
         // dev_gbuffer should be promoted to UNORDERED_ACCESS when first accessed by the gbuffer, and then should
         // decay back to COMMON after executing the command list
         BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(),
-                                                     renderState.dev_gbuffer.Get(),
+                                                     currentGbuffer(),
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -757,10 +803,13 @@ void render()
         const RestirDebugMode restirDebugMode = static_cast<RestirDebugMode>(SettingsManager::getAsUint("restirDebugMode"));
         const bool restirShadesInResample =
             restirDebugMode != RestirDebugMode::SELF_REPLAY && restirDebugMode != RestirDebugMode::SELF_REPLAY_ERROR;
-        if (paramBlockManager.renderParams->samplingMode == static_cast<uint32_t>(SamplingMode::RESTIR_PT) && restirShadesInResample)
+        const bool runRestirReuse =
+            paramBlockManager.renderParams->samplingMode == static_cast<uint32_t>(SamplingMode::RESTIR_PT) && restirShadesInResample;
+        if (runRestirReuse)
         {
-            dispatchRestirSpatialReuse(paramBlockManager);
+            dispatchRestirReuse(paramBlockManager);
         }
+        renderState.restirHistoryValid = runRestirReuse;
 
         // ===================================
         // COLLECT
@@ -996,7 +1045,10 @@ void destroy()
         rtTarget->reset();
     }
 
-    renderState.dev_gbuffer.Reset();
+    renderState.dev_gbuffers[0].Reset();
+    renderState.dev_gbuffers[1].Reset();
+    renderState.dev_reservoirsHistory[0].Reset();
+    renderState.dev_reservoirsHistory[1].Reset();
     renderState.dev_pathTracingRawBuffer.Reset();
     renderState.dev_ptDiffuseAlbedoRawBuffer.Reset();
     renderState.dev_reservoirs.Reset();

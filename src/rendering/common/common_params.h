@@ -165,9 +165,9 @@ struct RtslParams
 struct RestirParams
 {
     uint spatialNeighborCount; // pairing textures used this frame; 0 disables spatial reuse
+    uint temporalHistoryValid; // the history reservoirs and previous gbuffer hold last frame's ReSTIR output
+    float temporalConfidenceCap; // M cap applied to the temporal neighbor
     uint pad0;
-    uint pad1;
-    uint pad2;
 
     uint4 pairingTransforms[RESTIR_MAX_SPATIAL_NEIGHBORS]; // x = texture size, y = RESTIR_PAIRING_* flags, zw = offset
     uint4 pairingBufferOffsets; // first texel of each pairing texture in the pairing buffer

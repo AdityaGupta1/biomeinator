@@ -82,7 +82,7 @@ PathReservoir makeEmptyPathReservoir()
     reservoir.rcWi = 0.f;
     reservoir.rcJacobianTerms = 0.f;
     reservoir.rcRadiance = 0.f;
-    reservoir.pad0 = 0;
+    reservoir.debugFlags = 0;
     return reservoir;
 }
 

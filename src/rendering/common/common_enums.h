@@ -42,6 +42,7 @@ enum class SamplingMode : uint
 enum class PtPass : uint
 {
     INITIAL_SAMPLING,
+    TEMPORAL,
     SPATIAL_SHIFT,
 
     COUNT
@@ -53,6 +54,8 @@ enum class RestirDebugMode : uint
     SELF_REPLAY,       // shade with the selected path re-traced from its own reservoir instead of the stored F
     SELF_REPLAY_ERROR, // relative error of the re-traced F against the stored F, scaled by 100
     SPATIAL_SELF,      // spatial reuse with every pixel paired to itself; must reproduce no reuse exactly
+    CONFIDENCE,        // final reservoir M / 100 as gray
+    SHIFT_SUCCESS,     // R: temporal shift succeeded, G: fraction of spatial partner shifts that succeeded, B: fraction of partners on screen
 
     COUNT
 };

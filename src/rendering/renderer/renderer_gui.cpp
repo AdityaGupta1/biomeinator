@@ -81,6 +81,8 @@ static const std::vector<const char*> restirDebugModeComboOptions = {
     "self replay",
     "self replay error",
     "spatial self",
+    "confidence",
+    "shift success",
 };
 static const std::vector<const char*> antialiasingModeComboOptions = {
     "none",
@@ -125,6 +127,8 @@ void imguiEndFrame(double deltaTime)
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
         if (SettingsManager::getAsUint("samplingMode") == static_cast<uint32_t>(SamplingMode::RESTIR_PT))
         {
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Temporal reuse", "restirTemporalReuse");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Temporal confidence cap", "restirTemporalConfidenceCap", 0, 64);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Spatial neighbors", "restirSpatialNeighbors", 0, RESTIR_MAX_SPATIAL_NEIGHBORS);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("ReSTIR debug", "restirDebugMode", restirDebugModeComboOptions);
         }

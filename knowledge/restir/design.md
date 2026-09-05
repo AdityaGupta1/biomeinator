@@ -139,6 +139,42 @@ float precision, the canonical MIS term absorbs it and the output is still exact
 that the MIS, merge and Jacobian plumbing cancel correctly. With real partners, goldens must still
 match in mean, since spatial reuse within a frame is unbiased.
 
+## Stage 4: temporal reuse
+
+A `TEMPORAL` raygen pass between initial sampling and the spatial shift. It merges the pixel's
+split slots (canonical, M = 1), reprojects the current primary hit into the previous frame with
+`worldToPrevClipMat` and the previous jitter, validates the previous G-buffer hit there (same
+surface within a few pixel footprints, normals agree), and pairs the canonical with that pixel's
+history reservoir under the same pairwise MIS as spatial reuse. The history is confidence-capped
+(`restirTemporalConfidenceCap`, 20 by default), so M saturates at 21 after temporal and about 84
+after three spatial partners; the `CONFIDENCE` debug view shows M / 100.
+
+Both shifts of the pair are real replays: the history path is rebuilt at this frame's pixel, and
+this pixel's path is rebuilt at the previous frame's pixel from the previous G-buffer and camera
+position. `pathTraceRay` therefore takes the camera position as a parameter and derives the primary
+direction from the hit in replay mode. Both replays trace against the current scene, the standard
+approximation.
+
+**Buffers that cross frames** ping-pong by frame parity: the G-buffer (`dev_gbuffers`) and the
+history reservoirs (`dev_reservoirsHistory`), which the spatial resample pass writes. History is
+valid only if the previous frame ran ReSTIR reuse and neither the scene nor path tracing settings
+changed; camera motion is handled by reprojection, resizes reset the frame counter.
+
+**Color noise.** Resampling selects by luminance, so `F * W` of the selected path carries one
+path's chroma however many candidates were merged: with temporal and spatial reuse the luminance
+error of a single frame fell 2.5x while the chroma error rose. The spatial resample pass therefore
+shades with the vector-valued weights of Enhanced 6.3, the RGB sum of every candidate's
+`mis * F * W * J`, which has the same expectation and averages the partners' independent chroma.
+The reservoir itself still resamples on scalar weights. Debug views: `CONFIDENCE` (M / 100) and
+`SHIFT_SUCCESS` (temporal and spatial shift success rates, partners on screen).
+
+**What is still missing for moving cameras:** stored world positions go stale when voxel mode's
+floating origin moves (`prevGlobalInstanceOffset` is available to correct them), animated geometry
+invalidates stored rc vertices silently, and disocclusions simply get no history. Validation so far
+is stationary-camera only: goldens must still match in mean, since the per-frame estimate stays
+unbiased under the M cap (GRIS 6.4), though accumulation converges more slowly because frames are
+correlated.
+
 ## RNG streams
 
 Every draw comes from `initRng(pathSeed, index, purpose)` with purposes for BSDF, NEE area, NEE dome,
@@ -153,8 +189,8 @@ vertex replays the same alpha decisions. Resampling draws are a separate stream 
 
 ## Memory
 
-Per pixel: 2 x 112 B initial reservoirs, 112 B merged, and 3 x 32 B shifted paths, allocated
-regardless of sampling mode. Enhanced compresses reservoirs to 64 bytes; that is a later, measured
+Per pixel: 2 x 112 B initial reservoirs, 112 B merged, 2 x 112 B history, 3 x 32 B shifted paths
+and a second 64 B G-buffer, allocated regardless of sampling mode. Enhanced compresses reservoirs to 64 bytes; that is a later, measured
 step, and the self-replay error view is the tool to measure what precision loss costs.
 
 ## Storing world positions

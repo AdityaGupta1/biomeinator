@@ -16,8 +16,10 @@
 #include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "restir/pairing.hlsli"
+#include "restir/pairwise_mis.hlsli"
 #include "restir/path_reservoir.hlsli"
 #include "restir/reconnection.hlsli"
+#include "restir/temporal.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
@@ -32,6 +34,8 @@ RWStructuredBuffer<PathReservoir> reservoirsOut : REGISTER_U(PT, RESERVOIRS_OUT)
 RWStructuredBuffer<PathReservoir> reservoirsMergedOut : REGISTER_U(PT, RESERVOIRS_MERGED_OUT);
 RWStructuredBuffer<ShiftedPath> shiftedOut : REGISTER_U(PT, SHIFTED_OUT);
 StructuredBuffer<uint> pairingTextures : REGISTER_T(PT, PAIRING_TEXTURES_IN);
+StructuredBuffer<GbufferData> gbufferPrevIn : REGISTER_T(PT, GBUFFER_PREV_IN);
+StructuredBuffer<PathReservoir> reservoirsHistoryIn : REGISTER_T(PT, RESERVOIRS_HISTORY_IN);
 
 cbuffer PassConstants : REGISTER_B(PT, PASS_CONSTANTS)
 {
@@ -102,7 +106,7 @@ float applySegmentFog(const Payload payload, inout RandomNumberGenerator rng, co
     return fogTransmittance;
 }
 
-Payload initPayloadFromGbuffer(const GbufferData gbufferData)
+Payload initPayloadFromGbuffer(const GbufferData gbufferData, const float3 cameraPos_WS)
 {
     Payload payload;
     payload.hitInfo = gbufferData.hitInfo;
@@ -114,7 +118,7 @@ Payload initPayloadFromGbuffer(const GbufferData gbufferData)
     payload.waterExitT = RAY_DEFAULT_TMAX;
     payload.rayCone.angle = getRayConePixelAngle();
     payload.rayCone.width = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? payload.rayCone.angle * distance(cameraParams.pos_WS, payload.hitInfo.hitPos_WS)
+        ? payload.rayCone.angle * distance(cameraPos_WS, payload.hitInfo.hitPos_WS)
         : 0.f;
     return payload;
 }
@@ -483,6 +487,7 @@ float3 pathTraceRay(inout Payload payload,
                     inout PathTreeReservoir reservoir,
                     const ReplayTarget replay,
                     const uint2 pixelIdx,
+                    const float3 cameraPos_WS,
                     const uint pathSplitIdx,
                     const uint pathSeed,
                     out float3 pathColor,
@@ -502,18 +507,22 @@ float3 pathTraceRay(inout Payload payload,
     const bool isReplay = replay.active;
 
     RayDesc ray;
-    ray.Direction = getPrimaryRayDirection(pixelIdx); // same direction as gbuffer ray, used for calculating wo_WS the first time
+    // Same direction as the gbuffer ray, used for calculating wo_WS the first time. Replay derives it
+    // from the hit so a path can be rebuilt in the previous frame's camera too.
+    ray.Direction = isReplay && bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? normalize(payload.hitInfo.hitPos_WS - cameraPos_WS)
+        : getPrimaryRayDirection(pixelIdx);
 
     float3 throughput = 1.f; // includes the roulette division
     float rrProduct = 1.f;   // roulette survival product, so the stored integrand can exclude it
     float3 rcThroughput = 1.f; // factors applied after the reconnection vertex's scatter (no roulette)
 
-    const float3 primarySegmentAbsorption = computeSegmentAbsorption(payload, cameraParams.pos_WS, ray.Direction);
+    const float3 primarySegmentAbsorption = computeSegmentAbsorption(payload, cameraPos_WS, ray.Direction);
 
     // The primary segment is identical for both path splits and collect sums them, so
     // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
     RandomNumberGenerator primaryFogRng = pathRng(pathSeed, 0, PATH_RNG_FOG);
-    applySegmentFog(payload, primaryFogRng, cameraParams.pos_WS, ray.Direction,
+    applySegmentFog(payload, primaryFogRng, cameraPos_WS, ray.Direction,
         (pathSplitIdx == 0 && !isReplay) ? renderParams.fogMarchSteps : 0u, throughput, pathColor);
 
     throughput *= primarySegmentAbsorption;
@@ -552,7 +561,7 @@ float3 pathTraceRay(inout Payload payload,
     bool bounceSampledDiffuse = false;
     float3 surfPos_WS, surfNor_WS;
     // the real bounce before that, for the reconnection test between the two
-    float3 prevSurfPos_WS = cameraParams.pos_WS;
+    float3 prevSurfPos_WS = cameraPos_WS;
     float3 prevSurfNor_WS = 0.f;
 
     bool hasEncounteredNonDeltaSurface = false;
@@ -575,7 +584,7 @@ float3 pathTraceRay(inout Payload payload,
     // Vertex indices follow the papers: x1 is the primary hit, passthrough hits are not vertices
     uint vertexIdx = 1;
     const float footprintThreshold =
-        reconnectionFootprintThreshold(cameraParams.pos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
+        reconnectionFootprintThreshold(cameraPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
     RcState rc;
     rc.vertexIdx = 0;
     rc.hit = payload.hitInfo;
@@ -1078,8 +1087,9 @@ float3 pathTraceRay(inout Payload payload,
     return 0.f;
 }
 
-// Shifts a stored path to `pixelIdx` by replaying it from that pixel's primary hit
-ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbufferData, const uint2 pixelIdx)
+// Shifts a stored path to `pixelIdx` by replaying it from that pixel's primary hit, as seen from
+// `cameraPos_WS` (the previous frame's camera when shifting into the previous frame's domain)
+ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbufferData, const uint2 pixelIdx, const float3 cameraPos_WS)
 {
     ShiftedPath shifted;
     shifted.F = 0.f;
@@ -1093,11 +1103,11 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
         return shifted;
     }
 
-    Payload payload = initPayloadFromGbuffer(gbufferData);
+    Payload payload = initPayloadFromGbuffer(gbufferData, cameraPos_WS);
     PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0, 0);
     const uint pathSplitIdx = bool(path.flags & PATH_FLAGS_SPLIT_IDX) ? 1 : 0;
     float3 unusedColor, unusedAlbedo;
-    shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, pathSplitIdx, path.seed,
+    shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, cameraPos_WS, pathSplitIdx, path.seed,
         unusedColor, unusedAlbedo, shifted.jacobian, shifted.rcJacobianTerms);
     return shifted;
 }
@@ -1113,7 +1123,7 @@ void initialSamplingRayGen()
     const uint slotIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
 
     const GbufferData gbufferData = gbufferIn[linearPixelIdx];
-    Payload payload = initPayloadFromGbuffer(gbufferData);
+    Payload payload = initPayloadFromGbuffer(gbufferData, cameraParams.pos_WS);
 
     const uint pathSeed = initRng(constantParams.rngSeed, 987654103, slotIdx, renderParams.frameNumber).seed;
     // Separate stream from the path's RNG so resampling draws never perturb the path itself
@@ -1123,7 +1133,7 @@ void initialSamplingRayGen()
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
     float unusedJacobian, unusedJacobianTerms;
-    pathTraceRay(payload, reservoir, noReplay(), pixelIdx, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo,
+    pathTraceRay(payload, reservoir, noReplay(), pixelIdx, cameraParams.pos_WS, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo,
         unusedJacobian, unusedJacobianTerms);
 
     if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
@@ -1134,7 +1144,7 @@ void initialSamplingRayGen()
         const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
         if (debugMode == RestirDebugMode::SELF_REPLAY || debugMode == RestirDebugMode::SELF_REPLAY_ERROR)
         {
-            const ShiftedPath replayed = shiftPathToPixel(stored, gbufferData, pixelIdx);
+            const ShiftedPath replayed = shiftPathToPixel(stored, gbufferData, pixelIdx, cameraParams.pos_WS);
             if (debugMode == RestirDebugMode::SELF_REPLAY)
             {
                 pathColor += replayed.F * stored.W;
@@ -1188,6 +1198,72 @@ PathReservoir mergeSlotReservoirs(const uint2 pixelIdx)
     return merged;
 }
 
+// Temporal reuse: the pixel's merged initial reservoir is the canonical sample, its reprojected
+// history reservoir (confidence capped) the one neighbor. The history path is shifted into this
+// frame's pixel, and this pixel's path into the previous frame's pixel for the canonical MIS term.
+// The result is the input to spatial reuse.
+void temporalRayGen()
+{
+    const uint2 pixelIdx = DispatchRaysIndex().xy;
+    const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
+
+    const PathReservoir canonical = mergeSlotReservoirs(pixelIdx);
+    const GbufferData gbufferData = gbufferIn[linearPixelIdx];
+
+    uint2 prevPixelIdx;
+    const bool hasHistory = bool(restirParams.temporalHistoryValid) && restirParams.temporalConfidenceCap > 0.f &&
+        bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT) && reprojectToPrevPixel(gbufferData.hitInfo, gbufferPrevIn, prevPixelIdx);
+    if (!hasHistory)
+    {
+        reservoirsMergedOut[linearPixelIdx] = canonical;
+        return;
+    }
+
+    const uint prevLinearPixelIdx = prevPixelIdx.y * renderParams.renderSize.x + prevPixelIdx.x;
+    PathReservoir history = reservoirsHistoryIn[prevLinearPixelIdx];
+    history.M = min(history.M, restirParams.temporalConfidenceCap);
+
+    const ShiftedPath historyAtCanonical = shiftPathToPixel(history, gbufferData, pixelIdx, cameraParams.pos_WS);
+    const ShiftedPath canonicalAtHistory = shiftPathToPixel(canonical, gbufferPrevIn[prevLinearPixelIdx], prevPixelIdx, cameraParams.prevPos_WS);
+
+    const float neighborConfidence = history.M;
+    const float totalConfidence = canonical.M + neighborConfidence;
+    const float canonicalPHat = luminance(canonical.F);
+
+    const float canonicalMis = canonical.M / totalConfidence +
+        pairwiseMisCanonicalTerm(canonical.M, history.M, neighborConfidence, totalConfidence, canonicalPHat,
+            luminance(canonicalAtHistory.F) * canonicalAtHistory.jacobian);
+
+    PathReservoir selected = canonical;
+    float selectedPHat = canonicalPHat;
+    float weightSum = canonicalMis * canonicalPHat * canonical.W;
+
+    const float historyPHat = luminance(historyAtCanonical.F);
+    if (historyPHat > 0.f && historyAtCanonical.jacobian > 0.f && history.W > 0.f)
+    {
+        const float pHatFromHistory = luminance(history.F) / historyAtCanonical.jacobian;
+        const float mis = pairwiseMisNeighbor(canonical.M, history.M, neighborConfidence, totalConfidence, historyPHat, pHatFromHistory);
+        const float weight = mis * historyPHat * history.W * historyAtCanonical.jacobian;
+        if (weight > 0.f)
+        {
+            weightSum += weight;
+            RandomNumberGenerator rng = initRng(constantParams.rngSeed, 424242, linearPixelIdx, renderParams.frameNumber);
+            if (rng.nextFloat() * weightSum < weight)
+            {
+                selected = history;
+                selected.F = historyAtCanonical.F;
+                selected.rcJacobianTerms = historyAtCanonical.rcJacobianTerms;
+                selectedPHat = historyPHat;
+            }
+        }
+    }
+
+    selected.W = (weightSum > 0.f && selectedPHat > 0.f) ? weightSum / selectedPHat : 0.f;
+    selected.M = totalConfidence;
+    selected.debugFlags = (historyPHat > 0.f && historyAtCanonical.jacobian > 0.f) ? RESERVOIR_DEBUG_TEMPORAL_SHIFT_SUCCEEDED : 0;
+    reservoirsMergedOut[linearPixelIdx] = selected;
+}
+
 // Paired spatial reuse, first pass: each pixel shifts every partner's path to itself. The pairing is
 // symmetric, so this one evaluation per pair serves both the partner's candidate at this pixel and
 // this pixel's MIS term at the partner.
@@ -1198,8 +1274,6 @@ void spatialShiftRayGen()
     const uint pixelCount = renderParams.renderSize.x * renderParams.renderSize.y;
     const bool pairWithSelf = (RestirDebugMode)renderParams.restirDebugMode == RestirDebugMode::SPATIAL_SELF;
 
-    reservoirsMergedOut[linearPixelIdx] = mergeSlotReservoirs(pixelIdx);
-
     const GbufferData gbufferData = gbufferIn[linearPixelIdx];
     for (uint textureIdx = 0; textureIdx < restirParams.spatialNeighborCount; ++textureIdx)
     {
@@ -1208,21 +1282,25 @@ void spatialShiftRayGen()
         PathReservoir partner = makeEmptyPathReservoir();
         if (hasPartner)
         {
-            partner = mergeSlotReservoirs(partnerIdx);
+            partner = reservoirsMergedOut[partnerIdx.y * renderParams.renderSize.x + partnerIdx.x];
         }
-        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shiftPathToPixel(partner, gbufferData, pixelIdx);
+        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shiftPathToPixel(partner, gbufferData, pixelIdx, cameraParams.pos_WS);
     }
 }
 
 [shader("raygeneration")]
 void RayGeneration()
 {
-    if ((PtPass)ptPass == PtPass::SPATIAL_SHIFT)
+    switch ((PtPass)ptPass)
     {
-        spatialShiftRayGen();
-    }
-    else
-    {
-        initialSamplingRayGen();
+        case PtPass::TEMPORAL:
+            temporalRayGen();
+            break;
+        case PtPass::SPATIAL_SHIFT:
+            spatialShiftRayGen();
+            break;
+        default:
+            initialSamplingRayGen();
+            break;
     }
 }
