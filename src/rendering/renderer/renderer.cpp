@@ -499,16 +499,22 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
     GpuProfiler::endScope(renderState.cmdList.Get());
 
-    // Duplication map of this frame's final reservoirs, for next frame's temporal pass
-    GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "restir duplication");
-    BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirSeeds.Get());
-    renderState.cmdList->SetPipelineState(renderState.restirDuplicationPso.Get());
-    renderState.cmdList->SetComputeRootSignature(renderState.restirDuplicationRootSig.Get());
-    renderState.cmdList->SetComputeRootConstantBufferView(RESTIR_DUPLICATION_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
-    renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_DUPLICATION_PARAM_IDX(RESERVOIR_SEEDS_IN), renderState.dev_reservoirSeeds->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_DUPLICATION_PARAM_IDX(DUPLICATION_MAP_OUT), renderState.dev_duplicationMap->GetGPUVirtualAddress());
-    renderState.cmdList->Dispatch(Util::calculateDispatchSize(renderState.renderWidth, RESTIR_DUPLICATION_WORKGROUP_SIZE_X),
-                                  Util::calculateDispatchSize(renderState.renderHeight, RESTIR_DUPLICATION_WORKGROUP_SIZE_Y), 1);
+    // Duplication map of this frame's final reservoirs, for next frame's temporal pass (and the
+    // DUPLICATION debug view)
+    const bool buildDuplicationMap = bool(paramBlockManager.restirParams->decorrelationEnabled) ||
+        static_cast<RestirDebugMode>(SettingsManager::getAsUint("restirDebugMode")) == RestirDebugMode::DUPLICATION;
+    if (buildDuplicationMap)
+    {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "restir duplication");
+        BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirSeeds.Get());
+        renderState.cmdList->SetPipelineState(renderState.restirDuplicationPso.Get());
+        renderState.cmdList->SetComputeRootSignature(renderState.restirDuplicationRootSig.Get());
+        renderState.cmdList->SetComputeRootConstantBufferView(RESTIR_DUPLICATION_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
+        renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_DUPLICATION_PARAM_IDX(RESERVOIR_SEEDS_IN), renderState.dev_reservoirSeeds->GetGPUVirtualAddress());
+        renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_DUPLICATION_PARAM_IDX(DUPLICATION_MAP_OUT), renderState.dev_duplicationMap->GetGPUVirtualAddress());
+        renderState.cmdList->Dispatch(Util::calculateDispatchSize(renderState.renderWidth, RESTIR_DUPLICATION_WORKGROUP_SIZE_X),
+                                      Util::calculateDispatchSize(renderState.renderHeight, RESTIR_DUPLICATION_WORKGROUP_SIZE_Y), 1);
+    }
 
     if (RESTIR_SHIFT_STATS && bool(paramBlockManager.restirParams->shiftStatsEnabled))
     {

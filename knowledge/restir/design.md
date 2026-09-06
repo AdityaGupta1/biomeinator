@@ -222,8 +222,10 @@ stored rc vertices, and disocclusions get no history.
 
 ## Stage 5: decorrelation with duplication maps
 
-Enhanced Section 5, behind `restirDecorrelation` (default on; turn it off for golden comparisons,
-since it is the one deliberately biased piece). After the spatial resample writes the frame's final
+Enhanced Section 5, behind `restirDecorrelation` (default off: it is the one deliberately biased
+piece, and with the temporal confidence cap at 2 it has only the range 2..1 to work in, so the
+blob artifacts it targets are already gone; the map pass is skipped entirely when off unless the
+`DUPLICATION` debug view asks for it). After the spatial resample writes the frame's final
 reservoirs, `restir/duplication_map.cs.hlsl` counts, for each pixel, how many of the surrounding
 17x17 reservoirs carry the same path seed (a shifted copy of the same initial sample), over 288.
 Seeds come from a compact per-pixel buffer the resample pass writes, since reading 288 full

@@ -40,7 +40,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("restirSpatialNeighbors", "ReSTIR PT paired spatial neighbors per pixel (0-3)", uint32_t, "3");
     ADD_OPTION("restirTemporalReuse", "ReSTIR PT temporal reuse", bool, "true");
     ADD_OPTION("restirTemporalConfidenceCap", "ReSTIR PT confidence cap on the temporal neighbor (0 disables its contribution)", uint32_t, "2");
-    ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "true");
+    ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs; little effect at the default confidence cap)", bool, "false");
     ADD_OPTION("restirDecorrelationMinCap", "Confidence cap where the duplication score is 1", float, "1");
     ADD_OPTION("restirDecorrelationExponent", "Duplication score exponent driving the cap reduction", float, "0.1");
     ADD_OPTION("restirShiftStats", "Count ReSTIR PT shift outcomes into the perf report (needs a build with RESTIR_SHIFT_STATS)", bool, "false");
