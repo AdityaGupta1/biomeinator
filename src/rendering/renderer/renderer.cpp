@@ -1002,8 +1002,9 @@ void render()
     else
     {
         syncInterval = 0;
-        const bool isFullscreen = SettingsManager::getAsBool("fullscreen");
-        presentFlags = (renderState.allowTearing && isFullscreen) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+        // The app only ever uses borderless windowed fullscreen (never exclusive), and tearing is the
+        // documented way to uncap windowed sync-interval-0 presents from the display refresh rate.
+        presentFlags = renderState.allowTearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
     }
 
     CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
