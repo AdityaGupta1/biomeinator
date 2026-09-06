@@ -399,9 +399,22 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 
 // Initial sampling runs one thread per pixel slot (doubled width with path splitting); the spatial
 // shift runs one thread per pixel
+static const char* ptPassScopeName(const PtPass pass)
+{
+    switch (pass)
+    {
+        case PtPass::TEMPORAL:
+            return "restir temporal";
+        case PtPass::SPATIAL_SHIFT:
+            return "restir spatial shift";
+        default:
+            return "path tracing";
+    }
+}
+
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPass pass, const uint32_t dispatchWidth)
 {
-    GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "path tracing");
+    GPU_PROFILE_SCOPE(renderState.cmdList.Get(), ptPassScopeName(pass));
 
     renderState.cmdList->SetPipelineState1(renderState.ptPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
@@ -442,6 +455,7 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
         batch.submit(renderState.cmdList.Get());
     }
 
+    GpuProfiler::beginScope(renderState.cmdList.Get(), "restir resample");
     renderState.cmdList->SetPipelineState(renderState.restirResamplePso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.restirResampleRootSig.Get());
     renderState.cmdList->SetComputeRootConstantBufferView(RESTIR_RESAMPLE_PARAM_IDX(GLOBAL_PARAMS), paramBlockManager.getParamBufferGpuAddress());
@@ -456,8 +470,10 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
     const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.renderWidth, RESTIR_RESAMPLE_WORKGROUP_SIZE_X);
     const uint32_t dispatchHeight = Util::calculateDispatchSize(renderState.renderHeight, RESTIR_RESAMPLE_WORKGROUP_SIZE_Y);
     renderState.cmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
+    GpuProfiler::endScope(renderState.cmdList.Get());
 
     // Duplication map of this frame's final reservoirs, for next frame's temporal pass
+    GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "restir duplication");
     BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirSeeds.Get());
     renderState.cmdList->SetPipelineState(renderState.restirDuplicationPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.restirDuplicationRootSig.Get());
