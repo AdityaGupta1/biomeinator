@@ -60,14 +60,15 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         partnerLinearIdx[textureIdx] = partnerIdx.y * renderParams.renderSize.x + partnerIdx.x;
         if (hasPartner[textureIdx])
         {
-            neighborConfidence += reservoirsMergedIn[partnerLinearIdx[textureIdx]].M;
+            neighborConfidence += reservoirM(reservoirsMergedIn[partnerLinearIdx[textureIdx]]);
         }
     }
-    const float totalConfidence = canonical.M + neighborConfidence;
+    const float canonicalM = reservoirM(canonical);
+    const float totalConfidence = canonicalM + neighborConfidence;
 
     // Canonical MIS weight: its share of every pair, where the partner's view of the canonical path is
     // this pixel's path shifted to the partner
-    float canonicalMis = canonical.M / totalConfidence;
+    float canonicalMis = canonicalM / totalConfidence;
     for (uint textureIdx = 0; textureIdx < RESTIR_MAX_SPATIAL_NEIGHBORS; ++textureIdx)
     {
         if (!hasPartner[textureIdx])
@@ -76,7 +77,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
         const ShiftedPath canonicalAtPartner = shiftedIn[textureIdx * pixelCount + partnerLinearIdx[textureIdx]];
         const float pHatFromPartner = luminance(canonicalAtPartner.F) * canonicalAtPartner.jacobian;
-        canonicalMis += pairwiseMisCanonicalTerm(canonical.M, reservoirsMergedIn[partnerLinearIdx[textureIdx]].M, neighborConfidence,
+        canonicalMis += pairwiseMisCanonicalTerm(canonicalM, reservoirM(reservoirsMergedIn[partnerLinearIdx[textureIdx]]), neighborConfidence,
             totalConfidence, canonicalPHat, pHatFromPartner);
     }
 
@@ -105,7 +106,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         ++spatialShiftsSucceeded;
         // The partner's own target evaluated at its path, mapped into this pixel's measure
         const float pHatFromPartner = luminance(partner.F) / partnerAtCanonical.jacobian;
-        const float mis = pairwiseMisNeighbor(canonical.M, partner.M, neighborConfidence, totalConfidence, pHat, pHatFromPartner);
+        const float mis = pairwiseMisNeighbor(canonicalM, reservoirM(partner), neighborConfidence, totalConfidence, pHat, pHatFromPartner);
         const float weight = mis * pHat * partner.W * partnerAtCanonical.jacobian;
         if (weight <= 0.f)
         {
@@ -124,7 +125,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     selected.W = (weightSum > 0.f && selectedPHat > 0.f) ? weightSum / selectedPHat : 0.f;
-    selected.M = totalConfidence;
+    setReservoirM(selected, totalConfidence);
 
     reservoirsHistoryOut[linearPixelIdx] = selected;
     reservoirSeedsOut[linearPixelIdx] = (selected.W > 0.f) ? selected.seed : 0u;
@@ -133,7 +134,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
     if (debugMode == RestirDebugMode::CONFIDENCE)
     {
-        pathTracingRawBufferOut[slotIdx].xyz = selected.M / 100.f;
+        pathTracingRawBufferOut[slotIdx].xyz = reservoirM(selected) / 100.f;
         return;
     }
     if (debugMode == RestirDebugMode::DUPLICATION)

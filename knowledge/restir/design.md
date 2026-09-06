@@ -1,4 +1,4 @@
-_Last edited: 2026-09-04_
+_Last edited: 2026-09-05_
 
 # ReSTIR PT Design
 
@@ -80,13 +80,37 @@ test needs that pdf) and *before* x_j's light samples, since those paths reconne
 
 **What replay reproduces exactly and what it does not.** The self-replay debug modes
 (`--restirDebugMode=1|2`) re-trace each pixel's own stored path and either shade with it or show
-the relative error (x100). With `--rngSeed` fixed, mode 0 and mode 1 renders of a glTF scene
-compare pixel-exact except for a handful of pixels; voxel worlds cannot be compared across runs at
-low frame counts because chunk streaming timing differs, so use the error view for those. Known
-inexact cases: rough glass, where `evaluateBsdf`'s half-vector reconstruction occasionally disagrees
-with the sampled one at float precision (sparse dots on rough spheres); grazing hits on smooth
-curved surfaces, where the re-aimed reconnection ray can graze the surface before the target;
-water absorption on a reconnection segment, which uses the shadow-ray entry/exit formulation.
+the relative error (x100). The error view is the exactness test: it is relative and scaled, so
+quantization-level differences (0.1%) already show as visible speckles, and a rejected replay shows
+as a saturated pixel. Mode 0 vs mode 1 renders are *not* an exactness test since spatial reuse
+exists: mode 0 merges a pixel's two split slots stochastically while mode 1 sums them, so they differ
+wherever path splitting happens. Voxel worlds additionally cannot be compared across runs at low
+frame counts because chunk streaming timing differs. With mesh-relative vertices the residual error
+view means are about 1-2.5 (of 255) on evil_room, rough glass and water and below 1 elsewhere; half
+of that is the unorm16 barycentric and octahedral direction quantization (Falcor's precision too),
+the rest the cases below. Known inexact cases: rough glass, where `evaluateBsdf`'s half-vector
+reconstruction occasionally disagrees with the sampled one at float precision (sparse dots on rough
+spheres); grazing hits on smooth curved surfaces, where the re-aimed reconnection ray can graze the
+surface before the target; water absorption on a reconnection segment, which uses the shadow-ray
+entry/exit formulation; the rc vertex's texture mip, taken from the cone at the reconnection
+distance rather than the base path's propagated cone.
+
+**Invertibility checks must reproduce initial sampling's judgement, not re-judge.** Initial
+sampling decides whether x_j is the reconnection vertex using the lobe it *samples* at x_j (its
+pdf and delta-ness), before x_j's light samples, so an NEE path ending at the light from x_j was
+judged by a continuation direction that is not part of that path. Replay's "no earlier pair may
+qualify" check therefore draws that same BSDF sample from the base path's RNG stream at x_{j-1}
+instead of evaluating the pdf toward the rc vertex; judging by the direction to the light rejected
+0.3% of evil_room paths per frame (glossy peak sampled, low pdf toward the light). For the pair
+(x_{j-1}, x_j) itself the direction *is* the stored one, so `evaluateBsdf` of rcWi is the right pdf.
+
+**Pdfs stored for the Jacobian must be what replay recomputes.** An NEE light point carries the
+light's geometric normal (the area light's, not the mesh's shading normal), and the Jacobian's
+geometry term was stored with it, so the rebuilt hit's shading normal is replaced by the triangle's
+geometric normal for NEE reconnections; evil_room's smooth emissive meshes made every such path
+fail otherwise. NEE dome samples carry the cap pdf by construction (`sphericalCapUniformPdfInside`):
+testing the rounded sampled direction against the cap edge gave 0.1% of sun samples a zero pdf,
+which the path tracer's MIS silently tolerated but which made those reservoirs unreplayable.
 
 **Reconnection ray TMax.** An NEE light point carries its triangle's geometric normal, so the ray
 can stop short of the light's *plane* like `traceToLight` (the offset origin makes the plane
@@ -165,8 +189,8 @@ motion is handled by reprojection, resizes reset the frame counter. Scene topolo
 invalidate it: in voxel mode a new chunk enters the TLAS on most frames while moving, and dropping
 history on each one read as the image "resetting" at every chunk boundary. Light indices survive a
 rebuild (per-triangle light index plus the instance's buffer offset are fixed while the instance
-lives, and the tree is rebuilt the same frame). The one stale case is an instance id reused after a
-chunk beyond render distance is freed, which a stored path at that distance essentially never hits.
+lives, and the tree is rebuilt the same frame). A recycled instance id is caught by the generation
+stored with it.
 
 **Color noise.** Resampling selects by luminance, so `F * W` of the selected path carries one
 path's chroma however many candidates were merged: with temporal and spatial reuse the luminance
@@ -220,14 +244,28 @@ vertex replays the same alpha decisions. Resampling draws are a separate stream 
 
 ## Memory
 
-Per pixel: 2 x 112 B initial reservoirs, 112 B merged, 2 x 112 B history, 3 x 32 B shifted paths
-and a second 64 B G-buffer, allocated regardless of sampling mode. Enhanced compresses reservoirs to 64 bytes; that is a later, measured
-step, and the self-replay error view is the tool to measure what precision loss costs.
+Per pixel: 2 x 64 B initial reservoirs, 64 B merged, 2 x 64 B history, 3 x 32 B shifted paths, a
+second 64 B G-buffer, plus the seed and duplication buffers, allocated regardless of sampling mode.
 
-## Storing world positions
+## Mesh-relative reconnection vertices and the 64-byte reservoir
 
-`rcHit` stores world-space position and shading normal rather than barycentrics, because
-`InstanceData` has no full object-to-world matrix on the GPU (glTF instances can scale and rotate).
-The normal is stored as oriented for the original incoming ray; replay flips it (and the backface
-IOR) when reconnecting from the other side. Voxel mode's floating origin (`globalInstanceOffset`)
-means stored positions go stale when it changes; temporal reuse must handle that.
+The reconnection vertex is stored as instance id (with the instance's generation in the top byte),
+triangle index and two unorm16 barycentrics, and rebuilt on the *current* mesh at replay by
+`rebuildHit` in `path_tracing_common.hlsli`: interpolate the triangle from the shared vertex buffer,
+apply the instance's object-to-world rows (now in `InstanceData`, since `ObjectToWorld` only exists
+in hit shaders) plus the integer offsets, then `finishHit`, the normal orientation, wave normal and
+glossy fix shared with `ClosestHit_Primary`, so the rebuilt vertex matches the original hit exactly.
+The previous frame's primary hit is rebuilt the same way from barycentrics the G-buffer now stores.
+Consequences: stored paths follow deforming water and any animated geometry, so temporal reuse on
+water is back (the broken-MIS brightening came from the two temporal shifts seeing different
+surfaces); a recycled instance id is detected by the generation and the shift fails cleanly; and the
+floating origin is handled by the rebuild itself. Backface is no longer stored, it comes out of the
+rebuild. The reservoir is 64 bytes (Enhanced 6.2.1): direction octahedral-encoded, M as 8.8 fixed
+point in the high half of `flags`, radiance kept at full precision. Unpacked barycentrics are
+clamped onto the triangle: rounding could push the point just past an edge, where the reconnection
+ray gets occluded by an adjoining wall. The transform is a `row_major float3x4` read straight from
+`XMFLOAT3X4` memory; three-`float4`-row and matrix variants were verified bit-identical.
+
+`RESTIR_ATTRIBUTION_TEST` in `path_tracing.rgs.hlsl` turns the error view into a reason-code view
+(red = replay returned zero, with the return site and path kind in the other channels) for tracking
+down replay failures; that is how the cases above were found.

@@ -162,8 +162,8 @@ bool traceToLight(const float3 surfPos_WS,
     result.lightHit.hitNor_WS = lightNor_WS;
     result.lightHit.triangleIdx = light.triangleIdx;
     result.lightHit.uv = uv;
-    result.lightHit.pad0 = 0;
-    result.lightHit.pad1 = 0;
+    // lightBary2 weights the triangle's first two vertices; DXR barycentrics weight the second and third
+    result.lightHit.barycentrics = float2(lightBary2.y, 1.f - lightBary2.x - lightBary2.y);
     return true;
 }
 

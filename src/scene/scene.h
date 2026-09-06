@@ -133,6 +133,7 @@ private:
     MappedArray<InstanceData> mappedInstanceDatasArray{};
 
     std::queue<uint32_t> availableInstanceIds{};
+    std::vector<uint32_t> instanceGenerations{}; // per instance id, bumped on free (InstanceData::generation)
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
     // finalized, BLAS-built deformable instances; drives the displacement dispatches and

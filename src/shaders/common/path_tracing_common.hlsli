@@ -173,25 +173,21 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
     }
 }
 
-[shader("closesthit")]
-void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+// Finishes a triangle hit from its interpolated world-space attributes: orients the geometric and
+// shading normals for a ray arriving from `wo_WS`, applies the water wave normal and the glossy
+// reflection fix, and reports whether the hit is a backface. Shared by ClosestHit_Primary and
+// rebuildHit so a vertex rebuilt from barycentrics matches the original hit exactly.
+void finishHit(const InstanceData instanceData,
+               const uint triangleIdx,
+               const float3 wo_WS,
+               const float3 rayDir_WS,
+               const float3 geoNorUnoriented_WS,
+               inout HitInfo hitInfo,
+               out bool isBackface)
 {
-    const InstanceData instanceData = instanceDatas[InstanceID()];
-    const uint materialIdx = instanceData.materialIdx;
-
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
-
-    const float2 bary2 = attribs.barycentrics;
-    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-
-    const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
-    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
-
-    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
-    float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+    float3 nor_WS = hitInfo.hitNor_WS;
     // Geometric normal, oriented to agree with the interpolated normal so no winding convention is assumed
-    float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
+    float3 geoNor_WS = geoNorUnoriented_WS;
     if (dot(geoNor_WS, nor_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
@@ -200,25 +196,24 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     // Which side of the surface the ray is on is decided by the geometric normal: the interpolated normal can
     // face away from the ray on grazing hits of coarse meshes, and treating those as backfaces would invert the
     // IOR for them
-    const float3 wo_WS = -WorldRayDirection();
-    if (dot(geoNor_WS, wo_WS) < 0.f)
+    isBackface = dot(geoNor_WS, wo_WS) < 0.f;
+    if (isBackface)
     {
         geoNor_WS = -geoNor_WS;
         nor_WS = -nor_WS;
-        payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
 
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + triangleIdx];
     if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
     {
-        const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
-                                   bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+        const float2 posXZ_WS = hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+        nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, rayDir_WS, isBackface);
     }
     else
     {
         // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
         // correction ensures); other materials keep the plain interpolated normal, facing the ray
+        const uint materialIdx = instanceData.materialIdx;
         const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossy();
         if (hasGlossy)
         {
@@ -230,14 +225,102 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             nor_WS = -nor_WS;
         }
     }
-    payload.hitInfo.hitNor_WS = nor_WS;
+    hitInfo.hitNor_WS = nor_WS;
+}
+
+float3x3 inverse3x3(const float3x3 m)
+{
+    const float3 c0 = cross(m[1], m[2]);
+    const float3 c1 = cross(m[2], m[0]);
+    const float3 c2 = cross(m[0], m[1]);
+    const float det = dot(m[0], c0);
+    // Rows of the inverse are the columns of the cofactor matrix over the determinant
+    return transpose(float3x3(c0, c1, c2)) / det;
+}
+
+// Rebuilds a hit stored as instance/triangle/barycentrics on the current mesh, as seen from `fromPos_WS`,
+// reproducing what ClosestHit_Primary would have produced. `geoNor_WS` is the triangle's unoriented
+// geometric normal, as light sampling uses for light points. False if the instance id has been
+// recycled since the hit was stored (generation mismatch).
+bool rebuildHit(const uint instanceId,
+                const uint generation,
+                const uint triangleIdx,
+                const float2 bary2,
+                const float3 fromPos_WS,
+                out HitInfo hitInfo,
+                out float3 geoNor_WS,
+                out bool isBackface)
+{
+    hitInfo.hitPos_WS = 0.f;
+    hitInfo.instanceId = instanceId;
+    hitInfo.hitNor_WS = 0.f;
+    hitInfo.triangleIdx = triangleIdx;
+    hitInfo.uv = 0.f;
+    hitInfo.barycentrics = bary2;
+    geoNor_WS = 0.f;
+    isBackface = false;
+
+    const InstanceData instanceData = instanceDatas[instanceId];
+    if (instanceData.generation != generation)
+    {
+        return false;
+    }
+
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, triangleIdx, v0, v1, v2);
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
+    hitInfo.hitPos_WS = mul(instanceData.objectToWorld, float4(hitPos_OS, 1.f)) +
+                        float3(instanceData.transformOffset - cameraParams.globalInstanceOffset);
+    const float3x3 objectToWorld3x3 = (float3x3)instanceData.objectToWorld;
+
+    // Normals transform by the inverse transpose, which the row-vector product with the inverse gives
+    const float3x3 worldToObject3x3 = inverse3x3(objectToWorld3x3);
+    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
+    hitInfo.hitNor_WS = normalize(mul(hitNor_OS, worldToObject3x3));
+    geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), worldToObject3x3));
+
+    hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
+                 unpackUintToFloat2(v2.packedUv) * bary.z;
+
+    const float3 rayDir_WS = normalize(hitInfo.hitPos_WS - fromPos_WS);
+    finishHit(instanceData, triangleIdx, -rayDir_WS, rayDir_WS, geoNor_WS, hitInfo, isBackface);
+    return true;
+}
+
+[shader("closesthit")]
+void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+{
+    const InstanceData instanceData = instanceDatas[InstanceID()];
+
+    Vertex v0, v1, v2;
+    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+
+    const float2 bary2 = attribs.barycentrics;
+    const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
+
+    const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
+
+    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
+    payload.hitInfo.hitNor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+    const float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
 
     payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
                          unpackUintToFloat2(v2.packedUv) * bary.z;
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
+    payload.hitInfo.barycentrics = bary2;
 
-    payload.materialIdx = materialIdx;
+    bool isBackface;
+    finishHit(instanceData, PrimitiveIndex(), -WorldRayDirection(), WorldRayDirection(), geoNor_WS, payload.hitInfo, isBackface);
+    if (isBackface)
+    {
+        payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
+    }
+
+    payload.materialIdx = instanceData.materialIdx;
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

@@ -8,6 +8,10 @@
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+// These macros make the HLSL type names compile as C++ for the shared structs below. Every define
+// must be matched by an #undef at the bottom of this file: a macro that leaks past it rewrites
+// unrelated code in whatever gets included next (e.g. a `float4` define turns Streamline's
+// `struct float4` into an attempt to redefine DirectX::XMFLOAT4 inside namespace sl).
 #define int3 DirectX::XMINT3
 
 #define uint uint32_t
@@ -16,7 +20,9 @@
 #define float2 DirectX::XMFLOAT2
 #define float3 DirectX::XMFLOAT3
 
+#define float3x4 DirectX::XMFLOAT3X4
 #define float4x4 DirectX::XMFLOAT4X4
+#define row_major
 #endif
 
 struct HitInfo
@@ -28,8 +34,7 @@ struct HitInfo
     uint triangleIdx;
 
     float2 uv;
-    uint pad0;
-    uint pad1;
+    float2 barycentrics; // of the triangle's second and third vertices, as DXR reports them
 };
 
 struct GbufferData
@@ -38,27 +43,28 @@ struct GbufferData
 
     uint materialIdx;
     uint payloadFlags;
+    uint instanceGeneration; // of hitInfo.instanceId when the hit was made, see InstanceData::generation
     uint pad0;
-    uint pad1;
 };
 
 // One resampled path per pixel slot for ReSTIR PT. Holds what random replay and reconnection need to
 // rebuild the path at another pixel; see knowledge/restir/design.md. Field packing is in
-// shaders/restir/path_reservoir.hlsli.
+// shaders/restir/path_reservoir.hlsli. The reconnection vertex is stored as a mesh-relative hit and
+// rebuilt on the current mesh at replay, so it follows deforming geometry.
 struct PathReservoir
 {
     float3 F; // integrand of the selected path, without Russian roulette division
     float W;  // unbiased contribution weight
 
     uint seed;
-    uint flags;
-    float M; // confidence weight
+    uint flags; // path length, rc vertex, technique and lobe bits in the low half; confidence M as 8.8 fixed point in the high half
     float rcLightPdf; // light sampling pdf from the rc vertex, for MIS when the rc vertex precedes the light vertex
-
-    HitInfo rcHit; // reconnection vertex; unused when it is the dome
-
-    float3 rcWi; // direction leaving the rc vertex toward the next vertex, or the dome direction
     float rcJacobianTerms; // product of the path's pdf and geometry terms across the reconnection, the shift Jacobian's denominator
+
+    uint rcInstance; // instance generation << 24 | instance id; unused when the rc vertex is the dome
+    uint rcTriangleIdx;
+    uint rcBarycentrics; // two unorm16
+    uint rcWi; // octahedral-encoded direction leaving the rc vertex toward the next vertex, or the dome direction
 
     float3 rcRadiance; // radiance arriving at the rc vertex along rcWi, excluding the segment before it
     uint debugFlags; // RESERVOIR_DEBUG_*, only for the debug views
@@ -96,9 +102,15 @@ struct InstanceData
     uint areaLightsBufferOffset;
 
     uint materialIdx;
+    uint generation; // incremented each time this instance id is freed, so stale references can be detected
     uint pad0;
     uint pad1;
-    uint pad2;
+
+    // The TLAS instance transform without the integer offsets (Instance::transform), so hits can be
+    // rebuilt from barycentrics outside a hit shader, where ObjectToWorld() is unavailable:
+    // world = objectToWorld * (pos, 1) + transformOffset - globalInstanceOffset. Declared row-major
+    // so the HLSL side reads XMFLOAT3X4's memory layout as is.
+    row_major float3x4 objectToWorld;
 };
 
 #define MATERIAL_IDX_INVALID ~0u
@@ -318,7 +330,9 @@ public:
 #undef float2
 #undef float3
 
+#undef float3x4
 #undef float4x4
+#undef row_major
 #endif
 
 #endif // COMMON_STRUCTS_H

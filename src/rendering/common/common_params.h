@@ -8,6 +8,10 @@
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
+// These macros make the HLSL type names compile as C++ for the shared structs below. Every define
+// must be matched by an #undef at the bottom of this file: a macro that leaks past it rewrites
+// unrelated code in whatever gets included next (e.g. a `float4` define turns Streamline's
+// `struct float4` into an attempt to redefine DirectX::XMFLOAT4 inside namespace sl).
 #define int2 DirectX::XMINT2
 #define int3 DirectX::XMINT3
 
@@ -207,6 +211,7 @@ struct DebugParams
 
 #undef uint
 #undef uint2
+#undef uint4
 
 #undef float2
 #undef float3

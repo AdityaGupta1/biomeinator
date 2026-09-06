@@ -80,6 +80,12 @@ float3 getDomeLightColor(float3 wi_WS)
     return getSkyColor(wi_WS);
 }
 
+// pdf of a direction that NEE dome sampling produced, see generateDomeLightSampleDir
+float neeDomeLightPdf()
+{
+    return sphericalCapUniformPdfInside(sunCosTheta);
+}
+
 float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
 {
     if (sceneParams.voxelMode == 0)
@@ -110,7 +116,9 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGen
 {
     const float3 sunDir_WS = getSunDir_WS();
     const float3 wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
-    pdf = sphericalCapUniformPdf(wi_WS, sunDir_WS, sunCosTheta);
+    // The sample is inside the cap by construction; testing the rounded direction against the cap
+    // edge would give boundary samples a zero pdf
+    pdf = sphericalCapUniformPdfInside(sunCosTheta);
     return wi_WS;
 }
 

@@ -6,6 +6,7 @@
 #include "../rendering/common/common_structs.h"
 
 #include "util/math.hlsli"
+#include "util/packing.hlsli"
 #include "util/rng.hlsli"
 
 // How the last vertex of a path was sampled. Paths of different techniques (and lengths) cover
@@ -17,14 +18,20 @@
 
 // PathReservoir::flags layout. Vertex indices follow the papers: x1 is the primary hit, the light
 // vertex is x_k for a length-k path, and the reconnection vertex x_j has 2 <= j <= k (0 = none).
+// The high 16 bits hold the confidence M as 8.8 fixed point.
 #define PATH_FLAGS_LENGTH_SHIFT 0
 #define PATH_FLAGS_RC_VERTEX_SHIFT 5
 #define PATH_FLAGS_TECHNIQUE_SHIFT 10
 #define PATH_FLAGS_INDEX_MASK 0x1F
 #define PATH_FLAGS_TECHNIQUE_MASK 0x3
 #define PATH_FLAGS_SPLIT_IDX (1 << 12)
-#define PATH_FLAGS_RC_HIT_BACKFACE (1 << 13)
-#define PATH_FLAGS_RC_PREV_LOBE_DIFFUSE (1 << 14) // lobe sampled at the vertex before the rc vertex; else glossy or dielectric
+#define PATH_FLAGS_RC_PREV_LOBE_DIFFUSE (1 << 13) // lobe sampled at the vertex before the rc vertex; else glossy or dielectric
+#define PATH_FLAGS_CONFIDENCE_SHIFT 16
+#define PATH_FLAGS_CONFIDENCE_MASK 0xFFFF
+#define PATH_FLAGS_CONFIDENCE_SCALE 256.f
+
+#define PATH_RC_INSTANCE_GENERATION_SHIFT 24
+#define PATH_RC_INSTANCE_ID_MASK 0x00FFFFFF
 
 uint getPathLength(const uint flags)
 {
@@ -46,6 +53,42 @@ bool isDomeTechnique(const uint pathTechnique)
     return pathTechnique == PATH_TECHNIQUE_NEE_DOME || pathTechnique == PATH_TECHNIQUE_BSDF_DOME;
 }
 
+float reservoirM(const PathReservoir reservoir)
+{
+    return float((reservoir.flags >> PATH_FLAGS_CONFIDENCE_SHIFT) & PATH_FLAGS_CONFIDENCE_MASK) / PATH_FLAGS_CONFIDENCE_SCALE;
+}
+
+void setReservoirM(inout PathReservoir reservoir, const float M)
+{
+    const uint fixedPoint = min(uint(M * PATH_FLAGS_CONFIDENCE_SCALE + 0.5f), PATH_FLAGS_CONFIDENCE_MASK);
+    reservoir.flags = (reservoir.flags & PATH_FLAGS_CONFIDENCE_MASK) | (fixedPoint << PATH_FLAGS_CONFIDENCE_SHIFT);
+}
+
+uint rcInstanceId(const PathReservoir reservoir)
+{
+    return reservoir.rcInstance & PATH_RC_INSTANCE_ID_MASK;
+}
+
+uint rcInstanceGeneration(const PathReservoir reservoir)
+{
+    return reservoir.rcInstance >> PATH_RC_INSTANCE_GENERATION_SHIFT;
+}
+
+uint packBarycentrics(const float2 bary2)
+{
+    const uint2 fixedPoint = uint2(saturate(bary2) * 65535.f + 0.5f);
+    return fixedPoint.x | (fixedPoint.y << 16);
+}
+
+// Rounding can push the unpacked point just past the triangle's edge, where a reconnection ray to it
+// gets occluded by an adjoining surface, so the point is kept on the triangle
+float2 unpackBarycentrics(const uint packed)
+{
+    const float2 bary2 = float2(packed & 0xFFFF, packed >> 16) / 65535.f;
+    const float sum = bary2.x + bary2.y;
+    return sum > 1.f ? bary2 / sum : bary2;
+}
+
 // A complete path produced by the path tracer, as fed to initial resampling
 struct PathCandidate
 {
@@ -54,9 +97,9 @@ struct PathCandidate
     uint pathLength;
     uint pathTechnique;
     uint rcVertexIdx;
-    bool rcHitIsBackface;
     bool rcPrevLobeDiffuse;
     HitInfo rcHit;
+    uint rcInstanceGeneration;
     float3 rcWi;
     float3 rcRadiance;
     float rcLightPdf;
@@ -70,17 +113,12 @@ PathReservoir makeEmptyPathReservoir()
     reservoir.W = 0.f;
     reservoir.seed = 0;
     reservoir.flags = 0;
-    reservoir.M = 0.f;
     reservoir.rcLightPdf = 0.f;
-    reservoir.rcHit.hitPos_WS = 0.f;
-    reservoir.rcHit.instanceId = 0;
-    reservoir.rcHit.hitNor_WS = 0.f;
-    reservoir.rcHit.triangleIdx = 0;
-    reservoir.rcHit.uv = 0.f;
-    reservoir.rcHit.pad0 = 0;
-    reservoir.rcHit.pad1 = 0;
-    reservoir.rcWi = 0.f;
     reservoir.rcJacobianTerms = 0.f;
+    reservoir.rcInstance = 0;
+    reservoir.rcTriangleIdx = 0;
+    reservoir.rcBarycentrics = 0;
+    reservoir.rcWi = 0;
     reservoir.rcRadiance = 0.f;
     reservoir.debugFlags = 0;
     return reservoir;
@@ -119,12 +157,14 @@ struct PathTreeReservoir
                          (candidate.rcVertexIdx << PATH_FLAGS_RC_VERTEX_SHIFT) |
                          (candidate.pathTechnique << PATH_FLAGS_TECHNIQUE_SHIFT) |
                          (splitIdx != 0 ? PATH_FLAGS_SPLIT_IDX : 0) |
-                         (candidate.rcHitIsBackface ? PATH_FLAGS_RC_HIT_BACKFACE : 0) |
                          (candidate.rcPrevLobeDiffuse ? PATH_FLAGS_RC_PREV_LOBE_DIFFUSE : 0);
         selected.rcLightPdf = candidate.rcLightPdf;
-        selected.rcHit = candidate.rcHit;
-        selected.rcWi = candidate.rcWi;
         selected.rcJacobianTerms = candidate.rcJacobianTerms;
+        selected.rcInstance = (candidate.rcInstanceGeneration << PATH_RC_INSTANCE_GENERATION_SHIFT) |
+                              (candidate.rcHit.instanceId & PATH_RC_INSTANCE_ID_MASK);
+        selected.rcTriangleIdx = candidate.rcHit.triangleIdx;
+        selected.rcBarycentrics = packBarycentrics(candidate.rcHit.barycentrics);
+        selected.rcWi = octEncode(candidate.rcWi);
         selected.rcRadiance = candidate.rcRadiance;
     }
 
@@ -134,7 +174,7 @@ struct PathTreeReservoir
         PathReservoir result = selected;
         const float pHat = luminance(result.F);
         result.W = (weightSum > 0.f && pHat > 0.f) ? weightSum / pHat : 0.f;
-        result.M = 1.f;
+        setReservoirM(result, 1.f);
         return result;
     }
 };

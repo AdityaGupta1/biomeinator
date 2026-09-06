@@ -27,6 +27,9 @@ StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
 // Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
 static const float foliageDiffuseTransmission = 0.4f;
+#define RESTIR_ATTRIBUTION_TEST 0 // TEMP
+static uint debugZeroReason = 0; // TEMP
+static uint debugZeroKind = 0; // TEMP
 
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(PT, PATH_TRACING_RAW_BUFFER_OUT);
 RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
@@ -161,7 +164,7 @@ struct RcState
 {
     uint vertexIdx; // 0 = none yet
     HitInfo hit;
-    bool hitIsBackface;
+    uint instanceGeneration;
     bool prevLobeDiffuse; // lobe sampled at the vertex before
     float3 wi; // direction sampled at the rc vertex
     float prevPdfTimesGeom; // pdf of the direction that reached the rc vertex, times its geometry term
@@ -191,7 +194,6 @@ PathCandidate makePathCandidate(const float3 F, const float rrProduct, const uin
     candidate.pathLength = pathLength;
     candidate.pathTechnique = pathTechnique;
     candidate.rcVertexIdx = 0;
-    candidate.rcHitIsBackface = false;
     candidate.rcPrevLobeDiffuse = false;
     candidate.rcJacobianTerms = 0.f;
     candidate.rcHit.hitPos_WS = 0.f;
@@ -199,8 +201,8 @@ PathCandidate makePathCandidate(const float3 F, const float rrProduct, const uin
     candidate.rcHit.hitNor_WS = 0.f;
     candidate.rcHit.triangleIdx = 0;
     candidate.rcHit.uv = 0.f;
-    candidate.rcHit.pad0 = 0;
-    candidate.rcHit.pad1 = 0;
+    candidate.rcHit.barycentrics = 0.f;
+    candidate.rcInstanceGeneration = 0;
     candidate.rcWi = 0.f;
     candidate.rcRadiance = 0.f;
     candidate.rcLightPdf = 0.f;
@@ -217,7 +219,7 @@ void setCandidateRcFromState(inout PathCandidate candidate, const RcState rc, co
     const bool rcPrecedesLight = (rc.vertexIdx + 1 == candidate.pathLength);
     candidate.rcVertexIdx = rc.vertexIdx;
     candidate.rcHit = rc.hit;
-    candidate.rcHitIsBackface = rc.hitIsBackface;
+    candidate.rcInstanceGeneration = rc.instanceGeneration;
     candidate.rcPrevLobeDiffuse = rc.prevLobeDiffuse;
     candidate.rcWi = rcPrecedesLight ? finalSegmentDir : rc.wi;
     candidate.rcRadiance = rcPrecedesLight ? radianceIfRcPrecedesLight : radianceOtherwise;
@@ -228,12 +230,12 @@ void setCandidateRcFromState(inout PathCandidate candidate, const RcState rc, co
 // Reconnection data for a candidate that reconnects straight to its light vertex. For the dome, the
 // hit is unused and the direction identifies the vertex. `jacobianTerms` is the technique's pdf of
 // the light vertex times its geometry term.
-void setCandidateRcAtLightVertex(inout PathCandidate candidate, const HitInfo lightHit, const bool lightHitIsBackface,
+void setCandidateRcAtLightVertex(inout PathCandidate candidate, const HitInfo lightHit, const uint lightInstanceGeneration,
     const float3 domeDir, const float3 emission, const float jacobianTerms, const bool prevLobeDiffuse)
 {
     candidate.rcVertexIdx = candidate.pathLength;
     candidate.rcHit = lightHit;
-    candidate.rcHitIsBackface = lightHitIsBackface;
+    candidate.rcInstanceGeneration = lightInstanceGeneration;
     candidate.rcPrevLobeDiffuse = prevLobeDiffuse;
     candidate.rcWi = domeDir;
     candidate.rcRadiance = emission;
@@ -361,59 +363,83 @@ float3 evaluateReconnection(const ReplayTarget replay,
         rayRng = pathRng(pathSeed, pathDepth, PATH_RNG_RAY);
     }
 
-    const float3 wi_WS = rcIsDome ? path.rcWi : normalize(path.rcHit.hitPos_WS - surfPos_WS);
+    // The rc vertex is rebuilt on the current mesh so it follows deforming geometry; a recycled
+    // instance id means the stored vertex no longer exists
+    const float3 rcWi_WS = octDecode(path.rcWi);
+    const float2 rcBary2 = unpackBarycentrics(path.rcBarycentrics);
+    HitInfo rcHit;
+    float3 rcGeoNor_WS;
+    bool rcIsBackface = false;
+    if (!rcIsDome && !rebuildHit(rcInstanceId(path), rcInstanceGeneration(path), path.rcTriangleIdx,
+            rcBary2, surfPos_WS, rcHit, rcGeoNor_WS, rcIsBackface))
+    {
+        debugZeroReason = 1; return 0.f;
+    }
+    // A light point sampled by NEE carries its triangle's geometric normal, not the shading normal
+    if (rcIsNeeLightVertex)
+    {
+        rcHit.hitNor_WS = rcGeoNor_WS;
+    }
+    const float3 wi_WS = rcIsDome ? rcWi_WS : normalize(rcHit.hitPos_WS - surfPos_WS);
 
     const BsdfEval prevEval = evaluateBsdf(surfMaterial, uv, wo_WS, wi_WS, surfNor_WS, surfTexCtx);
     if (!any(prevEval.value > 0.f))
     {
-        return 0.f;
+        debugZeroReason = 2; return 0.f;
     }
     const float3 prevFactor = prevEval.value * absCosTheta(wi_WS, surfNor_WS);
 
-    // The pair ending at this vertex must not qualify, or the offset path would have reconnected earlier
-    if (vertexIdx >= 2 && isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, surfPos_WS,
-                              surfNor_WS, prevEval.pdf, false, surfMaterial.hasGlossy(), footprintThreshold))
+    // The pair ending at this vertex must not qualify, or the offset path would have reconnected earlier.
+    // Initial sampling judges the pair by the lobe it samples here, so the offset path's judgement is
+    // reproduced by drawing that same sample.
+    if (vertexIdx >= 2)
     {
-        return 0.f;
+        RandomNumberGenerator bsdfRng = pathRng(pathSeed, vertexIdx, PATH_RNG_BSDF);
+        const BsdfSample continuationSample = sampleBsdf(surfMaterial, uv, wo_WS, surfNor_WS, surfTexCtx, bsdfRng);
+        if (isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, surfPos_WS, surfNor_WS,
+                continuationSample.pdf, continuationSample.wasSpecular, surfMaterial.hasGlossy(), footprintThreshold))
+        {
+            debugZeroReason = 3 + 16 * min(vertexIdx, 15); return 0.f;
+        }
     }
 
     // The base path's lobe at x_{j-1} must exist here, and its roughness is this surface's
     const bool prevLobeDiffuse = bool(path.flags & PATH_FLAGS_RC_PREV_LOBE_DIFFUSE);
     if (prevLobeDiffuse ? !surfMaterial.hasDiffuse() : !surfMaterial.hasGlossy())
     {
-        return 0.f;
+        debugZeroReason = 4; return 0.f;
     }
     const float prevLobeRoughness = prevLobeDiffuse ? 1.f : surfMaterial.roughness;
 
     const bool isUnderwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
     float3 transmittance;
-    if (!traceReconnectionRay(surfPos_WS, surfNor_WS, wi_WS, rcIsDome, rcIsNeeLightVertex, path.rcHit.hitPos_WS, path.rcHit.hitNor_WS,
+    if (!traceReconnectionRay(surfPos_WS, surfNor_WS, wi_WS, rcIsDome, rcIsNeeLightVertex, rcHit.hitPos_WS, rcHit.hitNor_WS,
             payload.rayCone, canPassthrough, isUnderwater, !rcIsNeeLightVertex, rayRng, transmittance))
     {
-        return 0.f;
+        debugZeroReason = 5; return 0.f;
     }
 
     if (rcIsLightVertex)
     {
         const float lightPdf = rcIsDome
-            ? domeLightPdf(wi_WS, surfNor_WS)
-            : lightPdfRtsl(path.rcHit, surfPos_WS, surfNor_WS, wi_WS, surfMaterial.acceptsBacksideLight());
+            ? (rcIsNeeLightVertex ? neeDomeLightPdf() : domeLightPdf(wi_WS, surfNor_WS))
+            : lightPdfRtsl(rcHit, surfPos_WS, surfNor_WS, wi_WS, surfMaterial.acceptsBacksideLight());
 
         // NEE paths always reconnect to their light; BSDF-sampled light vertices only where the criteria hold
         if (!rcIsNeeLightVertex)
         {
             const bool qualifies = rcIsDome
                 ? isDomeReconnectionVertex(prevLobeRoughness)
-                : isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, path.rcHit.hitPos_WS,
-                      path.rcHit.hitNor_WS, 0.f, false, false, footprintThreshold);
+                : isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, rcHit.hitPos_WS,
+                      rcHit.hitNor_WS, 0.f, false, false, footprintThreshold);
             if (!qualifies)
             {
-                return 0.f;
+                debugZeroReason = 6; return 0.f;
             }
         }
 
         const float techniquePdf = rcIsNeeLightVertex ? lightPdf : prevEval.pdf;
-        jacobianTerms = techniquePdf * (rcIsDome ? 1.f : reconnectionGeometryTerm(surfPos_WS, path.rcHit.hitPos_WS, path.rcHit.hitNor_WS));
+        jacobianTerms = techniquePdf * (rcIsDome ? 1.f : reconnectionGeometryTerm(surfPos_WS, rcHit.hitPos_WS, rcHit.hitNor_WS));
         jacobian = (path.rcJacobianTerms > 0.f) ? jacobianTerms / path.rcJacobianTerms : 0.f;
 
         // With their path MIS weights applied, NEE and BSDF sampling of the light vertex both reduce to
@@ -423,17 +449,9 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     if (prevEval.pdf <= 0.f)
     {
-        return 0.f;
+        debugZeroReason = 7; return 0.f;
     }
 
-    // Reconstruct x_j facing the reconnection ray, as ClosestHit_Primary orients hits
-    HitInfo rcHit = path.rcHit;
-    bool rcIsBackface = bool(path.flags & PATH_FLAGS_RC_HIT_BACKFACE);
-    if (dot(rcHit.hitNor_WS, -wi_WS) < 0.f)
-    {
-        rcHit.hitNor_WS = -rcHit.hitNor_WS;
-        rcIsBackface = !rcIsBackface;
-    }
     const InstanceData rcInstanceData = instanceDatas[rcHit.instanceId];
     const PerTriangleData rcPerTriData = perTriDatas[rcInstanceData.perTriDatasBufferOffset + rcHit.triangleIdx];
     Material rcMaterial = materials[rcInstanceData.materialIdx];
@@ -450,14 +468,14 @@ float3 evaluateReconnection(const ReplayTarget replay,
     rcMaterial.baseColor = getMaterialBaseColor(rcMaterial, rcHit.uv, rcTexCtx).rgb;
     rcMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
 
-    const BsdfEval rcEval = evaluateBsdf(rcMaterial, rcHit.uv, -wi_WS, path.rcWi, rcHit.hitNor_WS, rcTexCtx);
-    const float3 rcFactor = rcEval.value * absCosTheta(path.rcWi, rcHit.hitNor_WS);
+    const BsdfEval rcEval = evaluateBsdf(rcMaterial, rcHit.uv, -wi_WS, rcWi_WS, rcHit.hitNor_WS, rcTexCtx);
+    const float3 rcFactor = rcEval.value * absCosTheta(rcWi_WS, rcHit.hitNor_WS);
 
     // The offset path must reconnect here too
     if (!isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, rcHit.hitPos_WS, rcHit.hitNor_WS,
             rcEval.pdf, false, rcMaterial.hasGlossy(), footprintThreshold))
     {
-        return 0.f;
+        debugZeroReason = 8; return 0.f;
     }
 
     // When x_j precedes the light vertex, the final segment's path MIS weight is recomputed here
@@ -465,7 +483,7 @@ float3 evaluateReconnection(const ReplayTarget replay,
     const float rcDenominator = rcPrecedesLight ? (path.rcLightPdf + rcEval.pdf) : rcEval.pdf;
     if (rcDenominator <= 0.f)
     {
-        return 0.f;
+        debugZeroReason = 9; return 0.f;
     }
 
     const bool finalSegmentIsNee = rcPrecedesLight &&
@@ -589,7 +607,7 @@ float3 pathTraceRay(inout Payload payload,
     RcState rc;
     rc.vertexIdx = 0;
     rc.hit = payload.hitInfo;
-    rc.hitIsBackface = false;
+    rc.instanceGeneration = 0;
     rc.prevLobeDiffuse = false;
     rc.wi = 0.f;
     rc.prevPdfTimesGeom = 0.f;
@@ -684,7 +702,7 @@ float3 pathTraceRay(inout Payload payload,
                     {
                         const float jacobianTerms =
                             bounceBsdfPdf * reconnectionGeometryTerm(surfPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
-                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT), 0.f, Le,
+                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, instanceData.generation, 0.f, Le,
                             jacobianTerms, bounceSampledDiffuse);
                     }
                     addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
@@ -790,7 +808,7 @@ float3 pathTraceRay(inout Payload payload,
                 }
                 rc.vertexIdx = vertexIdx;
                 rc.hit = payload.hitInfo;
-                rc.hitIsBackface = bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT);
+                rc.instanceGeneration = instanceData.generation;
                 rc.prevLobeDiffuse = bounceSampledDiffuse;
                 rc.wi = surfBsdfSample.wi_WS;
                 rc.prevPdfTimesGeom = bounceBsdfPdf * reconnectionGeometryTerm(prevSurfPos_WS, surfPos_WS, surfNor_WS);
@@ -853,7 +871,8 @@ float3 pathTraceRay(inout Payload payload,
                             // Forced light reconnection (Lin et al. 2026, Section 6.2.3): replay never re-samples lights
                             const float jacobianTerms = lightSample.pdf *
                                 reconnectionGeometryTerm(surfPos_WS, lightSample.lightHit.hitPos_WS, lightSample.lightHit.hitNor_WS);
-                            setCandidateRcAtLightVertex(candidate, lightSample.lightHit, false, 0.f, lightSample.Le, jacobianTerms,
+                            setCandidateRcAtLightVertex(candidate, lightSample.lightHit,
+                                instanceDatas[lightSample.lightHit.instanceId].generation, 0.f, lightSample.Le, jacobianTerms,
                                 surfBsdfSample.sampledDiffuse);
                             candidate.rcLightPdf = lightSample.pdf;
                         }
@@ -896,7 +915,7 @@ float3 pathTraceRay(inout Payload payload,
                         }
                         else
                         {
-                            setCandidateRcAtLightVertex(candidate, rc.hit, false, domeLightSample.wi_WS, domeLightSample.Le,
+                            setCandidateRcAtLightVertex(candidate, rc.hit, 0, domeLightSample.wi_WS, domeLightSample.Le,
                                 domeLightSample.pdf, surfBsdfSample.sampledDiffuse);
                         }
                         addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
@@ -1059,7 +1078,7 @@ float3 pathTraceRay(inout Payload payload,
             }
             else if (domeQualifies)
             {
-                setCandidateRcAtLightVertex(candidate, rc.hit, false, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
+                setCandidateRcAtLightVertex(candidate, rc.hit, 0, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
             }
             addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
             break;
@@ -1118,6 +1137,9 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
     const bool resultNonFinite = any(isnan(shifted.F)) || any(isinf(shifted.F)) || isnan(shifted.jacobian) || isinf(shifted.jacobian);
     if (jacobianExtreme || resultNonFinite)
     {
+        debugZeroReason = (debugZeroReason == 0) ? 20 : debugZeroReason;
+        debugZeroKind = 1 + getPathTechnique(path.flags) + (getRcVertexIdx(path.flags) == getPathLength(path.flags) ? 4 : 0) + (getRcVertexIdx(path.flags) == 0 ? 8 : 0)
+            + ((path.rcJacobianTerms == 0.f) ? 16 : 0);
         shifted.F = 0.f;
         shifted.jacobian = 0.f;
         shifted.rcJacobianTerms = 0.f;
@@ -1164,7 +1186,30 @@ void initialSamplingRayGen()
             }
             else
             {
+#if RESTIR_ATTRIBUTION_TEST
+                // TEMP attribution: red = replay returned zero (reason codes), green = relative error > 10%, blue = > 0.1%
+                const float relErr = luminance(abs(replayed.F - stored.F)) / max(luminance(stored.F), 1e-6f);
+                pathColor = 0.f;
+                if (stored.W > 0.f)
+                {
+                    if (!any(replayed.F > 0.f))
+                    {
+                        pathColor = float3(255.f, debugZeroReason, debugZeroKind) / 255.f;
+                    }
+                    else if (relErr > 0.1f)
+                    {
+                        const uint kind = 1 + getPathTechnique(stored.flags) + (getRcVertexIdx(stored.flags) == getPathLength(stored.flags) ? 4 : 0) +
+                            (getRcVertexIdx(stored.flags) == 0 ? 8 : 0) + 16 * min(getRcVertexIdx(stored.flags), 7);
+                        pathColor = float3(0.f, kind, clamp(relErr * 100.f, 1.f, 255.f)) / 255.f;
+                    }
+                    else if (relErr > 0.001f)
+                    {
+                        pathColor = float3(0.f, 0.f, 1.f);
+                    }
+                }
+#else
                 pathColor = (stored.W > 0.f) ? 100.f * abs(replayed.F - stored.F) / max(luminance(stored.F), 1e-6f) : 0.f;
+#endif
                 outPtDiffuseAlbedo = 0.f;
             }
         }
@@ -1207,7 +1252,7 @@ PathReservoir mergeSlotReservoirs(const uint2 pixelIdx)
     }
     const float pHat = luminance(merged.F);
     merged.W = (weightSum > 0.f && pHat > 0.f) ? weightSum / pHat : 0.f;
-    merged.M = 1.f;
+    setReservoirM(merged, 1.f);
     return merged;
 }
 
@@ -1225,22 +1270,36 @@ void temporalRayGen()
 
     uint2 prevPixelIdx;
     const bool hasHistory = bool(restirParams.temporalHistoryValid) && restirParams.temporalConfidenceCap > 0.f &&
-        bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT) && reprojectToPrevPixel(gbufferData.hitInfo, gbufferPrevIn, prevPixelIdx);
+        bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT) && reprojectToPrevPixel(gbufferData.hitInfo, prevPixelIdx);
     if (!hasHistory)
     {
         reservoirsMergedOut[linearPixelIdx] = canonical;
         return;
     }
 
-    // Everything stored last frame lives in last frame's render space; replay traces the current scene
+    // The previous frame's primary hit is rebuilt on the current mesh (so it follows deforming
+    // geometry) and must be the same surface. Everything stored last frame lives in last frame's
+    // render space; replay traces the current scene.
     const float3 prevToCurrent = prevFrameToCurrentOffset();
     const uint prevLinearPixelIdx = prevPixelIdx.y * renderParams.renderSize.x + prevPixelIdx.x;
-    PathReservoir history = reservoirsHistoryIn[prevLinearPixelIdx];
-    if (isOnDeformingGeometry(gbufferData.hitInfo) || (getRcVertexIdx(history.flags) != 0 && isOnDeformingGeometry(history.rcHit)))
+    GbufferData prevGbufferData = gbufferPrevIn[prevLinearPixelIdx];
+    const float3 prevCameraPos_WS = cameraParams.prevPos_WS + prevToCurrent;
+    HitInfo prevHit;
+    float3 prevHitGeoNor_WS;
+    bool prevHitIsBackface;
+    const bool prevHitValid = bool(prevGbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT) && prevGbufferData.materialIdx != MATERIAL_IDX_INVALID &&
+        rebuildHit(prevGbufferData.hitInfo.instanceId, prevGbufferData.instanceGeneration, prevGbufferData.hitInfo.triangleIdx,
+            prevGbufferData.hitInfo.barycentrics, prevCameraPos_WS, prevHit, prevHitGeoNor_WS, prevHitIsBackface);
+    if (!prevHitValid || !isSameSurface(prevHit, gbufferData.hitInfo))
     {
         reservoirsMergedOut[linearPixelIdx] = canonical;
         return;
     }
+    prevGbufferData.hitInfo = prevHit;
+    prevGbufferData.payloadFlags =
+        (prevGbufferData.payloadFlags & ~PAYLOAD_FLAG_BACKFACE_HIT) | (prevHitIsBackface ? PAYLOAD_FLAG_BACKFACE_HIT : 0);
+
+    PathReservoir history = reservoirsHistoryIn[prevLinearPixelIdx];
     // Decorrelation (Enhanced, Section 5): where last frame's reservoirs around the history pixel
     // mostly held copies of one sample, trust the history less so the copy stops spreading
     float confidenceCap = restirParams.temporalConfidenceCap;
@@ -1249,21 +1308,19 @@ void temporalRayGen()
         const float duplication = duplicationMapIn[prevLinearPixelIdx];
         confidenceCap = lerp(confidenceCap, restirParams.decorrelationMinCap, pow(duplication, restirParams.decorrelationExponent));
     }
-    history.M = min(history.M, confidenceCap);
-    history.rcHit.hitPos_WS += prevToCurrent;
-    GbufferData prevGbufferData = gbufferPrevIn[prevLinearPixelIdx];
-    prevGbufferData.hitInfo.hitPos_WS += prevToCurrent;
+    setReservoirM(history, min(reservoirM(history), confidenceCap));
 
     const ShiftedPath historyAtCanonical = shiftPathToPixel(history, gbufferData, pixelIdx, cameraParams.pos_WS);
-    const ShiftedPath canonicalAtHistory =
-        shiftPathToPixel(canonical, prevGbufferData, prevPixelIdx, cameraParams.prevPos_WS + prevToCurrent);
+    const ShiftedPath canonicalAtHistory = shiftPathToPixel(canonical, prevGbufferData, prevPixelIdx, prevCameraPos_WS);
 
-    const float neighborConfidence = history.M;
-    const float totalConfidence = canonical.M + neighborConfidence;
+    const float canonicalM = reservoirM(canonical);
+    const float historyM = reservoirM(history);
+    const float neighborConfidence = historyM;
+    const float totalConfidence = canonicalM + neighborConfidence;
     const float canonicalPHat = luminance(canonical.F);
 
-    const float canonicalMis = canonical.M / totalConfidence +
-        pairwiseMisCanonicalTerm(canonical.M, history.M, neighborConfidence, totalConfidence, canonicalPHat,
+    const float canonicalMis = canonicalM / totalConfidence +
+        pairwiseMisCanonicalTerm(canonicalM, historyM, neighborConfidence, totalConfidence, canonicalPHat,
             luminance(canonicalAtHistory.F) * canonicalAtHistory.jacobian);
 
     PathReservoir selected = canonical;
@@ -1274,7 +1331,7 @@ void temporalRayGen()
     if (historyPHat > 0.f && historyAtCanonical.jacobian > 0.f && history.W > 0.f)
     {
         const float pHatFromHistory = luminance(history.F) / historyAtCanonical.jacobian;
-        const float mis = pairwiseMisNeighbor(canonical.M, history.M, neighborConfidence, totalConfidence, historyPHat, pHatFromHistory);
+        const float mis = pairwiseMisNeighbor(canonicalM, historyM, neighborConfidence, totalConfidence, historyPHat, pHatFromHistory);
         const float weight = mis * historyPHat * history.W * historyAtCanonical.jacobian;
         if (weight > 0.f)
         {
@@ -1291,7 +1348,7 @@ void temporalRayGen()
     }
 
     selected.W = (weightSum > 0.f && selectedPHat > 0.f) ? weightSum / selectedPHat : 0.f;
-    selected.M = totalConfidence;
+    setReservoirM(selected, totalConfidence);
     selected.debugFlags = (historyPHat > 0.f && historyAtCanonical.jacobian > 0.f) ? RESERVOIR_DEBUG_TEMPORAL_SHIFT_SUCCEEDED : 0;
     reservoirsMergedOut[linearPixelIdx] = selected;
 }

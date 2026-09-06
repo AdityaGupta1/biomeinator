@@ -186,6 +186,7 @@ void Scene::init()
     {
         availableInstanceIds.push(instanceIdx);
     }
+    this->instanceGenerations.assign(this->maxNumInstances, 0);
 
     this->sharedBlasUploadBuffer.setName(L"scene sharedBlasUpload");
     this->sharedBlasUploadBuffer.init(1 << 16 /*bytes*/);
@@ -264,6 +265,7 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
         {
             this->availableInstanceIds.push(instanceIdx);
         }
+        this->instanceGenerations.resize(this->maxNumInstances, 0);
     }
 
     const uint32_t id = this->availableInstanceIds.front();
@@ -291,6 +293,7 @@ void Scene::markInstanceReadyForBlasBuild(Instance* instance)
 void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
+    ++this->instanceGenerations[instance->id];
     this->instancesReadyForBlasBuild.erase(instance);
     this->deformableInstances.erase(instance);
 
@@ -552,6 +555,8 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             instance->transformOffset.y,
             instance->transformOffset.z,
         };
+        instanceData.generation = this->instanceGenerations[instance->id];
+        instanceData.objectToWorld = instance->transform;
 
         this->mappedInstanceDatasArray[instance->id] = instanceData;
         this->mappedInstanceDatasArray.markDirty(instance->id);

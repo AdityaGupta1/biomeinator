@@ -16,12 +16,10 @@ float3 prevFrameToCurrentOffset()
     return float3(cameraParams.prevGlobalInstanceOffset - cameraParams.globalInstanceOffset);
 }
 
-// Finds the previous frame's pixel that saw this frame's primary hit and checks that it saw the same
-// surface: the previous hit must exist, lie within a few pixel footprints of the current one and face
-// the same way. A pixel is identified by its area, ignoring jitter: with a still camera every pixel
-// reprojects onto itself, otherwise sub-pixel jitter would pick a neighbor whenever it shrank and the
-// reused history would visibly drift.
-bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> gbufferPrevIn, out uint2 prevPixelIdx)
+// Finds the previous frame's pixel that saw this frame's primary hit. A pixel is identified by its
+// area, ignoring jitter: with a still camera every pixel reprojects onto itself, otherwise sub-pixel
+// jitter would pick a neighbor whenever it shrank and the reused history would visibly drift.
+bool reprojectToPrevPixel(const HitInfo hitInfo, out uint2 prevPixelIdx)
 {
     prevPixelIdx = 0;
 
@@ -38,36 +36,20 @@ bool reprojectToPrevPixel(const HitInfo hitInfo, StructuredBuffer<GbufferData> g
         return false;
     }
     prevPixelIdx = uint2(prevPixel);
-
-    const GbufferData prevGbuffer = gbufferPrevIn[prevPixelIdx.y * renderParams.renderSize.x + prevPixelIdx.x];
-    if (!bool(prevGbuffer.payloadFlags & PAYLOAD_FLAG_DID_HIT) || prevGbuffer.materialIdx == MATERIAL_IDX_INVALID)
-    {
-        return false;
-    }
-
-    // Same surface: the previous hit lies close to the current hit's tangent plane and faces the same
-    // way. A plain distance would reject grazing surfaces, where one pixel of jitter moves the hit by
-    // a footprint over cos(theta) along the surface.
-    const float distToCamera = distance(cameraParams.pos_WS, hitInfo.hitPos_WS);
-    const float pixelFootprint = distToCamera * 2.f * cameraParams.tanHalfFovY / float(renderParams.renderSize.y);
-    const float3 prevHitPos_WS = prevGbuffer.hitInfo.hitPos_WS + prevFrameToCurrentOffset();
-    if (abs(dot(prevHitPos_WS - hitInfo.hitPos_WS, hitInfo.hitNor_WS)) > 2.f * pixelFootprint)
-    {
-        return false;
-    }
-    return dot(prevGbuffer.hitInfo.hitNor_WS, hitInfo.hitNor_WS) > 0.9f;
+    return true;
 }
 
-// Deforming geometry (water) moves between frames, so anything stored on it last frame no longer
-// matches the surface the current scene traces against. The two temporal shifts then stop being
-// inverses of each other and the pairwise MIS no longer partitions unity, which biases the result
-// upward. Such history is not reused. The proper fix is storing reconnection vertices (and the
-// previous primary hits) as instance/triangle/barycentrics and rebuilding them on the current
-// mesh at replay, as the reference implementation does; that keeps temporal reuse on water and
-// is also the first step of the reservoir compression.
-bool isOnDeformingGeometry(const HitInfo hitInfo)
+// Whether a previous hit (rebuilt on the current mesh) is the same surface as the current one: it
+// lies close to the current hit's tangent plane and faces the same way. A plain distance would
+// reject grazing surfaces, where one pixel of jitter moves the hit by a footprint over cos(theta)
+// along the surface.
+bool isSameSurface(const HitInfo prevHit, const HitInfo hitInfo)
 {
-    const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
-    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+    const float distToCamera = distance(cameraParams.pos_WS, hitInfo.hitPos_WS);
+    const float pixelFootprint = distToCamera * 2.f * cameraParams.tanHalfFovY / float(renderParams.renderSize.y);
+    if (abs(dot(prevHit.hitPos_WS - hitInfo.hitPos_WS, hitInfo.hitNor_WS)) > 2.f * pixelFootprint)
+    {
+        return false;
+    }
+    return dot(prevHit.hitNor_WS, hitInfo.hitNor_WS) > 0.9f;
 }
