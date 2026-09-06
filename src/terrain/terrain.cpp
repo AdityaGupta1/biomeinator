@@ -126,7 +126,7 @@ void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
-    if (testMode && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
+    if (worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
