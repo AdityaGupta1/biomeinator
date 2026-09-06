@@ -37,6 +37,13 @@ float3 sampleSphericalCapUniform(const float3 axis_WS, const float minCosTheta, 
     return normalize(mul(computeTBN(axis_WS), sampledDir_OS));
 }
 
+// pdf of a direction known to lie inside the spherical cap
+float sphericalCapUniformPdfInside(const float minCosTheta)
+{
+    const float omega = M_TWO_PI * (1.f - minCosTheta); // solid angle of entire cone
+    return 1.f / omega;
+}
+
 // returns 0 if dir_WS is outside the spherical cap
 float sphericalCapUniformPdf(const float3 wi_WS, const float3 axis_WS, const float minCosTheta)
 {
@@ -44,7 +51,5 @@ float sphericalCapUniformPdf(const float3 wi_WS, const float3 axis_WS, const flo
     {
         return 0.f;
     }
-
-    const float omega = M_TWO_PI * (1.f - minCosTheta); // solid angle of entire cone
-    return 1.f / omega;
+    return sphericalCapUniformPdfInside(minCosTheta);
 }
