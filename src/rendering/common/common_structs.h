@@ -76,6 +76,10 @@ struct PathReservoir
 // A pass has RESTIR_STATS_PASS_STRIDE slots: pairs seen, pairs skipped for an empty reservoir, pairs
 // skipped for a missing partner, then per replayed-vertex-count bucket (0 .. RESTIR_STATS_REPLAY_BUCKETS-1, the last bucket meaning
 // that many or more) the shifts attempted and the shifts that produced a nonzero contribution.
+// Compiled out by default: the counting code and even its unused root descriptor made the whole
+// path tracing raygen measurably slower (the PT root signature is at the size where one more root
+// argument spills), so measuring shift outcomes takes a build with this set to 1.
+#define RESTIR_SHIFT_STATS 0
 #define RESTIR_STATS_REPLAY_BUCKETS 8
 #define RESTIR_STATS_PAIRS 0
 #define RESTIR_STATS_SKIPPED 1

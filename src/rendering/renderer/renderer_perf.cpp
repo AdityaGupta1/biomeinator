@@ -228,6 +228,11 @@ static nlohmann::json restirShiftStatsJson()
     {
         return nullptr;
     }
+    if (!RESTIR_SHIFT_STATS)
+    {
+        Logger::logError("perf run: --restirShiftStats needs a build with RESTIR_SHIFT_STATS set; no stats recorded");
+        return nullptr;
+    }
 
     std::array<uint32_t, RESTIR_STATS_COUNT> counters{};
     const D3D12_RANGE readRange = { 0, sizeof(counters) };

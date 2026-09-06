@@ -436,7 +436,9 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_MERGED_OUT), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHIFTED_OUT), renderState.dev_shifted->GetGPUVirtualAddress());
+#if RESTIR_SHIFT_STATS
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESTIR_STATS_OUT), renderState.dev_restirStats->GetGPUVirtualAddress());
+#endif
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_PREV_IN), previousGbuffer()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RESERVOIRS_HISTORY_IN), previousReservoirsHistory()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(DUPLICATION_MAP_IN), renderState.dev_duplicationMap->GetGPUVirtualAddress());
@@ -492,7 +494,7 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->Dispatch(Util::calculateDispatchSize(renderState.renderWidth, RESTIR_DUPLICATION_WORKGROUP_SIZE_X),
                                   Util::calculateDispatchSize(renderState.renderHeight, RESTIR_DUPLICATION_WORKGROUP_SIZE_Y), 1);
 
-    if (bool(paramBlockManager.restirParams->shiftStatsEnabled))
+    if (RESTIR_SHIFT_STATS && bool(paramBlockManager.restirParams->shiftStatsEnabled))
     {
         BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(), renderState.dev_restirStats.Get(),
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);

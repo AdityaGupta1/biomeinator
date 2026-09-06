@@ -36,7 +36,9 @@ RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFU
 RWStructuredBuffer<PathReservoir> reservoirsOut : REGISTER_U(PT, RESERVOIRS_OUT);
 RWStructuredBuffer<PathReservoir> reservoirsMergedOut : REGISTER_U(PT, RESERVOIRS_MERGED_OUT);
 RWStructuredBuffer<ShiftedPath> shiftedOut : REGISTER_U(PT, SHIFTED_OUT);
+#if RESTIR_SHIFT_STATS
 RWStructuredBuffer<uint> restirStatsOut : REGISTER_U(PT, RESTIR_STATS_OUT);
+#endif
 StructuredBuffer<uint> pairingTextures : REGISTER_T(PT, PAIRING_TEXTURES_IN);
 StructuredBuffer<GbufferData> gbufferPrevIn : REGISTER_T(PT, GBUFFER_PREV_IN);
 StructuredBuffer<PathReservoir> reservoirsHistoryIn : REGISTER_T(PT, RESERVOIRS_HISTORY_IN);
@@ -1262,9 +1264,10 @@ PathReservoir mergeSlotReservoirs(const uint2 pixelIdx)
 // frame's pixel, and this pixel's path into the previous frame's pixel for the canonical MIS term.
 // The result is the input to spatial reuse.
 // Shift outcome counters for the perf report, see RESTIR_STATS_* in common_structs.h. `path` is
-// the reservoir that was shifted (or empty when the pair was skipped).
+// the reservoir that was shifted (or empty when the pair was skipped). See RESTIR_SHIFT_STATS.
 void recordShiftStats(const uint passBase, const bool noPartner, const bool skipped, const PathReservoir path, const ShiftedPath shifted)
 {
+#if RESTIR_SHIFT_STATS
     if (!bool(restirParams.shiftStatsEnabled))
     {
         return;
@@ -1290,6 +1293,7 @@ void recordShiftStats(const uint passBase, const bool noPartner, const bool skip
     {
         InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_BUCKETS_BASE + 2 * bucket + 1], 1);
     }
+#endif
 }
 
 void temporalRayGen()
