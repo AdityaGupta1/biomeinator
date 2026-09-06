@@ -74,6 +74,11 @@ uint rcInstanceGeneration(const PathReservoir reservoir)
     return reservoir.rcInstance >> PATH_RC_INSTANCE_GENERATION_SHIFT;
 }
 
+uint packRcInstance(const uint generation, const uint instanceId)
+{
+    return (generation << PATH_RC_INSTANCE_GENERATION_SHIFT) | (instanceId & PATH_RC_INSTANCE_ID_MASK);
+}
+
 uint packBarycentrics(const float2 bary2)
 {
     const uint2 fixedPoint = uint2(saturate(bary2) * 65535.f + 0.5f);
@@ -98,9 +103,10 @@ struct PathCandidate
     uint pathTechnique;
     uint rcVertexIdx;
     bool rcPrevLobeDiffuse;
-    HitInfo rcHit;
-    uint rcInstanceGeneration;
-    float3 rcWi;
+    uint rcInstance; // packed as PathReservoir::rcInstance
+    uint rcTriangleIdx;
+    uint rcBarycentrics; // packed as PathReservoir::rcBarycentrics
+    uint rcWi; // octahedral-encoded
     float3 rcRadiance;
     float rcLightPdf;
     float rcJacobianTerms;
@@ -128,64 +134,76 @@ PathReservoir makeEmptyPathReservoir()
 // ReSTIR PT). Each candidate's F is its full contribution as the path tracer already estimates it,
 // so in primary sample space the source pdf is the Russian roulette survival product and the
 // resampling weight luminance(F_noRR) / rrProduct is just luminance(F). The stored integrand
-// excludes the roulette division, since random replay never applies roulette.
+// excludes the roulette division, since random replay never applies roulette. The selected
+// candidate is not kept here: the caller writes it through to its reservoir slot on acceptance,
+// which keeps 16 registers from staying live across every TraceRay of the path.
 struct PathTreeReservoir
 {
-    PathReservoir selected;
     float weightSum;
+    float selectedPHat;
+    bool hasSelected;
     RandomNumberGenerator rng;
     uint seed;
     uint splitIdx;
+    uint slotIdx;
 
-    void addCandidate(const PathCandidate candidate)
+    // True when the candidate replaces the selection; the caller then stores packCandidate of it
+    bool addCandidate(const PathCandidate candidate)
     {
         const float weight = luminance(candidate.F);
         if (weight <= 0.f)
         {
-            return;
+            return false;
         }
 
         weightSum += weight;
         if (rng.nextFloat() * weightSum >= weight)
         {
-            return;
+            return false;
         }
 
-        selected.F = candidate.F * candidate.rrProduct;
-        selected.seed = seed;
-        selected.flags = (candidate.pathLength << PATH_FLAGS_LENGTH_SHIFT) |
+        selectedPHat = weight * candidate.rrProduct; // pHat of the stored F, which excludes the roulette division
+        hasSelected = true;
+        return true;
+    }
+
+    // W = weightSum / pHat(selected)
+    float finalW()
+    {
+        return hasSelected ? weightSum / selectedPHat : 0.f;
+    }
+};
+
+// The reservoir record of a candidate, without W and M
+PathReservoir packCandidate(const PathCandidate candidate, const uint seed, const uint splitIdx)
+{
+    PathReservoir packed = makeEmptyPathReservoir();
+    packed.F = candidate.F * candidate.rrProduct;
+    packed.seed = seed;
+    packed.flags = (candidate.pathLength << PATH_FLAGS_LENGTH_SHIFT) |
                          (candidate.rcVertexIdx << PATH_FLAGS_RC_VERTEX_SHIFT) |
                          (candidate.pathTechnique << PATH_FLAGS_TECHNIQUE_SHIFT) |
                          (splitIdx != 0 ? PATH_FLAGS_SPLIT_IDX : 0) |
                          (candidate.rcPrevLobeDiffuse ? PATH_FLAGS_RC_PREV_LOBE_DIFFUSE : 0);
-        selected.rcLightPdf = candidate.rcLightPdf;
-        selected.rcJacobianTerms = candidate.rcJacobianTerms;
-        selected.rcInstance = (candidate.rcInstanceGeneration << PATH_RC_INSTANCE_GENERATION_SHIFT) |
-                              (candidate.rcHit.instanceId & PATH_RC_INSTANCE_ID_MASK);
-        selected.rcTriangleIdx = candidate.rcHit.triangleIdx;
-        selected.rcBarycentrics = packBarycentrics(candidate.rcHit.barycentrics);
-        selected.rcWi = octEncode(candidate.rcWi);
-        selected.rcRadiance = candidate.rcRadiance;
-    }
+    packed.rcLightPdf = candidate.rcLightPdf;
+    packed.rcJacobianTerms = candidate.rcJacobianTerms;
+    packed.rcInstance = candidate.rcInstance;
+    packed.rcTriangleIdx = candidate.rcTriangleIdx;
+    packed.rcBarycentrics = candidate.rcBarycentrics;
+    packed.rcWi = candidate.rcWi;
+    packed.rcRadiance = candidate.rcRadiance;
+    return packed;
+}
 
-    // W = weightSum / pHat(selected). One path tree is one unit of confidence, empty or not.
-    PathReservoir finalize()
-    {
-        PathReservoir result = selected;
-        const float pHat = luminance(result.F);
-        result.W = (weightSum > 0.f && pHat > 0.f) ? weightSum / pHat : 0.f;
-        setReservoirM(result, 1.f);
-        return result;
-    }
-};
-
-PathTreeReservoir initPathTreeReservoir(const RandomNumberGenerator rng, const uint seed, const uint splitIdx)
+PathTreeReservoir initPathTreeReservoir(const RandomNumberGenerator rng, const uint seed, const uint splitIdx, const uint slotIdx)
 {
     PathTreeReservoir reservoir;
-    reservoir.selected = makeEmptyPathReservoir();
     reservoir.weightSum = 0.f;
+    reservoir.selectedPHat = 0.f;
+    reservoir.hasSelected = false;
     reservoir.rng = rng;
     reservoir.seed = seed;
     reservoir.splitIdx = splitIdx;
+    reservoir.slotIdx = slotIdx;
     return reservoir;
 }

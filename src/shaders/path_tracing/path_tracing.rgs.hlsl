@@ -158,13 +158,16 @@ ReplayTarget noReplay()
 }
 
 // The reconnection vertex chosen so far while tracing a path tree
+// Kept packed as the reservoir stores it: this state and the selected reservoir stay live across
+// every TraceRay of the path, where registers are what the raygen is short of
 struct RcState
 {
     uint vertexIdx; // 0 = none yet
-    HitInfo hit;
-    uint instanceGeneration;
+    uint instance;
+    uint triangleIdx;
+    uint barycentrics;
     bool prevLobeDiffuse; // lobe sampled at the vertex before
-    float3 wi; // direction sampled at the rc vertex
+    uint wi; // octahedral-encoded direction sampled at the rc vertex
     float prevPdfTimesGeom; // pdf of the direction that reached the rc vertex, times its geometry term
     float pdf; // pdf of wi
 };
@@ -176,7 +179,10 @@ void addPathCandidate(inout PathTreeReservoir reservoir, const PathCandidate can
 {
     if (useRestirPt)
     {
-        reservoir.addCandidate(candidate);
+        if (reservoir.addCandidate(candidate))
+        {
+            reservoirsOut[reservoir.slotIdx] = packCandidate(candidate, reservoir.seed, reservoir.splitIdx);
+        }
     }
     else
     {
@@ -194,14 +200,10 @@ PathCandidate makePathCandidate(const float3 F, const float rrProduct, const uin
     candidate.rcVertexIdx = 0;
     candidate.rcPrevLobeDiffuse = false;
     candidate.rcJacobianTerms = 0.f;
-    candidate.rcHit.hitPos_WS = 0.f;
-    candidate.rcHit.instanceId = 0;
-    candidate.rcHit.hitNor_WS = 0.f;
-    candidate.rcHit.triangleIdx = 0;
-    candidate.rcHit.uv = 0.f;
-    candidate.rcHit.barycentrics = 0.f;
-    candidate.rcInstanceGeneration = 0;
-    candidate.rcWi = 0.f;
+    candidate.rcInstance = 0;
+    candidate.rcTriangleIdx = 0;
+    candidate.rcBarycentrics = 0;
+    candidate.rcWi = 0;
     candidate.rcRadiance = 0.f;
     candidate.rcLightPdf = 0.f;
     return candidate;
@@ -216,26 +218,41 @@ void setCandidateRcFromState(inout PathCandidate candidate, const RcState rc, co
 {
     const bool rcPrecedesLight = (rc.vertexIdx + 1 == candidate.pathLength);
     candidate.rcVertexIdx = rc.vertexIdx;
-    candidate.rcHit = rc.hit;
-    candidate.rcInstanceGeneration = rc.instanceGeneration;
+    candidate.rcInstance = rc.instance;
+    candidate.rcTriangleIdx = rc.triangleIdx;
+    candidate.rcBarycentrics = rc.barycentrics;
     candidate.rcPrevLobeDiffuse = rc.prevLobeDiffuse;
-    candidate.rcWi = rcPrecedesLight ? finalSegmentDir : rc.wi;
+    candidate.rcWi = rcPrecedesLight ? octEncode(finalSegmentDir) : rc.wi;
     candidate.rcRadiance = rcPrecedesLight ? radianceIfRcPrecedesLight : radianceOtherwise;
     candidate.rcLightPdf = lightPdf;
     candidate.rcJacobianTerms = rc.prevPdfTimesGeom * ((rcPrecedesLight && finalSegmentIsNee) ? 1.f : rc.pdf);
 }
 
-// Reconnection data for a candidate that reconnects straight to its light vertex. For the dome, the
-// hit is unused and the direction identifies the vertex. `jacobianTerms` is the technique's pdf of
-// the light vertex times its geometry term.
+// Reconnection data for a candidate that reconnects straight to its light vertex. `jacobianTerms`
+// is the technique's pdf of the light vertex times its geometry term.
 void setCandidateRcAtLightVertex(inout PathCandidate candidate, const HitInfo lightHit, const uint lightInstanceGeneration,
-    const float3 domeDir, const float3 emission, const float jacobianTerms, const bool prevLobeDiffuse)
+    const float3 emission, const float jacobianTerms, const bool prevLobeDiffuse)
 {
     candidate.rcVertexIdx = candidate.pathLength;
-    candidate.rcHit = lightHit;
-    candidate.rcInstanceGeneration = lightInstanceGeneration;
+    candidate.rcInstance = packRcInstance(lightInstanceGeneration, lightHit.instanceId);
+    candidate.rcTriangleIdx = lightHit.triangleIdx;
+    candidate.rcBarycentrics = packBarycentrics(lightHit.barycentrics);
     candidate.rcPrevLobeDiffuse = prevLobeDiffuse;
-    candidate.rcWi = domeDir;
+    candidate.rcWi = 0;
+    candidate.rcRadiance = emission;
+    candidate.rcJacobianTerms = jacobianTerms;
+}
+
+// Same for the dome, where the direction identifies the vertex and there is no hit
+void setCandidateRcAtDome(inout PathCandidate candidate, const float3 domeDir, const float3 emission, const float jacobianTerms,
+    const bool prevLobeDiffuse)
+{
+    candidate.rcVertexIdx = candidate.pathLength;
+    candidate.rcInstance = 0;
+    candidate.rcTriangleIdx = 0;
+    candidate.rcBarycentrics = 0;
+    candidate.rcPrevLobeDiffuse = prevLobeDiffuse;
+    candidate.rcWi = octEncode(domeDir);
     candidate.rcRadiance = emission;
     candidate.rcJacobianTerms = jacobianTerms;
 }
@@ -604,10 +621,11 @@ float3 pathTraceRay(inout Payload payload,
         reconnectionFootprintThreshold(cameraPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
     RcState rc;
     rc.vertexIdx = 0;
-    rc.hit = payload.hitInfo;
-    rc.instanceGeneration = 0;
+    rc.instance = 0;
+    rc.triangleIdx = 0;
+    rc.barycentrics = 0;
     rc.prevLobeDiffuse = false;
-    rc.wi = 0.f;
+    rc.wi = 0;
     rc.prevPdfTimesGeom = 0.f;
     rc.pdf = 0.f;
 
@@ -700,7 +718,7 @@ float3 pathTraceRay(inout Payload payload,
                     {
                         const float jacobianTerms =
                             bounceBsdfPdf * reconnectionGeometryTerm(surfPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
-                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, instanceData.generation, 0.f, Le,
+                        setCandidateRcAtLightVertex(candidate, payload.hitInfo, instanceData.generation, Le,
                             jacobianTerms, bounceSampledDiffuse);
                     }
                     addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
@@ -820,10 +838,11 @@ float3 pathTraceRay(inout Payload payload,
                     return 0.f;
                 }
                 rc.vertexIdx = vertexIdx;
-                rc.hit = payload.hitInfo;
-                rc.instanceGeneration = instanceData.generation;
+                rc.instance = packRcInstance(instanceData.generation, payload.hitInfo.instanceId);
+                rc.triangleIdx = payload.hitInfo.triangleIdx;
+                rc.barycentrics = packBarycentrics(payload.hitInfo.barycentrics);
                 rc.prevLobeDiffuse = bounceSampledDiffuse;
-                rc.wi = surfBsdfSample.wi_WS;
+                rc.wi = octEncode(surfBsdfSample.wi_WS);
                 rc.prevPdfTimesGeom = bounceBsdfPdf * reconnectionGeometryTerm(prevSurfPos_WS, surfPos_WS, surfNor_WS);
                 rc.pdf = surfBsdfSample.pdf;
             }
@@ -885,7 +904,7 @@ float3 pathTraceRay(inout Payload payload,
                             const float jacobianTerms = lightSample.pdf *
                                 reconnectionGeometryTerm(surfPos_WS, lightSample.lightHit.hitPos_WS, lightSample.lightHit.hitNor_WS);
                             setCandidateRcAtLightVertex(candidate, lightSample.lightHit,
-                                instanceDatas[lightSample.lightHit.instanceId].generation, 0.f, lightSample.Le, jacobianTerms,
+                                instanceDatas[lightSample.lightHit.instanceId].generation, lightSample.Le, jacobianTerms,
                                 surfBsdfSample.sampledDiffuse);
                             candidate.rcLightPdf = lightSample.pdf;
                         }
@@ -928,7 +947,7 @@ float3 pathTraceRay(inout Payload payload,
                         }
                         else
                         {
-                            setCandidateRcAtLightVertex(candidate, rc.hit, 0, domeLightSample.wi_WS, domeLightSample.Le,
+                            setCandidateRcAtDome(candidate, domeLightSample.wi_WS, domeLightSample.Le,
                                 domeLightSample.pdf, surfBsdfSample.sampledDiffuse);
                         }
                         addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
@@ -1091,7 +1110,7 @@ float3 pathTraceRay(inout Payload payload,
             }
             else if (domeQualifies)
             {
-                setCandidateRcAtLightVertex(candidate, rc.hit, 0, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
+                setCandidateRcAtDome(candidate, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
             }
             addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
             break;
@@ -1137,7 +1156,7 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
     }
 
     Payload payload = initPayloadFromGbuffer(gbufferData, cameraPos_WS);
-    PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0, 0);
+    PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0, 0, 0); // replay never adds candidates
     const uint pathSplitIdx = bool(path.flags & PATH_FLAGS_SPLIT_IDX) ? 1 : 0;
     float3 unusedColor, unusedAlbedo;
     shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, cameraPos_WS, pathSplitIdx, path.seed,
@@ -1176,7 +1195,7 @@ void initialSamplingRayGen()
     const uint pathSeed = initRng(constantParams.rngSeed, 987654103, slotIdx, renderParams.frameNumber).seed;
     // Separate stream from the path's RNG so resampling draws never perturb the path itself
     PathTreeReservoir reservoir = initPathTreeReservoir(
-        initRng(constantParams.rngSeed, 192837465, slotIdx, renderParams.frameNumber), pathSeed, pathSplitIdx);
+        initRng(constantParams.rngSeed, 192837465, slotIdx, renderParams.frameNumber), pathSeed, pathSplitIdx, slotIdx);
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
@@ -1186,7 +1205,19 @@ void initialSamplingRayGen()
 
     if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
     {
-        reservoirsOut[slotIdx] = reservoir.finalize();
+        // One path tree is one unit of confidence, empty or not
+        if (reservoir.hasSelected)
+        {
+            reservoirsOut[slotIdx].W = reservoir.finalW();
+            reservoirsOut[slotIdx].flags = (reservoirsOut[slotIdx].flags & PATH_FLAGS_CONFIDENCE_MASK) |
+                (uint(PATH_FLAGS_CONFIDENCE_SCALE) << PATH_FLAGS_CONFIDENCE_SHIFT);
+        }
+        else
+        {
+            PathReservoir empty = makeEmptyPathReservoir();
+            setReservoirM(empty, 1.f);
+            reservoirsOut[slotIdx] = empty;
+        }
         const PathReservoir stored = reservoirsOut[slotIdx];
 
         const RestirDebugMode debugMode = (RestirDebugMode)renderParams.restirDebugMode;
