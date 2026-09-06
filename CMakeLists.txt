@@ -275,15 +275,17 @@ target_include_directories(Biomeinator PRIVATE
     "${EXT}/stb/include"
     "${EXT}/streamline/include"
     "${EXT}/tinygltf/include"
+    "${EXT}/WinPixEventRuntime/include"
 )
 
 target_link_directories(Biomeinator PRIVATE
     "${EXT}/dxc/lib"
     "${EXT}/nvapi/amd64"
     "${EXT}/streamline/lib/x64"
+    "${EXT}/WinPixEventRuntime/lib/x64"
 )
 
-target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 glm::glm-header-only FastNoise lz4_static)
+target_link_libraries(Biomeinator PRIVATE user32 sl.interposer d3dcompiler nvapi64 WinPixEventRuntime glm::glm-header-only FastNoise lz4_static)
 
 set(STREAMLINE_DLL_DIR "${EXT}/streamline/bin/x64")
 
@@ -294,6 +296,7 @@ set(RUNTIME_DLLS
     "${STREAMLINE_DLL_DIR}/sl.dlss_d.dll"
     "${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
     #"${STREAMLINE_DLL_DIR}/development/nvngx_dlssd.dll"
+    "${EXT}/WinPixEventRuntime/bin/x64/WinPixEventRuntime.dll"
 )
 
 add_custom_command(TARGET Biomeinator POST_BUILD
@@ -345,6 +348,8 @@ target_compile_definitions(Biomeinator PRIVATE
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     TARGET_FILE_DIR="$<TARGET_FILE_DIR:Biomeinator>"
     ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
+    # pix3.h enables markers itself in Debug; Release stays marker-free
+    $<$<CONFIG:RelWithDebInfo>:USE_PIX>
 )
 
 # ==================================================

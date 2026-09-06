@@ -1,4 +1,4 @@
-_Last edited: 2026-07-19_
+_Last edited: 2026-09-06_
 
 # Render Loop
 
@@ -40,8 +40,18 @@ Gotchas:
 - Scrub direction is sampled *before* `getPlayerInput()` in `render()`, so `lockCamera` (which
   zeroes `PlayerInput` wholesale) does not disable time control.
 
-## Test Mode
+## Headless Runs
 
-When `testMode` is active (`testOutput` setting is non-empty), accumulation runs to
-`maxAccumulatedFrames` then auto-captures a screenshot and exits. Streamline logging is
-suppressed and the window is not brought to foreground.
+`--testOutput` (golden screenshot) and `--perfOutput` (timing report) both make the run
+*headless*: Streamline logging is suppressed, the window is not brought to foreground, and in
+voxel mode the world import is awaited before anything counts. `renderState.headless` gates
+those shared behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause
+and vsync for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
+`renderState.testMode` gates only the golden-specific exit, where
+accumulation runs to `maxAccumulatedFrames` then auto-captures a screenshot and exits. The
+perf lifecycle is separate and independent of accumulation; see
+[tests → perf_runs.md](../tests/perf_runs.md).
+
+Every frame is bracketed by `GpuProfiler::beginFrame`/`endFrame` and the passes are wrapped in
+profiler scopes, which always emit PIX markers but only record timestamps in perf mode; see
+[gpu_profiler.md](gpu_profiler.md) for where scopes may and may not go.

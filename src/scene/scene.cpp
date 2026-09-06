@@ -9,6 +9,7 @@
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
 #include "rendering/dxr_common.h"
+#include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
 #include "util/math.h"
@@ -357,7 +358,10 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 {
     this->areaLightTopologyChanged = false;
 
-    this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
+    {
+        GPU_PROFILE_SCOPE(cmdList, "blas build");
+        this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
+    }
 
     this->updateDeformableInstances(cmdList, toFreeList, animTime);
 
@@ -387,6 +391,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z); // y = 0 to optimize for voxel mode
         // Rewrite the area light sampling structure only on topology changes so light tree
         // rebuilds and accumulation resets aren't triggered every frame
+        GPU_PROFILE_SCOPE(cmdList, "tlas build");
         this->makeTlas(cmdList, toFreeList, this->isTlasDirty /*updateAreaLights*/);
     }
 
@@ -401,6 +406,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     {
         return;
     }
+    GPU_PROFILE_SCOPE(cmdList, "deformables");
     std::vector<WaterDisplacer::DispatchInputs> allDispatchInputs;
     std::vector<AcsHelper::GeometryWrapper*> geoWrappers;
     allDispatchInputs.reserve(this->deformableInstances.size());
@@ -426,7 +432,10 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
                                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), animTime, allDispatchInputs);
+    {
+        GPU_PROFILE_SCOPE(cmdList, "water displace");
+        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), animTime, allDispatchInputs);
+    }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
     BufferHelper::stateTransitionResourceBarrier(cmdList,
@@ -434,7 +443,10 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-    AcsHelper::updateBlases(cmdList, toFreeList, geoWrappers);
+    {
+        GPU_PROFILE_SCOPE(cmdList, "blas refit");
+        AcsHelper::updateBlases(cmdList, toFreeList, geoWrappers);
+    }
 }
 
 static constexpr uint32_t maxBlasBuildsPerFrame = 8;
