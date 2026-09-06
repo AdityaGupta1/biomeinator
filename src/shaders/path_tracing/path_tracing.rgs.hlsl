@@ -1306,6 +1306,52 @@ void recordShiftStats(const uint passBase, const bool noPartner, const bool skip
 #endif
 }
 
+// Stream compaction for random replay (Enhanced, Section 6.2.2): the spatial shift pass does the
+// shifts that reconnect straight from the primary hit and appends every pair that needs random
+// replay to a list; the spatial replay pass then runs over just that list, so the tail of a few
+// replaying pairs per warp stops holding every warp of the shift pass. The list lives in the initial
+// reservoir buffer, which nothing reads after the temporal pass (an extra root descriptor on the
+// path tracing root signature measurably slows the whole raygen): the counter is reservoir 0's
+// flags, entries are the seed fields of the reservoirs after it, and a pair that does not fit is
+// shifted in place.
+uint replayListCapacity()
+{
+    const uint pixelCount = renderParams.renderSize.x * renderParams.renderSize.y;
+    return pixelCount * (bool(renderParams.doPathSplitting) ? 2 : 1) - 1;
+}
+
+void resetReplayList()
+{
+    reservoirsOut[0].flags = 0;
+}
+
+bool appendToReplayList(const uint linearPixelIdx, const uint textureIdx)
+{
+    uint entryIdx;
+    InterlockedAdd(reservoirsOut[0].flags, 1, entryIdx);
+    if (entryIdx >= replayListCapacity())
+    {
+        return false;
+    }
+    reservoirsOut[1 + entryIdx].seed = linearPixelIdx | (textureIdx << 30);
+    return true;
+}
+
+// The partner's reservoir under pairing texture `textureIdx`, or an empty one when the partner is
+// off screen
+bool loadSpatialPartner(const uint textureIdx, const uint2 pixelIdx, out PathReservoir partner)
+{
+    const bool pairWithSelf = (RestirDebugMode)renderParams.restirDebugMode == RestirDebugMode::SPATIAL_SELF;
+    uint2 partnerIdx = pixelIdx;
+    const bool hasPartner = pairWithSelf || getPairedPixel(pairingTextures, textureIdx, pixelIdx, partnerIdx);
+    partner = makeEmptyPathReservoir();
+    if (hasPartner)
+    {
+        partner = reservoirsMergedOut[partnerIdx.y * renderParams.renderSize.x + partnerIdx.x];
+    }
+    return hasPartner;
+}
+
 void temporalRayGen()
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
@@ -1313,6 +1359,11 @@ void temporalRayGen()
 
     const PathReservoir canonical = mergeSlotReservoirs(pixelIdx);
     const GbufferData gbufferData = gbufferIn[linearPixelIdx];
+    // After every thread's own slots are read the initial reservoirs are scratch, see replayListCapacity
+    if (all(pixelIdx == 0))
+    {
+        resetReplayList();
+    }
 
     uint2 prevPixelIdx;
     const bool hasHistory = bool(restirParams.temporalHistoryValid) && restirParams.temporalConfidenceCap > 0.f &&
@@ -1409,21 +1460,40 @@ void spatialShiftRayGen()
     const uint2 pixelIdx = DispatchRaysIndex().xy;
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
     const uint pixelCount = renderParams.renderSize.x * renderParams.renderSize.y;
-    const bool pairWithSelf = (RestirDebugMode)renderParams.restirDebugMode == RestirDebugMode::SPATIAL_SELF;
 
     const GbufferData gbufferData = gbufferIn[linearPixelIdx];
     for (uint textureIdx = 0; textureIdx < restirParams.spatialNeighborCount; ++textureIdx)
     {
-        uint2 partnerIdx = pixelIdx;
-        const bool hasPartner = pairWithSelf || getPairedPixel(pairingTextures, textureIdx, pixelIdx, partnerIdx);
-        PathReservoir partner = makeEmptyPathReservoir();
-        if (hasPartner)
+        PathReservoir partner;
+        const bool hasPartner = loadSpatialPartner(textureIdx, pixelIdx, partner);
+        const bool needsReplay = partner.W > 0.f && getRcVertexIdx(partner.flags) != 2;
+        if (needsReplay && appendToReplayList(linearPixelIdx, textureIdx))
         {
-            partner = reservoirsMergedOut[partnerIdx.y * renderParams.renderSize.x + partnerIdx.x];
+            continue;
         }
         const ShiftedPath shifted = shiftPathToPixel(partner, gbufferData, pixelIdx, cameraParams.pos_WS);
         shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shifted;
         recordShiftStats(RESTIR_STATS_SPATIAL_BASE, !hasPartner, partner.W <= 0.f, partner, shifted);
+    }
+}
+
+void spatialReplayRayGen()
+{
+    const uint pixelCount = renderParams.renderSize.x * renderParams.renderSize.y;
+    const uint entryCount = min(reservoirsOut[0].flags, replayListCapacity());
+    const uint threadCount = DispatchRaysDimensions().x;
+    for (uint entryIdx = DispatchRaysIndex().x; entryIdx < entryCount; entryIdx += threadCount)
+    {
+        const uint entry = reservoirsOut[1 + entryIdx].seed;
+        const uint linearPixelIdx = entry & 0x3FFFFFFF;
+        const uint textureIdx = entry >> 30;
+        const uint2 pixelIdx = uint2(linearPixelIdx % renderParams.renderSize.x, linearPixelIdx / renderParams.renderSize.x);
+
+        PathReservoir partner;
+        loadSpatialPartner(textureIdx, pixelIdx, partner);
+        const ShiftedPath shifted = shiftPathToPixel(partner, gbufferIn[linearPixelIdx], pixelIdx, cameraParams.pos_WS);
+        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shifted;
+        recordShiftStats(RESTIR_STATS_SPATIAL_BASE, false, false, partner, shifted);
     }
 }
 
@@ -1446,4 +1516,10 @@ void RayGeneration_Temporal()
 void RayGeneration_SpatialShift()
 {
     spatialShiftRayGen();
+}
+
+[shader("raygeneration")]
+void RayGeneration_SpatialReplay()
+{
+    spatialReplayRayGen();
 }

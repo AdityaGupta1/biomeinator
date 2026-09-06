@@ -308,7 +308,8 @@ void initPipeline()
                              renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
         // One raygen entry per PtPass, in enum order, so each pass gets its own register allocation
         makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs",
-                             { L"RayGeneration_InitialSampling", L"RayGeneration_Temporal", L"RayGeneration_SpatialShift" },
+                             { L"RayGeneration_InitialSampling", L"RayGeneration_Temporal", L"RayGeneration_SpatialShift",
+                               L"RayGeneration_SpatialReplay" },
                              renderState.ptRootSig.Get(), renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
     }
 

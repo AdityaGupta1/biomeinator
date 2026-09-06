@@ -44,6 +44,7 @@ enum class PtPass : uint
     INITIAL_SAMPLING,
     TEMPORAL,
     SPATIAL_SHIFT,
+    SPATIAL_REPLAY,
 
     COUNT
 };

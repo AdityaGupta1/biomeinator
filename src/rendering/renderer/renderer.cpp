@@ -406,8 +406,9 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
                                                           renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
 }
 
-// Initial sampling runs one thread per pixel slot (doubled width with path splitting); the spatial
-// shift runs one thread per pixel
+// Initial sampling runs one thread per pixel slot (doubled width with path splitting); the temporal
+// and spatial shift passes run one thread per pixel; the spatial replay pass runs a fixed number of
+// threads that loop over the compacted replay list
 static const char* ptPassScopeName(const PtPass pass)
 {
     switch (pass)
@@ -416,12 +417,15 @@ static const char* ptPassScopeName(const PtPass pass)
             return "restir temporal";
         case PtPass::SPATIAL_SHIFT:
             return "restir spatial shift";
+        case PtPass::SPATIAL_REPLAY:
+            return "restir spatial replay";
         default:
             return "path tracing";
     }
 }
 
-static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPass pass, const uint32_t dispatchWidth)
+static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPass pass, const uint32_t dispatchWidth,
+                                const uint32_t dispatchHeight)
 {
     GPU_PROFILE_SCOPE(renderState.cmdList.Get(), ptPassScopeName(pass));
 
@@ -446,7 +450,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.ptDispatchDesc.RayGenerationShaderRecord.StartAddress =
         rtRaygenRecordAddress(renderState.dev_ptShaderIds.Get(), static_cast<uint32_t>(pass));
     renderState.ptDispatchDesc.Width = dispatchWidth;
-    renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
+    renderState.ptDispatchDesc.Height = dispatchHeight;
     renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);
 }
 
@@ -456,17 +460,27 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
 // tracing buffer.
 static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
 {
+    const uint32_t width = renderState.gbufferDispatchDesc.Width;
+    const uint32_t height = renderState.gbufferDispatchDesc.Height;
     BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirs.Get());
-    dispatchPathTracing(paramBlockManager, PtPass::TEMPORAL, renderState.gbufferDispatchDesc.Width);
-    BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_reservoirsMerged.Get());
-    dispatchPathTracing(paramBlockManager, PtPass::SPATIAL_SHIFT, renderState.gbufferDispatchDesc.Width);
-
+    dispatchPathTracing(paramBlockManager, PtPass::TEMPORAL, width, height);
     {
         BufferHelper::TransitionBatch batch;
         batch.addUavBarrier(renderState.dev_reservoirsMerged.Get());
+        batch.addUavBarrier(renderState.dev_reservoirs.Get()); // the replay list counter reset
+        batch.submit(renderState.cmdList.Get());
+    }
+    dispatchPathTracing(paramBlockManager, PtPass::SPATIAL_SHIFT, width, height);
+    {
+        BufferHelper::TransitionBatch batch;
+        batch.addUavBarrier(renderState.dev_reservoirs.Get()); // the replay list
         batch.addUavBarrier(renderState.dev_shifted.Get());
         batch.submit(renderState.cmdList.Get());
     }
+    // One thread per pixel looping over the list, which holds at most a few tenths of the pairs in
+    // practice, so most threads handle one entry (fewer threads looping more was measurably slower)
+    dispatchPathTracing(paramBlockManager, PtPass::SPATIAL_REPLAY, width * height, 1);
+    BufferHelper::uavBarrier(renderState.cmdList.Get(), renderState.dev_shifted.Get());
 
     GpuProfiler::beginScope(renderState.cmdList.Get(), "restir resample");
     renderState.cmdList->SetPipelineState(renderState.restirResamplePso.Get());
@@ -897,7 +911,8 @@ void render()
 
         GpuProfiler::endScope(renderState.cmdList.Get());
 
-        dispatchPathTracing(paramBlockManager, PtPass::INITIAL_SAMPLING, renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1));
+        dispatchPathTracing(paramBlockManager, PtPass::INITIAL_SAMPLING, renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1),
+            renderState.gbufferDispatchDesc.Height);
 
         // The self-replay debug modes shade inside initial sampling; everything else in ReSTIR PT mode
         // shades in the resample pass
