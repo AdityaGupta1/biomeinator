@@ -173,9 +173,10 @@ split slots (canonical, M = 1), reprojects the current primary hit into the prev
 surface within a few pixel footprints, normals agree), and pairs the canonical with that pixel's
 history reservoir under the same pairwise MIS as spatial reuse. The history is confidence-capped
 (`restirTemporalConfidenceCap`); the `CONFIDENCE` debug view shows M / 100. The paper's default cap
-of 20 makes the noise nearly static from frame to frame, which DLSS-RR then treats as signal (smoothed
-noise on far cave geometry), so the default is 2: a visible gain over spatial-only without the
-artifacts. Shading the temporal merge with vector-valued weights was tried and dropped, since the
+of 20 makes the noise nearly static from frame to frame, which DLSS-RR then treats as signal: slow-moving
+noise that shows clearly even at small scale (worst on far cave geometry). The default is 2 for that
+reason, not for cost: a visible gain over spatial-only without the artifacts. Longer history is a
+quality regression under the denoiser, whatever it costs. Shading the temporal merge with vector-valued weights was tried and dropped, since the
 fresh path's share is only 1 / (cap + 1) of the canonical term and the denoiser averages that away.
 
 Both shifts of the pair are real replays: the history path is rebuilt at this frame's pixel, and
