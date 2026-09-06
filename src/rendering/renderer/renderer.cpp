@@ -2,6 +2,7 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "renderer_internal.h"
+#include "pipeline_builder.h"
 
 #include "rendering/camera.h"
 #include "rendering/window_manager.h"
@@ -432,7 +433,6 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_OUT), renderState.dev_reservoirs->GetGPUVirtualAddress());
-    renderState.cmdList->SetComputeRoot32BitConstant(PT_PARAM_IDX(PASS_CONSTANTS), static_cast<uint32_t>(pass), 0);
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_MERGED_OUT), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHIFTED_OUT), renderState.dev_shifted->GetGPUVirtualAddress());
@@ -443,6 +443,8 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RESERVOIRS_HISTORY_IN), previousReservoirsHistory()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(DUPLICATION_MAP_IN), renderState.dev_duplicationMap->GetGPUVirtualAddress());
 
+    renderState.ptDispatchDesc.RayGenerationShaderRecord.StartAddress =
+        rtRaygenRecordAddress(renderState.dev_ptShaderIds.Get(), static_cast<uint32_t>(pass));
     renderState.ptDispatchDesc.Width = dispatchWidth;
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);

@@ -31,10 +31,16 @@ struct RtPipelineInputs
     ComPtr<ID3D12StateObject>& pso;
 
     ComPtr<ID3D12Resource>& dev_shaderIds;
-    const std::wstring& rgsShaderName;
+    std::vector<std::wstring> rgsShaderNames; // one raygen record each, selected by dispatchRaysDesc raygen record offset
     const std::wstring& missShaderName;
     D3D12_DISPATCH_RAYS_DESC& dispatchDesc;
 };
+
+// Address of raygen record `rgsIdx` of a pipeline built by makeRtPipeline, for DispatchRays
+inline D3D12_GPU_VIRTUAL_ADDRESS rtRaygenRecordAddress(ID3D12Resource* dev_shaderIds, const uint32_t rgsIdx)
+{
+    return dev_shaderIds->GetGPUVirtualAddress() + rgsIdx * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+}
 
 inline void makeRtPipeline(const RtPipelineInputs& inputs)
 {
@@ -86,8 +92,9 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
     const std::wstring psoName = inputs.name + L"_pso";
     inputs.pso->SetName(psoName.c_str());
 
+    const uint32_t rgsCount = static_cast<uint32_t>(inputs.rgsShaderNames.size());
     const uint32_t shaderIdsSizeBytes =
-        2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + inputs.hitGroups.size() * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+        (rgsCount + 1) * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT + inputs.hitGroups.size() * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
     inputs.dev_shaderIds = BufferHelper::createBasicBuffer(shaderIdsSizeBytes, &UPLOAD_HEAP);
     const std::wstring shaderIdsName = inputs.name + L"_shaderIds";
     inputs.dev_shaderIds->SetName(shaderIdsName.c_str());
@@ -106,7 +113,10 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
         host_shaderIds += incrementSizeBytes;
     };
 
-    writeShaderId(inputs.rgsShaderName.c_str(), D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+    for (const std::wstring& rgsShaderName : inputs.rgsShaderNames)
+    {
+        writeShaderId(rgsShaderName.c_str(), D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+    }
     writeShaderId(inputs.missShaderName.c_str(), D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
     for (const auto& hitGroup : inputs.hitGroups)
     {
@@ -121,11 +131,11 @@ inline void makeRtPipeline(const RtPipelineInputs& inputs)
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },
         .MissShaderTable = {
-            .StartAddress = inputs.dev_shaderIds->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .StartAddress = inputs.dev_shaderIds->GetGPUVirtualAddress() + rgsCount * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
             .SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },
         .HitGroupTable = {
-            .StartAddress = inputs.dev_shaderIds->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
+            .StartAddress = inputs.dev_shaderIds->GetGPUVirtualAddress() + (rgsCount + 1) * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT,
             .SizeInBytes = inputs.hitGroups.size() * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
             .StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
         },

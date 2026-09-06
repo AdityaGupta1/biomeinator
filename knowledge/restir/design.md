@@ -1,4 +1,4 @@
-_Last edited: 2026-09-05_
+_Last edited: 2026-09-06_
 
 # ReSTIR PT Design
 
@@ -122,9 +122,11 @@ distance minus epsilon, which reproduces the original closest-hit ray.
 ## Stage 3: paired spatial reuse
 
 Three passes per frame in ReSTIR PT mode: initial sampling (raygen, one thread per pixel slot),
-the spatial shift (the same raygen with `PtPass::SPATIAL_SHIFT` in a root constant, one thread per
-pixel), and the resample compute pass, which also does the shading. The pass index is a root
-constant because the global params cbuffer is uploaded once per frame.
+the spatial shift (raygen, one thread per pixel), and the resample compute pass, which also does
+the shading. The raygen passes are separate entry points in one pipeline, selected by raygen
+shader record (`PtPass` indexes the records): a single entry switching on a root constant made
+every pass pay for the register allocation of the largest one, measured as 7-16% on initial
+sampling when replay-only code grew.
 
 **Shift pass.** Each pixel first merges its two split slots into one canonical reservoir (exact,
 unit MIS weights, deterministic per pixel and frame so partners recompute the same merge), then for

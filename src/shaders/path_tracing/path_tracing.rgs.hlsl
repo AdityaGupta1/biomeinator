@@ -44,11 +44,6 @@ StructuredBuffer<GbufferData> gbufferPrevIn : REGISTER_T(PT, GBUFFER_PREV_IN);
 StructuredBuffer<PathReservoir> reservoirsHistoryIn : REGISTER_T(PT, RESERVOIRS_HISTORY_IN);
 StructuredBuffer<float> duplicationMapIn : REGISTER_T(PT, DUPLICATION_MAP_IN);
 
-cbuffer PassConstants : REGISTER_B(PT, PASS_CONSTANTS)
-{
-    uint ptPass; // PtPass
-};
-
 // Every random draw comes from a stream keyed by the path seed, a vertex (or segment) index and its
 // purpose. Random replay can then reproduce one vertex's BSDF or light draw on its own, and draws
 // that are not part of the path parameterization (fog march, anyhit alpha, roulette) never shift
@@ -1432,19 +1427,23 @@ void spatialShiftRayGen()
     }
 }
 
+// One entry point per PtPass (selected by raygen shader record) rather than one switching on a
+// root constant: each raygen is compiled and register-allocated on its own, so replay-only code
+// and live state do not tax initial sampling
 [shader("raygeneration")]
-void RayGeneration()
+void RayGeneration_InitialSampling()
 {
-    switch ((PtPass)ptPass)
-    {
-        case PtPass::TEMPORAL:
-            temporalRayGen();
-            break;
-        case PtPass::SPATIAL_SHIFT:
-            spatialShiftRayGen();
-            break;
-        default:
-            initialSamplingRayGen();
-            break;
-    }
+    initialSamplingRayGen();
+}
+
+[shader("raygeneration")]
+void RayGeneration_Temporal()
+{
+    temporalRayGen();
+}
+
+[shader("raygeneration")]
+void RayGeneration_SpatialShift()
+{
+    spatialShiftRayGen();
 }

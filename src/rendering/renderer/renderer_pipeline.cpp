@@ -151,14 +151,6 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, PT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT);
         ptParams[PT_PARAM_IDX(RESERVOIRS_OUT)] = MAKE_PARAM(UAV, PT, RESERVOIRS_OUT);
 
-        ptParams[PT_PARAM_IDX(PASS_CONSTANTS)] = {
-            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-            .Constants = {
-                .ShaderRegister = PT_REGISTER_PASS_CONSTANTS,
-                .RegisterSpace = PT_REGISTER_SPACE,
-                .Num32BitValues = 1,
-            },
-        };
         ptParams[PT_PARAM_IDX(PAIRING_TEXTURES_IN)] = MAKE_PARAM(SRV, PT, PAIRING_TEXTURES_IN);
         ptParams[PT_PARAM_IDX(RESERVOIRS_MERGED_OUT)] = MAKE_PARAM(UAV, PT, RESERVOIRS_MERGED_OUT);
         ptParams[PT_PARAM_IDX(SHIFTED_OUT)] = MAKE_PARAM(UAV, PT, SHIFTED_OUT);
@@ -275,7 +267,7 @@ void initPipeline()
     // RT PIPELINES
     // ===================================
     {
-        const auto makeCommonRtPipeline = [](const std::wstring& name, const char* rgsShader,
+        const auto makeCommonRtPipeline = [](const std::wstring& name, const char* rgsShader, std::vector<std::wstring> rgsShaderNames,
                                              ID3D12RootSignature* rootSig, ComPtr<ID3D12StateObject>& pso,
                                              ComPtr<ID3D12Resource>& dev_shaderIds, D3D12_DISPATCH_RAYS_DESC& dispatchDesc)
         {
@@ -283,7 +275,7 @@ void initPipeline()
                 .name = name,
                 .pso = pso,
                 .dev_shaderIds = dev_shaderIds,
-                .rgsShaderName = L"RayGeneration",
+                .rgsShaderNames = std::move(rgsShaderNames),
                 .missShaderName = L"Miss",
                 .dispatchDesc = dispatchDesc,
             };
@@ -312,10 +304,12 @@ void initPipeline()
             makeRtPipeline(pipelineInputs);
         };
 
-        makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", renderState.gbufferRootSig.Get(),
+        makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", { L"RayGeneration" }, renderState.gbufferRootSig.Get(),
                              renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
-        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs", renderState.ptRootSig.Get(),
-                             renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
+        // One raygen entry per PtPass, in enum order, so each pass gets its own register allocation
+        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs",
+                             { L"RayGeneration_InitialSampling", L"RayGeneration_Temporal", L"RayGeneration_SpatialShift" },
+                             renderState.ptRootSig.Get(), renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
     }
 
     // ===================================

@@ -41,9 +41,6 @@
 #define PT_REGISTER_SPACE 2
 // =============================================
 
-// b#
-#define PT_REGISTER_PASS_CONSTANTS 0
-
 // t#
 #define PT_REGISTER_GBUFFER_IN 0
 #define PT_REGISTER_PAIRING_TEXTURES_IN 1
