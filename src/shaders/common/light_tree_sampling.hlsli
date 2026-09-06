@@ -37,36 +37,17 @@ float maxDistAlong(float3 p, float3 dir, float3 bboxMin, float3 bboxMax)
     return max(m0.x, m1.x) + max(m0.y, m1.y) + max(m0.z, m1.z);
 }
 
-// min |dot(dir, c - p)| over the 8 bbox corners. Returns 0 when the corners
-// straddle the plane through p perpendicular to dir.
-float absMinDistAlong(float3 p, float3 dir, float3 bboxMin, float3 bboxMax)
-{
-    const float a = dot(dir, float3(bboxMin.x, bboxMin.y, bboxMin.z) - p);
-    const float b = dot(dir, float3(bboxMin.x, bboxMin.y, bboxMax.z) - p);
-    const float c = dot(dir, float3(bboxMin.x, bboxMax.y, bboxMin.z) - p);
-    const float d = dot(dir, float3(bboxMin.x, bboxMax.y, bboxMax.z) - p);
-    const float e = dot(dir, float3(bboxMax.x, bboxMin.y, bboxMin.z) - p);
-    const float f = dot(dir, float3(bboxMax.x, bboxMin.y, bboxMax.z) - p);
-    const float g = dot(dir, float3(bboxMax.x, bboxMax.y, bboxMin.z) - p);
-    const float h = dot(dir, float3(bboxMax.x, bboxMax.y, bboxMax.z) - p);
-    const bool hasPos = (a > 0.f) || (b > 0.f) || (c > 0.f) || (d > 0.f)
-                     || (e > 0.f) || (f > 0.f) || (g > 0.f) || (h > 0.f);
-    const bool hasNeg = (a < 0.f) || (b < 0.f) || (c < 0.f) || (d < 0.f)
-                     || (e < 0.f) || (f < 0.f) || (g < 0.f) || (h < 0.f);
-    if (hasPos && hasNeg)
-    {
-        return 0.0f;
-    }
-    return min(min(min(abs(a), abs(b)), min(abs(c), abs(d))),
-               min(min(abs(e), abs(f)), min(abs(g), abs(h))));
-}
-
-// Upper bound on max{ω in cone from x to bbox} dot(N, ω). True bbox-interior
-// bound (RTSL ref impl, Lin & Yuksel 2020): project bbox onto a tangent frame
-// (T, B) of N; nrm_max is max along N, (y_amin, z_amin) is the closest
-// in-plane offset. cos angle is bounded by nrm_max / sqrt(nrm_max² + y_amin² +
-// z_amin²). Tighter and more correct than 8-corner enumeration (corners do
-// not cover bbox-interior maxima).
+// Estimate of max{ω in cone from p to bbox} dot(N, ω), the RTSL reference
+// impl's GeomTermBoundApproximate (its default): nrm_max is the max extent
+// along N, tng is the tangential offset of the bbox's closest point to p, and
+// cos angle ≈ nrm_max / sqrt(nrm_max² + |tng|²). The exact bound instead takes
+// the closest in-plane offset over all corners in a tangent frame of N, two
+// 8-corner enumerations per call; this runs at a fraction of that ALU and is
+// what gates each level of the dependent tree walk. Not a true upper bound,
+// but importance sampling stays unbiased for any positive weight as long as
+// selection and pdf evaluation agree (both go through rtslChildProbs), and it
+// is zero exactly when the exact bound is zero (nrm_max <= 0), so dead-branch
+// pruning is unchanged.
 float geomTermBound(float3 p, float3 N, float3 bboxMin, float3 bboxMax)
 {
     const float nrmMax = maxDistAlong(p, N, bboxMin, bboxMax);
@@ -74,19 +55,9 @@ float geomTermBound(float3 p, float3 N, float3 bboxMin, float3 bboxMax)
     {
         return 0.0f;
     }
-    float3 T;
-    if (abs(N.x) > abs(N.y))
-    {
-        T = float3(-N.z, 0.0f, N.x) * rsqrt(N.x * N.x + N.z * N.z);
-    }
-    else
-    {
-        T = float3(0.0f, N.z, -N.y) * rsqrt(N.y * N.y + N.z * N.z);
-    }
-    const float3 B = normalize(cross(N, T));
-    const float yAmin = absMinDistAlong(p, T, bboxMin, bboxMax);
-    const float zAmin = absMinDistAlong(p, B, bboxMin, bboxMax);
-    const float hyp2 = yAmin * yAmin + zAmin * zAmin + nrmMax * nrmMax;
+    const float3 d = clamp(p, bboxMin, bboxMax) - p;
+    const float3 tng = d - dot(d, N) * N;
+    const float hyp2 = dot(tng, tng) + nrmMax * nrmMax;
     return nrmMax * rsqrt(hyp2);
 }
 
