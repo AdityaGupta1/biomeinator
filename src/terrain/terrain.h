@@ -33,7 +33,7 @@ bool tryGetCameraBiome(Biome& outBiome);
 void exportWorld();
 void importWorld();
 void reimportWorld(const std::filesystem::path& worldDir);
-bool pollTestModeImport();
+bool pollHeadlessImport();
 
 glm::ivec3 getVoxelRenderBoundsMin_WS();
 glm::ivec3 getVoxelRenderBoundsMax_WS();

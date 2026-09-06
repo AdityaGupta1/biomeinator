@@ -9,7 +9,8 @@
 
 // GPU timestamp scopes recorded into the frame command list, resolved once per frame and read
 // back after that frame's fence. Every scope is also emitted as a PIX event so captures in
-// Nsight or PIX carry the same names.
+// Nsight or PIX carry the same names. PIX events are always emitted; timestamps are only
+// recorded when enabled at init, otherwise every call below is a no-op and no resources exist.
 namespace GpuProfiler
 {
 
@@ -27,7 +28,7 @@ struct FrameTimings
     std::vector<ScopeTiming> scopes;
 };
 
-void init();
+void init(bool enableTimestamps);
 void destroy();
 
 // Reads back the timings recorded into a frame slot, if any are pending. Only valid once the

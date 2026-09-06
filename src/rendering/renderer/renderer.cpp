@@ -82,7 +82,7 @@ void init()
     initCommand();
     initConstantParams();
 
-    GpuProfiler::init();
+    GpuProfiler::init(SettingsManager::isPerfMode() /*enableTimestamps*/);
     perfRunInit();
 
     renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
@@ -504,9 +504,9 @@ void render()
     renderParams->prevAnimTime = renderState.prevAnimTime;
     renderState.prevAnimTime = animTimeFloat;
 
-    const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollTestModeImport();
+    const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessImport();
 
-    perfRunUpdate(renderState.scene.hasTlas() && !waitingForImport, didSceneChange, deltaTime);
+    perfRunUpdate(renderState.scene.hasTlas() && !waitingForImport, didSceneChange);
 
     if (resetAccumulation)
     {
@@ -833,6 +833,8 @@ void render()
 
     frameCtx.fenceValue = renderState.fence.signal(renderState.graphicsCmdQueue.Get());
 
+    perfRunEndCpuFrame();
+
     UINT syncInterval;
     UINT presentFlags;
     if (renderState.useVsync)
@@ -882,15 +884,13 @@ static void beginFrame()
     }
     renderState.fence.waitFor(frame.fenceValue);
 
+    perfRunBeginCpuFrame();
+
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
 
-    GpuProfiler::FrameTimings prevTimings;
-    if (GpuProfiler::collect(renderState.frameCtxIdx, prevTimings))
-    {
-        perfRunOnFrameTimings(prevTimings);
-    }
+    perfRunCollectTimings(renderState.frameCtxIdx);
     GpuProfiler::beginFrame(renderState.cmdList.Get(), renderState.frameCtxIdx, renderState.frameNumber);
 
     // Every root signature declares CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, which requires the

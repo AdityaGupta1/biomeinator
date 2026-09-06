@@ -1197,7 +1197,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool pollTestModeImport()
+bool pollHeadlessImport()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {

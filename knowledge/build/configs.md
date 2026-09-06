@@ -23,7 +23,7 @@ Output goes to `build/<Config>/`. `BiomeinatorTests` is a separate target and de
 Rationale:
 
 - **Debug is too slow for a path tracer** to be useful beyond stepping through CPU code;
-  the debug layer and unoptimized shaders-side host code make frames take long enough that
+  the debug layer and unoptimized host code make frames take long enough that
   timing-dependent behaviour (chunk streaming, fence waits) stops resembling the real thing.
 - **Release is deliberately bare.** No asserts and no markers means it measures what a user
   would run, so it is the config to build when checking that instrumentation itself has no

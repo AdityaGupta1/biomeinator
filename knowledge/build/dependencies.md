@@ -14,8 +14,8 @@ apart so that nothing in `reference/` can accidentally become a build input.
 - **Vendored prebuilt SDKs**, committed as files: AgilitySDK, streamline, dxc,
   WinPixEventRuntime. Each folder carries its own `LICENSE.txt` at the root and splits into
   `include/`, `lib/`, `bin/` (or the SDK's native layout when it ships one, as streamline
-  does). These are committed rather than fetched because the DLLs must match the headers
-  exactly and the download sources are not scriptable without extra tooling.
+  does). These are committed rather than fetched so the DLLs always match the headers
+  exactly.
 - **`external/_licenses/`** for things that arrive without their own folder: FetchContent
   packages (glm) and code adapted piecemeal from other projects (Cycles, Khronos PBR
   Neutral).
@@ -29,9 +29,6 @@ in the SDK folder:
 2. library directory in `target_link_directories`
 3. library name in `target_link_libraries`
 4. DLL path in `RUNTIME_DLLS`, so the post-build copy places it beside the exe
-
-Build once with a real call into the SDK before committing; an unreferenced `.lib` links
-silently, so a clean link proves nothing about the library path.
 
 ## WinPixEventRuntime
 

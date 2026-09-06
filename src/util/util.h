@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstring>
+#include <string>
 #include <vector>
 
 namespace Util
@@ -23,7 +25,9 @@ inline std::wstring to_wstring(const char* str)
     return std::wstring(str, str + std::strlen(str));
 }
 
-// Narrowing conversion; only for strings known to be ASCII (e.g. adapter names)
+// Narrowing conversion; only for strings known to be ASCII (e.g. adapter names). Not the
+// range constructor like to_wstring, since that narrows inside the standard library and
+// warns (C4244) in every translation unit including this header
 inline std::string to_string(const wchar_t* str)
 {
     std::string result;

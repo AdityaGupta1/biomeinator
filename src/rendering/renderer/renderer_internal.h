@@ -227,8 +227,12 @@ void finalizeQueuedScreenshot();
 
 // Perf run lifecycle (renderer_perf.cpp); all no-ops unless --perfOutput is set
 void perfRunInit();
-void perfRunUpdate(bool sceneReady, bool didSceneChange, double deltaTime);
-void perfRunOnFrameTimings(const GpuProfiler::FrameTimings& timings);
+void perfRunUpdate(bool sceneReady, bool didSceneChange);
+// The CPU sample for a frame excludes the waits that throttle it (frame latency, fence, Present),
+// so it measures the frame's own work rather than the frame rate
+void perfRunBeginCpuFrame();
+void perfRunEndCpuFrame();
+void perfRunCollectTimings(uint32_t slotIdx);
 bool perfRunIsDone();
 void perfRunFinish();
 
@@ -260,12 +264,14 @@ struct PerfRunState
     PerfPhase phase{ PerfPhase::WAITING_FOR_SCENE };
     std::chrono::steady_clock::time_point startTime{};
     std::chrono::steady_clock::time_point phaseStartTime{};
+    std::chrono::steady_clock::time_point cpuFrameStart{};
     uint32_t phaseStartFrame{ 0 };
     uint32_t quietStreak{ 0 }; // consecutive frames without a scene change
     // Frames in [measureStartFrame, measureEndFrame) are measured; GPU timings arrive
-    // NUM_FRAMES_IN_FLIGHT frames late, so this range is what decides which ones count
-    uint32_t measureStartFrame{ 0 };
-    uint32_t measureEndFrame{ 0 };
+    // NUM_FRAMES_IN_FLIGHT frames late, so this range is what decides which ones count.
+    // Both start unbounded so nothing counts before measuring and everything counts during it
+    uint32_t measureStartFrame{ UINT32_MAX };
+    uint32_t measureEndFrame{ UINT32_MAX };
     bool timedOut{ false };
     bool stablePowerState{ false };
     std::vector<GpuProfiler::FrameTimings> gpuSamples;

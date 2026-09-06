@@ -51,4 +51,5 @@ perf lifecycle is separate and independent of accumulation; see
 [tests → perf_runs.md](../tests/perf_runs.md).
 
 Every frame is bracketed by `GpuProfiler::beginFrame`/`endFrame` and the passes are wrapped in
-profiler scopes; see [gpu_profiler.md](gpu_profiler.md) for where scopes may and may not go.
+profiler scopes, which always emit PIX markers but only record timestamps in perf mode; see
+[gpu_profiler.md](gpu_profiler.md) for where scopes may and may not go.

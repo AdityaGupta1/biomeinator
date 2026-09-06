@@ -34,17 +34,26 @@ struct Slot
     std::vector<ScopeRecord> scopes;
 };
 
+static bool timestampsEnabled{ false };
 static ComPtr<ID3D12QueryHeap> queryHeap;
 static ComPtr<ID3D12Resource> readbackBuffer;
 static double msPerTick{ 0.0 };
 
 static Slot slots[NUM_SLOTS];
 static uint32_t currentSlotIdx{ 0 };
-static std::vector<uint32_t> openScopes; // indices into the current slot's scopes
+// One entry per open scope: its index into the current slot's scopes, or ~0u when it has no
+// timestamps (disabled or slot full) and only a PIX event to close
+static std::vector<uint32_t> openScopes;
 static bool warnedOverflow{ false };
 
-void init()
+void init(const bool enableTimestamps)
 {
+    timestampsEnabled = enableTimestamps;
+    if (!timestampsEnabled)
+    {
+        return;
+    }
+
     const D3D12_QUERY_HEAP_DESC heapDesc = {
         .Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP,
         .Count = NUM_SLOTS * MAX_QUERIES_PER_SLOT,
@@ -133,6 +142,10 @@ void beginFrame(ID3D12GraphicsCommandList* cmdList, const uint32_t slotIdx, cons
 {
     ASSERT(openScopes.empty(), "GpuProfiler scope left open across frames");
     ASSERT(!slots[slotIdx].pending, "GpuProfiler slot reused before its timings were collected");
+    if (!timestampsEnabled)
+    {
+        return;
+    }
 
     currentSlotIdx = slotIdx;
     Slot& slot = slots[slotIdx];
@@ -146,6 +159,10 @@ void beginFrame(ID3D12GraphicsCommandList* cmdList, const uint32_t slotIdx, cons
 void endFrame(ID3D12GraphicsCommandList* cmdList)
 {
     ASSERT(openScopes.empty(), "GpuProfiler scope left open at end of frame");
+    if (!timestampsEnabled)
+    {
+        return;
+    }
 
     Slot& slot = slots[currentSlotIdx];
     writeTimestamp(cmdList);
@@ -162,16 +179,22 @@ void endFrame(ID3D12GraphicsCommandList* cmdList)
 
 void beginScope(ID3D12GraphicsCommandList* cmdList, const char* name)
 {
-    Slot& slot = slots[currentSlotIdx];
     const uint32_t depth = static_cast<uint32_t>(openScopes.size());
     PIXBeginEvent(cmdList, PIX_COLOR_INDEX(static_cast<BYTE>(depth)), name);
 
-    const uint32_t beginQueryIdx = writeTimestamp(cmdList);
-    openScopes.push_back(beginQueryIdx == ~0u ? ~0u : static_cast<uint32_t>(slot.scopes.size()));
-    if (beginQueryIdx != ~0u)
+    uint32_t scopeIdx = ~0u;
+    if (timestampsEnabled)
     {
-        slot.scopes.push_back({ .name = name, .depth = depth, .beginQueryIdx = beginQueryIdx, .endQueryIdx = ~0u });
+        Slot& slot = slots[currentSlotIdx];
+        const uint32_t beginQueryIdx = writeTimestamp(cmdList);
+        if (beginQueryIdx != ~0u)
+        {
+            scopeIdx = static_cast<uint32_t>(slot.scopes.size());
+            slot.scopes.push_back(
+                { .name = name, .depth = depth, .beginQueryIdx = beginQueryIdx, .endQueryIdx = ~0u });
+        }
     }
+    openScopes.push_back(scopeIdx);
 }
 
 void endScope(ID3D12GraphicsCommandList* cmdList)

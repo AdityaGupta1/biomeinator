@@ -113,6 +113,11 @@ def cmd_compare(args):
     baseline = load_reports(args.baseline)
     candidate = load_reports(args.candidate)
     for name in sorted(set(baseline) & set(candidate)):
+        timed_out = [side for side, reports in (("baseline", baseline), ("candidate", candidate))
+                     if reports[name]["meta"]["timedOut"]]
+        if timed_out:
+            print(f"\n{name}: not compared, {' and '.join(timed_out)} timed out")
+            continue
         base_rows = dict(scope_rows(baseline[name]))
         cand_rows = dict(scope_rows(candidate[name]))
         print(f"\n{name}")

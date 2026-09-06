@@ -35,6 +35,22 @@ static void enterPhase(const PerfPhase phase)
     perfRun.phaseStartTime = std::chrono::steady_clock::now();
 }
 
+// SetStablePowerState needs Windows developer mode; without it the call fails and then removes
+// the device, so it must not even be attempted
+static bool isDeveloperModeEnabled()
+{
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    const LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
+                                        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock",
+                                        L"AllowDevelopmentWithoutDevLicense",
+                                        RRF_RT_REG_DWORD,
+                                        nullptr,
+                                        &value,
+                                        &size);
+    return status == ERROR_SUCCESS && value != 0;
+}
+
 void perfRunInit()
 {
     PerfRunState& perfRun = renderState.perfRun;
@@ -47,18 +63,19 @@ void perfRunInit()
     perfRun.startTime = std::chrono::steady_clock::now();
     enterPhase(PerfPhase::WAITING_FOR_SCENE);
 
-    // Locks GPU clocks to base so runs are comparable; needs Windows developer mode
-    const HRESULT hr = renderState.device->SetStablePowerState(TRUE);
-    perfRun.stablePowerState = SUCCEEDED(hr);
-    if (!perfRun.stablePowerState)
+    // Locks GPU clocks to base so runs are comparable
+    if (isDeveloperModeEnabled())
     {
-        Logger::logWarning("perf run: SetStablePowerState failed (0x%08X); is developer mode enabled? "
-                           "Timings will be noisier",
-                           static_cast<unsigned>(hr));
+        CHECK_HRESULT(renderState.device->SetStablePowerState(TRUE));
+        perfRun.stablePowerState = true;
+    }
+    else
+    {
+        Logger::logWarning("perf run: developer mode is off, so GPU clocks are not locked; timings will be noisier");
     }
 }
 
-void perfRunUpdate(const bool sceneReady, const bool didSceneChange, const double deltaTime)
+void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
 {
     PerfRunState& perfRun = renderState.perfRun;
     if (!perfRun.active || perfRun.phase == PerfPhase::DONE)
@@ -72,10 +89,6 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange, const doubl
     {
         Logger::logWarning("perf run: timed out in phase %u", static_cast<uint32_t>(perfRun.phase));
         perfRun.timedOut = true;
-        if (perfRun.phase != PerfPhase::MEASURING)
-        {
-            perfRun.measureStartFrame = renderState.frameNumber; // empty range: nothing was measured
-        }
         perfRun.measureEndFrame = renderState.frameNumber;
         enterPhase(PerfPhase::DONE);
         return;
@@ -100,7 +113,6 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange, const doubl
                 Logger::log("perf run: measuring from frame %u", renderState.frameNumber);
                 perfRun.measureStartFrame = renderState.frameNumber;
                 enterPhase(PerfPhase::MEASURING);
-                perfRun.cpuFrameMs.push_back(deltaTime * 1000.0);
             }
             break;
 
@@ -110,10 +122,6 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange, const doubl
                 perfRun.measureEndFrame = renderState.frameNumber;
                 enterPhase(PerfPhase::DONE);
             }
-            else
-            {
-                perfRun.cpuFrameMs.push_back(deltaTime * 1000.0);
-            }
             break;
 
         case PerfPhase::DONE:
@@ -121,19 +129,38 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange, const doubl
     }
 }
 
-void perfRunOnFrameTimings(const GpuProfiler::FrameTimings& timings)
+void perfRunBeginCpuFrame()
+{
+    if (renderState.perfRun.active)
+    {
+        renderState.perfRun.cpuFrameStart = std::chrono::steady_clock::now();
+    }
+}
+
+void perfRunEndCpuFrame()
 {
     PerfRunState& perfRun = renderState.perfRun;
-    if (!perfRun.active || perfRun.phase == PerfPhase::WAITING_FOR_SCENE || perfRun.phase == PerfPhase::WARMUP)
+    // perfRunUpdate has already run this frame, so the phase says whether this frame number is
+    // inside the measured range; that keeps the CPU samples paired with the GPU ones
+    if (perfRun.phase == PerfPhase::MEASURING)
+    {
+        perfRun.cpuFrameMs.push_back(secondsSince(perfRun.cpuFrameStart) * 1000.0);
+    }
+}
+
+void perfRunCollectTimings(const uint32_t slotIdx)
+{
+    GpuProfiler::FrameTimings timings;
+    if (!GpuProfiler::collect(slotIdx, timings))
     {
         return;
     }
 
-    const bool measured = timings.frameNumber >= perfRun.measureStartFrame &&
-                          (perfRun.phase == PerfPhase::MEASURING || timings.frameNumber < perfRun.measureEndFrame);
-    if (measured)
+    PerfRunState& perfRun = renderState.perfRun;
+    if (perfRun.active && timings.frameNumber >= perfRun.measureStartFrame &&
+        timings.frameNumber < perfRun.measureEndFrame)
     {
-        perfRun.gpuSamples.push_back(timings);
+        perfRun.gpuSamples.push_back(std::move(timings));
     }
 }
 
@@ -244,17 +271,13 @@ static nlohmann::json buildResultsJson()
 
 void perfRunFinish()
 {
-    PerfRunState& perfRun = renderState.perfRun;
+    const PerfRunState& perfRun = renderState.perfRun;
 
     // The last NUM_FRAMES_IN_FLIGHT measured frames are still in flight
     flush();
     for (uint32_t slotIdx = 0; slotIdx < NUM_FRAMES_IN_FLIGHT; ++slotIdx)
     {
-        GpuProfiler::FrameTimings timings;
-        if (GpuProfiler::collect(slotIdx, timings))
-        {
-            perfRunOnFrameTimings(timings);
-        }
+        perfRunCollectTimings(slotIdx);
     }
 
     const std::filesystem::path path = std::filesystem::absolute(SettingsManager::getAsString("perfOutput"));
@@ -263,19 +286,21 @@ void perfRunFinish()
     file << buildResultsJson().dump(2);
     file.close();
 
-    const bool ok = !perfRun.gpuSamples.empty();
-    if (ok)
+    if (perfRun.timedOut)
+    {
+        Logger::logError("perf run: timed out with %zu of %u frames measured; wrote %s anyway",
+                         perfRun.gpuSamples.size(),
+                         SettingsManager::getAsUint("perfFrames"),
+                         path.generic_string().c_str());
+    }
+    else
     {
         Logger::log(
             "perf run: wrote %zu measured frames to %s", perfRun.gpuSamples.size(), path.generic_string().c_str());
     }
-    else
-    {
-        Logger::logError("perf run: no frames measured; wrote %s anyway", path.generic_string().c_str());
-    }
 
     Renderer::destroy();
-    exit(ok ? 0 : 1);
+    exit(perfRun.timedOut ? 1 : 0);
 }
 
 } // namespace Renderer
