@@ -749,10 +749,25 @@ float3 pathTraceRay(inout Payload payload,
             surfPos_WS = payload.hitInfo.hitPos_WS;
         }
 
-        const uint coherenceHint =
-            (pathDepth == 0 ? (1 << 2) : 0) |
-            (isPassthrough ? (1 << 1) : 0) |
-            ((!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0);
+        // Replay threads sort by the work their shift does next, which the stored path decides, not
+        // the surface: whether random replay continues past this vertex, and whether the rc vertex
+        // is a light vertex (pdf walk, shadow ray) or the dome (nothing to rebuild)
+        uint coherenceHint;
+        if (isReplay)
+        {
+            const bool rcIsLightVertex = replay.rcVertexIdx == replay.pathLength;
+            coherenceHint =
+                (vertexIdx + 1 != replay.rcVertexIdx ? (1 << 2) : 0) |
+                (rcIsLightVertex ? (1 << 1) : 0) |
+                ((rcIsLightVertex && isDomeTechnique(replay.pathTechnique)) ? (1 << 0) : 0);
+        }
+        else
+        {
+            coherenceHint =
+                (pathDepth == 0 ? (1 << 2) : 0) |
+                (isPassthrough ? (1 << 1) : 0) |
+                ((!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0);
+        }
         NvReorderThread(coherenceHint, 3 /*numCoherenceHintBits*/);
 
         if (isPassthrough)
