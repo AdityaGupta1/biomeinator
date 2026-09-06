@@ -151,6 +151,7 @@ enum class PtParam
     PAIRING_TEXTURES_IN,
     RESERVOIRS_MERGED_OUT,
     SHIFTED_OUT,
+    RESTIR_STATS_OUT,
     GBUFFER_PREV_IN,
     RESERVOIRS_HISTORY_IN,
     DUPLICATION_MAP_IN,
@@ -411,6 +412,8 @@ struct RendererState
     ComPtr<ID3D12Resource> dev_reservoirSeeds; // path seed per pixel of the final reservoirs, input to the duplication map
     ComPtr<ID3D12Resource> dev_duplicationMap; // duplication score per pixel, read by the next frame's temporal pass
     ComPtr<ID3D12Resource> dev_shifted; // ShiftedPath per pixel per pairing texture
+    ComPtr<ID3D12Resource> dev_restirStats; // RESTIR_STATS_COUNT uints, accumulated over the run when shift stats are enabled
+    ComPtr<ID3D12Resource> dev_restirStatsReadback; // copy of dev_restirStats taken at the end of each reuse pass
     ComPtr<ID3D12Resource> dev_pairingTextures; // all pairing textures packed, see initRestirPairingTextures
     struct PairingTextureInfo
     {

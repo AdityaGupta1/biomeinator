@@ -256,6 +256,14 @@ void resize()
         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
     renderState.dev_shifted->SetName(L"dev_shifted");
 
+    renderState.dev_restirStats.Reset();
+    renderState.dev_restirStats = BufferHelper::createBasicBuffer(
+        RESTIR_STATS_COUNT * sizeof(uint32_t), &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    renderState.dev_restirStats->SetName(L"dev_restirStats");
+    renderState.dev_restirStatsReadback.Reset();
+    renderState.dev_restirStatsReadback = BufferHelper::createBasicBuffer(RESTIR_STATS_COUNT * sizeof(uint32_t), &READBACK_HEAP);
+    renderState.dev_restirStatsReadback->SetName(L"dev_restirStatsReadback");
+
     renderState.dev_reservoirSeeds.Reset();
     renderState.dev_reservoirSeeds = BufferHelper::createBasicBuffer(
         pixelCount * sizeof(uint32_t), &DEFAULT_HEAP, { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
@@ -428,6 +436,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, const PtPa
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(PAIRING_TEXTURES_IN), renderState.dev_pairingTextures->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESERVOIRS_MERGED_OUT), renderState.dev_reservoirsMerged->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHIFTED_OUT), renderState.dev_shifted->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(RESTIR_STATS_OUT), renderState.dev_restirStats->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(GBUFFER_PREV_IN), previousGbuffer()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RESERVOIRS_HISTORY_IN), previousReservoirsHistory()->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(DUPLICATION_MAP_IN), renderState.dev_duplicationMap->GetGPUVirtualAddress());
@@ -482,6 +491,15 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_DUPLICATION_PARAM_IDX(DUPLICATION_MAP_OUT), renderState.dev_duplicationMap->GetGPUVirtualAddress());
     renderState.cmdList->Dispatch(Util::calculateDispatchSize(renderState.renderWidth, RESTIR_DUPLICATION_WORKGROUP_SIZE_X),
                                   Util::calculateDispatchSize(renderState.renderHeight, RESTIR_DUPLICATION_WORKGROUP_SIZE_Y), 1);
+
+    if (bool(paramBlockManager.restirParams->shiftStatsEnabled))
+    {
+        BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(), renderState.dev_restirStats.Get(),
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderState.cmdList->CopyResource(renderState.dev_restirStatsReadback.Get(), renderState.dev_restirStats.Get());
+        BufferHelper::stateTransitionResourceBarrier(renderState.cmdList.Get(), renderState.dev_restirStats.Get(),
+            D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
 }
 
 static void beginFrame();
@@ -723,6 +741,7 @@ void render()
     restirParams->decorrelationEnabled = SettingsManager::getAsBool("restirDecorrelation") ? 1u : 0u;
     restirParams->decorrelationMinCap = SettingsManager::getAsFloat("restirDecorrelationMinCap");
     restirParams->decorrelationExponent = SettingsManager::getAsFloat("restirDecorrelationExponent");
+    restirParams->shiftStatsEnabled = SettingsManager::getAsBool("restirShiftStats") ? 1u : 0u;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

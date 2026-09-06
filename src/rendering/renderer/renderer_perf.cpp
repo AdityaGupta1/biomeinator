@@ -10,6 +10,7 @@
 #include <json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -219,6 +220,45 @@ static nlohmann::json settingsJson()
     return json;
 }
 
+// Shift outcome counters accumulated over the whole run (warmup included), see RESTIR_STATS_* in
+// common_structs.h. Null unless --restirShiftStats was set.
+static nlohmann::json restirShiftStatsJson()
+{
+    if (!SettingsManager::getAsBool("restirShiftStats"))
+    {
+        return nullptr;
+    }
+
+    std::array<uint32_t, RESTIR_STATS_COUNT> counters{};
+    const D3D12_RANGE readRange = { 0, sizeof(counters) };
+    void* mapped = nullptr;
+    CHECK_HRESULT(renderState.dev_restirStatsReadback->Map(0, &readRange, &mapped));
+    memcpy(counters.data(), mapped, sizeof(counters));
+    const D3D12_RANGE emptyRange = { 0, 0 };
+    renderState.dev_restirStatsReadback->Unmap(0, &emptyRange);
+
+    nlohmann::json json;
+    const std::pair<const char*, uint32_t> passes[] = { { "spatial", RESTIR_STATS_SPATIAL_BASE }, { "temporal", RESTIR_STATS_TEMPORAL_BASE } };
+    for (const auto& [passName, base] : passes)
+    {
+        nlohmann::json attempted = nlohmann::json::array();
+        nlohmann::json succeeded = nlohmann::json::array();
+        for (uint32_t bucket = 0; bucket < RESTIR_STATS_REPLAY_BUCKETS; ++bucket)
+        {
+            attempted.push_back(counters[base + RESTIR_STATS_BUCKETS_BASE + 2 * bucket]);
+            succeeded.push_back(counters[base + RESTIR_STATS_BUCKETS_BASE + 2 * bucket + 1]);
+        }
+        json[passName] = {
+            { "pairs", counters[base + RESTIR_STATS_PAIRS] },
+            { "skippedEmpty", counters[base + RESTIR_STATS_SKIPPED] },
+            { "skippedNoPartner", counters[base + RESTIR_STATS_NO_PARTNER] },
+            { "attemptedByReplayVertices", attempted },
+            { "succeededByReplayVertices", succeeded },
+        };
+    }
+    return json;
+}
+
 static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
@@ -281,6 +321,7 @@ static nlohmann::json buildResultsJson()
         { "settings", settingsJson() },
         { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) } } },
         { "gpu", { { "frameMs", statsJson(gpuFrameMs) }, { "scopes", scopesJson } } },
+        { "restirShiftStats", restirShiftStatsJson() },
     };
 }
 

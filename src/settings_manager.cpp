@@ -43,6 +43,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "true");
     ADD_OPTION("restirDecorrelationMinCap", "Confidence cap where the duplication score is 1", float, "1");
     ADD_OPTION("restirDecorrelationExponent", "Duplication score exponent driving the cap reduction", float, "0.1");
+    ADD_OPTION("restirShiftStats", "Count ReSTIR PT shift outcomes into the perf report (atomics perturb timings)", bool, "false");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
@@ -151,6 +152,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("restirDecorrelation", bool);
     COPY_SETTING("restirDecorrelationMinCap", float);
     COPY_SETTING("restirDecorrelationExponent", float);
+    COPY_SETTING("restirShiftStats", bool);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);

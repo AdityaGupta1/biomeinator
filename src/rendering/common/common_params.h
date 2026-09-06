@@ -175,7 +175,7 @@ struct RestirParams
 
     float decorrelationMinCap; // cap used where the duplication score is 1
     float decorrelationExponent; // score^exponent drives the cap reduction; smaller reacts faster
-    uint pad0;
+    uint shiftStatsEnabled; // count shift outcomes into the stats buffer (perf runs only)
     uint pad1;
 
     uint4 pairingTransforms[RESTIR_MAX_SPATIAL_NEIGHBORS]; // x = texture size, y = RESTIR_PAIRING_* flags, zw = offset

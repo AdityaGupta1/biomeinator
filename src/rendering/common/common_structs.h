@@ -72,6 +72,20 @@ struct PathReservoir
 
 #define RESERVOIR_DEBUG_TEMPORAL_SHIFT_SUCCEEDED (1 << 0)
 
+// Shift outcome counters (uint per slot), written by the reuse passes when RestirParams::shiftStatsEnabled.
+// A pass has RESTIR_STATS_PASS_STRIDE slots: pairs seen, pairs skipped for an empty reservoir, pairs
+// skipped for a missing partner, then per replayed-vertex-count bucket (0 .. RESTIR_STATS_REPLAY_BUCKETS-1, the last bucket meaning
+// that many or more) the shifts attempted and the shifts that produced a nonzero contribution.
+#define RESTIR_STATS_REPLAY_BUCKETS 8
+#define RESTIR_STATS_PAIRS 0
+#define RESTIR_STATS_SKIPPED 1
+#define RESTIR_STATS_NO_PARTNER 2
+#define RESTIR_STATS_BUCKETS_BASE 3
+#define RESTIR_STATS_PASS_STRIDE (RESTIR_STATS_BUCKETS_BASE + 2 * RESTIR_STATS_REPLAY_BUCKETS)
+#define RESTIR_STATS_SPATIAL_BASE 0
+#define RESTIR_STATS_TEMPORAL_BASE RESTIR_STATS_PASS_STRIDE
+#define RESTIR_STATS_COUNT (2 * RESTIR_STATS_PASS_STRIDE)
+
 // A neighbor's path shifted into a pixel, as produced by the spatial shift pass
 struct ShiftedPath
 {

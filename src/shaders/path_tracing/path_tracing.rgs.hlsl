@@ -36,6 +36,7 @@ RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFU
 RWStructuredBuffer<PathReservoir> reservoirsOut : REGISTER_U(PT, RESERVOIRS_OUT);
 RWStructuredBuffer<PathReservoir> reservoirsMergedOut : REGISTER_U(PT, RESERVOIRS_MERGED_OUT);
 RWStructuredBuffer<ShiftedPath> shiftedOut : REGISTER_U(PT, SHIFTED_OUT);
+RWStructuredBuffer<uint> restirStatsOut : REGISTER_U(PT, RESTIR_STATS_OUT);
 StructuredBuffer<uint> pairingTextures : REGISTER_T(PT, PAIRING_TEXTURES_IN);
 StructuredBuffer<GbufferData> gbufferPrevIn : REGISTER_T(PT, GBUFFER_PREV_IN);
 StructuredBuffer<PathReservoir> reservoirsHistoryIn : REGISTER_T(PT, RESERVOIRS_HISTORY_IN);
@@ -1260,6 +1261,37 @@ PathReservoir mergeSlotReservoirs(const uint2 pixelIdx)
 // history reservoir (confidence capped) the one neighbor. The history path is shifted into this
 // frame's pixel, and this pixel's path into the previous frame's pixel for the canonical MIS term.
 // The result is the input to spatial reuse.
+// Shift outcome counters for the perf report, see RESTIR_STATS_* in common_structs.h. `path` is
+// the reservoir that was shifted (or empty when the pair was skipped).
+void recordShiftStats(const uint passBase, const bool noPartner, const bool skipped, const PathReservoir path, const ShiftedPath shifted)
+{
+    if (!bool(restirParams.shiftStatsEnabled))
+    {
+        return;
+    }
+    InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_PAIRS], 1);
+    if (noPartner)
+    {
+        InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_NO_PARTNER], 1);
+        return;
+    }
+    if (skipped)
+    {
+        InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_SKIPPED], 1);
+        return;
+    }
+    // Vertices random replay traces before reconnecting: none when the rc vertex is x2, the whole
+    // path (minus the primary hit) when there is no rc vertex
+    const uint rcVertexIdx = getRcVertexIdx(path.flags);
+    const uint replayVertices = rcVertexIdx == 0 ? getPathLength(path.flags) - 1 : rcVertexIdx - 2;
+    const uint bucket = min(replayVertices, RESTIR_STATS_REPLAY_BUCKETS - 1);
+    InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_BUCKETS_BASE + 2 * bucket], 1);
+    if (any(shifted.F > 0.f))
+    {
+        InterlockedAdd(restirStatsOut[passBase + RESTIR_STATS_BUCKETS_BASE + 2 * bucket + 1], 1);
+    }
+}
+
 void temporalRayGen()
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
@@ -1312,6 +1344,8 @@ void temporalRayGen()
 
     const ShiftedPath historyAtCanonical = shiftPathToPixel(history, gbufferData, pixelIdx, cameraParams.pos_WS);
     const ShiftedPath canonicalAtHistory = shiftPathToPixel(canonical, prevGbufferData, prevPixelIdx, prevCameraPos_WS);
+    recordShiftStats(RESTIR_STATS_TEMPORAL_BASE, false, history.W <= 0.f, history, historyAtCanonical);
+    recordShiftStats(RESTIR_STATS_TEMPORAL_BASE, false, canonical.W <= 0.f, canonical, canonicalAtHistory);
 
     const float canonicalM = reservoirM(canonical);
     const float historyM = reservoirM(history);
@@ -1373,7 +1407,9 @@ void spatialShiftRayGen()
         {
             partner = reservoirsMergedOut[partnerIdx.y * renderParams.renderSize.x + partnerIdx.x];
         }
-        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shiftPathToPixel(partner, gbufferData, pixelIdx, cameraParams.pos_WS);
+        const ShiftedPath shifted = shiftPathToPixel(partner, gbufferData, pixelIdx, cameraParams.pos_WS);
+        shiftedOut[textureIdx * pixelCount + linearPixelIdx] = shifted;
+        recordShiftStats(RESTIR_STATS_SPATIAL_BASE, !hasPartner, partner.W <= 0.f, partner, shifted);
     }
 }
 

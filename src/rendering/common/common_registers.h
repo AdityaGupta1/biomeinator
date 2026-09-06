@@ -57,6 +57,7 @@
 #define PT_REGISTER_RESERVOIRS_OUT 2
 #define PT_REGISTER_RESERVOIRS_MERGED_OUT 3
 #define PT_REGISTER_SHIFTED_OUT 4
+#define PT_REGISTER_RESTIR_STATS_OUT 5
 
 // =============================================
 #define RESTIR_REGISTER_SPACE 2
