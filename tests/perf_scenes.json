@@ -27,6 +27,15 @@
                 "--height=1080",
                 "--antialiasingMode=2"
             ]
+        },
+        {
+            "name": "swamp",
+            "world": "voxel/swamp",
+            "args": [
+                "--width=1920",
+                "--height=1080",
+                "--antialiasingMode=2"
+            ]
         }
     ]
 }
