@@ -126,7 +126,7 @@ void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
-    if (worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
+    if (headless && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
@@ -1105,9 +1105,12 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         }
     }
 
-    expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
-    importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
-    worldImportActive.store(true, std::memory_order_release);
+    if (headless)
+    {
+        expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
+        importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
+        worldImportActive.store(true, std::memory_order_release);
+    }
 
     Renderer::restoreCameraFromImport(cameraPosInt, cameraPosFloat, phi, theta);
     setDirty();
@@ -1194,7 +1197,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool pollWorldImport()
+bool pollHeadlessImport()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {

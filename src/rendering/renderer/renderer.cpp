@@ -505,16 +505,6 @@ void render()
         imguiBeginFrame();
     }
 
-    // Sleeping here rather than throttling the swap chain keeps the whole frame, animation time
-    // included, on the capped cadence. Not applied while a world import is still streaming in.
-    const uint32_t maxFps = SettingsManager::getAsUint("maxFps");
-    const bool importStreaming = renderState.voxelMode && (!Terrain::pollWorldImport() || renderState.scene.hasPendingBlasBuilds());
-    if (maxFps > 0 && !importStreaming)
-    {
-        const auto frameDeadline = renderState.lastTimePoint + std::chrono::duration<double>(1.0 / maxFps);
-        std::this_thread::sleep_until(frameDeadline);
-    }
-
     const auto currentTimePoint = std::chrono::high_resolution_clock::now();
     const double deltaTime = std::chrono::duration<double>(currentTimePoint - renderState.lastTimePoint).count();
     renderState.lastTimePoint = currentTimePoint;
@@ -639,9 +629,7 @@ void render()
     renderParams->prevAnimTime = renderState.prevAnimTime;
     renderState.prevAnimTime = animTimeFloat;
 
-    // An import is loading until every chunk is queued and the throttled BLAS builds have drained
-    const bool worldLoading = renderState.voxelMode && (!Terrain::pollWorldImport() || renderState.scene.hasPendingBlasBuilds());
-    const bool waitingForImport = renderState.headless && worldLoading;
+    const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessImport();
 
     // Frame-sequence captures key on the raw frame counter so animation, camera motion and chunk
     // streaming (which all reset accumulation) cannot stall them

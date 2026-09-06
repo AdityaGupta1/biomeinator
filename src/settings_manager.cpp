@@ -54,7 +54,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
     ADD_OPTION("useVsync", "Enable VSync", bool, "false");
-    ADD_OPTION("maxFps", "Cap the frame rate by sleeping (0 = uncapped)", uint32_t, "0");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
     ADD_OPTION("scriptedCameraFrames", "Move the camera by the scriptedCamera* steps for this many frames from startup (for moving-camera tests)", uint32_t, "0");
     ADD_OPTION("scriptedCameraRightPerFrame", "Scripted camera translation along its right vector per frame", float, "0");
@@ -158,7 +157,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("dlssMode", uint32_t);
     COPY_SETTING("doPathSplitting", bool);
     COPY_SETTING("useVsync", bool);
-    COPY_SETTING("maxFps", uint32_t);
     COPY_SETTING("lockCamera", bool);
     COPY_SETTING("scriptedCameraFrames", uint32_t);
     COPY_SETTING("scriptedCameraRightPerFrame", float);

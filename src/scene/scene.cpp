@@ -821,11 +821,6 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevMaterialsAddress() const
     return this->mappedMaterialsArray.getGpuVirtualAddress();
 }
 
-bool Scene::hasPendingBlasBuilds() const
-{
-    return !this->instancesReadyForBlasBuild.empty();
-}
-
 bool Scene::hasTlas() const
 {
     return this->tlasBufferSection.sizeBytes > 0;

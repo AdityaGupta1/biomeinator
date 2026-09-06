@@ -230,7 +230,6 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevMaterialsAddress() const;
 
     bool hasTlas() const;
-    bool hasPendingBlasBuilds() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
