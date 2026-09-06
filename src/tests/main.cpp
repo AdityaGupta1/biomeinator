@@ -143,18 +143,9 @@ int main(int argc, char** argv)
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
         const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
-        const std::vector<std::string> constantArgs = {
-            "--testOutput=" + generatedImagePath.generic_string(),
-            "--useVsync=false",
-            "--lockCamera=true",
-            "--showGui=false",
-            "--animTimePaused=true" // freeze world animation for deterministic screenshots
-        };
-        std::string command = exePath.generic_string();
-        for (const std::string& arg : constantArgs)
-        {
-            command += " " + arg;
-        }
+        // --testOutput makes the run headless, which also locks the camera, hides the GUI, and
+        // pauses animation so screenshots are deterministic
+        std::string command = exePath.generic_string() + " --testOutput=" + generatedImagePath.generic_string();
         for (const std::string& arg : test.args)
         {
             command += " " + arg;

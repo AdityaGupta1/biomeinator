@@ -16,8 +16,7 @@ namespace SettingsManager
 
 using namespace cxxopts;
 
-using settingValue = std::variant<bool, int, uint32_t, float, std::string>;
-static std::unordered_map<std::string, settingValue> settings;
+static std::unordered_map<std::string, SettingValue> settings;
 
 uint32_t worldSeed; // cached due to frequent access
 
@@ -44,6 +43,11 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "true");
     ADD_OPTION("restirDecorrelationMinCap", "Confidence cap where the duplication score is 1", float, "1");
     ADD_OPTION("restirDecorrelationExponent", "Duplication score exponent driving the cap reduction", float, "0.1");
+    ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
+    ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
+    ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
+    ADD_OPTION("perfFrames", "Perf run: number of frames to measure", uint32_t, "300");
+    ADD_OPTION("perfTimeoutSeconds", "Perf run: give up and write whatever was measured after this long", float, "120");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
@@ -111,6 +115,21 @@ void parseArgs(const int argc, const char* const* argv)
         }
     }
 
+    if (parseResult.contains("perfOutput"))
+    {
+        const std::string& perfOutputPath = parseResult["perfOutput"].as<std::string>();
+        if (!perfOutputPath.ends_with(".json"))
+        {
+            std::cerr << "--perfOutput must be a .json" << std::endl;
+            exit(1);
+        }
+        if (parseResult.contains("testOutput"))
+        {
+            std::cerr << "--perfOutput and --testOutput are mutually exclusive" << std::endl;
+            exit(1);
+        }
+    }
+
 #define COPY_SETTING(name, type) settings[name] = parseResult[name].as<type>()
 
     COPY_SETTING("width", uint32_t);
@@ -120,6 +139,11 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("testOutputFrameInterval", uint32_t);
     COPY_SETTING("testOutputFrameCount", uint32_t);
+    COPY_SETTING("perfOutput", std::string);
+    COPY_SETTING("perfWarmupFrames", uint32_t);
+    COPY_SETTING("perfWarmupSeconds", float);
+    COPY_SETTING("perfFrames", uint32_t);
+    COPY_SETTING("perfTimeoutSeconds", float);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("restirDebugMode", uint32_t);
     COPY_SETTING("restirSpatialNeighbors", uint32_t);
@@ -212,6 +236,32 @@ void parseArgs(const int argc, const char* const* argv)
     {
         settings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
+
+    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so golden
+    // screenshots are reproducible and perf measurements are not throttled; each of these can
+    // still be overridden explicitly
+    if (isHeadless())
+    {
+        const auto defaultTo = [&parseResult](const char* name, const bool value)
+        {
+            if (parseResult.count(name) == 0)
+            {
+                settings[name] = value;
+            }
+        };
+        defaultTo("lockCamera", true);
+        defaultTo("showGui", false);
+        defaultTo("animTimePaused", true);
+        defaultTo("useVsync", false);
+    }
+}
+
+void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback)
+{
+    for (const auto& [name, value] : settings)
+    {
+        callback(name, value);
+    }
 }
 
 bool getAsBool(const std::string& name)
@@ -283,6 +333,16 @@ void setWorldSeed(uint32_t value)
 bool isTestMode()
 {
     return !getAsString("testOutput").empty();
+}
+
+bool isPerfMode()
+{
+    return !getAsString("perfOutput").empty();
+}
+
+bool isHeadless()
+{
+    return isTestMode() || isPerfMode();
 }
 
 } // namespace SettingsManager

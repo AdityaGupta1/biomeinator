@@ -48,7 +48,7 @@ namespace Terrain
 static Scene* scene;
 
 // Cached at Terrain::init. See knowledge/terrain/world_export_import.md (Cost containment).
-static bool testMode{ false };
+static bool headless{ false };
 
 static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -80,7 +80,7 @@ static ThreadPool threadPool;
 void init(Scene* scene)
 {
     Terrain::scene = scene;
-    Terrain::testMode = SettingsManager::isTestMode();
+    Terrain::headless = SettingsManager::isHeadless();
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -1054,7 +1054,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
     // pipeline must use the same seed/offset that produced the exported chunks.
     ChunkGenerator::init();
 
-    if (SettingsManager::isTestMode())
+    if (SettingsManager::isHeadless())
     {
         SettingsManager::setAsInt("renderDistance", worldJson["renderDistance"].get<int>());
     }

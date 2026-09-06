@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstring>
+#include <string>
 #include <vector>
 
 namespace Util
@@ -21,6 +23,19 @@ template<typename T> inline uint32_t convertByteSizeToCount(size_t sizeBytes)
 inline std::wstring to_wstring(const char* str)
 {
     return std::wstring(str, str + std::strlen(str));
+}
+
+// Narrowing conversion; only for strings known to be ASCII (e.g. adapter names). Not the
+// range constructor like to_wstring, since that narrows inside the standard library and
+// warns (C4244) in every translation unit including this header
+inline std::string to_string(const wchar_t* str)
+{
+    std::string result;
+    for (const wchar_t* c = str; *c != 0; ++c)
+    {
+        result.push_back(static_cast<char>(*c));
+    }
+    return result;
 }
 
 inline uint32_t calculateDispatchSize(const uint32_t size, const uint32_t threadGroupSize)

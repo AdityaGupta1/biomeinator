@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-06_
 
 # World Export / Import
 
@@ -32,25 +32,25 @@ The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`
 
 `ChunkGenerator` caches `worldSeed` and the RNG-derived `noiseOffsetXZ` at init time. The first `Terrain::init` runs with whatever seed was active at startup; `importWorld` then calls `setWorldSeed` and must re-init `ChunkGenerator` before any boundary chunk runs fresh-gen. Without this, regenerated boundary chunks use the wrong noise offset and produce visible seams against imported chunks.
 
-## `pollTestModeImport()` is a test-mode-only gate
+## `pollHeadlessImport()` is a headless-only gate
 
-The interactive import path does not need to know when import finishes — frames render unconditionally. The test harness, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before triggering the screenshot, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
+The interactive import path does not need to know when import finishes — frames render unconditionally. Headless runs, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before the golden screenshot or the perf warmup starts, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
 
 ### Counter mechanics
 
 Three statics in `terrain.cpp` drive the gate:
 
 - `expectedImportedChunks` — total imported chunks within `createBlasDistance` of the imported camera position. Tallied inside `loadRegionFile` as each chunk is decoded; stored once at the end of `importWorldImpl` while no workers are running yet, so a `relaxed` store suffices.
-- `importedChunksEnqueuedForBlas` — incremented by `addChunkToCreateBlas` whenever an imported chunk reaches the BLAS-create queue. `relaxed` increments are fine because the values are only consumed by `pollTestModeImport()`, which doesn't synchronize anything else against them.
-- `worldImportActive` — the publish flag. Stored `release` at the end of `importWorldImpl`; loaded `acquire` by `addChunkToCreateBlas` so workers see a fully-populated `expectedImportedChunks` before they start ticking the counter. `pollTestModeImport()` reads it `relaxed` because by the time the renderer calls it, the corresponding `addChunkToCreateBlas` happens-before edges through the BLAS-create-queue mutex have already established visibility of the counter values.
+- `importedChunksEnqueuedForBlas` — incremented by `addChunkToCreateBlas` whenever an imported chunk reaches the BLAS-create queue. `relaxed` increments are fine because the values are only consumed by `pollHeadlessImport()`, which doesn't synchronize anything else against them.
+- `worldImportActive` — the publish flag. Stored `release` at the end of `importWorldImpl`; loaded `acquire` by `addChunkToCreateBlas` so workers see a fully-populated `expectedImportedChunks` before they start ticking the counter. `pollHeadlessImport()` reads it `relaxed` because by the time the renderer calls it, the corresponding `addChunkToCreateBlas` happens-before edges through the BLAS-create-queue mutex have already established visibility of the counter values.
 
 ### Why the gate is one frame early
 
-The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollTestModeImport()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
+The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollHeadlessImport()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
 
 ### Cost containment
 
-All counter mutation in `addChunkToCreateBlas` is wrapped in `if (testMode && worldImportActive.load(...))` so the non-test path stays at zero extra atomic ops. `testMode` is cached at `Terrain::init` from `SettingsManager::isTestMode()`, mirroring how `renderer.cpp` caches its `testMode`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (golden tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
 
 ## `reimportWorld` flushes everything
 
