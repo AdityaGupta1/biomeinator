@@ -30,10 +30,6 @@ granularity. If a scope is ever added around dispatches that have no barrier bet
 expect misattribution: the GPU overlaps such dispatches, so a timestamp between them does not
 mark where one ends and the next begins.
 
-Every scope is also a PIX event with the same name, so Nsight and PIX captures show the same
-regions the JSON reports. Markers compile to nothing in Release (see
-[build → configs.md](../build/configs.md)).
-
 ## Readback timing
 
 Results for a frame come back `NUM_FRAMES_IN_FLIGHT` frames later. Each frame context owns a

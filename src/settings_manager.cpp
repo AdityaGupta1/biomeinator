@@ -199,11 +199,13 @@ void parseArgs(const int argc, const char* const* argv)
         settings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
-    // A perf run measures a fixed viewpoint with no frame-rate cap; each of these can still be
-    // overridden explicitly
-    if (isPerfMode())
+    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so golden
+    // screenshots are reproducible and perf measurements are not throttled; each of these can
+    // still be overridden explicitly
+    if (isHeadless())
     {
-        const auto defaultTo = [&parseResult](const char* name, const bool value) {
+        const auto defaultTo = [&parseResult](const char* name, const bool value)
+        {
             if (parseResult.count(name) == 0)
             {
                 settings[name] = value;

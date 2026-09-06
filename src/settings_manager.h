@@ -37,7 +37,8 @@ void forEachSetting(const std::function<void(const std::string& name, const Sett
 bool isTestMode();
 // Performance measurement run: warm up, measure, write --perfOutput, exit
 bool isPerfMode();
-// Either automated run: camera locked, no foreground window, voxel import awaited
+// Either automated run: camera locked, GUI hidden, animation paused, vsync off (all as
+// overridable defaults), no foreground window, voxel import awaited
 bool isHeadless();
 
 } // namespace SettingsManager

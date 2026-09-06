@@ -43,14 +43,14 @@ void endFrame(ID3D12GraphicsCommandList* cmdList);
 void beginScope(ID3D12GraphicsCommandList* cmdList, const char* name);
 void endScope(ID3D12GraphicsCommandList* cmdList);
 
-class ScopedZone
+class ProfileScope
 {
 public:
-    ScopedZone(ID3D12GraphicsCommandList* cmdList, const char* name);
-    ~ScopedZone();
+    ProfileScope(ID3D12GraphicsCommandList* cmdList, const char* name);
+    ~ProfileScope();
 
-    ScopedZone(const ScopedZone&) = delete;
-    ScopedZone& operator=(const ScopedZone&) = delete;
+    ProfileScope(const ProfileScope&) = delete;
+    ProfileScope& operator=(const ProfileScope&) = delete;
 
 private:
     ID3D12GraphicsCommandList* cmdList;
@@ -61,4 +61,4 @@ private:
 #define GPU_PROFILER_CONCAT_IMPL(a, b) a##b
 #define GPU_PROFILER_CONCAT(a, b) GPU_PROFILER_CONCAT_IMPL(a, b)
 #define GPU_PROFILE_SCOPE(cmdList, name)                                                                               \
-    const GpuProfiler::ScopedZone GPU_PROFILER_CONCAT(gpuProfileScope_, __LINE__)(cmdList, name)
+    const GpuProfiler::ProfileScope GPU_PROFILER_CONCAT(gpuProfileScope_, __LINE__)(cmdList, name)

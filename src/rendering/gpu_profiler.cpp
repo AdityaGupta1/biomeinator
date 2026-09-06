@@ -16,6 +16,8 @@ namespace GpuProfiler
 
 // Two timestamps per scope plus two for the frame itself
 static constexpr uint32_t MAX_QUERIES_PER_SLOT = 128;
+// The last query of every slot is reserved for the frame end, so overflow only ever drops scopes
+static constexpr uint32_t MAX_SCOPE_QUERIES_PER_SLOT = MAX_QUERIES_PER_SLOT - 1;
 static constexpr uint32_t NUM_SLOTS = Renderer::NUM_FRAMES_IN_FLIGHT;
 
 struct ScopeRecord
@@ -118,24 +120,29 @@ bool collect(const uint32_t slotIdx, FrameTimings& outTimings)
     return true;
 }
 
-// Returns the query index written, or ~0u if the slot is full
 static uint32_t writeTimestamp(ID3D12GraphicsCommandList* cmdList)
 {
     Slot& slot = slots[currentSlotIdx];
-    if (slot.numQueries >= MAX_QUERIES_PER_SLOT)
+    ASSERT(slot.numQueries < MAX_QUERIES_PER_SLOT, "GpuProfiler slot overflow");
+    const uint32_t queryIdx = slot.numQueries++;
+    cmdList->EndQuery(queryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slotQueryBase(currentSlotIdx) + queryIdx);
+    return queryIdx;
+}
+
+// Returns the query index written, or ~0u if the slot's scope queries are used up
+static uint32_t writeScopeTimestamp(ID3D12GraphicsCommandList* cmdList)
+{
+    if (slots[currentSlotIdx].numQueries >= MAX_SCOPE_QUERIES_PER_SLOT)
     {
         if (!warnedOverflow)
         {
-            Logger::logWarning("GpuProfiler: more than %u timestamps in a frame, later scopes are dropped",
-                               MAX_QUERIES_PER_SLOT);
+            Logger::logWarning("GpuProfiler: more than %u scope timestamps in a frame, later scopes are dropped",
+                               MAX_SCOPE_QUERIES_PER_SLOT);
             warnedOverflow = true;
         }
         return ~0u;
     }
-
-    const uint32_t queryIdx = slot.numQueries++;
-    cmdList->EndQuery(queryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slotQueryBase(currentSlotIdx) + queryIdx);
-    return queryIdx;
+    return writeTimestamp(cmdList);
 }
 
 void beginFrame(ID3D12GraphicsCommandList* cmdList, const uint32_t slotIdx, const uint32_t frameNumber)
@@ -186,7 +193,7 @@ void beginScope(ID3D12GraphicsCommandList* cmdList, const char* name)
     if (timestampsEnabled)
     {
         Slot& slot = slots[currentSlotIdx];
-        const uint32_t beginQueryIdx = writeTimestamp(cmdList);
+        const uint32_t beginQueryIdx = writeScopeTimestamp(cmdList);
         if (beginQueryIdx != ~0u)
         {
             scopeIdx = static_cast<uint32_t>(slot.scopes.size());
@@ -206,18 +213,18 @@ void endScope(ID3D12GraphicsCommandList* cmdList)
     if (scopeIdx != ~0u)
     {
         // Stays ~0u if the slot is full; collect() skips such scopes
-        slots[currentSlotIdx].scopes[scopeIdx].endQueryIdx = writeTimestamp(cmdList);
+        slots[currentSlotIdx].scopes[scopeIdx].endQueryIdx = writeScopeTimestamp(cmdList);
     }
 
     PIXEndEvent(cmdList);
 }
 
-ScopedZone::ScopedZone(ID3D12GraphicsCommandList* cmdList, const char* name) : cmdList(cmdList)
+ProfileScope::ProfileScope(ID3D12GraphicsCommandList* cmdList, const char* name) : cmdList(cmdList)
 {
     beginScope(cmdList, name);
 }
 
-ScopedZone::~ScopedZone()
+ProfileScope::~ProfileScope()
 {
     endScope(this->cmdList);
 }

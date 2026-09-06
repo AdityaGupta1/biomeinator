@@ -4,7 +4,6 @@
 #include "renderer_internal.h"
 
 #include "logger.h"
-#include "rendering/common/common_enums.h"
 #include "settings_manager.h"
 #include "util/file_util.h"
 
@@ -21,6 +20,22 @@ namespace Renderer
 // Warmup also waits for this many consecutive frames with no scene change, so voxel worlds
 // finish streaming boundary chunks before measuring starts
 static constexpr uint32_t PERF_QUIET_FRAMES = 30;
+
+static const char* phaseName(const PerfPhase phase)
+{
+    switch (phase)
+    {
+        case PerfPhase::WAITING_FOR_SCENE:
+            return "waiting for scene";
+        case PerfPhase::WARMUP:
+            return "warmup";
+        case PerfPhase::MEASURING:
+            return "measuring";
+        case PerfPhase::DONE:
+            return "done";
+    }
+    return "unknown";
+}
 
 static double secondsSince(const std::chrono::steady_clock::time_point& start)
 {
@@ -87,7 +102,7 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
 
     if (secondsSince(perfRun.startTime) > SettingsManager::getAsFloat("perfTimeoutSeconds"))
     {
-        Logger::logWarning("perf run: timed out in phase %u", static_cast<uint32_t>(perfRun.phase));
+        Logger::logWarning("perf run: timed out in phase '%s'", phaseName(perfRun.phase));
         perfRun.timedOut = true;
         perfRun.measureEndFrame = renderState.frameNumber;
         enterPhase(PerfPhase::DONE);

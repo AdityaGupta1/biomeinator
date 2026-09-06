@@ -152,13 +152,13 @@ def main():
     compare.add_argument("candidate")
 
     args, passthrough = parser.parse_known_args()
+    if passthrough and args.command != "run":
+        parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
     if args.command == "run":
         cmd_run(args, passthrough)
     elif args.command == "show":
         cmd_show(args)
     else:
-        if passthrough:
-            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
         cmd_compare(args)
 
 

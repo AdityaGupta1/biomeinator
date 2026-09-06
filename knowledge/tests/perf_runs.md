@@ -60,11 +60,12 @@ loose for the delta being checked; warmup rarely needs touching.
   it. The partial report is for diagnosing the timeout, not for comparison.
 
 Perf mode is a *headless* run, sharing that flag with `--testOutput`: camera locked, GUI
-hidden, animation paused, no foreground window, Streamline logging off, voxel import awaited.
-`SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays specific to the
-golden screenshot-and-exit path. The perf defaults (`lockCamera`, `showGui`, `animTimePaused`,
-`useVsync`) are only applied when the flag was not passed explicitly, so a run can opt back
-into animation if it wants moving water in the measurement.
+hidden, animation paused, vsync off, no foreground window, Streamline logging off, voxel
+import awaited. `SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays
+specific to the golden screenshot-and-exit path. The headless defaults (`lockCamera`,
+`showGui`, `animTimePaused`, `useVsync`) live in `parseArgs` and are only applied when the
+flag was not passed explicitly, so a run can opt back into animation if it wants moving water
+in the measurement.
 
 ## Why DLSS mode, not accumulate mode
 
