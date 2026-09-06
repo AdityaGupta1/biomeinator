@@ -48,7 +48,7 @@ namespace Terrain
 static Scene* scene;
 
 // Cached at Terrain::init. See knowledge/terrain/world_export_import.md (Cost containment).
-static bool testMode{ false };
+static bool headless{ false };
 
 static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
 {
@@ -80,7 +80,7 @@ static ThreadPool threadPool;
 void init(Scene* scene)
 {
     Terrain::scene = scene;
-    Terrain::testMode = SettingsManager::isTestMode();
+    Terrain::headless = SettingsManager::isHeadless();
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -126,7 +126,7 @@ void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
-    if (testMode && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
+    if (headless && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
@@ -1054,7 +1054,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
     // pipeline must use the same seed/offset that produced the exported chunks.
     ChunkGenerator::init();
 
-    if (SettingsManager::isTestMode())
+    if (SettingsManager::isHeadless())
     {
         SettingsManager::setAsInt("renderDistance", worldJson["renderDistance"].get<int>());
     }
@@ -1105,7 +1105,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
         }
     }
 
-    if (testMode)
+    if (headless)
     {
         expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
         importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);

@@ -38,7 +38,7 @@ void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = renderState.testMode ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
+    prefs.logLevel = renderState.headless ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
     if (SettingsManager::getAsBool("verboseLogging"))
     {
@@ -130,6 +130,7 @@ void initDevice()
             CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
 
             Logger::log("Selected adapter: %ls", desc.Description);
+            renderState.adapterName = Util::to_string(desc.Description);
             break;
         }
 

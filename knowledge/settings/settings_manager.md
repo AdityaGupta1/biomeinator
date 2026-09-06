@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-06_
 
 # Settings Manager
 
@@ -39,7 +39,10 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - **`antialiasingMode`**: Defaults to `DLSS` in voxel mode, `NONE` otherwise. Anything wanting a
   deterministic mode (e.g. the test runner) must pass `--antialiasingMode` explicitly.
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
-- **`testOutput`**: If set to a `.png` path, the engine renders one frame, saves a screenshot, and exits. Used by automated tests.
+- **`testOutput`**: If set to a `.png` path, the engine accumulates to `maxAccumulatedFrames`, saves a screenshot, and exits. Used by the golden tests.
+- **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `testOutput`. Also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to the values a measurement wants, but only when they were not passed explicitly. See [tests → perf_runs.md](../tests/perf_runs.md).
+- **`isHeadless()`** is true for either of the above and is what code should test for "automated run" behaviour (no foreground window, await voxel import); `isTestMode()` and `isPerfMode()` are for the behaviour specific to each.
+- **`forEachSetting`** exists so a perf report can embed every setting it ran with; there is no other reason to enumerate the map.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
 - **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation
   (water displacement and shading, sun position); player movement, camera, and everything else

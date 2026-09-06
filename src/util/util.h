@@ -23,6 +23,17 @@ inline std::wstring to_wstring(const char* str)
     return std::wstring(str, str + std::strlen(str));
 }
 
+// Narrowing conversion; only for strings known to be ASCII (e.g. adapter names)
+inline std::string to_string(const wchar_t* str)
+{
+    std::string result;
+    for (const wchar_t* c = str; *c != 0; ++c)
+    {
+        result.push_back(static_cast<char>(*c));
+    }
+    return result;
+}
+
 inline uint32_t calculateDispatchSize(const uint32_t size, const uint32_t threadGroupSize)
 {
     return (size + threadGroupSize - 1) / threadGroupSize;

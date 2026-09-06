@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-06_
 
 # World Export / Import
 
@@ -50,7 +50,7 @@ The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-
 
 ### Cost containment
 
-All counter mutation in `addChunkToCreateBlas` is wrapped in `if (testMode && worldImportActive.load(...))` so the non-test path stays at zero extra atomic ops. `testMode` is cached at `Terrain::init` from `SettingsManager::isTestMode()`, mirroring how `renderer.cpp` caches its `testMode`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (golden tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
 
 ## `reimportWorld` flushes everything
 

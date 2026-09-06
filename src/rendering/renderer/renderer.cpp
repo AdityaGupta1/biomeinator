@@ -49,6 +49,7 @@ static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a br
 void init()
 {
     renderState.testMode = SettingsManager::isTestMode();
+    renderState.headless = SettingsManager::isHeadless();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
@@ -81,6 +82,9 @@ void init()
     initCommand();
     initConstantParams();
 
+    GpuProfiler::init();
+    perfRunInit();
+
     renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
 
     AcsHelper::init();
@@ -111,7 +115,7 @@ void init()
         }
     }
 
-    if (!renderState.testMode)
+    if (!renderState.headless)
     {
         SetForegroundWindow(hwnd);
     }
@@ -331,6 +335,8 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
 
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)
 {
+    GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "path tracing");
+
     renderState.cmdList->SetPipelineState1(renderState.ptPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
 
@@ -465,12 +471,17 @@ void render()
 
     if (renderState.voxelMode)
     {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "terrain");
         TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
 
-    const bool didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
+    bool didSceneChange;
+    {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "scene update");
+        didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
+    }
 
     const bool didCameraChange = renderState.camera.update();
 
@@ -493,7 +504,9 @@ void render()
     renderParams->prevAnimTime = renderState.prevAnimTime;
     renderState.prevAnimTime = animTimeFloat;
 
-    const bool waitingForImport = renderState.testMode && renderState.voxelMode && !Terrain::pollTestModeImport();
+    const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollTestModeImport();
+
+    perfRunUpdate(renderState.scene.hasTlas() && !waitingForImport, didSceneChange, deltaTime);
 
     if (resetAccumulation)
     {
@@ -607,6 +620,7 @@ void render()
     // root sigs declare CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED.
     if (renderState.scene.hasTlas())
     {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "light tree");
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
@@ -631,6 +645,7 @@ void render()
 
         if (renderState.voxelMode)
         {
+            GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sky luts");
             const float cameraY = paramBlockManager.cameraParams->pos_WS.y +
                 static_cast<float>(paramBlockManager.cameraParams->globalInstanceOffset.y);
             SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY);
@@ -639,6 +654,8 @@ void render()
         // ===================================
         // GBUFFER
         // ===================================
+
+        GpuProfiler::beginScope(renderState.cmdList.Get(), "gbuffer");
 
         // this isn't strictly necessary as the RtTargets should be promoted to UNORDERED_ACCESS on first access,
         // but it helps with state tracking (since otherwise the transition to PIXEL_SHADER_RESOURCE would complain that
@@ -674,11 +691,15 @@ void render()
                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+        GpuProfiler::endScope(renderState.cmdList.Get());
+
         dispatchPathTracing(paramBlockManager, doPathSplitting);
 
         // ===================================
         // COLLECT
         // ===================================
+
+        GpuProfiler::beginScope(renderState.cmdList.Get(), "collect");
 
         {
             BufferHelper::TransitionBatch batch;
@@ -715,12 +736,15 @@ void render()
             batch.submit(renderState.cmdList.Get());
         }
 
+        GpuProfiler::endScope(renderState.cmdList.Get());
+
         // ===================================
         // DLSS
         // ===================================
 
         if (useDlss)
         {
+            GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "dlss");
             const sl::BaseStructure* inputs[] = { &renderState.dlss.viewportHandle };
             CHECK_SL_RESULT(
                 slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), renderState.cmdList.Get()));
@@ -734,6 +758,8 @@ void render()
     // ===================================
     // POSTPROCESSING
     // ===================================
+
+    GpuProfiler::beginScope(renderState.cmdList.Get(), "postprocess");
 
     renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
 
@@ -785,6 +811,8 @@ void render()
     renderState.cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     renderState.cmdList->DrawInstanced(3, 1, 0, 0);
 
+    GpuProfiler::endScope(renderState.cmdList.Get());
+
     if (renderState.screenshotRequest.active)
     {
         captureQueuedScreenshot();
@@ -792,11 +820,14 @@ void render()
 
     if (showGui)
     {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "imgui");
         imguiEndFrame(deltaTime);
     }
 
     BufferHelper::stateTransitionResourceBarrier(
         renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+    GpuProfiler::endFrame(renderState.cmdList.Get());
 
     submitCmd();
 
@@ -834,6 +865,11 @@ void render()
             exit(0);
         }
     }
+
+    if (perfRunIsDone())
+    {
+        perfRunFinish(); // writes the results, then destroys the renderer and exits
+    }
 }
 
 static void beginFrame()
@@ -849,6 +885,13 @@ static void beginFrame()
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
+
+    GpuProfiler::FrameTimings prevTimings;
+    if (GpuProfiler::collect(renderState.frameCtxIdx, prevTimings))
+    {
+        perfRunOnFrameTimings(prevTimings);
+    }
+    GpuProfiler::beginFrame(renderState.cmdList.Get(), renderState.frameCtxIdx, renderState.frameNumber);
 
     // Every root signature declares CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, which requires the
     // heap to be bound before any SetComputeRootSignature; bind it once up front so early
@@ -899,6 +942,7 @@ void destroy()
 
     renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
+    GpuProfiler::destroy();
     WaterDisplacer::destroy();
     SkyAtmosphere::destroy();
     BiomeMap::destroy();

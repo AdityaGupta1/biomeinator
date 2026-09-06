@@ -27,6 +27,7 @@
 #include <sl_dlss_d.h>
 
 #include "rendering/camera.h"
+#include "rendering/gpu_profiler.h"
 #include "rendering/gpu_sort/gpu_radix_sort.h"
 #include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
@@ -224,6 +225,13 @@ void updateFps(double deltaTime);
 void captureQueuedScreenshot();
 void finalizeQueuedScreenshot();
 
+// Perf run lifecycle (renderer_perf.cpp); all no-ops unless --perfOutput is set
+void perfRunInit();
+void perfRunUpdate(bool sceneReady, bool didSceneChange, double deltaTime);
+void perfRunOnFrameTimings(const GpuProfiler::FrameTimings& timings);
+bool perfRunIsDone();
+void perfRunFinish();
+
 // =============================================
 // Shared state
 // =============================================
@@ -236,6 +244,32 @@ struct DlssState
     sl::Extent renderExtent{};
     sl::Extent viewportExtent{};
     sl::DLSSDOptions options{};
+};
+
+enum class PerfPhase
+{
+    WAITING_FOR_SCENE,
+    WARMUP,
+    MEASURING,
+    DONE,
+};
+
+struct PerfRunState
+{
+    bool active{ false };
+    PerfPhase phase{ PerfPhase::WAITING_FOR_SCENE };
+    std::chrono::steady_clock::time_point startTime{};
+    std::chrono::steady_clock::time_point phaseStartTime{};
+    uint32_t phaseStartFrame{ 0 };
+    uint32_t quietStreak{ 0 }; // consecutive frames without a scene change
+    // Frames in [measureStartFrame, measureEndFrame) are measured; GPU timings arrive
+    // NUM_FRAMES_IN_FLIGHT frames late, so this range is what decides which ones count
+    uint32_t measureStartFrame{ 0 };
+    uint32_t measureEndFrame{ 0 };
+    bool timedOut{ false };
+    bool stablePowerState{ false };
+    std::vector<GpuProfiler::FrameTimings> gpuSamples;
+    std::vector<double> cpuFrameMs;
 };
 
 struct ScreenshotRequest
@@ -271,6 +305,7 @@ struct RendererState
     ComPtr<ID3D12Device5> device;
     ComPtr<ID3D12Device5> proxyDevice;
     ComPtr<ID3D12CommandQueue> graphicsCmdQueue;
+    std::string adapterName;
     Fence fence;
     ComPtr<ID3D12DescriptorHeap> sharedDescriptorHeap;
     // sharedDescHeapAlloc is declared in rendering/renderer.h (public API)
@@ -287,6 +322,7 @@ struct RendererState
 
     // -- Mode flags --
     bool testMode{ false };
+    bool headless{ false };
     bool voxelMode{ false };
     bool useSer{ false };
     // Voxel mode with raytracing tier 1.2: terrain alpha cutout resolves via opacity micromaps
@@ -362,6 +398,9 @@ struct RendererState
 
     // -- Screenshot state --
     ScreenshotRequest screenshotRequest{};
+
+    // -- Perf run state --
+    PerfRunState perfRun{};
 };
 
 extern RendererState renderState;

@@ -16,8 +16,7 @@ namespace SettingsManager
 
 using namespace cxxopts;
 
-using settingValue = std::variant<bool, int, uint32_t, float, std::string>;
-static std::unordered_map<std::string, settingValue> settings;
+static std::unordered_map<std::string, SettingValue> settings;
 
 uint32_t worldSeed; // cached due to frequent access
 
@@ -34,6 +33,11 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
+    ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
+    ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
+    ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
+    ADD_OPTION("perfFrames", "Perf run: number of frames to measure", uint32_t, "300");
+    ADD_OPTION("perfTimeoutSeconds", "Perf run: give up and write whatever was measured after this long", float, "120");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL)", uint32_t, "2");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
@@ -95,6 +99,21 @@ void parseArgs(const int argc, const char* const* argv)
         }
     }
 
+    if (parseResult.contains("perfOutput"))
+    {
+        const std::string& perfOutputPath = parseResult["perfOutput"].as<std::string>();
+        if (!perfOutputPath.ends_with(".json"))
+        {
+            std::cerr << "--perfOutput must be a .json" << std::endl;
+            exit(1);
+        }
+        if (parseResult.contains("testOutput"))
+        {
+            std::cerr << "--perfOutput and --testOutput are mutually exclusive" << std::endl;
+            exit(1);
+        }
+    }
+
 #define COPY_SETTING(name, type) settings[name] = parseResult[name].as<type>()
 
     COPY_SETTING("width", uint32_t);
@@ -102,6 +121,11 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);
+    COPY_SETTING("perfOutput", std::string);
+    COPY_SETTING("perfWarmupFrames", uint32_t);
+    COPY_SETTING("perfWarmupSeconds", float);
+    COPY_SETTING("perfFrames", uint32_t);
+    COPY_SETTING("perfTimeoutSeconds", float);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);
@@ -174,6 +198,30 @@ void parseArgs(const int argc, const char* const* argv)
     {
         settings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
+
+    // A perf run measures a fixed viewpoint with no frame-rate cap; each of these can still be
+    // overridden explicitly
+    if (isPerfMode())
+    {
+        const auto defaultTo = [&parseResult](const char* name, const bool value) {
+            if (parseResult.count(name) == 0)
+            {
+                settings[name] = value;
+            }
+        };
+        defaultTo("lockCamera", true);
+        defaultTo("showGui", false);
+        defaultTo("animTimePaused", true);
+        defaultTo("useVsync", false);
+    }
+}
+
+void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback)
+{
+    for (const auto& [name, value] : settings)
+    {
+        callback(name, value);
+    }
 }
 
 bool getAsBool(const std::string& name)
@@ -245,6 +293,16 @@ void setWorldSeed(uint32_t value)
 bool isTestMode()
 {
     return !getAsString("testOutput").empty();
+}
+
+bool isPerfMode()
+{
+    return !getAsString("perfOutput").empty();
+}
+
+bool isHeadless()
+{
+    return isTestMode() || isPerfMode();
 }
 
 } // namespace SettingsManager

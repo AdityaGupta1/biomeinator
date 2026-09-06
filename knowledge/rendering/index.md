@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-06_
 
 # Rendering Knowledgebase
 
@@ -19,4 +19,5 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |
 | [light_tree.md](light_tree.md) | RTSL Stage 2 GPU light tree build: sparse/dense buffers, sentinels, atomic float min/max, fused internal-levels |
 | [sky_atmosphere.md](sky_atmosphere.md) | PBR sky LUT passes: ordering invariants, unit calibration, horizon/occlusion gotchas |
+| [gpu_profiler.md](gpu_profiler.md) | Timestamp-query scopes with PIX markers: placement rules, readback lag, why barrier-free chains get one scope |
 | [biome_map.md](biome_map.md) | World-XZ grass tint texture: noise-refill rationale, refill triggers, luminance-replace tinting |

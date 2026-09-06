@@ -1,0 +1,32 @@
+{
+    "perf": [
+        {
+            "name": "cornell_box",
+            "scene": "gltf/cornell_box/cornell_box.gltf",
+            "args": [
+                "--width=1920",
+                "--height=1080",
+                "--antialiasingMode=2"
+            ]
+        },
+        {
+            "name": "evil_room",
+            "scene": "gltf/evil_room/evil_room.gltf",
+            "args": [
+                "--width=1920",
+                "--height=1080",
+                "--antialiasingMode=2",
+                "--maxPathDepth=20"
+            ]
+        },
+        {
+            "name": "cave_lights",
+            "world": "voxel/cave_lights",
+            "args": [
+                "--width=1920",
+                "--height=1080",
+                "--antialiasingMode=2"
+            ]
+        }
+    ]
+}
