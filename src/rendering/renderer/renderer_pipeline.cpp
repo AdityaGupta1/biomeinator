@@ -163,6 +163,7 @@ void initRootSignature()
 
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
+        ptParams[PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT)] = MAKE_PARAM(SRV, LIGHT_TREE, LEAF_TO_LIGHT_IN);
 
         if (renderState.useSer)
         {
@@ -294,7 +295,8 @@ void initPipeline()
                 .AnyHitShaderImport = L"AnyHit",
                 .ClosestHitShaderImport = L"ClosestHit_Primary",
             };
-            // No CHS needed for shadow rays
+            // Anyhit-only hit group for TraceRay visibility rays: the ReSTIR reuse passes' reconnection
+            // and NEE replay rays. Initial sampling's shadow rays trace inline (isSegmentOccluded).
             pipelineInputs.hitGroups[HITGROUP_LIGHTS] = {
                 .HitGroupExport = lightsHitGroupName.c_str(),
                 .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,

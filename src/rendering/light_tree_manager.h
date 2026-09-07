@@ -23,7 +23,9 @@ namespace Renderer
 // Stage 2 builds the perfect-binary light tree from those Stage 1 outputs:
 //   * dev_sceneBbox      — 6 floats (orderable-uint encoded) reduced from LightAux bboxes
 //   * dev_mortonKeys     — uint32 morton code per live light, sorted ascending
-//   * dev_mortonValues   — uint32 sparseIdx, sorted by morton (the radix-sort payload)
+//   * dev_mortonValues   — uint32 sparseIdx, sorted by morton (the radix-sort payload). After
+//                          the sort this is the leaf -> sparseIdx map, and the path tracer reads
+//                          it as such; tree nodes carry no light index.
 //   * dev_lightTree      — LightTreeNode[2M-1] perfect binary tree, M = nextPow2(numAreaLights),
 //                          leaves at [M-1, 2M-1), root at [0]
 class LightTreeManager
@@ -37,8 +39,8 @@ public:
     // Returns true if a dispatch was recorded.
     bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
-    // Transitions the SRV-bound buffers (dev_lightTree, dev_lightToLeaf) from
-    // UNORDERED_ACCESS → NON_PIXEL_SHADER_RESOURCE, but only for buffers that
+    // Transitions the SRV-bound buffers (dev_lightTree, dev_lightToLeaf,
+    // dev_mortonValues) from UNORDERED_ACCESS → NON_PIXEL_SHADER_RESOURCE, but only for buffers that
     // were actually written by the most recent update() call. Buffers that
     // weren't written this frame are still in COMMON (post-decay) and will
     // implicit-promote to SRV on first raygen read.
@@ -54,6 +56,7 @@ public:
     // bindings never see GPUVA == 0 (which is a validation error).
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightTreeSrvBindAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevLightToLeafSrvBindAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevLeafToLightSrvBindAddress() const;
 
 private:
     // Stage 1 PSOs

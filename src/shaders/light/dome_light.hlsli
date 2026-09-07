@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "../rendering/common/common_hitgroups.h"
-
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
 #include "sky/atmosphere.hlsli"
@@ -137,6 +135,7 @@ bool traceToDomeLight(const float3 surfPos_WS,
                       const bool canPassthrough,
                       const bool startUnderwater,
                       const RandomNumberGenerator shadowRng,
+                      const bool useRayQuery,
                       out float3 Le,
                       out float3 transmittance)
 {
@@ -148,13 +147,10 @@ bool traceToDomeLight(const float3 surfPos_WS,
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 
-    // Occlusion-only ray: any committed hit ends traversal and no closest hit shader runs, so
-    // PAYLOAD_FLAG_DID_HIT starts set and only the miss shader (= dome light reached) clears it.
-    // The anyhit shader still runs on non-opaque geometry, preserving passthrough tint and
-    // water entry/exit tracking for absorption.
+    // Occlusion-only ray: the candidate handling still runs on non-opaque geometry, preserving
+    // passthrough tint and water entry/exit tracking for absorption.
     Payload domeLightPayload;
     domeLightPayload.flags =
-        PAYLOAD_FLAG_DID_HIT |
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
@@ -163,10 +159,7 @@ bool traceToDomeLight(const float3 surfPos_WS,
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
     domeLightPayload.rayCone = rayCone;
 
-    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
-    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, domeLightPayload);
-
-    if (bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT))
+    if (isSegmentOccluded(ray, domeLightPayload, useRayQuery))
     {
         return false;
     }

@@ -300,22 +300,21 @@ struct LightAux
 };
 
 // Node in the Stage 2 perfect-binary light tree (0-indexed, root at [0],
-// children of node i at 2i+1 and 2i+2). Leaves hold a real `areaLightIdx`
-// (sparse, into AreaLight[]); internal nodes and bogus padding-leaves use
-// LIGHT_IDX_INVALID. Field order matches LightAux so HLSL/cbuffer 16-byte
-// packing rules give a tight 32-byte layout with no crossed boundaries.
+// children of node i at 2i+1 and 2i+2). Bounds are f16 pairs rounded outward,
+// see makeLightTreeNode() in light_tree.hlsli; 16 bytes so both children of a
+// node come from one 32-byte load. Leaves carry no light index: leaf offset s
+// maps to its sparse AreaLight[] index through the sorted morton values buffer.
 struct LightTreeNode
 {
-    float3 bboxMin;
+    uint packedBboxMinXY;
+    uint packedBboxMinZMaxX;
+    uint packedBboxMaxYZ;
     float flux;
-
-    float3 bboxMax;
-    uint areaLightIdx;
 };
 
 #ifdef __cplusplus
 static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with the HLSL StructuredBuffer<LightAux> layout");
-static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
+static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
 #endif
 
 #define TRIANGLE_FLAG_IS_WATER (1 << 0)

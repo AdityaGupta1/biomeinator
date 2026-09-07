@@ -404,6 +404,8 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
                                                           renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
                                                           renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT),
+                                                          renderState.lightTreeManager.getDevLeafToLightSrvBindAddress());
 }
 
 // Initial sampling runs one thread per pixel slot (doubled width with path splitting); the temporal

@@ -10,6 +10,34 @@ float2 unpackUintToFloat2(uint v)
     return float2(f16tof32(v), f16tof32(v >> 16));
 }
 
+// f32tof16 rounds to nearest; these round toward -inf / +inf for conservative bounds.
+// Steps one half ulp in sign-magnitude space, so +0 steps to the smallest negative subnormal.
+uint f32tof16RoundDown(float v)
+{
+    uint h = f32tof16(v);
+    if (f16tof32(h) > v)
+    {
+        if (h == 0u)
+        {
+            h = 0x8001u;
+        }
+        else if (h & 0x8000u)
+        {
+            h += 1u;
+        }
+        else
+        {
+            h -= 1u;
+        }
+    }
+    return h;
+}
+
+uint f32tof16RoundUp(float v)
+{
+    return f32tof16RoundDown(-v) ^ 0x8000u;
+}
+
 uint packSnorm2ToUint(float2 v)
 {
     const int2 i = int2(round(clamp(v, -1.f, 1.f) * 32767.f));

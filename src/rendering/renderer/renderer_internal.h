@@ -159,6 +159,7 @@ enum class PtParam
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
+    RTSL_LEAF_TO_LIGHT,
 
     COUNT
 };

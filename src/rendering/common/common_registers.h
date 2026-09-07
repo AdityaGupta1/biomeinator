@@ -106,6 +106,7 @@
 // t# (consumed by path tracing raygen — light tree SRVs)
 #define LIGHT_TREE_REGISTER_LIGHT_TREE_IN 0
 #define LIGHT_TREE_REGISTER_LIGHT_TO_LEAF_IN 1
+#define LIGHT_TREE_REGISTER_LEAF_TO_LIGHT_IN 2 // the sorted morton values buffer
 
 // u#
 #define LIGHT_TREE_REGISTER_LIGHT_AUX_OUT 0

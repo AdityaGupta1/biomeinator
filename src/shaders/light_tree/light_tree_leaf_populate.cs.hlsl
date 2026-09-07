@@ -31,15 +31,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     if (s < numAreaLights)
     {
+        // mortonValuesOut is left as-is after the sort: it is the leaf -> sparse
+        // light map the path tracer reads once a descent reaches a leaf.
         const uint sparseIdx = mortonValuesOut[s];
         const LightAux aux = lightAuxOut[sparseIdx];
 
-        LightTreeNode n;
-        n.bboxMin = aux.bboxMin;
-        n.flux = aux.flux;
-        n.bboxMax = aux.bboxMax;
-        n.areaLightIdx = sparseIdx;
-        lightTreeOut[treeLeafBase + s] = n;
+        lightTreeOut[treeLeafBase + s] = makeLightTreeNode(aux.bboxMin, aux.bboxMax, aux.flux);
 
         lightToLeafOut[sparseIdx] = treeLeafBase + s;
     }

@@ -618,7 +618,8 @@ bool LightTreeManager::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& t
     }
 
     // Stage 2 wrote dev_lightTree (ends in UAV state after the final
-    // internal-levels pass + UAV barrier).
+    // internal-levels pass + UAV barrier) and dev_mortonValues (ends in UAV
+    // state after the sort; the leaf populate pass only reads it).
     this->wroteLightTreeThisCall = true;
 
     return true;
@@ -630,6 +631,9 @@ void LightTreeManager::transitionForPathTracingRead(ID3D12GraphicsCommandList4* 
     if (this->wroteLightTreeThisCall && this->dev_lightTree)
     {
         batch.add(this->dev_lightTree.Get(),
+                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        batch.add(this->dev_mortonValues.Get(),
                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
@@ -655,6 +659,11 @@ D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightTreeSrvBindAddress() cons
 D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLightToLeafSrvBindAddress() const
 {
     return (this->dev_lightToLeaf ? this->dev_lightToLeaf : this->dev_srvPlaceholder)->GetGPUVirtualAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS LightTreeManager::getDevLeafToLightSrvBindAddress() const
+{
+    return (this->dev_mortonValues ? this->dev_mortonValues : this->dev_srvPlaceholder)->GetGPUVirtualAddress();
 }
 
 } // namespace Renderer

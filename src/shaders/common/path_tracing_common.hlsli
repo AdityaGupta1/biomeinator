@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_structs.h"
 
@@ -104,15 +105,22 @@ float4 getMaterialBaseColorAtHit(const Material material, const InstanceData ins
     return getMaterialBaseColorNoAux(material, uv, texCtx);
 }
 
-[shader("anyhit")]
-void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+// Decides whether a non-opaque candidate hit is accepted, applying passthrough tint, water
+// entry/exit tracking and the stochastic alpha cutout to the payload on the way. Shared by the
+// anyhit shader and the inline shadow ray query so a segment is traced identically either way.
+bool acceptHitCandidate(inout Payload payload,
+                        const uint instanceId,
+                        const uint primitiveIdx,
+                        const float2 barycentrics,
+                        const float rayT,
+                        const bool isFrontFace)
 {
-    const InstanceData instanceData = instanceDatas[InstanceID()];
+    const InstanceData instanceData = instanceDatas[instanceId];
 
     const uint materialIdx = instanceData.materialIdx;
     if (materialIdx == MATERIAL_IDX_INVALID)
     {
-        return;
+        return true;
     }
 
     const Material material = materials[materialIdx];
@@ -124,13 +132,13 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
 
     if (!testRefractionPassthrough && !testAlphaCutout)
     {
-        return;
+        return true;
     }
 
-    const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, rayT);
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + primitiveIdx];
     const float4 baseColor = getMaterialBaseColorAtHit(
-        material, instanceData, perTriData, PrimitiveIndex(), attribs.barycentrics, computeMipLevel(coneWidth));
+        material, instanceData, perTriData, primitiveIdx, barycentrics, computeMipLevel(coneWidth));
 
     if (testRefractionPassthrough)
     {
@@ -140,26 +148,24 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
         {
             // Track the first water entry/exit T for absorption in computePassthroughAbsorption.
             // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
-            if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
+            if (isFrontFace)
             {
-                payload.waterEntryT = min(payload.waterEntryT, RayTCurrent());
+                payload.waterEntryT = min(payload.waterEntryT, rayT);
             }
             else
             {
-                payload.waterExitT = min(payload.waterExitT, RayTCurrent());
+                payload.waterExitT = min(payload.waterExitT, rayT);
             }
         }
 
-        IgnoreHit();
-        return;
+        return false;
     }
 
     if (baseColor.a < 0.999f) // testAlphaCutout
     {
         if (baseColor.a == 0.f)
         {
-            IgnoreHit();
-            return;
+            return false;
         }
 
         // If path splitting is enabled, we will split for fractional opacity, so we don't want to ignore those hits in the gbuffer pass.
@@ -167,9 +173,20 @@ void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs
             !bool(renderParams.doPathSplitting) || !bool(payload.flags & PAYLOAD_FLAG_IS_GBUFFER);
         if (checkFractionalOpacity && nextFloat(payload.rng) > baseColor.a)
         {
-            IgnoreHit();
-            return;
+            return false;
         }
+    }
+
+    return true;
+}
+
+[shader("anyhit")]
+void AnyHit(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+{
+    const bool isFrontFace = HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE;
+    if (!acceptHitCandidate(payload, InstanceID(), PrimitiveIndex(), attribs.barycentrics, RayTCurrent(), isFrontFace))
+    {
+        IgnoreHit();
     }
 }
 
@@ -329,4 +346,39 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 void Miss(inout Payload payload)
 {
     payload.flags &= ~PAYLOAD_FLAG_DID_HIT;
+}
+
+// Occlusion test for a shadow ray, which only ever needs the anyhit's candidate handling. With
+// `useRayQuery` the traversal runs inline in the caller, so there is no payload marshalling or
+// shader-table dispatch per non-opaque candidate (measured -8..-16% path tracing vs. an
+// accept-first-hit TraceRay, 2026-09); the payload is then just the struct the candidate handling
+// reads and updates (passthrough tint, water entry/exit T, ray cone, rng). Otherwise it is an
+// accept-first-hit TraceRay through the anyhit-only hit group, which the ReSTIR reuse passes use:
+// inline traversal there gives up their SER ordering and costs registers.
+bool isSegmentOccluded(const RayDesc ray, inout Payload payload, const bool useRayQuery)
+{
+    if (useRayQuery)
+    {
+        // The OMM opt-in is required because traversal over OMM-linked terrain is otherwise undefined.
+        // SKIP_PROCEDURAL_PRIMITIVES means every candidate is a non-opaque triangle, exactly the
+        // geometry the anyhit shader runs on; opaque hits commit in hardware and end the search.
+        RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
+                 RAYQUERY_FLAG_ALLOW_OPACITY_MICROMAPS> query;
+        query.TraceRayInline(raytracingAcs, RAY_FLAG_NONE, 0xFF, ray);
+        while (query.Proceed())
+        {
+            if (acceptHitCandidate(payload, query.CandidateInstanceID(), query.CandidatePrimitiveIndex(),
+                    query.CandidateTriangleBarycentrics(), query.CandidateTriangleRayT(), query.CandidateTriangleFrontFace()))
+            {
+                query.CommitNonOpaqueTriangleHit();
+            }
+        }
+        return query.CommittedStatus() != COMMITTED_NOTHING;
+    }
+
+    // Only the miss shader clears DID_HIT
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
+    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
+    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, payload);
+    return bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
 }

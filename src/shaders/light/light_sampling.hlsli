@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "../rendering/common/common_hitgroups.h"
 #include "../rendering/common/common_structs.h"
 
 #include "common/global_params.hlsli"
@@ -100,6 +99,7 @@ bool traceToLight(const float3 surfPos_WS,
                   const bool canPassthrough,
                   const bool startUnderwater,
                   const RandomNumberGenerator shadowRng,
+                  const bool useRayQuery,
                   out DirectLightingSample result)
 {
     result.didHitLight = false;
@@ -132,7 +132,6 @@ bool traceToLight(const float3 surfPos_WS,
 
     Payload lightPayload;
     lightPayload.flags =
-        PAYLOAD_FLAG_DID_HIT |
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
@@ -140,10 +139,7 @@ bool traceToLight(const float3 surfPos_WS,
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
     lightPayload.rayCone = rayCone;
-    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
-    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, lightPayload);
-
-    if (bool(lightPayload.flags & PAYLOAD_FLAG_DID_HIT)) // only the miss shader clears this
+    if (isSegmentOccluded(ray, lightPayload, useRayQuery))
     {
         return false;
     }

@@ -344,7 +344,6 @@ bool traceReconnectionRay(const float3 surfPos_WS,
 
     Payload payload;
     payload.flags =
-        PAYLOAD_FLAG_DID_HIT |
         (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
         (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
     payload.pathWeight = float3(1.f, 1.f, 1.f);
@@ -352,10 +351,9 @@ bool traceReconnectionRay(const float3 surfPos_WS,
     payload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;
     payload.rayCone = rayCone;
-    const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
-    TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, payload);
-
-    if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT)) // only the miss shader clears this
+    // TraceRay rather than inline: the reuse passes are SER-sorted by reconnection type and
+    // register-bound, and an inline query here measured +10..16% on cave_lights/evil_room
+    if (isSegmentOccluded(ray, payload, false))
     {
         return false;
     }
@@ -572,6 +570,9 @@ float3 pathTraceRay(inout Payload payload,
     const bool useRtsl = (samplingMode == SamplingMode::RTSL || useRestirPt);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
     const bool isReplay = replay.active;
+    // Inline shadow rays win in initial sampling but not in the replay passes (see isSegmentOccluded);
+    // constant per raygen entry, so each pass compiles only one of the two paths
+    const bool neeRayQuery = !isReplay;
 
     RayDesc ray;
     // Same direction as the gbuffer ray, used for calculating wo_WS the first time. Replay derives it
@@ -918,7 +919,7 @@ float3 pathTraceRay(inout Payload payload,
 
                     DirectLightingSample lightSample;
                     if (areaSample.valid && traceToLight(surfPos_WS, surfNor_WS, areaSample, payload.rayCone, canPassthrough,
-                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_AREA), lightSample))
+                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_AREA), neeRayQuery, lightSample))
                     {
                         // no need to consider dome light pdf because dome light sampling can't hit area lights
 
@@ -971,7 +972,7 @@ float3 pathTraceRay(inout Payload payload,
 
                     float3 domeLe, domeTransmittance;
                     if (domeSampleValid && traceToDomeLight(surfPos_WS, surfNor_WS, domeWi_WS, payload.rayCone, canPassthrough,
-                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_DOME), domeLe, domeTransmittance))
+                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_DOME), neeRayQuery, domeLe, domeTransmittance))
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
