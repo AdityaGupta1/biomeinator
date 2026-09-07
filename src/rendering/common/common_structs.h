@@ -264,6 +264,8 @@ static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for p
 #define TRIANGLE_FLAG_BIOME_TINT (1 << 2)
 // Foliage faces with thin-wall diffuse transmission: diffuse splits into reflection and transmission
 #define TRIANGLE_FLAG_DIFFUSE_TRANSMISSION (1 << 3)
+// Update when adding a flag: the flags must fit the low PACKED_TRI_DATA_FLAG_BITS bits of GbufferData::packedTriData
+#define TRIANGLE_FLAG_LAST TRIANGLE_FLAG_DIFFUSE_TRANSMISSION
 
 struct PerTriangleData
 {
@@ -279,7 +281,7 @@ public:
 };
 
 #ifdef __cplusplus
-static_assert(TRIANGLE_FLAG_DIFFUSE_TRANSMISSION < (1 << PACKED_TRI_DATA_FLAG_BITS), "triangle flags must fit the packed tri data flag bits");
+static_assert(TRIANGLE_FLAG_LAST < (1 << PACKED_TRI_DATA_FLAG_BITS), "triangle flags must fit the packed tri data flag bits");
 #endif
 
 #ifdef __cplusplus
