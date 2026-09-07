@@ -46,19 +46,17 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
         prevMotionHitPos_WS = motionHitPos_WS;
-        hitNor_WS = payload.hitInfo.hitNor_WS;
+        hitNor_WS = getHitNor_WS(payload.hitInfo);
 
         // water displacement is vertical at fixed XZ, so the previous position of a water
         // surface point is the same column's wave height at the previous frame's time
-        const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+        if (bool(getTriFlags(payload.packedTriData) & TRIANGLE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
             prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
         }
 
-        if (payload.materialIdx != MATERIAL_IDX_INVALID)
+        if (payload.hitInfo.materialIdx != MATERIAL_IDX_INVALID)
         {
             const Material surfMaterial = getMaterialFromPayload(payload);
 
@@ -111,7 +109,6 @@ void RayGeneration()
     ray.TMax = RAY_DEFAULT_TMAX;
 
     Payload payload;
-    payload.materialIdx = MATERIAL_IDX_INVALID;
     payload.flags = (sceneParams.cameraUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0) | PAYLOAD_FLAG_IS_GBUFFER;
     payload.rng = initRng(constantParams.rngSeed, 123909203, linearPixelIdx, renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
@@ -121,12 +118,21 @@ void RayGeneration()
 
     TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
+    if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+    {
+        // Only the closest hit shader writes the hit fields, so they are undefined on a miss. Readers key
+        // off the flags, but write defined data to the gbuffer anyway.
+        payload.hitInfo = (HitInfo)0;
+        payload.hitInfo.materialIdx = MATERIAL_IDX_INVALID;
+        payload.packedTriData = 0;
+    }
+
     outputGuideBuffers(payload, ray);
 
     GbufferData outGbufferData;
     outGbufferData.hitInfo = payload.hitInfo;
-    outGbufferData.materialIdx = payload.materialIdx;
     outGbufferData.payloadFlags = payload.flags;
+    outGbufferData.packedTriData = payload.packedTriData;
     outGbufferData.pad0 = outGbufferData.pad1 = 0; // necessary since we're writing to a UAV
     gbufferOut[linearPixelIdx] = outGbufferData;
 }

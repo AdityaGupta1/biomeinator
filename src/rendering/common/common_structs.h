@@ -19,25 +19,30 @@
 #define float4x4 DirectX::XMFLOAT4X4
 #endif
 
+// Normal and uv are packed like Vertex's: HitInfo rides in the ray payload across the whole bounce loop,
+// so its size is paid on every TraceRay
 struct HitInfo
 {
     float3 hitPos_WS;
     uint instanceId;
 
-    float3 hitNor_WS;
     uint triangleIdx;
-
-    float2 uv;
-    uint pad0;
-    uint pad1;
+    uint materialIdx;
+    uint packedNor; // octahedron-encoded, see packing.hlsli
+    uint packedUv; // unorm16 pair of frac(uv), see packHitUv()
 };
+
+// The PerTriangleData fields shading needs, forwarded by the closest hit shader so the bounce loop doesn't
+// reload InstanceData and PerTriangleData (two dependent loads) for a triangle the hit shader just read:
+// flags in the low PACKED_TRI_DATA_FLAG_BITS bits, texArraySliceIdx above them
+#define PACKED_TRI_DATA_FLAG_BITS 8
 
 struct GbufferData
 {
     HitInfo hitInfo;
 
-    uint materialIdx;
     uint payloadFlags;
+    uint packedTriData;
     uint pad0;
     uint pad1;
 };
@@ -259,6 +264,8 @@ static_assert(sizeof(LightTreeNode) == 32, "LightTreeNode must be 32 bytes for p
 #define TRIANGLE_FLAG_BIOME_TINT (1 << 2)
 // Foliage faces with thin-wall diffuse transmission: diffuse splits into reflection and transmission
 #define TRIANGLE_FLAG_DIFFUSE_TRANSMISSION (1 << 3)
+// Update when adding a flag: the flags must fit the low PACKED_TRI_DATA_FLAG_BITS bits of GbufferData::packedTriData
+#define TRIANGLE_FLAG_LAST TRIANGLE_FLAG_DIFFUSE_TRANSMISSION
 
 struct PerTriangleData
 {
@@ -272,6 +279,10 @@ public:
     uint texArraySliceIdx;
     uint pad0;
 };
+
+#ifdef __cplusplus
+static_assert(TRIANGLE_FLAG_LAST < (1 << PACKED_TRI_DATA_FLAG_BITS), "triangle flags must fit the packed tri data flag bits");
+#endif
 
 #ifdef __cplusplus
 #undef int3
