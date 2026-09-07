@@ -55,6 +55,39 @@ bool isPixelOutOfBounds(int2 pixelIdx)
     return any(pixelIdx < int2(0, 0)) || any(pixelIdx >= renderParams.renderSize);
 }
 
+uint packTriData(const PerTriangleData perTriData)
+{
+    return (perTriData.flags & ((1u << PACKED_TRI_DATA_FLAG_BITS) - 1u)) | (perTriData.texArraySliceIdx << PACKED_TRI_DATA_FLAG_BITS);
+}
+
+uint getTriFlags(const uint packedTriData)
+{
+    return packedTriData & ((1u << PACKED_TRI_DATA_FLAG_BITS) - 1u);
+}
+
+uint getTexArraySliceIdx(const uint packedTriData)
+{
+    return packedTriData >> PACKED_TRI_DATA_FLAG_BITS;
+}
+
+float3 getHitNor_WS(const HitInfo hitInfo)
+{
+    return octDecode(hitInfo.packedNor);
+}
+
+// The material sampler wraps on every axis, so sampling at frac(uv) is equivalent to sampling at uv, and
+// unorm16 keeps 16 bits of precision across the whole tile. An f16 pair would lose bits towards uv = 1,
+// which visibly shifts texels on large textures.
+uint packHitUv(const float2 uv)
+{
+    return packUnorm2ToUint(frac(uv));
+}
+
+float2 getHitUv(const HitInfo hitInfo)
+{
+    return unpackUintToUnorm2(hitInfo.packedUv);
+}
+
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     uint i0, i1, i2;
@@ -79,12 +112,12 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
 
 // Ctx for surface shading at a hit; samples the biome map once here so all base color reads
 // for the hit share the tint (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
+TexSampleCtx makeTintedTexSampleCtx(const uint packedTriData, const float rayConeWidth, const float2 posXZ_WS)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
-    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    texCtx.biomeTint = getBiomeTint(perTriData.flags, posXZ_WS);
+    texCtx.arraySliceIdx = getTexArraySliceIdx(packedTriData);
+    texCtx.biomeTint = getBiomeTint(getTriFlags(packedTriData), posXZ_WS);
     return texCtx;
 }
 
@@ -230,14 +263,15 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             nor_WS = -nor_WS;
         }
     }
-    payload.hitInfo.hitNor_WS = nor_WS;
+    payload.hitInfo.packedNor = octEncode(nor_WS);
 
-    payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                         unpackUintToFloat2(v2.packedUv) * bary.z;
+    const float2 uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
+                      unpackUintToFloat2(v2.packedUv) * bary.z;
+    payload.hitInfo.packedUv = packHitUv(uv);
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    payload.materialIdx = materialIdx;
+    payload.hitInfo.materialIdx = materialIdx;
+    payload.packedTriData = packTriData(perTriData);
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

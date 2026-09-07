@@ -1,4 +1,4 @@
-_Last edited: 2026-09-04_
+_Last edited: 2026-09-06_
 
 # Path Tracing Shader
 
@@ -67,6 +67,12 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser input for first-bounce diffuse albedo. When the first bounce is specular with path splitting enabled, it looks through to the second hit's base color plus Reinhard-compressed emission, modulated by the first bounce's specular tint. It also implicitly captures volume absorption and other effects accumulated in `pathWeight` up to that point.
 
 Emission stands in for albedo in this guide (a bright emitter must not read as a black surface), compressed with Reinhard so it stays in range. A surface can both emit and scatter, so the primary hit's emission is kept in a separate `ptEmissiveAlbedo` and summed (saturated) into the guide only after the loop: the specular look-through above scales and zeroes the scattered part, and must not touch the emission part. Pure emitters and pure scatterers get exactly one of the two terms, so this is a no-op for them; the `diffuse_albedo_modulation_*` and `diffuse_and_emission_diffuse_albedo` goldens pin all three cases.
+
+### Payload size and per-bounce material sampling
+
+The payload is live across the whole bounce loop, so every field costs on every `TraceRay`; `maxPayloadSizeBytes` in `renderer_pipeline.cpp` must track `sizeof(Payload)`. See [common_structs.md](common_structs.md) for why `HitInfo` is packed and what `packedTriData` carries. Shrinking it from 88 to 72 bytes (2026-09) cut the G-buffer pass by a third but moved the path tracing scope by at most a few percent, within run-to-run noise, so payload size is not what the bounce loop is bound by.
+
+Each bounce samples the material's textures once through `sampleMaterialTextures` and resolves the result into `surfMaterial.baseColor` (clearing `baseColorTextureId`) before anything else reads the material. Emission, the alpha split in `trySplitMaterial` (which takes the sample's alpha rather than sampling itself) and every later BSDF evaluation share that one sample. This was also within noise on its own: the compiler already merged most of the duplicate same-coordinate samples the old structure had, so the gain is a few fewer sample instructions and one place that reads the textures.
 
 ---
 

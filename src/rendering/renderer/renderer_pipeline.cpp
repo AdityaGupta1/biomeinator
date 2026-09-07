@@ -12,7 +12,7 @@
 namespace Renderer
 {
 
-static constexpr uint32_t maxPayloadSizeBytes = 88;
+static constexpr uint32_t maxPayloadSizeBytes = 72; // sizeof(Payload) in shaders/common/payload.hlsli
 
 void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
                                      uint32_t numParams,

@@ -74,6 +74,9 @@ in the measurement.
 and is what the voxel game actually runs. The perf lifecycle is independent of the accumulation
 counter either way.
 
+`fog_god_rays` pins `--animTime=585`, just before sunset, because the fog march is inactive at
+the default mid-day time; it is the only scene that measures the fog code.
+
 ## Noise
 
 - **`SetStablePowerState(TRUE)`** is called in perf mode and locks GPU clocks to base. It
@@ -91,6 +94,12 @@ counter either way.
   reproduce; a real change looks like the SER sanity check below.
 - **Light tree build and its sort are one scope**, see
   [rendering → gpu_profiler.md](../rendering/gpu_profiler.md).
+- **The unscoped remainder is bistable.** `frame` minus the sum of top-level scopes is either
+  ~0.35 ms or ~0.01 ms for a whole run, on every scene, independent of the code being measured
+  (seen across ten runs in 2026-09). When it is absent the path tracing scope reads ~0.3 ms
+  higher, so a run-to-run path tracing delta of up to ~7% can be pure attribution. Compute the
+  remainder for both runs before believing a path tracing delta of that size, or compare
+  `path tracing + remainder`. Where the bubble sits in the frame is not known.
 
 ## Sanity check
 
