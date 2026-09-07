@@ -8,6 +8,7 @@
 
 #include "common/global_params.hlsli"
 #include "util/packing.hlsli"
+#include "util/rng.hlsli"
 
 StructuredBuffer<float4> pathTracingRawBufferIn : REGISTER_T(COLLECT, PATH_TRACING_RAW_BUFFER_IN);
 StructuredBuffer<float4> ptDiffuseAlbedoRawBufferIn : REGISTER_T(COLLECT, PT_DIFFUSE_ALBEDO_RAW_BUFFER_IN);
@@ -43,6 +44,14 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     if ((AntialiasingMode) renderParams.antialiasingMode == AntialiasingMode::ACCUMULATE)
     {
         color /= (renderParams.accumulatedFrameNumber + 1.f);
+    }
+
+    // ReSTIR's temporally filtered output starves the denoiser of the per-frame noise it is trained
+    // on; a little zero-mean noise relative to the pixel's own value reads as path tracing noise to it
+    if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT && restirParams.whiteNoise > 0.f)
+    {
+        RandomNumberGenerator rng = initRng(constantParams.rngSeed, 31415927, linearPixelIdx, renderParams.frameNumber);
+        color *= max(1.f + restirParams.whiteNoise * (2.f * rng.nextFloat() - 1.f), 0.f);
     }
 
     RWTexture2D<float4> pathTracingTarget = ResourceDescriptorHeap[heapIndices.uav.pathTracingTargetIdx];

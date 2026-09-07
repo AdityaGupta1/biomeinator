@@ -20,6 +20,8 @@ RWStructuredBuffer<PathReservoir> reservoirsHistoryOut : REGISTER_U(RESTIR, RESE
 RWStructuredBuffer<float4> pathTracingRawBufferOut : REGISTER_U(RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
 RWStructuredBuffer<uint> reservoirSeedsOut : REGISTER_U(RESTIR, RESERVOIR_SEEDS_OUT);
 StructuredBuffer<float> duplicationMapIn : REGISTER_T(RESTIR, DUPLICATION_MAP_IN); // previous frame's, for the debug view
+// This frame's initial reservoirs; only their F and W are read (the spatial replay list overwrites seeds and slot 0's flags)
+StructuredBuffer<PathReservoir> reservoirsInitialIn : REGISTER_T(RESTIR, RESERVOIRS_INITIAL_IN);
 
 // Paired spatial resampling with pairwise MIS (restir/pairwise_mis.hlsli). The pixel's own reservoir
 // after temporal reuse is the canonical sample; each partner's path arrives already shifted into
@@ -150,5 +152,19 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             float(partnersOnScreen) / float(max(restirParams.spatialNeighborCount, 1u)));
         return;
     }
-    pathTracingRawBufferOut[slotIdx].xyz += shadedSum;
+
+    // The pixel's own initial-sample estimate is blended in: both terms are unbiased, so the lerp is,
+    // and it puts back the per-frame independent noise a high confidence cap filters out, which the
+    // denoiser expects (the noise carries signal, unlike the white noise added in the collect pass)
+    float3 shaded = shadedSum;
+    if (restirParams.initialBlend > 0.f)
+    {
+        float3 initialEstimate = reservoirsInitialIn[slotIdx].F * reservoirsInitialIn[slotIdx].W;
+        if (bool(renderParams.doPathSplitting))
+        {
+            initialEstimate += reservoirsInitialIn[slotIdx + 1].F * reservoirsInitialIn[slotIdx + 1].W;
+        }
+        shaded = lerp(shadedSum, initialEstimate, saturate(restirParams.initialBlend));
+    }
+    pathTracingRawBufferOut[slotIdx].xyz += shaded;
 }

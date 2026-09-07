@@ -209,6 +209,7 @@ void initRootSignature()
         params[RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT)] = MAKE_PARAM(UAV, RESTIR, PATH_TRACING_RAW_BUFFER_OUT);
         params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIR_SEEDS_OUT)] = MAKE_PARAM(UAV, RESTIR, RESERVOIR_SEEDS_OUT);
         params[RESTIR_RESAMPLE_PARAM_IDX(DUPLICATION_MAP_IN)] = MAKE_PARAM(SRV, RESTIR, DUPLICATION_MAP_IN);
+        params[RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_INITIAL_IN)] = MAKE_PARAM(SRV, RESTIR, RESERVOIRS_INITIAL_IN);
 
         serializeAndCreateRootSignature(params.data(), static_cast<uint32_t>(params.size()),
                                         nullptr, 0, renderState.restirResampleRootSig);

@@ -176,7 +176,12 @@ struct RestirParams
     float decorrelationMinCap; // cap used where the duplication score is 1
     float decorrelationExponent; // score^exponent drives the cap reduction; smaller reacts faster
     uint shiftStatsEnabled; // count shift outcomes into the stats buffer (perf runs only)
+    float initialBlend; // weight of the pixel's own initial sample in the final shading
+
+    float whiteNoise; // multiplicative white noise amplitude applied to the collected color
     uint pad1;
+    uint pad2;
+    uint pad3;
 
     uint4 pairingTransforms[RESTIR_MAX_SPATIAL_NEIGHBORS]; // x = texture size, y = RESTIR_PAIRING_* flags, zw = offset
     uint4 pairingBufferOffsets; // first texel of each pairing texture in the pairing buffer

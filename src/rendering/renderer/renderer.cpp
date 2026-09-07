@@ -495,6 +495,7 @@ static void dispatchRestirReuse(ParamBlockManager& paramBlockManager)
     renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIR_SEEDS_OUT), renderState.dev_reservoirSeeds->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(DUPLICATION_MAP_IN), renderState.dev_duplicationMap->GetGPUVirtualAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(RESTIR_RESAMPLE_PARAM_IDX(RESERVOIRS_INITIAL_IN), renderState.dev_reservoirs->GetGPUVirtualAddress());
 
     const uint32_t dispatchWidth = Util::calculateDispatchSize(renderState.renderWidth, RESTIR_RESAMPLE_WORKGROUP_SIZE_X);
     const uint32_t dispatchHeight = Util::calculateDispatchSize(renderState.renderHeight, RESTIR_RESAMPLE_WORKGROUP_SIZE_Y);
@@ -764,10 +765,17 @@ void render()
     restirParams->temporalHistoryValid =
         (temporalReuse && renderState.restirHistoryValid && !renderState.didPathTracingSettingsChange) ? 1u : 0u;
     restirParams->temporalConfidenceCap = static_cast<float>(SettingsManager::getAsUint("restirTemporalConfidenceCap"));
-    restirParams->decorrelationEnabled = SettingsManager::getAsBool("restirDecorrelation") ? 1u : 0u;
+    // Accumulation renders a converged mean with no denoiser in the loop, so the terms that exist for
+    // the denoiser (blend, white noise) and the biased decorrelation stay out of it; the goldens
+    // then compare the plain estimator
+    const bool accumulating =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode")) == AntialiasingMode::ACCUMULATE;
+    restirParams->decorrelationEnabled = (!accumulating && SettingsManager::getAsBool("restirDecorrelation")) ? 1u : 0u;
     restirParams->decorrelationMinCap = SettingsManager::getAsFloat("restirDecorrelationMinCap");
     restirParams->decorrelationExponent = SettingsManager::getAsFloat("restirDecorrelationExponent");
     restirParams->shiftStatsEnabled = SettingsManager::getAsBool("restirShiftStats") ? 1u : 0u;
+    restirParams->initialBlend = accumulating ? 0.f : SettingsManager::getAsFloat("restirInitialBlend");
+    restirParams->whiteNoise = accumulating ? 0.f : SettingsManager::getAsFloat("restirWhiteNoise");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
