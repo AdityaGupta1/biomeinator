@@ -128,14 +128,22 @@ void imguiEndFrame(double deltaTime)
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
         if (SettingsManager::getAsUint("samplingMode") == static_cast<uint32_t>(SamplingMode::RESTIR_PT))
         {
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Spatial neighbors", "restirSpatialNeighbors", 0, RESTIR_MAX_SPATIAL_NEIGHBORS);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Temporal reuse", "restirTemporalReuse");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Temporal confidence cap", "restirTemporalConfidenceCap", 0, 64);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Decorrelation", "restirDecorrelation");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation min cap", "restirDecorrelationMinCap", 0.f, 20.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation exponent", "restirDecorrelationExponent", 0.01f, 1.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Spatial neighbors", "restirSpatialNeighbors", 0, RESTIR_MAX_SPATIAL_NEIGHBORS);
-            SettingsGuiHelpers::SliderFloat("Initial sample blend", "restirInitialBlend", 0.f, 1.f);
-            SettingsGuiHelpers::SliderFloat("White noise", "restirWhiteNoise", 0.f, 1.f);
+            if (ImGui::TreeNode("Noise"))
+            {
+                SettingsGuiHelpers::SliderFloat("White noise", "restirWhiteNoise", 0.f, 1.f);
+                SettingsGuiHelpers::SliderFloat("Initial sample blend", "restirInitialBlend", 0.f, 1.f);
+                ImGui::TreePop();
+            }
+            if (ImGui::TreeNode("Decorrelation"))
+            {
+                renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Enable decorrelation", "restirDecorrelation");
+                renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Min cap", "restirDecorrelationMinCap", 0.f, 20.f);
+                renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Exponent", "restirDecorrelationExponent", 0.01f, 1.f);
+                ImGui::TreePop();
+            }
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("ReSTIR debug", "restirDebugMode", restirDebugModeComboOptions);
         }
 
@@ -193,8 +201,8 @@ void imguiEndFrame(double deltaTime)
 
             SettingsGuiHelpers::VerticalSpacing();
 
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0 (uniform light sampling)", "debugBool0");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1 (primary-only light sampling)", "debugBool1");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
