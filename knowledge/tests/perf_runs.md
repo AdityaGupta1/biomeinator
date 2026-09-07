@@ -92,6 +92,12 @@ the default mid-day time; it is the only scene that measures the fog code.
 - **Path tracing varies ~10% between back-to-back runs** on the same build (evil_room, RTX 4070
   SUPER, 300 frames). Treat single-digit deltas in a single scope as noise unless they
   reproduce; a real change looks like the SER sanity check below.
+- **Path tracing also drifts ~10% between sessions minutes apart while every other scope stays
+  put.** Two identical builds measured 5.6 ms and 5.0 ms on evil_room half an hour apart with
+  gbuffer, DLSS and scene update unchanged to the third decimal (2026-09, stable power state on).
+  A baseline from earlier in the day is therefore not comparable; interleave A/B/A, i.e.
+  re-measure the baseline build immediately before or after the candidate, before believing
+  any path tracing delta.
 - **Light tree build and its sort are one scope**, see
   [rendering → gpu_profiler.md](../rendering/gpu_profiler.md).
 - **The unscoped remainder is bistable.** `frame` minus the sum of top-level scopes is either

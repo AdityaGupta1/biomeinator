@@ -164,7 +164,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // a path continuing past this surface can only come from BSDF sampling (NEE terminates at the light),
             // so the continuation keeps its full throughput.
             // No need to consider dome light pdf here because dome light sampling can't hit area lights.
-            if (pathDepth > 0 && doMis && !bounceWasSpecular)
+            // Gated on the sampled emission, not just the material: the voxel terrain material has emission
+            // for its lamp and lava texels, so hasEmission() alone would send every terrain bounce through
+            // the light pdf's instance and per-triangle loads to weight a zero.
+            if (pathDepth > 0 && doMis && !bounceWasSpecular && any(emissiveContrib > 0.f))
             {
                 const float bsdfSampleLightPdf = useRtsl
                     ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceAcceptedBacksideLight)
