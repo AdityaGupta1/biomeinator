@@ -50,22 +50,31 @@ void sampleAreaLightPoint(const AreaLight light,
     lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
 }
 
-AreaLight sampleLightUniform(const float3 surfPos_WS,
-                             inout RandomNumberGenerator rng,
-                             out float3 pointOnLight_WS,
-                             out float2 lightBary2,
-                             out float lightPdf)
+// A sampled point on an area light before its visibility is known. Sampling and tracing are
+// separate steps so the caller can evaluate the BSDF toward the point first: samples the BSDF
+// rejects trace no shadow ray, and the material is not live across the ray.
+struct AreaLightSample
+{
+    bool valid;
+    uint lightIdx;
+    float3 pointOnLight_WS;
+    float2 lightBary2;
+    float3 wi_WS;
+    float pdf; // light pick pdf times the point's area-to-solid-angle pdf
+};
+
+AreaLightSample sampleAreaLightUniform(const float3 surfPos_WS, inout RandomNumberGenerator rng)
 {
     const uint lightIdx = areaLightSamplingStructure[uint(rng.nextFloat() * sceneParams.numAreaLights)];
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
-    const AreaLight light = areaLights[lightIdx];
 
-    float3 wi_WS;
+    AreaLightSample sample;
+    sample.valid = true;
+    sample.lightIdx = lightIdx;
     float lightSamplePdf;
-    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, lightBary2, wi_WS, lightSamplePdf);
-    lightPdf = lightPickPdf * lightSamplePdf;
-
-    return light;
+    sampleAreaLightPoint(areaLights[lightIdx], surfPos_WS, rng, sample.pointOnLight_WS, sample.lightBary2, sample.wi_WS, lightSamplePdf);
+    sample.pdf = lightPickPdf * lightSamplePdf;
+    return sample;
 }
 
 struct DirectLightingSample
@@ -82,13 +91,11 @@ struct DirectLightingSample
 // hit means the light is occluded — no closest hit shader or hit-identity check needed.
 // The anyhit shader still runs on non-opaque geometry, preserving passthrough tint and
 // water entry/exit tracking for absorption. Le is evaluated from the sampled point's
-// barycentrics rather than a closest hit.
+// barycentrics rather than a closest hit. `shadowRng` drives the anyhit decisions so a
+// reconnection ray to the same light point can reproduce them.
 bool traceToLight(const float3 surfPos_WS,
                   const float3 surfNor_WS,
-                  const float3 wi_WS,
-                  const float3 pointOnLight_WS,
-                  const float2 lightBary2,
-                  const AreaLight light,
+                  const AreaLightSample sample,
                   const RayCone rayCone,
                   const bool canPassthrough,
                   const bool startUnderwater,
@@ -96,6 +103,10 @@ bool traceToLight(const float3 surfPos_WS,
                   out DirectLightingSample result)
 {
     result.didHitLight = false;
+    const AreaLight light = areaLights[sample.lightIdx];
+    const float3 pointOnLight_WS = sample.pointOnLight_WS;
+    const float2 lightBary2 = sample.lightBary2;
+    const float3 wi_WS = sample.wi_WS;
     const float lightDistance = distance(surfPos_WS, pointOnLight_WS);
 
     RayDesc ray;
@@ -155,6 +166,7 @@ bool traceToLight(const float3 surfPos_WS,
 
     result.didHitLight = true;
     result.wi_WS = wi_WS;
+    result.pdf = sample.pdf;
     result.Le = getMaterialEmissiveColor(material, uv, texCtx);
     result.transmittance = lightPayload.pathWeight * passthroughAbsorption;
     result.lightHit.hitPos_WS = pointOnLight_WS;
@@ -165,29 +177,6 @@ bool traceToLight(const float3 surfPos_WS,
     // lightBary2 weights the triangle's first two vertices; DXR barycentrics weight the second and third
     result.lightHit.barycentrics = float2(lightBary2.y, 1.f - lightBary2.x - lightBary2.y);
     return true;
-}
-
-// `rng` drives light selection and point sampling; `shadowRng` drives the shadow ray's anyhit
-// decisions so a reconnection ray to the same light point can reproduce them
-DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
-                                                 const float3 surfNor_WS,
-                                                 const RayCone rayCone,
-                                                 const bool canPassthrough,
-                                                 const bool startUnderwater,
-                                                 inout RandomNumberGenerator rng,
-                                                 const RandomNumberGenerator shadowRng)
-{
-    float3 pointOnLight_WS;
-    float2 lightBary2;
-    float lightPdf;
-    const AreaLight light = sampleLightUniform(surfPos_WS, rng, pointOnLight_WS, lightBary2, lightPdf);
-
-    const float3 wi_WS = normalize(pointOnLight_WS - surfPos_WS);
-
-    DirectLightingSample result;
-    traceToLight(surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, shadowRng, result);
-    result.pdf = lightPdf;
-    return result;
 }
 
 // Decodes the global area-light index of the triangle the hit landed on, or

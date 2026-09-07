@@ -125,24 +125,39 @@ Payload initPayloadFromGbuffer(const GbufferData gbufferData, const float3 camer
     return payload;
 }
 
-// The path selected by a reservoir, to be rebuilt from its seed instead of sampling a new path tree
+// The path selected by a reservoir, to be rebuilt from its seed instead of sampling a new path tree.
+// Holds only what replay reads, so F, W and M are not live through the replay.
 struct ReplayTarget
 {
     bool active;
-    PathReservoir path;
     uint pathLength;
     uint rcVertexIdx;
     uint pathTechnique;
+    bool rcPrevLobeDiffuse;
+    uint rcInstance;
+    uint rcTriangleIdx;
+    uint rcBarycentrics;
+    uint rcWi;
+    float3 rcRadiance;
+    float rcLightPdf;
+    float rcJacobianTerms;
 };
 
 ReplayTarget makeReplayTarget(const PathReservoir path)
 {
     ReplayTarget replay;
     replay.active = true;
-    replay.path = path;
     replay.pathLength = getPathLength(path.flags);
     replay.rcVertexIdx = getRcVertexIdx(path.flags);
     replay.pathTechnique = getPathTechnique(path.flags);
+    replay.rcPrevLobeDiffuse = bool(path.flags & PATH_FLAGS_RC_PREV_LOBE_DIFFUSE);
+    replay.rcInstance = path.rcInstance;
+    replay.rcTriangleIdx = path.rcTriangleIdx;
+    replay.rcBarycentrics = path.rcBarycentrics;
+    replay.rcWi = path.rcWi;
+    replay.rcRadiance = path.rcRadiance;
+    replay.rcLightPdf = path.rcLightPdf;
+    replay.rcJacobianTerms = path.rcJacobianTerms;
     return replay;
 }
 
@@ -150,10 +165,17 @@ ReplayTarget noReplay()
 {
     ReplayTarget replay;
     replay.active = false;
-    replay.path = makeEmptyPathReservoir();
     replay.pathLength = 0;
     replay.rcVertexIdx = 0;
     replay.pathTechnique = 0;
+    replay.rcPrevLobeDiffuse = false;
+    replay.rcInstance = 0;
+    replay.rcTriangleIdx = 0;
+    replay.rcBarycentrics = 0;
+    replay.rcWi = 0;
+    replay.rcRadiance = 0.f;
+    replay.rcLightPdf = 0.f;
+    replay.rcJacobianTerms = 0.f;
     return replay;
 }
 
@@ -172,16 +194,27 @@ struct RcState
     float pdf; // pdf of wi
 };
 
+// Loop-carried facts about the last real bounce of pathTraceRay
+#define BOUNCE_FLAG_WAS_SPECULAR (1 << 0)
+#define BOUNCE_FLAG_ACCEPTED_BACKSIDE_LIGHT (1 << 1)
+#define BOUNCE_FLAG_SAMPLED_DIFFUSE (1 << 2)
+#define BOUNCE_FLAG_ENCOUNTERED_NON_DELTA (1 << 3) // the path has passed a non-delta surface (including the current one)
+
 // Routes a complete path's contribution to the reservoir when ReSTIR PT is on, otherwise
 // straight into pathColor. Terms that are not resampled paths (primary emission, primary miss,
 // fog in-scatter) always go straight into pathColor.
-void addPathCandidate(inout PathTreeReservoir reservoir, const PathCandidate candidate, const bool useRestirPt, inout float3 pathColor)
+void addPathCandidate(inout PathTreeReservoir reservoir,
+                      const PathCandidate candidate,
+                      const bool useRestirPt,
+                      const uint pathSeed,
+                      const uint pathSplitIdx,
+                      inout float3 pathColor)
 {
     if (useRestirPt)
     {
         if (reservoir.addCandidate(candidate))
         {
-            reservoirsOut[reservoir.slotIdx] = packCandidate(candidate, reservoir.seed, reservoir.splitIdx);
+            reservoirsOut[reservoir.slotIdx] = packCandidate(candidate, pathSeed, pathSplitIdx);
         }
     }
     else
@@ -341,7 +374,8 @@ bool traceReconnectionRay(const float3 surfPos_WS,
 // segment is traced the way the original technique traced it: an NEE light vertex gets a shadow ray
 // (own rng stream, no fog), anything else the BSDF segment's stream and fog.
 float3 evaluateReconnection(const ReplayTarget replay,
-                            const Payload payload,
+                            const RayCone rayCone,
+                            const bool isUnderwater,
                             const Material surfMaterial,
                             const float2 uv,
                             const float3 wo_WS,
@@ -363,7 +397,6 @@ float3 evaluateReconnection(const ReplayTarget replay,
     jacobian = 0.f;
     jacobianTerms = 0.f;
 
-    const PathReservoir path = replay.path;
     const bool rcIsLightVertex = (replay.rcVertexIdx == replay.pathLength);
     const bool rcIsDome = rcIsLightVertex && isDomeTechnique(replay.pathTechnique);
     const bool rcIsNeeLightVertex = rcIsLightVertex &&
@@ -380,12 +413,12 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     // The rc vertex is rebuilt on the current mesh so it follows deforming geometry; a recycled
     // instance id means the stored vertex no longer exists
-    const float3 rcWi_WS = octDecode(path.rcWi);
-    const float2 rcBary2 = unpackBarycentrics(path.rcBarycentrics);
+    const float3 rcWi_WS = octDecode(replay.rcWi);
+    const float2 rcBary2 = unpackBarycentrics(replay.rcBarycentrics);
     HitInfo rcHit;
     float3 rcGeoNor_WS;
     bool rcIsBackface = false;
-    if (!rcIsDome && !rebuildHit(rcInstanceId(path), rcInstanceGeneration(path), path.rcTriangleIdx,
+    if (!rcIsDome && !rebuildHit(rcInstanceId(replay.rcInstance), rcInstanceGeneration(replay.rcInstance), replay.rcTriangleIdx,
             rcBary2, surfPos_WS, rcHit, rcGeoNor_WS, rcIsBackface))
     {
         debugZeroReason = 1; return 0.f;
@@ -419,17 +452,17 @@ float3 evaluateReconnection(const ReplayTarget replay,
     }
 
     // The base path's lobe at x_{j-1} must exist here, and its roughness is this surface's
-    const bool prevLobeDiffuse = bool(path.flags & PATH_FLAGS_RC_PREV_LOBE_DIFFUSE);
-    if (prevLobeDiffuse ? !surfMaterial.hasDiffuse() : !surfMaterial.hasGlossy())
+    if (replay.rcPrevLobeDiffuse ? !surfMaterial.hasDiffuse() : !surfMaterial.hasGlossy())
     {
         debugZeroReason = 4; return 0.f;
     }
-    const float prevLobeRoughness = prevLobeDiffuse ? 1.f : surfMaterial.roughness;
+    const float prevLobeRoughness = replay.rcPrevLobeDiffuse ? 1.f : surfMaterial.roughness;
+    // The only material read after the ray, so the material itself is not live across it
+    const bool surfAcceptsBacksideLight = surfMaterial.acceptsBacksideLight();
 
-    const bool isUnderwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
     float3 transmittance;
     if (!traceReconnectionRay(surfPos_WS, surfNor_WS, wi_WS, rcIsDome, rcIsNeeLightVertex, rcHit.hitPos_WS, rcHit.hitNor_WS,
-            payload.rayCone, canPassthrough, isUnderwater, !rcIsNeeLightVertex, rayRng, transmittance))
+            rayCone, canPassthrough, isUnderwater, !rcIsNeeLightVertex, rayRng, transmittance))
     {
         debugZeroReason = 5; return 0.f;
     }
@@ -438,7 +471,7 @@ float3 evaluateReconnection(const ReplayTarget replay,
     {
         const float lightPdf = rcIsDome
             ? (rcIsNeeLightVertex ? neeDomeLightPdf() : domeLightPdf(wi_WS, surfNor_WS))
-            : lightPdfRtsl(rcHit, surfPos_WS, surfNor_WS, wi_WS, surfMaterial.acceptsBacksideLight());
+            : lightPdfRtsl(rcHit, surfPos_WS, surfNor_WS, wi_WS, surfAcceptsBacksideLight);
 
         // NEE paths always reconnect to their light; BSDF-sampled light vertices only where the criteria hold
         if (!rcIsNeeLightVertex)
@@ -455,11 +488,11 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
         const float techniquePdf = rcIsNeeLightVertex ? lightPdf : prevEval.pdf;
         jacobianTerms = techniquePdf * (rcIsDome ? 1.f : reconnectionGeometryTerm(surfPos_WS, rcHit.hitPos_WS, rcHit.hitNor_WS));
-        jacobian = (path.rcJacobianTerms > 0.f) ? jacobianTerms / path.rcJacobianTerms : 0.f;
+        jacobian = (replay.rcJacobianTerms > 0.f) ? jacobianTerms / replay.rcJacobianTerms : 0.f;
 
         // With their path MIS weights applied, NEE and BSDF sampling of the light vertex both reduce to
         // f * cos * Le / (p_light + p_bsdf)
-        return prevFactor * transmittance * path.rcRadiance / (lightPdf + prevEval.pdf);
+        return prevFactor * transmittance * replay.rcRadiance / (lightPdf + prevEval.pdf);
     }
 
     if (prevEval.pdf <= 0.f)
@@ -478,7 +511,7 @@ float3 evaluateReconnection(const ReplayTarget replay,
     {
         rcMaterial.diffuseTransmission = foliageDiffuseTransmission;
     }
-    const float rcConeWidth = getRayConeWidthAtDistance(payload.rayCone, distance(surfPos_WS, rcHit.hitPos_WS));
+    const float rcConeWidth = getRayConeWidthAtDistance(rayCone, distance(surfPos_WS, rcHit.hitPos_WS));
     const TexSampleCtx rcTexCtx = makeTintedTexSampleCtx(rcPerTriData, rcConeWidth, rcHit.hitPos_WS.xz);
     rcMaterial.baseColor = getMaterialBaseColor(rcMaterial, rcHit.uv, rcTexCtx).rgb;
     rcMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
@@ -495,7 +528,7 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     // When x_j precedes the light vertex, the final segment's path MIS weight is recomputed here
     const bool rcPrecedesLight = (replay.rcVertexIdx + 1 == replay.pathLength);
-    const float rcDenominator = rcPrecedesLight ? (path.rcLightPdf + rcEval.pdf) : rcEval.pdf;
+    const float rcDenominator = rcPrecedesLight ? (replay.rcLightPdf + rcEval.pdf) : rcEval.pdf;
     if (rcDenominator <= 0.f)
     {
         debugZeroReason = 9; return 0.f;
@@ -505,9 +538,9 @@ float3 evaluateReconnection(const ReplayTarget replay,
         (replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA || replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME);
     jacobianTerms = prevEval.pdf * reconnectionGeometryTerm(surfPos_WS, rcHit.hitPos_WS, rcHit.hitNor_WS) *
                     (finalSegmentIsNee ? 1.f : rcEval.pdf);
-    jacobian = (path.rcJacobianTerms > 0.f) ? jacobianTerms / path.rcJacobianTerms : 0.f;
+    jacobian = (replay.rcJacobianTerms > 0.f) ? jacobianTerms / replay.rcJacobianTerms : 0.f;
 
-    return prevFactor / prevEval.pdf * transmittance * rcFactor / rcDenominator * path.rcRadiance;
+    return prevFactor / prevEval.pdf * transmittance * rcFactor / rcDenominator * replay.rcRadiance;
 }
 
 // Traces one path tree from the primary hit in the gbuffer. In initial sampling mode every complete
@@ -587,18 +620,14 @@ float3 pathTraceRay(inout Payload payload,
         return 0.f;
     }
 
-    // data of last "real" bounce (i.e. not passthrough)
-    bool bounceWasSpecular = false; // TODO: pack this and bounceAcceptedBacksideLight together (and see if they can be eliminated entirely)
-    bool bounceAcceptedBacksideLight = false;
+    // data of last "real" bounce (i.e. not passthrough); the bools share one register
+    uint bounceFlags = 0;
     float bounceBsdfPdf = 0.f;
     float bounceLobeRoughness = 0.f;
-    bool bounceSampledDiffuse = false;
     float3 surfPos_WS, surfNor_WS;
     // the real bounce before that, for the reconnection test between the two
     float3 prevSurfPos_WS = cameraPos_WS;
     float3 prevSurfNor_WS = 0.f;
-
-    bool hasEncounteredNonDeltaSurface = false;
 
     // Emission seen at the primary hit, kept apart from the scattered part of the albedo guide so the
     // specular look-through below can modulate the scattered part alone; folded in after the loop.
@@ -665,6 +694,7 @@ float3 pathTraceRay(inout Payload payload,
         // the constant-color path instead of re-sampling the base and aux textures every call.
         surfMaterial.baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
         surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+        const bool surfAcceptsBacksideLight = surfMaterial.acceptsBacksideLight();
 
         // In voxel mode all terrain shares one material with hasDiffuse=true; emissive blocks
         // like LAMP/LAVA have zero diffuse in the texture, so skip scatter work in that case
@@ -687,10 +717,11 @@ float3 pathTraceRay(inout Payload payload,
                 // light sampling belongs to this path only, not to the throughput continuing past it
                 float lightPdf = 0.f;
                 float misWeight = 1.f;
-                if (doMis && !bounceWasSpecular)
+                if (doMis && !bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR))
                 {
                     lightPdf = useRtsl
-                        ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceAcceptedBacksideLight)
+                        ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction,
+                              bool(bounceFlags & BOUNCE_FLAG_ACCEPTED_BACKSIDE_LIGHT))
                         : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                     misWeight = balanceHeuristic(bounceBsdfPdf, lightPdf);
                 }
@@ -719,9 +750,9 @@ float3 pathTraceRay(inout Payload payload,
                         const float jacobianTerms =
                             bounceBsdfPdf * reconnectionGeometryTerm(surfPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
                         setCandidateRcAtLightVertex(candidate, payload.hitInfo, instanceData.generation, Le,
-                            jacobianTerms, bounceSampledDiffuse);
+                            jacobianTerms, bool(bounceFlags & BOUNCE_FLAG_SAMPLED_DIFFUSE));
                     }
-                    addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
+                    addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
                 }
             }
 
@@ -745,7 +776,8 @@ float3 pathTraceRay(inout Payload payload,
 
         // canPassthrough = has the path encountered a non-delta surface (including this one)
         // isPassthrough = this intersection has glossy transmission and should be passed through
-        const bool canPassthrough = bool(renderParams.refractionIndirectPassthrough) && (!isDeltaSurface || hasEncounteredNonDeltaSurface);
+        const bool canPassthrough = bool(renderParams.refractionIndirectPassthrough) &&
+            (!isDeltaSurface || bool(bounceFlags & BOUNCE_FLAG_ENCOUNTERED_NON_DELTA));
         const bool isPassthrough = canPassthrough && surfMaterial.isDeltaTransmission();
 
         // If this is a passthrough "bounce", we don't care about its hit pos/nor and want to instead preserve the last
@@ -793,15 +825,16 @@ float3 pathTraceRay(inout Payload payload,
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
-            // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
+            // bounceBsdfPdf, bounceFlags, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
         {
             if (isReplay && replay.rcVertexIdx != 0 && vertexIdx + 1 == replay.rcVertexIdx)
             {
-                return throughput * evaluateReconnection(replay, payload, surfMaterial, payload.hitInfo.uv, wo_WS, surfPos_WS,
-                    surfNor_WS, surfTexCtx, canPassthrough, pathSeed, vertexIdx, pathDepth, bounceLobeRoughness, bounceBsdfPdf,
-                    prevSurfPos_WS, prevSurfNor_WS, footprintThreshold, replayJacobian, replayJacobianTerms);
+                return throughput * evaluateReconnection(replay, payload.rayCone, bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
+                    surfMaterial, payload.hitInfo.uv, wo_WS, surfPos_WS, surfNor_WS, surfTexCtx, canPassthrough, pathSeed, vertexIdx,
+                    pathDepth, bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, footprintThreshold,
+                    replayJacobian, replayJacobianTerms);
             }
 
             if (isReplay && vertexIdx >= replay.pathLength) // the target path ended here without matching
@@ -841,7 +874,7 @@ float3 pathTraceRay(inout Payload payload,
                 rc.instance = packRcInstance(instanceData.generation, payload.hitInfo.instanceId);
                 rc.triangleIdx = payload.hitInfo.triangleIdx;
                 rc.barycentrics = packBarycentrics(payload.hitInfo.barycentrics);
-                rc.prevLobeDiffuse = bounceSampledDiffuse;
+                rc.prevLobeDiffuse = bool(bounceFlags & BOUNCE_FLAG_SAMPLED_DIFFUSE);
                 rc.wi = octEncode(surfBsdfSample.wi_WS);
                 rc.prevPdfTimesGeom = bounceBsdfPdf * reconnectionGeometryTerm(prevSurfPos_WS, surfPos_WS, surfNor_WS);
                 rc.pdf = surfBsdfSample.pdf;
@@ -853,38 +886,45 @@ float3 pathTraceRay(inout Payload payload,
                 // Replay only re-samples a light when the target path ends with NEE from this vertex and
                 // has no reconnection vertex (NEE paths otherwise always reconnect to their light vertex)
                 const bool replayWantsNee = isReplay && replay.rcVertexIdx == 0 && vertexIdx + 1 == replay.pathLength;
+                const bool doAreaNee = !isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA);
+                const bool doDomeNee = sceneParams.voxelMode == 1 &&
+                    (!isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME));
+
+                // Each light sample's BSDF is evaluated before its shadow ray: samples the BSDF rejects
+                // trace nothing, and the BSDF value rather than the material is what the ray keeps live.
 
                 // ------------------------------
                 // sample area lights
                 // ------------------------------
 
-                if (!isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA))
+                if (doAreaNee)
                 {
                     RandomNumberGenerator neeRng = pathRng(pathSeed, vertexIdx, PATH_RNG_NEE_AREA);
-                    const RandomNumberGenerator shadowRng = pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_AREA);
-                    DirectLightingSample lightSample;
+                    AreaLightSample areaSample;
                     if (useRtsl)
                     {
-                        lightSample = sampleDirectLightingRtsl(
-                            surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
-                            surfMaterial.acceptsBacksideLight(), neeRng, shadowRng);
+                        areaSample = sampleAreaLightRtsl(surfPos_WS, surfNor_WS, surfAcceptsBacksideLight, neeRng);
                     }
                     else
                     {
-                        lightSample = sampleDirectLightingUniform(
-                            surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, neeRng, shadowRng);
+                        areaSample = sampleAreaLightUniform(surfPos_WS, neeRng);
+                    }
+                    BsdfEval areaBsdfEval;
+                    if (areaSample.valid)
+                    {
+                        areaBsdfEval = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, areaSample.wi_WS, surfNor_WS, surfTexCtx);
+                        areaSample.valid = any(areaBsdfEval.value > 0.f);
                     }
 
-                    if (lightSample.didHitLight)
+                    DirectLightingSample lightSample;
+                    if (areaSample.valid && traceToLight(surfPos_WS, surfNor_WS, areaSample, payload.rayCone, canPassthrough,
+                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_AREA), lightSample))
                     {
                         // no need to consider dome light pdf because dome light sampling can't hit area lights
 
-                        const BsdfEval bsdfEval =
-                            evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfTexCtx);
-
                         // light pdf in balance heuristic numerator cancels out with divide by pdf
-                        const float3 lightFactor = bsdfEval.value * absCosTheta(lightSample.wi_WS, surfNor_WS) *
-                                                   lightSample.Le * lightSample.transmittance / (lightSample.pdf + bsdfEval.pdf);
+                        const float3 lightFactor = areaBsdfEval.value * absCosTheta(lightSample.wi_WS, surfNor_WS) *
+                                                   lightSample.Le * lightSample.transmittance / (lightSample.pdf + areaBsdfEval.pdf);
                         const float3 F = throughput * lightFactor;
 
                         if (isReplay)
@@ -908,7 +948,7 @@ float3 pathTraceRay(inout Payload payload,
                                 surfBsdfSample.sampledDiffuse);
                             candidate.rcLightPdf = lightSample.pdf;
                         }
-                        addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
+                        addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
                     }
                 }
 
@@ -916,22 +956,28 @@ float3 pathTraceRay(inout Payload payload,
                 // sample dome light
                 // ------------------------------
 
-                if (sceneParams.voxelMode == 1 && (!isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME)))
+                if (doDomeNee)
                 {
                     RandomNumberGenerator domeRng = pathRng(pathSeed, vertexIdx, PATH_RNG_NEE_DOME);
-                    const DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rayCone,
-                        canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), domeRng,
-                        pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_DOME));
-                    if (domeLightSample.didReachDomeLight)
+                    float3 domeWi_WS;
+                    float domePdf;
+                    bool domeSampleValid = sampleDomeLightDir(surfNor_WS, surfAcceptsBacksideLight, domeRng, domeWi_WS, domePdf);
+                    BsdfEval domeBsdfEval;
+                    if (domeSampleValid)
+                    {
+                        domeBsdfEval = evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, domeWi_WS, surfNor_WS, surfTexCtx);
+                        domeSampleValid = any(domeBsdfEval.value > 0.f);
+                    }
+
+                    float3 domeLe, domeTransmittance;
+                    if (domeSampleValid && traceToDomeLight(surfPos_WS, surfNor_WS, domeWi_WS, payload.rayCone, canPassthrough,
+                            isUnderwater, pathRng(pathSeed, vertexIdx, PATH_RNG_SHADOW_DOME), domeLe, domeTransmittance))
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
-                        const BsdfEval bsdfEval = evaluateBsdf(
-                            surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfTexCtx);
-
                         // dome light pdf in balance heuristic numerator cancels out with divide by pdf
-                        const float3 lightFactor = bsdfEval.value * absCosTheta(domeLightSample.wi_WS, surfNor_WS) *
-                                                   domeLightSample.Le * domeLightSample.transmittance / (domeLightSample.pdf + bsdfEval.pdf);
+                        const float3 lightFactor = domeBsdfEval.value * absCosTheta(domeWi_WS, surfNor_WS) *
+                                                   domeLe * domeTransmittance / (domePdf + domeBsdfEval.pdf);
                         const float3 F = throughput * lightFactor;
 
                         if (isReplay)
@@ -942,22 +988,21 @@ float3 pathTraceRay(inout Payload payload,
                         PathCandidate candidate = makePathCandidate(F, rrProduct, vertexIdx + 1, PATH_TECHNIQUE_NEE_DOME);
                         if (rc.vertexIdx != 0)
                         {
-                            setCandidateRcFromState(candidate, rc, domeLightSample.wi_WS, domeLightSample.Le * domeLightSample.transmittance,
-                                rcThroughput * lightFactor, domeLightSample.pdf, true);
+                            setCandidateRcFromState(candidate, rc, domeWi_WS, domeLe * domeTransmittance,
+                                rcThroughput * lightFactor, domePdf, true);
                         }
                         else
                         {
-                            setCandidateRcAtDome(candidate, domeLightSample.wi_WS, domeLightSample.Le,
-                                domeLightSample.pdf, surfBsdfSample.sampledDiffuse);
+                            setCandidateRcAtDome(candidate, domeWi_WS, domeLe, domePdf, surfBsdfSample.sampledDiffuse);
                         }
-                        addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
+                        addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
                     }
                 }
             }
 
             if (!isDeltaSurface)
             {
-                hasEncounteredNonDeltaSurface = true;
+                bounceFlags |= BOUNCE_FLAG_ENCOUNTERED_NON_DELTA;
             }
 
             float3 scatterFactor = surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
@@ -986,10 +1031,11 @@ float3 pathTraceRay(inout Payload payload,
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
-            bounceWasSpecular = surfBsdfSample.wasSpecular;
-            bounceAcceptedBacksideLight = surfMaterial.acceptsBacksideLight();
             bounceLobeRoughness = surfBsdfSample.lobeRoughness;
-            bounceSampledDiffuse = surfBsdfSample.sampledDiffuse;
+            bounceFlags = (bounceFlags & BOUNCE_FLAG_ENCOUNTERED_NON_DELTA) |
+                (surfBsdfSample.wasSpecular ? BOUNCE_FLAG_WAS_SPECULAR : 0) |
+                (surfAcceptsBacksideLight ? BOUNCE_FLAG_ACCEPTED_BACKSIDE_LIGHT : 0) |
+                (surfBsdfSample.sampledDiffuse ? BOUNCE_FLAG_SAMPLED_DIFFUSE : 0);
             ++vertexIdx;
         } // !isPassthrough
 
@@ -1037,7 +1083,7 @@ float3 pathTraceRay(inout Payload payload,
         {
             // at this point, ptDiffuseAlbedo = first bounce path weight
 
-            if (bounceWasSpecular)
+            if (bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR))
             {
                 if (!bool(renderParams.doPathSplitting))
                 {
@@ -1081,7 +1127,7 @@ float3 pathTraceRay(inout Payload payload,
                 }
             }
 
-            // if !bounceWasSpecular, ptDiffAlbedo remains unchanged
+            // if the bounce was not specular, ptDiffAlbedo remains unchanged
         }
 
         if (didMiss)
@@ -1110,9 +1156,10 @@ float3 pathTraceRay(inout Payload payload,
             }
             else if (domeQualifies)
             {
-                setCandidateRcAtDome(candidate, ray.Direction, missDomeLightColor, bounceBsdfPdf, bounceSampledDiffuse);
+                setCandidateRcAtDome(candidate, ray.Direction, missDomeLightColor, bounceBsdfPdf,
+                    bool(bounceFlags & BOUNCE_FLAG_SAMPLED_DIFFUSE));
             }
-            addPathCandidate(reservoir, candidate, useRestirPt, pathColor);
+            addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
             break;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
@@ -1120,7 +1167,7 @@ float3 pathTraceRay(inout Payload payload,
             break;
         }
 
-        if (!isReplay && bool(renderParams.doPathSplitting) && pathDepth == 0 && bounceWasSpecular) // TODO: support multiple specular bounces?
+        if (!isReplay && bool(renderParams.doPathSplitting) && pathDepth == 0 && bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR)) // TODO: support multiple specular bounces?
         {
             if (pathSplitIdx == 0) // transmission
             {
@@ -1156,7 +1203,7 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
     }
 
     Payload payload = initPayloadFromGbuffer(gbufferData, cameraPos_WS);
-    PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0, 0, 0); // replay never adds candidates
+    PathTreeReservoir unusedReservoir = initPathTreeReservoir(initRng(0), 0); // replay never adds candidates
     const uint pathSplitIdx = bool(path.flags & PATH_FLAGS_SPLIT_IDX) ? 1 : 0;
     float3 unusedColor, unusedAlbedo;
     shifted.F = pathTraceRay(payload, unusedReservoir, makeReplayTarget(path), pixelIdx, cameraPos_WS, pathSplitIdx, path.seed,
@@ -1194,8 +1241,8 @@ void initialSamplingRayGen()
 
     const uint pathSeed = initRng(constantParams.rngSeed, 987654103, slotIdx, renderParams.frameNumber).seed;
     // Separate stream from the path's RNG so resampling draws never perturb the path itself
-    PathTreeReservoir reservoir = initPathTreeReservoir(
-        initRng(constantParams.rngSeed, 192837465, slotIdx, renderParams.frameNumber), pathSeed, pathSplitIdx, slotIdx);
+    PathTreeReservoir reservoir =
+        initPathTreeReservoir(initRng(constantParams.rngSeed, 192837465, slotIdx, renderParams.frameNumber), slotIdx);
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
@@ -1206,7 +1253,7 @@ void initialSamplingRayGen()
     if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
     {
         // One path tree is one unit of confidence, empty or not
-        if (reservoir.hasSelected)
+        if (reservoir.hasSelected())
         {
             reservoirsOut[slotIdx].W = reservoir.finalW();
             reservoirsOut[slotIdx].flags = (reservoirsOut[slotIdx].flags & PATH_FLAGS_CONFIDENCE_MASK) |

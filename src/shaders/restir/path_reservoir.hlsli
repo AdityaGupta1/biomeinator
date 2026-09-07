@@ -64,14 +64,14 @@ void setReservoirM(inout PathReservoir reservoir, const float M)
     reservoir.flags = (reservoir.flags & PATH_FLAGS_CONFIDENCE_MASK) | (fixedPoint << PATH_FLAGS_CONFIDENCE_SHIFT);
 }
 
-uint rcInstanceId(const PathReservoir reservoir)
+uint rcInstanceId(const uint packedRcInstance)
 {
-    return reservoir.rcInstance & PATH_RC_INSTANCE_ID_MASK;
+    return packedRcInstance & PATH_RC_INSTANCE_ID_MASK;
 }
 
-uint rcInstanceGeneration(const PathReservoir reservoir)
+uint rcInstanceGeneration(const uint packedRcInstance)
 {
-    return reservoir.rcInstance >> PATH_RC_INSTANCE_GENERATION_SHIFT;
+    return packedRcInstance >> PATH_RC_INSTANCE_GENERATION_SHIFT;
 }
 
 uint packRcInstance(const uint generation, const uint instanceId)
@@ -140,11 +140,8 @@ PathReservoir makeEmptyPathReservoir()
 struct PathTreeReservoir
 {
     float weightSum;
-    float selectedPHat;
-    bool hasSelected;
+    float selectedPHat; // zero until a candidate is selected
     RandomNumberGenerator rng;
-    uint seed;
-    uint splitIdx;
     uint slotIdx;
 
     // True when the candidate replaces the selection; the caller then stores packCandidate of it
@@ -163,14 +160,18 @@ struct PathTreeReservoir
         }
 
         selectedPHat = weight * candidate.rrProduct; // pHat of the stored F, which excludes the roulette division
-        hasSelected = true;
         return true;
+    }
+
+    bool hasSelected()
+    {
+        return selectedPHat > 0.f;
     }
 
     // W = weightSum / pHat(selected)
     float finalW()
     {
-        return hasSelected ? weightSum / selectedPHat : 0.f;
+        return hasSelected() ? weightSum / selectedPHat : 0.f;
     }
 };
 
@@ -195,15 +196,12 @@ PathReservoir packCandidate(const PathCandidate candidate, const uint seed, cons
     return packed;
 }
 
-PathTreeReservoir initPathTreeReservoir(const RandomNumberGenerator rng, const uint seed, const uint splitIdx, const uint slotIdx)
+PathTreeReservoir initPathTreeReservoir(const RandomNumberGenerator rng, const uint slotIdx)
 {
     PathTreeReservoir reservoir;
     reservoir.weightSum = 0.f;
     reservoir.selectedPHat = 0.f;
-    reservoir.hasSelected = false;
     reservoir.rng = rng;
-    reservoir.seed = seed;
-    reservoir.splitIdx = splitIdx;
     reservoir.slotIdx = slotIdx;
     return reservoir;
 }

@@ -101,15 +101,6 @@ float domeLightPdf(float3 wi_WS, float3 surfNor_WS)
     return 0.f;
 }
 
-struct DomeLightSample
-{
-    bool didReachDomeLight;
-    float3 wi_WS;
-    float3 Le; // dome radiance, before transmittance
-    float3 transmittance; // passthrough tint and water absorption along the shadow ray
-    float pdf;
-};
-
 // TODO: Once the moon exists, NEE should sample its cap as well, based on whether the sun is up at the time. Also,
 // domeLightPdf must account for both caps to keep MIS consistent.
 float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGenerator rng, out float pdf)
@@ -122,28 +113,35 @@ float3 generateDomeLightSampleDir(const float3 surfNor_WS, inout RandomNumberGen
     return wi_WS;
 }
 
-DomeLightSample sampleDomeLight(const float3 surfPos_WS,
-                                const float3 surfNor_WS,
-                                const RayCone rayCone,
-                                const bool canPassthrough,
-                                const bool startUnderwater,
-                                const bool acceptsBacksideLight,
-                                inout RandomNumberGenerator rng,
-                                const RandomNumberGenerator shadowRng)
+// Direction step of dome NEE; the shadow ray is traced separately by traceToDomeLight so the caller
+// can evaluate the BSDF toward the direction first (see AreaLightSample)
+bool sampleDomeLightDir(const float3 surfNor_WS,
+                        const bool acceptsBacksideLight,
+                        inout RandomNumberGenerator rng,
+                        out float3 wi_WS,
+                        out float pdf)
 {
-    DomeLightSample result;
-
-    float3 wi_WS;
-    float pdf;
     wi_WS = generateDomeLightSampleDir(surfNor_WS, rng, pdf);
 
     // Surfaces that accept backside light transmit backside samples, so only opaque surfaces get the
     // rejection (which saves a shadow ray whenever the sun is below the shading point's horizon).
-    if (!acceptsBacksideLight && dot(wi_WS, surfNor_WS) < 0.f)
-    {
-        result.didReachDomeLight = false;
-        return result;
-    }
+    return acceptsBacksideLight || dot(wi_WS, surfNor_WS) >= 0.f;
+}
+
+// Returns whether the dome is visible along wi_WS. Le is the dome radiance before transmittance;
+// transmittance is the passthrough tint and water absorption along the shadow ray.
+bool traceToDomeLight(const float3 surfPos_WS,
+                      const float3 surfNor_WS,
+                      const float3 wi_WS,
+                      const RayCone rayCone,
+                      const bool canPassthrough,
+                      const bool startUnderwater,
+                      const RandomNumberGenerator shadowRng,
+                      out float3 Le,
+                      out float3 transmittance)
+{
+    Le = 0.f;
+    transmittance = 0.f;
 
     RayDesc ray;
     setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, true /*faceforwardNormal*/);
@@ -168,16 +166,13 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     const uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
     TraceRay(raytracingAcs, rayFlags, 0xFF, HITGROUP_LIGHTS, 0, 0, ray, domeLightPayload);
 
-    result.didReachDomeLight = !bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT);
-    result.wi_WS = wi_WS;
-    result.pdf = pdf;
-    result.Le = float3(0.f, 0.f, 0.f);
-    result.transmittance = float3(0.f, 0.f, 0.f);
-    if (result.didReachDomeLight)
+    if (bool(domeLightPayload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        result.Le = getDomeLightColor(ray.Direction);
-        result.transmittance = domeLightPayload.pathWeight * passthroughAbsorption;
+        return false;
     }
-    return result;
+
+    const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
+    Le = getDomeLightColor(ray.Direction);
+    transmittance = domeLightPayload.pathWeight * passthroughAbsorption;
+    return true;
 }

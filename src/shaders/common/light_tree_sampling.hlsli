@@ -333,23 +333,19 @@ float lightPdfRtsl(const HitInfo hitInfo,
 }
 
 // =============================================
-// Forward NEE entry point — mirrors sampleDirectLightingUniform
+// Forward NEE entry point — mirrors sampleAreaLightUniform
 // =============================================
 
 // One-light-sample-per-pixel RTSL NEE. Returns the picked light's contribution
 // (or didHitLight=false on null sample). pdf is the true selection pdf
 // times the area-to-solid-angle pdf — flows into the MIS balance heuristic.
-DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
-                                              const float3 surfNor_WS,
-                                              const RayCone rayCone,
-                                              const bool canPassthrough,
-                                              const bool startUnderwater,
-                                              const bool acceptsBacksideLight,
-                                              inout RandomNumberGenerator rng,
-                                              const RandomNumberGenerator shadowRng)
+AreaLightSample sampleAreaLightRtsl(const float3 surfPos_WS,
+                                    const float3 surfNor_WS,
+                                    const bool acceptsBacksideLight,
+                                    inout RandomNumberGenerator rng)
 {
-    DirectLightingSample result;
-    result.didHitLight = false;
+    AreaLightSample sample;
+    sample.valid = false;
 
     uint pickedLightIdx;
     float pdfSelect;
@@ -357,17 +353,13 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
         0u, surfPos_WS, surfNor_WS, acceptsBacksideLight, rng, pickedLightIdx, pdfSelect);
     if (!gotLight)
     {
-        return result;
+        return sample;
     }
 
-    const AreaLight light = areaLights[pickedLightIdx];
-
-    float3 pointOnLight_WS, wi_WS;
-    float2 lightBary2;
+    sample.valid = true;
+    sample.lightIdx = pickedLightIdx;
     float lightSamplePdf;
-    sampleAreaLightPoint(light, surfPos_WS, rng, pointOnLight_WS, lightBary2, wi_WS, lightSamplePdf);
-
-    traceToLight(surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, shadowRng, result);
-    result.pdf = pdfSelect * lightSamplePdf;
-    return result;
+    sampleAreaLightPoint(areaLights[pickedLightIdx], surfPos_WS, rng, sample.pointOnLight_WS, sample.lightBary2, sample.wi_WS, lightSamplePdf);
+    sample.pdf = pdfSelect * lightSamplePdf;
+    return sample;
 }
