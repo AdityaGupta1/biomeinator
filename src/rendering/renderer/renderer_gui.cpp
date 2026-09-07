@@ -134,6 +134,8 @@ void imguiEndFrame(double deltaTime)
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation min cap", "restirDecorrelationMinCap", 0.f, 20.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Decorrelation exponent", "restirDecorrelationExponent", 0.01f, 1.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Spatial neighbors", "restirSpatialNeighbors", 0, RESTIR_MAX_SPATIAL_NEIGHBORS);
+            SettingsGuiHelpers::SliderFloat("Initial sample blend", "restirInitialBlend", 0.f, 1.f);
+            SettingsGuiHelpers::SliderFloat("White noise", "restirWhiteNoise", 0.f, 1.f);
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("ReSTIR debug", "restirDebugMode", restirDebugModeComboOptions);
         }
 
