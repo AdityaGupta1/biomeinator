@@ -251,7 +251,9 @@ void initPipeline()
                 .AnyHitShaderImport = L"AnyHit",
                 .ClosestHitShaderImport = L"ClosestHit_Primary",
             };
-            // No CHS needed for shadow rays
+            // Anyhit-only hit group for TraceRay visibility rays. Shadow rays on main trace inline
+            // (isSegmentOccluded) so nothing here uses it, but ReSTIR's reuse passes still trace
+            // some visibility rays through it.
             pipelineInputs.hitGroups[HITGROUP_LIGHTS] = {
                 .HitGroupExport = lightsHitGroupName.c_str(),
                 .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,

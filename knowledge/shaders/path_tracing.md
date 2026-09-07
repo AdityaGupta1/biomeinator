@@ -1,4 +1,4 @@
-_Last edited: 2026-09-04_
+_Last edited: 2026-09-07_
 
 # Path Tracing Shader
 
@@ -93,14 +93,24 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
 Two hit groups exist in the path tracing pipeline:
 
 - **`HITGROUP_PRIMARY`** — used for BSDF-sampled rays. Full closest-hit that records the complete hit, plus anyhit for alpha cutout and passthrough.
-- **`HITGROUP_LIGHTS`** — shared by area-light and dome-light shadow rays. Anyhit-only
-  (same anyhit as primary, for passthrough); a triangle hit group needs no closest hit
-  shader.
+- **`HITGROUP_LIGHTS`** — anyhit-only (same anyhit as primary, for passthrough); a triangle
+  hit group needs no closest hit shader. Nothing on `main` traces through it since shadow rays
+  went inline, but it is kept because ReSTIR's reuse passes still trace some visibility rays
+  with `TraceRay`.
 
-Shadow rays trace with `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH |
-RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` (the DXR occlusion-ray idiom — measured ~9% frame time in
-2026-08). `PAYLOAD_FLAG_DID_HIT` starts **set** and only the miss shader clears it, so
-flag-still-set means occluded. Consequences:
+Shadow rays (area-light NEE in `traceToLight`, dome light in `sampleDomeLight`) go through
+`isSegmentOccluded`, an inline `RayQuery` in the raygen shader rather than a `TraceRay`. The
+anyhit body lives in `acceptHitCandidate`, which the `AnyHit` entry point and the query's
+`Proceed` loop both call, so a segment applies the same passthrough tint, water entry/exit
+tracking and stochastic cutout whichever way it is traced; the `Payload` at those call sites is
+a plain local carrying that state. The inline query skips the payload marshalling and
+shader-table dispatch a `TraceRay` pays per non-opaque candidate: measured against the DXR
+occlusion-ray idiom (`RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH |
+RAY_FLAG_SKIP_CLOSEST_HIT_SHADER`, itself worth ~9% frame time in 2026-08) it took -8% path
+tracing on cornell_box/evil_room and -11..-16% on cave_lights/fog_god_rays (2026-09, A/B/A,
+goldens unchanged to 1e-5). Inline traversal gives up SER and adds live state to the caller, so
+it is only a win for rays with no closest hit; primary and bounce rays stay `TraceRay`. Any
+committed hit means occluded. Consequences:
 
 - Area-light shadow rays no longer verify they hit the sampled light triangle; instead
   `traceToLight` stops `TMax` just short of the light and treats any committed hit as

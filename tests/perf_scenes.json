@@ -27,6 +27,17 @@
                 "--height=1080",
                 "--antialiasingMode=2"
             ]
+        },
+        {
+            "name": "fog_god_rays",
+            "world": "voxel/fog_god_rays",
+            "args": [
+                "--width=1920",
+                "--height=1080",
+                "--antialiasingMode=2",
+                "--maxPathDepth=6",
+                "--animTime=585"
+            ]
         }
     ]
 }
