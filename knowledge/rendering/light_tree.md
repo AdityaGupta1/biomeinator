@@ -1,4 +1,4 @@
-_Last edited: 2026-05-17_
+_Last edited: 2026-09-07_
 
 # Light Tree Build
 
@@ -35,13 +35,36 @@ recovery — `instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx
   `light_buffer_clear` pass. The bbox-reduce shader unions them in
   unconditionally — `min(+∞, real) = real`, no liveness check needed.
 - **Bogus tree leaves** (slots `[numAreaLights, M)` after the leaf-populate
-  pass) share the same sentinel + `areaLightIdx = LIGHT_IDX_INVALID`. The
-  internal-levels gather sums and unions them with no branch; their
-  contribution is identity.
+  pass) share the same sentinel. The internal-levels gather sums and unions
+  them with no branch; their contribution is identity. The sampler recognises
+  them by leaf offset (`>= numAreaLights`), not by any field of the node.
 
 This is why Stage 1 invests in a separate `light_buffer_clear` dispatch instead
 of relying on emitter_collect to also zero unused slots — sparse holes carry
 the sentinel between rebuilds.
+
+## 16-byte nodes: f16 bounds rounded outward, no light index
+
+`LightTreeNode` stores its bounds as three f16 pairs plus an f32 flux so both
+children of a node (`2i+1`, `2i+2` are adjacent) arrive in one 32-byte load;
+the descent is a chain of dependent loads, so the win is cache footprint, not
+bandwidth. The tree lives in shader world space (true world minus the camera's
+integer XZ), so |x|, |z| stay within render distance and y within the column
+height, where f16 spacing is at most half a block. The encoder
+(`makeLightTreeNode`) rounds min toward −∞ and max toward +∞ rather than to
+nearest: the geometric bound prunes a subtree with zero pdf when its whole box
+is behind the shading plane, so a box that shrank could drop a light barely in
+front of it (energy loss), while a box that only grows costs a little
+importance and no bias since selection and pdf evaluation read the same stored
+values. Only leaves actually round; internal unions of representable halves
+re-encode exactly.
+
+The leaf's sparse light index no longer fits in the node. It is not needed
+during the walk, only once a descent lands, and after the radix sort
+`dev_mortonValues[s]` is exactly the sparse index of leaf `s`, so the path
+tracer binds that buffer as `rtslLeafToLight` instead of a fourth copy of the
+mapping. It is guarded by `leafOffset < sceneParams.numAreaLights` because the
+padding slots hold whatever the sort left there.
 
 ## `dev_sceneBbox` and the orderable-uint atomic float trick
 

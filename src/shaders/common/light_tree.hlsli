@@ -5,32 +5,52 @@
 
 #include "../rendering/common/common_structs.h"
 
+#include "util/packing.hlsli"
+
 // =============================================
 // Tree node helpers
 // =============================================
 
-// Inverted-infinity bbox + flux=0 + invalid idx. Unions cleanly through the
-// bottom-up internal-levels pass without a "is this slot live" branch.
+// Bounds are stored as f16 rounded outward (min toward -inf, max toward +inf) so the
+// stored box always contains the exact one. The geometric bound prunes a subtree with
+// zero pdf when its whole box is behind the shading plane, so a box that shrank could
+// lose a light that sits barely in front of it; a box that only grows costs a little
+// importance and no bias. Internal nodes union values that are already representable
+// halves, so only leaves actually round.
+LightTreeNode makeLightTreeNode(const float3 bboxMin, const float3 bboxMax, const float flux)
+{
+    LightTreeNode n;
+    n.packedBboxMinXY = f32tof16RoundDown(bboxMin.x) | (f32tof16RoundDown(bboxMin.y) << 16);
+    n.packedBboxMinZMaxX = f32tof16RoundDown(bboxMin.z) | (f32tof16RoundUp(bboxMax.x) << 16);
+    n.packedBboxMaxYZ = f32tof16RoundUp(bboxMax.y) | (f32tof16RoundUp(bboxMax.z) << 16);
+    n.flux = flux;
+    return n;
+}
+
+void getLightTreeBbox(const LightTreeNode n, out float3 bboxMin, out float3 bboxMax)
+{
+    const float2 minXY = unpackUintToFloat2(n.packedBboxMinXY);
+    const float2 minZMaxX = unpackUintToFloat2(n.packedBboxMinZMaxX);
+    const float2 maxYZ = unpackUintToFloat2(n.packedBboxMaxYZ);
+    bboxMin = float3(minXY, minZMaxX.x);
+    bboxMax = float3(minZMaxX.y, maxYZ);
+}
+
+// Inverted-infinity bbox + flux=0. Unions cleanly through the bottom-up
+// internal-levels pass without a "is this slot live" branch.
 LightTreeNode makeSentinelLightTreeNode()
 {
     const float posInf = asfloat(0x7F800000u);
     const float negInf = asfloat(0xFF800000u);
-    LightTreeNode n;
-    n.bboxMin = float3(posInf, posInf, posInf);
-    n.flux = 0.0f;
-    n.bboxMax = float3(negInf, negInf, negInf);
-    n.areaLightIdx = LIGHT_IDX_INVALID;
-    return n;
+    return makeLightTreeNode(float3(posInf, posInf, posInf), float3(negInf, negInf, negInf), 0.0f);
 }
 
 LightTreeNode unionLightTreeNodes(LightTreeNode a, LightTreeNode b)
 {
-    LightTreeNode n;
-    n.bboxMin = min(a.bboxMin, b.bboxMin);
-    n.flux = a.flux + b.flux;
-    n.bboxMax = max(a.bboxMax, b.bboxMax);
-    n.areaLightIdx = LIGHT_IDX_INVALID;
-    return n;
+    float3 bboxMinA, bboxMaxA, bboxMinB, bboxMaxB;
+    getLightTreeBbox(a, bboxMinA, bboxMaxA);
+    getLightTreeBbox(b, bboxMinB, bboxMaxB);
+    return makeLightTreeNode(min(bboxMinA, bboxMinB), max(bboxMaxA, bboxMaxB), a.flux + b.flux);
 }
 
 // =============================================

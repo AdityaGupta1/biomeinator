@@ -331,6 +331,8 @@ static void bindPtCommonParams(ParamBlockManager& paramBlockManager)
                                                           renderState.lightTreeManager.getDevLightTreeSrvBindAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF),
                                                           renderState.lightTreeManager.getDevLightToLeafSrvBindAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT),
+                                                          renderState.lightTreeManager.getDevLeafToLightSrvBindAddress());
 }
 
 static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPathSplitting)

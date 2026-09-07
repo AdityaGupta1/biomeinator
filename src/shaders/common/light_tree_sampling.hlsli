@@ -17,10 +17,13 @@
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 
-// Bound via PtParam::RTSL_LIGHT_TREE / RTSL_LIGHT_TO_LEAF in renderer_pipeline.cpp.
-// Constants live in rtslParams (in GlobalParams cbuffer via global_params.hlsli).
+// Bound via PtParam::RTSL_LIGHT_TREE / RTSL_LIGHT_TO_LEAF / RTSL_LEAF_TO_LIGHT in
+// renderer_pipeline.cpp. Constants live in rtslParams (in GlobalParams cbuffer via
+// global_params.hlsli). rtslLeafToLight is the sorted morton values buffer: sparse
+// area light index per leaf offset, valid for offsets < sceneParams.numAreaLights.
 StructuredBuffer<LightTreeNode> rtslLightTree   : REGISTER_T(LIGHT_TREE, LIGHT_TREE_IN);
 StructuredBuffer<uint>          rtslLightToLeaf : REGISTER_T(LIGHT_TREE, LIGHT_TO_LEAF_IN);
+StructuredBuffer<uint>          rtslLeafToLight : REGISTER_T(LIGHT_TREE, LEAF_TO_LIGHT_IN);
 
 // =============================================
 // Bbox geometry helpers
@@ -117,8 +120,12 @@ void rtslChildProbs(LightTreeNode c1,
                     out float p1,
                     out float p2)
 {
-    const float core1 = (c1.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, c1.bboxMin, c1.bboxMax) * c1.flux) : 0.0f;
-    const float core2 = (c2.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, c2.bboxMin, c2.bboxMax) * c2.flux) : 0.0f;
+    float3 bboxMin1, bboxMax1, bboxMin2, bboxMax2;
+    getLightTreeBbox(c1, bboxMin1, bboxMax1);
+    getLightTreeBbox(c2, bboxMin2, bboxMax2);
+
+    const float core1 = (c1.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, bboxMin1, bboxMax1) * c1.flux) : 0.0f;
+    const float core2 = (c2.flux > 0.0f) ? (geomTermBoundTwoSided(hitPos, hitNormal, acceptsBacksideLight, bboxMin2, bboxMax2) * c2.flux) : 0.0f;
 
     if (core1 == 0.0f && core2 == 0.0f)
     {
@@ -140,8 +147,8 @@ void rtslChildProbs(LightTreeNode c1,
     }
 
     float dMinSq1, dMaxSq1, dMinSq2, dMaxSq2;
-    distanceSquaredToBbox(hitPos, c1.bboxMin, c1.bboxMax, dMinSq1, dMaxSq1);
-    distanceSquaredToBbox(hitPos, c2.bboxMin, c2.bboxMax, dMinSq2, dMaxSq2);
+    distanceSquaredToBbox(hitPos, bboxMin1, bboxMax1, dMinSq1, dMaxSq1);
+    distanceSquaredToBbox(hitPos, bboxMin2, bboxMax2, dMinSq2, dMaxSq2);
 
     // Both children's core > 0 past this point, so the cross-multiplied
     // denominators are strictly positive whenever at least one distance > 0.
@@ -229,13 +236,13 @@ bool selectLightFromSubtree(uint subtreeRoot,
         }
     }
 
-    const LightTreeNode leaf = rtslLightTree[cur];
-    if (leaf.areaLightIdx == LIGHT_IDX_INVALID)
+    const uint leafOffset = cur - rtslParams.treeLeafBase;
+    if (leafOffset >= sceneParams.numAreaLights)
     {
         return false; // sentinel padding leaf
     }
 
-    areaLightIdx = leaf.areaLightIdx;
+    areaLightIdx = rtslLeafToLight[leafOffset];
     pdfSelect = pdf;
     return true;
 }

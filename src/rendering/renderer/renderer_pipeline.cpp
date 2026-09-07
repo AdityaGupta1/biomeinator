@@ -152,6 +152,7 @@ void initRootSignature()
 
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TREE)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TREE_IN);
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
+        ptParams[PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT)] = MAKE_PARAM(SRV, LIGHT_TREE, LEAF_TO_LIGHT_IN);
 
         if (renderState.useSer)
         {
