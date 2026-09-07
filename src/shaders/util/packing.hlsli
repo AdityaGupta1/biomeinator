@@ -10,17 +10,6 @@ float2 unpackUintToFloat2(uint v)
     return float2(f16tof32(v), f16tof32(v >> 16));
 }
 
-uint packUnorm2ToUint(float2 v)
-{
-    const uint2 u = uint2(round(saturate(v) * 65535.f));
-    return u.x | (u.y << 16);
-}
-
-float2 unpackUintToUnorm2(uint u)
-{
-    return float2(u & 0xFFFF, u >> 16) / 65535.f;
-}
-
 uint packSnorm2ToUint(float2 v)
 {
     const int2 i = int2(round(clamp(v, -1.f, 1.f) * 32767.f));

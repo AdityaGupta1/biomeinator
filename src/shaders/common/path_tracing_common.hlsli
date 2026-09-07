@@ -55,52 +55,6 @@ bool isPixelOutOfBounds(int2 pixelIdx)
     return any(pixelIdx < int2(0, 0)) || any(pixelIdx >= renderParams.renderSize);
 }
 
-uint packTriData(const PerTriangleData perTriData)
-{
-    return (perTriData.flags & ((1u << PACKED_TRI_DATA_FLAG_BITS) - 1u)) | (perTriData.texArraySliceIdx << PACKED_TRI_DATA_FLAG_BITS);
-}
-
-uint getTriFlags(const uint packedTriData)
-{
-    return packedTriData & ((1u << PACKED_TRI_DATA_FLAG_BITS) - 1u);
-}
-
-uint getTexArraySliceIdx(const uint packedTriData)
-{
-    return packedTriData >> PACKED_TRI_DATA_FLAG_BITS;
-}
-
-float3 getHitNor_WS(const HitInfo hitInfo)
-{
-    return octDecode(hitInfo.packedNor);
-}
-
-// The material sampler wraps on every axis, so sampling at frac(uv) is equivalent to sampling at uv, and
-// unorm16 keeps 16 bits of precision across the whole tile. An f16 pair would lose bits towards uv = 1,
-// which visibly shifts texels on large textures.
-uint packHitUv(const float2 uv)
-{
-    return packUnorm2ToUint(frac(uv));
-}
-
-float2 getHitUv(const HitInfo hitInfo)
-{
-    return unpackUintToUnorm2(hitInfo.packedUv);
-}
-
-HitInfo makeHitInfo(const float3 hitPos_WS, const float3 hitNor_WS, const float2 uv,
-    const uint instanceId, const uint triangleIdx, const uint materialIdx)
-{
-    HitInfo hitInfo;
-    hitInfo.hitPos_WS = hitPos_WS;
-    hitInfo.instanceId = instanceId;
-    hitInfo.triangleIdx = triangleIdx;
-    hitInfo.materialIdx = materialIdx;
-    hitInfo.packedNor = octEncode(hitNor_WS);
-    hitInfo.packedUv = packHitUv(uv);
-    return hitInfo;
-}
-
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     uint i0, i1, i2;
@@ -125,12 +79,12 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
 
 // Ctx for surface shading at a hit; samples the biome map once here so all base color reads
 // for the hit share the tint (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const uint packedTriData, const float rayConeWidth, const float2 posXZ_WS)
+TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
-    texCtx.arraySliceIdx = getTexArraySliceIdx(packedTriData);
-    texCtx.biomeTint = getBiomeTint(getTriFlags(packedTriData), posXZ_WS);
+    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
+    texCtx.biomeTint = getBiomeTint(perTriData.flags, posXZ_WS);
     return texCtx;
 }
 
@@ -232,7 +186,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
 
     const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
-    const float3 hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
+    payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
 
     const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
     float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
@@ -257,7 +211,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
     if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
     {
-        const float2 posXZ_WS = hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+        const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
         nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
@@ -276,10 +230,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             nor_WS = -nor_WS;
         }
     }
-    const float2 uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                      unpackUintToFloat2(v2.packedUv) * bary.z;
-    payload.hitInfo = makeHitInfo(hitPos_WS, nor_WS, uv, InstanceID(), PrimitiveIndex(), materialIdx);
-    payload.packedTriData = packTriData(perTriData);
+    payload.hitInfo.hitNor_WS = nor_WS;
+
+    payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
+                         unpackUintToFloat2(v2.packedUv) * bary.z;
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
+
+    payload.materialIdx = materialIdx;
 
     payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }

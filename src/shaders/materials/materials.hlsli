@@ -74,35 +74,19 @@ float4 getMaterialBaseColorNoAux(const Material material, const float2 uv, const
     return sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx);
 }
 
-bool hasPackedAuxTextures(const Material material)
-{
-    return material.hasPackedAux() && material.baseColorTextureId != TEXTURE_ID_INVALID
-        && material.auxTextureId != TEXTURE_ID_INVALID;
-}
-
-void applyPackedAuxToBaseColor(inout float3 baseColor, const float4 aux, const TexSampleCtx texCtx)
-{
-    if (aux.r > 0.f) // emissive texels carry emission color, not diffuse
-    {
-        baseColor = 0.f;
-    }
-    // Tint-masked texels are authored grayscale; the biome tint provides the hue
-    baseColor *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
-}
-
-// Emission color lives in the base color texture; aux.r is the per-texel strength
-float3 packedAuxEmission(const Material material, const float3 baseColor, const float auxStrength)
-{
-    return baseColor * auxStrength * material.emissiveStrength;
-}
-
 float4 getMaterialBaseColor(const Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     float4 baseColor = getMaterialBaseColorNoAux(material, uv, texCtx);
-    if (hasPackedAuxTextures(material))
+    if (material.hasPackedAux() && material.baseColorTextureId != TEXTURE_ID_INVALID
+        && material.auxTextureId != TEXTURE_ID_INVALID)
     {
         const float4 aux = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx);
-        applyPackedAuxToBaseColor(baseColor.rgb, aux, texCtx);
+        if (aux.r > 0.f) // emissive texels carry emission color, not diffuse
+        {
+            baseColor.rgb = 0.f;
+        }
+        // Tint-masked texels are authored grayscale; the biome tint provides the hue
+        baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
     }
     return baseColor;
 }
@@ -111,7 +95,8 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
 {
     if (material.hasPackedAux())
     {
-        if (!hasPackedAuxTextures(material))
+        // Emission color lives in the base color texture; aux.r is the per-texel strength.
+        if (material.auxTextureId == TEXTURE_ID_INVALID || material.baseColorTextureId == TEXTURE_ID_INVALID)
         {
             return float3(0.f, 0.f, 0.f);
         }
@@ -120,44 +105,14 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
         {
             return float3(0.f, 0.f, 0.f);
         }
-        const float3 baseColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
-        return packedAuxEmission(material, baseColor, auxStrength);
+        const float3 emissiveColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
+        return emissiveColor * auxStrength * material.emissiveStrength;
     }
 
     const float3 emissiveColor = (material.auxTextureId == TEXTURE_ID_INVALID)
         ? material.emissiveColor
         : sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).rgb;
     return emissiveColor * material.emissiveStrength;
-}
-
-struct MaterialTexSample
-{
-    float4 baseColor;
-    float3 emissiveColor;
-};
-
-// Base color and emission from one pass over the material's textures, for callers that need both
-// (the bounce loop): a packed aux texture feeds both, so getMaterialBaseColor + getMaterialEmissiveColor
-// would fetch it twice
-MaterialTexSample sampleMaterialTextures(const Material material, const float2 uv, const TexSampleCtx texCtx)
-{
-    MaterialTexSample result;
-    result.baseColor = getMaterialBaseColorNoAux(material, uv, texCtx);
-    result.emissiveColor = 0.f;
-    if (material.hasPackedAux())
-    {
-        if (hasPackedAuxTextures(material))
-        {
-            const float4 aux = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx);
-            result.emissiveColor = packedAuxEmission(material, result.baseColor.rgb, aux.r);
-            applyPackedAuxToBaseColor(result.baseColor.rgb, aux, texCtx);
-        }
-    }
-    else if (material.hasEmission())
-    {
-        result.emissiveColor = getMaterialEmissiveColor(material, uv, texCtx);
-    }
-    return result;
 }
 
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
@@ -550,7 +505,7 @@ BsdfSample sampleBsdf(const Material material,
 
 Material getMaterialFromPayload(const Payload payload)
 {
-    Material material = materials[payload.hitInfo.materialIdx];
+    Material material = materials[payload.materialIdx];
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {
@@ -563,38 +518,44 @@ Material getMaterialFromPayload(const Payload payload)
 // Attempts to split surfMaterial for path splitting. Returns true if the material was split, in which case surfMaterial
 // is replaced with the split variant for pathSplitIdx and pathWeight is scaled accordingly. Returns false if no split
 // applies; the caller should then early-out for pathSplitIdx == 1.
-// surfMaterial's base color must already be resolved to the sampled value (so the opaque half of an alpha split needs
-// no further change), with baseColorAlpha being that sample's alpha.
 bool trySplitMaterial(inout Material surfMaterial,
-                      const float baseColorAlpha,
+                      const float2 uv,
                       const float3 surfNor_WS,
                       const float3 wo_WS,
+                      const TexSampleCtx texCtx,
                       const uint pathSplitIdx,
                       inout float3 pathWeight)
 {
-    if (surfMaterial.hasDiffuse() && baseColorAlpha < 0.999f)
+    if (surfMaterial.hasDiffuse() && surfMaterial.baseColorTextureId != TEXTURE_ID_INVALID)
     {
-        if (pathSplitIdx == 0)
+        const float4 baseColorSample = getMaterialBaseColor(surfMaterial, uv, texCtx);
+        if (baseColorSample.a < 0.999f)
         {
-            // opaque
-            pathWeight *= baseColorAlpha;
+            const float alpha = baseColorSample.a;
+            if (pathSplitIdx == 0)
+            {
+                // opaque
+                surfMaterial.baseColor = baseColorSample.rgb;
+                surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+                pathWeight *= alpha;
+            }
+            else
+            {
+                // transparent
+                // TODO: use a special passthrough material type instead of co-opting specular transmission
+                surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
+                surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
+                surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+                surfMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
+                surfMaterial.roughness = 0.f;
+                surfMaterial.ior = 1.f; // passthrough without refraction
+                surfMaterial.emissiveStrength = 0.f;
+                surfMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
+                surfMaterial.auxTextureId = TEXTURE_ID_INVALID;
+                pathWeight *= (1.f - alpha);
+            }
+            return true;
         }
-        else
-        {
-            // transparent
-            // TODO: use a special passthrough material type instead of co-opting specular transmission
-            surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
-            surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
-            surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
-            surfMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
-            surfMaterial.roughness = 0.f;
-            surfMaterial.ior = 1.f; // passthrough without refraction
-            surfMaterial.emissiveStrength = 0.f;
-            surfMaterial.emissiveColor = float3(0.f, 0.f, 0.f);
-            surfMaterial.auxTextureId = TEXTURE_ID_INVALID;
-            pathWeight *= (1.f - baseColorAlpha);
-        }
-        return true;
     }
 
     // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them;

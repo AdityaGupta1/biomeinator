@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-01_
 
 # Common CPU/GPU Structs
 
@@ -30,9 +30,7 @@ Diffuse and glossy transmission are mutually exclusive: a transmissive material 
 
 **`Vertex`** — normal and uv are packed into one `uint` each (octahedron snorm16 and f16 pair). The CPU encoders in `util/packing.h` must stay bit-identical to the decoders in `shaders/util/packing.hlsli`. Only `pos_OS` is unpacked, which is what lets BLAS builds (pos at offset 0, `sizeof(Vertex)` stride) and the water displacement pass work without decoding. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
 
-**`HitInfo`** / **`GbufferData`** — the hit record the closest hit shader writes and the G-buffer pass persists for the path tracer. `HitInfo` rides in the ray payload across the whole bounce loop, so its size is paid on every `TraceRay`: the normal is octahedron-packed like `Vertex`'s (which quantises the shading normal, something near-bit-exact goldens can notice), the uv is a unorm16 pair of `frac(uv)` (sampling-equivalent because the material sampler wraps; an f16 pair was tried first and visibly shifted texels on large textures), and `materialIdx` lives inside it rather than as a separate payload field. `packedTriData` forwards the `PerTriangleData` fields shading needs (flags in the low `PACKED_TRI_DATA_FLAG_BITS` bits, texture array slice above) so the bounce loop, the orphan-water check and the G-buffer guide pass never reload `InstanceData` and `PerTriangleData` for a triangle the hit shader just read; a `static_assert` guards that the triangle flags fit. Only the closest hit shader writes these fields, so on a miss they are undefined and readers must check `PAYLOAD_FLAG_DID_HIT` first.
-
-`PerTriangleData` is self-explanatory from the source.
+The remaining structs (`HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
 
 ---
 

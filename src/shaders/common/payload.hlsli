@@ -14,13 +14,12 @@
 #define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
 
-// Live across the whole bounce loop, so every field costs on every TraceRay; maxPayloadSizeBytes in
-// renderer_pipeline.cpp must match its size
 struct [raypayload] Payload
 {
     uint flags : read(caller, anyhit, closesthit, miss) : write(caller, closesthit, miss);
     float3 pathWeight : read(caller, anyhit) : write(caller, anyhit);
 
+    uint materialIdx : read(caller) : write(caller, closesthit);
     RandomNumberGenerator rng : read(caller, anyhit) : write(caller, anyhit);
     float waterEntryT : read(caller, anyhit) : write(caller, anyhit); // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
     float waterExitT : read(caller, anyhit) : write(caller, anyhit);  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
@@ -28,5 +27,4 @@ struct [raypayload] Payload
     RayCone rayCone : read(caller, anyhit) : write(caller);
 
     HitInfo hitInfo : read(caller) : write(closesthit);
-    uint packedTriData : read(caller) : write(closesthit); // see GbufferData
 };
