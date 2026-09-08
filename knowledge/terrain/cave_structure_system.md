@@ -124,8 +124,8 @@ bottom layer index in gives each pocket an independent grid.
   biome/height. Neighboring columns with better pockets do not substitute — this
   is intended one-per-cell behavior.
 - **Ceiling gens only run on `closed` layers** (a pocket open to the sky has no
-  ceiling solid to hang from). BRIMSTONE's `HANGING_LAMP` and LUSH's `LAMP_CLUSTER`
-  and `CAVE_VINES` are the ceiling gens; each is naturally absent wherever its biome
+  ceiling solid to hang from). LUSH's `LAMP_CLUSTER` and `CAVE_VINES` are the
+  ceiling gens; each is naturally absent wherever its biome
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.

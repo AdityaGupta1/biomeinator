@@ -18,7 +18,6 @@ namespace CaveBiomes
 {
 
 static std::array<CaveBiomeData, static_cast<size_t>(CaveBiome::COUNT)> caveBiomeDatas;
-static Decorator caveFloorDecorator;
 
 #define CAVE_BIOME_DATA(caveBiome) caveBiomeDatas[static_cast<size_t>(caveBiome)]
 #define CAVE_BIOME_DATA_BY_NAME(caveBiomeName) caveBiomeDatas[static_cast<size_t>(CaveBiome::caveBiomeName)]
@@ -26,7 +25,7 @@ static Decorator caveFloorDecorator;
 void init()
 {
     // STONE sits at the origin so it only wins near the center of noise space; the
-    // special biomes sit at the extremes and only appear where the noise is strong.
+    // themed biomes sit toward the extremes and only appear where the noise is strong.
 
     // STONE
     {
@@ -45,8 +44,8 @@ void init()
     {
         CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(LUSH);
         data.biomeNoise = {
-            .temperature = 0.7f,
-            .humidity = 0.7f,
+            .temperature = 0.3f,
+            .humidity = 0.3f,
         };
         data.baseBlock = Block::STONE;
         data.secondaryBaseBlock = Block::MARBLE;
@@ -54,64 +53,21 @@ void init()
         data.skinPatchBlock = Block::CLAY;
         data.skinFringeBlock = Block::OVERGROWN_STONE;
         data.secondarySkinFringeBlock = Block::OVERGROWN_MARBLE;
+        data.scatterLamps = false;
         data.caveStructureGens = {
             { .type = CaveStructureType::LAMP_CLUSTER, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 18, .gridCellPadding = 6, .chance = 0.6f },
             { .type = CaveStructureType::CAVE_VINES, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 8, .gridCellPadding = 2, .chance = 0.5f },
             { .type = CaveStructureType::MOSS_PINK_CLUSTER, .minLayerHeight = 3, .gridCellSideLength = 10, .gridCellPadding = 2, .chance = 0.6f },
         };
-    }
-
-    // Ferns are LUSH-only via their ground filter (moss and overgrown rock only exist in LUSH);
-    // glowshrooms grow on any cave floor
-    caveFloorDecorator.addEntry(Block::FERN, 4.f, { Block::MOSS, Block::OVERGROWN_STONE, Block::OVERGROWN_MARBLE });
-    caveFloorDecorator.addEntry(Block::GLOWSHROOM_YELLOW, 1.f);
-    caveFloorDecorator.addEntry(Block::AIR, 32.f);
-
-    // BRIMSTONE
-    {
-        CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(BRIMSTONE);
-        data.biomeNoise = {
-            .temperature = 0.7f,
-            .humidity = -0.7f,
-        };
-        data.baseBlock = Block::HELLSTONE;
-        data.caveStructureGens = {
-            { .type = CaveStructureType::HANGING_LAMP, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 12, .gridCellPadding = 4 },
-        };
-    }
-
-    // MARBLE_CRYSTALS
-    {
-        CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(MARBLE_CRYSTALS);
-        data.biomeNoise = {
-            .temperature = -0.7f,
-            .humidity = -0.7f,
-        };
-        data.baseBlock = Block::MARBLE;
-        data.caveStructureGens = {
-            { .type = CaveStructureType::CRYSTAL, .minLayerHeight = 12, .gridCellSideLength = 12, .gridCellPadding = 4 },
-        };
-    }
-
-    // SUBMARINE
-    {
-        CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(SUBMARINE);
-        data.biomeNoise = {
-            .temperature = -0.7f,
-            .humidity = 0.7f,
-        };
-        data.baseBlock = Block::SCALESTONE;
+        data.decorator.addEntry(Block::FERN, 4.f, { Block::MOSS, Block::OVERGROWN_STONE, Block::OVERGROWN_MARBLE });
+        data.decorator.addEntry(Block::GLOWSHROOM_YELLOW, 1.f);
+        data.decorator.addEntry(Block::AIR, 32.f);
     }
 }
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome)
 {
     return CAVE_BIOME_DATA(caveBiome);
-}
-
-const Decorator& getCaveFloorDecorator()
-{
-    return caveFloorDecorator;
 }
 
 bool isCaveFloraGroundBlock(Block block)

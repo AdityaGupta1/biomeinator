@@ -45,11 +45,6 @@ static FN::SmartNode<FN::Generator> fnCavesSimplex;
 inline constexpr int caveBiomeNoiseDownsample = 4;
 inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 
-// TEMP: force every cave biome to LUSH while iterating on lush cave content. Revert to
-// CaveBiome::COUNT to restore noise-based classification.
-inline constexpr CaveBiome debugCaveBiomeOverride = CaveBiome::LUSH;
-// TEMP: suppress the random cave lamps so only vine berries light lush caves. Revert to false.
-inline constexpr bool debugDisableCaveLamps = true;
 
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
 static FN::SmartNode<FN::Generator> fnCaveHumidity;
@@ -531,12 +526,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         }
     };
 
+    this->caveFloors.clear();
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+            this->caveFloorOffsets[columnIdx] = static_cast<uint32_t>(this->caveFloors.size());
 
             const Biome biome = this->biomes[columnIdx];
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
@@ -677,9 +674,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
                                 .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
                             };
-                            const CaveBiome caveBiome = (debugCaveBiomeOverride != CaveBiome::COUNT)
-                                ? debugCaveBiomeOverride
-                                : CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
                             voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
@@ -716,7 +711,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        block = (!debugDisableCaveLamps && rng.nextFloat() < 0.04f) ? Block::LAMP : baseBlock;
+                        const bool scatterLamps = CaveBiomes::getCaveBiomeData(voxelCaveBiome).scatterLamps;
+                        block = (scatterLamps && rng.nextFloat() < 0.04f) ? Block::LAMP : baseBlock;
                         if (block != baseBlock)
                         {
                             fringeBlock = Block::AIR;
@@ -745,6 +741,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     layerOpen = true;
                     layerStart = static_cast<int>(y) - 1;
                     layerBottomBiome = lastSolidCaveBiome;
+                    this->caveFloors.push_back({ static_cast<uint16_t>(layerStart), layerBottomBiome });
                 }
                 else if (layerOpen && !isCave)
                 {
@@ -837,6 +834,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             placeCaveStructuresForColumn(blockPosXZ_WS);
         }
     }
+    this->caveFloorOffsets[chunkSizeXZSquare] = static_cast<uint32_t>(this->caveFloors.size());
 
     const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 

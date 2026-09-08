@@ -14,16 +14,19 @@ Each biome has a `Decorator` — a weighted list of blocks. At each air-above-so
 
 The pass visits every air-above-solid transition in a column. A transition whose
 ground sits below the column's terrain top (`Chunk::terrainTopY`, the highest
-solid terrain block before structures) is underground — a cave floor or the
-underside of an overhang — and uses `CaveBiomes::getCaveFloorDecorator()`;
-the rest use the surface biome's decorator as before. Tree canopies don't confuse
-this: leaves are structure blocks placed above the terrain top, so the grass under
-a tree is still classed as surface. There is one cave decorator, not one per cave
-biome, because no per-voxel cave biome is stored; an entry meant for one biome
-scopes itself with ground blocks only that biome's skin produces (ferns on moss and
-overgrown rock), while biome-agnostic entries (glowshrooms) set no filter. It draws
-from its own per-chunk RNG stream so adding cave flora never shifts the surface
-decorator pattern.
+solid terrain block before structures) is underground; the rest use the surface
+biome's decorator as before. Tree canopies don't confuse this: leaves are structure
+blocks placed above the terrain top, so the grass under a tree is still classed as
+surface.
+
+Underground transitions look up `Chunk::caveFloors`, the floor solids captured
+during the terrain scan together with their cave biome (a few entries per column,
+grouped by `caveFloorOffsets`), and apply `CaveBiomeData::decorator` of that
+biome. This is the one place a per-position cave biome survives generation — it
+is far cheaper than a per-voxel store and exactly what floor decoration needs.
+Underground ground with no captured floor (overhang undersides, blocks placed by
+structures) gets no decorator. Cave draws come from their own per-chunk RNG stream
+so adding cave flora never shifts the surface decorator pattern.
 
 ## Ordering Guarantees
 

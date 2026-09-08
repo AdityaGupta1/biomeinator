@@ -13,8 +13,6 @@
 // so earlier types claim space before later ones regardless of which chunk emitted them.
 enum class CaveStructureType : uint8_t
 {
-    CRYSTAL,
-    HANGING_LAMP,
     LAMP_CLUSTER,
     STONE_COLUMN,
     MOSS_PINK_CLUSTER,

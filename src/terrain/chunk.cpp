@@ -211,7 +211,6 @@ void Chunk::runStructuresAndDecoratorPass()
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
     // Separate stream so cave floor draws don't perturb the surface decorator pattern
     RandomNumberGenerator caveDecoratorRng = initRng(worldSeed ^ hash(771093284), this->chunkPos.x, this->chunkPos.y /*z*/);
-    const Decorator& caveFloorDecorator = CaveBiomes::getCaveFloorDecorator();
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -223,6 +222,8 @@ void Chunk::runStructuresAndDecoratorPass()
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const uint terrainTopY = this->terrainTopY[columnIdx];
+            const CaveFloor* caveFloorsBegin = this->caveFloors.data() + this->caveFloorOffsets[columnIdx];
+            const CaveFloor* caveFloorsEnd = this->caveFloors.data() + this->caveFloorOffsets[columnIdx + 1];
             Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
@@ -237,7 +238,20 @@ void Chunk::runStructuresAndDecoratorPass()
                     const bool isUnderground = blockY - 1 < terrainTopY;
                     if (isUnderground)
                     {
-                        decoratorBlock = caveFloorDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
+                        // Only terrain-captured cave floors carry a biome; other underground ground
+                        // (overhang undersides, structure blocks) gets nothing
+                        for (const CaveFloor* floor = caveFloorsBegin; floor != caveFloorsEnd; ++floor)
+                        {
+                            if (floor->y == blockY - 1)
+                            {
+                                const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(floor->biome).decorator;
+                                if (!caveDecorator.isEmpty())
+                                {
+                                    decoratorBlock = caveDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
+                                }
+                                break;
+                            }
+                        }
                     }
                     else if (!decorator.isEmpty())
                     {

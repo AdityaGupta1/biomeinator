@@ -29,7 +29,7 @@ corners; STONE keeps the middle.
 
 The effective classification noise is the 3D field plus the column's 2D surface
 temperature/humidity scaled by `caveBiomeSurfaceBias`. This loosely anchors a
-cave biome to whatever is above it (a desert tends toward BRIMSTONE below) while
+cave biome to whatever is above it (a humid surface tends toward LUSH below) while
 the 3D term lets it drift with depth. The 2D arrays already exist in scratch for
 surface biome selection, so the bias is effectively free.
 

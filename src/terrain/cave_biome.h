@@ -22,15 +22,13 @@ enum class CaveBiome : uint8_t
     STONE,
 
     LUSH,
-    BRIMSTONE,
-    MARBLE_CRYSTALS,
-    SUBMARINE,
 
     COUNT
 };
 
 // One air pocket in a single column, captured during the terrain block-fill scan. Scratch
-// only — never persisted. start = floor solid y (first air is start + 1); end = top air y
+// only (the floor y and biome are persisted compactly as Chunk::caveFloors). start = floor
+// solid y (first air is start + 1); end = top air y
 // (ceiling solid is end + 1); layerHeight = end - start = number of air blocks. closed is
 // false when the pocket opens upward into non-cave air (no ceiling solid), so ceiling gens
 // are skipped. bottomBiome/topBiome are the cave biomes of the floor/ceiling solids.
@@ -60,7 +58,11 @@ struct CaveBiomeData
     Block skinBlock{ Block::AIR };
     Block skinPatchBlock{ Block::AIR };
     Block skinFringeBlock{ Block::AIR };
+    // Random LAMP blocks scattered through the biome's rock
+    bool scatterLamps{ true };
     std::vector<CaveStructureGen> caveStructureGens{};
+    // Applied at cave floors of this biome (see Chunk::caveFloors)
+    Decorator decorator{};
 };
 
 namespace CaveBiomes
@@ -69,11 +71,6 @@ namespace CaveBiomes
 void init();
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome);
-
-// Decorator for every air-above-solid transition below the column's terrain top. No per-voxel
-// cave biome is stored, so entries meant for one biome scope themselves through groundBlocks
-// that only that biome's skin produces.
-const Decorator& getCaveFloorDecorator();
 
 // Cave-floor ground blocks that cave flora may stand on
 bool isCaveFloraGroundBlock(Block block);

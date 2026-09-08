@@ -5,6 +5,7 @@
 
 #include "biome.h"
 #include "block.h"
+#include "cave_biome.h"
 #include "scene/scene.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
@@ -105,6 +106,15 @@ private:
     // Highest solid terrain block per column (pre-structure). Lets later passes tell an
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
+    // Cave floor solids with their cave biome, captured during the terrain scan (a few per column),
+    // grouped by column via caveFloorOffsets so the decorator pass can apply that biome's decorator.
+    struct CaveFloor
+    {
+        uint16_t y;
+        CaveBiome biome;
+    };
+    std::vector<CaveFloor> caveFloors{};
+    std::array<uint32_t, chunkSizeXZSquare + 1> caveFloorOffsets{};
 
     std::vector<Structure> structures{};
     std::vector<CaveStructure> caveStructures{};

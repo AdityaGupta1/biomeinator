@@ -16,7 +16,7 @@
 using namespace glm;
 using namespace StructureHelpers;
 
-// The 3x3 cave structures write a single vertical run per column.
+// Writes a single vertical run per column of a 3x3 footprint.
 // yStep is +1 to grow upward from a floor anchor, -1 to grow downward from a ceiling anchor.
 static void fill3x3VerticalRun(std::vector<Block>& blocks, ivec3 anchorPos_CS, int height, int yStep, Block block)
 {
@@ -46,16 +46,6 @@ static void fill3x3VerticalRun(std::vector<Block>& blocks, ivec3 anchorPos_CS, i
 #define fillCaveStructureBlocksHeader(structureName)                                                                   \
     static void fillCaveStructureBlocks_##structureName(                                                               \
         const Chunk& chunk, const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
-
-fillCaveStructureBlocksHeader(CRYSTAL)
-{
-    fill3x3VerticalRun(blocks, structurePos_CS, 5, 1, Block::RAINBOW_CRYSTAL);
-}
-
-fillCaveStructureBlocksHeader(HANGING_LAMP)
-{
-    fill3x3VerticalRun(blocks, structurePos_CS, 5, -1, Block::LAMP);
-}
 
 fillCaveStructureBlocksHeader(STONE_COLUMN)
 {
@@ -398,12 +388,6 @@ static std::array<StructureBounds, static_cast<size_t>(CaveStructureType::COUNT)
 
 void init()
 {
-    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL);
-    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL) = 1;
-
-    SET_FILL_CAVE_STRUCTURE_FUNC(HANGING_LAMP);
-    CAVE_STRUCTURE_BOUNDS_BY_NAME(HANGING_LAMP) = 1;
-
     SET_FILL_CAVE_STRUCTURE_FUNC(LAMP_CLUSTER);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(LAMP_CLUSTER) = lampClusterMaxRadius;
 
