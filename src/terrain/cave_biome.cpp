@@ -75,7 +75,7 @@ void init()
         data.flatSurfaceBlock = Block::CRACKED_BASALT;
         data.secondaryBaseBlock = Block::STONE;
         data.caveStructureGens = {
-            { .type = CaveStructureType::CRYSTAL_PILLAR, .minLayerHeight = 9, .gridCellSideLength = 16, .gridCellPadding = 3, .chance = 0.7f },
+            { .type = CaveStructureType::CRYSTAL_PILLAR, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 3, .chance = 0.7f },
         };
     }
 }

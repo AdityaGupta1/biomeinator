@@ -127,10 +127,17 @@ bottom layer index in gives each pocket an independent grid.
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.
-- **`CRYSTAL_PILLAR` writes top-down and stops at the first non-air block**, rather than using
-  `tryPlaceStructureBlock` per cell. Its glass sheath continues below the core so the pillar meets
-  the floor of each of its own columns, and a plain AIR-only test would let the sheath skip past a
-  ledge and resume inside an air pocket underneath it.
+- **`CRYSTAL_PILLAR` writes each column top-down**, rather than using `tryPlaceStructureBlock` per
+  cell: rock above the prism's top just clips it, but rock below whatever the column has already
+  written is the floor it rests on, so the column stops there. Its glass shell continues below the
+  anchor so the prism meets the floor of each of its own columns, and a plain AIR-only test would
+  let the shell skip past a ledge and resume in an air pocket underneath it. Its height is rolled
+  per structure and capped at `availableHeight - 2`, so the gen's `minLayerHeight` is what keeps
+  that range non-empty.
+- **The crystal's emitter must stay sheathed.** The CRYSTAL_CORE prism is the same hexagon one
+  block in from the shell on every side and one block lower, including under a sliced top, so no core
+  face is ever exposed to air — an exposed one would light the cave directly instead of through the
+  glass. Changing the cross-section or the slice must preserve that block of shell.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
   blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`

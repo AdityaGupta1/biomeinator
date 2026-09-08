@@ -108,40 +108,80 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
     }
 }
 
-inline constexpr int crystalPillarHeight = 5;
-inline constexpr int crystalPillarMaxSideDrop = 2;
+inline constexpr ivec2 cardinalDirsXZ[4] = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } };
 
-// A CRYSTAL_CORE column sheathed in CRYSTAL_BLUE on the eight columns around it and capped by one
-// more at the top, so the emitter is only ever seen through glass. The sheath continues below the
-// core until it meets whatever floor its own column has, so the pillar sits on uneven ground
+inline constexpr int crystalPillarWideExtent = 2;
+inline constexpr float crystalPillarWideChance = 0.3f;
+inline constexpr int crystalPillarMinHeight = 4;
+inline constexpr int crystalPillarMaxHeight = 12;
+// Air blocks left between the top of the prism and the pocket's ceiling
+inline constexpr int crystalPillarCeilingGap = 2;
+inline constexpr int crystalPillarMaxSideDrop = 2;
+inline constexpr float crystalPillarSliceChance = 0.4f;
+
+// A prism of CRYSTAL_BLUE with a CRYSTAL_CORE prism inside it, kept a block clear of every face of
+// the shell so the emitter is only ever seen through glass. The cross-section is a 3x3 block or,
+// less often, a 5x5 with its corners cut; the core is the centre column or the middle plus shape
+// respectively. The top is cut at 45 degrees along a cardinal direction and the core follows the
+// same cut one block down, so a sliced crystal stays sealed. The shell continues below the anchor
+// until it meets whatever floor each of its own columns has, so the prism sits on uneven ground
 // instead of hovering over the dips around the anchor; the drop is capped so it can't chase a hole
-// all the way down.
+// down.
 fillCaveStructureBlocksHeader(CRYSTAL_PILLAR)
 {
-    const int maxY = std::min(structurePos_CS.y + crystalPillarHeight - 1, static_cast<int>(chunkSizeY) - 1);
+    RandomNumberGenerator rng = initStructureRng(structure, 1174509823);
+    const bool isWide = rng.chance(crystalPillarWideChance);
+    const int extent = isWide ? crystalPillarWideExtent : 1;
+    const bool isSliced = rng.chance(crystalPillarSliceChance);
+    const ivec2 sliceDir = cardinalDirsXZ[rng.nextInt(static_cast<int>(std::size(cardinalDirsXZ)))];
+    // The gen's minLayerHeight is what keeps this range non-empty
+    const int maxHeight = std::min(structure.availableHeight - crystalPillarCeilingGap, crystalPillarMaxHeight);
+    const int height = rng.nextInt(crystalPillarMinHeight, std::max(maxHeight, crystalPillarMinHeight) + 1);
 
-    for (int dz = -1; dz <= 1; ++dz)
+    for (int dz = -extent; dz <= extent; ++dz)
     {
-        for (int dx = -1; dx <= 1; ++dx)
+        for (int dx = -extent; dx <= extent; ++dx)
         {
+            const ivec2 offsetXZ(dx, dz);
+            const ivec2 absOffsetXZ = glm::abs(offsetXZ);
+            const int diamondDist = absOffsetXZ.x + absOffsetXZ.y;
+            if (isWide && diamondDist > 2 * extent - 1) // corners of the 5x5
+            {
+                continue;
+            }
+
             const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
             if (!Chunk::isInChunkXZ(colPosXZ_CS))
             {
                 continue;
             }
 
-            const bool isCore = (dx == 0 && dz == 0);
-            const int minY = std::max(isCore ? structurePos_CS.y : structurePos_CS.y - crystalPillarMaxSideDrop, 0);
-            // Top down so the column stops at the first block it rests on rather than continuing
-            // past it into any air pocket below
-            for (int y = maxY; y >= minY; --y)
+            // 45 degrees is one block of height lost per block travelled along the slice
+            // direction, offset so the side the cut rises towards keeps the full height
+            const int slice = isSliced ? (offsetXZ.x * sliceDir.x + offsetXZ.y * sliceDir.y + extent) : 0;
+            const int columnTopY =
+                std::min(structurePos_CS.y + height - 1 - slice, static_cast<int>(chunkSizeY) - 1);
+            const bool isCoreColumn = isWide ? (diamondDist <= 1) : (diamondDist == 0);
+            const int minY = std::max(structurePos_CS.y - crystalPillarMaxSideDrop, 0);
+
+            bool placedAny = false;
+            for (int y = columnTopY; y >= minY; --y)
             {
                 const uint32_t blockIdx = columnBlockIdx(colPosXZ_CS, y);
                 if (blocks[blockIdx] != Block::AIR)
                 {
-                    break;
+                    // Rock above the prism's top just clips it, but rock below the part already
+                    // written is the floor it rests on
+                    if (placedAny)
+                    {
+                        break;
+                    }
+                    continue;
                 }
-                blocks[blockIdx] = (isCore && y < maxY) ? Block::CRYSTAL_CORE : Block::CRYSTAL_BLUE;
+
+                const bool isCore = isCoreColumn && y >= structurePos_CS.y && y < columnTopY;
+                blocks[blockIdx] = isCore ? Block::CRYSTAL_CORE : Block::CRYSTAL_BLUE;
+                placedAny = true;
             }
         }
     }
@@ -422,7 +462,7 @@ void init()
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_PILLAR);
-    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_PILLAR) = 1;
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_PILLAR) = crystalPillarWideExtent;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(MOSS_PINK_CLUSTER);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(MOSS_PINK_CLUSTER) = mossPinkClusterMaxRadius;
