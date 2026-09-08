@@ -63,6 +63,18 @@ void init()
         data.decorator.addEntry(Block::GLOWSHROOM_YELLOW, 1.f);
         data.decorator.addEntry(Block::AIR, 32.f);
     }
+
+    // CRYSTALS: cool and dry, mirroring LUSH through the origin
+    {
+        CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(CRYSTALS);
+        data.biomeNoise = {
+            .temperature = -0.3f,
+            .humidity = -0.3f,
+        };
+        data.baseBlock = Block::BASALT;
+        data.flatSurfaceBlock = Block::CRACKED_BASALT;
+        data.secondaryBaseBlock = Block::STONE;
+    }
 }
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome)

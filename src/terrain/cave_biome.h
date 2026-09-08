@@ -22,6 +22,7 @@ enum class CaveBiome : uint8_t
     STONE,
 
     LUSH,
+    CRYSTALS,
 
     COUNT
 };
@@ -49,6 +50,12 @@ struct CaveBiomeData
     // AIR disables.
     Block secondaryBaseBlock{ Block::AIR };
     Block secondarySkinFringeBlock{ Block::AIR };
+    // Optional replacement for near-surface rock where the cave surface is flat-ish (floors,
+    // ceilings, gentle slopes); steep walls and deeper rock keep the base block. Lets a rock with
+    // a distinctive top face (columnar basalt) show it only on ledges. AIR disables.
+    // See knowledge/terrain/cave_biome_system.md.
+    Block flatSurfaceBlock{ Block::AIR };
+    Block secondaryFlatSurfaceBlock{ Block::AIR };
     // Optional skin on cave surfaces (floors, walls and ceilings alike): solid voxels whose cave
     // carve noise sits just above the carve threshold become skinBlock, with skinPatchBlock
     // blobs mixed in. skinFringeBlock forms a band just outside the skin, so it shows on the
