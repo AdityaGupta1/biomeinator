@@ -1,4 +1,4 @@
-_Last edited: 2026-08-24_
+_Last edited: 2026-09-07_
 
 # Block System
 
@@ -31,6 +31,19 @@ missing-file handling.
 The non-obvious culling rules in `shouldGenerateFace`:
 - **TRANSPARENT_CUTOUT** between two cutout blocks: only the one at the lower/equal position generates the face. This prevents double-rendering the shared boundary (both quads would be coplanar and z-fight).
 - **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it). Exception: `LIQUID_TOP` blocks always generate the +Y (top) face regardless of neighbor, so the water surface is always visible.
+
+## GLASS blocks
+
+`BlockType::GLASS` is a fully opaque-alpha cube that the path tracer shades as glass (see
+[shaders → materials.md](../shaders/materials.md)). It is its own `BlockType` purely for the
+culling rules: a face between two glass blocks would be a refraction interface *inside* what should
+read as one solid crystal, and glass buried in rock is never seen, so both are culled — a crystal
+formation meshes as a hollow shell. Solid neighbors are unaffected and still generate their face
+towards glass, which is what lets an emissive block sheathed in crystal (CRYSTAL_CORE inside
+CRYSTAL_BLUE) stay visible through it.
+
+Glass is opaque to the acceleration structure: its texels have alpha 1, so it needs no OMM or
+anyhit handling, and shadow rays are blocked by it as they are by any rough transmissive surface.
 
 ## BlockShape
 

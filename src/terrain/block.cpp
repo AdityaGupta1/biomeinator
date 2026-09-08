@@ -40,6 +40,7 @@ static const std::unordered_map<std::string, BlockType> blockTypesByName = {
     { "water", BlockType::WATER },
     { "solid", BlockType::SOLID },
     { "transparent_cutout", BlockType::TRANSPARENT_CUTOUT },
+    { "glass", BlockType::GLASS },
 };
 
 static const std::unordered_map<std::string, BlockShape> blockShapesByName = {

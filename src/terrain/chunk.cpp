@@ -613,6 +613,14 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
         {
             return (thisBlockShape == BlockShape::LIQUID_TOP && faceIdx == 4) || (neighborBlockData.type == BlockType::AIR);
         }
+        case BlockType::GLASS:
+        {
+            // A face between two glass blocks would be a refraction interface inside what should
+            // read as one solid crystal, and glass buried in rock is never seen. Solid neighbors
+            // still generate their own face towards the glass (the SOLID case above), so an
+            // emissive block sheathed in crystal stays visible.
+            return neighborBlockData.type != BlockType::GLASS && neighborBlockData.type != BlockType::SOLID;
+        }
     }
 
     ASSERT(false, "shouldGenerateFace() reached end of function");
@@ -831,6 +839,10 @@ void Chunk::createInstances()
                             if (blockData.translucent)
                             {
                                 faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
+                            }
+                            if (blockData.type == BlockType::GLASS)
+                            {
+                                faceData.flags |= TRIANGLE_FLAG_IS_GLASS;
                             }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);

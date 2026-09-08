@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-07_
 
 # Material Model and BSDFs
 
@@ -63,6 +63,22 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   must mirror `sampleBsdf`'s lobe structure exactly (including the diffuse-transmission hemisphere
   split) or MIS silently breaks. `sampleBsdf` finishes non-delta samples through the same
   `evaluateBsdf` NEE uses for that reason.
+
+## Glass as a per-triangle override
+
+Voxel terrain shares a single diffuse material across every block, so the glass look
+(`TRIANGLE_FLAG_IS_GLASS`, `applyGlassMaterial`) is applied per triangle at shading time instead of
+being its own material: a second material would need a second instance and BLAS per chunk, while the
+override costs one flag test and one aux texture sample on hits that were already sampling that
+texture. The block's base color texture becomes the transmission tint, reflection stays untinted as
+for any dielectric, and roughness comes from the packed aux b channel so different crystal textures
+can differ without new shader constants.
+
+The override is applied in the path tracing raygen (shading) and the gbuffer raygen (DLSS roughness
+and specular albedo guides). It deliberately does *not* touch `acceptHitCandidate`: rough glass is a
+real bounce rather than a passthrough, so glass triangles occlude shadow rays like any opaque
+geometry. An emitter enclosed in glass is therefore lit into the world by BSDF-sampled refraction
+paths only — NEE towards it is always shadowed.
 
 ## Verifying energy behaviour
 

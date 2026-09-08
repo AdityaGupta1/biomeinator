@@ -108,6 +108,45 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
     }
 }
 
+inline constexpr int crystalPillarHeight = 5;
+inline constexpr int crystalPillarMaxSideDrop = 2;
+
+// A CRYSTAL_CORE column sheathed in CRYSTAL_BLUE on the eight columns around it and capped by one
+// more at the top, so the emitter is only ever seen through glass. The sheath continues below the
+// core until it meets whatever floor its own column has, so the pillar sits on uneven ground
+// instead of hovering over the dips around the anchor; the drop is capped so it can't chase a hole
+// all the way down.
+fillCaveStructureBlocksHeader(CRYSTAL_PILLAR)
+{
+    const int maxY = std::min(structurePos_CS.y + crystalPillarHeight - 1, static_cast<int>(chunkSizeY) - 1);
+
+    for (int dz = -1; dz <= 1; ++dz)
+    {
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
+            if (!Chunk::isInChunkXZ(colPosXZ_CS))
+            {
+                continue;
+            }
+
+            const bool isCore = (dx == 0 && dz == 0);
+            const int minY = std::max(isCore ? structurePos_CS.y : structurePos_CS.y - crystalPillarMaxSideDrop, 0);
+            // Top down so the column stops at the first block it rests on rather than continuing
+            // past it into any air pocket below
+            for (int y = maxY; y >= minY; --y)
+            {
+                const uint32_t blockIdx = columnBlockIdx(colPosXZ_CS, y);
+                if (blocks[blockIdx] != Block::AIR)
+                {
+                    break;
+                }
+                blocks[blockIdx] = (isCore && y < maxY) ? Block::CRYSTAL_CORE : Block::CRYSTAL_BLUE;
+            }
+        }
+    }
+}
+
 inline constexpr int lampClusterMaxRadius = 4;
 inline constexpr int lampClusterMaxDepth = 6;
 inline constexpr int lampClusterMaxRise = 3;
@@ -381,6 +420,9 @@ void init()
 
     SET_FILL_CAVE_STRUCTURE_FUNC(STONE_COLUMN);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
+
+    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_PILLAR);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_PILLAR) = 1;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(MOSS_PINK_CLUSTER);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(MOSS_PINK_CLUSTER) = mossPinkClusterMaxRadius;

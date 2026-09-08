@@ -115,6 +115,22 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
     return emissiveColor * material.emissiveStrength;
 }
 
+static const float glassIor = 1.55f; // quartz-ish
+
+// Turns the hit's material into glass, for faces flagged TRIANGLE_FLAG_IS_GLASS. Terrain shares
+// one diffuse material across every block, so glass is a per-triangle override rather than its own
+// material and instance; the base color texture becomes the transmission tint and the packed aux
+// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric.
+void applyGlassMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    material.flags = (material.flags & ~MATERIAL_FLAG_DIFFUSE) | MATERIAL_FLAGS_GLOSSY;
+    material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
+    material.roughness = (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
+        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
+        : 0.f;
+    material.ior = glassIor;
+}
+
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
 // alpha = roughness^2
 float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const float alpha, float nDotV)

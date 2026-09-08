@@ -148,6 +148,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const TexSampleCtx surfTexCtx =
             makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
 
+        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS))
+        {
+            applyGlassMaterial(surfMaterial, payload.hitInfo.uv, surfTexCtx);
+        }
+
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         float3 emissiveContrib = 0.f;
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())

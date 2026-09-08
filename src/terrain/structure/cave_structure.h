@@ -15,6 +15,7 @@ enum class CaveStructureType : uint8_t
 {
     LAMP_CLUSTER,
     STONE_COLUMN,
+    CRYSTAL_PILLAR,
     MOSS_PINK_CLUSTER,
     CAVE_VINES,
 

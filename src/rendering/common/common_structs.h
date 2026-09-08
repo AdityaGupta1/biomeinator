@@ -258,6 +258,9 @@ static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for p
 #define TRIANGLE_FLAG_BIOME_TINT (1 << 2)
 // Foliage faces with thin-wall diffuse transmission: diffuse splits into reflection and transmission
 #define TRIANGLE_FLAG_DIFFUSE_TRANSMISSION (1 << 3)
+// Faces shaded as glass: the terrain material's diffuse lobe is replaced by glossy reflection +
+// transmission, with per-texel roughness from the packed aux b channel (see applyGlassMaterial)
+#define TRIANGLE_FLAG_IS_GLASS (1 << 4)
 
 struct PerTriangleData
 {

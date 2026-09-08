@@ -127,6 +127,10 @@ bottom layer index in gives each pocket an independent grid.
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.
+- **`CRYSTAL_PILLAR` writes top-down and stops at the first non-air block**, rather than using
+  `tryPlaceStructureBlock` per cell. Its glass sheath continues below the core so the pillar meets
+  the floor of each of its own columns, and a plain AIR-only test would let the sheath skip past a
+  ledge and resume inside an air pocket underneath it.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
   blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`

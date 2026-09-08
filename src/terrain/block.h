@@ -18,6 +18,9 @@ enum class BlockType : uint8_t
     WATER,
     SOLID,
     TRANSPARENT_CUTOUT,
+    // Opaque-alpha cubes rendered as glass (specular reflection + refraction); see
+    // knowledge/terrain/block_system.md
+    GLASS,
 
     COUNT
 };
