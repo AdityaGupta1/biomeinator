@@ -6,6 +6,7 @@
 #include "block_ids.h"
 
 #include <cstdint>
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,6 +28,7 @@ enum class BlockShape : uint8_t
     CUBE,
     X_SHAPED,
     LIQUID_TOP,
+    DECORATOR_CUSTOM,
 
     COUNT
 };
@@ -55,7 +57,21 @@ struct BlockData
     BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
+    uint32_t modelIdx{ ~0u };
+    std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
+    uint8_t numRotationsY{ 1 };
 };
+
+// These shapes never hide a neighboring solid or cutout cube face.
+constexpr bool isDecoratorShape(BlockShape shape)
+{
+    return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
+}
+
+constexpr bool decoratorExposesNeighborFace(BlockType faceType, BlockShape neighborShape)
+{
+    return (faceType == BlockType::SOLID || faceType == BlockType::TRANSPARENT_CUTOUT) && isDecoratorShape(neighborShape);
+}
 
 namespace Blocks
 {

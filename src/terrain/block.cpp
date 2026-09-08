@@ -2,6 +2,7 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "block.h"
+#include "block_model.h"
 
 #include "logger.h"
 
@@ -46,6 +47,7 @@ static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "cube", BlockShape::CUBE },
     { "x_shaped", BlockShape::X_SHAPED },
     { "liquid_top", BlockShape::LIQUID_TOP },
+    { "decorator_custom", BlockShape::DECORATOR_CUSTOM },
 };
 
 // Slices are assigned in first-reference order
@@ -116,10 +118,40 @@ static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
 
         outData.emitsLight = blockJson.value("emitsLight", false);
         outData.translucent = blockJson.value("translucent", false);
+        if (outData.shape == BlockShape::DECORATOR_CUSTOM)
+        {
+            if (!blockJson.at("textures").is_string() || outData.texSlices[0] == TEX_SLICE_INVALID)
+                throw std::runtime_error("custom decorators require one texture atlas");
+            const std::filesystem::path name = blockJson.at("model").get<std::string>();
+            if (name.empty() || name.has_parent_path() || name.extension() != ".glb")
+                throw std::runtime_error("model must be a GLB filename in assets/blocks/models");
+            if (outData.type != BlockType::SOLID && outData.type != BlockType::TRANSPARENT_CUTOUT)
+                throw std::runtime_error("custom decorators must use solid or transparent_cutout type");
+            if (blockJson.contains("randomRotationY"))
+            {
+                const auto& turns = blockJson.at("randomRotationY");
+                if (!turns.is_array() || turns.empty() || turns.size() > 4)
+                    throw std::runtime_error("randomRotationY must contain 1 to 4 distinct quarter-turn angles");
+                unsigned seen = 0;
+                outData.numRotationsY = static_cast<uint8_t>(turns.size());
+                for (size_t i = 0; i < turns.size(); ++i)
+                {
+                    if (!turns[i].is_number_integer()) throw std::runtime_error("rotation angles must be integers");
+                    const int degrees = turns[i].get<int>();
+                    if (degrees < 0 || degrees > 270 || degrees % 90 != 0 || (seen & (1u << (degrees / 90))))
+                        throw std::runtime_error("rotation angles must be distinct values from 0, 90, 180, 270");
+                    seen |= 1u << (degrees / 90);
+                    outData.rotationY[i] = static_cast<uint8_t>(degrees / 90);
+                }
+            }
+            outData.modelIdx = BlockModels::load(jsonPath.parent_path() / "models" / name);
+        }
     }
     catch (const std::exception& e)
     {
         Logger::logError("blocks: failed to parse %s: %s", jsonPath.generic_string().c_str(), e.what());
+        // Never silently turn a malformed model into a full occluding cube.
+        if (outData.shape == BlockShape::DECORATOR_CUSTOM) throw;
     }
 }
 
@@ -128,6 +160,11 @@ void init()
     namespace fs = std::filesystem;
 
     const fs::path blocksDir = fs::path(TARGET_FILE_DIR) / "assets/blocks";
+    BlockModels::clear();
+    blockDatas.fill(BlockData{});
+    blocksById.clear();
+    textureNames.clear();
+    sliceByTextureName.clear();
     blocksById.reserve(blockIdNames.size());
     for (size_t i = 0; i < blockIdNames.size(); ++i)
     {

@@ -4,6 +4,7 @@
 #include "chunk.h"
 
 #include "block.h"
+#include "block_model.h"
 #include "cave_biome.h"
 #include "terrain.h"
 #include "terrain_materials.h"
@@ -565,6 +566,10 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
     }
 
     const BlockData& neighborBlockData = Blocks::getBlockData(neighborBlock);
+    if (decoratorExposesNeighborFace(thisBlockType, neighborBlockData.shape))
+    {
+        return true;
+    }
     if (neighborBlockData.type == BlockType::AIR)
     {
         return true;
@@ -725,7 +730,37 @@ void Chunk::createInstances()
 
                     const BlockData& blockData = Blocks::getBlockData(block);
 
-                    if (blockData.shape == BlockShape::X_SHAPED)
+                    if (blockData.shape == BlockShape::DECORATOR_CUSTOM)
+                    {
+                        const auto& model = BlockModels::get(blockData.modelIdx);
+                        const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
+                        // Independent of jitter and traversal order, and includes Y for cave layers.
+                        auto rng = initRng(worldSeed ^ 0xB16B00B5u, static_cast<uint>(columnPos_WS.x),
+                                           blockY, static_cast<uint>(columnPos_WS.y));
+                        const uint turn = blockData.rotationY[rng.nextUint() % blockData.numRotationsY];
+                        const vec3 offset = vec3(blockPos_CS) + vec3(.5f, 0.f, .5f);
+                        const auto baseVertex = static_cast<uint32_t>(terrainVerts.size());
+                        const auto baseTriangle = static_cast<uint32_t>(terrainIdxs.size() / 3);
+                        for (Vertex vertex : model.rotations[turn])
+                        {
+                            vertex.pos_OS.x += offset.x;
+                            vertex.pos_OS.y += offset.y;
+                            vertex.pos_OS.z += offset.z;
+                            terrainVerts.push_back(vertex);
+                        }
+                        for (uint32_t index : model.indices) terrainIdxs.push_back(baseVertex + index);
+                        PerTriangleData data{};
+                        data.texArraySliceIdx = blockData.texSlices[0];
+                        if (TerrainMaterials::sliceHasBiomeTint(data.texArraySliceIdx)) data.flags |= TRIANGLE_FLAG_BIOME_TINT;
+                        if (blockData.translucent) data.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
+                        const auto triangleCount = static_cast<uint32_t>(model.indices.size() / 3);
+                        terrainPerTriDatas.insert(terrainPerTriDatas.end(), triangleCount, data);
+                        // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
+                        if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), triangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+                        if (blockData.emitsLight)
+                            for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
+                    }
+                    else if (blockData.shape == BlockShape::X_SHAPED)
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 

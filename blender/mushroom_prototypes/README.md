@@ -17,8 +17,10 @@ preview studio. Textures are packed into the blend and supplied as PNGs.
   rectangular prism. All face edge and diagonal lengths are checked against
   UV distances; the maximum relative error is recorded in `validation.json`.
 - The yellow cap uses closely spaced golden palette colors for subtle mottling.
-- These are shape/base-color prototypes. The yellow material does not yet
-  include an emission mask. They are not connected to the terrain mesher.
+- The blend remains a shape/base-color preview. `export_block_models.py`
+  exports the models to `assets/blocks/models` and their atlases to
+  `assets/blocks/textures`, adding an aux mask for glowshroom cap emission.
+  The runtime block definitions use these assets as custom decorators.
 - One Blender unit represents one voxel. Parent X offsets separate the models
   for presentation; child geometry is local to each asset, with its base at Z=0.
   The studio ground is also exactly Z=0.
