@@ -9,11 +9,14 @@
 #include <glm/glm.hpp>
 #include <vector>
 
+// Enum order is also fill order across all neighbor chunks (see Chunk::runStructuresAndDecoratorPass),
+// so earlier types claim space before later ones regardless of which chunk emitted them.
 enum class CaveStructureType : uint8_t
 {
-    CRYSTAL,
-    HANGING_LAMP,
+    LAMP_CLUSTER,
     STONE_COLUMN,
+    MOSS_PINK_CLUSTER,
+    CAVE_VINES,
 
     COUNT
 };
@@ -40,6 +43,8 @@ struct CaveStructureGen
     // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
     // between candidates in adjacent cells. Mirrors StructureGen.
     uint32_t gridCellPadding{ 0 };
+    // Probability that a qualifying grid cell actually spawns the structure
+    float chance{ 1.f };
     uint32_t flags{ 0 };
 };
 

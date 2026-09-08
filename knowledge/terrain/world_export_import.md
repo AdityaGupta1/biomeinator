@@ -6,7 +6,7 @@ _Last edited: 2026-09-06_
 
 ## Block palette decouples exports from enum values
 
-The generated `Block` enum's values are not stable across builds (see [block_system.md](block_system.md)), so serialized block values cannot be interpreted directly. `world.json` v2 carries a `blocks` array of string ids; the block values in region files index into it, and import remaps every block through a palette→current-enum table. Unknown ids map to air with a logged error (a hard failure would brick worlds after a block rename). The region *binary* format is unchanged by this — only world.json interpretation — which is why pre-palette worlds could be migrated by editing world.json alone (all v1 worlds were patched in place with the legacy enum order as their palette; there is no v1 import path).
+The generated `Block` enum's values are not stable across builds (see [block_system.md](block_system.md)), so serialized block values cannot be interpreted directly. `world.json` v2 carries a `blocks` array of string ids; the block values in region files index into it, and import remaps every block through a palette→current-enum table. Unknown ids map to the `MISSING` placeholder block with a logged warning (a hard failure would brick worlds after a block rename, and a visible placeholder is easier to spot than silently vanished blocks). The region *binary* format is unchanged by this — only world.json interpretation — which is why pre-palette worlds could be migrated by editing world.json alone (all v1 worlds were patched in place with the legacy enum order as their palette; there is no v1 import path).
 
 ## Boundary chunks are intentionally regenerated
 

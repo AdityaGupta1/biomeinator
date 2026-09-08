@@ -69,6 +69,7 @@ Block textures come from:
 - [Good Vibes](https://github.com/Phyronnaz/VoxelAssets/tree/master/GoodVibes) by Acaitart - CC-BY
 - [16px Seamless MC Texture Hyperpack](https://reactorcore.itch.io/16px-seamless-mc-texture-hyperpack) by Reactorcore - CC0
 - [Paler Gardens](https://modrinth.com/resourcepack/paler-gardens2) by autumnleavesfalling_2008 - MIT
+- [Yuushya](https://modrinth.com/resourcepack/yuushya-16x) by Coco, Xiao2 & LD_Anvil - [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) (textures under `assets/blocks/textures/yuushya/`; these textures and any adaptations of them are **not** covered by this project's MIT license and are for noncommercial use only)
 
 Test scene textures in `tests/gltf/_textures/` are my own work and are **not** covered by this project's MIT license; see [tests/gltf/_textures/LICENSE.txt](tests/gltf/_textures/LICENSE.txt).
 
