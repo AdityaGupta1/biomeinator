@@ -54,9 +54,7 @@ machine states or tasks: positions are decided in Pass 1
 written in Pass 2 (`fillCaveStructureBlocks`), called from
 `runStructuresAndDecoratorPass` inside the same `structureNeighbors` loop that
 fills surface structures. Both passes share `structureMaxChunkRadius = 1`, so the
-existing neighbor gather and gating already cover cave structures — the 3×3 (radius
-1) footprint can cross a chunk border and is reassembled from neighbors' lists
-exactly like surface.
+existing neighbor gather and gating already cover cave structures — a footprint may cross a chunk border by up to `chunkSizeXZ / 2` blocks (vines reach radius 6) and still lie within every overlapping chunk's neighborhood.
 
 ## Column-centric placement (the key divergence)
 

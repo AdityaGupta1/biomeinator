@@ -11,7 +11,8 @@ biomes vary with **y** and the same column can pass through several with depth.
 
 Surface `Biome` selection is partitioned by `inland` and is inherently 2D
 (one biome per column). Cave biomes are a different concept — 3D, no inland
-axis, and their only job (for now) is choosing which block replaces `STONE`.
+axis, and they own their own theming (base and secondary rock, surface skin,
+structure gens, floor decorator) rather than the surface data.
 Overloading `Biome` would drag in the irrelevant inland partitioning and
 per-column assumptions, so `CaveBiome` is its own enum + data table with the
 same nearest-neighbor-by-`distance2` shape, kept deliberately extensible (add
@@ -19,11 +20,12 @@ an enum entry + one init block).
 
 ## STONE at the origin
 
-`STONE` sits at the origin of noise space; the special biomes sit at the
-corners. Because selection is nearest-neighbor, `STONE` only wins near the
-center, so the special biomes naturally appear only where the noise is strong —
-no explicit rarity threshold needed. Adding more special biomes just means more
-corners; STONE keeps the middle.
+`STONE` sits at the origin of noise space and the themed biomes are offset from
+it (LUSH at temperature 0.3, humidity 0.3). Because selection is nearest-neighbor,
+the boundary between two biomes is the perpendicular bisector of their points, so
+a biome's share of the cave band is set by how far and in which direction it is
+offset — no explicit rarity threshold needed. Adding a themed biome means adding
+another offset point; STONE keeps the middle.
 
 ## Surface bias
 

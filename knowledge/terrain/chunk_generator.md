@@ -25,9 +25,9 @@ Two additional 3D fields (temperature, humidity) drive cave biome theming — se
 (downsampled) over `[0, caveNoiseMaxY]` and trilinearly interpolated, then
 biased by the column's 2D surface noise. Classification picks the block that
 replaces `STONE` in the `STONE`/`LAMP` choice, for every solid voxel in the cave
-band. Two more coarse fields (skin thickness, skin patch) drive the optional
-per-biome surface skin, which uses the carve noise itself as its distance proxy —
-see [cave_biome_system.md](cave_biome_system.md).
+band. Three more coarse fields (skin thickness, skin patch, secondary rock) drive
+the optional per-biome surface skin and rock choice; the skin uses the carve noise
+itself as its distance proxy — see [cave_biome_system.md](cave_biome_system.md).
 
 ## Heightfield Design
 

@@ -16,31 +16,71 @@
 using namespace glm;
 using namespace StructureHelpers;
 
-// Writes a single vertical run per column of a 3x3 footprint.
-// yStep is +1 to grow upward from a floor anchor, -1 to grow downward from a ceiling anchor.
-static void fill3x3VerticalRun(std::vector<Block>& blocks, ivec3 anchorPos_CS, int height, int yStep, Block block)
+static uint32_t columnBlockIdx(ivec2 colPosXZ_CS, int y)
 {
-    for (int dz = -1; dz <= 1; ++dz)
+    return Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/));
+}
+
+static Block columnBlockAt(const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int y)
+{
+    return blocks[columnBlockIdx(colPosXZ_CS, y)];
+}
+
+// Seeded from the anchor position so every chunk this structure overlaps rolls the same values
+static RandomNumberGenerator initStructureRng(const CaveStructure& structure, uint32_t salt)
+{
+    return initRng(SettingsManager::getWorldSeed() ^ hash(salt),
+                   static_cast<uint32_t>(structure.pos_WS.x),
+                   static_cast<uint32_t>(structure.pos_WS.y),
+                   static_cast<uint32_t>(structure.pos_WS.z));
+}
+
+// Visits every in-chunk column of a disc around the anchor whose radius is rolled per structure in
+// [minRadius, maxRadius]. A structure is filled once by every chunk it overlaps and each fill sees
+// only its own columns, so each column gets an RNG seeded from its world position (plus anchor y)
+// rather than one stream advanced across the footprint, which would desynchronize between chunks.
+// func(ivec2 colPosXZ_CS, float distFromCenter, int radius, RandomNumberGenerator& columnRng)
+template <typename PerColumnFunc>
+static void forEachDiscColumn(const CaveStructure& structure,
+                              ivec3 structurePos_CS,
+                              int minRadius,
+                              int maxRadius,
+                              uint32_t radiusSalt,
+                              uint32_t columnSalt,
+                              PerColumnFunc&& func)
+{
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    const int radius = initStructureRng(structure, radiusSalt).nextInt(minRadius, maxRadius + 1);
+
+    for (int dz = -radius; dz <= radius; ++dz)
     {
-        for (int dx = -1; dx <= 1; ++dx)
+        for (int dx = -radius; dx <= radius; ++dx)
         {
-            const ivec2 colPosXZ_CS(anchorPos_CS.x + dx, anchorPos_CS.z + dz);
+            const float distFromCenter = glm::length(vec2(dx, dz));
+            if (distFromCenter > static_cast<float>(radius))
+            {
+                continue;
+            }
+
+            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
             if (!Chunk::isInChunkXZ(colPosXZ_CS))
             {
                 continue;
             }
 
-            int y = anchorPos_CS.y;
-            for (int i = 0; i < height; ++i)
-            {
-                if (y >= 0 && y < static_cast<int>(chunkSizeY))
-                {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/)), block);
-                }
-                y += yStep;
-            }
+            RandomNumberGenerator columnRng = initRng(worldSeed ^ hash(columnSalt),
+                                                      static_cast<uint32_t>(structure.pos_WS.x + dx),
+                                                      static_cast<uint32_t>(structure.pos_WS.z + dz),
+                                                      static_cast<uint32_t>(structure.pos_WS.y));
+            func(colPosXZ_CS, distFromCenter, radius, columnRng);
         }
     }
+}
+
+static bool isSolidCubeBlock(Block block)
+{
+    const BlockData& blockData = Blocks::getBlockData(block);
+    return blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE;
 }
 
 #define fillCaveStructureBlocksHeader(structureName)                                                                   \
@@ -49,13 +89,23 @@ static void fill3x3VerticalRun(std::vector<Block>& blocks, ivec3 anchorPos_CS, i
 
 fillCaveStructureBlocksHeader(STONE_COLUMN)
 {
-    fill3x3VerticalRun(blocks, structurePos_CS, structure.availableHeight, 1, Block::SCALESTONE);
-}
+    for (int dz = -1; dz <= 1; ++dz)
+    {
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
+            if (!Chunk::isInChunkXZ(colPosXZ_CS))
+            {
+                continue;
+            }
 
-static bool isSolidCubeBlock(Block block)
-{
-    const BlockData& blockData = Blocks::getBlockData(block);
-    return blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE;
+            const int maxY = std::min(structurePos_CS.y + structure.availableHeight, static_cast<int>(chunkSizeY));
+            for (int y = structurePos_CS.y; y < maxY; ++y)
+            {
+                tryPlaceStructureBlock(blocks, columnBlockIdx(colPosXZ_CS, y), Block::SCALESTONE);
+            }
+        }
+    }
 }
 
 inline constexpr int lampClusterMaxRadius = 4;
@@ -69,7 +119,9 @@ inline constexpr int lampClusterGrowthAttempts = 600;
 // instead of a blob, and since every cell is added touching the cluster, nothing ever floats.
 // Growth may rise above the anchor row so the cluster climbs a ceiling that pulls away upward
 // rather than sticking out flat beneath it. Terrain is read through the chunk's neighborhood
-// air mask, so every chunk the cluster overlaps grows the identical shape.
+// air mask, so every chunk the cluster overlaps grows the identical shape. Growth ignores
+// structure blocks placed earlier (surface structures), so a cell landing on one is skipped at
+// write time; only reachable near cave mouths, accepted.
 fillCaveStructureBlocksHeader(LAMP_CLUSTER)
 {
     constexpr int gridSideXZ = 2 * lampClusterMaxRadius + 1;
@@ -93,11 +145,7 @@ fillCaveStructureBlocksHeader(LAMP_CLUSTER)
         return structure.pos_WS + ivec3(x - lampClusterMaxRadius, y - lampClusterMaxDepth, z - lampClusterMaxRadius);
     };
 
-    const uint worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator rng = initRng(worldSeed ^ hash(1830294761),
-                                        static_cast<uint32_t>(structure.pos_WS.x),
-                                        static_cast<uint32_t>(structure.pos_WS.y),
-                                        static_cast<uint32_t>(structure.pos_WS.z));
+    RandomNumberGenerator rng = initStructureRng(structure, 1830294761);
 
     cells[cellIdx(lampClusterMaxRadius, lampClusterMaxDepth, lampClusterMaxRadius)] = true;
     for (int attempt = 0; attempt < lampClusterGrowthAttempts; ++attempt)
@@ -141,7 +189,7 @@ fillCaveStructureBlocksHeader(LAMP_CLUSTER)
                 {
                     continue;
                 }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y_CS, colPosXZ_CS.y /*z*/)), Block::LAMP);
+                tryPlaceStructureBlock(blocks, columnBlockIdx(colPosXZ_CS, y_CS), Block::LAMP);
             }
         }
     }
@@ -157,10 +205,6 @@ inline constexpr float mossPinkClusterEdgeBudChance = 0.2f;
 // Finds the air block sitting on a cave-flora ground block near the anchor y in this column.
 static bool findCaveFloraStandY(const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int& outStandY)
 {
-    const auto blockAt = [&](int y)
-    {
-        return blocks[Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/))];
-    };
     const int maxY = static_cast<int>(chunkSizeY) - 1;
     for (int dy = 0; dy <= mossPinkClusterFloorSearchDist; ++dy)
     {
@@ -170,7 +214,8 @@ static bool findCaveFloraStandY(const std::vector<Block>& blocks, ivec2 colPosXZ
             {
                 continue;
             }
-            if (blockAt(y) == Block::AIR && CaveBiomes::isCaveFloraGroundBlock(blockAt(y - 1)))
+            if (columnBlockAt(blocks, colPosXZ_CS, y) == Block::AIR &&
+                CaveBiomes::isCaveFloraGroundBlock(columnBlockAt(blocks, colPosXZ_CS, y - 1)))
             {
                 outStandY = y;
                 return true;
@@ -184,52 +229,26 @@ static bool findCaveFloraStandY(const std::vector<Block>& blocks, ivec2 colPosXZ
 // Only stands on cave-flora ground (moss / overgrown rock).
 fillCaveStructureBlocksHeader(MOSS_PINK_CLUSTER)
 {
-    const uint worldSeed = SettingsManager::getWorldSeed();
-    RandomNumberGenerator structureRng = initRng(worldSeed ^ hash(1122334455),
-                                                 static_cast<uint32_t>(structure.pos_WS.x),
-                                                 static_cast<uint32_t>(structure.pos_WS.y),
-                                                 static_cast<uint32_t>(structure.pos_WS.z));
-    const int radius = structureRng.nextInt(mossPinkClusterMinRadius, mossPinkClusterMaxRadius + 1);
-
-    for (int dz = -radius; dz <= radius; ++dz)
-    {
-        for (int dx = -radius; dx <= radius; ++dx)
+    forEachDiscColumn(
+        structure, structurePos_CS, mossPinkClusterMinRadius, mossPinkClusterMaxRadius, 1122334455, 2011223344,
+        [&](ivec2 colPosXZ_CS, float distFromCenter, int radius, RandomNumberGenerator& rng)
         {
-            const float distFromCenter = glm::length(vec2(dx, dz));
-            if (distFromCenter > static_cast<float>(radius))
-            {
-                continue;
-            }
-
-            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
-            if (!Chunk::isInChunkXZ(colPosXZ_CS))
-            {
-                continue;
-            }
-
-            RandomNumberGenerator rng = initRng(worldSeed ^ hash(2011223344),
-                                                static_cast<uint32_t>(structure.pos_WS.x + dx),
-                                                static_cast<uint32_t>(structure.pos_WS.z + dz),
-                                                static_cast<uint32_t>(structure.pos_WS.y));
             const bool isCenter = distFromCenter <= 1.f;
             const float chance = isCenter
                 ? mossPinkClusterBloomChance
                 : glm::mix(mossPinkClusterCenterBudChance, mossPinkClusterEdgeBudChance, distFromCenter / radius);
             if (!rng.chance(chance))
             {
-                continue;
+                return;
             }
 
             int standY;
             if (!findCaveFloraStandY(blocks, colPosXZ_CS, structurePos_CS.y, standY))
             {
-                continue;
+                return;
             }
-            tryPlaceStructureBlock(blocks,
-                                   Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, standY, colPosXZ_CS.y /*z*/)),
-                                   isCenter ? Block::MOSS_PINK_BLOOM : Block::MOSS_PINK_BUD);
-        }
-    }
+            tryPlaceStructureBlock(blocks, columnBlockIdx(colPosXZ_CS, standY), isCenter ? Block::MOSS_PINK_BLOOM : Block::MOSS_PINK_BUD);
+        });
 }
 
 inline constexpr int caveVinesMinRadius = 3;
@@ -253,17 +272,13 @@ static bool isCaveVinesCeilingBlock(Block block)
 // Finds the topmost air block under this column's ceiling by searching from the anchor y.
 static bool findCaveVinesStrandStartY(const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int& outStartY)
 {
-    const auto blockAt = [&](int y)
-    {
-        return blocks[Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/))];
-    };
     const int maxY = static_cast<int>(chunkSizeY) - 1;
 
-    if (blockAt(anchorY) == Block::AIR)
+    if (columnBlockAt(blocks, colPosXZ_CS, anchorY) == Block::AIR)
     {
         for (int y = anchorY; y < anchorY + caveVinesCeilingSearchDist && y < maxY; ++y)
         {
-            const Block above = blockAt(y + 1);
+            const Block above = columnBlockAt(blocks, colPosXZ_CS, y + 1);
             if (above == Block::AIR)
             {
                 continue;
@@ -280,9 +295,9 @@ static bool findCaveVinesStrandStartY(const std::vector<Block>& blocks, ivec2 co
 
     for (int y = anchorY - 1; y >= anchorY - caveVinesCeilingSearchDist && y >= 0; --y)
     {
-        if (blockAt(y) == Block::AIR)
+        if (columnBlockAt(blocks, colPosXZ_CS, y) == Block::AIR)
         {
-            if (!isCaveVinesCeilingBlock(blockAt(y + 1)))
+            if (!isCaveVinesCeilingBlock(columnBlockAt(blocks, colPosXZ_CS, y + 1)))
             {
                 return false;
             }
@@ -296,50 +311,25 @@ static bool findCaveVinesStrandStartY(const std::vector<Block>& blocks, ivec2 co
 // Hangs strands from the ceiling within a circle; strand chance falls off toward the circle edge.
 fillCaveStructureBlocksHeader(CAVE_VINES)
 {
-    const uint worldSeed = SettingsManager::getWorldSeed();
     // Leave at least one air block below the longest strand
     const int maxStrandHeight = std::min(caveVinesMaxStrandHeight, structure.availableHeight - 1);
 
-    // Seeded from the anchor position so every chunk this structure overlaps rolls the same radius
-    RandomNumberGenerator structureRng = initRng(worldSeed ^ hash(2093481127),
-                                                 static_cast<uint32_t>(structure.pos_WS.x),
-                                                 static_cast<uint32_t>(structure.pos_WS.y),
-                                                 static_cast<uint32_t>(structure.pos_WS.z));
-    const int radius = structureRng.nextInt(caveVinesMinRadius, caveVinesMaxRadius + 1);
-
-    for (int dz = -radius; dz <= radius; ++dz)
-    {
-        for (int dx = -radius; dx <= radius; ++dx)
+    forEachDiscColumn(
+        structure, structurePos_CS, caveVinesMinRadius, caveVinesMaxRadius, 2093481127, 1497203641,
+        [&](ivec2 colPosXZ_CS, float distFromCenter, int radius, RandomNumberGenerator& rng)
         {
-            const float distFromCenter = glm::length(vec2(dx, dz));
-            if (distFromCenter > static_cast<float>(radius))
-            {
-                continue;
-            }
-
-            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
-            if (!Chunk::isInChunkXZ(colPosXZ_CS))
-            {
-                continue;
-            }
-
-            // Seeded from world position so every chunk this structure overlaps produces the same strand
-            RandomNumberGenerator rng = initRng(worldSeed ^ hash(1497203641),
-                                                static_cast<uint32_t>(structure.pos_WS.x + dx),
-                                                static_cast<uint32_t>(structure.pos_WS.z + dz),
-                                                static_cast<uint32_t>(structure.pos_WS.y));
             const float strandChance =
                 glm::mix(caveVinesCenterStrandChance, caveVinesEdgeStrandChance, distFromCenter / radius);
             if (!rng.chance(strandChance))
             {
-                continue;
+                return;
             }
 
             const int strandHeight = rng.nextInt(caveVinesMinStrandHeight, maxStrandHeight + 1);
             int strandStartY;
             if (!findCaveVinesStrandStartY(blocks, colPosXZ_CS, structurePos_CS.y, strandStartY))
             {
-                continue;
+                return;
             }
 
             uint32_t lastVineIdx = 0;
@@ -353,9 +343,8 @@ fillCaveStructureBlocksHeader(CAVE_VINES)
                 {
                     break;
                 }
-                const uint32_t blockIdx = Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/));
-                const uint32_t belowBlockIdx = Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y - 1, colPosXZ_CS.y /*z*/));
-                if (blocks[blockIdx] != Block::AIR || blocks[belowBlockIdx] != Block::AIR)
+                const uint32_t blockIdx = columnBlockIdx(colPosXZ_CS, y);
+                if (blocks[blockIdx] != Block::AIR || columnBlockAt(blocks, colPosXZ_CS, y - 1) != Block::AIR)
                 {
                     break;
                 }
@@ -369,8 +358,7 @@ fillCaveStructureBlocksHeader(CAVE_VINES)
                     ? Block::CAVE_VINES_TIP_BERRIES
                     : Block::CAVE_VINES_TIP;
             }
-        }
-    }
+        });
 }
 
 namespace CaveStructures

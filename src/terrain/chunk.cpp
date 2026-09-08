@@ -222,8 +222,8 @@ void Chunk::runStructuresAndDecoratorPass()
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const uint terrainTopY = this->terrainTopY[columnIdx];
-            const CaveFloor* caveFloorsBegin = this->caveFloors.data() + this->caveFloorOffsets[columnIdx];
-            const CaveFloor* caveFloorsEnd = this->caveFloors.data() + this->caveFloorOffsets[columnIdx + 1];
+            const CaveFloor* caveFloor = this->caveFloors.data() + this->caveFloorOffsets[columnIdx];
+            const CaveFloor* const caveFloorsEnd = this->caveFloors.data() + this->caveFloorOffsets[columnIdx + 1];
             Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
@@ -233,27 +233,26 @@ void Chunk::runStructuresAndDecoratorPass()
                 if (thisBlock == Block::AIR && bottomBlock != Block::AIR &&
                     Blocks::getBlockData(bottomBlock).shape == BlockShape::CUBE)
                 {
-                    Block decoratorBlock = Block::AIR;
-                    // Ground below the column's terrain top is a cave floor (or overhang underside)
-                    const bool isUnderground = blockY - 1 < terrainTopY;
-                    if (isUnderground)
+                    const uint groundY = blockY - 1;
+                    // Floors and the scan are both ascending, so the cursor only ever moves forward
+                    while (caveFloor != caveFloorsEnd && caveFloor->y < groundY)
                     {
-                        // Only terrain-captured cave floors carry a biome; other underground ground
-                        // (overhang undersides, structure blocks) gets nothing
-                        for (const CaveFloor* floor = caveFloorsBegin; floor != caveFloorsEnd; ++floor)
+                        ++caveFloor;
+                    }
+
+                    Block decoratorBlock = Block::AIR;
+                    if (caveFloor != caveFloorsEnd && caveFloor->y == groundY)
+                    {
+                        const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(caveFloor->biome).decorator;
+                        if (!caveDecorator.isEmpty())
                         {
-                            if (floor->y == blockY - 1)
-                            {
-                                const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(floor->biome).decorator;
-                                if (!caveDecorator.isEmpty())
-                                {
-                                    decoratorBlock = caveDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
-                                }
-                                break;
-                            }
+                            decoratorBlock = caveDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
                         }
                     }
-                    else if (!decorator.isEmpty())
+                    // Captured cave floors are checked first because a column whose top pocket opens to
+                    // the sky has no terrain top above its floors; everything else at or above the
+                    // terrain top is surface, and other underground ground gets nothing
+                    else if (groundY >= terrainTopY && !decorator.isEmpty())
                     {
                         decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
                     }

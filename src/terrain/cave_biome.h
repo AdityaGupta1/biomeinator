@@ -27,11 +27,11 @@ enum class CaveBiome : uint8_t
 };
 
 // One air pocket in a single column, captured during the terrain block-fill scan. Scratch
-// only (the floor y and biome are persisted compactly as Chunk::caveFloors). start = floor
-// solid y (first air is start + 1); end = top air y
-// (ceiling solid is end + 1); layerHeight = end - start = number of air blocks. closed is
-// false when the pocket opens upward into non-cave air (no ceiling solid), so ceiling gens
-// are skipped. bottomBiome/topBiome are the cave biomes of the floor/ceiling solids.
+// only (the floor y and biome are persisted compactly as Chunk::caveFloors).
+// start = floor solid y (first air is start + 1); end = top air y (ceiling solid is end + 1);
+// layerHeight = end - start = number of air blocks. closed is false when the pocket opens
+// upward into non-cave air (no ceiling solid), so ceiling gens are skipped.
+// bottomBiome/topBiome are the cave biomes of the floor/ceiling solids.
 struct CaveLayer
 {
     int start;

@@ -45,7 +45,6 @@ static FN::SmartNode<FN::Generator> fnCavesSimplex;
 inline constexpr int caveBiomeNoiseDownsample = 4;
 inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 
-
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
 static FN::SmartNode<FN::Generator> fnCaveHumidity;
 
@@ -444,18 +443,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     const uint caveBiomeNoiseSizeXZ = chunkSizeXZ / caveBiomeNoiseDownsample + 1;
     const uint caveBiomeNoiseHeight = caveNoiseMaxY / caveBiomeNoiseDownsample + 2;
     const uint caveBiomeNoiseSize = caveBiomeNoiseSizeXZ * caveBiomeNoiseSizeXZ * caveBiomeNoiseHeight;
-    float* caveTemperatureNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-    float* caveHumidityNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    float* caveSkinThicknessNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-    float* caveSkinPatchNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-    fillCaveBiomeNoiseArray(caveSkinThicknessNoise, fnCaveSkinThickness, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    fillCaveBiomeNoiseArray(caveSkinPatchNoise, fnCaveSkinPatch, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    float* caveRockNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-    fillCaveBiomeNoiseArray(caveRockNoise, fnCaveRock, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-
-    uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
+    const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
+    {
+        float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+        fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+        return static_cast<const float*>(data);
+    };
+    const float* caveTemperatureNoise = requestCaveBiomeField(fnCaveTemperature);
+    const float* caveHumidityNoise = requestCaveBiomeField(fnCaveHumidity);
+    const float* caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
+    const float* caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
+    const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
     const uint caveWorleyNoiseSize = chunkSizeXZSquare * caveWorleyNoiseHeight;
@@ -505,8 +503,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
-                    RandomNumberGenerator chanceRng =
-                        initRng(rngSeed ^ hash(2860317133u), cellCornerXZ_WS.x, cellCornerXZ_WS.y /*z*/, static_cast<uint>(gen.type));
+                    RandomNumberGenerator chanceRng = initRng(rngSeed ^ hash(2860317133u), cellCornerXZ_WS.x, cellCornerXZ_WS.y /*z*/);
                     if (!chanceRng.chance(gen.chance))
                     {
                         continue;
@@ -598,8 +595,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 bool isCave = false;
-                // Cave carve noise above the carve threshold; only set where cave noise was sampled
-                float caveSurfaceDist = std::numeric_limits<float>::max();
+                Block baseBlock = Block::STONE;
+                bool scatterLamps = true;
                 if (isInTerrain)
                 {
                     if (y < static_cast<uint>(caveNoiseMaxY))
@@ -658,14 +655,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
-                    }
-
-                    if (!isCave)
-                    {
-                        Block baseBlock = Block::STONE;
-                        if (y < static_cast<uint>(caveNoiseMaxY))
+                        if (!isCave)
                         {
+                            const float caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
                             const float caveTemperature =
                                 sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
                             const float caveHumidity =
@@ -687,7 +679,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 skinFringeBlock = caveBiomeData.secondarySkinFringeBlock;
                             }
 
-                            if (caveBiomeData.skinBlock != Block::AIR)
+                            if (caveBiomeData.skinBlock != Block::AIR && caveSurfaceDist < caveSkinThicknessMax + caveSkinFringeWidth)
                             {
                                 const float skinThickness = glm::mix(
                                     caveSkinThicknessMin,
@@ -706,16 +698,23 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                     fringeBlock = skinFringeBlock;
                                 }
                             }
+                            scatterLamps = caveBiomeData.scatterLamps;
                         }
+                    }
 
-                        const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                        RandomNumberGenerator rng =
-                            initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                        const bool scatterLamps = CaveBiomes::getCaveBiomeData(voxelCaveBiome).scatterLamps;
-                        block = (scatterLamps && rng.nextFloat() < 0.04f) ? Block::LAMP : baseBlock;
-                        if (block != baseBlock)
+                    if (!isCave)
+                    {
+                        block = baseBlock;
+                        if (scatterLamps)
                         {
-                            fringeBlock = Block::AIR;
+                            const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);
+                            RandomNumberGenerator rng =
+                                initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                            if (rng.nextFloat() < 0.04f)
+                            {
+                                block = Block::LAMP;
+                                fringeBlock = Block::AIR;
+                            }
                         }
                     }
                 }
@@ -815,7 +814,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
             }
 
-            heightfield[columnIdx] = topBlockY;
             this->terrainTopY[columnIdx] = static_cast<uint16_t>(topBlockY);
 
             // A pocket still open at the top of the scan opened upward into non-cave air (sky); close
@@ -880,7 +878,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                     const uint columnIdx = candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/;
 
-                    const uint candidateGroundHeight = heightfield[columnIdx];
+                    const uint candidateGroundHeight = this->terrainTopY[columnIdx];
                     if (candidateGroundHeight == 0)
                     {
                         continue; // top of this column is a cave, so skip this candidate
