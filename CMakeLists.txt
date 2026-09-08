@@ -105,6 +105,11 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
 SET(SHADER_VERSION "6_9")
+# Keep the runtime capability check aligned with the compiled shader target.
+string(REPLACE "_" "" REQUIRED_SHADER_MODEL_HEX "${SHADER_VERSION}")
+file(CONFIGURE OUTPUT "${GENERATED_HEADERS_DIR}/gpu_requirements.h"
+    CONTENT "#pragma once\n#define BIOMEINATOR_REQUIRED_SHADER_MODEL 0x@REQUIRED_SHADER_MODEL_HEX@\n"
+    @ONLY)
 
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
