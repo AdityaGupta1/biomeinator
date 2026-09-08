@@ -127,11 +127,15 @@ bottom layer index in gives each pocket an independent grid.
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.
-- **`CRYSTAL_PILLAR` writes each column top-down**, rather than using `tryPlaceStructureBlock` per
-  cell: rock above the prism's top just clips it, but rock below whatever the column has already
-  written is the floor it rests on, so the column stops there. Its glass shell continues below the
-  anchor so the prism meets the floor of each of its own columns, and a plain AIR-only test would
-  let the shell skip past a ledge and resume in an air pocket underneath it. Its height is rolled
+- **`CRYSTAL_PILLAR` and `CRYSTAL_PILLAR_HANGING` are one fill written in terms of a grow
+  direction**, since a hanging crystal is the exact mirror of a standing one. They are separate
+  types only because the fill has no other way to know which side of the pocket it was anchored to,
+  and separate types also give them independent placement grids, so a pocket can host both.
+- **`CRYSTAL_PILLAR` writes each column from the tip inwards**, rather than using `tryPlaceStructureBlock` per
+  cell: rock beyond the prism's tip just clips it, but rock past whatever the column has already
+  written is the surface it rests on, so the column stops there. Its glass shell continues past the
+  anchor so the prism meets the surface of each of its own columns, and a plain AIR-only test would
+  let the shell skip past a ledge and resume in an air pocket beyond it. Its height is rolled
   per structure and capped at `availableHeight - 2`, so the gen's `minLayerHeight` is what keeps
   that range non-empty.
 - **The crystal's emitter must stay sheathed.** The CRYSTAL_CORE prism is the same hexagon one

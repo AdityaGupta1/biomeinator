@@ -74,8 +74,10 @@ void init()
         data.baseBlock = Block::BASALT;
         data.flatSurfaceBlock = Block::CRACKED_BASALT;
         data.secondaryBaseBlock = Block::STONE;
+        data.scatterLamps = false;
         data.caveStructureGens = {
-            { .type = CaveStructureType::CRYSTAL_PILLAR, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 3, .chance = 0.7f },
+            { .type = CaveStructureType::CRYSTAL_PILLAR, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 4, .chance = 0.7f },
+            { .type = CaveStructureType::CRYSTAL_PILLAR_HANGING, .generatesFromCeiling = true, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 4, .chance = 0.7f },
         };
     }
 }
