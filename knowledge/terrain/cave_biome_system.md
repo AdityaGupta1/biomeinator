@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-09-07_
 
 # Cave Biome System
 
@@ -11,7 +11,8 @@ biomes vary with **y** and the same column can pass through several with depth.
 
 Surface `Biome` selection is partitioned by `inland` and is inherently 2D
 (one biome per column). Cave biomes are a different concept — 3D, no inland
-axis, and their only job (for now) is choosing which block replaces `STONE`.
+axis, and they own their own theming (base and secondary rock, surface skin,
+structure gens, floor decorator) rather than the surface data.
 Overloading `Biome` would drag in the irrelevant inland partitioning and
 per-column assumptions, so `CaveBiome` is its own enum + data table with the
 same nearest-neighbor-by-`distance2` shape, kept deliberately extensible (add
@@ -19,17 +20,18 @@ an enum entry + one init block).
 
 ## STONE at the origin
 
-`STONE` sits at the origin of noise space; the special biomes sit at the
-corners. Because selection is nearest-neighbor, `STONE` only wins near the
-center, so the special biomes naturally appear only where the noise is strong —
-no explicit rarity threshold needed. Adding more special biomes just means more
-corners; STONE keeps the middle.
+`STONE` sits at the origin of noise space and the themed biomes are offset from
+it (LUSH at temperature 0.3, humidity 0.3). Because selection is nearest-neighbor,
+the boundary between two biomes is the perpendicular bisector of their points, so
+a biome's share of the cave band is set by how far and in which direction it is
+offset — no explicit rarity threshold needed. Adding a themed biome means adding
+another offset point; STONE keeps the middle.
 
 ## Surface bias
 
 The effective classification noise is the 3D field plus the column's 2D surface
 temperature/humidity scaled by `caveBiomeSurfaceBias`. This loosely anchors a
-cave biome to whatever is above it (a desert tends toward BRIMSTONE below) while
+cave biome to whatever is above it (a humid surface tends toward LUSH below) while
 the 3D term lets it drift with depth. The 2D arrays already exist in scratch for
 surface biome selection, so the bias is effectively free.
 
@@ -51,9 +53,53 @@ origin must be explicitly snapped or borders will mismatch.
 
 ## No per-voxel storage
 
-The biome's only current effect is the base block, so it is classified on the
-fly inside the fill loop and baked straight into the block choice — nothing is
-stored per voxel. Theming covers **all** solid stone with `y < caveNoiseMaxY`
-(not just cave walls), so exposed faces anywhere in the band read as the biome.
-A per-voxel/per-region `CaveBiome` store will only be needed once cave structures
-or decorators land.
+The biome's block effects (base block and skin) are classified on the fly inside
+the fill loop and baked straight into the block choice — nothing is stored per
+voxel. The base block covers **all** solid stone with `y < caveNoiseMaxY` (not
+just cave walls), so exposed faces anywhere in the band read as the biome. Cave
+structures read the biome once per captured layer at fill time
+([cave_structure_system.md](cave_structure_system.md)); a per-voxel store is still
+not needed.
+
+## Secondary rock
+
+`secondaryBaseBlock` / `secondarySkinFringeBlock` let a biome alternate between two
+rock types (LUSH: stone and marble, each with its own overgrown fringe) on a
+separate low-frequency coarse field (`fnCaveRock`, ~160-block features, thresholded
+at `caveSecondaryRockThreshold`). It is sampled on the same downsampled grid as the
+other cave fields, so the rock boundary is smooth and seam-free across chunks; the
+skin and clay are rock-agnostic and lie on top of whichever rock is chosen.
+
+## Surface skin via carve noise (no distance pass)
+
+`skinBlock` / `skinPatchBlock` theme only the shell of solid rock around cave
+surfaces — floors, walls and ceilings alike — leaving `baseBlock` deeper in (LUSH
+is stone with a moss skin and clay patches). The "distance to the cave surface" is
+**not** measured: the fill loop already has the voxel's carve noise and the carve
+threshold, and `noise - threshold` grows with distance from the carved surface in
+every direction, so a voxel is skin when that difference is below a thickness
+expressed in noise units (`caveSkinThicknessMin/Max`). This costs no extra pass,
+no neighbor reads, and has no chunk-border seam.
+
+`skinFringeBlock` is a second band immediately outside the skin (`thickness +
+caveSkinFringeWidth`). On the exposed surface it therefore appears exactly where
+the thickness field is slightly negative — the ring between a skin patch and bare
+rock — which is how LUSH gets overgrown stone between moss and plain stone
+without any neighbour lookup. The fringe is only committed to voxels with air
+directly above them (the block has a moss-capped side texture, so it must read as
+a floor): the scan is bottom-up, so a fringe candidate is written as `baseBlock`
+and promoted one iteration later when the voxel above turns out to be AIR. The thickness range must dip further negative than
+the fringe width or bare rock never shows.
+
+Two consequences to know about:
+- The thickness field is coarse 3D noise (same downsampled grid as the biome
+  fields) and its range dips negative, which is what produces bare-stone patches
+  on the surface rather than a uniform coat.
+- Skin also forms around *near-misses* — rock where the noise came close to
+  carving but didn't. Those pockets are buried and invisible unless something
+  else exposes them (a ravine, a structure); mega-minecraft's vertical-only
+  variant had the analogous artifact. Accepted.
+
+Noise-unit thickness maps to different block depths in the worley and simplex
+cave bands because their gradients differ (worley is steeper), so the skin reads
+slightly thinner in deep rounded caves than in shallow spaghetti caves.

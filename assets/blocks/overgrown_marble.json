@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "yuushya/moss_block",
+        "side": "yuushya/overgrown_marble_side",
+        "bottom": "marble"
+    }
+}

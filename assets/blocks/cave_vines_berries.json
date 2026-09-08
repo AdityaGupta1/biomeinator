@@ -1,0 +1,6 @@
+{
+    "textures": "yuushya/cave_vines_berries",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "translucent": true
+}

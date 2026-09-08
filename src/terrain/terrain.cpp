@@ -795,7 +795,7 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
 }
 
 // Maps each palette index in an imported world to the corresponding Block in this build.
-// Unknown block ids map to AIR so worlds survive block removals/renames.
+// Unknown block ids map to MISSING so worlds survive block removals/renames.
 static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson)
 {
     std::vector<Block> remapTable;
@@ -806,8 +806,8 @@ static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson
         const Block block = Blocks::fromId(blockIdName);
         if (block == Block::COUNT)
         {
-            Logger::logError("world import: unknown block id '%s'; mapping to air", blockIdName.c_str());
-            remapTable.push_back(Block::AIR);
+            Logger::logWarning("world import: unknown block id '%s'; mapping to MISSING", blockIdName.c_str());
+            remapTable.push_back(Block::MISSING);
         }
         else
         {

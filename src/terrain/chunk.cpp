@@ -4,6 +4,7 @@
 #include "chunk.h"
 
 #include "block.h"
+#include "cave_biome.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
@@ -91,13 +92,48 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
+        this->terrainTopY.resize(chunkSizeXZSquare);
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
+    this->buildTerrainAirMask();
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
     Terrain::setDirty();
+}
+
+void Chunk::buildTerrainAirMask()
+{
+    constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
+    this->terrainAirMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+    for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
+    {
+        if (this->blocks[blockIdx] == Block::AIR)
+        {
+            this->terrainAirMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+        }
+    }
+}
+
+bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
+{
+    if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
+    {
+        return false;
+    }
+
+    const glm::ivec2 posChunk(MathUtil::floorDiv(pos_WS.x, chunkSizeXZ), MathUtil::floorDiv(pos_WS.z, chunkSizeXZ));
+    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
+    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
+    constexpr int sideLength = 2 * radius + 1;
+    const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+
+    const glm::ivec2 chunkOriginXZ_WS = posChunk * static_cast<int>(chunkSizeXZ);
+    const uint32_t blockIdx =
+        blockPosToIdx(glm::uvec3(pos_WS.x - chunkOriginXZ_WS.x, pos_WS.y, pos_WS.z - chunkOriginXZ_WS.y /*z*/));
+    return (chunk->terrainAirMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
 }
 
 void Chunk::checkStructureNeighbors()
@@ -157,13 +193,24 @@ void Chunk::runStructuresAndDecoratorPass()
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+    }
 
-        const std::vector<CaveStructure>& neighborCaveStructures = structureNeighbor->caveStructures;
-        this->fillCaveStructureBlocks(neighborCaveStructures.data(), neighborCaveStructures.size());
+    // Cave structures fill one type at a time in enum order so a type's blocks are all in place
+    // before a lower-priority type (e.g. vines) reads the world around it
+    for (uint32_t typeIdx = 0; typeIdx < static_cast<uint32_t>(CaveStructureType::COUNT); ++typeIdx)
+    {
+        for (const Chunk* structureNeighbor : this->structureNeighbors)
+        {
+            const std::vector<CaveStructure>& neighborCaveStructures = structureNeighbor->caveStructures;
+            this->fillCaveStructureBlocks(
+                neighborCaveStructures.data(), neighborCaveStructures.size(), static_cast<CaveStructureType>(typeIdx));
+        }
     }
 
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
+    // Separate stream so cave floor draws don't perturb the surface decorator pattern
+    RandomNumberGenerator caveDecoratorRng = initRng(worldSeed ^ hash(771093284), this->chunkPos.x, this->chunkPos.y /*z*/);
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -173,20 +220,42 @@ void Chunk::runStructuresAndDecoratorPass()
             const Biome biome = this->biomes[columnIdx];
             const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
 
-            if (decorator.isEmpty())
-            {
-                continue;
-            }
-
             const uint baseBlockIdx = chunkSizeY * columnIdx;
+            const uint terrainTopY = this->terrainTopY[columnIdx];
+            const CaveFloor* caveFloor = this->caveFloors.data() + this->caveFloorOffsets[columnIdx];
+            const CaveFloor* const caveFloorsEnd = this->caveFloors.data() + this->caveFloorOffsets[columnIdx + 1];
             Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
                 Block& thisBlock = this->blocks[baseBlockIdx + blockY];
 
-                if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
+                // Decorators only stand on full cubes, never on other decorators or structure flora
+                if (thisBlock == Block::AIR && bottomBlock != Block::AIR &&
+                    Blocks::getBlockData(bottomBlock).shape == BlockShape::CUBE)
                 {
-                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    const uint groundY = blockY - 1;
+                    // Floors and the scan are both ascending, so the cursor only ever moves forward
+                    while (caveFloor != caveFloorsEnd && caveFloor->y < groundY)
+                    {
+                        ++caveFloor;
+                    }
+
+                    Block decoratorBlock = Block::AIR;
+                    if (caveFloor != caveFloorsEnd && caveFloor->y == groundY)
+                    {
+                        const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(caveFloor->biome).decorator;
+                        if (!caveDecorator.isEmpty())
+                        {
+                            decoratorBlock = caveDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
+                        }
+                    }
+                    // Captured cave floors are checked first because a column whose top pocket opens to
+                    // the sky has no terrain top above its floors; everything else at or above the
+                    // terrain top is surface, and other underground ground gets nothing
+                    else if (groundY >= terrainTopY && !decorator.isEmpty())
+                    {
+                        decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    }
                     if (decoratorBlock != Block::AIR)
                     {
                         thisBlock = decoratorBlock;
