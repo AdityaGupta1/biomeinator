@@ -10,6 +10,42 @@ gens live on `CaveBiomeData.caveStructureGens`
 ([cave_biome_system.md](cave_biome_system.md)), keyed by `CaveBiome` of the
 floor/ceiling solid.
 
+## Terrain air mask: the one safe cross-chunk read during fill
+
+A structure is filled once by every chunk it overlaps, and a fill may only touch its
+own chunk's blocks. That is fine for shapes that are a pure function of the seed,
+but a growth process that must avoid rock (`LAMP_CLUSTER`) needs to know which
+blocks are air across the *whole* footprint, including the parts in neighbouring
+chunks. Reading a neighbour's `blocks` during fill is a data race — neighbours run
+their own structure pass concurrently and mutate `blocks` in place.
+
+`Chunk::terrainAirMask` is the answer: one bit per block, captured from `blocks`
+right before `HAS_TERRAIN` and never written again. The structure pass is gated on
+every neighbour being `>= HAS_TERRAIN` (acquire), and the mask is written before the
+release on that state advance, so `isTerrainAir_WS` can read any neighbour's mask
+race-free. It reports *terrain* air (pre-structure), which is exactly what makes it
+consistent: every chunk sees the same answer regardless of how far each has got in
+its own fill. Cost is `chunkSizeY / 8` bytes per column, 16 KB per chunk.
+
+Imported chunks build the mask from their loaded blocks (which already include
+structures), so a cluster whose footprint reaches into an imported chunk sees its
+structure blocks as solid there. Deterministic per import; accepted.
+
+The lookup is limited to the 3×3 structure neighbourhood. A footprint radius
+≤ `chunkSizeXZ / 2` guarantees every chunk a structure touches has all of the
+footprint's chunks within its own neighbourhood.
+
+## Fill order is type-major, then neighbour, then emission order
+
+`runStructuresAndDecoratorPass` fills cave structures one `CaveStructureType` at a
+time in enum order, iterating the neighbour grid inside each type. Enum order is
+therefore a priority: every lamp in the 3×3 neighbourhood is placed before any vine
+cluster anywhere in it, so a vine's ceiling search sees the finished lamp and skips
+the column instead of hanging from it or being punched through by a lamp filled
+later from another chunk. The neighbour-then-emission order inside a type is still
+world-position-fixed, so overlaps within a type stay deterministic. This differs
+from surface structures, which fill per neighbour in one pass.
+
 ## Same two passes, no new pass or threading
 
 Cave structures slot into the existing chunk pipeline with **zero** new state-
@@ -75,14 +111,20 @@ bottom layer index in gives each pocket an independent grid.
   cell's candidate and only one matches (grid 12 → ~144 columns recompute to
   return true once). Tiny vs the 80k+ block-fill iterations; columns with no
   captured layers skip the gen loop entirely, so non-cave columns cost nothing.
+- **Vines never anchor to emissive blocks.** `isCaveVinesCeilingBlock` rejects
+  `emitsLight` cubes so a strand can't hang from a lamp's underside; combined with the
+  type-major fill order this keeps lamps and vines from interleaving.
 - **A placement requires the candidate column to itself have a qualifying layer.**
   The grid picks one candidate XZ per (cell, type, layerIdx); the structure
   appears only if that specific column owns a layer at that index meeting
   biome/height. Neighboring columns with better pockets do not substitute — this
   is intended one-per-cell behavior.
 - **Ceiling gens only run on `closed` layers** (a pocket open to the sky has no
-  ceiling solid to hang from). BRIMSTONE's `HANGING_LAMP` and LUSH's `CAVE_VINES`
-  are the ceiling gens; each is naturally absent wherever its biome doesn't generate.
+  ceiling solid to hang from). BRIMSTONE's `HANGING_LAMP` and LUSH's `LAMP_CLUSTER`
+  and `CAVE_VINES` are the ceiling gens; each is naturally absent wherever its biome
+  doesn't generate. Within a biome's gen list, order is priority for a *shared
+  candidate column* only — different gens roll different candidate columns per cell,
+  so a cell can host one of each.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
   blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`

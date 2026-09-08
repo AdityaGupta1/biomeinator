@@ -44,7 +44,7 @@ static void fill3x3VerticalRun(std::vector<Block>& blocks, ivec3 anchorPos_CS, i
 
 #define fillCaveStructureBlocksHeader(structureName)                                                                   \
     static void fillCaveStructureBlocks_##structureName(                                                               \
-        const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
+        const Chunk& chunk, const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks)
 
 fillCaveStructureBlocksHeader(CRYSTAL)
 {
@@ -61,6 +61,101 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
     fill3x3VerticalRun(blocks, structurePos_CS, structure.availableHeight, 1, Block::SCALESTONE);
 }
 
+static bool isSolidCubeBlock(Block block)
+{
+    const BlockData& blockData = Blocks::getBlockData(block);
+    return blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE;
+}
+
+inline constexpr int lampClusterMaxRadius = 4;
+inline constexpr int lampClusterMaxDepth = 6;
+inline constexpr int lampClusterMaxRise = 3;
+inline constexpr int lampClusterGrowthAttempts = 600;
+
+// Grown like Minecraft's nether glowstone: one block under the ceiling anchor, then random
+// attempts in a box around it that only place where the terrain is air and the cell touches
+// exactly one existing cluster cell. The single-neighbor rule produces spidery strings with gaps
+// instead of a blob, and since every cell is added touching the cluster, nothing ever floats.
+// Growth may rise above the anchor row so the cluster climbs a ceiling that pulls away upward
+// rather than sticking out flat beneath it. Terrain is read through the chunk's neighborhood
+// air mask, so every chunk the cluster overlaps grows the identical shape.
+fillCaveStructureBlocksHeader(LAMP_CLUSTER)
+{
+    constexpr int gridSideXZ = 2 * lampClusterMaxRadius + 1;
+    constexpr int gridHeight = lampClusterMaxDepth + lampClusterMaxRise + 1;
+    // Local grid coords: x, z in [0, gridSideXZ), y in [0, gridHeight) with the anchor row at lampClusterMaxDepth
+    std::array<bool, gridSideXZ * gridHeight * gridSideXZ> cells{};
+    const auto cellIdx = [](int x, int y, int z)
+    {
+        return x + gridSideXZ * (y + gridHeight * z);
+    };
+    const auto isCell = [&](int x, int y, int z)
+    {
+        if (x < 0 || x >= gridSideXZ || z < 0 || z >= gridSideXZ || y < 0 || y >= gridHeight)
+        {
+            return false;
+        }
+        return cells[cellIdx(x, y, z)];
+    };
+    const auto gridToWorld = [&](int x, int y, int z)
+    {
+        return structure.pos_WS + ivec3(x - lampClusterMaxRadius, y - lampClusterMaxDepth, z - lampClusterMaxRadius);
+    };
+
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(1830294761),
+                                        static_cast<uint32_t>(structure.pos_WS.x),
+                                        static_cast<uint32_t>(structure.pos_WS.y),
+                                        static_cast<uint32_t>(structure.pos_WS.z));
+
+    cells[cellIdx(lampClusterMaxRadius, lampClusterMaxDepth, lampClusterMaxRadius)] = true;
+    for (int attempt = 0; attempt < lampClusterGrowthAttempts; ++attempt)
+    {
+        // Difference of two uniform draws biases attempts toward the anchor
+        const int x = lampClusterMaxRadius + rng.nextInt(lampClusterMaxRadius + 1) - rng.nextInt(lampClusterMaxRadius + 1);
+        const int z = lampClusterMaxRadius + rng.nextInt(lampClusterMaxRadius + 1) - rng.nextInt(lampClusterMaxRadius + 1);
+        const int y = lampClusterMaxDepth + rng.nextInt(lampClusterMaxRise + 1) - rng.nextInt(lampClusterMaxDepth + 1);
+        if (cells[cellIdx(x, y, z)] || !chunk.isTerrainAir_WS(gridToWorld(x, y, z)))
+        {
+            continue;
+        }
+
+        const int numNeighbors = static_cast<int>(isCell(x - 1, y, z)) + static_cast<int>(isCell(x + 1, y, z)) +
+                                 static_cast<int>(isCell(x, y - 1, z)) + static_cast<int>(isCell(x, y + 1, z)) +
+                                 static_cast<int>(isCell(x, y, z - 1)) + static_cast<int>(isCell(x, y, z + 1));
+        if (numNeighbors == 1)
+        {
+            cells[cellIdx(x, y, z)] = true;
+        }
+    }
+
+    for (int z = 0; z < gridSideXZ; ++z)
+    {
+        for (int x = 0; x < gridSideXZ; ++x)
+        {
+            const ivec2 colPosXZ_CS(structurePos_CS.x + x - lampClusterMaxRadius, structurePos_CS.z + z - lampClusterMaxRadius);
+            if (!Chunk::isInChunkXZ(colPosXZ_CS))
+            {
+                continue;
+            }
+
+            for (int y = 0; y < gridHeight; ++y)
+            {
+                if (!cells[cellIdx(x, y, z)])
+                {
+                    continue;
+                }
+                const int y_CS = structurePos_CS.y + y - lampClusterMaxDepth;
+                if (y_CS < 0 || y_CS >= static_cast<int>(chunkSizeY))
+                {
+                    continue;
+                }
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y_CS, colPosXZ_CS.y /*z*/)), Block::LAMP);
+            }
+        }
+    }
+}
+
 inline constexpr int caveVinesMinRadius = 3;
 inline constexpr int caveVinesMaxRadius = 6;
 inline constexpr int caveVinesMinStrandHeight = 3;
@@ -72,11 +167,11 @@ inline constexpr float caveVinesBerryChance = 0.25f;
 // which keeps a cluster on one ceiling surface instead of reaching into pockets above or below
 inline constexpr int caveVinesCeilingSearchDist = 6;
 
-// Only a solid cube can anchor a strand; an X-shaped block (e.g. another cluster's vine) can't.
+// Only a non-emissive solid cube can anchor a strand: not an X-shaped block (e.g. another
+// cluster's vine) and not a lamp.
 static bool isCaveVinesCeilingBlock(Block block)
 {
-    const BlockData& blockData = Blocks::getBlockData(block);
-    return blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE;
+    return isSolidCubeBlock(block) && !Blocks::getBlockData(block).emitsLight;
 }
 
 // Finds the topmost air block under this column's ceiling by searching from the anchor y.
@@ -205,7 +300,7 @@ fillCaveStructureBlocksHeader(CAVE_VINES)
 namespace CaveStructures
 {
 
-using FillCaveStructureFunc = void (*)(const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks);
+using FillCaveStructureFunc = void (*)(const Chunk& chunk, const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks);
 static std::array<FillCaveStructureFunc, static_cast<size_t>(CaveStructureType::COUNT)> fillCaveStructureFuncs{};
 
 #define FILL_CAVE_STRUCTURE_FUNC_BY_NAME(structureName) fillCaveStructureFuncs[static_cast<size_t>(CaveStructureType::structureName)]
@@ -222,6 +317,9 @@ void init()
 
     SET_FILL_CAVE_STRUCTURE_FUNC(HANGING_LAMP);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(HANGING_LAMP) = 1;
+
+    SET_FILL_CAVE_STRUCTURE_FUNC(LAMP_CLUSTER);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(LAMP_CLUSTER) = lampClusterMaxRadius;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(STONE_COLUMN);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
@@ -244,13 +342,17 @@ const StructureBounds& getCaveStructureBounds(CaveStructureType type)
 
 using namespace CaveStructures;
 
-void Chunk::fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures)
+void Chunk::fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
     for (uint32_t i = 0; i < numCaveStructures; ++i)
     {
         const CaveStructure& caveStructure = caveStructures[i];
+        if (caveStructure.type != type)
+        {
+            continue;
+        }
 
         const ivec2 structurePosXZ_CS = ivec2(caveStructure.pos_WS.x, caveStructure.pos_WS.z) - chunkPosBlocksXZ_WS;
         const StructureBounds& bounds = CaveStructures::getCaveStructureBounds(caveStructure.type);
@@ -263,6 +365,6 @@ void Chunk::fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_
         }
 
         const FillCaveStructureFunc fillCaveStructureFunc = fillCaveStructureFuncs[static_cast<size_t>(caveStructure.type)];
-        fillCaveStructureFunc(caveStructure, ivec3(structurePosXZ_CS.x, caveStructure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks);
+        fillCaveStructureFunc(*this, caveStructure, ivec3(structurePosXZ_CS.x, caveStructure.pos_WS.y, structurePosXZ_CS.y /*z*/), blocks);
     }
 }

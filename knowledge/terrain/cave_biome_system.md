@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-09-07_
 
 # Cave Biome System
 
@@ -51,9 +51,34 @@ origin must be explicitly snapped or borders will mismatch.
 
 ## No per-voxel storage
 
-The biome's only current effect is the base block, so it is classified on the
-fly inside the fill loop and baked straight into the block choice — nothing is
-stored per voxel. Theming covers **all** solid stone with `y < caveNoiseMaxY`
-(not just cave walls), so exposed faces anywhere in the band read as the biome.
-A per-voxel/per-region `CaveBiome` store will only be needed once cave structures
-or decorators land.
+The biome's block effects (base block and skin) are classified on the fly inside
+the fill loop and baked straight into the block choice — nothing is stored per
+voxel. The base block covers **all** solid stone with `y < caveNoiseMaxY` (not
+just cave walls), so exposed faces anywhere in the band read as the biome. Cave
+structures read the biome once per captured layer at fill time
+([cave_structure_system.md](cave_structure_system.md)); a per-voxel store is still
+not needed.
+
+## Surface skin via carve noise (no distance pass)
+
+`skinBlock` / `skinPatchBlock` theme only the shell of solid rock around cave
+surfaces — floors, walls and ceilings alike — leaving `baseBlock` deeper in (LUSH
+is stone with a moss skin and clay patches). The "distance to the cave surface" is
+**not** measured: the fill loop already has the voxel's carve noise and the carve
+threshold, and `noise - threshold` grows with distance from the carved surface in
+every direction, so a voxel is skin when that difference is below a thickness
+expressed in noise units (`caveSkinThicknessMin/Max`). This costs no extra pass,
+no neighbor reads, and has no chunk-border seam.
+
+Two consequences to know about:
+- The thickness field is coarse 3D noise (same downsampled grid as the biome
+  fields) and its range dips negative, which is what produces bare-stone patches
+  on the surface rather than a uniform coat.
+- Skin also forms around *near-misses* — rock where the noise came close to
+  carving but didn't. Those pockets are buried and invisible unless something
+  else exposes them (a ravine, a structure); mega-minecraft's vertical-only
+  variant had the analogous artifact. Accepted.
+
+Noise-unit thickness maps to different block depths in the worley and simplex
+cave bands because their gradients differ (worley is steeper), so the skin reads
+slightly thinner in deep rounded caves than in shallow spaghetti caves.

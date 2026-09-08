@@ -95,6 +95,10 @@ private:
     Region* const region;
 
     std::vector<Block> blocks{};
+    // One bit per block, set where the terrain pass left AIR. Captured before HAS_TERRAIN and never
+    // written again, so neighbors may read it during their structure pass while this chunk's
+    // blocks are being mutated. See knowledge/terrain/cave_structure_system.md.
+    std::vector<uint64_t> terrainAirMask{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::vector<Biome> biomes{};
@@ -118,8 +122,9 @@ private:
     Instance* waterInstance{ nullptr };
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
+    void buildTerrainAirMask();
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
-    void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures);
+    void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
@@ -178,6 +183,10 @@ public:
     static uint32_t segmentPosToIdx(glm::uvec3 chunkSegmentPos);
 
     static void segmentPosToBounds(glm::uvec3 chunkSegmentPos, glm::uvec3& outSegmentStartPos, glm::uvec3& outSegmentEndPos);
+
+    // Whether the terrain pass left AIR at a world position within this chunk's structure
+    // neighborhood (radius structureMaxChunkRadius). Only valid during the structure pass.
+    bool isTerrainAir_WS(glm::ivec3 pos_WS) const;
 
     static inline bool isInChunkXZ(glm::ivec2 pos_CS)
     {

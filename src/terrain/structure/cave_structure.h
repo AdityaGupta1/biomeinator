@@ -9,10 +9,13 @@
 #include <glm/glm.hpp>
 #include <vector>
 
+// Enum order is also fill order across all neighbor chunks (see Chunk::runStructuresAndDecoratorPass),
+// so earlier types claim space before later ones regardless of which chunk emitted them.
 enum class CaveStructureType : uint8_t
 {
     CRYSTAL,
     HANGING_LAMP,
+    LAMP_CLUSTER,
     STONE_COLUMN,
     CAVE_VINES,
 

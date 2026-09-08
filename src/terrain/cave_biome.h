@@ -46,6 +46,11 @@ struct CaveBiomeData
 {
     CaveBiomeNoise biomeNoise{};
     Block baseBlock{ Block::STONE };
+    // Optional skin on cave surfaces (floors, walls and ceilings alike): solid voxels whose cave
+    // carve noise sits just above the carve threshold become skinBlock, with skinPatchBlock
+    // blobs mixed in. AIR disables. See knowledge/terrain/cave_biome_system.md.
+    Block skinBlock{ Block::AIR };
+    Block skinPatchBlock{ Block::AIR };
     std::vector<CaveStructureGen> caveStructureGens{};
 };
 

@@ -15,6 +15,7 @@
 #include "util/rng.h"
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -52,6 +53,18 @@ inline constexpr bool debugDisableCaveLamps = true;
 
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
 static FN::SmartNode<FN::Generator> fnCaveHumidity;
+
+// Cave biome skin (CaveBiomeData::skinBlock) thickness is measured in cave carve noise units
+// above the carve threshold, which approximates distance from the cave surface in every
+// direction without a separate distance pass. Thickness varies per voxel via a coarse 3D field;
+// the negative end of the range leaves patches of the cave surface bare.
+inline constexpr float caveSkinThicknessMin = -0.04f;
+inline constexpr float caveSkinThicknessMax = 0.14f;
+// Skin patch noise is in [0, 1]; values above this become skinPatchBlock
+inline constexpr float caveSkinPatchThreshold = 0.62f;
+
+static FN::SmartNode<FN::Generator> fnCaveSkinThickness;
+static FN::SmartNode<FN::Generator> fnCaveSkinPatch;
 
 static FN::SmartNode<FN::Generator> fnSwampWarp;
 static FN::SmartNode<FN::Generator> fnSwampWarpFine;
@@ -166,6 +179,30 @@ void init()
         fnSimplex->SetOutputMax(1.0f);
 
         fnCaveHumidity = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(730192843);
+        fnSimplex->SetScale(48.f);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnCaveSkinThickness = fnSimplex;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(281937461);
+        fnSimplex->SetScale(20.f);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(1.0f);
+        auto fnDomainWarp = FN::New<FN::DomainWarpGradient>();
+        fnDomainWarp->SetSource(fnSimplex);
+        fnDomainWarp->SetSeedOffset(619283047);
+        fnDomainWarp->SetWarpAmplitude(6.f);
+
+        fnCaveSkinPatch = fnDomainWarp;
     }
 }
 
@@ -398,6 +435,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* caveHumidityNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
     fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
     fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    float* caveSkinThicknessNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+    float* caveSkinPatchNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+    fillCaveBiomeNoiseArray(caveSkinThicknessNoise, fnCaveSkinThickness, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    fillCaveBiomeNoiseArray(caveSkinPatchNoise, fnCaveSkinPatch, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
@@ -537,6 +578,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 bool isCave = false;
+                // Cave carve noise above the carve threshold; only set where cave noise was sampled
+                float caveSurfaceDist = std::numeric_limits<float>::max();
                 if (isInTerrain)
                 {
                     if (y < static_cast<uint>(caveNoiseMaxY))
@@ -595,6 +638,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
+                        caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
                     }
 
                     if (!isCave)
@@ -614,7 +658,23 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 ? debugCaveBiomeOverride
                                 : CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
                             voxelCaveBiome = caveBiome;
-                            baseBlock = CaveBiomes::getCaveBiomeData(caveBiome).baseBlock;
+                            const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
+                            baseBlock = caveBiomeData.baseBlock;
+
+                            if (caveBiomeData.skinBlock != Block::AIR)
+                            {
+                                const float skinThickness = glm::mix(
+                                    caveSkinThicknessMin,
+                                    caveSkinThicknessMax,
+                                    sampleCaveBiomeNoise(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ));
+                                if (caveSurfaceDist < skinThickness)
+                                {
+                                    const bool isPatch = caveBiomeData.skinPatchBlock != Block::AIR &&
+                                        sampleCaveBiomeNoise(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                            caveSkinPatchThreshold;
+                                    baseBlock = isPatch ? caveBiomeData.skinPatchBlock : caveBiomeData.skinBlock;
+                                }
+                            }
                         }
 
                         const ivec3 blockPos_WS(blockPosXZ_WS.x, y, blockPosXZ_WS.y);

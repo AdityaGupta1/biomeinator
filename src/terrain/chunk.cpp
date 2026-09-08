@@ -94,10 +94,44 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
+    this->buildTerrainAirMask();
 
     this->advanceState(ChunkState::HAS_TERRAIN);
 
     Terrain::setDirty();
+}
+
+void Chunk::buildTerrainAirMask()
+{
+    constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
+    this->terrainAirMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+    for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
+    {
+        if (this->blocks[blockIdx] == Block::AIR)
+        {
+            this->terrainAirMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+        }
+    }
+}
+
+bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
+{
+    if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
+    {
+        return false;
+    }
+
+    const glm::ivec2 posChunk(MathUtil::floorDiv(pos_WS.x, chunkSizeXZ), MathUtil::floorDiv(pos_WS.z, chunkSizeXZ));
+    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
+    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
+    constexpr int sideLength = 2 * radius + 1;
+    const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+
+    const glm::ivec2 chunkOriginXZ_WS = posChunk * static_cast<int>(chunkSizeXZ);
+    const uint32_t blockIdx =
+        blockPosToIdx(glm::uvec3(pos_WS.x - chunkOriginXZ_WS.x, pos_WS.y, pos_WS.z - chunkOriginXZ_WS.y /*z*/));
+    return (chunk->terrainAirMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
 }
 
 void Chunk::checkStructureNeighbors()
@@ -157,9 +191,18 @@ void Chunk::runStructuresAndDecoratorPass()
     {
         const std::vector<Structure>& neighborStructures = structureNeighbor->structures;
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
+    }
 
-        const std::vector<CaveStructure>& neighborCaveStructures = structureNeighbor->caveStructures;
-        this->fillCaveStructureBlocks(neighborCaveStructures.data(), neighborCaveStructures.size());
+    // Cave structures fill one type at a time in enum order so a type's blocks are all in place
+    // before a lower-priority type (e.g. vines) reads the world around it
+    for (uint32_t typeIdx = 0; typeIdx < static_cast<uint32_t>(CaveStructureType::COUNT); ++typeIdx)
+    {
+        for (const Chunk* structureNeighbor : this->structureNeighbors)
+        {
+            const std::vector<CaveStructure>& neighborCaveStructures = structureNeighbor->caveStructures;
+            this->fillCaveStructureBlocks(
+                neighborCaveStructures.data(), neighborCaveStructures.size(), static_cast<CaveStructureType>(typeIdx));
+        }
     }
 
     const uint worldSeed = SettingsManager::getWorldSeed();
