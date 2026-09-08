@@ -1,0 +1,49 @@
+{
+  "Brown mushroom \u2014 36 triangles": {
+    "triangles": 36,
+    "mesh_parts": 3,
+    "texture_size": [
+      16,
+      16
+    ],
+    "uv_bounds": [
+      0,
+      1
+    ],
+    "texels_per_block": 16,
+    "max_relative_checked_distance_error": 0,
+    "stem_segments_pixels": [
+      3
+    ],
+    "tilted_stem_mapping": "axis aligned"
+  },
+  "Yellow glowshroom cluster \u2014 108 triangles": {
+    "triangles": 108,
+    "mesh_parts": 12,
+    "texture_size": [
+      16,
+      16
+    ],
+    "uv_bounds": [
+      0,
+      1
+    ],
+    "texels_per_block": 16,
+    "max_relative_checked_distance_error": 1.3203703388420251e-06,
+    "stem_segments_pixels": {
+      "tall": [
+        3,
+        3
+      ],
+      "small_left": [
+        1,
+        2
+      ],
+      "small_right": [
+        1,
+        1
+      ]
+    },
+    "tilted_stem_mapping": "rigidly rotated square pixels; single-pixel triangular elbow"
+  }
+}

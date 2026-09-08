@@ -30,3 +30,9 @@ three preview renders using Blender's background Python interface. `preview.png`
 is the main three-quarter view; `front.png` and `rear.png` show other angles.
 Rendering and denoising use OptiX on the GPU, with CPU devices disabled.
 The script stops if no OptiX device is available rather than falling back to CPU.
+
+Run the builder with `-- --cluster` for the separate three-mushroom proposal in
+`cluster/`: one 5×5 cap leaning back, flanked by two 3×3 caps leaning outward.
+The small stems differ in length and bend angle. The runtime exporter now uses
+this cluster for the glowshroom and the original brown mushroom. It copies the
+atlas from disk, preserving GIMP edits; exporting does not regenerate textures.

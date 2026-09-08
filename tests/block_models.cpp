@@ -48,7 +48,7 @@ int main()
             check(!data.translucent && !data.emitsLight, "mushrooms must not transmit or register sampled lights");
             check(data.numRotationsY == (glow ? 4 : 1), "rotation configuration");
             const auto& mesh = BlockModels::get(data.modelIdx);
-            check(mesh.indices.size() == (glow ? 72 : 36) * 3, "exported triangle count");
+            check(mesh.indices.size() == (glow ? 108 : 36) * 3, "exported triangle count");
             float minY = 1;
             for (size_t i = 0; i < mesh.rotations[0].size(); ++i)
             {

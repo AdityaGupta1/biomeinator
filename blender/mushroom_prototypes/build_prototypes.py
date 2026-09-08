@@ -3,11 +3,16 @@ import bpy
 import json
 import math
 import random
+import sys
 from pathlib import Path
 from mathutils import Vector, Matrix
 
 OUT = Path(__file__).resolve().parent
 ROOT = OUT.parents[1]
+CLUSTER = '--cluster' in sys.argv
+if CLUSTER:
+    OUT = OUT / 'cluster'
+    OUT.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 assets = bpy.data.collections.new('Mushroom prototypes')
@@ -58,6 +63,25 @@ def atlas(name, glow=False):
             else:
                 k = (x + y) % len(colors)
             data.extend([v/255 for v in colors[k]] + [1])
+    if glow and CLUSTER:
+        # Three disjoint top islands in the existing 8x8 cap region. Give each
+        # head a reproducible shuffle, with restrained highlights in the same palette.
+        for ox, oy, size, seed in ((0,0,5,23),(5,0,3,47),(5,3,3,89)):
+            # Nine texels are too few for isolated bright accents: they read as
+            # eyes/spots. Use evenly represented, neighboring gold shades instead.
+            cap_colors = top if size==5 else [(238,166,51),(242,178,73),(242,181,76)]
+            assert all(c in palette for c in cap_colors)
+            shades = ([0]*13+[1]*7+[2]*4+[3]) if size==5 else ([0,1,2]*3)
+            random.Random(seed).shuffle(shades)
+            for y in range(size):
+                for x in range(size):
+                    idx=((oy+y)*16+ox+x)*4
+                    data[idx:idx+4]=[v/255 for v in cap_colors[shades[y*size+x]]]+[1]
+        side_rng = random.Random(136)
+        for y in (8,9):
+            for x in range(8):
+                idx=(y*16+x)*4
+                data[idx:idx+4]=[v/255 for v in side[side_rng.randrange(len(side))]]+[1]
     image = bpy.data.images.new(name + '_atlas_16', width=16, height=16, alpha=True)
     image.pixels = data
     image.filepath_raw = str(OUT / (name + '_16.png'))
@@ -85,9 +109,9 @@ def root_object(name, x):
     return obj
 
 brown = root_object('Brown mushroom — 36 triangles', -.44)
-glow = root_object('Yellow glowshroom pair — 72 triangles', .42)
+glow = root_object('Yellow glowshroom cluster — 108 triangles' if CLUSTER else 'Yellow glowshroom pair — 72 triangles', .42)
 
-def box(name, center, size, parent, material, stem=False, tilt=0, omit=()):
+def box(name, center, size, parent, material, stem=False, tilt=0, omit=(), cap_variant=0):
     sx,sy,sz = (s/2 for s in size)
     corners = [(-sx,-sy,-sz),(sx,-sy,-sz),(sx,sy,-sz),(-sx,sy,-sz),
                (-sx,-sy,sz),(sx,-sy,sz),(sx,sy,sz),(-sx,sy,sz)]
@@ -108,6 +132,11 @@ def box(name, center, size, parent, material, stem=False, tilt=0, omit=()):
             origin, capacity = (0, 10), (8, 6)
         else:
             origin, capacity = (0, 8), (8, 2)
+        if CLUSTER and material==glow_mat and not stem:
+            if face_ids[face.index]==5:
+                origin, capacity = (((0,0),(5,0),(5,3))[cap_variant], (5,5) if cap_variant==0 else (3,3))
+            elif face_ids[face.index] in (1,2,3,4):
+                origin, capacity = (((0,8),(5,8),(5,9))[cap_variant], (5,1) if cap_variant==0 else (3,1))
         # Unfold each planar face in an orthonormal basis. One world unit in
         # either direction maps to one UV unit (16 texels per voxel). Unlike
         # rectangular UV fitting this also preserves squares on sheared faces.
@@ -164,7 +193,8 @@ def elbow(label, pivot, outer, turned):
     obj.data.materials.append(glow_mat)
 
 
-def shroom(label, base, lower, upper, angle, capsize):
+def shroom(label, base, lower, upper, angle, capsize, yaw=0, cap_variant=0):
+    previous_parts = set(glow.children)
     assert int(lower)==lower and int(upper)==upper
     rot=Matrix.Rotation(math.radians(angle),3,'Y')
     direction=rot @ Vector((0,0,1))
@@ -178,10 +208,23 @@ def shroom(label, base, lower, upper, angle, capsize):
     box(label+' | lower stem',(base[0],base[1],lower/2),(1,1,lower),glow,glow_mat,True,omit=(5,))
     box(label+' | leaning stem',upper_base+direction*upper/2,(1,1,upper),glow,glow_mat,True,angle,omit=(0,))
     elbow(label,pivot,outer,turned)
-    box(label+' | cap',tip+direction*.5,(*capsize,1),glow,glow_mat,False,angle)
+    box(label+' | cap',tip+direction*.5,(*capsize,1),glow,glow_mat,False,angle,cap_variant=cap_variant)
+    spin = Matrix.Rotation(math.radians(yaw),3,'Z')
+    anchor = Vector((base[0],base[1],0))/16
+    for obj in set(glow.children)-previous_parts:
+        for vertex in obj.data.vertices:
+            vertex.co = anchor + spin @ (vertex.co-anchor)
+        obj.data.update()
 
-shroom('Tall glowshroom',(-.8,.5),3,3,-18,(8,5))
-shroom('Small glowshroom',(1.1,-.7),1,2,24,(4,3))
+if CLUSTER:
+    shroom('Tall glowshroom',(0,.8),3,3,20,(5,5),90)
+    shroom('Small left glowshroom',(-1.4,-.8),1,2,26,(3,3),210,1)
+    shroom('Small right glowshroom',(1.4,-1),1,1,18,(3,3),-30,2)
+    for obj in brown.children:
+        obj.hide_render = True
+else:
+    shroom('Tall glowshroom',(-.8,.5),3,3,-18,(8,5))
+    shroom('Small glowshroom',(1.1,-.7),1,2,24,(4,3))
 
 report = {}
 for root in (brown,glow):
@@ -205,7 +248,7 @@ for root in (brown,glow):
     report[root.name] = {'triangles':tris,'mesh_parts':len(children),'texture_size':[16,16],
                         'uv_bounds':[0,1], 'texels_per_block':16,
                         'max_relative_checked_distance_error':max_error,
-                        'stem_segments_pixels': {'tall':[3,3], 'small':[1,2]} if root==glow else [3],
+                        'stem_segments_pixels': ({'tall':[3,3], 'small_left':[1,2], 'small_right':[1,1]} if CLUSTER else {'tall':[3,3], 'small':[1,2]}) if root==glow else [3],
                         'tilted_stem_mapping':'rigidly rotated square pixels; single-pixel triangular elbow' if root==glow else 'axis aligned'}
 (OUT/'validation.json').write_text(json.dumps(report,indent=2))
 
@@ -259,19 +302,23 @@ stage.objects.link(camera)
 scene.camera=camera
 camera_data.type='ORTHO'
 camera_data.ortho_scale=1.65
+target = Vector((0,0,.22))
+if CLUSTER:
+    target = Vector((glow.location.x,0,.24))
+    camera_data.ortho_scale = 1.12
 
 for name,loc in [('preview', (1.1,-2.8,1.6)),('front',(0,-3,.5)),('rear',(-1.2,2.8,1.3))]:
-    camera.location=loc
-    aim(camera,(0,0,.22))
+    camera.location=Vector(loc)+(Vector((glow.location.x,0,0)) if CLUSTER else Vector())
+    aim(camera,target)
     scene.render.filepath=str(OUT/(name+'.png'))
     bpy.ops.render.render(write_still=True)
 
-camera.location=(1.1,-2.8,1.6)
-aim(camera,(0,0,.22))
+camera.location=Vector((1.1,-2.8,1.6))+(Vector((glow.location.x,0,0)) if CLUSTER else Vector())
+aim(camera,target)
 bpy.ops.object.select_all(action='DESELECT')
-for obj in brown.children:
+for obj in (glow if CLUSTER else brown).children:
     obj.select_set(True)
-bpy.context.view_layer.objects.active=brown.children[0]
+bpy.context.view_layer.objects.active=(glow if CLUSTER else brown).children[0]
 for screen in bpy.data.screens:
     for area in screen.areas:
         if area.type=='VIEW_3D':

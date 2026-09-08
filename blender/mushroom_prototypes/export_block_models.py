@@ -13,9 +13,10 @@ ROOT = HERE.parents[1]
 MODELS = ROOT / 'assets/blocks/models'
 TEXTURES = ROOT / 'assets/blocks/textures'
 MODELS.mkdir(parents=True, exist_ok=True)
-bpy.ops.wm.open_mainfile(filepath=str(HERE/'mushroom_prototypes.blend'))
 
 for prefix, name in [('Brown mushroom', 'brown_mushroom'), ('Yellow glowshroom', 'glowshroom_yellow')]:
+    source = HERE / 'cluster' if name == 'glowshroom_yellow' else HERE
+    bpy.ops.wm.open_mainfile(filepath=str(source/'mushroom_prototypes.blend'))
     parent = next(o for o in bpy.data.objects if o.type == 'EMPTY' and o.name.startswith(prefix))
     bpy.ops.object.select_all(action='DESELECT')
     exported = []
@@ -32,7 +33,8 @@ for prefix, name in [('Brown mushroom', 'brown_mushroom'), ('Yellow glowshroom',
         export_materials='NONE', export_cameras=False, export_lights=False, export_animations=False)
     for obj in exported:
         bpy.data.objects.remove(obj, do_unlink=True)
-    shutil.copyfile(HERE/(name+'_16.png'), TEXTURES/(name+'_model.png'))
+    # Read the on-disk atlas, including manual edits exported from GIMP.
+    shutil.copyfile(source/(name+'_16.png'), TEXTURES/(name+'_model.png'))
 
 # The atlas reserves its left half for cap top/side/underside, right half for stems.
 # R is linear emissive strength; G (biome tint) and B are zero. Fully opaque alpha.
