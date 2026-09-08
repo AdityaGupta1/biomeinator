@@ -92,6 +92,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
+        this->terrainTopY.resize(chunkSizeXZSquare);
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
@@ -221,15 +222,20 @@ void Chunk::runStructuresAndDecoratorPass()
             const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
+            const uint terrainTopY = this->terrainTopY[columnIdx];
             Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
             {
                 Block& thisBlock = this->blocks[baseBlockIdx + blockY];
 
-                if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
+                // Decorators only stand on full cubes, never on other decorators or structure flora
+                if (thisBlock == Block::AIR && bottomBlock != Block::AIR &&
+                    Blocks::getBlockData(bottomBlock).shape == BlockShape::CUBE)
                 {
                     Block decoratorBlock = Block::AIR;
-                    if (CaveBiomes::isCaveFloraGroundBlock(bottomBlock))
+                    // Ground below the column's terrain top is a cave floor (or overhang underside)
+                    const bool isUnderground = blockY - 1 < terrainTopY;
+                    if (isUnderground)
                     {
                         decoratorBlock = caveFloorDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
                     }

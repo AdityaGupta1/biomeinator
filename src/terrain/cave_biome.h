@@ -70,9 +70,9 @@ void init();
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome);
 
-// Decorator for cave floors. Keyed by ground block rather than cave biome (no per-voxel cave
-// biome is stored): each entry's groundBlocks are blocks that only a specific biome's skin
-// produces, which is what scopes it to that biome.
+// Decorator for every air-above-solid transition below the column's terrain top. No per-voxel
+// cave biome is stored, so entries meant for one biome scope themselves through groundBlocks
+// that only that biome's skin produces.
 const Decorator& getCaveFloorDecorator();
 
 // Cave-floor ground blocks that cave flora may stand on

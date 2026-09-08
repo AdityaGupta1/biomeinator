@@ -12,14 +12,18 @@ Each biome has a `Decorator` — a weighted list of blocks. At each air-above-so
 
 ## Cave floor decorator
 
-The pass visits every air-above-solid transition in a column, so cave floors are
-already reached — but with the *surface* biome's decorator, whose ground filters
-reject cave blocks. `CaveBiomes::getCaveFloorDecorator()` is a single decorator
-used instead whenever the ground is a cave-flora block (moss, overgrown rock). It is
-keyed by ground block, not cave biome, because no per-voxel cave biome is stored;
-that works because those ground blocks are produced only by one biome's skin. It
-draws from its own per-chunk RNG stream so adding cave flora never shifts the
-surface decorator pattern.
+The pass visits every air-above-solid transition in a column. A transition whose
+ground sits below the column's terrain top (`Chunk::terrainTopY`, the highest
+solid terrain block before structures) is underground — a cave floor or the
+underside of an overhang — and uses `CaveBiomes::getCaveFloorDecorator()`;
+the rest use the surface biome's decorator as before. Tree canopies don't confuse
+this: leaves are structure blocks placed above the terrain top, so the grass under
+a tree is still classed as surface. There is one cave decorator, not one per cave
+biome, because no per-voxel cave biome is stored; an entry meant for one biome
+scopes itself with ground blocks only that biome's skin produces (ferns on moss and
+overgrown rock), while biome-agnostic entries (glowshrooms) set no filter. It draws
+from its own per-chunk RNG stream so adding cave flora never shifts the surface
+decorator pattern.
 
 ## Ordering Guarantees
 

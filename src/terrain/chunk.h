@@ -102,6 +102,9 @@ private:
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::vector<Biome> biomes{};
+    // Highest solid terrain block per column (pre-structure). Lets later passes tell an
+    // underground transition (cave floor) from the terrain surface.
+    std::vector<uint16_t> terrainTopY{};
 
     std::vector<Structure> structures{};
     std::vector<CaveStructure> caveStructures{};

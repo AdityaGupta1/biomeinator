@@ -61,9 +61,11 @@ void init()
         };
     }
 
-    // LUSH floor flora (moss and overgrown rock only exist in LUSH)
-    caveFloorDecorator.addEntry(Block::FERN, 1.f, { Block::MOSS, Block::OVERGROWN_STONE, Block::OVERGROWN_MARBLE });
-    caveFloorDecorator.addEntry(Block::AIR, 10.f);
+    // Ferns are LUSH-only via their ground filter (moss and overgrown rock only exist in LUSH);
+    // glowshrooms grow on any cave floor
+    caveFloorDecorator.addEntry(Block::FERN, 4.f, { Block::MOSS, Block::OVERGROWN_STONE, Block::OVERGROWN_MARBLE });
+    caveFloorDecorator.addEntry(Block::GLOWSHROOM_YELLOW, 1.f);
+    caveFloorDecorator.addEntry(Block::AIR, 32.f);
 
     // BRIMSTONE
     {

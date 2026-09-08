@@ -819,6 +819,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
 
             heightfield[columnIdx] = topBlockY;
+            this->terrainTopY[columnIdx] = static_cast<uint16_t>(topBlockY);
 
             // A pocket still open at the top of the scan opened upward into non-cave air (sky); close
             // it unceilinged. In practice the scan always reaches non-cave air first, so this is a guard.
