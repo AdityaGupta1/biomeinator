@@ -17,6 +17,7 @@ enum class CaveStructureType : uint8_t
     HANGING_LAMP,
     LAMP_CLUSTER,
     STONE_COLUMN,
+    MOSS_PINK_CLUSTER,
     CAVE_VINES,
 
     COUNT

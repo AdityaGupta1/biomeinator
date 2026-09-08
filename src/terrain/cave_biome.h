@@ -5,6 +5,7 @@
 
 #include "block.h"
 #include "structure/cave_structure.h"
+#include "structure/decorator.h"
 
 #include <vector>
 
@@ -68,6 +69,14 @@ namespace CaveBiomes
 void init();
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome);
+
+// Decorator for cave floors. Keyed by ground block rather than cave biome (no per-voxel cave
+// biome is stored): each entry's groundBlocks are blocks that only a specific biome's skin
+// produces, which is what scopes it to that biome.
+const Decorator& getCaveFloorDecorator();
+
+// Cave-floor ground blocks that cave flora may stand on
+bool isCaveFloraGroundBlock(Block block);
 
 CaveBiome getClosestCaveBiome(const CaveBiomeNoise& caveBiomeNoise);
 

@@ -111,6 +111,10 @@ bottom layer index in gives each pocket an independent grid.
   cell's candidate and only one matches (grid 12 → ~144 columns recompute to
   return true once). Tiny vs the 80k+ block-fill iterations; columns with no
   captured layers skip the gen loop entirely, so non-cave columns cost nothing.
+- **Floor flora finds its own footing per column.** `MOSS_PINK_CLUSTER` searches a
+  few blocks up and down from the anchor for air over a cave-flora ground block
+  (`CaveBiomes::isCaveFloraGroundBlock`), so clusters follow the floor and never
+  land on bare stone or clay. Per-column seeding as for vines.
 - **Vines never anchor to emissive blocks.** `isCaveVinesCeilingBlock` rejects
   `emitsLight` cubes so a strand can't hang from a lamp's underside; combined with the
   type-major fill order this keeps lamps and vines from interleaving.

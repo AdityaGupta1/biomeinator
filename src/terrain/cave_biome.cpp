@@ -18,6 +18,7 @@ namespace CaveBiomes
 {
 
 static std::array<CaveBiomeData, static_cast<size_t>(CaveBiome::COUNT)> caveBiomeDatas;
+static Decorator caveFloorDecorator;
 
 #define CAVE_BIOME_DATA(caveBiome) caveBiomeDatas[static_cast<size_t>(caveBiome)]
 #define CAVE_BIOME_DATA_BY_NAME(caveBiomeName) caveBiomeDatas[static_cast<size_t>(CaveBiome::caveBiomeName)]
@@ -56,8 +57,13 @@ void init()
         data.caveStructureGens = {
             { .type = CaveStructureType::LAMP_CLUSTER, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 18, .gridCellPadding = 6, .chance = 0.6f },
             { .type = CaveStructureType::CAVE_VINES, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 8, .gridCellPadding = 2, .chance = 0.5f },
+            { .type = CaveStructureType::MOSS_PINK_CLUSTER, .minLayerHeight = 3, .gridCellSideLength = 10, .gridCellPadding = 2, .chance = 0.6f },
         };
     }
+
+    // LUSH floor flora (moss and overgrown rock only exist in LUSH)
+    caveFloorDecorator.addEntry(Block::FERN, 1.f, { Block::MOSS, Block::OVERGROWN_STONE, Block::OVERGROWN_MARBLE });
+    caveFloorDecorator.addEntry(Block::AIR, 10.f);
 
     // BRIMSTONE
     {
@@ -99,6 +105,16 @@ void init()
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome)
 {
     return CAVE_BIOME_DATA(caveBiome);
+}
+
+const Decorator& getCaveFloorDecorator()
+{
+    return caveFloorDecorator;
+}
+
+bool isCaveFloraGroundBlock(Block block)
+{
+    return block == Block::MOSS || block == Block::OVERGROWN_STONE || block == Block::OVERGROWN_MARBLE;
 }
 
 CaveBiome getClosestCaveBiome(const CaveBiomeNoise& caveBiomeNoise)

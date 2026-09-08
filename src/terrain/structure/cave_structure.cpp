@@ -4,6 +4,7 @@
 #include "cave_structure.h"
 
 #include "../block.h"
+#include "../cave_biome.h"
 #include "../chunk.h"
 #include "settings_manager.h"
 #include "structure_helpers.h"
@@ -152,6 +153,91 @@ fillCaveStructureBlocksHeader(LAMP_CLUSTER)
                 }
                 tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y_CS, colPosXZ_CS.y /*z*/)), Block::LAMP);
             }
+        }
+    }
+}
+
+inline constexpr int mossPinkClusterMinRadius = 2;
+inline constexpr int mossPinkClusterMaxRadius = 4;
+inline constexpr int mossPinkClusterFloorSearchDist = 3;
+inline constexpr float mossPinkClusterBloomChance = 0.35f;
+inline constexpr float mossPinkClusterCenterBudChance = 0.55f;
+inline constexpr float mossPinkClusterEdgeBudChance = 0.2f;
+
+// Finds the air block sitting on a cave-flora ground block near the anchor y in this column.
+static bool findCaveFloraStandY(const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int& outStandY)
+{
+    const auto blockAt = [&](int y)
+    {
+        return blocks[Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, y, colPosXZ_CS.y /*z*/))];
+    };
+    const int maxY = static_cast<int>(chunkSizeY) - 1;
+    for (int dy = 0; dy <= mossPinkClusterFloorSearchDist; ++dy)
+    {
+        for (const int y : { anchorY - dy, anchorY + dy })
+        {
+            if (y < 1 || y > maxY)
+            {
+                continue;
+            }
+            if (blockAt(y) == Block::AIR && CaveBiomes::isCaveFloraGroundBlock(blockAt(y - 1)))
+            {
+                outStandY = y;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Blooms at the center, buds scattered around them with chance falling off toward the edge.
+// Only stands on cave-flora ground (moss / overgrown rock).
+fillCaveStructureBlocksHeader(MOSS_PINK_CLUSTER)
+{
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    RandomNumberGenerator structureRng = initRng(worldSeed ^ hash(1122334455),
+                                                 static_cast<uint32_t>(structure.pos_WS.x),
+                                                 static_cast<uint32_t>(structure.pos_WS.y),
+                                                 static_cast<uint32_t>(structure.pos_WS.z));
+    const int radius = structureRng.nextInt(mossPinkClusterMinRadius, mossPinkClusterMaxRadius + 1);
+
+    for (int dz = -radius; dz <= radius; ++dz)
+    {
+        for (int dx = -radius; dx <= radius; ++dx)
+        {
+            const float distFromCenter = glm::length(vec2(dx, dz));
+            if (distFromCenter > static_cast<float>(radius))
+            {
+                continue;
+            }
+
+            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
+            if (!Chunk::isInChunkXZ(colPosXZ_CS))
+            {
+                continue;
+            }
+
+            RandomNumberGenerator rng = initRng(worldSeed ^ hash(2011223344),
+                                                static_cast<uint32_t>(structure.pos_WS.x + dx),
+                                                static_cast<uint32_t>(structure.pos_WS.z + dz),
+                                                static_cast<uint32_t>(structure.pos_WS.y));
+            const bool isCenter = distFromCenter <= 1.f;
+            const float chance = isCenter
+                ? mossPinkClusterBloomChance
+                : glm::mix(mossPinkClusterCenterBudChance, mossPinkClusterEdgeBudChance, distFromCenter / radius);
+            if (!rng.chance(chance))
+            {
+                continue;
+            }
+
+            int standY;
+            if (!findCaveFloraStandY(blocks, colPosXZ_CS, structurePos_CS.y, standY))
+            {
+                continue;
+            }
+            tryPlaceStructureBlock(blocks,
+                                   Chunk::blockPosToIdx(uvec3(colPosXZ_CS.x, standY, colPosXZ_CS.y /*z*/)),
+                                   isCenter ? Block::MOSS_PINK_BLOOM : Block::MOSS_PINK_BUD);
         }
     }
 }
@@ -323,6 +409,9 @@ void init()
 
     SET_FILL_CAVE_STRUCTURE_FUNC(STONE_COLUMN);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
+
+    SET_FILL_CAVE_STRUCTURE_FUNC(MOSS_PINK_CLUSTER);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(MOSS_PINK_CLUSTER) = mossPinkClusterMaxRadius;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(CAVE_VINES);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(CAVE_VINES) = caveVinesMaxRadius;

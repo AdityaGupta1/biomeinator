@@ -4,6 +4,7 @@
 #include "chunk.h"
 
 #include "block.h"
+#include "cave_biome.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
@@ -207,6 +208,9 @@ void Chunk::runStructuresAndDecoratorPass()
 
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
+    // Separate stream so cave floor draws don't perturb the surface decorator pattern
+    RandomNumberGenerator caveDecoratorRng = initRng(worldSeed ^ hash(771093284), this->chunkPos.x, this->chunkPos.y /*z*/);
+    const Decorator& caveFloorDecorator = CaveBiomes::getCaveFloorDecorator();
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
@@ -216,11 +220,6 @@ void Chunk::runStructuresAndDecoratorPass()
             const Biome biome = this->biomes[columnIdx];
             const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
 
-            if (decorator.isEmpty())
-            {
-                continue;
-            }
-
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             Block bottomBlock = Block::BEDROCK;
             for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
@@ -229,7 +228,15 @@ void Chunk::runStructuresAndDecoratorPass()
 
                 if (thisBlock == Block::AIR && bottomBlock != Block::AIR)
                 {
-                    const Block decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    Block decoratorBlock = Block::AIR;
+                    if (CaveBiomes::isCaveFloraGroundBlock(bottomBlock))
+                    {
+                        decoratorBlock = caveFloorDecorator.getBlock(caveDecoratorRng.nextFloat(), bottomBlock);
+                    }
+                    else if (!decorator.isEmpty())
+                    {
+                        decoratorBlock = decorator.getBlock(decoratorRng.nextFloat(), bottomBlock);
+                    }
                     if (decoratorBlock != Block::AIR)
                     {
                         thisBlock = decoratorBlock;
