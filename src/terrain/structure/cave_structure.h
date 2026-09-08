@@ -14,6 +14,7 @@ enum class CaveStructureType : uint8_t
     CRYSTAL,
     HANGING_LAMP,
     STONE_COLUMN,
+    CAVE_VINES,
 
     COUNT
 };
@@ -40,6 +41,8 @@ struct CaveStructureGen
     // Inset on the cell's high edge; guarantees gridCellPadding empty blocks
     // between candidates in adjacent cells. Mirrors StructureGen.
     uint32_t gridCellPadding{ 0 };
+    // Probability that a qualifying grid cell actually spawns the structure
+    float chance{ 1.f };
     uint32_t flags{ 0 };
 };
 

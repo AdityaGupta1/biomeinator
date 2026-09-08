@@ -48,6 +48,9 @@ void init()
             .humidity = 0.7f,
         };
         data.baseBlock = Block::MOSS;
+        data.caveStructureGens = {
+            { .type = CaveStructureType::CAVE_VINES, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 8, .gridCellPadding = 2, .chance = 0.5f },
+        };
     }
 
     // BRIMSTONE

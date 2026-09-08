@@ -1,4 +1,4 @@
-_Last edited: 2026-05-24_
+_Last edited: 2026-09-07_
 
 # Cave Structure System
 
@@ -81,12 +81,25 @@ bottom layer index in gives each pocket an independent grid.
   biome/height. Neighboring columns with better pockets do not substitute — this
   is intended one-per-cell behavior.
 - **Ceiling gens only run on `closed` layers** (a pocket open to the sky has no
-  ceiling solid to hang from). Currently only BRIMSTONE has a ceiling gen
-  (`HANGING_LAMP`); it is naturally absent wherever hot-dry caves don't generate.
-- **`STONE_COLUMN` is the only gen using `availableHeight`** (fills floor→ceiling
-  for `end - start` blocks). The fixed-height gens ignore it; their high
-  `minLayerHeight` guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so
-  a 3×3 pillar auto-clips per column to whatever air actually exists.
+  ceiling solid to hang from). BRIMSTONE's `HANGING_LAMP` and LUSH's `CAVE_VINES`
+  are the ceiling gens; each is naturally absent wherever its biome doesn't generate.
+- **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
+  blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
+  touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`
+  guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so a 3×3 pillar
+  auto-clips per column to whatever air actually exists.
+- **`chance` is rolled per (cell, type, layerIdx) after the candidate match**, from a
+  stream independent of the candidate-position RNG. A failed roll falls through to
+  the next gen in the list rather than leaving the cell empty, so gen-list order is
+  still priority order.
+- **Multi-column fills must seed per column from world position.** A structure is
+  filled once by every chunk it overlaps, and each fill visits only that chunk's
+  columns, so a single RNG advanced across the footprint would desynchronise between
+  chunks. `CAVE_VINES` seeds each strand from (column XZ, anchor y) the way cypress
+  spanish moss does; the strand's chance, length and berry variants all come from
+  that per-column stream. Overlapping structures are deterministic because fill order
+  is world-position row-major over neighbours then emission order within a chunk —
+  first writer wins into AIR and every chunk agrees on who was first.
 
 ## Not serialized (parity gap with surface)
 
