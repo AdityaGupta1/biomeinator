@@ -50,6 +50,7 @@ void init()
         data.baseBlock = Block::STONE;
         data.skinBlock = Block::MOSS;
         data.skinPatchBlock = Block::CLAY;
+        data.skinFringeBlock = Block::OVERGROWN_STONE;
         data.caveStructureGens = {
             { .type = CaveStructureType::LAMP_CLUSTER, .generatesFromCeiling = true, .minLayerHeight = 12, .gridCellSideLength = 18, .gridCellPadding = 6, .chance = 0.6f },
             { .type = CaveStructureType::CAVE_VINES, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 8, .gridCellPadding = 2, .chance = 0.5f },

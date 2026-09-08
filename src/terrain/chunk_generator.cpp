@@ -57,9 +57,12 @@ static FN::SmartNode<FN::Generator> fnCaveHumidity;
 // Cave biome skin (CaveBiomeData::skinBlock) thickness is measured in cave carve noise units
 // above the carve threshold, which approximates distance from the cave surface in every
 // direction without a separate distance pass. Thickness varies per voxel via a coarse 3D field;
-// the negative end of the range leaves patches of the cave surface bare.
-inline constexpr float caveSkinThicknessMin = -0.04f;
+// the negative end of the range leaves patches of the cave surface bare. The fringe band sits
+// just outside the skin (thickness + caveSkinFringeWidth), so on the surface it appears where the
+// thickness is slightly negative: the transition ring between skin and bare rock.
+inline constexpr float caveSkinThicknessMin = -0.10f;
 inline constexpr float caveSkinThicknessMax = 0.14f;
+inline constexpr float caveSkinFringeWidth = 0.05f;
 // Skin patch noise is in [0, 1]; values above this become skinPatchBlock
 inline constexpr float caveSkinPatchThreshold = 0.62f;
 
@@ -547,9 +550,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             uint topBlockY = 0;
             bool wasSolid = true;
+            // Fringe candidate from the voxel below, promoted once this voxel turns out to be air
+            Block prevFringeBlock = Block::AIR;
             for (uint y = 1; y <= maxFillY; ++y)
             {
                 Block block = Block::AIR;
+                Block fringeBlock = Block::AIR;
                 CaveBiome voxelCaveBiome = CaveBiome::STONE;
                 const uint blockIdx = baseBlockIdx + y;
                 ASSERT(blockIdx < numChunkBlocks, "block index out of bounds");
@@ -674,6 +680,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                             caveSkinPatchThreshold;
                                     baseBlock = isPatch ? caveBiomeData.skinPatchBlock : caveBiomeData.skinBlock;
                                 }
+                                else if (caveBiomeData.skinFringeBlock != Block::AIR && caveSurfaceDist < skinThickness + caveSkinFringeWidth)
+                                {
+                                    // Only promoted if the voxel above is air: the fringe block reads as a top surface
+                                    fringeBlock = caveBiomeData.skinFringeBlock;
+                                }
                             }
                         }
 
@@ -681,6 +692,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         RandomNumberGenerator rng =
                             initRng(worldSeed ^ hash(103290193), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                         block = (!debugDisableCaveLamps && rng.nextFloat() < 0.04f) ? Block::LAMP : baseBlock;
+                        if (block != baseBlock)
+                        {
+                            fringeBlock = Block::AIR;
+                        }
                     }
                 }
                 else if (y <= static_cast<uint>(waterLevel))
@@ -689,6 +704,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 this->blocks[blockIdx] = block;
+                if (prevFringeBlock != Block::AIR && block == Block::AIR)
+                {
+                    this->blocks[blockIdx - 1] = prevFringeBlock;
+                }
+                prevFringeBlock = fringeBlock;
 
                 const bool isSolid = (Blocks::getBlockData(block).type == BlockType::SOLID);
 

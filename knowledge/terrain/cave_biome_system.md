@@ -70,6 +70,16 @@ every direction, so a voxel is skin when that difference is below a thickness
 expressed in noise units (`caveSkinThicknessMin/Max`). This costs no extra pass,
 no neighbor reads, and has no chunk-border seam.
 
+`skinFringeBlock` is a second band immediately outside the skin (`thickness +
+caveSkinFringeWidth`). On the exposed surface it therefore appears exactly where
+the thickness field is slightly negative — the ring between a skin patch and bare
+rock — which is how LUSH gets overgrown stone between moss and plain stone
+without any neighbour lookup. The fringe is only committed to voxels with air
+directly above them (the block has a moss-capped side texture, so it must read as
+a floor): the scan is bottom-up, so a fringe candidate is written as `baseBlock`
+and promoted one iteration later when the voxel above turns out to be AIR. The thickness range must dip further negative than
+the fringe width or bare rock never shows.
+
 Two consequences to know about:
 - The thickness field is coarse 3D noise (same downsampled grid as the biome
   fields) and its range dips negative, which is what produces bare-stone patches
