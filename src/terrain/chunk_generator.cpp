@@ -69,6 +69,11 @@ inline constexpr float caveSkinPatchThreshold = 0.62f;
 static FN::SmartNode<FN::Generator> fnCaveSkinThickness;
 static FN::SmartNode<FN::Generator> fnCaveSkinPatch;
 
+// Low-frequency field in [0, 1] choosing a biome's secondary rock (CaveBiomeData::secondaryBaseBlock)
+// above this threshold
+inline constexpr float caveSecondaryRockThreshold = 0.5f;
+static FN::SmartNode<FN::Generator> fnCaveRock;
+
 static FN::SmartNode<FN::Generator> fnSwampWarp;
 static FN::SmartNode<FN::Generator> fnSwampWarpFine;
 static FN::SmartNode<FN::Generator> fnSwampShore;
@@ -206,6 +211,16 @@ void init()
         fnDomainWarp->SetWarpAmplitude(6.f);
 
         fnCaveSkinPatch = fnDomainWarp;
+    }
+
+    {
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(407192653);
+        fnSimplex->SetScale(160.f);
+        fnSimplex->SetOutputMin(0.0f);
+        fnSimplex->SetOutputMax(1.0f);
+
+        fnCaveRock = fnSimplex;
     }
 }
 
@@ -442,6 +457,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* caveSkinPatchNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
     fillCaveBiomeNoiseArray(caveSkinThicknessNoise, fnCaveSkinThickness, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
     fillCaveBiomeNoiseArray(caveSkinPatchNoise, fnCaveSkinPatch, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    float* caveRockNoise = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+    fillCaveBiomeNoiseArray(caveRockNoise, fnCaveRock, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
 
     uint* heightfield = threadMemoryAlloc.request<uint>(chunkSizeXZSquare);
 
@@ -666,6 +683,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
+                            Block skinFringeBlock = caveBiomeData.skinFringeBlock;
+                            if (caveBiomeData.secondaryBaseBlock != Block::AIR &&
+                                sampleCaveBiomeNoise(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                    caveSecondaryRockThreshold)
+                            {
+                                baseBlock = caveBiomeData.secondaryBaseBlock;
+                                skinFringeBlock = caveBiomeData.secondarySkinFringeBlock;
+                            }
 
                             if (caveBiomeData.skinBlock != Block::AIR)
                             {
@@ -680,10 +705,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                             caveSkinPatchThreshold;
                                     baseBlock = isPatch ? caveBiomeData.skinPatchBlock : caveBiomeData.skinBlock;
                                 }
-                                else if (caveBiomeData.skinFringeBlock != Block::AIR && caveSurfaceDist < skinThickness + caveSkinFringeWidth)
+                                else if (skinFringeBlock != Block::AIR && caveSurfaceDist < skinThickness + caveSkinFringeWidth)
                                 {
                                     // Only promoted if the voxel above is air: the fringe block reads as a top surface
-                                    fringeBlock = caveBiomeData.skinFringeBlock;
+                                    fringeBlock = skinFringeBlock;
                                 }
                             }
                         }

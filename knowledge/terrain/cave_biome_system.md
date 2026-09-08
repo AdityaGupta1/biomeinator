@@ -59,6 +59,15 @@ structures read the biome once per captured layer at fill time
 ([cave_structure_system.md](cave_structure_system.md)); a per-voxel store is still
 not needed.
 
+## Secondary rock
+
+`secondaryBaseBlock` / `secondarySkinFringeBlock` let a biome alternate between two
+rock types (LUSH: stone and marble, each with its own overgrown fringe) on a
+separate low-frequency coarse field (`fnCaveRock`, ~160-block features, thresholded
+at `caveSecondaryRockThreshold`). It is sampled on the same downsampled grid as the
+other cave fields, so the rock boundary is smooth and seam-free across chunks; the
+skin and clay are rock-agnostic and lie on top of whichever rock is chosen.
+
 ## Surface skin via carve noise (no distance pass)
 
 `skinBlock` / `skinPatchBlock` theme only the shell of solid rock around cave

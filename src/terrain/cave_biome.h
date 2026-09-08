@@ -46,6 +46,10 @@ struct CaveBiomeData
 {
     CaveBiomeNoise biomeNoise{};
     Block baseBlock{ Block::STONE };
+    // Optional second rock type chosen by a low-frequency 3D field, with its own fringe block.
+    // AIR disables.
+    Block secondaryBaseBlock{ Block::AIR };
+    Block secondarySkinFringeBlock{ Block::AIR };
     // Optional skin on cave surfaces (floors, walls and ceilings alike): solid voxels whose cave
     // carve noise sits just above the carve threshold become skinBlock, with skinPatchBlock
     // blobs mixed in. skinFringeBlock forms a band just outside the skin, so it shows on the
