@@ -1472,6 +1472,15 @@ void temporalRayGen()
         reservoirsMergedOut[linearPixelIdx] = canonical;
         return;
     }
+    // The history pixel is jittered by up to one pixel each way, the DLSS-RR guide's "randomize the
+    // temporal reuse step" (Section 3.5): the reused sample then differs between neighbors and
+    // frames instead of tracking one pixel's chain. The surface check below still applies to the
+    // jittered pixel, and both MIS shifts use it consistently.
+    {
+        RandomNumberGenerator jitterRng = initRng(constantParams.rngSeed, 271828, linearPixelIdx, renderParams.frameNumber);
+        const int2 offset = int2(floor(jitterRng.nextFloat2() * 3.f)) - 1;
+        prevPixelIdx = uint2(clamp(int2(prevPixelIdx) + offset, int2(0, 0), int2(renderParams.renderSize) - 1));
+    }
 
     // The previous frame's primary hit is rebuilt on the current mesh (so it follows deforming
     // geometry) and must be the same surface. Everything stored last frame lives in last frame's
