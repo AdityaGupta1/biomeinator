@@ -107,6 +107,9 @@ static const std::vector<const char*> debugViewComboOptions = {
 static const std::vector<const char*> dlssModeOptions = {
     "DLAA", "quality", "balanced", "performance", "ultra performance",
 };
+static const std::vector<const char*> dlssPresetOptions = {
+    "Preset D", "Preset F",
+};
 
 void imguiBeginFrame()
 {
@@ -182,6 +185,7 @@ void imguiEndFrame(double deltaTime)
         else if (antialiasingMode == AntialiasingMode::DLSS)
         {
             renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+            renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS preset", "dlssPreset", dlssPresetOptions);
             if (renderState.frameGen.supported)
             {
                 SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");

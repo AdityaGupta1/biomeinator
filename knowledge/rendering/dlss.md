@@ -55,6 +55,14 @@ command list work that produces them. This is why resource tagging happens at th
 `DlssState::needsReset` (in `renderState.dlss`) is set on scene load and resize. Passes
 `reset = eTrue` in `sl::Constants` for one frame, telling DLSS to discard temporal history.
 
+## Ray Reconstruction Preset
+
+The `dlssPreset` setting applies one Ray Reconstruction preset to every DLSS quality mode. The UI
+offers preset D, the previous Streamline SDK's default transformer model, and preset F, the current
+SDK's latest/default transformer model. Preset F is the application default; keeping D selectable
+makes before/after image-quality comparisons possible. Changing it follows the existing resize path
+so Streamline receives the new preset while its temporal history and render targets are reset.
+
 ## Frame Generation
 
 Frame generation is only offered when DLSS-G, Reflex and PCL all report support, which is checked
