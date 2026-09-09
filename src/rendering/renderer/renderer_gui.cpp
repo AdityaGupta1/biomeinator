@@ -141,8 +141,8 @@ void imguiEndFrame(double deltaTime)
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Temporal confidence cap", "restirTemporalConfidenceCap", 0, 64);
             if (ImGui::TreeNode("Noise"))
             {
-                SettingsGuiHelpers::SliderFloat("White noise", "restirWhiteNoise", 0.f, 1.f);
                 SettingsGuiHelpers::SliderFloat("Initial sample blend", "restirInitialBlend", 0.f, 1.f);
+                SettingsGuiHelpers::SliderFloat("Dropout probability", "restirDropoutProbability", 0.f, 0.9f);
                 ImGui::TreePop();
             }
             if (ImGui::TreeNode("Decorrelation"))

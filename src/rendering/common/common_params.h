@@ -178,7 +178,7 @@ struct RestirParams
     uint shiftStatsEnabled; // count shift outcomes into the stats buffer (perf runs only)
     float initialBlend; // weight of the pixel's own initial sample in the final shading
 
-    float whiteNoise; // multiplicative white noise amplitude applied to the collected color
+    float dropoutProbability; // blue-noise dropout of the collected color, survivors rescaled
     uint pad1;
     uint pad2;
     uint pad3;

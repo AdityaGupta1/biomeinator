@@ -877,7 +877,7 @@ void render()
     restirParams->decorrelationExponent = SettingsManager::getAsFloat("restirDecorrelationExponent");
     restirParams->shiftStatsEnabled = SettingsManager::getAsBool("restirShiftStats") ? 1u : 0u;
     restirParams->initialBlend = accumulating ? 0.f : SettingsManager::getAsFloat("restirInitialBlend");
-    restirParams->whiteNoise = accumulating ? 0.f : SettingsManager::getAsFloat("restirWhiteNoise");
+    restirParams->dropoutProbability = accumulating ? 0.f : SettingsManager::getAsFloat("restirDropoutProbability");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
