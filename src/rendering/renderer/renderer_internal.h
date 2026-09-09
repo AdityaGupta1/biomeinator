@@ -25,6 +25,9 @@
 
 #include <sl.h>
 #include <sl_dlss_d.h>
+#include <sl_dlss_g.h>
+#include <sl_pcl.h>
+#include <sl_reflex.h>
 
 #include "rendering/camera.h"
 #include "rendering/gpu_profiler.h"
@@ -59,31 +62,36 @@ struct FrameTimeMeasurement
 // CHECK_SL_RESULT macro
 // =============================================
 
-#if ENABLE_ASSERTS
-inline void printSlResultError(sl::Result result)
+inline std::string slResultToString(sl::Result result)
 {
-    std::string msg;
-
     switch (result)
     {
         case sl::Result::eErrorNoPlugins:
-            msg = "No plugins found";
-            break;
+            return "No plugins found";
         case sl::Result::eErrorInvalidParameter:
-            msg = "Invalid parameter";
-            break;
+            return "Invalid parameter";
         case sl::Result::eErrorMissingConstants:
-            msg = "Missing constants";
-            break;
+            return "Missing constants";
         case sl::Result::eWarnOutOfVRAM:
-            msg = "Out of VRAM";
-            break;
+            return "Out of VRAM";
+        case sl::Result::eErrorAdapterNotSupported:
+        case sl::Result::eErrorNoSupportedAdapterFound:
+            return "Adapter not supported";
+        case sl::Result::eErrorOSDisabledHWS:
+            return "Hardware-accelerated GPU Scheduling disabled";
+        case sl::Result::eErrorDriverOutOfDate:
+            return "Driver out of date";
+        case sl::Result::eErrorOSOutOfDate:
+            return "OS out of date";
         default:
-            msg = "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
-            break;
+            return "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
     }
+}
 
-    Logger::logError(msg.c_str());
+#if ENABLE_ASSERTS
+inline void printSlResultError(sl::Result result)
+{
+    Logger::logError(slResultToString(result).c_str());
 }
 
 #define CHECK_SL_RESULT(expr)                                                                                          \
@@ -214,6 +222,15 @@ void initDevice();
 void initDescriptorHeaps();
 void initNvapi();
 void initSwapChain();
+void createSwapChain();
+void releaseSwapChain();
+void closeFrameLatencyWaitable();
+// Frame generation rides on DLSS mode: its checkbox only shows there, so it must not stay on
+// invisibly in the other antialiasing modes. The setting itself is left alone so switching back
+// to DLSS restores the user's choice.
+bool isFrameGenerationRequested();
+// Loads or unloads the DLSS-G plugin and queues the swap chain rebuild that makes it take effect
+void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
 void initConstantParams();
@@ -249,6 +266,26 @@ struct DlssState
     sl::Extent renderExtent{};
     sl::Extent viewportExtent{};
     sl::DLSSDOptions options{};
+};
+
+struct FrameGenState
+{
+    // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
+    bool supported{ false };
+    // Shown in the GUI while unsupported; empty once supported or in headless runs
+    std::string unsupportedReason;
+    // Only ever changes between frames, since flipping it recreates the swap chain
+    bool active{ false };
+    // Frames DLSS-G presented for the last app frame. Not simply 2 while frame generation is on:
+    // the interpolated frame is dropped when presents go out of sync. 1 whenever it is off.
+    uint32_t framesPresentedLastFrame{ 1 };
+    sl::DLSSGOptions options{};
+
+    // PCL Stats measures input sampling latency by posting this window message and timing how long
+    // the app takes to answer it with a ping marker; 0 when PCL is not loaded
+    uint32_t pclStatsWindowMessage{ 0 };
+    // Set by the message pump, answered with the next frame's token since that frame picks up the input
+    bool pclPingPending{ false };
 };
 
 enum class PerfPhase
@@ -289,6 +326,10 @@ struct ScreenshotRequest
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
 };
+
+// The back buffers and everything that has to match them exactly (PSO render target formats, the
+// hudless copy, the screenshot readback footprint)
+inline constexpr DXGI_FORMAT SWAP_CHAIN_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 struct RendererState
 {
@@ -347,11 +388,18 @@ struct RendererState
     RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
     RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-    RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    // Post-projection depth, which is what both DLSS-RR and DLSS-G ask for under kBufferTypeDepth
+    RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
     // should really be 4 debug channels but it would look funny that way
     RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
     RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+
+    // Copy of the back buffer taken before the GUI is drawn, so frame generation can interpolate
+    // the scene without the overlay smearing across generated frames. Only allocated while frame
+    // generation is on. Keeps its SRV flag even though no shader reads it, since DLSS-G creates
+    // its own views on the resource.
+    RtTarget hudlessTarget{ L"hudlessTarget", SWAP_CHAIN_FORMAT, 0, true, false };
 
     RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
@@ -375,6 +423,7 @@ struct RendererState
 
     // -- DLSS --
     DlssState dlss;
+    FrameGenState frameGen;
 
     // -- Root signatures --
     ComPtr<ID3D12RootSignature> gbufferRootSig;
@@ -411,5 +460,12 @@ struct RendererState
 };
 
 extern RendererState renderState;
+
+// While the DLSS-G plugin is loaded, SL owns the swap chain's frame-latency waitable object and the
+// app must stay off it; slReflexSleep paces the frame instead. See section 12.1 of the DLSS-G guide.
+inline bool isWaitableSwapChainActive()
+{
+    return renderState.useWaitableSwapChain && !renderState.frameGen.active;
+}
 
 } // namespace Renderer

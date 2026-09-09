@@ -6,7 +6,6 @@
 
 #include "common/global_params.hlsli"
 #include "util/color.hlsli"
-#include "util/ray.hlsli"
 
 SamplerState texSampler : REGISTER_S(POSTPROCESS, TEX_SAMPLER);
 
@@ -15,17 +14,6 @@ struct PsIn
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;
 };
-
-float3 reconstructWorldPos(float2 uv)
-{
-    Texture2D<float> linearDepthTex = ResourceDescriptorHeap[heapIndices.srv.linearDepthTargetIdx];
-    const float linearDepth = linearDepthTex.SampleLevel(texSampler, uv, 0);
-
-    const uint2 pixelIdx = uint2(uv * float2(renderParams.renderSize));
-    const float3 rayDir = getPrimaryRayDirection(pixelIdx);
-
-    return evalRayPos(cameraParams.pos_WS, rayDir, linearDepth);
-}
 
 float4 getDebugColor(float2 uv)
 {

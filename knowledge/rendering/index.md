@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-08_
 
 # Rendering Knowledgebase
 
@@ -14,7 +14,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [param_blocks.md](param_blocks.md) | ParamBlockManager, constant buffer layout and upload |
 | [rt_targets.md](rt_targets.md) | RtTarget, UAV/SRV descriptor pairs, G-buffer output textures |
 | [camera.md](camera.md) | Spherical coordinate camera, Halton TAA jitter, motion vectors |
-| [dlss.md](dlss.md) | NVIDIA Streamline SDK, DLSS-D upsampling integration |
+| [dlss.md](dlss.md) | NVIDIA Streamline SDK, DLSS-D upsampling and DLSS-G frame generation |
 | [nvapi_ser.md](nvapi_ser.md) | NVAPI, Shader Execution Reordering (SER) optimization |
 | [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |
 | [light_tree.md](light_tree.md) | RTSL Stage 2 GPU light tree build: sparse/dense buffers, sentinels, atomic float min/max, fused internal-levels |

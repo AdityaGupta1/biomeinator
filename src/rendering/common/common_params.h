@@ -27,7 +27,7 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint linearDepthTargetIdx;
+        uint depthTargetIdx;
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
@@ -40,7 +40,7 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint linearDepthTargetIdx;
+        uint depthTargetIdx;
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;

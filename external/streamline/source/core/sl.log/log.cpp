@@ -43,7 +43,6 @@ namespace sl
 namespace log
 {
 
-#ifdef SL_WINDOWS
 extern bool g_slEnableLogPreMetaDataUniqueWAR = false;
 // The interposer always calls its own logva — no ABI mismatch is possible, so
 // the WAR check is always considered resolved.
@@ -98,7 +97,6 @@ void moveWindowToAnotherMonitor(HWND hwnd, UINT flags)
 
 struct Log : ILog
 {
-    std::hash<std::string> m_hash;
     std::atomic<bool> m_console = false;
     std::atomic<bool> m_pathInvalid = false;
     std::wstring m_path;
@@ -226,6 +224,12 @@ struct Log : ILog
 
     void logva(uint32_t level, ConsoleForeground color, const char *_file, int line, const char *_func, int type, bool isMetaDataUnique, const char *_fmt,...) override
     {
+        // isMetaDataUnique used to be consulted by the formatted-message
+        // dedup hash; the dedup was removed because it silently dropped
+        // events during bug investigations of rapid log call sites.
+        // Parameter is kept in the signature for ABI compatibility.
+        (void)isMetaDataUnique;
+
         if (level > (uint32_t)m_logLevel)
         {
             // Higher level than requested, bail out
@@ -294,7 +298,7 @@ struct Log : ILog
 
         // This thread ID
         auto tid = std::this_thread::get_id();
-        auto logLambda = [this, tid, msg, level, color, file, line, func, type, fmt, formatted, isMetaDataUnique]()->void
+        auto logLambda = [this, tid, msg, level, color, file, line, func, type, fmt, formatted]()->void
         {
             if (m_console && !m_consoleActive)
             {
@@ -370,38 +374,6 @@ struct Log : ILog
             // Actual message will get appended a bit later in this func
             completeLogMessage = oss.str();
 
-            // Safety in case map grows too big like 10K unique messages (which is highly unlikely ever to happen but ...)
-            // However if verbose logging is on allow all messages
-            if (m_logLevel != LogLevel::eVerbose)
-            {
-                if (m_logTimes.size() > 10000)
-                {
-                    m_logTimes.clear();
-                }
-
-                std::string messageHashPrefix = "";
-                if (isMetaDataUnique)
-                {
-                    // We consider source metadata(e.g., thread id, granular timestamp) to make a log message unique in this case
-                    // e.g.: logging "Hello!" from 2 different threads is considered logging 2 different messages
-                    messageHashPrefix = oss_logSourceMetdata.str();
-                }
-
-                auto id = m_hash(messageHashPrefix + message);
-                auto lastLogTime = m_logTimes[id];
-                if (lastLogTime.time_since_epoch().count() > 0)
-                {
-                    // Already logged before, make sure not to spam the log
-                    std::chrono::duration<float, std::milli> diff = std::chrono::system_clock::now() - lastLogTime;
-                    if (diff.count() < m_messageDelayMs)
-                    {
-                        // Show frequent messages every 'messageDelayMs'
-                        return;
-                    }
-                }
-                m_logTimes[id] = std::chrono::system_clock::now();
-            }
-
             completeLogMessage += ' ' + message;
 
             if (formatted)
@@ -438,8 +410,6 @@ struct Log : ILog
     
     float m_messageDelayMs = 5000.0f;
 
-    std::map<size_t, std::chrono::time_point<std::chrono::system_clock>> m_logTimes{};
-
     inline static Log* s_log = {};
     HANDLE m_outHandle{};
 };
@@ -462,8 +432,6 @@ void destroyInterface()
         Log::s_log = {};
     }
 }
-
-#endif // SL_WINDOWS
 
 }
 }

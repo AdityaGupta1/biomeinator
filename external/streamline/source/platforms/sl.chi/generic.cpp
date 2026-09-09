@@ -20,11 +20,9 @@
 * SOFTWARE.
 */
 
-#if defined(SL_WINDOWS)
 #include <d3d12.h>
 #include <d3d11.h>
 #include <dxgi1_6.h>
-#endif // defined(SL_WINDOWS)
 #define __STDC_FORMAT_MACROS 1
 #include <cinttypes>
 #include <utility>
@@ -42,6 +40,9 @@ struct IDXGISwapChain;
 #include "source/core/sl.extra/extra.h"
 #include "source/core/sl.param/parameters.h"
 #include "source/platforms/sl.chi/generic.h"
+#include "source/core/sl.security/secureLoadLibrary.h"
+#include "source/platforms/sl.chi/nvapiCompat.h"
+#include "external/nsight-sdk/SystemsGraphics/include/Impl/NGFX_Core.h"
 #include "nvapi.h"
 
 // {B5504F36-CB88-4B2D-AE64-9CAE29E23CA9}
@@ -87,13 +88,48 @@ namespace sl
 namespace chi
 {
 
+namespace
+{
+void* nsightSecureLoadLibraryCallback(const wchar_t* libName)
+{
+    auto handle{ static_cast<void*>(sl::security::loadLibrary(libName)) };
+    if (!handle)
+    {
+        SL_LOG_VERBOSE("NSight library load failed: %S", libName);
+    }
+    return handle;
+}
+}
+
+void Generic::initNsightActivity()
+{
+    NGFX_SetLibraryLoadFn(nsightSecureLoadLibraryCallback);
+
+    NGFX_ActivityType activity{};
+    const NGFX_Result detected{ NGFX_GetInjectedActivity(&activity) };
+    if (detected != NGFX_Result_Success)
+    {
+        SL_LOG_VERBOSE("NSight SDK activity not detected (%d)!", detected);
+        return;
+    }
+
+    if (!initNsightActivityImpl(activity))
+    {
+        SL_LOG_WARN("NSight SDK activity initialization failed (%d)!", activity);
+        return;
+    }
+
+    m_nsightInitialized = true;
+    SL_LOG_INFO("NSight SDK activity initialized successfully!");
+}
+
 ScopedProfilingSection::ScopedProfilingSection(ICompute* compute, CommandList cmdList, const char* function, sl::Feature feature)
     : ScopedProfilingSection(compute, cmdList)
 {
 #if SL_ENABLE_PROFILING
     std::stringstream str;
     str << function << " " << getFeatureAsStr(feature);
-    m_compute->beginProfiling(m_cmdList, 0, str.str().c_str());
+    m_compute->beginProfiling(m_cmdList, str.str().c_str());
 #endif
 }
 
@@ -114,7 +150,7 @@ ScopedProfilingSection::ScopedProfilingSection(ICompute* compute, CommandList cm
             str << ", ";
         }
     }
-    m_compute->beginProfiling(m_cmdList, 0, str.str().c_str());
+    m_compute->beginProfiling(m_cmdList, str.str().c_str());
     #endif
 }
 
@@ -127,9 +163,8 @@ struct ResourcePool : IResourcePool
 
     ResourcePool(ICompute* compute, const char* vramSegment) : m_compute(compute), m_vramSegment(vramSegment) {};
 
-    virtual void setMaxQueueSize(size_t maxSize) override final
+    virtual void setMaxQueueSize(size_t) override final
     {
-        m_maxQueueSize = maxSize;
     }
 
     virtual HashedResource allocate(Resource source, const char* debugName, ResourceState initialState) override final
@@ -141,77 +176,39 @@ struct ResourcePool : IResourcePool
         std::unique_lock<std::mutex> lock(m_mtx);
         // Look for a free one to recycle
         HashedResource resource{};
+        auto& freeItems = m_free[hash];
+        if (!freeItems.empty())
         {
-            auto& freeItems = m_free[hash];
-            // Incoming resource was allocated and freed before but nothing is free at the moment
-            if (freeItems.empty())
-            {
-                // No free items, check if this was allocated before
-                for (auto& allocated : m_allocated)
-                {
-                    if (hash == allocated.first)
-                    {
-                        // Yes, this was allocated before so it makes sense to wait for an item to be freed
-
-                        // Figure out how much VRAM is available vs how much we need
-                        uint64_t bytesAvailable;
-                        m_compute->getVRAMBudget(bytesAvailable);
-                        ResourceFootprint footprint{};
-                        m_compute->getResourceFootprint(source, footprint);
-
-                        //! IMPORTANT: The more we wait the less VRAM we use but we potentially slow down execution.
-                        //! 
-                        //! Therefore we determine dynamically how much VRAM is available and if we need to wait more (100ms) or less (0.5ms).
-                        //! In addition, we have to check for hard limit on the queue size since even if there is plenty of VRAM it does not 
-                        //! make sense to allocate buffers endlessly. Good example would be the v-sync on mode, in that scenario the longer 
-                        //! waits are normal since present calls will block and wait for the v-sync line before actually presenting the frame.
-                        float resourcePoolWaitUs = bytesAvailable > footprint.totalBytes && allocated.second.size() < m_maxQueueSize ? 500.0f : 100000.0f;
-
-                        // Use more precise timer
-                        extra::AverageValueMeter meter;
-                        meter.begin();
-                        // Prevent deadlocks, time out after a reasonable wait period.
-                        // See comments above about the wait time and VRAM consumption.
-                        while (freeItems.empty() && meter.getElapsedTimeUs() < resourcePoolWaitUs)
-                        {
-                            lock.unlock();
-                            // Better than sleep for modern CPUs with hyper-threading
-                            YieldProcessor();
-                            lock.lock();
-                            meter.end();
-                        }
-                        // Timing out here is fine, that just means more VRAM is needed.
-                        //
-                        // We already have warnings/errors for GPU fence and worker thread timeouts which are serious problems
-                    }
-                }
-            }
-            if (!freeItems.empty())
-            {
-                resource = freeItems.back().second;
-                freeItems.pop_back();
-                m_compute->getResourceState((Resource)resource, resource.accessState());
-                m_allocated[hash].push_back({ std::chrono::system_clock::now(), resource });
-                return resource;
-            }
-        }
-        if (!resource)
-        {
-            m_compute->beginVRAMSegment(m_vramSegment.c_str());
-            Resource res{};
-            m_compute->cloneResource(source, res, debugName, initialState);
-            m_compute->endVRAMSegment();
-            m_compute->getResourceState(res->state, initialState);
-            resource = HashedResource(hash, initialState, res, m_compute, true);
-#if SL_DEBUG_RESOURCE_POOL
-            for (auto& [timestamp, cached] : m_allocated[hash])
-            {
-                assert(res != cached.resource);
-            }
-            SL_LOG_VERBOSE("alloc - hash %llu 0x%p '%s' [%llu,%llu]\n", hash, ((Resource)resource)->native, debugName, m_allocated[hash].size(), m_free[hash].size());
-#endif
+            resource = freeItems.back().second;
+            freeItems.pop_back();
+            m_compute->getResourceState((Resource)resource, resource.accessState());
             m_allocated[hash].push_back({ std::chrono::system_clock::now(), resource });
+            return resource;
         }
+        // No free items available, allocate a new resource.
+        // This is safe because all GPU work using previously recycled resources
+        // was submitted on the same command queue earlier, so it is guaranteed
+        // to complete before any new work referencing the newly allocated resource.
+        // collectGarbage() will reclaim unused pool entries to keep VRAM in check.
+        m_compute->beginVRAMSegment(m_vramSegment.c_str());
+        Resource res{};
+        auto status = m_compute->cloneResource(source, res, debugName, initialState);
+        m_compute->endVRAMSegment();
+        if (status != ComputeStatus::eOk || !res)
+        {
+            SL_LOG_ERROR("Failed to clone resource '%s' for hash %llu", debugName, hash);
+            return HashedResource{};
+        }
+        m_compute->getResourceState(res->state, initialState);
+        resource = HashedResource(hash, initialState, res, m_compute, true);
+#if SL_DEBUG_RESOURCE_POOL
+        for (auto& [timestamp, cached] : m_allocated[hash])
+        {
+            assert(res != cached.resource);
+        }
+        SL_LOG_VERBOSE("alloc - hash %llu 0x%p '%s' [%llu,%llu]\n", hash, ((Resource)resource)->native, debugName, m_allocated[hash].size(), m_free[hash].size());
+#endif
+        m_allocated[hash].push_back({ std::chrono::system_clock::now(), resource });
         return resource;
     }
 
@@ -308,8 +305,6 @@ struct ResourcePool : IResourcePool
     };
 
     std::mutex m_mtx{};
-    //! Some basic default, must be set to a reasonable value based on the use-case
-    std::atomic<size_t> m_maxQueueSize = 2; 
     ICompute* m_compute{};
     std::string m_vramSegment{};
     std::map<uint64_t, std::vector<TimestampedResource>> m_free{};
@@ -330,6 +325,7 @@ ComputeStatus Generic::init(Device device, param::IParameters* params)
     m_parameters = params;
     m_typelessDevice = device;
     params->get(sl::param::global::kPreferenceFlags, (uint64_t*)&m_preferenceFlags);
+    m_cachedReflexSyncParams.version = NV_SET_REFLEX_SYNC_PARAMS_VER1;
     return ComputeStatus::eOk;
 }
 
@@ -870,11 +866,10 @@ ComputeStatus Generic::destroyResource(Resource resource, uint32_t frameDelay)
         manageVRAM(resource, VRAMOperation::eFree);
     }
 
-    if (m_releaseCallback && bufferOrTex2d)
+    // Skip the host release callback for Vulkan swapchain images: they were never allocated by the
+    // host callback, and they need destroyResourceDeferredImpl to clean up the internally-created VkImageView.
+    if (m_releaseCallback && bufferOrTex2d && !(resource->internalFlags & sl::Resource::eVulkanSwapChainImage))
     {
-        //NOTE: We never destroy resources created by the host, only internal ones.
-
-        // This allows host to destroy VK memory etc.
         m_releaseCallback(resource, m_typelessDevice);
         delete resource;
     }
@@ -1280,6 +1275,17 @@ ComputeStatus Generic::getSleepStatus(ReflexState& settings)
     return ComputeStatus::eOk;
 }
 
+ComputeStatus Generic::getFrameGenParams(uint8_t& outFgMultiplier, bool& outDfgControl)
+{
+    NV_GET_SLEEP_STATUS_PARAMS_V1_BFM_37870595 params{};
+    compile_time_assert(sizeof(NV_GET_SLEEP_STATUS_PARAMS_V1_BFM_37870595) == sizeof(NV_GET_SLEEP_STATUS_PARAMS_V1));
+    params.version = NV_GET_SLEEP_STATUS_PARAMS_VER;
+    NVAPI_CHECK(NvAPI_D3D_GetSleepStatus((IUnknown*)m_typelessDevice, (NV_GET_SLEEP_STATUS_PARAMS*)&params));
+    outFgMultiplier = params.fgMultiplier;
+    outDfgControl = params.bDfgControl != 0;
+    return ComputeStatus::eOk;
+}
+
 //TODO: Remove this binary compatible struct once we update the NVAPI headers.
 typedef struct
 {
@@ -1357,6 +1363,36 @@ ComputeStatus Generic::setReflexMarker(PCLMarker marker, uint64_t frameId)
     params.frameID = frameId;
     params.markerType = (NV_LATENCY_MARKER_TYPE)marker;
     NVAPI_CHECK(NvAPI_D3D_SetLatencyMarker((IUnknown*)m_typelessDevice, &params));
+    return ComputeStatus::eOk;
+}
+
+ComputeStatus Generic::setReflexSync(bool enable, int32_t timeInQueueUs, uint32_t timeInQueueUsTarget, uint32_t vblankIntervalUs)
+{
+    std::unique_lock lock(m_mutexReflexSync);
+
+    m_cachedReflexSyncParams.bEnable = enable ? 1 : 0;
+    m_cachedReflexSyncParams.bDisable = enable ? 0 : 1;
+    m_cachedReflexSyncParams.timeInQueueUs = timeInQueueUs;
+    m_cachedReflexSyncParams.timeInQueueUsTarget = timeInQueueUsTarget;
+    m_cachedReflexSyncParams.vblankIntervalUs = vblankIntervalUs;
+
+    NVAPI_CHECK(NvAPI_D3D_SetReflexSync((IUnknown*)m_typelessDevice, (NV_SET_REFLEX_SYNC_PARAMS*)&m_cachedReflexSyncParams));
+
+    m_cachedReflexSyncParams.bEnable = 0;
+    m_cachedReflexSyncParams.bDisable = 0;
+
+    return ComputeStatus::eOk;
+}
+
+ComputeStatus Generic::setReflexSyncFG(uint8_t dfgMaxMultiplier, uint32_t dfgTargetFps, uint8_t fgMultiplier)
+{
+    std::unique_lock lock(m_mutexReflexSync);
+
+    m_cachedReflexSyncParams.fgMultiplier = fgMultiplier;
+    m_cachedReflexSyncParams.dfgMaxMultiplier = dfgMaxMultiplier;
+    m_cachedReflexSyncParams.dfgTargetFps = dfgTargetFps;
+
+    NVAPI_CHECK(NvAPI_D3D_SetReflexSync((IUnknown*)m_typelessDevice, (NV_SET_REFLEX_SYNC_PARAMS*)&m_cachedReflexSyncParams));
     return ComputeStatus::eOk;
 }
 
@@ -1446,7 +1482,6 @@ ComputeStatus Generic::fetchTranslatedResourceFromCache(ICompute* compute, Resou
 
 ComputeStatus Generic::getRefreshRate(WindowHandle window, float& refreshRate)
 {
-#if defined(SL_WINDOWS)
     if (!window)
     {
         return ComputeStatus::eInvalidArgument;
@@ -1524,9 +1559,53 @@ ComputeStatus Generic::getRefreshRate(WindowHandle window, float& refreshRate)
 
     SL_LOG_ERROR("Failed to get refresh rate from window handle 0x%llx", window);
     return ComputeStatus::eError;
-#else
-    return ComputeStatus::eNoImplementation;
-#endif
+}
+
+ComputeStatus Generic::getDisplayId(WindowHandle window, uint32_t& displayId)
+{
+    displayId = 0;
+
+    if (!window)
+    {
+        return ComputeStatus::eInvalidArgument;
+    }
+
+    HWND hwnd = (HWND)window;
+
+    if (!IsWindow(hwnd))
+    {
+        SL_LOG_ERROR("Window handle 0x%llx is not a valid window", window);
+        return ComputeStatus::eError;
+    }
+
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor)
+    {
+        SL_LOG_ERROR("Failed to get monitor from window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    MONITORINFOEXW monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(hMonitor, &monitorInfo))
+    {
+        SL_LOG_ERROR("Failed to get monitor info for window handle 0x%llx", window);
+        return ComputeStatus::eError;
+    }
+
+    char deviceNameA[CCHDEVICENAME];
+    WideCharToMultiByte(CP_ACP, 0, monitorInfo.szDevice, -1, deviceNameA, CCHDEVICENAME, nullptr, nullptr);
+
+    NvU32 nvDisplayId = 0;
+    NvAPI_Status status = NvAPI_DISP_GetDisplayIdByDisplayName(deviceNameA, &nvDisplayId);
+    if (status != NVAPI_OK)
+    {
+        SL_LOG_ERROR("NvAPI_DISP_GetDisplayIdByDisplayName failed for '%s' with status %d", deviceNameA, status);
+        return ComputeStatus::eError;
+    }
+
+    displayId = nvDisplayId;
+    return ComputeStatus::eOk;
 }
 
 ComputeStatus Generic::createResourcePool(IResourcePool** pool, const char* vramSegment)

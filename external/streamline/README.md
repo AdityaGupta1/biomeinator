@@ -1,8 +1,8 @@
-# Streamline (SL) - Version 2.11.1
+# Streamline (SL) - Version 2.14.1
 
 Streamline is an open-sourced cross-IHV solution that simplifies integration of the latest NVIDIA and other independent hardware vendors' super resolution technologies into applications and games. This framework allows developers to easily implement one single integration and enable multiple super-resolution technologies and other graphics effects supported by the hardware vendor.
 
-This repo contains the SDK for integrating Streamline into your application.  This project is currently not accepting contributions.
+This repo contains the SDK for integrating Streamline into your application.
 
 For a high level overview, see the [NVIDIA Developer Streamline page](https://developer.nvidia.com/rtx/streamline)
 
@@ -47,9 +47,9 @@ Running the `setup.bat` script will cause two things to be done:
 
 To build the project, simply open `_project\vs2019\streamline.sln` in Visual Studio, select the desired build configuration and build, or else use the provided build script:
 
-`./build.bat` with `-{debug|develop|production}` (`debug` is default) or use VS IDE and load solution from the `_project` directory
+`./build.bat` with `-{debug|develop|production}` (`debug` is default) and optional architecture `{-amd64|-arm64|-arm64ec}` (`amd64` is default), or use VS IDE and load solution from the `_project` directory
 
-The default setting is to target x86_64 CPU architecture.
+The default setting is to target x86_64 CPU architecture (`amd64`).
 
 > NOTE: To build the project minimal configuration is needed. Any version of Windows 10 will do. Then
 run the setup and build scripts as described here above. That's it. The specific version of Windows, NVIDIA driver,
@@ -130,3 +130,7 @@ A sample Streamline plugin source code is located [here](source/plugins/sl.templ
 ## Sample App and Source
 
 A sample application using Streamline may be found in [this git repo](https://github.com/NVIDIA-RTX/Streamline_Sample)
+
+## Contributing
+
+For information on reporting issues and contributing changes, see [CONTRIBUTING.md](CONTRIBUTING.md).

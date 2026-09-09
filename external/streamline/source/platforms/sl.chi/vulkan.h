@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2022-2023 NVIDIA CORPORATION. All rights reserved
+* Copyright (c) 2022-2026 NVIDIA CORPORATION. All rights reserved
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -22,19 +22,27 @@
 
 #pragma once
 
-#if defined(SL_WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <wrl.h>
-#endif
 #include <inttypes.h>
 #include <mutex>
+#include <atomic>
 
 #include "source/core/sl.thread/thread.h"
 #include "source/platforms/sl.chi/generic.h"
 #include "source/core/sl.interposer/vulkan/layer.h"
 
 #define CHI_CHECK_VK(f) { auto _r = f; if (_r != chi::ComputeStatus::ComputeStatus::eOk) { SL_LOG_ERROR( "%s failed error %u", #f, _r); return VK_INCOMPLETE; } };
+
+// Errors are negative so don't check for VK_SUCCESS only since there are other 'non fatal' values > 0, we show them as warnings
+#define VK_CHECK(f) do {auto _r = f;if(_r < 0){SL_LOG_ERROR("%s failed - error %d",#f,_r); return ComputeStatus::eError;} else if(_r != 0) {SL_LOG_WARN("%s - warning %d",#f,_r);}} while(0)
+#define VK_CHECK_RV(f) do {auto _r = f;if(_r < 0){SL_LOG_ERROR("%s failed - error %d",#f,_r); return;} else if(_r != 0) {SL_LOG_WARN("%s - warning %d",#f,_r);}} while(0)
+#define VK_CHECK_RF(f) do {auto _r = f;if(_r < 0){SL_LOG_ERROR("%s failed - error %d",#f,_r); return false;} else if(_r != 0) {SL_LOG_WARN("%s - warning %d",#f,_r);}} while(0)
+#define VK_CHECK_RN(f) do {auto _r = f;if(_r < 0){SL_LOG_ERROR("%s failed - error %d",#f,_r); return nullptr;} else if(_r != 0) {SL_LOG_WARN("%s - warning %d",#f,_r);}} while(0)
+// VK_CHECK_RI lives in source/core/sl.interposer/vulkan/layer.h (included above) so wrapper.cpp can use it without including vulkan.h
+#define VK_CHECK_RE(res, f) do {res = f;if(res < 0){SL_LOG_ERROR("%s failed - error %d",#f,res); return res;} else if(res != 0) {SL_LOG_WARN("%s - warning %d",#f,res);}} while(0)
+#define VK_CHECK_RWS(f) do {auto _r = f;if(_r < 0){SL_LOG_ERROR("%s failed - error %d",#f,_r); return WaitStatus::eError;} else if(_r == VK_TIMEOUT) {SL_LOG_WARN("%s - timed out", #f); return WaitStatus::eTimeout;}} while(0)
 
 namespace sl
 {
@@ -213,7 +221,11 @@ class Vulkan : public Generic
     VkCommandBuffer m_cmdBuffer;
 
     IReflexVk* m_reflex;
-    
+
+    // Latched true once the Reflex plugin detects the app emitting its own PRESENT markers; gates
+    // whether setAsyncFrameMarker suppresses SL's own PRESENT markers (see setAppOwnsPresentMarkers).
+    std::atomic<bool> m_appOwnsPresentMarkers = false;
+
     thread::ThreadContext<DispatchData> m_dispatchContext;
 
     struct PerfData
@@ -272,6 +284,16 @@ class Vulkan : public Generic
 
     ComputeStatus fillSupportedDeviceExtensions();
     std::unordered_map<std::string, uint32_t> m_supportedDeviceExtensions = {};
+protected:
+    bool initNsightActivityImpl(NGFX_ActivityType activity) override final;
+
+#if SL_ENABLE_PROFILING
+    ComputeStatus beginProfilingImpl(CommandList cmdList, const char* marker, uint8_t r, uint8_t g, uint8_t b) override final;
+    ComputeStatus endProfilingImpl(CommandList cmdList) override final;
+    ComputeStatus beginProfilingQueueImpl(CommandQueue cmdQueue, const char* marker, uint8_t r, uint8_t g, uint8_t b) override final;
+    ComputeStatus endProfilingQueueImpl(CommandQueue cmdQueue) override final;
+#endif
+
 public:
 
     virtual ComputeStatus init(Device InDevice, param::IParameters* params);
@@ -345,6 +367,16 @@ public:
 
     virtual ComputeStatus getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer) override final;
     
+    // Hybrid GPU support - Vulkan doesn't support hybrid GPU yet
+    virtual ComputeStatus notifySwapChainCreated(SwapChain chain, uint32_t bufferCount) override final { return ComputeStatus::eOk; }
+    virtual void notifySwapChainDestroyed(SwapChain chain) override final {}
+    virtual ChiCommandQueue* getHybridPresentationQueue() override final { return nullptr; }
+    virtual ComputeStatus copyFrameToHybridBackBuffer(SwapChain chain, Resource source,
+                                                      const HybridCopyParams& params,
+                                                      CommandQueue pacerQueue) override final { return ComputeStatus::eOk; }
+    virtual ComputeStatus waitForHybridCopyComplete(SwapChain chain) override final { return ComputeStatus::eOk; }
+    virtual ComputeStatus notifyHybridPresent(CommandQueue queue) override final { return ComputeStatus::eOk; }
+
     virtual ComputeStatus clearView(CommandList InCmdList, Resource InResource, const float4 Color, const RECT * pRect, unsigned int NumRects, CLEAR_TYPE &outType) override final;
 
     virtual ComputeStatus setDebugName(Resource InOutResource, const char InFriendlyName[]) override final;
@@ -359,9 +391,21 @@ public:
     virtual ComputeStatus getLatencyReport(ReflexState& settings) override final;
     virtual ComputeStatus sleep() override final;
     virtual ComputeStatus setReflexMarker(PCLMarker marker, uint64_t frameId) override final;
+
+    // areLatencyIdsEnabled() is intentionally not overridden: the base returns false always (see
+    // ICompute::areLatencyIdsEnabled), so SL never tags its own submissions until we have a way to
+    // learn whether the app tags its own.
+    bool areLatencyIdsSupported() const override final;
     virtual ComputeStatus notifyOutOfBandCommandQueue(ChiCommandQueue* queue, OutOfBandCommandQueueType type) override final;
     virtual ComputeStatus setAsyncFrameMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) override final;
     virtual ComputeStatus setLatencyMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) override final;
+    virtual ComputeStatus getFrameGenParams(uint8_t& outFgMultiplier, bool& outDfgControl) override final { return ComputeStatus::eNotSupported; }
+    virtual ComputeStatus setReflexSync(bool enable, int32_t timeInQueueUs, uint32_t timeInQueueUsTarget, uint32_t vblankIntervalUs) override final { return ComputeStatus::eNotSupported; }
+    virtual ComputeStatus setReflexSyncFG(uint8_t dfgMaxMultiplier, uint32_t dfgTargetFps, uint8_t fgMultiplier) override final { return ComputeStatus::eNotSupported; }
+    bool appOwnsPresentMarkers() const override final { return m_appOwnsPresentMarkers; }
+    void setAppOwnsPresentMarkers(bool owns) override final { m_appOwnsPresentMarkers = owns; }
+    virtual ComputeStatus notifyCreateSwapchain(SwapChain chain, bool isLatencyModeEnabled) override final;
+    virtual ComputeStatus notifyDestroySwapchain(SwapChain chain) override final;
 
     // Helper methods for NGX feature requirements and slIsFeatureSupported
     static ComputeStatus createInstanceAndFindPhysicalDevice(uint32_t id, chi::Instance& instance, chi::PhysicalDevice& device);
@@ -372,6 +416,16 @@ public:
 
     // check if an extension is available
     virtual ComputeStatus isDeviceExtensionSupported(const char* extension, uint32_t version) override final;
+
+    ComputeStatus setSwapChainPrivateData(void* nativeSwapChain, void* data) override final;
+    ComputeStatus getSwapChainPrivateData(void* nativeSwapChain, void** data) override final;
+
+private:
+    VkPrivateDataSlot m_privateDataSlot{};
+    // Final synchronization2-enabled state of the device, read once from the interposer-published
+    // param at init. Drives whether command-list contexts submit via vkQueueSubmit2. False (default)
+    // when an older interposer never published it - the OTA-safe fallback keeps the v1 vkQueueSubmit.
+    bool m_sync2SubmitEnabled{ false };
 };
 
 }

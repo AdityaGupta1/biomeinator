@@ -23,6 +23,11 @@ void loadScene(const std::string& filePathStr);
 void resize();
 void queueResize();
 
+// PCL Stats posts this window message to measure input sampling latency; 0 when PCL is not loaded.
+// The message pump answers it with queuePclPing so the next frame sends the ping marker.
+uint32_t getPclStatsWindowMessage();
+void queuePclPing();
+
 void render();
 
 void queueScreenshot(const bool useTestOutputPath = false);

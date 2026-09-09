@@ -20,14 +20,8 @@
 * SOFTWARE.
 */
 
-#ifdef SL_WINDOWS
 #include <Windows.h>
 #include <versionhelpers.h>
-#else
-#include <dlfcn.h>
-#include <dirent.h>
-#include <unistd.h>
-#endif
 
 #include <set>
 #include <sstream>
@@ -81,6 +75,10 @@ public:
     virtual const HookList& getAfterHooks(FunctionHookID functionHookID) override final;
     virtual const HookList& getBeforeHooksWithoutLazyInit(FunctionHookID functionHookID) override final;
     virtual const HookList& getAfterHooksWithoutLazyInit(FunctionHookID functionHookID) override final;
+
+    virtual void setSurfaceWindow(VkSurfaceKHR surface, HWND hwnd) override final;
+    virtual void removeSurfaceWindow(VkSurfaceKHR surface) override final;
+    virtual HWND getSurfaceWindow(VkSurfaceKHR surface) const override final;
 
     virtual Result setHostSDKVersion(uint64_t sdkVersion) override final;
 
@@ -388,6 +386,9 @@ private:
     sl::ota::IOTA* m_ota{};
 
     std::set<std::wstring> m_otaOverridePaths;
+
+    //! Surface-to-HWND mapping for Vulkan, populated before device/plugin init
+    std::vector<std::pair<VkSurfaceKHR, HWND>> m_surfaceWindows{};
 };
 
 IPluginManager* getInterface()
@@ -539,11 +540,7 @@ Result PluginManager::setFeatureEnabled(Feature feature, bool value)
 
 Result PluginManager::findPlugins(const fs::path& directory, std::vector<fs::path>& files)
 {
-#ifdef SL_WINDOWS
     std::wstring dynamicLibraryExt = L".dll";
-#else
-    std::wstring dynamicLibraryExt = L".so";
-#endif
 
     SL_LOG_INFO("Looking for plugins in %S ...", directory.c_str());
     try
@@ -770,11 +767,21 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
                     if (duplicateIsOtaOverride)
                     {
                         // We know that the OTA override plugins are always at the front of the list, so the precedence is already handled.
-                        SL_LOG_INFO("Plugin %s is an OTA override, keeping it over %s", duplicatedPluginById->name.c_str(), plugin->name.c_str());
+                        SL_LOG_INFO("Plugin %s v%s is an OTA override ('%ls'), keeping it over v%s ('%ls')",
+                            duplicatedPluginById->name.c_str(),
+                            duplicatedPluginById->version.toStr().c_str(),
+                            duplicatedPluginById->fullpath.wstring().c_str(),
+                            plugin->version.toStr().c_str(),
+                            plugin->fullpath.wstring().c_str());
                     }
                     else if (plugin->version > duplicatedPluginById->version)
                     {
-                        SL_LOG_INFO("Plugin %s is newer (%s) will choose that", plugin->name.c_str(), plugin->version.toStr().c_str());
+                        SL_LOG_INFO("Plugin %s v%s ('%ls') supersedes v%s ('%ls')",
+                            plugin->name.c_str(),
+                            plugin->version.toStr().c_str(),
+                            plugin->fullpath.wstring().c_str(),
+                            duplicatedPluginById->version.toStr().c_str(),
+                            duplicatedPluginById->fullpath.wstring().c_str());
                         newerVersion = true;
                     }
                 }
@@ -792,7 +799,12 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
             }
             else if (duplicatedPluginById && !newerVersion)
             {
-                SL_LOG_WARN("Ignoring plugin '%s' since it has duplicated unique id", plugin->name.c_str());
+                SL_LOG_WARN("Ignoring plugin '%s' v%s ('%ls') - duplicate of already-loaded v%s ('%ls')",
+                    plugin->name.c_str(),
+                    plugin->version.toStr().c_str(),
+                    plugin->fullpath.wstring().c_str(),
+                    duplicatedPluginById->version.toStr().c_str(),
+                    duplicatedPluginById->fullpath.wstring().c_str());
                 freePlugin(&plugin);
 
                 // XXX[ljm] Plugins can inject global state in their 'onLoad'
@@ -873,13 +885,15 @@ Result PluginManager::mapPlugins(std::vector<fs::path>& files)
             // unload the old plugin and remove it from the list.
             if (newerVersion)
             {
-                SL_LOG_INFO("A duplicate was found, but a newer plugin version was available");
                 for (auto it = m_plugins.begin(); it != m_plugins.end(); it++)
                 {
                     if (*it == duplicatedPluginById)
                     {
-                        // Remove the plugin from the list and free it
-                        SL_LOG_INFO("Removing plugin with name: %s superseded by plugin %s", duplicatedPluginById->name.c_str(), plugin->name.c_str());
+                        SL_LOG_INFO("Removing %s v%s ('%ls') replaced by v%s",
+                            duplicatedPluginById->name.c_str(),
+                            duplicatedPluginById->version.toStr().c_str(),
+                            duplicatedPluginById->fullpath.wstring().c_str(),
+                            plugin->version.toStr().c_str());
                         m_plugins.erase(it);
                         freePlugin(&duplicatedPluginById);
                         break;
@@ -1044,6 +1058,13 @@ Result PluginManager::loadPlugins()
     }
 
     param::getInterface()->set(param::global::kPluginPath, (void*)m_pluginPath.c_str());
+
+    // Expose the surface-to-HWND lookup function so plugins can call it without linking to the plugin manager
+    static auto s_getSurfaceWindow = +[](VkSurfaceKHR surface) -> HWND
+    {
+        return getInterface()->getSurfaceWindow(surface);
+    };
+    param::getInterface()->set(param::interposer::kPFunGetSurfaceWindow, (void*)s_getSurfaceWindow);
 
     SL_CHECK(mapPlugins(pluginList));
     
@@ -1303,6 +1324,16 @@ void PluginManager::populateLoaderJSON(uint32_t deviceType, json& config)
         config["ngx"]["engineType"] = m_engine;
         config["ngx"]["engineVersion"] = m_engineVersion;
         config["ngx"]["projectId"] = m_projectId;
+        
+#if defined(SL_UNITTEST_ONLY_CODE)
+        // Pass OTA cache path to plugins so they can sync their OTA path override
+        // NOTE: Only used for unit tests - do not rely on this in production plugins
+        std::filesystem::path ngxPath;
+        if (m_ota->getNGXPath(ngxPath))
+        {
+            config["ngx"]["otaCachePath"] = ngxPath.string();
+        }
+#endif
 
         config["preferences"]["flags"] = m_pref.flags;
 #if !defined(SL_UNITTEST_ONLY_CODE)
@@ -1511,6 +1542,26 @@ const HookList& PluginManager::getBeforeHooksWithoutLazyInit(FunctionHookID func
 const HookList& PluginManager::getAfterHooksWithoutLazyInit(FunctionHookID functionHookID)
 {
     return m_afterHooks[(uint32_t)functionHookID];
+}
+
+void PluginManager::setSurfaceWindow(VkSurfaceKHR surface, HWND hwnd)
+{
+    m_surfaceWindows.emplace_back(surface, hwnd);
+}
+
+void PluginManager::removeSurfaceWindow(VkSurfaceKHR surface)
+{
+    m_surfaceWindows.erase(
+        std::remove_if(m_surfaceWindows.begin(), m_surfaceWindows.end(),
+            [surface](const auto& it) { return it.first == surface; }),
+        m_surfaceWindows.end());
+}
+
+HWND PluginManager::getSurfaceWindow(VkSurfaceKHR surface) const
+{
+    const auto it = std::find_if(m_surfaceWindows.begin(), m_surfaceWindows.end(),
+        [surface](const auto& entry) { return entry.first == surface; });
+    return (it != m_surfaceWindows.end()) ? it->second : NULL;
 }
 
 PluginManager::PluginManager()

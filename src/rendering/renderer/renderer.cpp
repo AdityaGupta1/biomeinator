@@ -137,6 +137,13 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eUltraPerformance,
 };
 
+static void setFrameGenMode(sl::DLSSGMode mode)
+{
+    renderState.frameGen.options.mode = mode;
+    renderState.frameGen.options.numFramesToGenerate = 1; // 2x; higher multipliers need Blackwell
+    CHECK_SL_RESULT(slDLSSGSetOptions(renderState.dlss.viewportHandle, renderState.frameGen.options));
+}
+
 void resize()
 {
     if (!renderState.swapChain)
@@ -191,17 +198,28 @@ void resize()
         renderState.dlss.mipBias = 0.f;
     }
 
+    // While interpolating, DLSS-G presents from its own thread, and section 12 of its guide requires
+    // it to be off across any ResizeBuffers to rule out a deadlock with that thread
+    if (renderState.frameGen.active)
+    {
+        setFrameGenMode(sl::DLSSGMode::eOff);
+    }
+
     flush();
 
     CHECK_HRESULT(renderState.proxySwapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, renderState.swapChainFlags));
-    if (renderState.useWaitableSwapChain)
+    if (isWaitableSwapChainActive())
     {
         CHECK_HRESULT(renderState.swapChain->SetMaximumFrameLatency(2));
-        if (renderState.frameLatencyWaitable)
-        {
-            CloseHandle(renderState.frameLatencyWaitable);
-        }
+        closeFrameLatencyWaitable();
         renderState.frameLatencyWaitable = renderState.swapChain->GetFrameLatencyWaitableObject();
+    }
+
+    // Loading the plugin is not enough on its own; interpolation only starts once the mode is set.
+    // Every swap chain creation is followed by a resize, so this is the one place that switches it on.
+    if (renderState.frameGen.active)
+    {
+        setFrameGenMode(sl::DLSSGMode::eOn);
     }
 
     renderState.dev_gbuffer.Reset();
@@ -240,6 +258,11 @@ void resize()
     for (RtTarget* rtTarget : renderState.allRtTargets)
     {
         rtTarget->reset();
+        // Toggling frame generation queues a resize, so the hudless copy's VRAM is only held while it is read
+        if (rtTarget == &renderState.hudlessTarget && !renderState.frameGen.active)
+        {
+            continue;
+        }
         if (rtTarget->isFullSize)
         {
             rtTarget->setDimensions(viewportWidth, viewportHeight);
@@ -257,7 +280,7 @@ void resize()
         uav.pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx();
         uav.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx();
         uav.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx();
-        uav.linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx();
+        uav.depthTargetIdx = renderState.depthTarget.getUavIdx();
 
         uav.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx();
         uav.motionTargetIdx = renderState.motionTarget.getUavIdx();
@@ -268,7 +291,7 @@ void resize()
         srv.pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx();
         srv.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx();
         srv.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx();
-        srv.linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx();
+        srv.depthTargetIdx = renderState.depthTarget.getSrvIdx();
 
         srv.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx();
         srv.motionTargetIdx = renderState.motionTarget.getSrvIdx();
@@ -297,6 +320,16 @@ void resize()
 void queueResize()
 {
     renderState.needsResize = true;
+}
+
+uint32_t getPclStatsWindowMessage()
+{
+    return renderState.frameGen.pclStatsWindowMessage;
+}
+
+void queuePclPing()
+{
+    renderState.frameGen.pclPingPending = true;
 }
 
 // state = state the resource should be in when SL (DLSS) is invoked
@@ -355,6 +388,34 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 static void beginFrame();
 static void submitCmd();
 
+// Queried once per frame, right after Present, for two things:
+//
+// - DLSS-G fails quietly, still presenting real frames (with a pink overlay) and reporting the
+//   reason only through its state. Section 14.3 of its guide says to turn it off in that case, which
+//   is done through the setting so the GUI checkbox reflects it and the user can try again.
+// - numFramesActuallyPresented counts frames presented since the previous query, which is exactly
+//   one app frame here, and is what the FPS counter needs to report presented rather than rendered
+//   frames
+//
+// Options are deliberately not passed: a stats-only query has no use for them, and passing them
+// with DLSSGFlags::eRequestVRAMEstimate set would make DLSS-G recompute a VRAM estimate every frame.
+static void updateFrameGenState()
+{
+    sl::DLSSGState state{};
+    if (SL_FAILED(result, slDLSSGGetState(renderState.dlss.viewportHandle, state, nullptr)))
+    {
+        return;
+    }
+
+    renderState.frameGen.framesPresentedLastFrame = std::max(state.numFramesActuallyPresented, 1u);
+
+    if (state.status != sl::DLSSGStatus::eOk)
+    {
+        Logger::logWarning("DLSS-G reported status 0x%x, turning frame generation off", static_cast<uint32_t>(state.status));
+        SettingsManager::setAsBool("frameGeneration", false);
+    }
+}
+
 // Fog strength peaks around sunrise and sunset: full within fogFullStrengthSeconds of the sun
 // crossing the horizon, fading to zero with smoothstep by fogFadeEndSeconds away.
 static constexpr float fogPeakSigmaS = 0.004f;
@@ -377,6 +438,9 @@ static float computeFogSigmaS(const float animTime)
 
 void render()
 {
+    // Rebuilds the swap chain when it changes, so it has to settle before any of this frame's work
+    setFrameGenerationActive(isFrameGenerationRequested());
+
     if (renderState.needsResize)
     {
         resize();
@@ -402,46 +466,78 @@ void render()
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);
 
-    beginFrame();
-
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
     const bool useDlss = antialiasingMode == AntialiasingMode::DLSS;
 
-    sl::FrameToken* frameToken;
-    sl::Constants slConstants;
-    if (useDlss)
+    // Reflex and PCL run whenever frame generation is available rather than only while it is on:
+    // DLSS-G matches its inputs to the frame index carried by the present markers, so the markers
+    // have to already be in place and correctly paired by the time it is switched on
+    const bool useReflex = renderState.frameGen.supported;
+
+    sl::FrameToken* frameToken = nullptr;
+    if (useDlss || useReflex)
     {
         CHECK_SL_RESULT(slGetNewFrameToken(frameToken));
+    }
 
+    if (useReflex)
+    {
+        CHECK_SL_RESULT(slReflexSleep(*frameToken));
+        if (renderState.frameGen.pclPingPending)
+        {
+            renderState.frameGen.pclPingPending = false;
+            CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePCLatencyPing, *frameToken));
+        }
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::eSimulationStart, *frameToken));
+    }
+
+    beginFrame();
+
+    sl::Constants slConstants{};
+    if (useDlss)
+    {
         {
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&renderState.pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&renderState.dlssOutputTarget);
-            sl::Resource linearDepthResource = makeSlResource(&renderState.linearDepthTarget);
+            sl::Resource depthResource = makeSlResource(&renderState.depthTarget);
             sl::Resource motionResource = makeSlResource(&renderState.motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&renderState.diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&renderState.specularAlbedoTarget);
             sl::Resource normalsAndRoughnessResource = makeSlResource(&renderState.normalsAndRoughnessTarget);
             sl::Resource specularHitDistanceResource = makeSlResource(&renderState.specularHitDistanceTarget);
+            sl::Resource hudlessResource = makeSlResource(&renderState.hudlessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-            sl::ResourceTag resourceTags[] = {
-                {&pathTracingResource, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&dlssOutputResource, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.viewportExtent},
-                {&linearDepthResource, sl::kBufferTypeLinearDepth, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&motionResource, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&diffuseAlbedoResource, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
-                {&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &renderState.dlss.renderExtent},
+            std::vector<sl::ResourceTag> resourceTags;
+            const auto addTag = [&resourceTags](sl::Resource* resource, sl::BufferType type, sl::Extent* extent)
+            {
+                resourceTags.push_back({ resource, type, sl::ResourceLifecycle::eValidUntilPresent, extent });
             };
+
+            addTag(&pathTracingResource, sl::kBufferTypeScalingInputColor, &renderState.dlss.renderExtent);
+            addTag(&dlssOutputResource, sl::kBufferTypeScalingOutputColor, &renderState.dlss.viewportExtent);
+            addTag(&depthResource, sl::kBufferTypeDepth, &renderState.dlss.renderExtent);
+            addTag(&motionResource, sl::kBufferTypeMotionVectors, &renderState.dlss.renderExtent);
+            addTag(&diffuseAlbedoResource, sl::kBufferTypeAlbedo, &renderState.dlss.renderExtent);
+            addTag(&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, &renderState.dlss.renderExtent);
+            addTag(&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, &renderState.dlss.renderExtent);
+            addTag(&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, &renderState.dlss.renderExtent);
+
+            // DLSS-G reads the depth and motion vectors tagged above and only adds the hudless copy
+            if (renderState.frameGen.active)
+            {
+                addTag(&hudlessResource, sl::kBufferTypeHUDLessColor, &renderState.dlss.viewportExtent);
+            }
             // clang-format on
 
-            CHECK_SL_RESULT(
-                slSetTagForFrame(*frameToken, renderState.dlss.viewportHandle, resourceTags, _countof(resourceTags), renderState.cmdList.Get()));
+            CHECK_SL_RESULT(slSetTagForFrame(*frameToken,
+                                             renderState.dlss.viewportHandle,
+                                             resourceTags.data(),
+                                             static_cast<uint32_t>(resourceTags.size()),
+                                             renderState.cmdList.Get()));
         }
 
-        slConstants = {};
         slConstants.depthInverted = sl::Boolean::eFalse;
         slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
         slConstants.motionVectors3D = sl::Boolean::eFalse;
@@ -610,6 +706,12 @@ void render()
             voxelBoundsMax_WS.y - globalInstanceOffset.y,
             voxelBoundsMax_WS.z - globalInstanceOffset.z,
         };
+    }
+
+    if (useReflex)
+    {
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::eSimulationEnd, *frameToken));
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::eRenderSubmitStart, *frameToken));
     }
 
     ID3D12DescriptorHeap* const descHeaps[] = { renderState.sharedDescriptorHeap.Get() };
@@ -815,6 +917,23 @@ void render()
 
     GpuProfiler::endScope(renderState.cmdList.Get());
 
+    // Snapshot the finished scene before the GUI is drawn over it, so frame generation interpolates
+    // the scene on its own; without this the overlay smears across the generated frames
+    if (renderState.frameGen.active)
+    {
+        GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "hudless copy");
+
+        renderState.hudlessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+        BufferHelper::stateTransitionResourceBarrier(
+            renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        renderState.cmdList->CopyResource(renderState.hudlessTarget.getTarget(), backBuffer.Get());
+
+        BufferHelper::stateTransitionResourceBarrier(
+            renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        renderState.hudlessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
+
     if (renderState.screenshotRequest.active)
     {
         captureQueuedScreenshot();
@@ -829,9 +948,24 @@ void render()
     BufferHelper::stateTransitionResourceBarrier(
         renderState.cmdList.Get(), backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
+    // The postprocess pass moved these to PIXEL_SHADER_RESOURCE, but frame generation reads them at
+    // Present and expects the state their tags declared
+    if (renderState.frameGen.active)
+    {
+        BufferHelper::TransitionBatch batch;
+        renderState.motionTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderState.depthTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        batch.submit(renderState.cmdList.Get());
+    }
+
     GpuProfiler::endFrame(renderState.cmdList.Get());
 
     submitCmd();
+
+    if (useReflex)
+    {
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::eRenderSubmitEnd, *frameToken));
+    }
 
     frameCtx.fenceValue = renderState.fence.signal(renderState.graphicsCmdQueue.Get());
 
@@ -852,7 +986,22 @@ void render()
         presentFlags = renderState.allowTearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
     }
 
+    if (useReflex)
+    {
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePresentStart, *frameToken));
+    }
+
     CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
+
+    if (useReflex)
+    {
+        CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePresentEnd, *frameToken));
+    }
+
+    if (renderState.frameGen.active)
+    {
+        updateFrameGenState();
+    }
 
     ++renderState.frameNumber;
     renderState.frameCtxIdx = (renderState.frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -880,7 +1029,7 @@ static void beginFrame()
 {
     FrameContext& frame = renderState.frameCtxs[renderState.frameCtxIdx];
 
-    if (renderState.useWaitableSwapChain)
+    if (isWaitableSwapChainActive())
     {
         WaitForSingleObjectEx(renderState.frameLatencyWaitable, 1000 /*ms*/, true);
     }
@@ -978,8 +1127,9 @@ void destroy()
     renderState.dev_gbufferShaderIds.Reset();
     renderState.dev_ptShaderIds.Reset();
 
-    renderState.proxySwapChain.Reset();
-    renderState.swapChain.Reset();
+    releaseSwapChain();
+    renderState.proxyFactory.Reset();
+    renderState.factory.Reset();
     renderState.rtvHeap.Reset();
     renderState.sharedDescriptorHeap.Reset();
 
@@ -993,10 +1143,7 @@ void destroy()
 
     renderState.fence.reset();
 
-    if (renderState.useWaitableSwapChain && renderState.frameLatencyWaitable)
-    {
-        CloseHandle(renderState.frameLatencyWaitable);
-    }
+    closeFrameLatencyWaitable();
 
     renderState.graphicsCmdQueue.Reset();
 

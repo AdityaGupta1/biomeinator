@@ -22,12 +22,7 @@
 
 #pragma once
 
-#ifdef SL_WINDOWS
 #include <windows.h>
-#else
-#include <stdarg.h>
-#include "include/sl.h"
-#endif
 #include <string>
 #include <atomic>
 #include <cassert>
@@ -46,13 +41,6 @@ enum class LogLevel : uint32_t;
 
 namespace log
 {
-
-#ifndef SL_WINDOWS
-#define FOREGROUND_BLUE 1
-#define FOREGROUND_GREEN 2
-#define FOREGROUND_RED 4
-#define FOREGROUND_INTENSITY 8
-#endif
 
 enum ConsoleForeground
 {

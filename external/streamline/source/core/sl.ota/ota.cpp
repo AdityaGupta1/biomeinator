@@ -44,13 +44,11 @@
 
 #include "nvapi.h"
 
-#ifdef SL_WINDOWS
 #include <ShlObj.h>
 #include <wininet.h>
 #pragma comment(lib,"shlwapi.lib")
 #pragma comment(lib, "Urlmon.lib")
 #pragma comment(lib, "Wininet.lib")
-#endif
 
 namespace
 {
@@ -60,7 +58,6 @@ sl::ota::OTA s_ota = {};
 void execThreadProc(const std::wstring& command)
 {
     std::string output;
-#ifdef SL_WINDOWS
     HANDLE readPipe, writePipe;
     SECURITY_ATTRIBUTES security;
     STARTUPINFOW        start;
@@ -144,7 +141,6 @@ void execThreadProc(const std::wstring& command)
     {
         SL_LOG_ERROR("Failed to create pipe");
     }
-#endif
     SL_LOG_VERBOSE("execThreadProc: %ls", command.c_str());
 
     // Append a '\n' here so that SL uses "unformatted" logs. The output
@@ -303,6 +299,11 @@ bool OTA::getNGXPath(std::filesystem::path& ngxPath) const
 void OTA::setNGXPathOverride(const std::optional<std::filesystem::path> ngxPath)
 {
     m_ngxPathOverride = ngxPath;
+}
+
+void OTA::setOTAOverrideEnabled(std::optional<bool> enabled)
+{
+    m_otaOverrideEnabled = enabled;
 }
 
 bool OTA::getDriverPath(std::filesystem::path& driverPath) const
@@ -1030,12 +1031,24 @@ bool OTA::getOTAPluginForFeature(Feature featureID, const Version &apiVersion, s
     // well, this at least matches the tiering of the comment above
     uint32_t pluginCmsid = useOverride ? kOverrideCmsId : kDefaultCmsId;
     std::wstring hashedCmsid = extra::toWStr("_" + cmsIdToHexStr(hashCmsId(pluginCmsid)));
+#if defined(_M_ARM64)
+    // Native aarch64, search the aarch64 subdirectory.
+    std::filesystem::path pluginPath = ngxPath /
+                                (L"sl_" + extra::toWStr(name_version)) /
+                                L"versions" /
+                                otaVersionString /
+                                L"files" /
+                                L"aarch64" /
+                                (extra::toWStr(extra::toHexStr<uint32_t>(gpuArch, 3)) + hashedCmsid + L".dll");
+#else
+    // arm64ec or amd64, search the regular OTA path.
     std::filesystem::path pluginPath = ngxPath /
                                 (L"sl_" + extra::toWStr(name_version)) /
                                 L"versions" /
                                 otaVersionString /
                                 L"files" /
                                 (extra::toWStr(extra::toHexStr<uint32_t>(gpuArch, 3)) + hashedCmsid + L".dll");
+#endif
 
     // Check if exists
     if (!fs::exists(pluginPath))

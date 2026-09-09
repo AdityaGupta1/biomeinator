@@ -22,8 +22,6 @@
 
 #ifdef SL_ENABLE_EXCEPTION_HANDLING
 
-#ifdef SL_WINDOWS
-
 #include "include/sl.h"
 #include "source/core/sl.log/log.h"
 #include "source/core/sl.exception/exception.h"
@@ -137,5 +135,4 @@ void destroyInterface()
 }
 }
 
-#endif // SL_WINDOWS
 #endif // SL_ENABLE_EXCEPTION_HANDLING
