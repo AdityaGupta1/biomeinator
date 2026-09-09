@@ -28,8 +28,8 @@ static const float proceduralColorHueEnd = 320.f / 360.f;
 static const float proceduralColorSaturation = 0.8f;
 // Every hue on the ramp is scaled to this luminance. At a fixed value the sweep's own luminance
 // swings about eightfold (green is bright, the blue midpoint is very dark), which reads as the
-// clusters pulsing in brightness as the ramp drifts rather than changing color. Roughly the mean
-// of the unequalized sweep, so overall brightness is unchanged.
+// clusters pulsing in brightness as the ramp drifts rather than changing color. Equalizing pushes
+// the dark hues' channels well above 1, which is why this is only for emission.
 static const float proceduralColorLuminance = 1.f;
 
 float3 getProceduralColor(const uint triangleFlags, const float3 pos_WS)

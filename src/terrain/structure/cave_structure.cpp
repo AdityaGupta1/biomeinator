@@ -136,15 +136,16 @@ inline constexpr int crystalKneeSurfaceSearchDist = 6;
 // Widest a cluster reaches in XZ: the outermost knee, the mound being far narrower
 inline constexpr int crystalClusterMaxReachXZ = 10;
 
-static bool isCrystalBlock(Block block)
+// Natural cave rock a knee may stand on. The scan that finds it also sees blocks written by
+// structures filled earlier and by this fill's own mound, so the accepted set is a whitelist rather
+// than "anything solid" (see knowledge/terrain/structure_system.md).
+static bool isCrystalKneeGroundBlock(Block block)
 {
-    return block == Block::CRYSTAL_CORE || block == Block::WHITE_CRYSTAL;
+    return block == Block::BASALT || block == Block::CRACKED_BASALT || block == Block::STONE;
 }
 
-// Discs from the anchor to the peak, each narrower than the last, with the base ring rooted down to
-// local ground. The radius wobble is world-position noise rather than a draw from the structure
-// RNG, so a chunk can skip the columns it doesn't own without desynchronising anything (the cypress
-// buttress wobbles the same way).
+// Discs from the anchor to the peak, each narrower than the last, with the base ring rooted to
+// local ground.
 static void placeCrystalMound(std::vector<Block>& blocks,
                               ivec3 anchorPos_CS,
                               ivec2 chunkPosXZ_WS,
@@ -153,60 +154,26 @@ static void placeCrystalMound(std::vector<Block>& blocks,
                               int yGrowDir)
 {
     const uint worldSeed = SettingsManager::getWorldSeed();
+    const DiscWobble wobble{
+        .strength = crystalMoundWobbleStrength,
+        .frequency = crystalMoundWobbleFrequency,
+        .seed = worldSeed ^ hash(1902384571u),
+        .detailStrength = crystalMoundWobbleDetailStrength,
+        .detailFrequencyMultiplier = crystalMoundWobbleDetailFrequency,
+        .detailSeed = worldSeed ^ hash(3310277119u),
+    };
 
     for (int layer = 0; layer < height; ++layer)
     {
         const float layerRadius = baseRadius * (1.f - static_cast<float>(layer) / height);
-        const int radiusCeil = static_cast<int>(glm::ceil(layerRadius * (1.f + crystalMoundWobbleStrength)));
-        const int layerY = anchorPos_CS.y + yGrowDir * layer;
-
-        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
-        {
-            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
-            {
-                const ivec3 pos_CS(anchorPos_CS.x + dx, layerY, anchorPos_CS.z + dz);
-                if (!Chunk::isInChunk(pos_CS))
-                {
-                    continue;
-                }
-
-                const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
-                const float wobble =
-                    (valueNoise3(pos_WS * crystalMoundWobbleFrequency, worldSeed ^ hash(1902384571u)) +
-                     crystalMoundWobbleDetailStrength *
-                         valueNoise3(pos_WS * (crystalMoundWobbleFrequency * crystalMoundWobbleDetailFrequency),
-                                     worldSeed ^ hash(3310277119u))) /
-                    (1.f + crystalMoundWobbleDetailStrength);
-                const float radius = layerRadius * (1.f + crystalMoundWobbleStrength * wobble);
-                if (dx * dx + dz * dz >= radius * radius)
-                {
-                    continue;
-                }
-
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CRYSTAL_CORE);
-
-                if (layer > 0)
-                {
-                    continue;
-                }
-                for (int depth = 1; depth <= crystalMoundMaxRootDepth; ++depth)
-                {
-                    const ivec3 rootPos_CS(pos_CS.x, layerY - yGrowDir * depth, pos_CS.z);
-                    if (!Chunk::isInChunk(rootPos_CS) ||
-                        blocks[Chunk::blockPosToIdx(uvec3(rootPos_CS))] != Block::AIR)
-                    {
-                        break;
-                    }
-                    blocks[Chunk::blockPosToIdx(uvec3(rootPos_CS))] = Block::CRYSTAL_CORE;
-                }
-            }
-        }
+        const ivec3 layerCenterPos_CS(anchorPos_CS.x, anchorPos_CS.y + yGrowDir * layer, anchorPos_CS.z);
+        placeWobbledDisc(blocks, layerCenterPos_CS, chunkPosXZ_WS, layerRadius, wobble, Block::CRYSTAL_CORE,
+                         -yGrowDir /*rootStepY*/, (layer == 0) ? crystalMoundMaxRootDepth : 0);
     }
 }
 
 // Finds the surface a knee stands on by scanning this column back along the grow direction from a
-// little past the anchor, as cypress knees do. Crystal blocks are rejected so knees ring the mound
-// instead of climbing it. Draws no RNG (see the stream invariant in
+// little past the anchor, as cypress knees do. Draws no RNG (see the stream invariant in
 // knowledge/terrain/structure_system.md).
 static bool findCrystalKneeSurfaceY(
     const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int yGrowDir, int& outSurfaceY)
@@ -224,7 +191,7 @@ static bool findCrystalKneeSurfaceY(
         {
             continue;
         }
-        if (isCrystalBlock(block))
+        if (!isCrystalKneeGroundBlock(block))
         {
             return false;
         }
@@ -278,9 +245,9 @@ static void fillCrystalCluster(
             continue;
         }
 
-        for (int block = 1; block <= kneeHeight; ++block)
+        for (int i = 1; i <= kneeHeight; ++i)
         {
-            const int y = surfaceY + yGrowDir * block;
+            const int y = surfaceY + yGrowDir * i;
             if (y < 0 || y >= static_cast<int>(chunkSizeY))
             {
                 break;

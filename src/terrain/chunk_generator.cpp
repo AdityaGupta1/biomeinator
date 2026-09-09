@@ -79,9 +79,16 @@ inline constexpr uint caveNoiseSizeXZSquare = caveNoiseSizeXZ * caveNoiseSizeXZ;
 inline constexpr float caveFlatSurfaceShellDist = 0.25f;
 inline constexpr float caveFlatSurfaceMinNormalY = 0.7f;
 
-// TEMP: force every cave biome to CRYSTALS while iterating on crystal cave content. Revert to
-// CaveBiome::COUNT to restore noise-based classification.
-inline constexpr CaveBiome debugCaveBiomeOverride = CaveBiome::CRYSTALS;
+// Depth range below a column's terrain height over which the carve threshold fades, which is what
+// keeps caves from opening onto the surface. Because the fade is anchored to the column's own
+// terrain height, the carve field varies horizontally inside this band; see the slope
+// classification in the fill loop.
+inline constexpr float caveSurfaceFadeStartDepth = 20.f;
+inline constexpr float caveSurfaceFadeEndDepth = 4.f;
+
+// Set to a biome to force every cave to it while iterating on that biome's content; COUNT restores
+// noise-based classification.
+inline constexpr CaveBiome debugCaveBiomeOverride = CaveBiome::COUNT;
 static FN::SmartNode<FN::Generator> fnCaveRock;
 
 static FN::SmartNode<FN::Generator> fnSwampWarp;
@@ -610,7 +617,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // Carve threshold before the per-column swamp seal: surface fade plus altitude squash
             const auto caveSurfaceValAt = [&](const float y)
             {
-                return glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, y)) -
+                return glm::mix(0.6f, -0.3f,
+                                glm::smoothstep(terrainBaseHeight - caveSurfaceFadeStartDepth,
+                                                terrainBaseHeight - caveSurfaceFadeEndDepth, y)) -
                     glm::smoothstep(240.0f, 320.0f, y) * 0.8f;
             };
 
@@ -709,11 +718,20 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 skinFringeBlock = caveBiomeData.secondarySkinFringeBlock;
                             }
 
-                            if (flatSurfaceBlock != Block::AIR && caveSurfaceDist < caveFlatSurfaceShellDist)
+                            // Inside the surface fade band the carve threshold follows this column's own
+                            // terrain height, so the carve field has a horizontal gradient that the central
+                            // differences below cannot see: neighboring columns' terrain heights are not
+                            // available with the cave grids' one-block margin. Classifying there would read
+                            // caves under a hillside as flat, so classification stops below the band, where
+                            // the threshold varies with y alone.
+                            const bool isBelowSurfaceFade =
+                                static_cast<float>(y) < terrainBaseHeight - caveSurfaceFadeStartDepth;
+                            if (flatSurfaceBlock != Block::AIR && caveSurfaceDist < caveFlatSurfaceShellDist &&
+                                isBelowSurfaceFade)
                             {
                                 // The y difference includes the carve threshold's own y dependence so the
                                 // surface fade band doesn't read as a tilt
-                                const uint yBelow = (y > 0) ? y - 1 : 0;
+                                const uint yBelow = y - 1;
                                 const uint yAbove = glm::min(y + 1, static_cast<uint>(caveNoiseMaxY) - 1);
                                 const float gradX =
                                     (sampleCaveNoise(caveColumnIdx + 1, y) - sampleCaveNoise(caveColumnIdx - 1, y)) * 0.5f;

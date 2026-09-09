@@ -403,50 +403,15 @@ fillStructureBlocksHeader(CYPRESS_TREE)
         const float trunkRatio = (y + 2.f) / (trunkHeight + 2.f);
         const float flare = 0.73f + trunkRatio;
         const float baseRadius = 0.5f * (1.3f + trunkRatio) / (flare * flare * flare * flare) + 0.5f;
-        const float wobbleStrength = 0.3f * (1.f - glm::smoothstep(0.15f, 0.55f, trunkRatio));
-        const int radiusCeil = static_cast<int>(glm::ceil(baseRadius * (1.f + wobbleStrength)));
+        const DiscWobble wobble{
+            .strength = 0.3f * (1.f - glm::smoothstep(0.15f, 0.55f, trunkRatio)),
+            .frequency = 0.15f,
+            .seed = worldSeed ^ hash(602149583),
+        };
 
-        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
-        {
-            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
-            {
-                const ivec3 pos_CS = structurePos_CS + ivec3(dx, y, dz);
-                if (!Chunk::isInChunk(pos_CS))
-                {
-                    continue;
-                }
-
-                // The wobble noise is position-hashed, not drawn from the structure RNG stream, so
-                // skipping it per chunk is safe
-                float trunkRadius = baseRadius;
-                if (wobbleStrength > 0.f)
-                {
-                    const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
-                    trunkRadius *= 1.f + wobbleStrength * valueNoise3(pos_WS * 0.15f, worldSeed ^ hash(602149583));
-                }
-
-                if (dx * dx + dz * dz < trunkRadius * trunkRadius)
-                {
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CYPRESS_LOG);
-
-                    // Root the buttress down to local ground so the rim doesn't float where the
-                    // terrain drops within the footprint; the scan draws no RNG
-                    if (y == -2)
-                    {
-                        for (int rootY = pos_CS.y - 1; rootY >= glm::max(pos_CS.y - maxRootDepth, 0); --rootY)
-                        {
-                            const uint blockIdx = Chunk::blockPosToIdx(uvec3(pos_CS.x, rootY, pos_CS.z));
-                            const Block block = blocks[blockIdx];
-                            if (block != Block::AIR && block != Block::WATER && block != Block::WATER_TOP)
-                            {
-                                break;
-                            }
-                            blocks[blockIdx] = Block::CYPRESS_LOG;
-                        }
-                    }
-                }
-            }
-        }
+        // Only the bottom layer roots, seating the buttress rim on local ground
+        placeWobbledDisc(blocks, structurePos_CS + ivec3(0, y, 0), chunkPosXZ_WS, baseRadius, wobble,
+                         Block::CYPRESS_LOG, -1 /*rootStepY*/, (y == -2) ? maxRootDepth : 0);
     }
 
     // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the

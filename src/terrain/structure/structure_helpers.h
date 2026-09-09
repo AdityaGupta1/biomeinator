@@ -46,6 +46,84 @@ inline float valueNoise3(glm::vec3 pos, uint32_t seed)
 
 // True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
 // blocks land here. Lets the per-chunk fill passes skip structures that only overhang neighbors.
+// Radius perturbation for placeWobbledDisc. A detailStrength of 0 leaves a single octave.
+struct DiscWobble
+{
+    float strength{ 0.f };
+    float frequency{ 0.f };
+    uint32_t seed{ 0 };
+    float detailStrength{ 0.f };
+    float detailFrequencyMultiplier{ 1.f };
+    uint32_t detailSeed{ 0 };
+};
+
+// One horizontal disc of `block` centered on centerPos_CS, its radius perturbed per column so the
+// silhouette isn't a clean circle. The perturbation is hashed from world position rather than drawn
+// from a structure's RNG, which is what lets each chunk fill only the columns it owns without
+// desynchronising the stream (see knowledge/terrain/structure_system.md). Cells that land in the
+// disc are rooted rootDepth blocks along rootStepY, seating a shape on local ground instead of
+// leaving its rim floating where the surface drops away; pass rootDepth 0 to skip that.
+inline void placeWobbledDisc(std::vector<Block>& blocks,
+                             glm::ivec3 centerPos_CS,
+                             glm::ivec2 chunkPosXZ_WS,
+                             float radius,
+                             const DiscWobble& wobble,
+                             Block block,
+                             int rootStepY = 0,
+                             int rootDepth = 0)
+{
+    const int radiusCeil = static_cast<int>(glm::ceil(radius * (1.f + wobble.strength)));
+
+    for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
+    {
+        for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
+        {
+            const glm::ivec3 pos_CS = centerPos_CS + glm::ivec3(dx, 0, dz);
+            if (!Chunk::isInChunk(pos_CS))
+            {
+                continue;
+            }
+
+            float wobbledRadius = radius;
+            if (wobble.strength > 0.f)
+            {
+                const glm::vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
+                float noise = valueNoise3(pos_WS * wobble.frequency, wobble.seed);
+                if (wobble.detailStrength > 0.f)
+                {
+                    const float detailNoise = valueNoise3(
+                        pos_WS * (wobble.frequency * wobble.detailFrequencyMultiplier), wobble.detailSeed);
+                    noise = (noise + wobble.detailStrength * detailNoise) / (1.f + wobble.detailStrength);
+                }
+                wobbledRadius *= 1.f + wobble.strength * noise;
+            }
+
+            if (dx * dx + dz * dz >= wobbledRadius * wobbledRadius)
+            {
+                continue;
+            }
+
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
+
+            for (int depth = 1; depth <= rootDepth; ++depth)
+            {
+                const glm::ivec3 rootPos_CS(pos_CS.x, pos_CS.y + rootStepY * depth, pos_CS.z);
+                if (!Chunk::isInChunk(rootPos_CS))
+                {
+                    break;
+                }
+                const uint32_t rootBlockIdx = Chunk::blockPosToIdx(glm::uvec3(rootPos_CS));
+                const Block rootBlock = blocks[rootBlockIdx];
+                if (rootBlock != Block::AIR && rootBlock != Block::WATER && rootBlock != Block::WATER_TOP)
+                {
+                    break;
+                }
+                blocks[rootBlockIdx] = block;
+            }
+        }
+    }
+}
+
 inline bool structureAabbRejectsChunk(glm::ivec2 minXZ_CS, glm::ivec2 maxXZ_CS)
 {
     return minXZ_CS.x >= static_cast<int>(chunkSizeXZ) || minXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||
