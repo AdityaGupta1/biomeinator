@@ -158,7 +158,7 @@ void imguiEndFrame(double deltaTime)
             }
             else
             {
-                ImGui::TextDisabled("Frame generation not supported (check Hardware-accelerated GPU Scheduling)");
+                ImGui::TextDisabled("Frame generation: %s", renderState.frameGen.unsupportedReason);
             }
         }
 

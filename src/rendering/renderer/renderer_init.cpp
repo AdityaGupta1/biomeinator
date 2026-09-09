@@ -64,8 +64,27 @@ void initStreamline()
 
 namespace
 {
-// Frame generation is optional, so a missing feature only disables it rather than failing startup.
-// The most common cause is Hardware-accelerated GPU Scheduling being turned off in Windows.
+// Streamline separates the reasons a feature is unavailable, and they call for different user
+// actions, so the GUI hint should not blame one of them for all of the others
+const char* describeUnsupportedResult(sl::Result result)
+{
+    switch (result)
+    {
+        case sl::Result::eErrorAdapterNotSupported:
+        case sl::Result::eErrorNoSupportedAdapterFound:
+            return "GPU not supported (needs RTX 40 series or newer)";
+        case sl::Result::eErrorOSDisabledHWS:
+            return "enable Hardware-accelerated GPU Scheduling in Windows graphics settings";
+        case sl::Result::eErrorDriverOutOfDate:
+            return "update the NVIDIA driver";
+        case sl::Result::eErrorOSOutOfDate:
+            return "update Windows";
+        default:
+            return "unavailable (see log for the sl::Result code)";
+    }
+}
+
+// Frame generation is optional, so a missing feature only disables it rather than failing startup
 void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
 {
     // Generated frames would corrupt golden screenshots, and Reflex pacing the frame start would
@@ -85,9 +104,11 @@ void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
     {
         if (SL_FAILED(result, slIsFeatureSupported(feature, adapterInfo)))
         {
-            Logger::logWarning("%s not supported (sl::Result %u), disabling frame generation",
+            renderState.frameGen.unsupportedReason = describeUnsupportedResult(result);
+            Logger::logWarning("%s not supported (sl::Result %u): %s; disabling frame generation",
                                name,
-                               static_cast<uint32_t>(result));
+                               static_cast<uint32_t>(result),
+                               renderState.frameGen.unsupportedReason);
             return;
         }
     }

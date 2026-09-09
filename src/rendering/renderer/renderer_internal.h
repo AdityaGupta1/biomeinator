@@ -267,6 +267,8 @@ struct FrameGenState
 {
     // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
     bool supported{ false };
+    // Shown in the GUI while unsupported; null once supported or in headless runs
+    const char* unsupportedReason{ nullptr };
     // Only ever changes between frames, since flipping it recreates the swap chain
     bool active{ false };
     // Frames DLSS-G presented for the last app frame. Not simply 2 while frame generation is on:

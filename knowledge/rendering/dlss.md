@@ -58,8 +58,10 @@ command list work that produces them. This is why resource tagging happens at th
 ## Frame Generation
 
 Frame generation is only offered when DLSS-G, Reflex and PCL all report support, which is checked
-once at startup (`initFrameGenSupport`). The usual reason for it to be unavailable is Windows
-Hardware-accelerated GPU Scheduling being off, which no amount of application-side work can fix.
+once at startup (`initFrameGenSupport`). Streamline reports *why* a feature is unavailable (pre-Ada
+GPU, Hardware-accelerated GPU Scheduling off, old driver, old OS), and each calls for a different
+user action, so the result code is mapped to a short reason that the GUI shows in place of the
+checkbox rather than blaming one cause for all of them.
 Headless runs opt out entirely: generated frames would corrupt golden screenshots, and Reflex
 pacing the frame start would skew perf measurements.
 
