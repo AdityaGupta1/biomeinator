@@ -76,56 +76,58 @@ static T parseNamedValue(const std::unordered_map<std::string, T>& valuesByName,
     return it->second;
 }
 
-static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& outData)
+BlockData readBlockJson(const std::filesystem::path& jsonPath)
 {
     std::ifstream file(jsonPath);
     if (!file)
     {
         Logger::logError("blocks: failed to open %s", jsonPath.generic_string().c_str());
-        return;
+        return {};
     }
 
+    BlockData data;
     nlohmann::json blockJson;
     try
     {
         blockJson = nlohmann::json::parse(file);
+
+        if (blockJson.contains("shape"))
+        {
+            data.shape = parseNamedValue(blockShapesByName, blockJson["shape"], "shape");
+        }
+
 
         if (blockJson.contains("textures"))
         {
             const nlohmann::json& texturesJson = blockJson["textures"];
             if (texturesJson.is_string())
             {
-                outData.texSlices = BlockTexSlices(resolveTextureSlice(texturesJson.get<std::string>()));
+                data.texSlices = BlockTexSlices(resolveTextureSlice(texturesJson.get<std::string>()));
             }
             else
             {
                 const uint32_t top = resolveTextureSlice(texturesJson.at("top").get<std::string>());
                 const uint32_t side = resolveTextureSlice(texturesJson.at("side").get<std::string>());
                 const uint32_t bottom = resolveTextureSlice(texturesJson.at("bottom").get<std::string>());
-                outData.texSlices = BlockTexSlices(top, side, bottom);
+                data.texSlices = BlockTexSlices(top, side, bottom);
             }
         }
 
         if (blockJson.contains("type"))
         {
-            outData.type = parseNamedValue(blockTypesByName, blockJson["type"], "type");
+            data.type = parseNamedValue(blockTypesByName, blockJson["type"], "type");
         }
 
-        if (blockJson.contains("shape"))
+        data.emitsLight = blockJson.value("emitsLight", false);
+        data.translucent = blockJson.value("translucent", false);
+        if (data.shape == BlockShape::DECORATOR_CUSTOM)
         {
-            outData.shape = parseNamedValue(blockShapesByName, blockJson["shape"], "shape");
-        }
-
-        outData.emitsLight = blockJson.value("emitsLight", false);
-        outData.translucent = blockJson.value("translucent", false);
-        if (outData.shape == BlockShape::DECORATOR_CUSTOM)
-        {
-            if (!blockJson.at("textures").is_string() || outData.texSlices[0] == TEX_SLICE_INVALID)
+            if (!blockJson.at("textures").is_string() || data.texSlices[0] == TEX_SLICE_INVALID)
                 throw std::runtime_error("custom decorators require one texture atlas");
             const std::filesystem::path name = blockJson.at("model").get<std::string>();
             if (name.empty() || name.has_parent_path() || name.extension() != ".glb")
                 throw std::runtime_error("model must be a GLB filename in assets/blocks/models");
-            if (outData.type != BlockType::SOLID && outData.type != BlockType::TRANSPARENT_CUTOUT)
+            if (data.type != BlockType::SOLID && data.type != BlockType::TRANSPARENT_CUTOUT)
                 throw std::runtime_error("custom decorators must use solid or transparent_cutout type");
             if (blockJson.contains("randomRotationY"))
             {
@@ -133,7 +135,7 @@ static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
                 if (!turns.is_array() || turns.empty() || turns.size() > 4)
                     throw std::runtime_error("randomRotationY must contain 1 to 4 distinct quarter-turn angles");
                 unsigned seen = 0;
-                outData.numRotationsY = static_cast<uint8_t>(turns.size());
+                data.numRotationsY = static_cast<uint8_t>(turns.size());
                 for (size_t i = 0; i < turns.size(); ++i)
                 {
                     if (!turns[i].is_number_integer()) throw std::runtime_error("rotation angles must be integers");
@@ -141,18 +143,20 @@ static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
                     if (degrees < 0 || degrees > 270 || degrees % 90 != 0 || (seen & (1u << (degrees / 90))))
                         throw std::runtime_error("rotation angles must be distinct values from 0, 90, 180, 270");
                     seen |= 1u << (degrees / 90);
-                    outData.rotationY[i] = static_cast<uint8_t>(degrees / 90);
+                    data.rotationY[i] = static_cast<uint8_t>(degrees / 90);
                 }
             }
-            outData.modelIdx = BlockModels::load(jsonPath.parent_path() / "models" / name);
+            data.modelIdx = BlockModels::load(jsonPath.parent_path() / "models" / name);
         }
     }
     catch (const std::exception& e)
     {
         Logger::logError("blocks: failed to parse %s: %s", jsonPath.generic_string().c_str(), e.what());
         // Never silently turn a malformed model into a full occluding cube.
-        if (outData.shape == BlockShape::DECORATOR_CUSTOM) throw;
+        if (data.shape == BlockShape::DECORATOR_CUSTOM) throw;
+        return {};
     }
+    return data;
 }
 
 void init()
@@ -170,7 +174,7 @@ void init()
     {
         blocksById.emplace(blockIdNames[i], static_cast<Block>(i));
         const fs::path jsonPath = blocksDir / (std::string(blockIdNames[i]) + ".json");
-        parseBlockJson(jsonPath, blockDatas[i]);
+        blockDatas[i] = readBlockJson(jsonPath);
     }
 }
 

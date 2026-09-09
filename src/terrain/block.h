@@ -6,6 +6,7 @@
 #include "block_ids.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <array>
 #include <string>
 #include <string_view>
@@ -68,15 +69,40 @@ constexpr bool isDecoratorShape(BlockShape shape)
     return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
 }
 
-constexpr bool decoratorExposesNeighborFace(BlockType faceType, BlockShape neighborShape)
+// Face direction ordering matches chunk neighbor directions: +X,+Z,-X,-Z,+Y,-Y.
+// Called after neighbor lookup; world-height boundaries are handled by the chunk.
+constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neighborType,
+                                BlockShape neighborShape, int faceIdx)
 {
-    return (faceType == BlockType::SOLID || faceType == BlockType::TRANSPARENT_CUTOUT) && isDecoratorShape(neighborShape);
+    if (neighborType == BlockType::AIR) return true;
+    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT) &&
+        isDecoratorShape(neighborShape)) return true;
+    switch (type)
+    {
+    case BlockType::SOLID:
+        if (neighborType != BlockType::SOLID) return true;
+        if (faceIdx == 4) return shape == BlockShape::LIQUID_TOP;
+        if (faceIdx == 5) return neighborShape == BlockShape::LIQUID_TOP;
+        return neighborShape == BlockShape::LIQUID_TOP && shape != BlockShape::LIQUID_TOP;
+    case BlockType::TRANSPARENT_CUTOUT:
+        if (neighborType == BlockType::SOLID) return false;
+        // Only the lower-positioned cube owns a shared cutout boundary.
+        return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
+               faceIdx == 0 || faceIdx == 1 || faceIdx == 4;
+    case BlockType::WATER:
+        return shape == BlockShape::LIQUID_TOP && faceIdx == 4;
+    default:
+        return false;
+    }
 }
 
 namespace Blocks
 {
 
 void init();
+
+// Malformed custom definitions throw; other failures log and return defaults.
+BlockData readBlockJson(const std::filesystem::path& jsonPath);
 
 const BlockData& getBlockData(Block block);
 

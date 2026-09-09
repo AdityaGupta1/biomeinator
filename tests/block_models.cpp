@@ -8,6 +8,7 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 
 static void check(bool condition, const char* message)
@@ -32,13 +33,38 @@ int main()
         const fs::path assets = fs::path(CMAKE_SOURCE_DIR) / "assets/blocks";
         Blocks::init();
         for (const auto shape : { BlockShape::X_SHAPED, BlockShape::DECORATOR_CUSTOM })
+        for (const auto neighborType : { BlockType::SOLID, BlockType::TRANSPARENT_CUTOUT })
+        for (int face = 0; face < 6; ++face)
         {
-            check(decoratorExposesNeighborFace(BlockType::SOLID, shape), "solid face must remain against decorator");
-            check(decoratorExposesNeighborFace(BlockType::TRANSPARENT_CUTOUT, shape), "cutout face must remain against decorator");
-            check(!decoratorExposesNeighborFace(BlockType::WATER, shape), "water rules must not change");
+            check(blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, neighborType, shape, face), "solid face against decorator");
+            check(blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, neighborType, shape, face), "cutout face against decorator");
+            check(!blockFaceVisible(BlockType::WATER, BlockShape::CUBE, neighborType, shape, face), "water stays hidden against decorator");
         }
-        check(!decoratorExposesNeighborFace(BlockType::SOLID, BlockShape::CUBE), "cube culling must not change");
-        check(!decoratorExposesNeighborFace(BlockType::SOLID, BlockShape::LIQUID_TOP), "short cube culling must not change");
+        for (int face = 0; face < 6; ++face)
+        {
+            check(!blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, BlockType::SOLID, BlockShape::CUBE, face), "solid shared boundary");
+            check(!blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, BlockType::SOLID, BlockShape::CUBE, face), "cutout against solid");
+            check(blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, face) == (face == 0 || face == 1 || face == 4), "one owner per cutout boundary");
+            check(blockFaceVisible(BlockType::WATER, BlockShape::LIQUID_TOP, BlockType::SOLID, BlockShape::CUBE, face) == (face == 4), "water top exception");
+            check(blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, BlockType::SOLID, BlockShape::LIQUID_TOP, face) == (face != 4), "full cube against lowered solid");
+            check(blockFaceVisible(BlockType::SOLID, BlockShape::LIQUID_TOP, BlockType::SOLID, BlockShape::CUBE, face) == (face == 4), "lowered solid against full cube");
+            for (const auto type : { BlockType::SOLID, BlockType::TRANSPARENT_CUTOUT, BlockType::WATER })
+                check(blockFaceVisible(type, BlockShape::CUBE, BlockType::AIR, BlockShape::CUBE, face), "faces against air");
+        }
+        const fs::path definitions = fs::path(CMAKE_BINARY_DIR)/"test_output/block_models";
+        fs::create_directories(definitions);
+        const auto definition = definitions/"invalid_block.json";
+        for (const char* json : { R"({"shape":"decorator_custom","textures":{}})",
+                                  R"({"shape":"decorator_custom","type":"invalid"})" })
+        {
+            { std::ofstream out(definition); out << json; }
+            bool rejected = false;
+            try { Blocks::readBlockJson(definition); } catch (const std::exception&) { rejected = true; }
+            check(rejected, "custom definition errors before model loading must throw");
+        }
+        { std::ofstream out(definition); out << R"({"type":"water","translucent":"invalid"})"; }
+        const auto fallback = Blocks::readBlockJson(definition);
+        check(fallback.type == BlockType::SOLID && !fallback.translucent, "failed definitions must not publish partial metadata");
 
         for (const auto block : { Block::BROWN_MUSHROOM, Block::GLOWSHROOM_YELLOW })
         {

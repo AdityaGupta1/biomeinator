@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-08_
 
 # Block System
 
@@ -24,7 +24,9 @@ companions.
 
 A block JSON that fails to open or parse logs an error and leaves that block's `BlockData` at
 defaults (solid cube, no textures) rather than aborting — same spirit as the texture loader's
-missing-file handling.
+missing-file handling. Recognized custom-model definitions instead fail startup
+on any field/model error, since falling back to an occluding cube would hide terrain.
+Metadata is published only after the whole definition parses successfully.
 
 ## BlockType Drives Meshing
 
