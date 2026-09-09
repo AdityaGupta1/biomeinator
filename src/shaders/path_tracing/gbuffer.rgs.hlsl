@@ -60,7 +60,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, linearDepth);
+            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, distance(ray.Origin, payload.hitInfo.hitPos_WS));
             Material surfMaterial = getHitMaterial(payload, coneWidth);
 
             if (surfMaterial.hasGlossyReflection())
