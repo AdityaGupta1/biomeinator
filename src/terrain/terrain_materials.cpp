@@ -8,6 +8,7 @@
 #include "block.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/renderer.h"
+#include <stdexcept>
 
 namespace TerrainMaterials
 {
@@ -41,6 +42,17 @@ static void createMaterials(Scene* scene)
     if (diffuseTextureId == TEXTURE_ID_INVALID)
     {
         return;
+    }
+
+    // Validate even on pre-OMM hardware: arbitrary model UVs only support opaque tiles.
+    for (size_t i = 0; i < static_cast<size_t>(Block::COUNT); ++i)
+    {
+        const auto& block = Blocks::getBlockData(static_cast<Block>(i));
+        if (block.shape != BlockShape::DECORATOR_CUSTOM) continue;
+        const auto slice = block.texSlices[0];
+        if (slice >= diffuseAlphas.size() || diffuseAlphas[slice].empty() ||
+            std::any_of(diffuseAlphas[slice].begin(), diffuseAlphas[slice].end(), [](uint8_t a) { return a != 255; }))
+            throw std::runtime_error("custom decorator texture must be fully opaque: " + textureNames.at(slice));
     }
 
     if (useOmms)

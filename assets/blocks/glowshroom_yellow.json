@@ -1,6 +1,9 @@
 {
-    "textures": "glowshroom_yellow",
-    "type": "transparent_cutout",
-    "shape": "x_shaped",
-    "translucent": true
+    "textures": "glowshroom_yellow_model",
+    "type": "solid",
+    "shape": "decorator_custom",
+    "model": "glowshroom_yellow.glb",
+    "randomRotationY": [0, 90, 180, 270],
+    "translucent": false,
+    "emitsLight": false
 }

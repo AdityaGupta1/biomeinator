@@ -1,4 +1,4 @@
-_Last edited: 2026-08-24_
+_Last edited: 2026-09-08_
 
 # Block System
 
@@ -24,7 +24,9 @@ companions.
 
 A block JSON that fails to open or parse logs an error and leaves that block's `BlockData` at
 defaults (solid cube, no textures) rather than aborting — same spirit as the texture loader's
-missing-file handling.
+missing-file handling. Recognized custom-model definitions instead fail startup
+on any field/model error, since falling back to an occluding cube would hide terrain.
+Metadata is published only after the whole definition parses successfully.
 
 ## BlockType Drives Meshing
 
@@ -34,6 +36,16 @@ The non-obvious culling rules in `shouldGenerateFace`:
 
 ## BlockShape
 
+`DECORATOR_CUSTOM` is an authored mesh that never hides adjacent solid/cutout cube
+faces, regardless of the decorator's block type. `X_SHAPED` follows the same
+neighbor rule. This lets mushrooms use `SOLID` without punching holes in their
+ground or nearby leaves. Water retains its existing face rules. Segment occlusion
+already requires both `SOLID` and `CUBE`.
+
+Custom models are static GLBs in `assets/blocks/models`, with geometry cached during
+`Blocks::init()` before worker threads start. They reuse one opaque 16px terrain
+atlas named by the block, not glTF materials; see [custom_models.md](custom_models.md).
+
 `X_SHAPED` blocks are rendered as two crossed diagonal quads (like Minecraft foliage). During mesh generation they also receive a random XZ jitter so adjacent grass blocks don't form a visible grid pattern.
 
 `LIQUID_TOP` is a cube with the +Y face lowered by 1/8 block, creating the "not quite full block" water surface look.
@@ -41,3 +53,7 @@ The non-obvious culling rules in `shouldGenerateFace`:
 ## Emissive
 
 `LAMP`, `LAVA`, and `LAVA_TOP` have `emitsLight = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding an emissive block means setting this flag *and* authoring its texels in the assets: emission color lives in the block's diffuse texture (with zero diffuse implied) and per-texel strength in the red channel of its `<name>.aux.png` companion in `assets/blocks/textures/` — see [scene → materials_textures.md](../scene/materials_textures.md).
+
+Emission on ray hits does not require `emitsLight`: the glowshroom model deliberately
+uses an emissive cap mask with `emitsLight = false`, excluding its tiny triangles
+from explicit area-light sampling. Both mushroom models disable diffuse transmission.
