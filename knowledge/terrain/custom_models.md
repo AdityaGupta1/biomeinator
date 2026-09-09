@@ -1,8 +1,8 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Custom decorator models
 
-`block_model.h/cpp` loads geometry once and caches four quarter-turn vertex arrays
+`block_model.h/cpp` loads geometry once and caches six attachment directions with four quarter-turn vertex arrays each
 with shared local indices. `Chunk::createInstances` chooses a variant, translates
 its vertices, rebases its indices, and appends triangle metadata to the ordinary
 terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
@@ -29,8 +29,11 @@ texture PNGs/aux PNGs, and block JSONs under `assets/blocks`, not Blender source
 `randomRotationY` chooses from distinct degrees 0/90/180/270, defaulting to 0.
 World seed and all three integer block coordinates choose a turn, using a salt
 independent of foliage jitter. Orientation is reproducible across remeshing and
-world imports without adding block-state storage. Quarter turns use sign/swap
-operations before normal packing, not trig in the worker loop.
+world imports. Surface-mounted models additionally store their attachment face in
+a sparse one-byte block-state map; the quarter turn remains reconstructed. Rotation
+is applied about local +Y before that axis is mapped to the attachment normal, so it
+becomes a roll around the selected block face. Quarter turns and face transforms use
+sign/swap operations before normal packing, not trig in the worker loop.
 
 Opaque atlases are validated before meshing on all GPUs, including without OMM
 support. Custom UVs cannot reuse the pair of OMMs baked for full-tile quads.

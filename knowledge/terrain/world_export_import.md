@@ -1,8 +1,12 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-09_
 
 # World Export / Import
 
 `Terrain::exportWorld` / `importWorld` / `reimportWorld` serialize all populated chunks (blocks, biomes, structures), the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; will eventually be reused for chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. Region binary format and `world.json` schema live in code (`terrain.cpp` near `worldRegionMagic`) — do not duplicate here.
+
+Sparse block-state records are sorted by local block index before export so the
+in-memory unordered map does not make world files nondeterministic. State bytes are
+validated against the referenced block's declared state kind during import.
 
 ## Block palette decouples exports from enum values
 

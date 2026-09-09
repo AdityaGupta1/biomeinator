@@ -5,18 +5,20 @@
 
 #include "debug.h"
 
-void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks)
+void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> supportBlocks, uint8_t surfaces)
 {
     ASSERT(weight > 0.f);
+    ASSERT((surfaces & ~DECORATOR_SURFACE_ALL) == 0 && surfaces != 0);
     this->entries.push_back({
         block,
         weight,
-        std::unordered_set<Block>(groundBlocks),
+        std::unordered_set<Block>(supportBlocks),
+        surfaces,
     });
     totalWeight += weight;
 }
 
-Block Decorator::getBlock(float rndSample, Block bottomBlock) const
+Block Decorator::getBlock(float rndSample, Block supportBlock, uint8_t surface) const
 {
     if (this->isEmpty())
     {
@@ -40,8 +42,18 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
     ASSERT(entryIdx >= 0 && entryIdx < this->entries.size());
 
     const DecoratorEntry& entry = this->entries[entryIdx];
-    const bool groundBlockValid = entry.groundBlocks.empty() || entry.groundBlocks.contains(bottomBlock);
-    return groundBlockValid ? entry.block : Block::AIR;
+    const bool supportBlockValid = entry.supportBlocks.empty() || entry.supportBlocks.contains(supportBlock);
+    return supportBlockValid && (entry.surfaces & surface) ? entry.block : Block::AIR;
+}
+
+bool Decorator::supportsSurface(uint8_t surface, Block supportBlock) const
+{
+    for (const DecoratorEntry& entry : this->entries)
+    {
+        if (entry.block != Block::AIR && (entry.surfaces & surface) &&
+            (entry.supportBlocks.empty() || entry.supportBlocks.contains(supportBlock))) return true;
+    }
+    return false;
 }
 
 bool Decorator::isEmpty() const

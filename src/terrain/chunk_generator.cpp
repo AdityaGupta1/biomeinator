@@ -544,15 +544,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         }
     };
 
-    this->caveFloors.clear();
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-            this->caveFloorOffsets[columnIdx] = static_cast<uint32_t>(this->caveFloors.size());
-
             const Biome biome = this->biomes[columnIdx];
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
             const TopBlocks& topBlocks = biomeData.topBlocks;
@@ -687,19 +684,23 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        if (!isCave)
+                        const float caveTemperature =
+                            sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                        const float caveHumidity =
+                            sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                        const CaveBiomeNoise caveBiomeNoise = {
+                            .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
+                            .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
+                        };
+                        const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                        voxelCaveBiome = caveBiome;
+                        if (isCave)
+                        {
+                            this->caveBiomes[blockIdx] = static_cast<uint8_t>(caveBiome);
+                        }
+                        else
                         {
                             const float caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
-                            const float caveTemperature =
-                                sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                            const float caveHumidity =
-                                sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                            const CaveBiomeNoise caveBiomeNoise = {
-                                .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
-                                .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
-                            };
-                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
-                            voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
                             Block flatSurfaceBlock = caveBiomeData.flatSurfaceBlock;
@@ -815,7 +816,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     layerOpen = true;
                     layerStart = static_cast<int>(y) - 1;
                     layerBottomBiome = lastSolidCaveBiome;
-                    this->caveFloors.push_back({ static_cast<uint16_t>(layerStart), layerBottomBiome });
                 }
                 else if (layerOpen && !isCave)
                 {
@@ -907,8 +907,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             placeCaveStructuresForColumn(blockPosXZ_WS);
         }
     }
-    this->caveFloorOffsets[chunkSizeXZSquare] = static_cast<uint32_t>(this->caveFloors.size());
-
     const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 
     for (Biome biome : biomeSet)

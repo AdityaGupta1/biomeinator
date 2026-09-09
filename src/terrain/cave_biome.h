@@ -28,7 +28,7 @@ enum class CaveBiome : uint8_t
 };
 
 // One air pocket in a single column, captured during the terrain block-fill scan. Scratch
-// only (the floor y and biome are persisted compactly as Chunk::caveFloors).
+// only; cave-air biome ownership is persisted separately for the decorator pass.
 // start = floor solid y (first air is start + 1); end = top air y (ceiling solid is end + 1);
 // layerHeight = end - start = number of air blocks. closed is false when the pocket opens
 // upward into non-cave air (no ceiling solid), so ceiling gens are skipped.
@@ -68,7 +68,7 @@ struct CaveBiomeData
     // Random LAMP blocks scattered through the biome's rock
     bool scatterLamps{ true };
     std::vector<CaveStructureGen> caveStructureGens{};
-    // Applied at cave floors of this biome (see Chunk::caveFloors)
+    // Applied to permitted floor, wall, and ceiling surfaces bordering this biome's cave air.
     Decorator decorator{};
 };
 

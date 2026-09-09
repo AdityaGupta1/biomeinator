@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Cave Structure System
 
@@ -85,8 +85,8 @@ flag, and the floor/ceiling cave biome reuses the per-voxel biome already
 classified for the base-block choice. Floor event (solid→cave-air) opens a layer;
 ceiling event (cave-air→solid) closes it `closed=true`; cave-air→non-cave-air
 closes it `closed=false` (opened to sky — ceiling gens skipped). Biome is sampled
-at the floor/ceiling **once per layer**, never per voxel, preserving the
-"no per-voxel cave biome storage" invariant in cave_biome_system.md.
+at the floor/ceiling **once per layer**. The separate per-voxel cave-air biome
+array belongs to decorator surface discovery and is not used to choose structures.
 
 ## Why the seed folds in `layerIdx` (required, not optional)
 

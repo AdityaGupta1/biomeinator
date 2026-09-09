@@ -51,6 +51,11 @@ static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "decorator_custom", BlockShape::DECORATOR_CUSTOM },
 };
 
+static const std::unordered_map<std::string, BlockStateKind> blockStateKindsByName = {
+    { "none", BlockStateKind::NONE },
+    { "surface_mount", BlockStateKind::SURFACE_MOUNT },
+};
+
 // Slices are assigned in first-reference order
 static uint32_t resolveTextureSlice(const std::string& textureName)
 {
@@ -122,6 +127,10 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         data.markAsEmitter = blockJson.value("markAsEmitter", false);
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
+        if (blockJson.contains("blockState"))
+        {
+            data.stateKind = parseNamedValue(blockStateKindsByName, blockJson["blockState"], "blockState");
+        }
         if (data.shape == BlockShape::DECORATOR_CUSTOM)
         {
             if (!blockJson.at("textures").is_string() || data.texSlices[0] == TEX_SLICE_INVALID)
@@ -150,6 +159,8 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
             }
             data.modelIdx = BlockModels::load(jsonPath.parent_path() / "models" / name);
         }
+        if (data.stateKind == BlockStateKind::SURFACE_MOUNT && data.shape != BlockShape::DECORATOR_CUSTOM)
+            throw std::runtime_error("surface_mount block state requires a custom decorator model");
     }
     catch (const std::exception& e)
     {

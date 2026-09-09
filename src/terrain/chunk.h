@@ -14,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <glm/glm.hpp>
+#include <unordered_map>
 
 enum class ChunkState : uint8_t
 {
@@ -100,22 +101,17 @@ private:
     // written again, so neighbors may read it during their structure pass while this chunk's
     // blocks are being mutated. See knowledge/terrain/cave_structure_system.md.
     std::vector<uint64_t> terrainAirMask{};
+    // Cave biome at terrain-carved cave-air voxels; 0xff means the voxel was not cave air.
+    std::vector<uint8_t> caveBiomes{};
+    // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
+    // if stateful blocks become common.
+    std::unordered_map<uint32_t, uint8_t> blockStates{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::vector<Biome> biomes{};
     // Highest solid terrain block per column (pre-structure). Lets later passes tell an
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
-    // Cave floor solids with their cave biome, captured during the terrain scan (a few per column),
-    // grouped by column via caveFloorOffsets so the decorator pass can apply that biome's decorator.
-    struct CaveFloor
-    {
-        uint16_t y;
-        CaveBiome biome;
-    };
-    std::vector<CaveFloor> caveFloors{};
-    std::array<uint32_t, chunkSizeXZSquare + 1> caveFloorOffsets{};
-
     std::vector<Structure> structures{};
     std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
@@ -187,8 +183,11 @@ public:
     const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
     const std::vector<Structure>& getStructures() const;
+    const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
 
-    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures);
+    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
+                            std::vector<Structure>&& structures,
+                            std::unordered_map<uint32_t, uint8_t>&& blockStates);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);

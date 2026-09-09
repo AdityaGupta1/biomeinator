@@ -37,6 +37,12 @@ enum class BlockShape : uint8_t
     COUNT
 };
 
+enum class BlockStateKind : uint8_t
+{
+    NONE,
+    SURFACE_MOUNT,
+};
+
 // Slice value for untextured blocks (air, water); never sampled
 inline constexpr uint32_t TEX_SLICE_INVALID = ~0u;
 
@@ -63,6 +69,7 @@ struct BlockData
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
+    BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
     uint8_t numRotationsY{ 1 };

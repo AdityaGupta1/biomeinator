@@ -16,7 +16,8 @@ inline constexpr uint32_t INVALID = ~0u;
 // Immutable after Blocks::init; all workers share the CPU-side templates.
 struct Model
 {
-    std::array<std::vector<Vertex>, 4> rotations;
+    // Six attachment-face normals, each with four quarter turns around the model's local +Y axis.
+    std::array<std::vector<Vertex>, 24> orientations;
     std::vector<uint32_t> indices;
 };
 

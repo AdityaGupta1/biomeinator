@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-09_
 
 # Cave Biome System
 
@@ -12,7 +12,7 @@ biomes vary with **y** and the same column can pass through several with depth.
 Surface `Biome` selection is partitioned by `inland` and is inherently 2D
 (one biome per column). Cave biomes are a different concept — 3D, no inland
 axis, and they own their own theming (base and secondary rock, surface skin,
-structure gens, floor decorator) rather than the surface data.
+structure gens, surface decorator) rather than the surface data.
 Overloading `Biome` would drag in the irrelevant inland partitioning and
 per-column assumptions, so `CaveBiome` is its own enum + data table with the
 same nearest-neighbor-by-`distance2` shape, kept deliberately extensible (add
@@ -52,15 +52,16 @@ far-edge interpolation margin overlapping the next chunk's first cell) and `+2`
 in y. If the downsample factor ever stops dividing `chunkSizeXZ`, the coarse
 origin must be explicitly snapped or borders will mismatch.
 
-## No per-voxel storage
+## Per-voxel cave-air ownership
 
 The biome's block effects (base block and skin) are classified on the fly inside
-the fill loop and baked straight into the block choice — nothing is stored per
-voxel. The base block covers **all** solid stone with `y < caveNoiseMaxY` (not
-just cave walls), so exposed faces anywhere in the band read as the biome. Cave
-structures read the biome once per captured layer at fill time
-([cave_structure_system.md](cave_structure_system.md)); a per-voxel store is still
-not needed.
+the fill loop and baked straight into the block choice. The base block covers
+**all** solid stone with `y < caveNoiseMaxY` (not just cave walls), so exposed
+faces anywhere in the band read as the biome. Cave structures read the biome once
+per captured layer at fill time. Separately, chunks retain one byte per voxel for
+carved cave air (`0xff` means non-cave); this lets the post-structure decorator
+pass identify exact floor, wall, and ceiling cells across chunk boundaries without
+retaining the generation noise fields.
 
 ## Secondary rock
 
