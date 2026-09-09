@@ -6,7 +6,7 @@ DLSS Ray Reconstruction (DLSS-RR / DLSS-D) via NVIDIA Streamline SDK. Upscales f
 resolution to viewport resolution while denoising the path-traced output.
 
 DLSS Frame Generation (DLSS-G / DLSS-FG) sits on top of it, interpolating one extra frame per
-rendered frame. It is off by default, gated on the `frameGeneration` setting.
+rendered frame. It is on by default, gated on the `frameGeneration` setting.
 
 ## Manual Hooking
 
@@ -52,6 +52,11 @@ command list work that produces them. This is why resource tagging happens at th
 `reset = eTrue` in `sl::Constants` for one frame, telling DLSS to discard temporal history.
 
 ## Frame Generation
+
+Since the setting defaults to on, the first `render()` call normally enables frame generation and
+therefore rebuilds the swap chain once at startup. That is deliberate: routing startup through the
+same `setFrameGenerationActive` path as a runtime toggle keeps one code path for enabling it,
+at the cost of one extra swap chain create and target reallocation before the first frame.
 
 Frame generation is only offered when DLSS-G, Reflex and PCL all report support, which is checked
 once at startup (`initFrameGenSupport`). The usual reason for it to be unavailable is Windows
