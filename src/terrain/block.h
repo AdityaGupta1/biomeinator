@@ -6,6 +6,8 @@
 #include "block_ids.h"
 
 #include <cstdint>
+#include <filesystem>
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +32,7 @@ enum class BlockShape : uint8_t
     CUBE,
     X_SHAPED,
     LIQUID_TOP,
+    DECORATOR_CUSTOM,
 
     COUNT
 };
@@ -60,12 +63,53 @@ struct BlockData
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
+    uint32_t modelIdx{ ~0u };
+    std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
+    uint8_t numRotationsY{ 1 };
 };
+
+// These shapes never hide a neighboring solid or cutout cube face.
+constexpr bool isDecoratorShape(BlockShape shape)
+{
+    return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
+}
+
+// Face direction ordering matches chunk neighbor directions: +X,+Z,-X,-Z,+Y,-Y.
+// Called after neighbor lookup; world-height boundaries are handled by the chunk.
+constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neighborType,
+                                BlockShape neighborShape, int faceIdx)
+{
+    if (neighborType == BlockType::AIR) return true;
+    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT) &&
+        isDecoratorShape(neighborShape)) return true;
+    switch (type)
+    {
+    case BlockType::SOLID:
+        if (neighborType != BlockType::SOLID) return true;
+        if (faceIdx == 4) return shape == BlockShape::LIQUID_TOP;
+        if (faceIdx == 5) return neighborShape == BlockShape::LIQUID_TOP;
+        return neighborShape == BlockShape::LIQUID_TOP && shape != BlockShape::LIQUID_TOP;
+    case BlockType::TRANSPARENT_CUTOUT:
+        if (neighborType == BlockType::SOLID) return false;
+        // Only the lower-positioned cube owns a shared cutout boundary.
+        return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
+               faceIdx == 0 || faceIdx == 1 || faceIdx == 4;
+    case BlockType::GLASS:
+        return neighborType != BlockType::GLASS && neighborType != BlockType::SOLID;
+    case BlockType::WATER:
+        return shape == BlockShape::LIQUID_TOP && faceIdx == 4;
+    default:
+        return false;
+    }
+}
 
 namespace Blocks
 {
 
 void init();
+
+// Malformed custom definitions throw; other failures log and return defaults.
+BlockData readBlockJson(const std::filesystem::path& jsonPath);
 
 const BlockData& getBlockData(Block block);
 

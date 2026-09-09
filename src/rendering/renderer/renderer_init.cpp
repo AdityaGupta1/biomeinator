@@ -4,6 +4,9 @@
 #include "renderer_internal.h"
 
 #include <random>
+#include <cstdlib>
+
+#include "gpu_requirements.h"
 
 #include <sl_security.h>
 
@@ -57,6 +60,28 @@ void initStreamline()
 
     CHECK_SL_RESULT(slInit(prefs));
 }
+
+namespace
+{
+[[noreturn]] void failGpuCompatibility(const std::string& reason)
+{
+    const std::string message = reason +
+        "\nUpdate your graphics driver and try again. If this persists, use a GPU and driver that support these features.";
+    Logger::logError("%s", message.c_str());
+    if (!renderState.headless)
+    {
+        const std::wstring wideMessage = Util::to_wstring(message.c_str());
+        MessageBoxW(hwnd, wideMessage.c_str(), L"Biomeinator - unsupported GPU capabilities", MB_OK | MB_ICONERROR);
+    }
+    std::exit(EXIT_FAILURE);
+}
+
+std::string shaderModelName(D3D_SHADER_MODEL model)
+{
+    const unsigned int value = static_cast<unsigned int>(model);
+    return std::to_string(value >> 4) + "." + std::to_string(value & 0xf);
+}
+} // namespace
 
 void initDevice()
 {
@@ -121,6 +146,24 @@ void initDevice()
         {
             CHECK_SL_RESULT(slGetNativeInterface(renderState.proxyDevice.Get(),
                                                  reinterpret_cast<void**>(renderState.device.GetAddressOf())));
+            // Query the native device before Streamline setup or shader pipeline creation.
+            constexpr auto requiredShaderModel = static_cast<D3D_SHADER_MODEL>(BIOMEINATOR_REQUIRED_SHADER_MODEL);
+            D3D12_FEATURE_DATA_SHADER_MODEL shaderModel{ requiredShaderModel };
+            const HRESULT shaderModelResult = renderState.device->CheckFeatureSupport(
+                D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+            const std::string adapterName = Util::to_string(desc.Description);
+            if (FAILED(shaderModelResult))
+            {
+                failGpuCompatibility("GPU '" + adapterName + "': unable to query required Shader Model " +
+                                     shaderModelName(requiredShaderModel) + " support.");
+            }
+            if (shaderModel.HighestShaderModel < requiredShaderModel)
+            {
+                failGpuCompatibility("GPU '" + adapterName + "' reports Shader Model " +
+                                     shaderModelName(shaderModel.HighestShaderModel) + "; this build requires Shader Model " +
+                                     shaderModelName(requiredShaderModel) + ".");
+            }
+            Logger::log("Shader Model %s requirement satisfied", shaderModelName(requiredShaderModel).c_str());
             CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get()));
 
             sl::AdapterInfo adapterInfo{};
@@ -137,8 +180,21 @@ void initDevice()
         adapter.Reset();
     }
 
+    if (!renderState.device)
+    {
+        failGpuCompatibility("No hardware adapter supporting Direct3D feature level 12.1 was found.");
+    }
+
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
-    CHECK_HRESULT(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)));
+    if (FAILED(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    {
+        failGpuCompatibility("GPU '" + renderState.adapterName + "': unable to query DirectX raytracing support.");
+    }
+    if (options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
+    {
+        failGpuCompatibility("GPU '" + renderState.adapterName +
+                             "' does not support the required DirectX Raytracing tier 1.1 (inline raytracing).");
+    }
     renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2;
     if (renderState.voxelMode)
     {

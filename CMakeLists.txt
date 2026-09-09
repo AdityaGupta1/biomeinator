@@ -105,6 +105,11 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
 SET(SHADER_VERSION "6_9")
+# Keep the runtime capability check aligned with the compiled shader target.
+string(REPLACE "_" "" REQUIRED_SHADER_MODEL_HEX "${SHADER_VERSION}")
+file(CONFIGURE OUTPUT "${GENERATED_HEADERS_DIR}/gpu_requirements.h"
+    CONTENT "#pragma once\n#define BIOMEINATOR_REQUIRED_SHADER_MODEL 0x@REQUIRED_SHADER_MODEL_HEX@\n"
+    @ONLY)
 
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
@@ -386,6 +391,17 @@ target_compile_definitions(BiomeinatorTests PRIVATE
 # ==================================================
 # BiomeScanner
 # ==================================================
+
+# CPU-only asset/loader regression checks; no graphics device or window required.
+add_executable(BlockModelTests EXCLUDE_FROM_ALL
+    tests/block_models.cpp src/terrain/block_model.cpp src/terrain/block.cpp
+    src/tinygltf_impl.cpp src/logger.cpp)
+target_include_directories(BlockModelTests PRIVATE ${SRC_DIR} ${GENERATED_HEADERS_DIR}
+    "${EXT}/tinygltf/include" "${EXT}/json/include" "${EXT}/stb/include")
+target_link_libraries(BlockModelTests PRIVATE glm::glm-header-only)
+target_compile_definitions(BlockModelTests PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+    TARGET_FILE_DIR="${CMAKE_SOURCE_DIR}")
 
 # Local web tool for exploring the biome field: serves an interactive seed map and searches for
 # seeds with a target biome near spawn.
