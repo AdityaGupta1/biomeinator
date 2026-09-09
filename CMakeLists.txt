@@ -298,9 +298,14 @@ set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"
     "${EXT}/dxc/bin/dxil.dll"
     "${STREAMLINE_DLL_DIR}/sl.interposer.dll"
+    "${STREAMLINE_DLL_DIR}/sl.common.dll"
     "${STREAMLINE_DLL_DIR}/sl.dlss_d.dll"
     "${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
     #"${STREAMLINE_DLL_DIR}/development/nvngx_dlssd.dll"
+    "${STREAMLINE_DLL_DIR}/sl.dlss_g.dll"
+    "${STREAMLINE_DLL_DIR}/nvngx_dlssg.dll"
+    "${STREAMLINE_DLL_DIR}/sl.reflex.dll"
+    "${STREAMLINE_DLL_DIR}/sl.pcl.dll"
     "${EXT}/WinPixEventRuntime/bin/x64/WinPixEventRuntime.dll"
 )
 
