@@ -60,13 +60,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            Material surfMaterial = getMaterialFromPayload(payload);
-            if (bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS))
-            {
-                const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, linearDepth);
-                applyGlassMaterial(surfMaterial, payload.hitInfo.uv,
-                    makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx));
-            }
+            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, linearDepth);
+            Material surfMaterial = getHitMaterial(payload, coneWidth);
 
             if (surfMaterial.hasGlossyReflection())
             {

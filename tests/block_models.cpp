@@ -38,6 +38,7 @@ int main()
         {
             check(blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, neighborType, shape, face), "solid face against decorator");
             check(blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, neighborType, shape, face), "cutout face against decorator");
+            check(blockFaceVisible(BlockType::GLASS, BlockShape::CUBE, neighborType, shape, face), "glass face against decorator");
             check(!blockFaceVisible(BlockType::WATER, BlockShape::CUBE, neighborType, shape, face), "water stays hidden against decorator");
         }
         for (int face = 0; face < 6; ++face)

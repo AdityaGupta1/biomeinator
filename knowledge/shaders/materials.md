@@ -74,8 +74,11 @@ texture. The block's base color texture becomes the transmission tint, reflectio
 for any dielectric, and roughness comes from the packed aux b channel so different crystal textures
 can differ without new shader constants.
 
-The override is applied in the path tracing raygen (shading) and the gbuffer raygen (DLSS roughness
-and specular albedo guides). It deliberately does *not* touch `acceptHitCandidate`: rough glass is a
+`getHitMaterial` resolves overrides for primary and secondary hits and for the DLSS gbuffer.
+Overrides precede backface IOR inversion, so exiting glass uses reciprocal IOR. Secondary-hit
+resolution follows footprint propagation but precedes lobe-dependent ray-cone widening and DLSS
+look-through albedo evaluation; the shared diffuse terrain material must not leak into those decisions.
+It deliberately does *not* touch `acceptHitCandidate`: rough glass is a
 real bounce rather than a passthrough, so glass triangles occlude shadow rays like any opaque
 geometry. An emitter enclosed in glass is therefore lit into the world by BSDF-sampled refraction
 paths only — NEE towards it is always shadowed.
@@ -100,9 +103,10 @@ strategies would report different colors for the same emitter and MIS would blen
 `globalInstanceOffset` so the ramp doesn't slide when the world origin shifts.
 
 The light tree's flux (`emitter_collect.cs.hlsl`) does not know about the ramp — it uses
-`colorTerm = 1` for packed-aux materials and never samples a texture. That costs a little sampling
-efficiency where the hue is dark (magenta carries less luminance than green at the same value) but
-introduces no bias, since flux is only an importance estimate.
+`colorTerm = 1` for packed-aux materials and never samples a texture. The ramp equalizes
+hue luminance, so hue itself does not change brightness. This estimate still
+omits texture/emission-mask variation and the ramp's luminance scale; that can reduce sampling
+efficiency but introduces no bias, since flux is only an importance estimate.
 
 ## Verifying energy behaviour
 

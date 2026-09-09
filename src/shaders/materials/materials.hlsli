@@ -528,9 +528,17 @@ BsdfSample sampleBsdf(const Material material,
     return result;
 }
 
-Material getMaterialFromPayload(const Payload payload)
+// Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
+static const float foliageDiffuseTransmission = 0.4f;
+
+Material getMaterialFromPayload(const Payload payload, const uint triangleFlags, const TexSampleCtx texCtx)
 {
     Material material = materials[payload.materialIdx];
+    // Resolve surface overrides before orienting IOR for this particular hit.
+    if (bool(triangleFlags & TRIANGLE_FLAG_IS_GLASS))
+        applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    if (bool(triangleFlags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
+        material.diffuseTransmission = foliageDiffuseTransmission;
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {

@@ -90,6 +90,16 @@ TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const floa
     return texCtx;
 }
 
+// Resolve every primary/secondary hit before any lobe-dependent shading or guide logic.
+// Roughness needs the footprint at the hit; biome/procedural color is sampled separately.
+Material getHitMaterial(const Payload payload, const float coneWidth)
+{
+    const PerTriangleData data = perTriDatas[
+        instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+    return getMaterialFromPayload(payload, data.flags,
+        makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.texArraySliceIdx));
+}
+
 float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
     const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
 {

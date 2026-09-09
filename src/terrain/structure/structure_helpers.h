@@ -44,8 +44,6 @@ inline float valueNoise3(glm::vec3 pos, uint32_t seed)
     return result;
 }
 
-// True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
-// blocks land here. Lets the per-chunk fill passes skip structures that only overhang neighbors.
 // Radius perturbation for placeWobbledDisc. A detailStrength of 0 leaves a single octave.
 struct DiscWobble
 {
@@ -124,6 +122,8 @@ inline void placeWobbledDisc(std::vector<Block>& blocks,
     }
 }
 
+// True when a structure's XZ AABB (chunk space) lies wholly outside this chunk, so none of its
+// blocks land here. Lets the per-chunk fill passes skip structures that only overhang neighbors.
 inline bool structureAabbRejectsChunk(glm::ivec2 minXZ_CS, glm::ivec2 maxXZ_CS)
 {
     return minXZ_CS.x >= static_cast<int>(chunkSizeXZ) || minXZ_CS.y /*z*/ >= static_cast<int>(chunkSizeXZ) ||

@@ -68,7 +68,7 @@ struct BlockData
     uint8_t numRotationsY{ 1 };
 };
 
-// These shapes never hide a neighboring solid or cutout cube face.
+// These shapes never hide a neighboring solid, cutout, or glass cube face.
 constexpr bool isDecoratorShape(BlockShape shape)
 {
     return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
@@ -80,7 +80,7 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
                                 BlockShape neighborShape, int faceIdx)
 {
     if (neighborType == BlockType::AIR) return true;
-    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT) &&
+    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
         isDecoratorShape(neighborShape)) return true;
     switch (type)
     {
