@@ -158,7 +158,7 @@ void imguiEndFrame(double deltaTime)
             }
             else
             {
-                ImGui::TextDisabled("Frame generation: %s", renderState.frameGen.unsupportedReason);
+                ImGui::TextDisabled("Frame generation not supported: %s", renderState.frameGen.unsupportedReason.c_str());
             }
         }
 

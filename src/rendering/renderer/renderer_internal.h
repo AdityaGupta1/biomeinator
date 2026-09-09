@@ -62,31 +62,36 @@ struct FrameTimeMeasurement
 // CHECK_SL_RESULT macro
 // =============================================
 
-#if ENABLE_ASSERTS
-inline void printSlResultError(sl::Result result)
+inline std::string slResultToString(sl::Result result)
 {
-    std::string msg;
-
     switch (result)
     {
         case sl::Result::eErrorNoPlugins:
-            msg = "No plugins found";
-            break;
+            return "No plugins found";
         case sl::Result::eErrorInvalidParameter:
-            msg = "Invalid parameter";
-            break;
+            return "Invalid parameter";
         case sl::Result::eErrorMissingConstants:
-            msg = "Missing constants";
-            break;
+            return "Missing constants";
         case sl::Result::eWarnOutOfVRAM:
-            msg = "Out of VRAM";
-            break;
+            return "Out of VRAM";
+        case sl::Result::eErrorAdapterNotSupported:
+        case sl::Result::eErrorNoSupportedAdapterFound:
+            return "Adapter not supported";
+        case sl::Result::eErrorOSDisabledHWS:
+            return "Hardware-accelerated GPU Scheduling disabled";
+        case sl::Result::eErrorDriverOutOfDate:
+            return "Driver out of date";
+        case sl::Result::eErrorOSOutOfDate:
+            return "OS out of date";
         default:
-            msg = "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
-            break;
+            return "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
     }
+}
 
-    Logger::logError(msg.c_str());
+#if ENABLE_ASSERTS
+inline void printSlResultError(sl::Result result)
+{
+    Logger::logError(slResultToString(result).c_str());
 }
 
 #define CHECK_SL_RESULT(expr)                                                                                          \
@@ -267,8 +272,8 @@ struct FrameGenState
 {
     // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
     bool supported{ false };
-    // Shown in the GUI while unsupported; null once supported or in headless runs
-    const char* unsupportedReason{ nullptr };
+    // Shown in the GUI while unsupported; empty once supported or in headless runs
+    std::string unsupportedReason;
     // Only ever changes between frames, since flipping it recreates the swap chain
     bool active{ false };
     // Frames DLSS-G presented for the last app frame. Not simply 2 while frame generation is on:

@@ -64,26 +64,6 @@ void initStreamline()
 
 namespace
 {
-// Streamline separates the reasons a feature is unavailable, and they call for different user
-// actions, so the GUI hint should not blame one of them for all of the others
-const char* describeUnsupportedResult(sl::Result result)
-{
-    switch (result)
-    {
-        case sl::Result::eErrorAdapterNotSupported:
-        case sl::Result::eErrorNoSupportedAdapterFound:
-            return "GPU not supported (needs RTX 40 series or newer)";
-        case sl::Result::eErrorOSDisabledHWS:
-            return "enable Hardware-accelerated GPU Scheduling in Windows graphics settings";
-        case sl::Result::eErrorDriverOutOfDate:
-            return "update the NVIDIA driver";
-        case sl::Result::eErrorOSOutOfDate:
-            return "update Windows";
-        default:
-            return "unavailable (see log for the sl::Result code)";
-    }
-}
-
 // Frame generation is optional, so a missing feature only disables it rather than failing startup
 void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
 {
@@ -104,11 +84,8 @@ void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
     {
         if (SL_FAILED(result, slIsFeatureSupported(feature, adapterInfo)))
         {
-            renderState.frameGen.unsupportedReason = describeUnsupportedResult(result);
-            Logger::logWarning("%s not supported (sl::Result %u): %s; disabling frame generation",
-                               name,
-                               static_cast<uint32_t>(result),
-                               renderState.frameGen.unsupportedReason);
+            renderState.frameGen.unsupportedReason = slResultToString(result);
+            Logger::logWarning("%s not supported: %s", name, renderState.frameGen.unsupportedReason.c_str());
             return;
         }
     }
