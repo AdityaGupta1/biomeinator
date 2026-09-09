@@ -154,7 +154,7 @@ Model readGlb(const std::filesystem::path& path)
                         normal = glm::normalize(normal);
                         for (int c = 0; c < 3; ++c) require(std::isfinite(position[c]), "non-finite model position");
                         require(position.x >= -.5001f && position.x <= .5001f && position.z >= -.5001f &&
-                                position.z <= .5001f && position.y >= -.0001f && position.y <= 1.0001f,
+                                position.z <= .5001f && position.y >= -.1251f && position.y <= 1.0001f,
                                 "decorator model must fit one block, centered at its base (Y up)");
                         require(std::isfinite(uv[0]) && std::isfinite(uv[1]) && uv[0] >= 0.f && uv[0] <= 1.f &&
                                 uv[1] >= 0.f && uv[1] <= 1.f, "model UVs must stay within the block texture");

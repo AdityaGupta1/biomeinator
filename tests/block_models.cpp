@@ -58,6 +58,14 @@ int main()
             check(blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, BlockType::GLASS, BlockShape::CUBE, face), "solid remains visible through glass");
         }
         check(Blocks::getBlockData(Block::CRYSTAL_CORE).proceduralColor, "crystal procedural color survives parsing");
+        const auto& shard = Blocks::getBlockData(Block::CRYSTAL_SHARD);
+        check(shard.shape == BlockShape::DECORATOR_CUSTOM && shard.proceduralColor, "crystal shard model uses procedural ramp");
+        check(Blocks::getTextureNames().at(shard.texSlices[0]) == "crystal_core", "crystal shard uses core atlas");
+        const auto& shardMesh = BlockModels::get(shard.modelIdx);
+        check(shardMesh.indices.size() == 36 * 3, "three rectangular crystal prisms");
+        float shardMinY = 1.f;
+        for (const auto& v : shardMesh.rotations[0]) shardMinY = std::min(shardMinY, v.pos_OS.y);
+        check(shardMinY < 0.f && shardMinY >= -.125f, "crystal bases are buried within allowance");
         const fs::path definitions = fs::path(CMAKE_BINARY_DIR)/"test_output/block_models";
         fs::create_directories(definitions);
         const auto definition = definitions/"invalid_block.json";

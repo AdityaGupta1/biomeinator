@@ -1,6 +1,13 @@
 {
-    "textures": "crystal_shard",
-    "type": "transparent_cutout",
-    "shape": "x_shaped",
-    "proceduralColor": true
+    "textures": "crystal_core",
+    "type": "solid",
+    "shape": "decorator_custom",
+    "model": "crystal_shard.glb",
+    "proceduralColor": true,
+    "randomRotationY": [
+        0,
+        90,
+        180,
+        270
+    ]
 }

@@ -30,7 +30,7 @@ static const float proceduralColorSaturation = 0.8f;
 // swings about eightfold (green is bright, the blue midpoint is very dark), which reads as the
 // clusters pulsing in brightness as the ramp drifts rather than changing color. Equalizing pushes
 // the dark hues' channels well above 1, which is why this is only for emission.
-static const float proceduralColorLuminance = 1.f;
+static const float proceduralColorLuminance = 1.5f;
 
 float3 getProceduralColor(const uint triangleFlags, const float3 pos_WS)
 {

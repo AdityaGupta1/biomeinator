@@ -16,9 +16,10 @@ intentionally supplied by the block JSON; one atlas can be swapped independently
 of the mesh. Invalid custom assets fail startup rather than silently becoming cubes.
 
 The contract is static uncompressed triangles, NORMAL and TEXCOORD_0, UVs within
-0–1, and bounds within one block: X/Z in [-0.5,0.5], Y in [0,1]. The origin is at
-the center of the base. Placement adds (0.5,0,0.5) to the block position. Keeping
-geometry within the owning voxel preserves existing segment-culling assumptions.
+0–1, and bounds within one block: X/Z in [-0.5,0.5], Y in [-0.125,1]. The origin is at
+the center of the base. Placement adds (0.5,0,0.5) to the block position. Horizontal geometry stays within the owning voxel. The downward allowance is for
+buried decorator bases on solid floors, not geometry intended to be visible in the
+voxel below. This keeps floor-mounted crystals as intact tilted rectangular prisms.
 Export from Blender with Y-up conversion, excluding the prototype studio and its
 parent presentation offsets. Preserve component transforms relative to the asset
 root (`root.matrix_world.inverted() @ child.matrix_world`); stripping all object
@@ -71,3 +72,8 @@ The prototype folder was removed intentionally; no generator or source blend is
 required to maintain these assets. Preserve the approved atlases when re-exporting.
 For Blender preview renders on the development GPU, use Cycles OptiX with CPU
 devices disabled.
+
+Crystal shards reuse the opaque `crystal_core` atlas and its emission mask, with
+`proceduralColor` enabled to apply the same world-space color ramp as crystal cores.
+They do not register as sampled area lights. UV density is 16 square texels per
+block along each prism surface, including when tilted.
