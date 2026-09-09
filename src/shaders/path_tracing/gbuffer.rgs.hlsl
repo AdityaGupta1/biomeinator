@@ -27,6 +27,13 @@ float2 calculateMotionFromPos(const float3 pos_WS, const float3 prevPos_WS)
     return motion;
 }
 
+// DLSS frame generation wants post-projection depth, not the ray distance in linearDepthTarget
+float calculateNdcDepth(const float3 pos_WS)
+{
+    const float4 ndc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
+    return ndc.z / ndc.w;
+}
+
 void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
@@ -84,6 +91,10 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;
+
+    // motionHitPos_WS is the hit position, or a far-plane position on a miss, so the sky lands at the far plane
+    RWTexture2D<float> ndcDepthTarget = ResourceDescriptorHeap[heapIndices.uav.ndcDepthTargetIdx];
+    ndcDepthTarget[pixelIdx] = calculateNdcDepth(motionHitPos_WS);
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS, prevMotionHitPos_WS);

@@ -53,19 +53,24 @@ void initImgui()
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
 }
 
-static uint32_t frameCount = 0;
+static uint32_t renderedFrameCount = 0;
+static uint32_t presentedFrameCount = 0;
 static double elapsedTime = 0.0;
 static int lastFps = 0;
+static int lastRenderedFps = 0;
 
 void updateFps(double deltaTime)
 {
-    frameCount++;
+    renderedFrameCount++;
+    presentedFrameCount += renderState.frameGen.framesPresentedLastFrame;
     elapsedTime += deltaTime;
 
     if (elapsedTime >= 1.0)
     {
-        lastFps = frameCount;
-        frameCount = 0;
+        lastFps = presentedFrameCount;
+        lastRenderedFps = renderedFrameCount;
+        renderedFrameCount = 0;
+        presentedFrameCount = 0;
         elapsedTime = 0.0;
     }
 }
@@ -87,7 +92,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularHitDistance", "normals", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "ndcDepth", "motion", "specularHitDistance", "normals", "debug",
 };
 static const std::vector<const char*> dlssModeOptions = {
     "DLAA", "quality", "balanced", "performance", "ultra performance",
@@ -150,6 +155,17 @@ void imguiEndFrame(double deltaTime)
         }
 
         SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("Frame generation");
+        if (renderState.frameGen.supported)
+        {
+            SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
+        }
+        else
+        {
+            ImGui::TextDisabled("not supported (check Hardware-accelerated GPU Scheduling)");
+        }
+
+        SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("World");
         SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 250.f);
 
@@ -189,11 +205,18 @@ void imguiEndFrame(double deltaTime)
 
     if (ImGui::Begin("Performance", nullptr, windowFlags))
     {
-        ImGui::Text("FPS: %d", lastFps);
+        if (renderState.frameGen.active)
+        {
+            ImGui::Text("FPS: %d (%d rendered)", lastFps, lastRenderedFps);
+        }
+        else
+        {
+            ImGui::Text("FPS: %d", lastFps);
+        }
 
         SettingsGuiHelpers::VerticalSpacing();
         renderState.frameTimeBuffer.push({ static_cast<float>(renderState.frameNumber), static_cast<float>(deltaTime) * 1000.f });
-        if (ImPlot::BeginPlot("Frame time", ImVec2(-1, -1)))
+        if (ImPlot::BeginPlot("Frame time (rendered)", ImVec2(-1, -1)))
         {
             static constexpr ImPlotAxisFlags axisFlags = 0;
             ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);

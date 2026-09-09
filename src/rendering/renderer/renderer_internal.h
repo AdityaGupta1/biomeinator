@@ -25,6 +25,9 @@
 
 #include <sl.h>
 #include <sl_dlss_d.h>
+#include <sl_dlss_g.h>
+#include <sl_pcl.h>
+#include <sl_reflex.h>
 
 #include "rendering/camera.h"
 #include "rendering/gpu_profiler.h"
@@ -214,6 +217,10 @@ void initDevice();
 void initDescriptorHeaps();
 void initNvapi();
 void initSwapChain();
+void createSwapChain();
+void releaseSwapChain();
+// Tears the swap chain down and rebuilds it around the new plugin state; see setFrameGenerationActive
+void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
 void initConstantParams();
@@ -249,6 +256,18 @@ struct DlssState
     sl::Extent renderExtent{};
     sl::Extent viewportExtent{};
     sl::DLSSDOptions options{};
+};
+
+struct FrameGenState
+{
+    // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
+    bool supported{ false };
+    // Only ever changes between frames, since flipping it recreates the swap chain
+    bool active{ false };
+    // Frames DLSS-G presented for the last app frame. Not simply 2 while frame generation is on:
+    // the interpolated frame is dropped when presents go out of sync. 1 whenever it is off.
+    uint32_t framesPresentedLastFrame{ 1 };
+    sl::DLSSGOptions options{};
 };
 
 enum class PerfPhase
@@ -352,6 +371,11 @@ struct RendererState
     RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
     RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    RtTarget ndcDepthTarget{ L"ndcDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+
+    // Copy of the back buffer taken before the GUI is drawn, so frame generation can interpolate
+    // the scene without the overlay smearing across generated frames. Format must match the swap chain.
+    RtTarget hudlessTarget{ L"hudlessTarget", DXGI_FORMAT_R8G8B8A8_UNORM, 0, true, false };
 
     RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 
@@ -375,6 +399,7 @@ struct RendererState
 
     // -- DLSS --
     DlssState dlss;
+    FrameGenState frameGen;
 
     // -- Root signatures --
     ComPtr<ID3D12RootSignature> gbufferRootSig;
@@ -411,5 +436,12 @@ struct RendererState
 };
 
 extern RendererState renderState;
+
+// While the DLSS-G plugin is loaded, SL owns the swap chain's frame-latency waitable object and the
+// app must stay off it; slReflexSleep paces the frame instead. See section 12.1 of the DLSS-G guide.
+inline bool isWaitableSwapChainActive()
+{
+    return renderState.useWaitableSwapChain && !renderState.frameGen.active;
+}
 
 } // namespace Renderer

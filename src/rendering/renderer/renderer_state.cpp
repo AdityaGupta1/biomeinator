@@ -15,6 +15,7 @@ RendererState::RendererState()
         { "diffuseAlbedo", &diffuseAlbedoTarget },
         { "specularAlbedo", &specularAlbedoTarget },
         { "linearDepth", &linearDepthTarget },
+        { "ndcDepth", &ndcDepthTarget },
         { "motion", &motionTarget },
         { "specularHitDistance", &specularHitDistanceTarget },
         { "normals", &normalsAndRoughnessTarget },
