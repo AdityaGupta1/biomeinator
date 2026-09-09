@@ -741,6 +741,34 @@
             ],
             "golden": "voxel/grass_biome_blend/golden.png",
             "threshold": 0.01
+        },
+        {
+            "name": "crystal_caves_diffuse_albedo",
+            "world": "voxel/crystal_caves",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=0",
+                "--debugView=\"diffuseAlbedo\"",
+                "--maxPathDepth=4",
+                "--noJitter"
+            ],
+            "golden": "voxel/crystal_caves/golden_diffuseAlbedo.png",
+            "threshold": 0.001
+        },
+        {
+            "name": "crystal_caves_specular_albedo",
+            "world": "voxel/crystal_caves",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=0",
+                "--debugView=\"specularAlbedo\"",
+                "--maxPathDepth=4",
+                "--noJitter"
+            ],
+            "golden": "voxel/crystal_caves/golden_specularAlbedo.png",
+            "threshold": 0.0001
         }
     ]
 }
