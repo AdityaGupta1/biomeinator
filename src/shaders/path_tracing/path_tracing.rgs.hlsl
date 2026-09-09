@@ -197,16 +197,6 @@ struct RcState
 #define BOUNCE_FLAG_ACCEPTED_BACKSIDE_LIGHT (1 << 1)
 #define BOUNCE_FLAG_SAMPLED_DIFFUSE (1 << 2)
 #define BOUNCE_FLAG_ENCOUNTERED_NON_DELTA (1 << 3) // the path has passed a non-delta surface (including the current one)
-#define BOUNCE_FLAG_AREA_NEE (1 << 4) // area-light NEE was allowed at the vertex the last bounce left, see areaNeeAllowed
-
-// Debug toggle: debugBool1 restricts area-light NEE to the first non-delta vertex (dome NEE stays on at
-// every vertex), to see whether later-bounce area NEE earns its cost. Where NEE is off, BSDF-sampled
-// light hits take the whole path MIS weight, so the estimate stays unbiased. Only valid before the
-// vertex's own ENCOUNTERED_NON_DELTA update.
-bool areaNeeAllowed(const uint bounceFlags)
-{
-    return !(bool(debugParams.debugBool1) && bool(bounceFlags & BOUNCE_FLAG_ENCOUNTERED_NON_DELTA));
-}
 
 // Routes a complete path's contribution to the reservoir when ReSTIR PT is on, otherwise
 // straight into pathColor. Terms that are not resampled paths (primary emission, primary miss,
@@ -397,8 +387,6 @@ float3 evaluateReconnection(const ReplayTarget replay,
                             const float3 prevSurfPos_WS,
                             const float3 prevSurfNor_WS,
                             const float footprintThreshold,
-                            const bool useRtsl,
-                            const bool areaNee,
                             out float jacobian,
                             out float jacobianTerms)
 {
@@ -477,26 +465,9 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     if (rcIsLightVertex)
     {
-        float lightPdf = 0.f;
-        if (rcIsDome)
-        {
-            lightPdf = rcIsNeeLightVertex ? neeDomeLightPdf() : domeLightPdf(wi_WS, surfNor_WS);
-        }
-        else if (!areaNee)
-        {
-            if (rcIsNeeLightVertex)
-            {
-                debugZeroReason = 21; return 0.f; // no such path is generated here
-            }
-        }
-        else if (useRtsl)
-        {
-            lightPdf = lightPdfRtsl(rcHit, surfPos_WS, surfNor_WS, wi_WS, surfAcceptsBacksideLight);
-        }
-        else
-        {
-            lightPdf = lightPdfUniform(rcHit, surfPos_WS, wi_WS);
-        }
+        const float lightPdf = rcIsDome
+            ? (rcIsNeeLightVertex ? neeDomeLightPdf() : domeLightPdf(wi_WS, surfNor_WS))
+            : lightPdfRtsl(rcHit, surfPos_WS, surfNor_WS, wi_WS, surfAcceptsBacksideLight);
 
         // NEE paths always reconnect to their light; BSDF-sampled light vertices only where the criteria hold
         if (!rcIsNeeLightVertex)
@@ -587,10 +558,8 @@ float3 pathTraceRay(inout Payload payload,
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRestirPt = (samplingMode == SamplingMode::RESTIR_PT);
-    // Debug toggle: debugBool0 swaps RTSL for uniform light picking under ReSTIR, to see what the tree still
-    // buys once resampling does the importance sampling
-    const bool useRtsl = (samplingMode == SamplingMode::RTSL || useRestirPt) && !(useRestirPt && bool(debugParams.debugBool0));
-    const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl || useRestirPt);
+    const bool useRtsl = (samplingMode == SamplingMode::RTSL || useRestirPt);
+    const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
     const bool isReplay = replay.active;
     // Inline shadow rays win in initial sampling but not in the replay passes (see isSegmentOccluded);
     // constant per raygen entry, so each pass compiles only one of the two paths
@@ -736,7 +705,7 @@ float3 pathTraceRay(inout Payload payload,
                 // light sampling belongs to this path only, not to the throughput continuing past it
                 float lightPdf = 0.f;
                 float misWeight = 1.f;
-                if (doMis && !bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR) && bool(bounceFlags & BOUNCE_FLAG_AREA_NEE))
+                if (doMis && !bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR))
                 {
                     lightPdf = useRtsl
                         ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction,
@@ -853,7 +822,7 @@ float3 pathTraceRay(inout Payload payload,
                 return throughput * evaluateReconnection(replay, payload.rayCone, bool(payload.flags & PAYLOAD_FLAG_UNDERWATER),
                     surfMaterial, payload.hitInfo.uv, wo_WS, surfPos_WS, surfNor_WS, surfTexCtx, canPassthrough, pathSeed, vertexIdx,
                     pathDepth, bounceLobeRoughness, bounceBsdfPdf, prevSurfPos_WS, prevSurfNor_WS, footprintThreshold,
-                    useRtsl, areaNeeAllowed(bounceFlags), replayJacobian, replayJacobianTerms);
+                    replayJacobian, replayJacobianTerms);
             }
 
             if (isReplay && vertexIdx >= replay.pathLength) // the target path ended here without matching
@@ -905,8 +874,7 @@ float3 pathTraceRay(inout Payload payload,
                 // Replay only re-samples a light when the target path ends with NEE from this vertex and
                 // has no reconnection vertex (NEE paths otherwise always reconnect to their light vertex)
                 const bool replayWantsNee = isReplay && replay.rcVertexIdx == 0 && vertexIdx + 1 == replay.pathLength;
-                const bool doAreaNee = areaNeeAllowed(bounceFlags) &&
-                    (!isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA));
+                const bool doAreaNee = !isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA);
                 const bool doDomeNee = sceneParams.voxelMode == 1 &&
                     (!isReplay || (replayWantsNee && replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME));
 
@@ -1020,7 +988,6 @@ float3 pathTraceRay(inout Payload payload,
                 }
             }
 
-            const bool areaNeeHere = areaNeeAllowed(bounceFlags);
             if (!isDeltaSurface)
             {
                 bounceFlags |= BOUNCE_FLAG_ENCOUNTERED_NON_DELTA;
@@ -1056,8 +1023,7 @@ float3 pathTraceRay(inout Payload payload,
             bounceFlags = (bounceFlags & BOUNCE_FLAG_ENCOUNTERED_NON_DELTA) |
                 (surfBsdfSample.wasSpecular ? BOUNCE_FLAG_WAS_SPECULAR : 0) |
                 (surfAcceptsBacksideLight ? BOUNCE_FLAG_ACCEPTED_BACKSIDE_LIGHT : 0) |
-                (surfBsdfSample.sampledDiffuse ? BOUNCE_FLAG_SAMPLED_DIFFUSE : 0) |
-                (areaNeeHere ? BOUNCE_FLAG_AREA_NEE : 0);
+                (surfBsdfSample.sampledDiffuse ? BOUNCE_FLAG_SAMPLED_DIFFUSE : 0);
             ++vertexIdx;
         } // !isPassthrough
 

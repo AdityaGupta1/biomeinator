@@ -214,8 +214,8 @@ void imguiEndFrame(double deltaTime)
 
             SettingsGuiHelpers::VerticalSpacing();
 
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0 (uniform light sampling)", "debugBool0");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1 (primary-only light sampling)", "debugBool1");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
             renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
