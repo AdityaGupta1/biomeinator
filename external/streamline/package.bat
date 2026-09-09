@@ -8,6 +8,7 @@
 ::      -source               Include source in the final package
 ::      -sourceonly           Package only sources (no binaries)
 ::      -dir [output_path]    Creates the package in output_path. Defaults to .\_sdk
+::      -arm64                Package arm64/aarch64 (default is x64)
 
 @SETLOCAL EnableDelayedExpansion
 
@@ -70,6 +71,11 @@ IF NOT "%1"=="" (
     IF "%1"=="-artifacts-src" (
         set artifacts_src=%~f2
         shift
+    )
+    IF "%1"=="-arm64" (
+        set arch_vs=arm64
+        set arch_vs_ex=aarch64
+        set arch_nvmake=aarch64
     )
     shift
     goto :argloop
@@ -184,12 +190,21 @@ copy %artifacts_src%\sl.reflex\%copy_cfg%_%arch_vs%\sl.reflex.pdb %sym_dest% /Y
 
 copy %features_src%\reflex.license.txt %copy_dest% /Y
 
+IF "%arch_vs%"=="x64" (
 copy %src%\external\reflex-sdk-vk\lib\NvLowLatencyVk.dll %copy_dest% /Y
 
+) ELSE (
+    :: Don't want to have to build/support NvLowLatencyVk futher, so there's no arm64ec build.  Use x64.
+    IF "%arch_nvmake%"=="arm64ec" (
+        copy %src%\external\reflex-sdk-vk\lib\NvLowLatencyVk.dll %copy_dest% /Y
+    )
+)
+
+
 :: Profiling Binary
-IF "%copy_cfg%"=="Develop" (
+IF NOT "%copy_cfg%"=="Production" (
     copy %src%\external\pix\bin\WinPixEventRuntime.dll %copy_dest% /Y
-    copy %src%\external\pix\PACKAGE_LICENSES\winpixeventruntime-LICENSE.md %copy_dest% /Y
+    copy %src%\external\pix\PACKAGE-LICENSES\winpixeventruntime-LICENSE.md %copy_dest% /Y
 )
 
 exit /b 0
@@ -307,8 +322,12 @@ copy %src%\docs\changelog.txt %dest% /Y
 
 :: README AND LICENSES
 copy %src%\README.md             %dest% /Y
+:: Contribution docs are for the public GitHub repo only.
+copy %src%\CONTRIBUTING.md       %dest% /Y
+copy %src%\CLA.md                %dest% /Y
 copy %src%\license.txt           %dest% /Y
 copy %src%\"NVIDIA Nsight Perf SDK License (28Sept2022).pdf" %dest% /Y
+copy %src%\"NVIDIA Nsight Graphics SDK License (Apache 2.0).txt" %dest% /Y
 copy %src%\3rd-party-licenses.md %dest% /Y
 
 :: SOURCE
@@ -343,6 +362,25 @@ IF "%include_source%"=="True" (
     copy %src%\setup.bat     %dest%
     copy %src%\project.xml   %dest%
     copy %src%\package.bat   %dest%
+
+    :: Agent skills
+    mkdir "%dest%\.agents"
+    mkdir "%dest%\.agents\plugins"
+    mkdir "%dest%\.claude-plugin"
+    mkdir "%dest%\plugins"
+    mkdir "%dest%\plugins\streamline-agent-skills"
+    mkdir "%dest%\plugins\streamline-agent-skills\skills"
+
+    copy "%src%\.agents\plugins\marketplace.json" "%dest%\.agents\plugins"
+    copy "%src%\.claude-plugin\marketplace.json" "%dest%\.claude-plugin"
+    copy "%src%\plugins\streamline-agent-skills\AGENTS.md" "%dest%\plugins\streamline-agent-skills"
+    copy "%src%\plugins\streamline-agent-skills\CLAUDE.md" "%dest%\plugins\streamline-agent-skills"
+    copy "%src%\plugins\streamline-agent-skills\plugin-manifest-source.json" "%dest%\plugins\streamline-agent-skills"
+    xcopy "%src%\plugins\streamline-agent-skills\skills\authoring-dlss-agent-skills" "%dest%\plugins\streamline-agent-skills\skills\authoring-dlss-agent-skills" /S /I /Y
+    xcopy "%src%\plugins\streamline-agent-skills\skills\integrate-dlss-fg" "%dest%\plugins\streamline-agent-skills\skills\integrate-dlss-fg" /S /I /Y
+    xcopy "%src%\plugins\streamline-agent-skills\skills\integrate-dlss-rr" "%dest%\plugins\streamline-agent-skills\skills\integrate-dlss-rr" /S /I /Y
+    xcopy "%src%\plugins\streamline-agent-skills\skills\integrate-dlss-sr" "%dest%\plugins\streamline-agent-skills\skills\integrate-dlss-sr" /S /I /Y
+    xcopy "%src%\plugins\streamline-agent-skills\skills\integrate-reflex-pcl" "%dest%\plugins\streamline-agent-skills\skills\integrate-reflex-pcl" /S /I /Y
 
     :: Common Source
     xcopy %src%\source\core      %dest%\source\core /S
@@ -387,19 +425,24 @@ IF "%include_source%"=="True" (
     mkdir %dest%\external\ngx-sdk\include
     mkdir %dest%\external\ngx-sdk\lib
     mkdir %dest%\external\ngx-sdk\lib\Windows_%arch_vs_ex%
+    mkdir %dest%\external\nvapi
 
     xcopy %src%\external\json\include                          %dest%\external\json\include /S
     copy %src%\external\json\LICENSE.MIT                       %dest%\external\json
     copy %src%\external\json\nlohmann_json.natvis              %dest%\external\json
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_defs.h       %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_defs_vk.h   %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers.h    %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_d3d.h %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_cuda.h %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_vk.h %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_params.h     %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx.h            %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_vk.h         %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_defs_dlssd.h       %dest%\external\ngx-sdk\include
-    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_dlssd.h    %dest%\external\ngx-sdk\include
-    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_dlssd_vk.h %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_dlssd.h     %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_dlssd_d3d.h %dest%\external\ngx-sdk\include
+    copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_dlssd_vk.h  %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_params_dlssd.h     %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_defs_deepdvc.h       %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_deepdvc.h    %dest%\external\ngx-sdk\include
@@ -407,12 +450,22 @@ IF "%include_source%"=="True" (
 
     xcopy %src%\external\ngx-sdk\lib\Windows_%arch_vs_ex%                    %dest%\external\ngx-sdk\lib\Windows_%arch_vs_ex% /S
 
+    copy %src%\external\nvapi\*.c %dest%\external\nvapi\ /Y
+    copy %src%\external\nvapi\*.h %dest%\external\nvapi\ /Y
+    mkdir %dest%\external\nvapi\amd64
+    copy %src%\external\nvapi\amd64\nvapi64.lib %dest%\external\nvapi\amd64\nvapi64.lib
+    mkdir %dest%\external\nvapi\aarch64
+    copy %src%\external\nvapi\aarch64\nvapia64.lib %dest%\external\nvapi\aarch64\nvapia64.lib
+
     :: Copy RTX SDKs EULA for NGX SDK bits
     copy %src%\features\nvngx_dlss.license.txt %dest%\external\ngx-sdk\license.txt
 
     mkdir %dest%\external\reflex-sdk-vk
     xcopy %src%\external\reflex-sdk-vk\ %dest%\external\reflex-sdk-vk /S
     copy %src%\features\reflex.license.txt %dest%\external\reflex-sdk-vk /Y
+
+    mkdir %dest%\external\nsight-sdk
+    xcopy %src%\external\nsight-sdk\ %dest%\external\nsight-sdk /S
 
     :: Shader Source
     copy %src%\shaders\copy.hlsl                       %dest%\shaders
@@ -422,7 +475,6 @@ IF "%include_source%"=="True" (
     copy %src%\shaders\mvec.hlsl                       %dest%\shaders
     copy %src%\shaders\vulkan_clear_image_view.comp    %dest%\shaders
     copy %src%\shaders\vulkan_clear_image_view_spirv.h %dest%\shaders
-
     :: Compiled Shaders
     copy %artifacts_src%\shaders\copy_cs.h            %dest%\_artifacts\shaders
     copy %artifacts_src%\shaders\copy_spv.h           %dest%\_artifacts\shaders
@@ -430,7 +482,6 @@ IF "%include_source%"=="True" (
     copy %artifacts_src%\shaders\copy_to_buffer_spv.h %dest%\_artifacts\shaders
     copy %artifacts_src%\shaders\mvec_cs.h            %dest%\_artifacts\shaders
     copy %artifacts_src%\shaders\mvec_spv.h           %dest%\_artifacts\shaders
-
     :: Feature DLLs
     IF "%create_features_dir%"=="True" (
         mkdir %dest%\features
@@ -462,5 +513,6 @@ IF "%include_source%"=="True" (
         copy %artifacts_src%\sl.dlss_g\Production_%arch_vs%\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Production_%arch_vs%
         copy %artifacts_src%\sl.dlss_g\Develop_%arch_vs%\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Develop_%arch_vs%
     )
+
 
 )

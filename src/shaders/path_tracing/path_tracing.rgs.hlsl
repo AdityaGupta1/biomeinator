@@ -25,8 +25,6 @@
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
-// Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
-static const float foliageDiffuseTransmission = 0.4f;
 #define RESTIR_ATTRIBUTION_TEST 0 // TEMP
 static uint debugZeroReason = 0; // TEMP
 static uint debugZeroKind = 0; // TEMP
@@ -529,17 +527,10 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     const InstanceData rcInstanceData = instanceDatas[rcHit.instanceId];
     const PerTriangleData rcPerTriData = perTriDatas[rcInstanceData.perTriDatasBufferOffset + rcHit.triangleIdx];
-    Material rcMaterial = materials[rcInstanceData.materialIdx];
-    if (rcIsBackface)
-    {
-        rcMaterial.ior = 1.f / rcMaterial.ior;
-    }
-    if (bool(rcPerTriData.flags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
-    {
-        rcMaterial.diffuseTransmission = foliageDiffuseTransmission;
-    }
     const float rcConeWidth = getRayConeWidthAtDistance(rayCone, distance(surfPos_WS, rcHit.hitPos_WS));
-    const TexSampleCtx rcTexCtx = makeTintedTexSampleCtx(rcPerTriData, rcConeWidth, rcHit.hitPos_WS.xz);
+    Material rcMaterial = getHitMaterialAt(rcInstanceData.materialIdx, rcPerTriData.flags, rcHit.uv,
+        makeUntintedTexSampleCtx(computeMipLevel(rcConeWidth), rcPerTriData.texArraySliceIdx), rcIsBackface);
+    const TexSampleCtx rcTexCtx = makeTintedTexSampleCtx(rcPerTriData, rcConeWidth, rcHit.hitPos_WS);
     rcMaterial.baseColor = getMaterialBaseColor(rcMaterial, rcHit.uv, rcTexCtx).rgb;
     rcMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
 
@@ -674,7 +665,7 @@ float3 pathTraceRay(inout Payload payload,
         throughput *= chunkColor;
     }
 
-    Material surfMaterial = getMaterialFromPayload(payload);
+    Material surfMaterial = getHitMaterial(payload, payload.rayCone.width);
 
     // Vertex indices follow the papers: x1 is the primary hit, passthrough hits are not vertices
     uint vertexIdx = 1;
@@ -695,13 +686,9 @@ float3 pathTraceRay(inout Payload payload,
     {
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-        if (bool(perTriData.flags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
-        {
-            surfMaterial.diffuseTransmission = foliageDiffuseTransmission;
-        }
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
-            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
+            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and multiply by Fresnel reflectance
         float3 Le = 0.f;
@@ -1085,10 +1072,9 @@ float3 pathTraceRay(inout Payload payload,
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            surfMaterial = getMaterialFromPayload(payload);
-
             const float hitDistance = distance(ray.Origin, payload.hitInfo.hitPos_WS);
             payload.rayCone.width = getRayConeWidthAtDistance(payload.rayCone, hitDistance);
+            surfMaterial = getHitMaterial(payload, payload.rayCone.width);
 
             if (surfMaterial.hasDiffuse())
             {
@@ -1132,7 +1118,7 @@ float3 pathTraceRay(inout Payload payload,
                         const PerTriangleData secondHitPerTriData =
                             perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
                         const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
-                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
+                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
                         if (surfMaterial.hasDiffuse())
                         {
                             secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;

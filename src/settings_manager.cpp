@@ -55,6 +55,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
     ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
+    ADD_OPTION("frameGeneration", "Enable DLSS frame generation", bool, "true");
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
     ADD_OPTION("useVsync", "Enable VSync", bool, "false");
     ADD_OPTION("lockCamera", "Lock camera (disable player input)", bool, "false");
@@ -161,6 +162,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);
     COPY_SETTING("dlssMode", uint32_t);
+    COPY_SETTING("frameGeneration", bool);
     COPY_SETTING("doPathSplitting", bool);
     COPY_SETTING("useVsync", bool);
     COPY_SETTING("lockCamera", bool);

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-08_
 
 # Material Model and BSDFs
 
@@ -63,6 +63,50 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   must mirror `sampleBsdf`'s lobe structure exactly (including the diffuse-transmission hemisphere
   split) or MIS silently breaks. `sampleBsdf` finishes non-delta samples through the same
   `evaluateBsdf` NEE uses for that reason.
+
+## Glass as a per-triangle override
+
+Voxel terrain shares a single diffuse material across every block, so the glass look
+(`TRIANGLE_FLAG_IS_GLASS`, `applyGlassMaterial`) is applied per triangle at shading time instead of
+being its own material: a second material would need a second instance and BLAS per chunk, while the
+override costs one flag test and one aux texture sample on hits that were already sampling that
+texture. The block's base color texture becomes the transmission tint, reflection stays untinted as
+for any dielectric, and roughness comes from the packed aux b channel so different crystal textures
+can differ without new shader constants.
+
+`getHitMaterial` resolves overrides for primary and secondary hits and for the DLSS gbuffer.
+Overrides precede backface IOR inversion, so exiting glass uses reciprocal IOR. Secondary-hit
+resolution follows footprint propagation but precedes lobe-dependent ray-cone widening and DLSS
+look-through albedo evaluation; the shared diffuse terrain material must not leak into those decisions.
+It deliberately does *not* touch `acceptHitCandidate`: rough glass is a
+real bounce rather than a passthrough, so glass triangles occlude shadow rays like any opaque
+geometry. An emitter enclosed in glass is therefore lit into the world by BSDF-sampled refraction
+paths only — NEE towards it is always shadowed.
+
+## Procedural color
+
+`TRIANGLE_FLAG_PROCEDURAL_COLOR` multiplies emission by a world-space ramp
+(`common/procedural_color.hlsli`): hue sweeping green to magenta and back along the (1, 1, 1)
+diagonal, drifting with `animTime`. It only affects `getMaterialEmissiveColor`; diffuse and
+transmission retain their texture color. This lets crystal ore use an emissive aux-R mask over
+unchanged basalt. Non-emissive texels receive no ramp contribution.
+
+It is evaluated per shading point rather than baked per triangle at mesh time, which is what makes
+it smooth within a single block, lets it animate, and keeps it independent of the geometry, so a
+crystal model gets it on the same terms as a cube face.
+
+The invariant that makes this correct: **every path that shades a surface must evaluate the ramp at
+the same world position.** A BSDF hit evaluates it at the hit point (through
+`makeTintedTexSampleCtx`); NEE evaluates it at the sampled point on the light triangle
+(`traceToLight`, which otherwise builds an untinted ctx). If one of them skipped it, the two
+strategies would report different colors for the same emitter and MIS would blend them. Both add
+`globalInstanceOffset` so the ramp doesn't slide when the world origin shifts.
+
+The light tree's flux (`emitter_collect.cs.hlsl`) does not know about the ramp — it uses
+`colorTerm = 1` for packed-aux materials and never samples a texture. The ramp equalizes
+hue luminance, so hue itself does not change brightness. This estimate still
+omits texture/emission-mask variation and the ramp's luminance scale; that can reduce sampling
+efficiency but introduces no bias, since flux is only an importance estimate.
 
 ## Verifying energy behaviour
 

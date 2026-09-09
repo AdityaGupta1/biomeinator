@@ -21,7 +21,8 @@ an enum entry + one init block).
 ## STONE at the origin
 
 `STONE` sits at the origin of noise space and the themed biomes are offset from
-it (LUSH at temperature 0.3, humidity 0.3). Because selection is nearest-neighbor,
+it (LUSH at temperature 0.3, humidity 0.3; CRYSTALS mirrored at -0.3, -0.3, so the
+two never border each other directly — STONE always lies between). Because selection is nearest-neighbor,
 the boundary between two biomes is the perpendicular bisector of their points, so
 a biome's share of the cave band is set by how far and in which direction it is
 offset — no explicit rarity threshold needed. Adding a themed biome means adding
@@ -69,6 +70,24 @@ separate low-frequency coarse field (`fnCaveRock`, ~160-block features, threshol
 at `caveSecondaryRockThreshold`). It is sampled on the same downsampled grid as the
 other cave fields, so the rock boundary is smooth and seam-free across chunks; the
 skin and clay are rock-agnostic and lie on top of whichever rock is chosen.
+
+## Slope-dependent surface rock
+
+`flatSurfaceBlock` / `secondaryFlatSurfaceBlock` replace near-surface rock where the cave
+surface is flat-ish, so CRYSTALS reads as basalt on steep walls and cracked basalt on
+floors, ceilings and gentle slopes (its stone regions stay plain stone on every slope). The
+surface normal is the gradient of the carve distance (`noise - caveSurfaceVal`) by central
+differences of the cave noise grids; the y difference folds in the carve threshold's own y
+dependence so the near-surface fade band does not read as a tilt. This is why the two
+cave noise grids carry a one-block XZ margin: the x/z differences at a chunk border read
+the neighbor chunk's first column, which is what keeps the classification seamless (about a
+quarter more cave noise per chunk). Only rock within `caveFlatSurfaceShellDist` noise units
+of the surface is classified, the same shell idea as the skin below.
+
+The obvious cheaper alternative — mark voxels with air directly above or below — was
+rejected because it would put the flat block on every exposed top face, so the base rock's
+top texture (the columnar cross-section) could never show. With a true slope, a steep wall's
+stair-step ledges stay base rock and display it.
 
 ## Surface skin via carve noise (no distance pass)
 

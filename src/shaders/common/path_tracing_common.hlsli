@@ -9,6 +9,7 @@
 
 #include "common/biome_map.hlsli"
 #include "common/global_params.hlsli"
+#include "common/procedural_color.hlsli"
 #include "common/payload.hlsli"
 #include "common/water_waves.hlsli"
 #include "materials/materials.hlsli"
@@ -78,15 +79,26 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
     v2 = verts[instanceData.vertsBufferOffset + i2];
 }
 
-// Ctx for surface shading at a hit; samples the biome map once here so all base color reads
-// for the hit share the tint (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float2 posXZ_WS)
+// Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
+// so all color reads for the hit share them (c.f. makeUntintedTexSampleCtx())
+TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float3 pos_WS)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
     texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    texCtx.biomeTint = getBiomeTint(perTriData.flags, posXZ_WS);
+    texCtx.biomeTint = getBiomeTint(perTriData.flags, pos_WS.xz);
+    texCtx.proceduralColor = getProceduralColor(perTriData.flags, pos_WS);
     return texCtx;
+}
+
+// Resolve every primary/secondary hit before any lobe-dependent shading or guide logic.
+// Roughness needs the footprint at the hit; biome/procedural color is sampled separately.
+Material getHitMaterial(const Payload payload, const float coneWidth)
+{
+    const PerTriangleData data = perTriDatas[
+        instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+    return getMaterialFromPayload(payload, data.flags,
+        makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.texArraySliceIdx));
 }
 
 float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,

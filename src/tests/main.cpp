@@ -157,6 +157,13 @@ int main(int argc, char** argv)
         std::cout << command << std::endl << std::endl;
         const int ret = std::system(command.c_str());
         TEST_ASSERT(ret == 0);
+        if (ret != 0)
+        {
+            std::cerr << "Renderer exited with code " << ret << "; skipping image comparison for '"
+                      << test.name << "'. See the renderer diagnostic above.\n";
+            failedTestNames.push_back(test.name);
+            continue;
+        }
 
         int genW = 0;
         int genH = 0;

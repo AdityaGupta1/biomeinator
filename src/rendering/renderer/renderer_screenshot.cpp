@@ -56,7 +56,7 @@ void captureQueuedScreenshot()
     destLocation.PlacedFootprint = {
         .Offset = 0,
         .Footprint = {
-            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .Format = SWAP_CHAIN_FORMAT,
             .Width = width,
             .Height = height,
             .Depth = 1,

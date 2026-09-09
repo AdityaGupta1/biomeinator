@@ -66,6 +66,26 @@ static FN::SmartNode<FN::Generator> fnCaveSkinPatch;
 // Low-frequency field in [0, 1] choosing a biome's secondary rock (CaveBiomeData::secondaryBaseBlock)
 // above this threshold
 inline constexpr float caveSecondaryRockThreshold = 0.5f;
+
+// Biomes with a flat-surface block (CaveBiomeData::flatSurfaceBlock) split their cave surfaces
+// by slope. The surface normal is the gradient of the carve distance, taken by central
+// differences, which is why the cave noise grids carry a one-block XZ margin (a seam would appear
+// at chunk borders otherwise). Only rock within caveFlatSurfaceShellDist noise units of the
+// surface is classified; deeper rock stays baseBlock. A surface is flat when the normal's y
+// component is at least caveFlatSurfaceMinNormalY (0.7 ~ within 45 degrees of horizontal).
+inline constexpr uint caveNoiseMarginXZ = 1;
+inline constexpr uint caveNoiseSizeXZ = chunkSizeXZ + 2 * caveNoiseMarginXZ;
+inline constexpr uint caveNoiseSizeXZSquare = caveNoiseSizeXZ * caveNoiseSizeXZ;
+inline constexpr float caveFlatSurfaceShellDist = 0.25f;
+inline constexpr float caveFlatSurfaceMinNormalY = 0.7f;
+
+// Depth range below a column's terrain height over which the carve threshold fades, which is what
+// keeps caves from opening onto the surface. Because the fade is anchored to the column's own
+// terrain height, the carve field varies horizontally inside this band; see the slope
+// classification in the fill loop.
+inline constexpr float caveSurfaceFadeStartDepth = 20.f;
+inline constexpr float caveSurfaceFadeEndDepth = 4.f;
+
 static FN::SmartNode<FN::Generator> fnCaveRock;
 
 static FN::SmartNode<FN::Generator> fnSwampWarp;
@@ -218,15 +238,15 @@ void init()
     }
 }
 
-static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint height, int yOffset = 0)
+static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint sizeXZ, uint height, int yOffset = 0)
 {
     fn->GenUniformGrid3D(data,
                          yOffset /*y*/,
                          posXZ.x + noiseOffsetXZ.x /*x*/,
                          posXZ.y + noiseOffsetXZ.y /*z*/,
                          height,
-                         chunkSizeXZ,
-                         chunkSizeXZ,
+                         sizeXZ,
+                         sizeXZ,
                          1.f,
                          1.f,
                          1.f,
@@ -432,11 +452,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     ASSERT(caveSimplexNoiseHeight > 0 && caveSimplexNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave simplex noise height out of range");
 
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
-    float* caveNoiseWorley = threadMemoryAlloc.request<float>(chunkSizeXZSquare * caveWorleyNoiseHeight);
-    float* caveNoiseSimplex = threadMemoryAlloc.request<float>(chunkSizeXZSquare * caveSimplexNoiseHeight);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, terrainNoiseHeight, terrainNoiseMinY);
-    fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, chunkPosBlocksXZ_WS, caveWorleyNoiseHeight);
-    fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, chunkPosBlocksXZ_WS, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
+    float* caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
+    float* caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
+    const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
+    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ, terrainNoiseHeight, terrainNoiseMinY);
+    fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveWorleyNoiseHeight);
+    fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
 
     // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
     // top of the band to interpolate against the next coarse cell.
@@ -456,8 +477,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
-    const uint caveWorleyNoiseSize = chunkSizeXZSquare * caveWorleyNoiseHeight;
-    const uint caveSimplexNoiseSize = chunkSizeXZSquare * caveSimplexNoiseHeight;
+    const uint caveWorleyNoiseSize = caveNoiseSizeXZSquare * caveWorleyNoiseHeight;
+    const uint caveSimplexNoiseSize = caveNoiseSizeXZSquare * caveSimplexNoiseHeight;
     const uint maxFillY = min(static_cast<int>(chunkSizeY - 1), max(terrainNoiseMaxY, waterLevelMax));
 
     // Reused scratch: holds one column's air pockets at a time, cleared and refilled per column.
@@ -538,8 +559,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const int baseTerrainNoiseIdx = static_cast<int>(terrainNoiseHeight * columnIdx) - terrainNoiseMinY;
-            const uint baseCaveWorleyNoiseIdx = caveWorleyNoiseHeight * columnIdx;
-            const uint baseCaveSimplexNoiseIdx = caveSimplexNoiseHeight * columnIdx;
+            const uint caveColumnIdx = (blockX + caveNoiseMarginXZ) + caveNoiseSizeXZ * (blockZ + caveNoiseMarginXZ);
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
 
@@ -549,6 +569,56 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
+
+            // Carve noise at any column of the margined cave grids, blended between the worley and
+            // simplex bands. Neighbor columns are evaluated with this column's band bounds so the
+            // slope gradient sees one continuous function.
+            const auto sampleCaveNoise = [&](const uint caveCol, const uint y) -> float
+            {
+                const auto worleyAt = [&]()
+                {
+                    const uint idx = caveWorleyNoiseHeight * caveCol + y;
+                    ASSERT(idx < caveWorleyNoiseSize, "cave worley noise index out of bounds");
+                    return caveNoiseWorley[idx];
+                };
+                const auto simplexAt = [&]()
+                {
+                    const uint idx = caveSimplexNoiseHeight * caveCol + (y - caveSimplexNoiseMinY);
+                    ASSERT(idx < caveSimplexNoiseSize, "cave simplex noise index out of bounds");
+                    return caveNoiseSimplex[idx];
+                };
+
+                if (y < caveWorleyBound)
+                {
+                    return worleyAt();
+                }
+                if (y >= caveSimplexBound)
+                {
+                    return simplexAt();
+                }
+
+                const float worleyVal = worleyAt();
+                const float simplexVal = simplexAt();
+                const float halfRange = (caveSimplexBound - caveWorleyBound) * 0.5f;
+                const float midpoint = caveWorleyBound + halfRange;
+                const float minVal = glm::min(worleyVal, simplexVal);
+                if (y < midpoint)
+                {
+                    const float t = (y - caveWorleyBound) / halfRange;
+                    return glm::mix(worleyVal, minVal, glm::smoothstep(0.0f, 1.0f, t));
+                }
+                const float t = (y - midpoint) / halfRange;
+                return glm::mix(minVal, simplexVal, glm::smoothstep(0.0f, 1.0f, t));
+            };
+
+            // Carve threshold before the per-column swamp seal: surface fade plus altitude squash
+            const auto caveSurfaceValAt = [&](const float y)
+            {
+                return glm::mix(0.6f, -0.3f,
+                                glm::smoothstep(terrainBaseHeight - caveSurfaceFadeStartDepth,
+                                                terrainBaseHeight - caveSurfaceFadeEndDepth, y)) -
+                    glm::smoothstep(240.0f, 320.0f, y) * 0.8f;
+            };
 
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
@@ -601,46 +671,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     if (y < static_cast<uint>(caveNoiseMaxY))
                     {
-                        float caveNoiseVal;
-                        if (y < caveWorleyBound)
-                        {
-                            const uint caveWorleyNoiseIdx = baseCaveWorleyNoiseIdx + y;
-                            ASSERT(caveWorleyNoiseIdx < caveWorleyNoiseSize, "cave worley noise index out of bounds");
-                            caveNoiseVal = caveNoiseWorley[caveWorleyNoiseIdx];
-                        }
-                        else if (y < caveSimplexBound)
-                        {
-                            const uint caveWorleyNoiseIdx = baseCaveWorleyNoiseIdx + y;
-                            ASSERT(caveWorleyNoiseIdx < caveWorleyNoiseSize, "cave worley noise index out of bounds");
-                            const float caveNoiseWorleyVal = caveNoiseWorley[caveWorleyNoiseIdx];
-
-                            const uint caveSimplexNoiseIdx = baseCaveSimplexNoiseIdx + (y - caveSimplexNoiseMinY);
-                            ASSERT(caveSimplexNoiseIdx < caveSimplexNoiseSize, "cave simplex noise index out of bounds");
-                            const float caveNoiseSimplexVal = caveNoiseSimplex[caveSimplexNoiseIdx];
-
-                            const float halfRange = (caveSimplexBound - caveWorleyBound) * 0.5f;
-                            const float midpoint = caveWorleyBound + halfRange;
-                            const float caveNoiseMinVal = glm::min(caveNoiseWorleyVal, caveNoiseSimplexVal);
-                            if (y < midpoint)
-                            {
-                                const float t = (y - caveWorleyBound) / halfRange;
-                                caveNoiseVal = glm::mix(caveNoiseWorleyVal, caveNoiseMinVal, glm::smoothstep(0.0f, 1.0f, t));
-                            }
-                            else
-                            {
-                                const float t = (y - midpoint) / halfRange;
-                                caveNoiseVal = glm::mix(caveNoiseMinVal, caveNoiseSimplexVal, glm::smoothstep(0.0f, 1.0f, t));
-                            }
-                        }
-                        else
-                        {
-                            const uint caveSimplexNoiseIdx = baseCaveSimplexNoiseIdx + (y - caveSimplexNoiseMinY);
-                            ASSERT(caveSimplexNoiseIdx < caveSimplexNoiseSize, "cave simplex noise index out of bounds");
-                            caveNoiseVal = caveNoiseSimplex[caveSimplexNoiseIdx];
-                        }
-
-                        float caveSurfaceVal = glm::mix(0.6f, -0.3f, glm::smoothstep(terrainBaseHeight - 20.f, terrainBaseHeight - 4.f, static_cast<float>(y)));
-                        caveSurfaceVal -= glm::smoothstep(240.0f, 320.0f, static_cast<float>(y)) * 0.8f;
+                        const float caveNoiseVal = sampleCaveNoise(caveColumnIdx, y);
+                        float caveSurfaceVal = caveSurfaceValAt(static_cast<float>(y));
                         // Seal caves in a band around nearby pond waterlines
                         // (knowledge/terrain/swamp_generation.md)
                         float swampSealSub = 0.f;
@@ -670,13 +702,47 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
+                            Block flatSurfaceBlock = caveBiomeData.flatSurfaceBlock;
                             Block skinFringeBlock = caveBiomeData.skinFringeBlock;
                             if (caveBiomeData.secondaryBaseBlock != Block::AIR &&
                                 sampleCaveBiomeNoise(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
                                     caveSecondaryRockThreshold)
                             {
                                 baseBlock = caveBiomeData.secondaryBaseBlock;
+                                flatSurfaceBlock = caveBiomeData.secondaryFlatSurfaceBlock;
                                 skinFringeBlock = caveBiomeData.secondarySkinFringeBlock;
+                            }
+
+                            // Inside the surface fade band the carve threshold follows this column's own
+                            // terrain height, so the carve field has a horizontal gradient that the central
+                            // differences below cannot see: neighboring columns' terrain heights are not
+                            // available with the cave grids' one-block margin. Classifying there would read
+                            // caves under a hillside as flat, so classification stops below the band, where
+                            // the threshold varies with y alone.
+                            const bool isBelowSurfaceFade =
+                                static_cast<float>(y) < terrainBaseHeight - caveSurfaceFadeStartDepth;
+                            if (flatSurfaceBlock != Block::AIR && caveSurfaceDist < caveFlatSurfaceShellDist &&
+                                isBelowSurfaceFade)
+                            {
+                                // The y difference includes the carve threshold's own y dependence so the
+                                // surface fade band doesn't read as a tilt
+                                const uint yBelow = y - 1;
+                                const uint yAbove = glm::min(y + 1, static_cast<uint>(caveNoiseMaxY) - 1);
+                                const float gradX =
+                                    (sampleCaveNoise(caveColumnIdx + 1, y) - sampleCaveNoise(caveColumnIdx - 1, y)) * 0.5f;
+                                const float gradZ =
+                                    (sampleCaveNoise(caveColumnIdx + caveNoiseSizeXZ, y) - sampleCaveNoise(caveColumnIdx - caveNoiseSizeXZ, y)) * 0.5f;
+                                const float gradY =
+                                    ((sampleCaveNoise(caveColumnIdx, yAbove) - caveSurfaceValAt(static_cast<float>(yAbove))) -
+                                     (sampleCaveNoise(caveColumnIdx, yBelow) - caveSurfaceValAt(static_cast<float>(yBelow)))) /
+                                    static_cast<float>(yAbove - yBelow);
+                                const float gradLen2 = gradX * gradX + gradY * gradY + gradZ * gradZ;
+                                const bool isFlat =
+                                    gradY * gradY >= caveFlatSurfaceMinNormalY * caveFlatSurfaceMinNormalY * gradLen2;
+                                if (isFlat)
+                                {
+                                    baseBlock = flatSurfaceBlock;
+                                }
                             }
 
                             if (caveBiomeData.skinBlock != Block::AIR && caveSurfaceDist < caveSkinThicknessMax + caveSkinFringeWidth)
@@ -721,6 +787,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 else if (y <= static_cast<uint>(waterLevel))
                 {
                     block = (y == static_cast<uint>(waterLevel)) ? Block::WATER_TOP : Block::WATER;
+                }
+
+                // Temporary scatter until crystal ore gets vein generation. Position hashing keeps
+                // placement independent of traversal order and other decorators' random streams.
+                if (block == Block::CRACKED_BASALT)
+                {
+                    RandomNumberGenerator oreRng = initRng(worldSeed ^ hash(0xC7157A1u),
+                        blockPosXZ_WS.x, y, blockPosXZ_WS.y);
+                    if (oreRng.nextFloat() < 0.01f) block = Block::CRACKED_BASALT_CRYSTAL_ORE;
                 }
 
                 this->blocks[blockIdx] = block;

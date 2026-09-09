@@ -4,6 +4,7 @@
 #include "chunk.h"
 
 #include "block.h"
+#include "block_model.h"
 #include "cave_biome.h"
 #include "terrain.h"
 #include "terrain_materials.h"
@@ -565,58 +566,8 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
     }
 
     const BlockData& neighborBlockData = Blocks::getBlockData(neighborBlock);
-    if (neighborBlockData.type == BlockType::AIR)
-    {
-        return true;
-    }
-
-    switch (thisBlockType)
-    {
-        case BlockType::SOLID:
-        {
-            if (neighborBlockData.type != BlockType::SOLID)
-            {
-                return true;
-            }
-
-            const bool thisShort = (thisBlockShape == BlockShape::LIQUID_TOP);
-            const bool neighborShort = (neighborBlockData.shape == BlockShape::LIQUID_TOP);
-            if (faceIdx == 4) // +y
-            {
-                return thisShort;
-            }
-            if (faceIdx == 5) // -y
-            {
-                return neighborShort;
-            }
-            return neighborBlockData.shape == BlockShape::LIQUID_TOP && !thisShort; // +/- x/z
-        }
-        case BlockType::TRANSPARENT_CUTOUT:
-        {
-            if (neighborBlockData.type == BlockType::SOLID)
-            {
-                return false;
-            }
-            else if (neighborBlockData.type == BlockType::TRANSPARENT_CUTOUT)
-            {
-                // Dedupe shared faces only against cube neighbors; other shapes contribute no
-                // cube faces, so deduping against them would leave a hole
-                if (neighborBlockData.shape == BlockShape::CUBE)
-                {
-                    return all(lessThanEqual(thisPos_CS, neighborPos_CS));
-                }
-                return true;
-            }
-            return true;
-        }
-        case BlockType::WATER:
-        {
-            return (thisBlockShape == BlockShape::LIQUID_TOP && faceIdx == 4) || (neighborBlockData.type == BlockType::AIR);
-        }
-    }
-
-    ASSERT(false, "shouldGenerateFace() reached end of function");
-    return false;
+    return blockFaceVisible(thisBlockType, thisBlockShape, neighborBlockData.type,
+                            neighborBlockData.shape, faceIdx);
 }
 
 // first four match NeighborDirection enum
@@ -662,6 +613,17 @@ void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
     this->terrainInstance = terrainInstance;
     this->waterInstance = waterInstance;
     this->setInstancesVisible(this->areInstancesVisible);
+}
+
+static PerTriangleData makeBlockTriangleData(const BlockData& block, uint32_t slice)
+{
+    PerTriangleData data{};
+    data.texArraySliceIdx = slice;
+    if (TerrainMaterials::sliceHasBiomeTint(slice)) data.flags |= TRIANGLE_FLAG_BIOME_TINT;
+    if (block.translucent) data.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
+    if (block.proceduralColor) data.flags |= TRIANGLE_FLAG_PROCEDURAL_COLOR;
+    if (block.type == BlockType::GLASS) data.flags |= TRIANGLE_FLAG_IS_GLASS;
+    return data;
 }
 
 void Chunk::createInstances()
@@ -725,7 +687,38 @@ void Chunk::createInstances()
 
                     const BlockData& blockData = Blocks::getBlockData(block);
 
-                    if (blockData.shape == BlockShape::X_SHAPED)
+                    if (blockData.shape == BlockShape::DECORATOR_CUSTOM)
+                    {
+                        const auto& model = BlockModels::get(blockData.modelIdx);
+                        const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
+                        // Independent of jitter and traversal order, and includes Y for cave layers.
+                        auto rng = initRng(worldSeed ^ 0xB16B00B5u, static_cast<uint>(columnPos_WS.x),
+                                           blockY, static_cast<uint>(columnPos_WS.y));
+                        const uint turn = blockData.rotationY[rng.nextUint() % blockData.numRotationsY];
+                        const vec3 offset = vec3(blockPos_CS) + vec3(.5f, 0.f, .5f);
+                        const auto baseVertex = static_cast<uint32_t>(terrainVerts.size());
+                        const auto baseTriangle = static_cast<uint32_t>(terrainIdxs.size() / 3);
+                        const auto& vertices = model.rotations[turn];
+                        terrainVerts.insert(terrainVerts.end(), vertices.begin(), vertices.end());
+                        for (size_t i = baseVertex; i < terrainVerts.size(); ++i)
+                        {
+                            auto& pos = terrainVerts[i].pos_OS;
+                            pos.x += offset.x;
+                            pos.y += offset.y;
+                            pos.z += offset.z;
+                        }
+                        const size_t baseIndex = terrainIdxs.size();
+                        terrainIdxs.insert(terrainIdxs.end(), model.indices.begin(), model.indices.end());
+                        for (size_t i = baseIndex; i < terrainIdxs.size(); ++i) terrainIdxs[i] += baseVertex;
+                        const auto data = makeBlockTriangleData(blockData, blockData.texSlices[0]);
+                        const auto triangleCount = static_cast<uint32_t>(model.indices.size() / 3);
+                        terrainPerTriDatas.insert(terrainPerTriDatas.end(), triangleCount, data);
+                        // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
+                        if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), triangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+                        if (blockData.emitsLight)
+                            for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
+                    }
+                    else if (blockData.shape == BlockShape::X_SHAPED)
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
@@ -756,20 +749,8 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
 
-                        PerTriangleData faceData{};
-                        if (TerrainMaterials::sliceHasBiomeTint(texArraySliceIdx))
-                        {
-                            faceData.flags = TRIANGLE_FLAG_BIOME_TINT;
-                        }
-                        if (blockData.translucent)
-                        {
-                            faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
-                        }
-                        faceData.texArraySliceIdx = texArraySliceIdx;
-                        for (uint t = 0; t < 4; ++t)
-                        {
-                            terrainPerTriDatas.emplace_back(faceData);
-                        }
+                        terrainPerTriDatas.insert(terrainPerTriDatas.end(), 4,
+                                                  makeBlockTriangleData(blockData, texArraySliceIdx));
 
                         if (useOmms)
                         {
@@ -818,21 +799,9 @@ void Chunk::createInstances()
                             idxs.emplace_back(baseVertIdx + 2u);
                             idxs.emplace_back(baseVertIdx + 3u);
 
-                            PerTriangleData faceData{};
-                            faceData.flags = isWater ? TRIANGLE_FLAG_IS_WATER : 0u;
-                            if (isWater && faceIdx == 4) // top face
-                            {
-                                faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
-                            }
-                            if (TerrainMaterials::sliceHasBiomeTint(texArraySliceIdx))
-                            {
-                                faceData.flags |= TRIANGLE_FLAG_BIOME_TINT;
-                            }
-                            if (blockData.translucent)
-                            {
-                                faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
-                            }
-                            faceData.texArraySliceIdx = texArraySliceIdx;
+                            auto faceData = makeBlockTriangleData(blockData, texArraySliceIdx);
+                            if (isWater) faceData.flags |= TRIANGLE_FLAG_IS_WATER;
+                            if (isWater && faceIdx == 4) faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
                             perTriDatas.emplace_back(faceData);
                             perTriDatas.emplace_back(faceData);
 

@@ -361,7 +361,7 @@ void initPipeline()
         postprocessPsoDescBase.InputLayout = { nullptr, 0 }; // no verts/idxs
         postprocessPsoDescBase.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         postprocessPsoDescBase.NumRenderTargets = 1;
-        postprocessPsoDescBase.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        postprocessPsoDescBase.RTVFormats[0] = SWAP_CHAIN_FORMAT;
         postprocessPsoDescBase.SampleDesc = SAMPLE_DESC_NO_AA;
 
         const D3D12_SHADER_BYTECODE postprocessVsShaderBytecode = makeShaderBytecode(getShader("postprocess_vs"));

@@ -14,7 +14,7 @@ RendererState::RendererState()
         { "pathTracing", &pathTracingTarget },
         { "diffuseAlbedo", &diffuseAlbedoTarget },
         { "specularAlbedo", &specularAlbedoTarget },
-        { "linearDepth", &linearDepthTarget },
+        { "depth", &depthTarget },
         { "motion", &motionTarget },
         { "specularHitDistance", &specularHitDistanceTarget },
         { "normals", &normalsAndRoughnessTarget },

@@ -14,13 +14,16 @@
 
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER, GBUFFER_OUT);
 
-// motion is in uv space, not pixel space
-float2 calculateMotionFromPos(const float3 pos_WS, const float3 prevPos_WS)
+float3 calculateNdc(const float4x4 worldToClipMat, const float3 pos_WS)
 {
-    float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
-    currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(prevPos_WS, 1)); // worldToPrevClipMat accounts for changed globalInstanceOffset
-    prevNdc /= prevNdc.w;
+    const float4 clip = mul(worldToClipMat, float4(pos_WS, 1));
+    return clip.xyz / clip.w;
+}
+
+// motion is in uv space, not pixel space
+float2 calculateMotionFromNdc(const float3 currNdc, const float3 prevPos_WS)
+{
+    const float3 prevNdc = calculateNdc(cameraParams.worldToPrevClipMat, prevPos_WS); // worldToPrevClipMat accounts for changed globalInstanceOffset
 
     float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;
     motion.y = -motion.y;
@@ -31,7 +34,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
 
-    float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 prevMotionHitPos_WS;
     float3 hitNor_WS = 0.f;
@@ -42,8 +44,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
         prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = payload.hitInfo.hitNor_WS;
@@ -60,7 +60,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
         {
-            const Material surfMaterial = getMaterialFromPayload(payload);
+            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, distance(ray.Origin, payload.hitInfo.hitPos_WS));
+            Material surfMaterial = getHitMaterial(payload, coneWidth);
 
             if (surfMaterial.hasGlossyReflection())
             {
@@ -77,16 +78,21 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     }
     else
     {
-        motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
+        // Put the sky on the far plane itself, not on a sphere of radius farPlane, so its depth is 1
+        // everywhere rather than falling off towards the screen edges
+        const float distToFarPlane = cameraParams.farPlane / dot(ray.Direction, cameraParams.forward_WS);
+        motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = normalize(-ray.Direction);
     }
 
-    RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
-    linearDepthTarget[pixelIdx] = linearDepth;
+    const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);
+
+    RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
+    depthTarget[pixelIdx] = currNdc.z;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
-    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS, prevMotionHitPos_WS);
+    motionTarget[pixelIdx] = calculateMotionFromNdc(currNdc, prevMotionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);

@@ -59,7 +59,6 @@ struct Keyboard : IKeyboard
 #endif
         auto key = m_keys[name];
         // Only if we have focus, otherwise ignore keys
-#ifdef SL_WINDOWS
         if (!hasFocus())
         {
             return false;
@@ -84,9 +83,6 @@ struct Keyboard : IKeyboard
         bool bPressed = !bKeyDown && GKeyDown[key.m_mainKey][shiftIndex][controlIndex][altIndex];
         GKeyDown[key.m_mainKey][shiftIndex][controlIndex][altIndex] = bKeyDown;
         return bPressed;
-#else
-        return false;
-#endif
     }
 
     virtual const VirtKey& getKey(const char* name) override final
@@ -96,7 +92,6 @@ struct Keyboard : IKeyboard
 
     virtual bool hasFocus() override final
     {
-#ifdef SL_WINDOWS
         HWND wnd = GetForegroundWindow();
         DWORD pidWindow = 0;
         GetWindowThreadProcessId(wnd, &pidWindow);
@@ -122,7 +117,6 @@ struct Keyboard : IKeyboard
             }
             return m_processEntry.th32ParentProcessID == pidWindow;
         }
-#endif
         return true;
     }
 

@@ -3,39 +3,44 @@
 Streamline - DLSS-G
 =======================
 
-NVIDIA DLSS Frame Generation (“DLSS-FG” or “DLSS-G”) is an AI based technology that infers frames based on rendered frames coming from a game engine or rendering pipeline. This document explains how to integrate DLSS-G into a renderer.
+NVIDIA DLSS Frame Generation (“DLSS-FG” or “DLSS-G”) is an AI-based technology that infers frames from rendered frames produced by a game engine or rendering pipeline. This document explains how to integrate DLSS-G into a renderer.
 
-Version 2.11.1
+The diagram below illustrates this integration. Traditionally, the render pipeline contains discrete GPU stages that build a frame in the swap chain back buffer before culminating in a frame present. The Streamline DLSS Frame Generation plugin intercepts this present call with a Streamline proxy swap chain, coordinates execution of the frame generation algorithm, and paces frames for a smooth user experience. Specific resources from the render pipeline must be tagged before present so Frame Generation can infer additional frames.
+
+![dlssg_docs_overview](./media/dlssg_docs_overview.png "NVIDIA Streamline DLSS Frame Generation Overview")
+
+Version 2.14.1
 =======
 
 ### 0.0 Integration checklist
 
-See Section 15.0 for further details on some of these items, in addition to the Sections noted in the table below.
+See Section 15.0 and the sections referenced in the table below for further details on these items.
 
 Item | Reference | Confirmed
 ---|---|---
-All the required inputs are passed to Streamline: depth buffers, motion vectors, HUD-less color buffers  | [Section 5.0](#50-tag-all-required-resources) |
-Common constants and frame index are provided for **each frame** using slSetConstants and slSetFeatureConstants methods   |  [Section 7.0](#70-provide-common-constants) |
-All tagged buffers are valid at frame present time, and they are not re-used for other purposes | [Section 5.0](#50-tag-all-required-resources) |
-Buffers to be tagged with unique id 0 | [Section 5.0](#50-tag-all-required-resources) |
-Make sure that frame index provided with the common constants is matching the presented frame | [Section 8.0](#80-integrate-sl-reflex) |
-Inputs are passed into Streamline look correct, as well as camera matrices and dynamic objects | [SL ImGUI guide](<Debugging - SL ImGUI (Realtime Data Inspection).md>) |
-Application checks the signature of sl.interposer.dll to make sure it is a genuine NVIDIA library | [Streamline programming guide, section 2.1.1](./ProgrammingGuide.md#211-security) |
-Requirements for Dynamic Resolution are met (if the game supports Dynamic Resolution)  | [Section 10.0](#100-dlss-g-and-dynamic-resolution) |
-DLSS-G is turned off (by setting `sl::DLSSGOptions::mode` to `sl::DLSSGMode::eOff`) when the game is paused, loading, in menu and in general NOT rendering game frames and also when modifying resolution & full-screen vs windowed mode | [Section 12.0](#120-dlss-g-and-dxgi) |
-Swap chain is recreated every time DLSS-G is turned on or off (by changing `sl::DLSSGOptions::mode`) to avoid unnecessary performance overhead when DLSS-G is switched off | [Section 18.0](#180-how-to-avoid-unnecessary-overhead-when-dlss-g-is-turned-off) |
-Reduce the amount of motion blur; when DLSS-G enabled, halve the distance/magnitude of motion blur | N/A |
+All required inputs are passed to Streamline: depth buffers, motion vectors, and HUD-less color buffers | [Section 5.0](#50-tag-all-required-resources) |
+Common constants and frame index are provided for **each frame** using `slSetConstants` and `slSetFeatureConstants` | [Section 7.0](#70-provide-common-constants) |
+All tagged buffers are valid at frame present time and are not reused for other purposes | [Section 5.0](#50-tag-all-required-resources) |
+Tag buffers with unique id 0 | [Section 5.0](#50-tag-all-required-resources) |
+Ensure the frame index provided with the common constants matches the presented frame | [Section 8.0](#80-integrate-sl-reflex) |
+Verify that inputs passed to Streamline look correct, including camera matrices and dynamic objects | [SL ImGUI guide](<Debugging - SL ImGUI (Realtime Data Inspection).md>) |
+The application checks the signature of sl.interposer.dll to verify it is a genuine NVIDIA library | [Streamline programming guide, section 2.1.1](./ProgrammingGuide.md#211-security) |
+Requirements for Dynamic Resolution are met (if the game supports Dynamic Resolution) | [Section 10.0](#100-dlss-g-and-dynamic-resolution) |
+DLSS-G is turned off (by setting `sl::DLSSGOptions::mode` to `sl::DLSSGMode::eOff`) when the game is paused, loading, in menus, or otherwise not rendering game frames, and when changing resolution or switching between full-screen and windowed mode | [Section 12.0](#120-dlss-g-and-dxgi) |
+The swap chain is recreated every time DLSS-G is turned on or off (by changing `sl::DLSSGOptions::mode`) to avoid unnecessary performance overhead when DLSS-G is switched off | [Section 18.0](#180-how-to-avoid-unnecessary-overhead-when-dlss-g-is-turned-off) |
+Reduce the amount of motion blur; when DLSS-G is enabled, halve the distance or magnitude of motion blur | N/A |
 Reflex is properly integrated (see checklist in Reflex Programming Guide) | [Section 8.0](#80-integrate-sl-reflex) |
 In-game UI for enabling/disabling DLSS-G is implemented | [RTX UI Guidelines](<RTX UI Developer Guidelines.pdf>) |
 Only full production non-watermarked libraries are packaged in the release build | N/A |
 No errors or unexpected warnings in Streamline and DLSS-G log files while running the feature | N/A |
-Ensure extent resolution or resource size, whichever is in use, for `Hudless` and `UI Color and Alpha` buffers exactly match that of backbuffer. | N/A |
+Ensure the extent resolution or resource size (whichever applies) of the `Hudless` and `UI Color and Alpha` buffers exactly matches that of the back buffer. | N/A |
 Execute the DLSS-G In-Game Enhanced Debug Visualization Tests | [Section 21.0](#210-enhanced-in-game-debug-visualization) | |
 Check `bIsVsyncSupportAvailable` before exposing VSync toggle in UI | [Section 22.0](#220-vsync-with-frame-generation) | |
+Application either does not use `GetFrameLatencyWaitableObject`/`SetMaximumFrameLatency` while sl.dlss_g is loaded and paces via `slReflexSleep`, or requests `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` and manages frame latency itself | [Section 12.1](#121-frame-latency-waitable-objects) | |
 
 ### 1.0 REQUIREMENTS
 
-**NOTE - DLSS-G requires the following Windows versions/settings to run.  The DLSS-G feature will fail to be available if these are not met.  Failing any of these will cause DLSS-G to be unavailable, and Streamline will log an error:**
+**NOTE:** DLSS-G requires the following Windows versions and settings. If any requirement is not met, DLSS-G will be unavailable and Streamline will log an error:
 
 * Minimum Windows OS version of Win10 20H1 (version 2004, build 19041 or higher)
 * Display Hardware-accelerated GPU Scheduling (HWS) must be enabled via Settings : System : Display : Graphics : Change default graphics settings.
@@ -75,7 +80,7 @@ generation and multi-frame generation modes.
 
 ### 2.0 INITIALIZATION AND SHUTDOWN
 
-Call `slInit` as early as possible (before any d3d12/vk APIs are invoked)
+Call `slInit` as early as possible (before any D3D12/Vulkan APIs are invoked).
 
 ```cpp
 #include <sl.h>
@@ -101,9 +106,9 @@ if(SL_FAILED(res, slInit(pref)))
 }
 ```
 
-For more details please see [preferences](ProgrammingGuide.md#222-preferences)
+For more details, see [preferences](ProgrammingGuide.md#222-preferences).
 
-Call `slShutdown()` before destroying dxgi/d3d12/vk instances, devices and other components in your engine.
+Call `slShutdown()` before destroying DXGI, D3D12, or Vulkan instances, devices, and other components in your engine.
 
 ```cpp
 if(SL_FAILED(res, slShutdown()))
@@ -114,7 +119,7 @@ if(SL_FAILED(res, slShutdown()))
 
 #### 2.1 SET THE CORRECT DEVICE
 
-Once the main device is created call `slSetD3DDevice` or `slSetVulkanInfo`:
+Once the main device is created, call `slSetD3DDevice` or `slSetVulkanInfo`:
 
 ```cpp
 if(SL_FAILED(res, slSetD3DDevice(nativeD3DDevice)))
@@ -166,7 +171,7 @@ if (SUCCEEDED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory)))
 
 #### 3.1 CHECKING DLSS-G'S CONFIGURATION AND SPECIAL REQUIREMENTS
 
-In order for DLSS-G to work correctly certain requirements regarding the OS, driver and other settings on user's machine must be met. To obtain DLSS-G configuration and check if all requirements are met you can use the following code snippet:
+For DLSS-G to work correctly, certain requirements regarding the OS, driver, and other settings on the user's machine must be met. To obtain DLSS-G configuration and verify that all requirements are satisfied, use the following code snippet:
 
 ```cpp
 sl::FeatureRequirements requirements{};
@@ -176,7 +181,7 @@ if (SL_FAILED(result, slGetFeatureRequirements(sl::kFeatureDLSS_G, requirements)
 }
 else
 {
-    // Feature is loaded, we can check the requirements    
+    // Feature is loaded; we can check the requirements
     requirements.flags & FeatureRequirementFlags::eD3D12Supported
     requirements.flags & FeatureRequirementFlags::eVulkanSupported
     requirements.maxNumViewports
@@ -184,13 +189,13 @@ else
 }
 ```
 > **NOTE:**
-> DLSS-G runs optical flow in interop mode in Vulkan by default. In order to leverage potential performance benefit of running optical flow natively in Vulkan, client must meet the minimum requirements of Nvidia driver version being 527.64 on Windows and 525.72 on Linux and VK_API_VERSION_1_1 (recommended version - VK_API_VERSION_1_3).
-> In manual hooking mode, it must meet additional requirements as described in section 5.2.1 of ProgrammingGuideManualHooking.md.
+> DLSS-G runs optical flow in interop mode in Vulkan by default. To leverage the potential performance benefit of running optical flow natively in Vulkan, the client must meet the minimum requirements: NVIDIA driver version 527.64 or later on Windows, 525.72 or later on Linux, and `VK_API_VERSION_1_1` (recommended: `VK_API_VERSION_1_3`).
+> In manual hooking mode, additional requirements apply as described in section 5.2.1 of ProgrammingGuideManualHooking.md.
 
 ### 4.0 HANDLE MULTIPLE SWAP-CHAINS
 
-DLSS-G will automatically attach to any swap-chain created by the application **unless manual hooking is used**. In the editor mode there could be multiple swap-chains but DLSS-G should attach only to the main one where frame interpolation is used.
-Here is how DLSS-G could be enabled only on a single swap-chain:
+DLSS-G automatically attaches to any swap chain created by the application **unless manual hooking is used**. In editor mode, there may be multiple swap chains, but DLSS-G should attach only to the main one where frame interpolation is used.
+Here is how DLSS-G can be enabled on a single swap chain:
 
 ```cpp
 // This is just one example, swap-chains can be created at any point in time and in any order.
@@ -211,7 +216,7 @@ slSetFeatureLoaded(sl::kFeatureDLSS_G, true);
 IDXGISwapChain1* mainSwapChain{};
 factory->CreateSwapChainForHwnd(device, hWnd, desc, nullptr, nullptr, &mainSwapChain);
 
-// From this point onward DLSS-G will automatically manage only mainSwapChain, other swap-chains use standard DXGI implementation
+// From this point onward, DLSS-G automatically manages only mainSwapChain; other swap chains use the standard DXGI implementation
 
 ```
 
@@ -258,30 +263,30 @@ Input | Requirements/Recommendations | Reference Image
 ---|---|---
 Final Color | - *No requirements, this is intercepted automatically via SL's SwapChain API* | ![dlssg_final_color](./media/dlssg_docs_final_color.png "DLSSG Input Example: Final Color")
 Final Color Subrect | - Subregion of the final color buffer to run frame-generation on. <br> - Subrect-external backbuffer region is copied as is to the generated frame. <br> - Tag backbuffer optionally, only to pass in backbuffer subrect info. <br> - Extent resolution or resource size, whichever is in use, for `Hudless`, `UI Color and Alpha`, and `UI Alpha` buffers should exactly match that of backbuffer. <br> - Refer to [Section 5.2](#52-tagging-recommendations) below for details. | ![dlssg_final_color_subrect](./media/dlssg_docs_final_color_subrect.png "DLSSG Input Example: Final Color Subrect")
-Depth | - Same depth data used to generate motion vector data <br> - `sl::Constants` depth-related data (e.g. `depthInverted`) should be set accordingly<br>  - *Note: this is the same set of requirements as DLSS-SR, and the same depth can be used for both* | ![dlssg_depth](./media/dlssg_docs_depth.png "DLSSG Input Example: Depth")
+Depth | - Same depth data used to generate motion vector data <br> - `sl::Constants` depth-related data (e.g., `depthInverted`) should be set accordingly<br>  - *Note: this is the same set of requirements as DLSS-SR, and the same depth can be used for both* | ![dlssg_depth](./media/dlssg_docs_depth.png "DLSSG Input Example: Depth")
 Motion Vectors | - Dense motion vector field (i.e. includes camera motion, and motion of dynamic objects) <br> - *Note: this is the same set of requirements as DLSS-SR, and the same motion vectors can be used for both* | ![dlssg_mvec](./media/dlssg_docs_mvec.png "DLSSG Input Example: Motion Vectors")
-Hudless | - Should contain the full viewable scene, **without any HUD/UI elements in it**. If some HUD/UI elements are unavoidably included, expect some image quality degradation on those elements <br> - Same color space and post-processing effects (e.g tonemapping, blur etc.) as color backbuffer <br> - When appropriate buffer extents are *not* provided, needs to have the same dimensions as the color backbuffer <br> | ![dlssg_hudless](./media/dlssg_docs_hudless.png "DLSSG Input Example: Hudless")
+Hudless | - Should contain the full viewable scene, **without any HUD/UI elements in it**. If some HUD/UI elements are unavoidably included, expect image quality degradation on those elements <br> - Same color space and post-processing effects (e.g., tonemapping, blur, etc.) as the color back buffer <br> - When appropriate buffer extents are *not* provided, must have the same dimensions as the color back buffer <br> | ![dlssg_hudless](./media/dlssg_docs_hudless.png "DLSSG Input Example: Hudless")
 UI Alpha OR UI Color and Alpha | - `UI Alpha` is a single channel containing only the alpha values (0.0 to 1.0) of the UI <br> - `UI Color and Alpha` also contains the RGB color of the UI <br> - Prefer `UI Alpha` (single channel) for performance when available. If both are tagged, only `UI Alpha` will be used. <br> - Must be 0.0 for pixels with no UI elements <br> - Alpha must be non-zero for pixels with UI <br> - Values provided must respect the standard blending formula: `Final_Color.RGB = UI.RGB + (1 - UI.Alpha) x Hudless.RGB` <br> - When UI color is provided, the RGB channels must be pre-multiplied by alpha. <br> - When appropriate buffer extents are *not* provided, needs to have the same dimensions as the color backbuffer | **Alpha Channel** ![dlssg_ui_alpha](./media/dlssg_docs_ui_alpha.png "DLSSG Input Example: UI Alpha")<br><br>**RGB Channels** (UI Color and Alpha only) ![dlssg_ui_color_and_alpha](./media/dlssg_docs_ui_color_and_alpha.png "DLSSG Input Example: UI Color and Alpha")
-Bidirectional Distortion Field | - Optional buffer, **only needed when strong distortion effects are applied as post-processing filters** <br> - Refer to [Section 5.4](#54-bidirectional-distortion-field-buffer-generation-code-sample) for an example on how to generate this optional buffer <br> - When this buffer is tagged, Mvec and Depth need to be **undistorted** <br> - When this buffer is tagged, the FinalColor is should be **distorted** <br> - When this buffer is tagged, Hudless and UIColorAndAlpha need to be such that `Blend(Hudless, UIColorAndAlpha) = FinalColor`. This may mean that Hudless needs to be equally distorted, and in rare cases that UIColorAndAlpha is also equally distorted <br> - **Resolution**: we recommend using half of the FinalColor's resolution's width and height <br> - **Channel count**: 4 channels <br> - **RG channels**: UV coordinates of the corresponding **undistorted** pixel, as an offset relative to the source UV coordinate <br> - **BA channels**: UV coordinates of the corresponding **distorted** pixel, as an offset relative to the source UV coordinate <br> - **Units**: the buffer values should be in normalized pixel space `[0,1]`. These should be the same scale as the input MVecs <br> - **Channel precision and format:** Signed format, equal bit-count per channel (i.e. R10G10B10A2 is NOT allowed). We recommend a minimum of 8 bits per channel, with precision scale and bias (`PrecisionInfo`) passed in as part of the `ResourceTag` | <center>**Barrel distortion, RGB channels**  ![dlssg_bidirectional_distortion_field](./media/dlssg_docs_bidirectional_distortion_field.png "DLSSG Input Example: Bidirectional Distortion Field") <br><br> <center>**Barrel distortion, absolute value of RG channels** ![dlssg_docs_bidirectional_distortion_field_rg_abs](./media/dlssg_docs_bidirectional_distortion_field_rg_abs.png "DLSSG Input Example: Bidirectional Distortion Field, RG channels, Absolute value")
+Bidirectional Distortion Field | - Optional buffer, **only needed when strong distortion effects are applied as post-processing filters** <br> - Refer to [Section 5.4](#54-bidirectional-distortion-field-buffer-generation-code-sample) for an example of how to generate this optional buffer <br> - When this buffer is tagged, Mvec and Depth must be **undistorted** <br> - When this buffer is tagged, FinalColor should be **distorted** <br> - When this buffer is tagged, Hudless and UIColorAndAlpha must satisfy `Blend(Hudless, UIColorAndAlpha) = FinalColor`. This may require equally distorting Hudless and, in rare cases, UIColorAndAlpha as well <br> - **Resolution**: we recommend using half of FinalColor's width and height <br> - **Channel count**: 4 channels <br> - **RG channels**: UV coordinates of the corresponding **undistorted** pixel, as an offset relative to the source UV coordinate <br> - **BA channels**: UV coordinates of the corresponding **distorted** pixel, as an offset relative to the source UV coordinate <br> - **Units**: buffer values should be in normalized pixel space `[0,1]`. These should use the same scale as the input MVecs <br> - **Channel precision and format:** Signed format, equal bit count per channel (i.e., R10G10B10A2 is NOT allowed). We recommend a minimum of 8 bits per channel, with precision scale and bias (`PrecisionInfo`) passed in as part of the `ResourceTag` | <center>**Barrel distortion, RGB channels**  ![dlssg_bidirectional_distortion_field](./media/dlssg_docs_bidirectional_distortion_field.png "DLSSG Input Example: Bidirectional Distortion Field") <br><br> <center>**Barrel distortion, absolute value of RG channels** ![dlssg_docs_bidirectional_distortion_field_rg_abs](./media/dlssg_docs_bidirectional_distortion_field_rg_abs.png "DLSSG Input Example: Bidirectional Distortion Field, RG channels, Absolute value")
 
 #### 5.2 TAGGING RECOMMENDATIONS
 
-**For all buffers**: tagged buffers are used during the `Swapchain::Present` call. **If the tagged buffers are going to be reused, destroyed or changed in any way before the frame is presented, their life-cycle needs to be specified correctly**.
+**For all buffers**: tagged buffers are used during the `Swapchain::Present` call. **If tagged buffers will be reused, destroyed, or changed in any way before the frame is presented, their lifecycle must be specified correctly**.
 
-It is important to emphasize that **the overuse of `sl::ResourceLifecycle::eOnlyValidNow` and `sl::ResourceLifecycle::eValidUntilEvaluate` can result in wasted VRAM**. Therefore please do the following:
+It is important to emphasize that **overuse of `sl::ResourceLifecycle::eOnlyValidNow` and `sl::ResourceLifecycle::eValidUntilEvaluate` can waste VRAM**. Therefore, please do the following:
 
-* First tag all of the DLSS-G inputs as `sl::ResourceLifecycle::eValidUntilPresent` then test and see if DLSS-G is working correctly.
-* Only if you notice that one or more of the inputs (depth, mvec, hud-less, ui etc.) has incorrect content at the `present frame` time, should you proceed and flag them as `sl::ResourceLifecycle::eOnlyValidNow` or `sl::ResourceLifecycle::eValidUntilEvaluate` as appropriate.
+* First tag all DLSS-G inputs as `sl::ResourceLifecycle::eValidUntilPresent`, then test to confirm DLSS-G is working correctly.
+* Only if one or more inputs (depth, mvec, hud-less, UI, etc.) has incorrect content at present time should you flag them as `sl::ResourceLifecycle::eOnlyValidNow` or `sl::ResourceLifecycle::eValidUntilEvaluate`, as appropriate.
 
-In order to run DLSS-G on final color subrect region:
-* It is required to tag backbuffer to pass-in subrect data.
-* Only buffer type - `kBufferTypeBackbuffer` and backbuffer extent data are required to be passed in when setting the tag for backbuffer; the rest of the other inputs to sl::ResourceTag are optional. This implies passing in NULL backbuffer resource pointer is valid because SL already has knowledge about the backbuffer being presented.
-* If a valid backbuffer resource pointer is passed in when tagging:
+To run DLSS-G on a final color subrect:
+* Tag the backbuffer to pass in subrect data.
+* Only the buffer type `kBufferTypeBackbuffer` and backbuffer extent data are required when setting the tag; the remaining `sl::ResourceTag` fields are optional. This means passing a NULL backbuffer resource pointer is valid because SL already knows which backbuffer is being presented.
+* If a valid backbuffer resource pointer is passed when tagging:
   * SL will hold a reference to it until a null tag is set.
   * SL will warn if it doesn't match the SL-provided backbuffer resource being presented.
 
 > NOTE:
-> SL will hold a reference to all `sl::ResourceLifecycle::eValidUntilPresent` resources until a null tag is set, therefore the application will not crash if host releases tagged resource before `present frame` event is reached. This does not apply to Vulkan.
+> SL holds a reference to all `sl::ResourceLifecycle::eValidUntilPresent` resources until a null tag is set. Therefore, the application will not crash if the host releases a tagged resource before the present event. This does not apply to Vulkan.
 
 ```cpp
 
@@ -340,21 +345,20 @@ slSetTagForFrame(*currentFrame, viewport, inputs, _countof(inputs), cmdList);
 ```
 
 > **NOTE:**
-> If dynamic resolution is used then please specify the extent for each tagged resource. Please note that SL **manages resource states so there is no need to transition tagged resources**.
+> If dynamic resolution is used, specify the extent for each tagged resource. SL **manages resource states, so there is no need to transition tagged resources**.
 
 > **IMPORTANT:**
-> If validity of tagged resources cannot be guaranteed (for example game is loading, paused, in menu, playing a video cut scene etc.) **all tags should be set to null pointers to avoid stability or IQ issues**.
+> If the validity of tagged resources cannot be guaranteed (for example, while loading, paused, in menus, or playing a video cutscene), **set all tags to null pointers to avoid stability or image quality issues**.
 
 #### 5.3 MULTIPLE VIEWPORTS
 
-DLSS-G supports multiple viewports. Resources for each viewport must be tagged independently. Our [SL Sample](https://github.com/NVIDIA-RTX/Streamline_Sample) supports multiple viewports. Check the sample for recommended best practices on how to do it. The idea is that resource tags for different resources are independent
-from each other. For instance - if you have two viewports, there must be two slSetTagForFrame() calls. Input resource for one viewport may be different from the input resource
-for another viewport. However - all viewports do write into the same backbuffer.
+DLSS-G supports multiple viewports. Resources for each viewport must be tagged independently. Our [SL Sample](https://github.com/NVIDIA-RTX/Streamline_Sample) supports multiple viewports; check the sample for recommended best practices. Resource tags for different viewports are independent of one another. For example, if you have two viewports, you must make two `slSetTagForFrame()` calls. Input resources may differ between viewports, but all viewports write to the same back buffer.
 
-Note that DLSS-G doesn't support multiple swap chains at the moment. So all viewports must write into the same backbuffer.
+Note that DLSS-G does not currently support multiple swap chains. All viewports must write to the same back buffer.
 
 #### 5.4 BIDIRECTIONAL DISTORTION FIELD BUFFER GENERATION CODE SAMPLE
-The following HLSL code snippet demonstrates the generation of the bidirectional distortion field buffer. The example distortion illustrated is barrel distortion.
+
+The following HLSL code snippet demonstrates generation of the bidirectional distortion field buffer. The example distortion illustrated is barrel distortion.
 
 ```cpp
 const float distortionAlpha = -0.5f;
@@ -406,8 +410,8 @@ float2 generateBidirectionalDistortionField(Texture2D output, float2 UV)
     float2 rg = barrelDistortion(UV) - UV;
     float2 ba = inverseBarrelDistortion(UV) - UV;
  
-    // rg and ba needs to be in the same canonical format as the motion vectors
-    // i.e. a displacement of rg or ba needs to to be in the same scale as (Mvec.x, Mvec.y)
+    // rg and ba must use the same canonical format as the motion vectors
+    // i.e., a displacement of rg or ba must be on the same scale as (Mvec.x, Mvec.y)
      
     // The output can be outside of the [0, 1] range
     Texture2D[UV] = float4(rg, ba); // needs to be signed
@@ -538,22 +542,31 @@ In this mode, Streamline automatically adjusts the number of generated frames to
 align the output frame rate with the display's refresh rate or a user-defined
 target.
 
+Dynamic multi frame support is dependent on the hardware and system
+configuration. Applications must verify support by calling `slDLSSGGetState()` and
+checking if `bIsDynamicMFGSupported` is `eTrue`.
+
+The most likely reasons for lack of support are:
+- Multi-frame generation is not supported
+- The NVIDIA display driver is below version 595.41
+- The application is using Vulkan (support is currently limited to D3D12 only)
+
+When `eDynamic` is active, the `numFramesToGenerate` property is ignored.
+
 The target frame rate is managed via the `dynamicTargetFrameRate` property:
 - **Custom Target:** Set to a specific FPS value (e.g., 120.0f).
 - **Auto-Detect:** Set to 0.0f to automatically target the monitor's current
   refresh rate. When multiple monitors are in use, the placement of the
   application window determines which monitor is used.
 
-When `eDynamic` is active, the `numFramesToGenerate` property is ignored.
+When VSync is enabled, the `dynamicTargetFrameRate` property is ignored, and the
+optimal refresh rate to achieve tearing-free presentation (near the monitor's
+refresh rate) is used instead.
 
-Dynamic multi frame support is dependent on the hardware and system
-configuration. Applications must verify support by calling `slDLSSGGetState()` and
-checking if `bIsDynamicMFGSupported` is `eTrue`.
-
-Common reasons for lack of support include:
-- Multi frame generation is not supported
-- The NVIDIA Display Driver is below version 595.41
-- The application is using Vulkan (support is currently limited to D3D12, only)
+Dynamic MFG is designed to work with the Reflex frame rate limiter, which can be
+enabled by setting `frameLimitUs` in `ReflexOptions`. Other frame rate limiting
+techniques may not work or may produce unexpected results when combined with
+Dynamic MFG.
 
 **Auto Mode as a Fallback**
 
@@ -592,14 +605,10 @@ For short-term deactivations, such as in pause menus, avoid calling
 
 #### 6.5 AUTOMATICALLY DISABLING DLSS-G IN MENUS
 
-If `kBufferTypeUIColorAndAlpha` is provided, DLSS-G can automatically detect
-fullscreen menus and turn off automatically. To enable automatic fullscreen menu
-detection, set the `sl::DLSSGFlags::eEnableFullscreenMenuDetection` flag.
-This flag may be changed on a per-frame basis to disable detection on specific
-scenes, for example.
+If `kBufferTypeUIColorAndAlpha` is provided, DLSS-G can automatically detect fullscreen menus and turn itself off. To enable automatic fullscreen menu detection, set the `sl::DLSSGFlags::eEnableFullscreenMenuDetection` flag.
+This flag may be changed on a per-frame basis to disable detection for specific scenes, for example.
 
-Since this approach may not detect menus in all cases, it is still preferred to
-disable DLSS-G manually, by setting the mode to `sl::DLSSGMode::eOff`.
+Since this approach may not detect menus in all cases, it is still preferable to disable DLSS-G manually by setting the mode to `sl::DLSSGMode::eOff`.
 
 **Note:** when DLSS-G is disabled by fullscreen menu detection, its resources
 will _always_ be retained, regardless of the value of the
@@ -610,14 +619,13 @@ will _always_ be retained, regardless of the value of the
 When both Hudless and a UI buffer are tagged, User Interface Recomposition can
 be enabled by setting `DLSSGOptions::enableUserInterfaceRecomposition = eTrue`.
 
-When enabled, the HUD and scene are interpolated separately and composited
-later, providing significantly-improved UI interpolation quality.
+When enabled, the HUD and scene are interpolated separately and composited later, providing significantly improved UI interpolation quality.
 
 Using user interface recomposition has a slight performance and memory cost.
 
 #### 6.7 HOW TO SETUP A CALLBACK TO RECEIVE API ERRORS (OPTIONAL)
 
-DLSS-G intercepts `IDXGISwapChain::Present` and when using Vulkan `vkQueuePresentKHR` and `vkAcquireNextImageKHR`calls and executes them asynchronously. When calling these methods from the host side SL will return the "last known error" but in order to obtain per call API error you must provide an API error callback. Here is how this can be done:
+DLSS-G intercepts `IDXGISwapChain::Present` and, when using Vulkan, `vkQueuePresentKHR` and `vkAcquireNextImageKHR` calls, executing them asynchronously. When calling these methods from the host side, SL returns the "last known error." To obtain per-call API errors, you must provide an API error callback. Here is how to set one up:
 
 ```cpp
 
@@ -647,7 +655,7 @@ if(SL_FAILED(result, slDLSSGSetOptions(viewport, options)))
 
 ### 7.0 PROVIDE COMMON CONSTANTS
 
-Various per frame camera related constants are required by all Streamline features and must be provided ***if any SL feature is active and as early in the frame as possible***. Please keep in mind the following:
+Various per-frame camera-related constants are required by all Streamline features and must be provided ***if any SL feature is active, as early in the frame as possible***. Keep in mind the following:
 
 * All SL matrices are row-major and should not contain any jitter offsets
 * If motion vector values in your buffer are in {-1,1} range then motion vector scale factor in common constants should be {1,1}
@@ -669,16 +677,16 @@ if(!setConstants(consts, *frameToken, viewport))
 }
 ```
 
-For more details please see [common constants](ProgrammingGuide.md#2111-common-constants)
+For more details, see [common constants](ProgrammingGuide.md#2111-common-constants).
 
 ### 8.0 INTEGRATE SL REFLEX
 
-**It is required** for sl.reflex to be integrated in the host application. **Please note that any existing regular Reflex SDK integration (not using Streamline) cannot be used by DLSS-G**. Special attention should be paid to the markers `eReflexMarkerPresentStart` and `eReflexMarkerPresentEnd` which must provide correct frame index so that it can be matched to the one provided in the [section 7](#70-provide-common-constants)
+**It is required** for sl.reflex to be integrated in the host application. **Any existing Reflex SDK integration that does not use Streamline cannot be used with DLSS-G.** Pay special attention to the `eReflexMarkerPresentStart` and `eReflexMarkerPresentEnd` markers, which must provide the correct frame index so it can be matched to the one provided in [Section 7](#70-provide-common-constants).
 
-For more details please see [Reflex guide](ProgrammingGuideReflex.md)
+For more details, see the [Reflex guide](ProgrammingGuideReflex.md).
 
 > **IMPORTANT:**
-> If you see a warning in the SL log stating that `common constants cannot be found for frame N` that indicates that sl.reflex markers `eReflexMarkerPresentStart` and `eReflexMarkerPresentEnd` are out of sync with the actual frame being presented.
+> If you see a warning in the SL log stating that `common constants cannot be found for frame N`, this indicates that the sl.reflex markers `eReflexMarkerPresentStart` and `eReflexMarkerPresentEnd` are out of sync with the frame being presented.
 
 ### 9.0 DLSS-G DEVELOPMENT HOTKEYS
 
@@ -699,15 +707,15 @@ When using non-production (development) builds of `sl.dlss_g.dll`, there are num
 
 ### 10.0 DLSS-G AND DYNAMIC RESOLUTION
 
-DLSS-G supports dynamic resolution of the MVec and Depth buffer extents.  Dynamic resolution may be done via DLSS or an app-specific method.  Since DLSS-G uses the final color buffer with all post-processing complete, the color buffer, or its subrect if in use, must be a fixed size -- it cannot resize per-frame.  When DLSS-G dynamic resolution mode is enabled, the application can pass in a differently-sized extent for the MVec and Depth buffers on a perf frame basis.  This allows the application to dynamically change its rendering load smoothly.
+DLSS-G supports dynamic resolution of the MVec and Depth buffer extents. Dynamic resolution may be implemented via DLSS or an app-specific method. Since DLSS-G uses the final color buffer with all post-processing complete, the color buffer (or its subrect, if in use) must remain a fixed size and cannot resize per frame. When DLSS-G dynamic resolution mode is enabled, the application can pass differently sized extents for the MVec and Depth buffers on a per-frame basis, allowing the application to change its rendering load smoothly.
 
 There are a few requirements when using dynamic resolution with DLSS-G:
 
-* The application must set the flag `sl::DLSSGFlags::eDynamicResolutionEnabled` in `sl::DLSSGOptions::flags` when dynamic resolution is active.  It should clear the flag when/if dynamic resolutiuon is disabled.  *DO NOT* leave the dynamic resolution flag set when using fixed-ratio DLSS, as it may decrease performance or image quality.
-* The application should specify `sl::DLSSGOptions::dynamicResWidth` and `sl::DLSSGOptions::dynamicResHeight` to a target resolution in the range of the dynamic MVec and Depth buffer sizes.
-  * This is the fixed resolution at which DLSS-G will process the MVec and Depth buffers.
-  * This value must not change dynamically per-frame.  Changing it outside of the application UI can lead to a frame rate glitch.
-  * Set it to a reasonable "middle-range" value and do not change it until/unless the DLSS or other dynamic-range settings change.  
+* The application must set the flag `sl::DLSSGFlags::eDynamicResolutionEnabled` in `sl::DLSSGOptions::flags` when dynamic resolution is active. Clear the flag when dynamic resolution is disabled. *Do not* leave the dynamic resolution flag set when using fixed-ratio DLSS, as it may decrease performance or image quality.
+* The application should set `sl::DLSSGOptions::dynamicResWidth` and `sl::DLSSGOptions::dynamicResHeight` to a target resolution within the range of the dynamic MVec and Depth buffer sizes.
+  * This is the fixed resolution at which DLSS-G processes the MVec and Depth buffers.
+  * This value must not change dynamically per frame. Changing it outside of the application UI can cause a frame rate glitch.
+  * Set it to a reasonable middle-range value and do not change it unless DLSS or other dynamic resolution settings change.  
   * For example, if the application has a final, upscaled color resolution of 3840x2160 pixels, with a rendering resolution that can vary between 1920x1080 and 3840x2160 pixels, the `dynamicResWidth` and `Height` could be set to 2880x1620 or 1920x1080.
   * This ratio between the min and max resolutions can be tuned for performance and quality.
   * If the application passes 0 for these values when DLSS-G dynamic resolution is enabled, then DLSS-G will default to half of the resolution of the final color target or its subrect, if in use.
@@ -735,24 +743,34 @@ Additionally, in development (i.e. non-production) builds of sl.dlss_g.dll, it i
 
 ### 11.0 DLSS-G AND HDR
 
-If your game supports HDR please make sure to use **UINT10/RGB10 pixel format and HDR10/BT.2100 color space**. For more details please see <https://docs.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range#option-2-use-uint10rgb10-pixel-format-and-hdr10bt2100-color-space>
+If your game supports HDR, use **UINT10/RGB10 pixel format and HDR10/BT.2100 color space**. For more details, see <https://docs.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range#option-2-use-uint10rgb10-pixel-format-and-hdr10bt2100-color-space>.
 
-When tagging `eUIColorAndAlpha` please make sure that alpha channel has enough precision (for example do NOT use formats like R10G10B10A2)
+When tagging `eUIColorAndAlpha`, ensure the alpha channel has enough precision (for example, do not use formats like R10G10B10A2).
 
 > **IMPORTANT:**
 > DLSS-G currently does NOT support FP16 pixel format and scRGB color space because it is too expensive in terms of compute and bandwidth cost.
 
 ### 12.0 DLSS-G AND DXGI
 
-DLSS-G takes over frame presenting so it is important for the host application to turn on/off DLSS-G as needed to avoid potential problems and deadlocks.
-As a general rule, **when host is modifying resolution, full-screen vs windowed mode or performing any other operation that could cause SwapChain::Present call to generate a deadlock DLSS-G must be turned off by the host using the sl::DLSSGConsts::mode field.** When turned off DLSS-G will call SwapChain::Present on the same thread as the host application which is not the case when DLSS-G is turned on. For more details please see <https://docs.microsoft.com/en-us/windows/win32/direct3darticles/dxgi-best-practices#multithreading-and-dxgi>
+DLSS-G takes over frame presentation, so the host application must turn DLSS-G on and off as needed to avoid potential problems and deadlocks.
+As a general rule, **when the host is changing resolution, switching between full-screen and windowed mode, or performing any other operation that could cause `SwapChain::Present` to deadlock, DLSS-G must be turned off using the `sl::DLSSGOptions::mode` field.** When DLSS-G is off, it calls `SwapChain::Present` on the same thread as the host application; this is not the case when DLSS-G is on. For more details, see <https://docs.microsoft.com/en-us/windows/win32/direct3darticles/dxgi-best-practices#multithreading-and-dxgi>.
 
 > **IMPORTANT:**
-> Turning DLSS-G on and off using the `sl::DLSSGOptions::mode` should not be confused with enabling/disabling DLSS-G feature using the `slSetFeatureLoaded`, the later would completely unload and unhook the sl.dlss_g plugin hence completely disable the `sl::kFeatureDLSS_G` (cannot be turned on/off or used in any way).
+> Turning DLSS-G on and off via `sl::DLSSGOptions::mode` should not be confused with enabling or disabling the DLSS-G feature using `slSetFeatureLoaded`. The latter completely unloads and unhooks the sl.dlss_g plugin, disabling `sl::kFeatureDLSS_G` entirely (it cannot be turned on/off or used in any way).
+
+#### 12.1 FRAME-LATENCY WAITABLE OBJECTS
+
+When the sl.dlss_g plugin is loaded, the host application receives a proxy swap chain while SL creates and owns the actual swap chain. That internal swap chain is always created with `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`. DXGI provides a single frame-latency waitable object (a single pool of signals) per swap chain, so only one side - the application or SL - can safely wait on it. Which side owns it depends on whether the application requested `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` when creating its swap chain. Both behaviors below apply whenever the plugin is loaded, **even while DLSS-G is turned off** with `DLSSGMode::eOff`.
+
+**If the application does not request the flag (recommended),** the SL pacer owns the waitable object: SL sets the maximum frame latency and consumes the waitable's signals for its own frame pacing. The application **must not call `IDXGISwapChain2::GetFrameLatencyWaitableObject` or `IDXGISwapChain2::SetMaximumFrameLatency`** on such a swap chain. These calls forward to the internal swap chain: the returned handle refers to the same waitable object the SL pacer is waiting on, so the application and SL compete for signals—application waits can block unpredictably and SL frame pacing breaks. Note that `GetFrameLatencyWaitableObject` returns a valid handle in this case too, so a non-null handle does not mean the waitable is safe to use.
+
+**If the application requests the flag,** the application owns the waitable object and SL stays off of it: SL never waits on it and never limits the frame latency through it, so `GetFrameLatencyWaitableObject` and `SetMaximumFrameLatency` behave as they do without SL. The one exception is at swap-chain creation, where SL performs a single `SetMaximumFrameLatency` call raising the limit to the internal back-buffer count so that frame generation can queue its presents without CPU stalls; the application's own `SetMaximumFrameLatency` call overwrites it - last writer wins. In exchange, the application is expected to manage frame latency itself: SL applies no latency limit of its own, so an application that leaves the limit at the creation-time value can queue presents up to the internal back-buffer count deep. Applications that pace on the waitable object and set their own frame-latency limit get standard DXGI behavior.
+
+Applications that use the waitable object to pace their frame start (as recommended by Microsoft for regular DXGI swap chains) may keep doing so by requesting the flag as described above, but the preferred approach is to use `slReflexSleep` instead - it blocks until the optimal frame-start time computed by the driver from measured render and queue timing, and it is available in any DLSS-G integration since [SL Reflex is required](#80-integrate-sl-reflex). To pace to a fixed frame rate rather than run at the lowest latency, use `sl::ReflexOptions::frameLimitUs`. On configurations where the sl.dlss_g plugin is not loaded the waitable object behaves natively and can be used as usual.
 
 ### 13.0 HOW TO OBTAIN THE ACTUAL FRAME TIMES AND NUMBER OF FRAMES PRESENTED
 
-Since DLSS-G when turned on presents additional frames the actual frame time can be obtained using the following sample code:
+When DLSS-G is enabled, it presents additional frames. The actual frame time can be obtained using the following sample code:
 
 ```cpp
 
@@ -769,7 +787,7 @@ if(SL_FAILED(result, slDLSSGGetState(viewport, state)))
 > **IMPORTANT:**
 > When querying only frame times or status, do not specify the `DLSSGFlags::eRequestVRAMEstimate`; setting that flag and passing a non-null `sl::DLSSGOptions` will cause DLSS-G to compute and return the estimated VRAM required.  This is needless and too expensive to do per frame.
 
-Once we have obtained DLSS-G state we can estimate the actual FPS like this:
+Once DLSS-G state has been obtained, the actual FPS can be estimated like this:
 
 ```cpp
 //! IMPORTANT: Returned value represents number of frames presented since 
@@ -780,17 +798,17 @@ Once we have obtained DLSS-G state we can estimate the actual FPS like this:
 auto actualFPS = myFPS * state.numFramesActuallyPresented;
 ```
 
-The `numFramesActuallyPresented` is equal to the number of presented frames per one application frame. For example, if DLSS-G plugin is inserting one generated frame after each application frame, that variable will contain '2'.
+`numFramesActuallyPresented` equals the number of frames presented per application frame. For example, if the DLSS-G plugin inserts one generated frame after each application frame, that variable will contain `2`.
 
-> **IMPORTANT**
+> **IMPORTANT:**
 
-Please note that DLSS-G will **always present real frame generated by the host but the interpolated frame can be dropped** if presents go out of sync (interpolated frame is too close to the last real one). In addition, if the host is CPU bottlenecked it is **possible for the reported FPS to be more than 2x when DLSS-G is on** because the call to `Swapchain::Present` is no longer a blocking call for the host and can be up to 1ms faster which then translates to faster base frame times. Here is an example:
+DLSS-G will **always present the real frame generated by the host, but the interpolated frame can be dropped** if presents go out of sync (for example, when the interpolated frame is too close to the last real one). In addition, if the host is CPU-bound, **reported FPS can exceed 2× when DLSS-G is on** because the call to `Swapchain::Present` is no longer blocking for the host and can be up to 1 ms faster, which translates to faster base frame times. Here is an example:
 
 * Host is CPU bound and producing frames every 10ms
 * Up to 1ms is spent blocked by the `Swapchain::Present` call
 * SL present hook will take around 0.2ms instead since `Swapchain::Present` is now an async event handled by the SL pacer
-* Host is now delivering frames at 10ms - 0.8ms = 9.2ms
-* This results in 109fps getting bumped to 218fps when DLSS-G is active so 2.18x scaling instead of the expected 2x
+* Host is now delivering frames at 10 ms − 0.8 ms = 9.2 ms
+* This results in 109 FPS increasing to 218 FPS when DLSS-G is active; 2.18× scaling instead of the expected 2×
 
 #### 13.1 UNDERSTANDING FRAME PACING BEHAVIOR
 
@@ -810,7 +828,7 @@ NVIDIA [FrameView](https://www.nvidia.com/en-us/geforce/technologies/frameview/)
 
 `MsBetweenPresents` is not suitable for measuring frame pacing quality because DLSS-G uses specialized hardware to delay the image after Present() has been called. This delay ensures the image is shown to the end user at precisely the right time, but `MsBetweenPresents` does not account for this delay.
 
-NVIDIA [FrameView](https://www.nvidia.com/en-us/geforce/technologies/frameview/) (as of version 16.1) uses `MsBetweenDisplayChange` and is the recommended tool for measuring frame pacing quality. 3rd-party tools may not account for the hardware-level presentation delay used by DLSS-G, making FrameView the most accurate option for evaluating DLSS-G frame pacing performance.
+NVIDIA [FrameView](https://www.nvidia.com/en-us/geforce/technologies/frameview/) (as of version 16.1) uses `MsBetweenDisplayChange` and is the recommended tool for measuring frame pacing quality. Third-party tools may not account for the hardware-level presentation delay used by DLSS-G, making FrameView the most accurate option for evaluating DLSS-G frame pacing performance.
 
 ### 14.0 HOW TO CHECK DLSS-G STATUS AT RUNTIME
 
@@ -832,7 +850,7 @@ enable it will result in an error.
 
 #### 14.3 HOW TO CHECK FOR RUNTIME ERRORS
 
-Even if DLSS-G feature is supported and loaded it can still end up in an invalid state at run-time due to various reasons. The following code snippet shows how to check the run-time status:
+Even if the DLSS-G feature is supported and loaded, it can still enter an invalid runtime state for various reasons. The following code snippet shows how to check runtime status:
 
 ```cpp
 sl::DLSSGState state{};
@@ -852,10 +870,10 @@ if(state.status != sl::eDLSSGStatusOk)
 }
 ```
 
-For more details please see `enum DLSSGStatus` in sl_dlss_g.h
+For more details, see `enum DLSSGStatus` in sl_dlss_g.h.
 
 > **IMPORTANT:**
-> When in invalid state and turned on DLSS-G will add pink overlay to the final color image. Warning message will be shown on screen in the NDA development build and error will be logged describing the issue.
+> When DLSS-G is in an invalid state and turned on, it adds a pink overlay to the final color image. A warning message is shown on screen in NDA development builds, and an error is logged describing the issue.
 
 > **IMPORTANT:**
 > When querying only frame times or status, do not specify the `DLSSGFlags::eRequestVRAMEstimate`; setting that flag and passing a non-null `sl::DLSSGOptions::ext` will cause DLSS-G to compute and return the estimated VRAM required.  This is needless and too expensive to do per frame.
@@ -865,7 +883,7 @@ For more details please see `enum DLSSGStatus` in sl_dlss_g.h
 SL can return a general estimate of the GPU memory required by DLSS-G via `slDLSSGGetState`.  This can be queried before DLSS-G is enabled, and can be queried for resolutions and formats other than those currently active.  To receive an estimate of GPU memory required, the application must:
 
 * Set the `sl::DLSSGOptions::flags` flag, `DLSSGFlags::eRequestVRAMEstimate`
-* Provide the values in the `sl::DLSSGOptions` structure include the intended resolutions of the MVecs, Depth buffer, final color buffer (UI buffers are assumed to be the same size as the color buffer), as well as the 3D API-specific format enums for each buffer.  Finally, the expected number of backbuffers in the swapchain must be specified.  See the `sl::DLSSGOptions` struct for details.
+* Provide values in the `sl::DLSSGOptions` structure, including the intended resolutions of the MVecs, Depth buffer, and final color buffer (UI buffers are assumed to match the color buffer size), as well as the 3D API-specific format enums for each buffer. Finally, specify the expected number of back buffers in the swap chain. See the `sl::DLSSGOptions` struct for details.
 
 If the flag and structure are provided, `slDLSSGGetState` should return a nonzero value in `sl::DLSSGState::estimatedVRAMUsageInBytes`.  Note that this value is a very rough estimate/guideline and should be used for general allocation.  The actual amount used may differ from this value.
 
@@ -889,13 +907,13 @@ uint64_t lastPresentInputsProcessingCompletionFenceValue{};
 
 SL DLSS-G implements the following logic when intercepting `vkQueuePresentKHR` and `vkAcquireNextImageKHR`:
 
-* sl.dlssg will wait for the binary semaphore provided in the `VkPresentInfoKHR` before proceeding with adding workload(s) to the GPU
-* sl.dlssg will signal binary semaphore provided in `vkAcquireNextImageKHR` call when DLSS-G workloads are submitted to the GPU
+* sl.dlss_g waits for the binary semaphore provided in `VkPresentInfoKHR` before proceeding with adding workload(s) to the GPU
+* sl.dlss_g signals the binary semaphore provided in the `vkAcquireNextImageKHR` call when DLSS-G workloads are submitted to the GPU
 
-Based on this the host application MUST:
+Based on this, the host application MUST:
 
-* Signal the `present` binary semaphore provided in `VkPresentInfoKHR` when submitting final workload at the end of the frame
-* Wait for the signal on the `acquire` binary semaphore provided with `vkAcquireNextImageKHR` call before starting the new frame
+* Signal the `present` binary semaphore provided in `VkPresentInfoKHR` when submitting the final workload at the end of the frame
+* Wait for the signal on the `acquire` binary semaphore provided with the `vkAcquireNextImageKHR` call before starting the new frame
 
 Here is some pseudo-code:
 
@@ -924,49 +942,48 @@ vkQueuePresent(presentSemaphore, index);
 
 * Provide either correct application ID or engine type (Unity, UE etc.) when calling `slInit`
 * In final (production) builds validate the public key for the NVIDIA custom digital certificate on `sl.interposer.dll` if using the binaries provided by NVIDIA. See [security section](ProgrammingGuide.md#211-security) for more details.
-* Tag `eDepth`, `eMotionVectors`, `eHUDLessColor` and `eUIColorAndAlpha` buffers
-  * When values of depth and mvec could be invalid make sure to set all tags to null pointers (level loading, playing video cut-scenes, paused, in menu etc.)
-  * Tagged buffers must by marked as volatile if they are not going to be valid when SwapChain::Present call is made
-* Tag backbuffer, only if DLSS-G needs to run on a subregion of the final color buffer. If tagged, ensure to set the tag to null pointer, if it could be invalid.
-* Provide correct common constants and frame index using `slSetConstants` method.
-  * When game is rendering game frames make sure to set `sl::Constants::renderingGameFrames` correctly
-* Make sure that frame index provided with the common constants is matching the presented frame (i.e. frame index provided with Reflex markers `ReflexMarker::ePresentStart` and `ReflexMarker::ePresentEnd`)
-* **Do NOT set common constants (camera matrices etc) multiple times per single frame** - this causes ambiguity which can result in IQ issues.
-* Use sl.imgui plugin to validate that inputs (camera matrices, depth, mvec, color etc.) are correct
-* Turn DLSS-G off (by setting `sl::DLSSGOptions::mode` to `DLSSGMode::eOff`) before any window manipulation (resize, maximize/minimize, full-screen transition etc.) to avoid potential deadlocks or instability
+* Tag `eDepth`, `eMotionVectors`, `eHUDLessColor`, and `eUIColorAndAlpha` buffers
+  * When depth and mvec values may be invalid, set all tags to null pointers (level loading, video cutscenes, paused, in menus, etc.)
+  * Tagged buffers must be marked as volatile if they will not be valid when the `SwapChain::Present` call is made
+* Tag the backbuffer only if DLSS-G needs to run on a subregion of the final color buffer. If tagged, set the tag to a null pointer when it may be invalid.
+* Provide correct common constants and frame index using the `slSetConstants` method.
+  * When the game is rendering frames, set `sl::Constants::renderingGameFrames` correctly
+* Ensure the frame index provided with the common constants matches the presented frame (i.e., the frame index provided with Reflex markers `ReflexMarker::ePresentStart` and `ReflexMarker::ePresentEnd`)
+* **Do not set common constants (camera matrices, etc.) multiple times in a single frame**, as this causes ambiguity that can result in image quality issues.
+* Use the sl.imgui plugin to validate that inputs (camera matrices, depth, mvec, color, etc.) are correct
+* Turn DLSS-G off (by setting `sl::DLSSGOptions::mode` to `DLSSGMode::eOff`) before any window manipulation (resize, maximize/minimize, full-screen transition, etc.) to avoid potential deadlocks or instability
 * Reduce the amount of motion blur when DLSS-G is active
 * Call `slDLSSGGetState` to obtain `sl::DLSSGState` and check the following:
-  * Make sure that `sl::DLSSGStatus` is set to `eDLSSGStatusOk`, if not disable DLSS-G and fix integration as needed (please see the logs for errors)
-  * If swap-chain back buffer size is lower than `sl::DLSSGSettings::minWidthOrHeight` DLSS-G must be disabled
-  * If VRAM stats and other extra information is not needed pass `nullptr` for constants for lowest overhead.
-* Call `slGetFeatureRequirements` to obtain requirements for DLSS-G (see [programming guide](./ProgrammingGuide.md#23-checking-features-requirements) and check the following:
-  * If any of the items in the `sl::FeatureRequirements` structure like OS, driver etc. are NOT supported inform user accordingly.
-* To avoid an additional overhead when presenting frames while DLSS-G is off **always make sure to re-create the swap-chain when DLSS-G is turned off**. For details please see [section 18](#180-how-to-avoid-unnecessary-overhead-when-dlss-g-is-turned-off)
-* `In Vulkan`, to exploit command queue parallelism, setting `DLSSGOptions::queueParallelismMode` to 'DLSSGQueueParallelismMode::eBlockNoClientQueues' mode might offer extra performance gains depending on the workload. 
-  * Same DLSSGQueueParallelismMode mode but be set for all the viewports.
-  * When using this mode, the client should wait on `DLSSGState::inputsProcessingCompletionFence` and associated value, before client can modify or destroy the tagged resources input to DLSS-G enabled for the corresponding previously presented frame on any of its queues.
-  * For synchronization details, please refer [section 15.1](#151-how-to-synchronize-the-host-app-dlss-g-inputs-and-streamline-if-required).
-  * Typical scenario in which gains might be more apparent is in GPU-limited applications having workload types employing multiple queues for submissions, especially if the presenting queue is the only one accessing FG inputs. Workloads from other application queues can happen in parallel with the DLSS-G workload; if those workloads underutilize GPU SM resources, the DLSS-G workload may better fill out SM utilization, improving overall performance. On the other hand, highly CPU-limited applications could see relatively smaller gains due to lower parallelism.
+  * Ensure `sl::DLSSGStatus` is set to `eDLSSGStatusOk`. If not, disable DLSS-G and fix the integration as needed (see the logs for errors).
+  * If the swap chain back buffer size is lower than `sl::DLSSGSettings::minWidthOrHeight`, DLSS-G must be disabled.
+  * If VRAM stats and other extra information are not needed, pass `nullptr` for constants for the lowest overhead.
+* Call `slGetFeatureRequirements` to obtain requirements for DLSS-G (see [programming guide](./ProgrammingGuide.md#23-checking-features-requirements)) and check the following:
+  * If any items in the `sl::FeatureRequirements` structure (OS, driver, etc.) are not supported, inform the user accordingly.
+* To avoid additional overhead when presenting frames while DLSS-G is off, **always recreate the swap chain when DLSS-G is turned off**. For details, see [Section 18](#180-how-to-avoid-unnecessary-overhead-when-dlss-g-is-turned-off).
+* In Vulkan, to exploit command queue parallelism, setting `DLSSGOptions::queueParallelismMode` to `DLSSGQueueParallelismMode::eBlockNoClientQueues` may offer extra performance gains depending on the workload.
+  * The same `DLSSGQueueParallelismMode` must be set for all viewports.
+  * When using this mode, the client should wait on `DLSSGState::inputsProcessingCompletionFence` and its associated value before modifying or destroying tagged resource inputs for the corresponding previously presented frame on any of its queues.
+  * For synchronization details, see [Section 15.1](#151-how-to-synchronize-the-host-app-dlss-g-inputs-and-streamline-if-required).
+  * Gains are most apparent in GPU-limited applications that use multiple queues for submissions, especially when the presenting queue is the only one accessing FG inputs. Workloads from other application queues can run in parallel with the DLSS-G workload; if those workloads underutilize GPU SM resources, the DLSS-G workload may better fill SM utilization, improving overall performance. Highly CPU-limited applications may see relatively smaller gains due to lower parallelism.
 
-#### 17.1 Game setup for the testing DLSS Frame Generation
+#### 17.1 Game setup for testing DLSS Frame Generation
 
-1. Set up a machine with an Ada board and drivers recommended by NVIDIA team.
-1. Turn on Hardware GPU Scheduling: Windows Display Settings (scroll down) -> Graphics Settings -> Hardware-accelerated GPU Scheduling: ON. Restart your PC.
-1. Check that Vertical Sync is set to "Use the 3D application setting" in the NVIDIA Control Panel ("Manage 3D Settings").
-1. Get the game build that has Streamline, DLSS-G and Reflex integrated and install on the machine.
-1. Once the game has loaded, go into the game settings and turn DLSS-G on.
-1. Once DLSS-G is on, you should be able to see it by:
-    * observing FPS boost in any external FPS measurement tool; and
-    * if the build includes Streamline and DLSS-G development libraries, seeing a debug overlay at the bottom of the screen (can be set in sl.dlss-g.json).
+1. Set up a machine with an Ada board and drivers recommended by the NVIDIA team.
+1. Turn on Hardware GPU Scheduling: Windows Display Settings (scroll down) → Graphics Settings → Hardware-accelerated GPU Scheduling: ON. Restart your PC.
+1. Verify that Vertical Sync is set to "Use the 3D application setting" in the NVIDIA Control Panel ("Manage 3D Settings").
+1. Get the game build that has Streamline, DLSS-G, and Reflex integrated and install it on the machine.
+1. Once the game has loaded, open the game settings and turn DLSS-G on.
+1. Once DLSS-G is on, you should be able to confirm it by:
+    * observing an FPS boost in any external FPS measurement tool; and
+    * if the build includes Streamline and DLSS-G development libraries, seeing a debug overlay at the bottom of the screen (configurable in sl.dlss-g.json).
 
-If the steps above fail, set up logging in sl.interposer.json, check for easy-to-fix issues & errors in the log, and contact NVIDIA team.
+If the steps above fail, set up logging in sl.interposer.json, check the log for easy-to-fix issues and errors, and contact the NVIDIA team.
 
 ### 18.0 HOW TO AVOID UNNECESSARY OVERHEAD WHEN DLSS-G IS TURNED OFF
 
-When DLSS-G is loaded it will create an extra graphics command queue used to present frames asynchronously and in addition it will force the host application to render off-screen (host has no access to the swap-chain buffers directly). In scenarios when DLSS-G is switched off by the user
-this results in unnecessary overhead coming from the extra copy from the off-screen buffer to the back buffer and synchronization between the game's graphics queue and the DLSS-G's queue. To avoid this, swap-chain must be torn down and re-created every time DLSS-G is switched on or off.
+When DLSS-G is loaded, it creates an extra graphics command queue used to present frames asynchronously and forces the host application to render off-screen (the host has no direct access to swap chain buffers). When DLSS-G is switched off by the user, this results in unnecessary overhead from the extra copy from the off-screen buffer to the back buffer and from synchronization between the game's graphics queue and DLSS-G's queue. To avoid this, the swap chain must be torn down and recreated every time DLSS-G is switched on or off.
 
-Here is some pseudo code showing how this can be done:
+Here is some pseudocode showing how this can be done:
 
 ```cpp
 void onDLSSGModeChange(sl::DLSSGMode mode)
@@ -1001,7 +1018,7 @@ void onDLSSGModeChange(sl::DLSSGMode mode)
         releaseBackBuffers();
         // Release swap-chain
         releaseSwapChain();
-        // Make sure DLSS-G is un-loaded
+        // Make sure DLSS-G is unloaded
         slSetFeatureLoaded(sl::kFeatureDLSS_G, false);
         // Re-create our swap-chain using the same parameters as before
         // Note that DLSS-G is unloaded so there is no proxy here, SL will return native swap-chain interface
@@ -1012,10 +1029,10 @@ void onDLSSGModeChange(sl::DLSSGMode mode)
 }
 ```
 
-For the additional implementation details please check out the Streamline sample, especially the `void DeviceManagerOverride_DX12::BeginFrame()` function.
+For additional implementation details, check the Streamline sample, especially the `void DeviceManagerOverride_DX12::BeginFrame()` function.
 
-> NOTE:
-> When DLSS-G is turned on the overhead from rendering to an off-screen target is negligible considering the overall frame rate boost provided by the feature.
+> **NOTE:**
+> When DLSS-G is turned on, the overhead from rendering to an off-screen target is negligible compared with the overall frame rate boost provided by the feature.
 
 ### 19.0 DLSS-FG INDICATOR TEXT
 
@@ -1059,7 +1076,7 @@ The mode will be
 * Disabled
 * Disabled (Invalid Input Data)
 
-In developer builds, ASCD can be toggled with `Shift+F9`. In developer builds, an additional ignore_reset_flag option simulates pure dependence on ASCD `Shift+F10`.
+In developer builds, ASCD can be toggled with `Shift+F9`. In developer builds, an additional `ignore_reset_flag` option simulates pure dependence on ASCD (`Shift+F10`).
 
 In cases where input camera data is incorrect, ASCD will report failure to the logs every frame. Log messages can be resolved by updating the camera inputs or disabling ASCD temporarily with the keybind.
 
@@ -1071,11 +1088,11 @@ In developer DLSS-FG variants ASCD displays on-screen hints for:
 2. Scene change detected with the reset flag.
 3. No scene change detected with the reset flag.
 
-The hints present as text blurbs in the center of screen, messages in the DLSS-FG log file, and in scenario 1, a screen goldenrod yellow tint.
+The hints appear as text blurbs in the center of the screen, messages in the DLSS-FG log file, and in scenario 1, a goldenrod-yellow screen tint.
 
 ### 21.0 ENHANCED IN-GAME DEBUG VISUALIZATION
 
-The developer FG NGX feature contains an in-game debug visualization feature that can be used to accurately validate GPU and CPU input resources are correct. Consult the **Troubleshooting and Optional Features** section of the  [DLSS-FG Programming Guide.pdf](<DLSS-FG Programming Guide.pdf>) for more details.
+The developer FG NGX feature contains an in-game debug visualization feature that can be used to accurately validate that GPU and CPU input resources are correct. Consult the **Troubleshooting and Optional Features** section of the [DLSS-FG Programming Guide.pdf](<DLSS-FG Programming Guide.pdf>) for more details.
 
 ### 22.0 VSYNC WITH FRAME GENERATION
 
@@ -1108,7 +1125,7 @@ When VSync is supported, the application controls VSync through the standard `Sy
 
 * `SyncInterval = 0`: VSync disabled (tearing allowed)
 * `SyncInterval = 1`: VSync enabled (present every refresh)
-* `SyncInterval > 1`: **Not supported** — will be clamped to 1 with a warning
+* `SyncInterval > 1`: **Not supported.** Will be clamped to 1 with a warning
 
 #### 22.3 NVCPL PRECEDENCE
 
@@ -1135,21 +1152,19 @@ With App-Enabled VSync, **NVCPL VSync settings now work on MS Hybrid systems** w
 
 **VSync is NOT supported in the following scenarios:**
 
-1. **Dynamic Multi Frame (`DLSSGMode::eDynamic`)**: Dynamic Frame Generation has its own frame pacing that conflicts with VSync. Use `DLSSGMode::eOn` for VSync support.
+1. **VSync Interval > 1**: Only `SyncInterval = 1` is supported. Higher intervals are clamped to 1.
 
-2. **VSync Interval > 1**: Only `SyncInterval = 1` is supported. Higher intervals are clamped to 1.
+2. **Excluded Platforms**: VSync is not supported on GeForce NOW (GFN) platforms. GFN streams rendered frames to the client device rather than displaying them directly on the game machine, so it has its own mechanisms for handling frame synchronization and is not covered by the Streamline VSync implementation.
 
-3. **Excluded Platforms**: VSync is not supported on GeForce NOW (GFN) platforms. GFN streams rendered frames to the client device rather than displaying them directly on the game machine, so it has its own mechanisms for handling frame synchronization and is not covered by the Streamline VSync implementation.
-
-4. **Vulkan**: VSync with Frame Generation is only supported on D3D12.
+3. **Vulkan**: VSync with Frame Generation is only supported on D3D12.
 
 #### 22.6 IFLIP REQUIREMENT
 
-VSync with Frame Generation relies on Independent Flip (IFLIP) — a Windows presentation mode where the GPU flips directly to the application's back buffer on the display, bypassing Desktop Window Manager (DWM) composition. IFLIP is critical for low-latency VSync because it allows the driver to control presentation timing at the hardware level.
+VSync with Frame Generation relies on Independent Flip (IFLIP) a Windows presentation mode where the GPU flips directly to the application's back buffer on the display, bypassing Desktop Window Manager (DWM) composition. IFLIP is critical for low-latency VSync because it allows the driver to control presentation timing at the hardware level.
 
 **If VSync is enabled with Frame Generation on a system that does not support IFLIP, high latency is expected.** On such systems it is better to not enable VSync.
 
-IFLIP is supported on all modern systems under normal conditions. However, certain configurations can prevent IFLIP from being used — for example, certain overlays, resolution mismatches, or forced DWM composition.
+IFLIP is supported on all modern systems under normal conditions. However, certain configurations can prevent IFLIP from being used for example, certain overlays, resolution mismatches, or forced DWM composition.
 
 **Diagnosing IFLIP with NVIDIA FrameView:**
 
@@ -1179,19 +1194,3 @@ Note that the maximum Frame Generation multiplier is **6×** (i.e. 5 generated f
 * Reduce Frame Generation multiplier
 * Use a higher refresh rate display
 * Disable VSync if latency is critical
-
-#### 22.8 DIAGNOSTICS
-
-VSync state is displayed in the DLSS-G debug text overlay (non-production builds):
-
-```
-VSYNC: ON (App:ON NVCPL:App-Controlled)
-VSYNC: OFF (App:ON NVCPL:Force OFF)
-VSYNC: OFF (App:OFF NVCPL:App-Controlled Auto:ACTIVE)
-```
-
-The overlay shows:
-* **VSYNC**: Final decision (ON/OFF)
-* **App**: Application's VSync request
-* **NVCPL**: Control Panel setting (Force OFF / Force ON / App-Controlled)
-* **Auto:ACTIVE**: Shown when `DLSSGMode::eAuto` is active (VSync disabled)

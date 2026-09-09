@@ -39,6 +39,7 @@ struct TexSampleCtx
     float mipLevel;
     uint arraySliceIdx;
     float4 biomeTint; // rgb = biome map tint, a = 1 to apply it (see getBiomeTint)
+    float3 proceduralColor; // world-space ramp color, or 1 (see getProceduralColor)
 };
 
 // Ctx for samples that don't apply the biome tint; tinted hits build the ctx with getBiomeTint instead
@@ -49,6 +50,7 @@ TexSampleCtx makeUntintedTexSampleCtx(const float mipLevel, const uint arraySlic
     texCtx.mipLevel = mipLevel;
     texCtx.arraySliceIdx = arraySliceIdx;
     texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f);
+    texCtx.proceduralColor = float3(1.f, 1.f, 1.f);
     return texCtx;
 }
 
@@ -106,13 +108,29 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
             return float3(0.f, 0.f, 0.f);
         }
         const float3 emissiveColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
-        return emissiveColor * auxStrength * material.emissiveStrength;
+        return emissiveColor * auxStrength * material.emissiveStrength * texCtx.proceduralColor;
     }
 
     const float3 emissiveColor = (material.auxTextureId == TEXTURE_ID_INVALID)
         ? material.emissiveColor
         : sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).rgb;
-    return emissiveColor * material.emissiveStrength;
+    return emissiveColor * material.emissiveStrength * texCtx.proceduralColor;
+}
+
+static const float glassIor = 1.55f; // quartz-ish
+
+// Turns the hit's material into glass, for faces flagged TRIANGLE_FLAG_IS_GLASS. Terrain shares
+// one diffuse material across every block, so glass is a per-triangle override rather than its own
+// material and instance; the base color texture becomes the transmission tint and the packed aux
+// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric.
+void applyGlassMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    material.flags = (material.flags & ~MATERIAL_FLAG_DIFFUSE) | MATERIAL_FLAGS_GLOSSY;
+    material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
+    material.roughness = (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
+        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
+        : 0.f;
+    material.ior = glassIor;
 }
 
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
@@ -514,16 +532,36 @@ BsdfSample sampleBsdf(const Material material,
     return result;
 }
 
-Material getMaterialFromPayload(const Payload payload)
-{
-    Material material = materials[payload.materialIdx];
+// Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
+static const float foliageDiffuseTransmission = 0.4f;
 
-    if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
+// A hit's material with its per-triangle overrides applied, then the IOR oriented for a backface
+// hit. Random replay rebuilds reconnection vertices through this too, so a reused path sees the
+// same surface the base path did.
+Material getHitMaterialAt(const uint materialIdx, const uint triangleFlags, const float2 uv, const TexSampleCtx texCtx, const bool isBackface)
+{
+    Material material = materials[materialIdx];
+    // Resolve surface overrides before orienting IOR for this particular hit.
+    if (bool(triangleFlags & TRIANGLE_FLAG_IS_GLASS))
+    {
+        applyGlassMaterial(material, uv, texCtx);
+    }
+    if (bool(triangleFlags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
+    {
+        material.diffuseTransmission = foliageDiffuseTransmission;
+    }
+
+    if (isBackface)
     {
         material.ior = 1.f / material.ior;
     }
 
     return material;
+}
+
+Material getMaterialFromPayload(const Payload payload, const uint triangleFlags, const TexSampleCtx texCtx)
+{
+    return getHitMaterialAt(payload.materialIdx, triangleFlags, payload.hitInfo.uv, texCtx, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
 }
 
 // Attempts to split surfMaterial for path splitting. Returns true if the material was split, in which case surfMaterial

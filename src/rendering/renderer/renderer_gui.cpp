@@ -39,7 +39,7 @@ void initImgui()
     imguiDX12InitInfo.Device = renderState.device.Get();
     imguiDX12InitInfo.CommandQueue = renderState.graphicsCmdQueue.Get();
     imguiDX12InitInfo.NumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
-    imguiDX12InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    imguiDX12InitInfo.RTVFormat = SWAP_CHAIN_FORMAT;
 
     imguiDX12InitInfo.SrvDescriptorHeap = renderState.sharedDescriptorHeap.Get();
     imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
@@ -53,19 +53,24 @@ void initImgui()
     ImGui_ImplDX12_Init(&imguiDX12InitInfo);
 }
 
-static uint32_t frameCount = 0;
+static uint32_t renderedFrameCount = 0;
+static uint32_t presentedFrameCount = 0;
 static double elapsedTime = 0.0;
 static int lastFps = 0;
+static int lastRenderedFps = 0;
 
 void updateFps(double deltaTime)
 {
-    frameCount++;
+    renderedFrameCount++;
+    presentedFrameCount += renderState.frameGen.framesPresentedLastFrame;
     elapsedTime += deltaTime;
 
     if (elapsedTime >= 1.0)
     {
-        lastFps = frameCount;
-        frameCount = 0;
+        lastFps = presentedFrameCount;
+        lastRenderedFps = renderedFrameCount;
+        renderedFrameCount = 0;
+        presentedFrameCount = 0;
         elapsedTime = 0.0;
     }
 }
@@ -97,7 +102,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "motion", "specularHitDistance", "normals", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "depth", "motion", "specularHitDistance", "normals", "debug",
 };
 static const std::vector<const char*> dlssModeOptions = {
     "DLAA", "quality", "balanced", "performance", "ultra performance",
@@ -177,6 +182,14 @@ void imguiEndFrame(double deltaTime)
         else if (antialiasingMode == AntialiasingMode::DLSS)
         {
             renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+            if (renderState.frameGen.supported)
+            {
+                SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
+            }
+            else
+            {
+                ImGui::TextDisabled("Frame generation not supported:\n- %s", renderState.frameGen.unsupportedReason.c_str());
+            }
         }
 
         SettingsGuiHelpers::VerticalSpacing();
@@ -219,11 +232,18 @@ void imguiEndFrame(double deltaTime)
 
     if (ImGui::Begin("Performance", nullptr, windowFlags))
     {
-        ImGui::Text("FPS: %d", lastFps);
+        if (renderState.frameGen.active)
+        {
+            ImGui::Text("FPS: %d (%d rendered)", lastFps, lastRenderedFps);
+        }
+        else
+        {
+            ImGui::Text("FPS: %d", lastFps);
+        }
 
         SettingsGuiHelpers::VerticalSpacing();
         renderState.frameTimeBuffer.push({ static_cast<float>(renderState.frameNumber), static_cast<float>(deltaTime) * 1000.f });
-        if (ImPlot::BeginPlot("Frame time", ImVec2(-1, -1)))
+        if (ImPlot::BeginPlot("Frame time (rendered)", ImVec2(-1, -1)))
         {
             static constexpr ImPlotAxisFlags axisFlags = 0;
             ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);

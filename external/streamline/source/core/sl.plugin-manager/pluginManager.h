@@ -118,6 +118,12 @@ struct IPluginManager
     virtual bool getLoadedFeatureConfigs(std::vector<json>& configList) const = 0;
     virtual bool getLoadedFeatures(std::vector<Feature>& featureList) const = 0;
     virtual bool getLoadedFeatureVersion(Feature feature, sl::Version& version) const = 0;
+
+    //! Surface-to-HWND mapping for Vulkan.
+    //! Stored here because vkCreateWin32SurfaceKHR fires before plugins are initialized.
+    virtual void setSurfaceWindow(VkSurfaceKHR surface, HWND hwnd) = 0;
+    virtual void removeSurfaceWindow(VkSurfaceKHR surface) = 0;
+    virtual HWND getSurfaceWindow(VkSurfaceKHR surface) const = 0;
 };
 
 IPluginManager* getInterface();

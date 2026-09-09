@@ -23,21 +23,30 @@
 <#
 .SYNOPSIS
  Script to take in a file, and convert it to a C header char-array
- representation of its binary contents. Output is written to stdout.
+ representation of its binary contents. Output goes to -o file if provided,
+ otherwise to stdout.
 .EXAMPLE
- bin2cheader.ps1 -i myfile.spv
+ bin2cheader.ps1 -i myfile.spv -o myfile_spv.h
 #>
 
 param(
     [Alias("i")]
     [Parameter(Mandatory=$true)]
     [string]
-    $inputFilename
+    $inputFilename,
+
+    [Alias("o")]
+    [string]
+    $outputFilename
 )
+
+# Wine cmd doesn't strip outer double quotes from argv when invoking PE
+# children, so '"foo.spv"' arrives here verbatim. Trim defensively.
+$inputFilename = $inputFilename.Trim('"')
+if ($outputFilename) { $outputFilename = $outputFilename.Trim('"') }
 
 $variable_name = $inputFilename.replace(".", "_")
 
-# Load file into memory
 # WAR for `-Encoding Byte` removed in pwsh6 (https://github.com/PowerShell/PowerShell/issues/7986)
 if ($PSVersionTable.PSVersion.Major -ge 6) {
     $filevar = Get-Content $inputFilename -AsByteStream
@@ -45,13 +54,16 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
     $filevar = Get-Content $inputFilename -Encoding Byte
 }
 
-# Print file preamble
-Write-Host "unsigned char $variable_name[] = {"
+$sb = [System.Text.StringBuilder]::new()
+[void]$sb.AppendLine("unsigned char $variable_name[] = {")
+foreach ($b in $filevar) { [void]$sb.Append("$b, ") }
+[void]$sb.AppendLine()
+[void]$sb.AppendLine("};")
+[void]$sb.AppendLine("unsigned int ${variable_name}_len = $($filevar.Length);")
+$output = $sb.ToString()
 
-$filevar | Foreach-Object {
-    Write-Host -NoNewline "$_, "
+if ($outputFilename) {
+    Set-Content -Path $outputFilename -Value $output -NoNewline
+} else {
+    Write-Output $output
 }
-
-Write-Host "};"
-
-Write-Host "unsigned int ${variable_name}_len = $($filevar.Length);"

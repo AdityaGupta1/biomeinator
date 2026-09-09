@@ -105,6 +105,11 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
 SET(SHADER_VERSION "6_9")
+# Keep the runtime capability check aligned with the compiled shader target.
+string(REPLACE "_" "" REQUIRED_SHADER_MODEL_HEX "${SHADER_VERSION}")
+file(CONFIGURE OUTPUT "${GENERATED_HEADERS_DIR}/gpu_requirements.h"
+    CONTENT "#pragma once\n#define BIOMEINATOR_REQUIRED_SHADER_MODEL 0x@REQUIRED_SHADER_MODEL_HEX@\n"
+    @ONLY)
 
 # Compile shaders to headers
 set(COMPILED_HEADERS "")
@@ -293,9 +298,14 @@ set(RUNTIME_DLLS
     "${EXT}/dxc/bin/dxcompiler.dll"
     "${EXT}/dxc/bin/dxil.dll"
     "${STREAMLINE_DLL_DIR}/sl.interposer.dll"
+    "${STREAMLINE_DLL_DIR}/sl.common.dll"
     "${STREAMLINE_DLL_DIR}/sl.dlss_d.dll"
     "${STREAMLINE_DLL_DIR}/nvngx_dlssd.dll"
     #"${STREAMLINE_DLL_DIR}/development/nvngx_dlssd.dll"
+    "${STREAMLINE_DLL_DIR}/sl.dlss_g.dll"
+    "${STREAMLINE_DLL_DIR}/nvngx_dlssg.dll"
+    "${STREAMLINE_DLL_DIR}/sl.reflex.dll"
+    "${STREAMLINE_DLL_DIR}/sl.pcl.dll"
     "${EXT}/WinPixEventRuntime/bin/x64/WinPixEventRuntime.dll"
 )
 

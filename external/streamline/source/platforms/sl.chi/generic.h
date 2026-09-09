@@ -28,18 +28,12 @@
 #include <atomic>
 #include <mutex>
 
-#include "source/platforms/sl.chi/compute.h"
+#include "external/nsight-sdk/SystemsGraphics/include/NGFX_Types.h"
 
-#if !defined(SL_WINDOWS)
-typedef struct GUID {
-    unsigned long  Data1;
-    unsigned short Data2;
-    unsigned short Data3;
-    unsigned char  Data4[ 8 ];
-} GUID;
-#else
+#include "source/platforms/sl.chi/compute.h"
+#include "source/platforms/sl.chi/nvapiCompat.h"
+
 typedef LUID    NVSDK_NGX_LUID;
-#endif
 
 #include <atomic>
 #include <utility>
@@ -110,6 +104,8 @@ protected:
     using KernelMap = std::map<Kernel, KernelDataBase*>;
     KernelMap m_kernels = {};
 
+    bool m_nsightInitialized{ false };
+
     std::atomic<uint32_t> m_finishedFrame = 0;
 
     Device m_typelessDevice{};
@@ -157,6 +153,12 @@ protected:
 
     std::map<void*, TranslatedResource> m_sharedResourceMap{};
 
+    std::mutex m_mutexReflexSync;
+    // setReflexSync and setReflexSyncFG each set a different subset of fields
+    // in NV_SET_REFLEX_SYNC_PARAMS but both submit the full struct to NvAPI.
+    // Caching ensures one call doesn't zero out the other's fields.
+    NV_SET_REFLEX_SYNC_PARAMS_V1_BFM_37843738 m_cachedReflexSyncParams{};
+
     virtual int destroyResourceDeferredImpl(const Resource InResource) = 0;
     virtual ComputeStatus createBufferResourceImpl(ResourceDescription &InOutResourceDesc, Resource &OutResource, ResourceState InitialState, const char InFriendlyName[]) = 0;
     virtual ComputeStatus createTexture2DResourceSharedImpl(ResourceDescription &InOutResourceDesc, Resource &OutResource, bool UseNativeFormat, ResourceState InitialState, const char InFriendlyName[]) = 0;
@@ -179,6 +181,23 @@ protected:
     bool isResourceTracked(chi::Resource resource);
 
     VRAMSegment manageVRAM(Resource res, VRAMOperation op);
+
+    //! Fixed detect/init/log sequence; backends override initNsightActivityImpl() for the API-specific calls.
+    void initNsightActivity();
+    //! Backend hook: initialize `activity` for this graphics API.
+    //! Returns true on success; sets `recognized` to whether this backend handles `activity`.
+    //! Base recognizes nothing.
+    virtual bool initNsightActivityImpl(NGFX_ActivityType activity)
+    {
+        return false;
+    }
+
+#if SL_ENABLE_PROFILING
+    ComputeStatus beginProfilingImpl(CommandList cmdList, const char* marker, uint8_t r, uint8_t g, uint8_t b) override { return ComputeStatus::eNoImplementation; }
+    ComputeStatus endProfilingImpl(CommandList cmdList) override { return ComputeStatus::eNoImplementation; }
+    ComputeStatus beginProfilingQueueImpl(CommandQueue cmdQueue, const char* marker, uint8_t r, uint8_t g, uint8_t b) override { return ComputeStatus::eNoImplementation; }
+    ComputeStatus endProfilingQueueImpl(CommandQueue cmdQueue) override { return ComputeStatus::eNoImplementation; }
+#endif
 
 public:
 
@@ -244,6 +263,7 @@ public:
     virtual ComputeStatus setDebugName(Resource res, const char friendlyName[]) override { return ComputeStatus::eNoImplementation; }
         
     virtual ComputeStatus getRefreshRate(WindowHandle window, float& refreshRate) override;
+    virtual ComputeStatus getDisplayId(WindowHandle window, uint32_t& displayId) override;
     virtual ComputeStatus getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer) override { return ComputeStatus::eNoImplementation; }
 
     virtual ComputeStatus pushState(CommandList cmdList) override { return ComputeStatus::eOk; }
@@ -297,19 +317,17 @@ public:
     ComputeStatus getFullscreenState(SwapChain chain, bool& fullscreen) override { return ComputeStatus::eNoImplementation; };
     ComputeStatus setFullscreenState(SwapChain chain, bool fullscreen, Output out = nullptr) override { return ComputeStatus::eNoImplementation; }
 
-    ComputeStatus beginProfiling(CommandList cmdList, unsigned int Metadata, const char* marker) override { return ComputeStatus::eOk;  }
-    ComputeStatus endProfiling(CommandList cmdList)  override { return ComputeStatus::eOk; }
-    ComputeStatus beginProfilingQueue(CommandQueue cmdList, uint32_t metadata, const char* marker)  override { return ComputeStatus::eOk; }
-    ComputeStatus endProfilingQueue(CommandQueue cmdList)  override { return ComputeStatus::eOk; }
-
     virtual bool signalCPUFence(Fence fence, uint64_t syncValue) = 0;
 
     virtual ComputeStatus setSleepMode(const ReflexOptions& consts) override;
     virtual ComputeStatus getSleepStatus(ReflexState& settings) override;
+    virtual ComputeStatus getFrameGenParams(uint8_t& outFgMultiplier, bool& outDfgControl) override;
     virtual ComputeStatus getLatencyReport(ReflexState& settings) override;
     virtual ComputeStatus sleep() override;
     virtual ComputeStatus setReflexMarker(PCLMarker marker, uint64_t frameId) override;
-    
+    virtual ComputeStatus setReflexSync(bool enable, int32_t timeInQueueUs, uint32_t timeInQueueUsTarget, uint32_t vblankIntervalUs) override;
+    virtual ComputeStatus setReflexSyncFG(uint8_t dfgMaxMultiplier, uint32_t dfgTargetFps, uint8_t fgMultiplier) override;
+
 
     // Sharing API
     virtual ComputeStatus fetchTranslatedResourceFromCache(ICompute* otherAPI, ResourceType type, Resource res, TranslatedResource& shared, const char friendlyName[]) override;
@@ -326,6 +344,9 @@ public:
     virtual ComputeStatus isNativeOpticalFlowSupported() override { return ComputeStatus::eNoImplementation; }
 
     virtual ComputeStatus isDeviceExtensionSupported(const char* extension, uint32_t version) override { return ComputeStatus::eNoImplementation; }
+
+    ComputeStatus setSwapChainPrivateData(void* nativeSwapChain, void* data) override { return ComputeStatus::eNoImplementation; }
+    ComputeStatus getSwapChainPrivateData(void* nativeSwapChain, void** data) override { return ComputeStatus::eNoImplementation; }
 };
 
 }
