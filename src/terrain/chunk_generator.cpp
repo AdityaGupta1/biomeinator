@@ -86,9 +86,6 @@ inline constexpr float caveFlatSurfaceMinNormalY = 0.7f;
 inline constexpr float caveSurfaceFadeStartDepth = 20.f;
 inline constexpr float caveSurfaceFadeEndDepth = 4.f;
 
-// Set to a biome to force every cave to it while iterating on that biome's content; COUNT restores
-// noise-based classification.
-inline constexpr CaveBiome debugCaveBiomeOverride = CaveBiome::COUNT;
 static FN::SmartNode<FN::Generator> fnCaveRock;
 
 static FN::SmartNode<FN::Generator> fnSwampWarp;
@@ -701,9 +698,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
                                 .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
                             };
-                            const CaveBiome caveBiome = (debugCaveBiomeOverride != CaveBiome::COUNT)
-                                ? debugCaveBiomeOverride
-                                : CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
                             voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
