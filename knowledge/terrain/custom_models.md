@@ -40,9 +40,7 @@ geometry path; do not feed them to the existing quad OMM helper.
 
 The glowshroom atlas reserves the left half for caps and the right half for stems.
 Its aux R mask makes caps emissive, but its block does not register area lights.
-No diffuse transmission is enabled. CPU checks are available via the explicit
-`BlockModelTests` target (loader errors, hierarchy, winding, rotations, pixel
-assets, cache, and the decorator neighbor-face exception).
+No diffuse transmission is enabled.
 
 ## Mushroom authoring decisions
 
