@@ -85,11 +85,11 @@ paths only — NEE towards it is always shadowed.
 
 ## Procedural color
 
-`TRIANGLE_FLAG_PROCEDURAL_COLOR` replaces a surface's color with a world-space ramp
+`TRIANGLE_FLAG_PROCEDURAL_COLOR` multiplies emission by a world-space ramp
 (`common/procedural_color.hlsli`): hue sweeping green to magenta and back along the (1, 1, 1)
-diagonal, drifting with `animTime`. It multiplies both `getMaterialBaseColor` and
-`getMaterialEmissiveColor`, so it tints an emitter's light and a glass surface's transmission alike,
-and it is unmasked — unlike the biome tint, which only applies where the aux g channel says so.
+diagonal, drifting with `animTime`. It only affects `getMaterialEmissiveColor`; diffuse and
+transmission retain their texture color. This lets crystal ore use an emissive aux-R mask over
+unchanged basalt. Non-emissive texels receive no ramp contribution.
 
 It is evaluated per shading point rather than baked per triangle at mesh time, which is what makes
 it smooth within a single block, lets it animate, and keeps it independent of the geometry, so a

@@ -9,8 +9,8 @@
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-// Faces flagged TRIANGLE_FLAG_PROCEDURAL_COLOR take their color from a world-space ramp instead of
-// their texture: the hue sweeps green -> magenta -> green along the (1, 1, 1) diagonal and drifts
+// Faces flagged TRIANGLE_FLAG_PROCEDURAL_COLOR multiply their emission by a world-space ramp;
+// diffuse and transmission keep their texture color: the hue sweeps green -> magenta -> green along the (1, 1, 1) diagonal and drifts
 // with time. Evaluating it from the shading point rather than baking it per triangle is what keeps
 // it smooth within a single block and lets it animate, and it makes the ramp independent of the
 // geometry, so a crystal model gets it on the same terms as a cube.
@@ -30,7 +30,7 @@ static const float proceduralColorSaturation = 0.8f;
 // swings about eightfold (green is bright, the blue midpoint is very dark), which reads as the
 // clusters pulsing in brightness as the ramp drifts rather than changing color. Equalizing pushes
 // the dark hues' channels well above 1, which is why this is only for emission.
-static const float proceduralColorLuminance = 1.5f;
+static const float proceduralColorLuminance = 1.8f;
 
 float3 getProceduralColor(const uint triangleFlags, const float3 pos_WS)
 {

@@ -48,8 +48,8 @@ anyhit handling, and shadow rays are blocked by it as they are by any rough tran
 
 ## Procedural color
 
-A block JSON's `proceduralColor` flag makes its faces take their color from a world-space ramp
-instead of their texture, by setting `TRIANGLE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
+A block JSON's `proceduralColor` flag multiplies emission by a world-space ramp
+while leaving diffuse and transmission texture colors unchanged, by setting `TRIANGLE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
 uses it). The ramp itself lives in the shaders — see
 [shaders → materials.md](../shaders/materials.md).
 
@@ -76,3 +76,8 @@ atlas named by the block, not glTF materials; see [custom_models.md](custom_mode
 Emission on ray hits does not require `emitsLight`: the glowshroom model deliberately
 uses an emissive cap mask with `emitsLight = false`, excluding its tiny triangles
 from explicit area-light sampling. Both mushroom models disable diffuse transmission.
+
+Cracked basalt crystal ore temporarily replaces 1% of generated cracked basalt, using
+a world-seed/position hash independent of other generation RNG streams. It registers
+as an area light; the texture aux-R mask limits emission to the user-authored ore pixels.
+Imported worlds keep their saved blocks and do not reroll ore.

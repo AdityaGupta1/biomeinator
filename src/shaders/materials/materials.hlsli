@@ -90,13 +90,6 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
         // Tint-masked texels are authored grayscale; the biome tint provides the hue
         baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
     }
-    // Unmasked, unlike the biome tint, which the aux g channel gates. Applied only at the texture
-    // sample: the path tracer bakes this result back into material.baseColor and clears the texture
-    // id, so multiplying on the cached path too would apply the ramp once per read.
-    if (material.baseColorTextureId != TEXTURE_ID_INVALID)
-    {
-        baseColor.rgb *= texCtx.proceduralColor;
-    }
     return baseColor;
 }
 

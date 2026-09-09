@@ -59,6 +59,17 @@ int main()
             check(blockFaceVisible(BlockType::SOLID, BlockShape::CUBE, BlockType::GLASS, BlockShape::CUBE, face), "solid remains visible through glass");
         }
         check(Blocks::getBlockData(Block::CRYSTAL_CORE).proceduralColor, "crystal procedural color survives parsing");
+        const auto& ore = Blocks::getBlockData(Block::CRACKED_BASALT_CRYSTAL_ORE);
+        check(ore.type == BlockType::SOLID && ore.emitsLight && ore.proceduralColor, "crystal ore shading and light registration");
+        {
+            int w, h, c;
+            auto* mask = stbi_load((assets / "textures/cracked_basalt_crystal_ore.aux.png").string().c_str(), &w, &h, &c, 4);
+            check(mask && w == 16 && h == 16, "crystal ore mask size");
+            int emissive = 0;
+            for (int i = 0; i < 256; ++i) { emissive += mask[i*4] > 0; check(mask[i*4+3] == 255, "opaque ore mask"); }
+            check(emissive > 0 && emissive < 256, "ore mask separates emission from basalt");
+            stbi_image_free(mask);
+        }
         const auto& shard = Blocks::getBlockData(Block::CRYSTAL_SHARD);
         check(shard.shape == BlockShape::DECORATOR_CUSTOM && shard.proceduralColor, "crystal shard model uses procedural ramp");
         check(Blocks::getTextureNames().at(shard.texSlices[0]) == "crystal_core", "crystal shard uses core atlas");

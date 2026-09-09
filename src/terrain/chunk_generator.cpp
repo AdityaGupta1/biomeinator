@@ -794,6 +794,15 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     block = (y == static_cast<uint>(waterLevel)) ? Block::WATER_TOP : Block::WATER;
                 }
 
+                // Temporary scatter until crystal ore gets vein generation. Position hashing keeps
+                // placement independent of traversal order and other decorators' random streams.
+                if (block == Block::CRACKED_BASALT)
+                {
+                    RandomNumberGenerator oreRng = initRng(worldSeed ^ hash(0xC7157A1u),
+                        blockPosXZ_WS.x, y, blockPosXZ_WS.y);
+                    if (oreRng.nextFloat() < 0.01f) block = Block::CRACKED_BASALT_CRYSTAL_ORE;
+                }
+
                 this->blocks[blockIdx] = block;
                 if (prevFringeBlock != Block::AIR && block == Block::AIR)
                 {
