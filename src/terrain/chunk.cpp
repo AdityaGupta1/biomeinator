@@ -38,6 +38,15 @@ inline constexpr ivec3 faceOffsets[6] = {
     ivec3(0, -1, 0), // -y
 };
 
+inline constexpr vec3 faceTangentX[6] = {
+    vec3(0, -1, 0), vec3(1, 0, 0), vec3(0, 1, 0),
+    vec3(1, 0, 0), vec3(1, 0, 0), vec3(1, 0, 0),
+};
+inline constexpr vec3 faceTangentZ[6] = {
+    vec3(0, 0, 1), vec3(0, -1, 0), vec3(0, 0, 1),
+    vec3(0, 1, 0), vec3(0, 0, 1), vec3(0, 0, -1),
+};
+
 constexpr uint8_t surfaceForFace(uint8_t face)
 {
     return face < 4 ? DECORATOR_SURFACE_WALL
@@ -771,7 +780,16 @@ void Chunk::createInstances()
                             ASSERT(mountFace < 6);
                         }
                         const vec3 mountNormal(faceOffsets[mountFace]);
-                        const vec3 offset = vec3(blockPos_CS) + vec3(.5f) - .5f * mountNormal;
+                        vec3 jitter(0.f);
+                        if (blockData.randomJitter)
+                        {
+                            auto jitterRng = initRng(worldSeed ^ hash(392421012),
+                                static_cast<uint>(columnPos_WS.x), blockY, static_cast<uint>(columnPos_WS.y));
+                            const vec2 tangentJitter = (jitterRng.nextFloat2() - .5f) * .4f;
+                            jitter = tangentJitter.x * faceTangentX[mountFace] +
+                                     tangentJitter.y * faceTangentZ[mountFace];
+                        }
+                        const vec3 offset = vec3(blockPos_CS) + vec3(.5f) - .5f * mountNormal + jitter;
                         const auto baseVertex = static_cast<uint32_t>(terrainVerts.size());
                         const auto baseTriangle = static_cast<uint32_t>(terrainIdxs.size() / 3);
                         const auto& vertices = model.orientations[mountFace * 4 + turn];
@@ -798,12 +816,16 @@ void Chunk::createInstances()
                     {
                         const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
 
-                        // Jitter is hashed from the world-space XZ position so vertically stacked X-shaped blocks stay aligned
+                        // Jitter is hashed from world XZ so vertically stacked X-shaped blocks stay aligned.
                         const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
-                        RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
-                                                                  static_cast<uint>(columnPos_WS.x),
-                                                                  static_cast<uint>(columnPos_WS.y /*z*/));
-                        const vec2 jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
+                        vec2 jitter(0.f);
+                        if (blockData.randomJitter)
+                        {
+                            RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
+                                                                      static_cast<uint>(columnPos_WS.x),
+                                                                      static_cast<uint>(columnPos_WS.y /*z*/));
+                            jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
+                        }
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
                         const uint32_t texArraySliceIdx = blockData.texSlices[1]; // top; all faces of an X-shaped block share one texture

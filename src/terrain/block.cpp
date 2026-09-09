@@ -127,6 +127,7 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         data.markAsEmitter = blockJson.value("markAsEmitter", false);
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
+        data.randomJitter = blockJson.value("randomJitter", false);
         if (blockJson.contains("blockState"))
         {
             data.stateKind = parseNamedValue(blockStateKindsByName, blockJson["blockState"], "blockState");

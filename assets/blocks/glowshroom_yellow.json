@@ -2,6 +2,7 @@
     "textures": "glowshroom_yellow_model",
     "type": "solid",
     "shape": "decorator_custom",
+    "randomJitter": true,
     "model": "glowshroom_yellow.glb",
     "randomRotationY": [0, 90, 180, 270],
     "translucent": false,

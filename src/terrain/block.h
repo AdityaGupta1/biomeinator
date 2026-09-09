@@ -69,6 +69,7 @@ struct BlockData
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
+    bool randomJitter{ false };
     BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns

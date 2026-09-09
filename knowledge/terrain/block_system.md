@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Block System
 
@@ -65,7 +65,10 @@ Custom models are static GLBs in `assets/blocks/models`, with geometry cached du
 `Blocks::init()` before worker threads start. They reuse one opaque 16px terrain
 atlas named by the block, not glTF materials; see [custom_models.md](custom_models.md).
 
-`X_SHAPED` blocks are rendered as two crossed diagonal quads (like Minecraft foliage). During mesh generation they also receive a random XZ jitter so adjacent grass blocks don't form a visible grid pattern.
+`X_SHAPED` blocks are rendered as two crossed diagonal quads (like Minecraft foliage).
+The `randomJitter` JSON flag opts either X-shaped or custom decorator models into a
+deterministic ±0.2-block tangent-plane offset. It defaults off so every block that
+wants displacement must declare it explicitly.
 
 `LIQUID_TOP` is a cube with the +Y face lowered by 1/8 block, creating the "not quite full block" water surface look.
 
