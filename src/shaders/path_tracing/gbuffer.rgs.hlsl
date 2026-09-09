@@ -14,24 +14,20 @@
 
 RWStructuredBuffer<GbufferData> gbufferOut : REGISTER_U(GBUFFER, GBUFFER_OUT);
 
-// motion is in uv space, not pixel space
-float2 calculateMotionFromPos(const float3 pos_WS, const float3 prevPos_WS)
+float3 calculateNdc(const float4x4 worldToClipMat, const float3 pos_WS)
 {
-    float4 currNdc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
-    currNdc /= currNdc.w;
-    float4 prevNdc = mul(cameraParams.worldToPrevClipMat, float4(prevPos_WS, 1)); // worldToPrevClipMat accounts for changed globalInstanceOffset
-    prevNdc /= prevNdc.w;
+    const float4 clip = mul(worldToClipMat, float4(pos_WS, 1));
+    return clip.xyz / clip.w;
+}
+
+// motion is in uv space, not pixel space
+float2 calculateMotionFromNdc(const float3 currNdc, const float3 prevPos_WS)
+{
+    const float3 prevNdc = calculateNdc(cameraParams.worldToPrevClipMat, prevPos_WS); // worldToPrevClipMat accounts for changed globalInstanceOffset
 
     float2 motion = (prevNdc.xy - currNdc.xy) / 2.f;
     motion.y = -motion.y;
     return motion;
-}
-
-// DLSS frame generation wants post-projection depth, not the ray distance in linearDepthTarget
-float calculateNdcDepth(const float3 pos_WS)
-{
-    const float4 ndc = mul(cameraParams.worldToClipMat, float4(pos_WS, 1));
-    return ndc.z / ndc.w;
 }
 
 void outputGuideBuffers(const Payload payload, const RayDesc ray)
@@ -92,12 +88,16 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
     linearDepthTarget[pixelIdx] = linearDepth;
 
-    // motionHitPos_WS is the hit position, or a far-plane position on a miss, so the sky lands at the far plane
+    // motionHitPos_WS is the hit position, or on a miss a point at ray distance farPlane, which puts the
+    // sky just short of the far plane for off-axis pixels
+    const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);
+
+    // DLSS frame generation wants post-projection depth, not the ray distance in linearDepthTarget
     RWTexture2D<float> ndcDepthTarget = ResourceDescriptorHeap[heapIndices.uav.ndcDepthTargetIdx];
-    ndcDepthTarget[pixelIdx] = calculateNdcDepth(motionHitPos_WS);
+    ndcDepthTarget[pixelIdx] = currNdc.z;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
-    motionTarget[pixelIdx] = calculateMotionFromPos(motionHitPos_WS, prevMotionHitPos_WS);
+    motionTarget[pixelIdx] = calculateMotionFromNdc(currNdc, prevMotionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
     normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);

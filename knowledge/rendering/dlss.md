@@ -6,7 +6,11 @@ DLSS Ray Reconstruction (DLSS-RR / DLSS-D) via NVIDIA Streamline SDK. Upscales f
 resolution to viewport resolution while denoising the path-traced output.
 
 DLSS Frame Generation (DLSS-G / DLSS-FG) sits on top of it, interpolating one extra frame per
-rendered frame. It is on by default, gated on the `frameGeneration` setting.
+rendered frame. It is on by default, gated on the `frameGeneration` setting *and* on DLSS being the
+antialiasing mode (`isFrameGenerationRequested`). DLSS-G could run without DLSS-RR, but its checkbox
+lives under the DLSS mode dropdown, so leaving it active in the other modes would give the user no
+visible way to turn it off. Only the active state is gated; the setting keeps the user's choice for
+when they switch back.
 
 ## Manual Hooking
 
@@ -53,11 +57,6 @@ command list work that produces them. This is why resource tagging happens at th
 
 ## Frame Generation
 
-Since the setting defaults to on, the first `render()` call normally enables frame generation and
-therefore rebuilds the swap chain once at startup. That is deliberate: routing startup through the
-same `setFrameGenerationActive` path as a runtime toggle keeps one code path for enabling it,
-at the cost of one extra swap chain create and target reallocation before the first frame.
-
 Frame generation is only offered when DLSS-G, Reflex and PCL all report support, which is checked
 once at startup (`initFrameGenSupport`). The usual reason for it to be unavailable is Windows
 Hardware-accelerated GPU Scheduling being off, which no amount of application-side work can fix.
@@ -71,16 +70,35 @@ they drift out of sync the log fills with `common constants cannot be found for 
 of that the markers and `slReflexSleep` run whenever frame generation is *supported*, not only
 while it is switched on, so the pairing is already correct at the moment it gets enabled.
 
-### Toggling recreates the swap chain
+PCL Stats also posts a private window message to time how long input takes to reach a frame. The
+message pump only raises a flag (`queuePclPing`); the ping marker itself goes out with the next
+frame's token, since that is the frame that picks up the input. Requesting a separate token for
+the ping would burn one of SL's few in-flight token slots.
+
+### Plugin load vs. interpolation
 
 While the sl.dlss_g plugin is loaded, the application renders to an off-screen target and SL owns
 the real swap chain. Leaving the plugin loaded with frame generation merely set to `eOff` keeps
-that extra copy and the cross-queue sync, so `setFrameGenerationActive` unloads the plugin and
-rebuilds the swap chain around the new state. This is why the DXGI factories are kept alive past
-`initSwapChain` instead of being released there.
+that extra copy and the cross-queue sync, so the plugin is only loaded while the setting is on and
+every load or unload is followed by a swap chain rebuild. At startup `initSwapChain` loads it
+before the first swap chain exists, so the default-on setting costs no rebuild; a runtime toggle
+goes through `setFrameGenerationActive`, which rebuilds the swap chain and queues a resize rather
+than running one, so a frame that also has a pending resize still resizes once. This is why the
+DXGI factories are kept alive past `initSwapChain` instead of being released there.
 
-Loading the plugin is also not sufficient on its own: interpolation only starts once
-`slDLSSGSetOptions` sets the mode.
+Loading the plugin is not sufficient on its own: interpolation only starts once `slDLSSGSetOptions`
+sets the mode. That happens at the end of `resize()`, the one place that follows every swap chain
+creation. `resize()` also turns the mode off before `ResizeBuffers`: while interpolating, DLSS-G
+presents from its own thread, and section 12 of its guide requires it to be off across any window
+manipulation to avoid a deadlock.
+
+DLSS-G fails quietly, still presenting real frames (with a pink overlay) and reporting the reason
+only through `DLSSGState::status`. A bad status turns the `frameGeneration` setting off rather than
+just logging, as section 14.3 of the guide asks; using the setting keeps the GUI checkbox honest and
+lets the user try again. The resolution-too-low status is how a tiny window is handled.
+
+`hudlessTarget` is only allocated while frame generation is on. Toggling queues a resize anyway, so
+gating it in the resize loop costs nothing and frees a full-resolution RGBA8 texture on the off path.
 
 ### Buffer states at Present
 
@@ -120,8 +138,11 @@ why the two disagree by design.
 ### Hudless
 
 `hudlessTarget` is a copy of the back buffer taken after the postprocess draw and before ImGui, so
-interpolation sees the scene without the overlay smeared across it. Its format has to track the
-swap chain's. No UI alpha buffer is tagged yet, so the overlay still degrades somewhat on generated
+interpolation sees the scene without the overlay smeared across it. It uses `SWAP_CHAIN_FORMAT`,
+the same constant the swap chain, the postprocess PSO, ImGui and the screenshot readback use, since
+`CopyResource` needs the formats to match exactly. It keeps its SRV flag even though no shader
+reads it: DLSS-G creates its own views on the resource, and `DENY_SHADER_RESOURCE` would break
+that. No UI alpha buffer is tagged yet, so the overlay still degrades somewhat on generated
 frames, and fullscreen menu auto-detection (which needs `kBufferTypeUIColorAndAlpha`) is
 unavailable.
 

@@ -137,6 +137,13 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eUltraPerformance,
 };
 
+static void setFrameGenMode(sl::DLSSGMode mode)
+{
+    renderState.frameGen.options.mode = mode;
+    renderState.frameGen.options.numFramesToGenerate = 1; // 2x; higher multipliers need Blackwell
+    CHECK_SL_RESULT(slDLSSGSetOptions(renderState.dlss.viewportHandle, renderState.frameGen.options));
+}
+
 void resize()
 {
     if (!renderState.swapChain)
@@ -156,10 +163,10 @@ void resize()
 
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
-    renderState.dlss.viewportExtent = { 0, 0, viewportWidth, viewportHeight };
-
     if (antialiasingMode == AntialiasingMode::DLSS)
     {
+        renderState.dlss.viewportExtent = { 0, 0, viewportWidth, viewportHeight };
+
         sl::DLSSDOptimalSettings dlssdSettings;
         renderState.dlss.options.mode = (sl::DLSSMode)dlssModes[SettingsManager::getAsUint("dlssMode")];
         renderState.dlss.options.outputWidth = viewportWidth;
@@ -169,6 +176,8 @@ void resize()
         renderState.renderWidth = dlssdSettings.optimalRenderWidth;
         renderState.renderHeight = dlssdSettings.optimalRenderHeight;
         renderState.dlss.mipBias = std::log2(static_cast<float>(renderState.renderWidth) / static_cast<float>(viewportWidth)) - 1.f;
+
+        renderState.dlss.renderExtent = { 0, 0, renderState.renderWidth, renderState.renderHeight };
 
         renderState.dlss.options.dlaaPreset = sl::DLSSDPreset::ePresetD;
         renderState.dlss.options.qualityPreset = sl::DLSSDPreset::ePresetD;
@@ -189,9 +198,12 @@ void resize()
         renderState.dlss.mipBias = 0.f;
     }
 
-    // Frame generation tags depth and motion vectors whether or not DLSS upscaling is on, so the
-    // render extent has to be set for both paths
-    renderState.dlss.renderExtent = { 0, 0, renderState.renderWidth, renderState.renderHeight };
+    // While interpolating, DLSS-G presents from its own thread, and section 12 of its guide requires
+    // it to be off across any ResizeBuffers to rule out a deadlock with that thread
+    if (renderState.frameGen.active)
+    {
+        setFrameGenMode(sl::DLSSGMode::eOff);
+    }
 
     flush();
 
@@ -199,11 +211,15 @@ void resize()
     if (isWaitableSwapChainActive())
     {
         CHECK_HRESULT(renderState.swapChain->SetMaximumFrameLatency(2));
-        if (renderState.frameLatencyWaitable)
-        {
-            CloseHandle(renderState.frameLatencyWaitable);
-        }
+        closeFrameLatencyWaitable();
         renderState.frameLatencyWaitable = renderState.swapChain->GetFrameLatencyWaitableObject();
+    }
+
+    // Loading the plugin is not enough on its own; interpolation only starts once the mode is set.
+    // Every swap chain creation is followed by a resize, so this is the one place that switches it on.
+    if (renderState.frameGen.active)
+    {
+        setFrameGenMode(sl::DLSSGMode::eOn);
     }
 
     renderState.dev_gbuffer.Reset();
@@ -242,6 +258,11 @@ void resize()
     for (RtTarget* rtTarget : renderState.allRtTargets)
     {
         rtTarget->reset();
+        // Toggling frame generation queues a resize, so the hudless copy's VRAM is only held while it is read
+        if (rtTarget == &renderState.hudlessTarget && !renderState.frameGen.active)
+        {
+            continue;
+        }
         if (rtTarget->isFullSize)
         {
             rtTarget->setDimensions(viewportWidth, viewportHeight);
@@ -302,6 +323,16 @@ void queueResize()
     renderState.needsResize = true;
 }
 
+uint32_t getPclStatsWindowMessage()
+{
+    return renderState.frameGen.pclStatsWindowMessage;
+}
+
+void queuePclPing()
+{
+    renderState.frameGen.pclPingPending = true;
+}
+
 // state = state the resource should be in when SL (DLSS) is invoked
 static inline sl::Resource makeSlResource(RtTarget* target,
                                           D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
@@ -360,8 +391,9 @@ static void submitCmd();
 
 // Queried once per frame, right after Present, for two things:
 //
-// - DLSS-G fails quietly, still presenting real frames and reporting the reason only through its
-//   state, so every new status is surfaced rather than left silently inactive
+// - DLSS-G fails quietly, still presenting real frames (with a pink overlay) and reporting the
+//   reason only through its state. Section 14.3 of its guide says to turn it off in that case, which
+//   is done through the setting so the GUI checkbox reflects it and the user can try again.
 // - numFramesActuallyPresented counts frames presented since the previous query, which is exactly
 //   one app frame here, and is what the FPS counter needs to report presented rather than rendered
 //   frames
@@ -370,8 +402,6 @@ static void submitCmd();
 // with DLSSGFlags::eRequestVRAMEstimate set would make DLSS-G recompute a VRAM estimate every frame.
 static void updateFrameGenState()
 {
-    static sl::DLSSGStatus lastStatus = sl::DLSSGStatus::eOk;
-
     sl::DLSSGState state{};
     if (SL_FAILED(result, slDLSSGGetState(renderState.dlss.viewportHandle, state, nullptr)))
     {
@@ -380,13 +410,10 @@ static void updateFrameGenState()
 
     renderState.frameGen.framesPresentedLastFrame = std::max(state.numFramesActuallyPresented, 1u);
 
-    if (state.status != lastStatus)
+    if (state.status != sl::DLSSGStatus::eOk)
     {
-        lastStatus = state.status;
-        if (state.status != sl::DLSSGStatus::eOk)
-        {
-            Logger::logWarning("DLSS-G is not generating frames (status 0x%x)", static_cast<uint32_t>(state.status));
-        }
+        Logger::logWarning("DLSS-G reported status 0x%x, turning frame generation off", static_cast<uint32_t>(state.status));
+        SettingsManager::setAsBool("frameGeneration", false);
     }
 }
 
@@ -413,10 +440,7 @@ static float computeFogSigmaS(const float animTime)
 void render()
 {
     // Rebuilds the swap chain when it changes, so it has to settle before any of this frame's work
-    if (renderState.frameGen.supported)
-    {
-        setFrameGenerationActive(SettingsManager::getAsBool("frameGeneration"));
-    }
+    setFrameGenerationActive(isFrameGenerationRequested());
 
     if (renderState.needsResize)
     {
@@ -451,7 +475,6 @@ void render()
     // DLSS-G matches its inputs to the frame index carried by the present markers, so the markers
     // have to already be in place and correctly paired by the time it is switched on
     const bool useReflex = renderState.frameGen.supported;
-    const bool useSlConstants = useDlss || renderState.frameGen.active;
 
     sl::FrameToken* frameToken = nullptr;
     if (useDlss || useReflex)
@@ -462,13 +485,18 @@ void render()
     if (useReflex)
     {
         CHECK_SL_RESULT(slReflexSleep(*frameToken));
+        if (renderState.frameGen.pclPingPending)
+        {
+            renderState.frameGen.pclPingPending = false;
+            CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePCLatencyPing, *frameToken));
+        }
         CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::eSimulationStart, *frameToken));
     }
 
     beginFrame();
 
-    sl::Constants slConstants;
-    if (useSlConstants)
+    sl::Constants slConstants{};
+    if (useDlss)
     {
         {
             // clang-format off
@@ -483,29 +511,23 @@ void render()
             sl::Resource ndcDepthResource = makeSlResource(&renderState.ndcDepthTarget);
             sl::Resource hudlessResource = makeSlResource(&renderState.hudlessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-            sl::ResourceTag resourceTags[10];
-            uint32_t numResourceTags = 0;
-            const auto addTag = [&resourceTags, &numResourceTags](sl::Resource* resource, sl::BufferType type, sl::Extent* extent)
+            std::vector<sl::ResourceTag> resourceTags;
+            const auto addTag = [&resourceTags](sl::Resource* resource, sl::BufferType type, sl::Extent* extent)
             {
-                resourceTags[numResourceTags++] = { resource, type, sl::ResourceLifecycle::eValidUntilPresent, extent };
+                resourceTags.push_back({ resource, type, sl::ResourceLifecycle::eValidUntilPresent, extent });
             };
 
-            if (useDlss)
-            {
-                addTag(&pathTracingResource, sl::kBufferTypeScalingInputColor, &renderState.dlss.renderExtent);
-                addTag(&dlssOutputResource, sl::kBufferTypeScalingOutputColor, &renderState.dlss.viewportExtent);
-                addTag(&linearDepthResource, sl::kBufferTypeLinearDepth, &renderState.dlss.renderExtent);
-                addTag(&diffuseAlbedoResource, sl::kBufferTypeAlbedo, &renderState.dlss.renderExtent);
-                addTag(&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, &renderState.dlss.renderExtent);
-                addTag(&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, &renderState.dlss.renderExtent);
-                addTag(&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, &renderState.dlss.renderExtent);
-            }
-
-            // Motion vectors feed both features; DLSS-G additionally needs post-projection depth,
-            // which is what ndcDepthTarget exists for (linearDepthTarget holds ray distance, which
-            // only DLSS-RR accepts)
+            addTag(&pathTracingResource, sl::kBufferTypeScalingInputColor, &renderState.dlss.renderExtent);
+            addTag(&dlssOutputResource, sl::kBufferTypeScalingOutputColor, &renderState.dlss.viewportExtent);
+            addTag(&linearDepthResource, sl::kBufferTypeLinearDepth, &renderState.dlss.renderExtent);
             addTag(&motionResource, sl::kBufferTypeMotionVectors, &renderState.dlss.renderExtent);
+            addTag(&diffuseAlbedoResource, sl::kBufferTypeAlbedo, &renderState.dlss.renderExtent);
+            addTag(&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, &renderState.dlss.renderExtent);
+            addTag(&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, &renderState.dlss.renderExtent);
+            addTag(&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, &renderState.dlss.renderExtent);
 
+            // DLSS-G shares the motion vectors but needs post-projection depth, which is what
+            // ndcDepthTarget exists for (linearDepthTarget holds ray distance, which only DLSS-RR accepts)
             if (renderState.frameGen.active)
             {
                 addTag(&ndcDepthResource, sl::kBufferTypeDepth, &renderState.dlss.renderExtent);
@@ -513,11 +535,13 @@ void render()
             }
             // clang-format on
 
-            CHECK_SL_RESULT(
-                slSetTagForFrame(*frameToken, renderState.dlss.viewportHandle, resourceTags, numResourceTags, renderState.cmdList.Get()));
+            CHECK_SL_RESULT(slSetTagForFrame(*frameToken,
+                                             renderState.dlss.viewportHandle,
+                                             resourceTags.data(),
+                                             static_cast<uint32_t>(resourceTags.size()),
+                                             renderState.cmdList.Get()));
         }
 
-        slConstants = {};
         slConstants.depthInverted = sl::Boolean::eFalse;
         slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
         slConstants.motionVectors3D = sl::Boolean::eFalse;
@@ -563,14 +587,11 @@ void render()
 
     const bool didCameraChange = renderState.camera.update();
 
-    if (useSlConstants)
+    if (useDlss)
     {
         renderState.camera.copySlConstantsTo(&slConstants);
         CHECK_SL_RESULT(slSetConstants(slConstants, *frameToken, renderState.dlss.viewportHandle));
-    }
 
-    if (useDlss)
-    {
         renderState.camera.copyMatricesToDlssOptions(&renderState.dlss.options.worldToCameraView, &renderState.dlss.options.cameraViewToWorld);
         CHECK_SL_RESULT(slDLSSDSetOptions(renderState.dlss.viewportHandle, renderState.dlss.options));
     }
@@ -1110,8 +1131,9 @@ void destroy()
     renderState.dev_gbufferShaderIds.Reset();
     renderState.dev_ptShaderIds.Reset();
 
-    renderState.proxySwapChain.Reset();
-    renderState.swapChain.Reset();
+    releaseSwapChain();
+    renderState.proxyFactory.Reset();
+    renderState.factory.Reset();
     renderState.rtvHeap.Reset();
     renderState.sharedDescriptorHeap.Reset();
 
@@ -1125,10 +1147,7 @@ void destroy()
 
     renderState.fence.reset();
 
-    if (renderState.useWaitableSwapChain && renderState.frameLatencyWaitable)
-    {
-        CloseHandle(renderState.frameLatencyWaitable);
-    }
+    closeFrameLatencyWaitable();
 
     renderState.graphicsCmdQueue.Reset();
 

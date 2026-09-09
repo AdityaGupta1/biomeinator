@@ -219,7 +219,12 @@ void initNvapi();
 void initSwapChain();
 void createSwapChain();
 void releaseSwapChain();
-// Tears the swap chain down and rebuilds it around the new plugin state; see setFrameGenerationActive
+void closeFrameLatencyWaitable();
+// Frame generation rides on DLSS mode: its checkbox only shows there, so it must not stay on
+// invisibly in the other antialiasing modes. The setting itself is left alone so switching back
+// to DLSS restores the user's choice.
+bool isFrameGenerationRequested();
+// Loads or unloads the DLSS-G plugin and queues the swap chain rebuild that makes it take effect
 void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
@@ -268,6 +273,12 @@ struct FrameGenState
     // the interpolated frame is dropped when presents go out of sync. 1 whenever it is off.
     uint32_t framesPresentedLastFrame{ 1 };
     sl::DLSSGOptions options{};
+
+    // PCL Stats measures input sampling latency by posting this window message and timing how long
+    // the app takes to answer it with a ping marker; 0 when PCL is not loaded
+    uint32_t pclStatsWindowMessage{ 0 };
+    // Set by the message pump, answered with the next frame's token since that frame picks up the input
+    bool pclPingPending{ false };
 };
 
 enum class PerfPhase
@@ -308,6 +319,10 @@ struct ScreenshotRequest
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
 };
+
+// The back buffers and everything that has to match them exactly (PSO render target formats, the
+// hudless copy, the screenshot readback footprint)
+inline constexpr DXGI_FORMAT SWAP_CHAIN_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 struct RendererState
 {
@@ -374,8 +389,10 @@ struct RendererState
     RtTarget ndcDepthTarget{ L"ndcDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
     // Copy of the back buffer taken before the GUI is drawn, so frame generation can interpolate
-    // the scene without the overlay smearing across generated frames. Format must match the swap chain.
-    RtTarget hudlessTarget{ L"hudlessTarget", DXGI_FORMAT_R8G8B8A8_UNORM, 0, true, false };
+    // the scene without the overlay smearing across generated frames. Only allocated while frame
+    // generation is on. Keeps its SRV flag even though no shader reads it, since DLSS-G creates
+    // its own views on the resource.
+    RtTarget hudlessTarget{ L"hudlessTarget", SWAP_CHAIN_FORMAT, 0, true, false };
 
     RtTarget dlssOutputTarget{ L"dlssOutputTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, true };
 

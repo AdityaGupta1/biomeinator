@@ -281,6 +281,13 @@ static LRESULT WINAPI onWindowMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
         return true;
     }
 
+    // Registered at runtime, so it cannot be a case label
+    if (msg != 0 && msg == Renderer::getPclStatsWindowMessage())
+    {
+        Renderer::queuePclPing();
+        return 0;
+    }
+
     switch (msg)
     {
         case WM_CLOSE:

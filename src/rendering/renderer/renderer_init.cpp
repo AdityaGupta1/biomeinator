@@ -98,8 +98,25 @@ void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
     reflexOptions.mode = sl::ReflexMode::eLowLatency;
     CHECK_SL_RESULT(slReflexSetOptions(reflexOptions));
 
+    sl::PCLState pclState{};
+    CHECK_SL_RESULT(slPCLGetState(pclState));
+    renderState.frameGen.pclStatsWindowMessage = pclState.statsWindowMessage;
+
     Logger::log("Frame generation supported");
     renderState.frameGen.supported = true;
+}
+
+// Loading the plugin is what makes SL hand back a proxy swap chain that renders off-screen.
+// Unloading it again when frame generation is off is the only way to avoid the resulting extra
+// copy and cross-queue sync, which is why the swap chain has to be (re)created after every call.
+void loadFrameGenPlugin(bool active)
+{
+    CHECK_SL_RESULT(slSetFeatureLoaded(sl::kFeatureDLSS_G, active));
+    renderState.frameGen.active = active;
+    if (!active)
+    {
+        renderState.frameGen.framesPresentedLastFrame = 1;
+    }
 }
 
 [[noreturn]] void failGpuCompatibility(const std::string& reason)
@@ -314,13 +331,21 @@ void initSwapChain()
         Logger::log("Allow tearing: %s", renderState.allowTearing ? "true" : "false");
     }
 
+    // Loading the plugin before the first swap chain exists means the setting's default does not
+    // cost a swap chain rebuild on the first frame
+    if (renderState.frameGen.supported)
+    {
+        loadFrameGenPlugin(isFrameGenerationRequested());
+    }
+
     createSwapChain();
 
     CHECK_HRESULT(renderState.factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES));
 }
 
 // The factories are kept alive past init so the swap chain can be rebuilt when frame generation
-// is toggled; see setFrameGenerationActive
+// is toggled; see setFrameGenerationActive. Interpolation itself is switched on at the end of
+// resize(), which always follows a swap chain creation.
 void createSwapChain()
 {
     renderState.swapChainFlags = 0;
@@ -334,7 +359,7 @@ void createSwapChain()
     }
 
     DXGI_SWAP_CHAIN_DESC1 scDesc = {
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Format = SWAP_CHAIN_FORMAT,
         .SampleDesc = SAMPLE_DESC_NO_AA,
         .BufferCount = NUM_FRAMES_IN_FLIGHT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
@@ -355,6 +380,23 @@ void releaseSwapChain()
     renderState.swapChain.Reset();
 }
 
+bool isFrameGenerationRequested()
+{
+    const AntialiasingMode antialiasingMode =
+        static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+    return renderState.frameGen.supported && antialiasingMode == AntialiasingMode::DLSS
+        && SettingsManager::getAsBool("frameGeneration");
+}
+
+void closeFrameLatencyWaitable()
+{
+    if (renderState.frameLatencyWaitable)
+    {
+        CloseHandle(renderState.frameLatencyWaitable);
+        renderState.frameLatencyWaitable = nullptr;
+    }
+}
+
 void setFrameGenerationActive(bool active)
 {
     if (renderState.frameGen.active == active)
@@ -364,34 +406,16 @@ void setFrameGenerationActive(bool active)
 
     flush();
 
-    if (renderState.frameLatencyWaitable)
-    {
-        CloseHandle(renderState.frameLatencyWaitable);
-        renderState.frameLatencyWaitable = nullptr;
-    }
+    closeFrameLatencyWaitable();
     releaseSwapChain();
 
-    // Loading the plugin is what makes SL hand back a proxy swap chain that renders off-screen.
-    // Unloading it again when frame generation is off is the only way to avoid the resulting extra
-    // copy and cross-queue sync, which is why the swap chain has to be rebuilt on every toggle.
-    CHECK_SL_RESULT(slSetFeatureLoaded(sl::kFeatureDLSS_G, active));
-    renderState.frameGen.active = active;
-    if (!active)
-    {
-        renderState.frameGen.framesPresentedLastFrame = 1;
-    }
+    loadFrameGenPlugin(active);
 
     createSwapChain();
 
-    resize(); // re-fetches the back buffers and their RTVs from the new swap chain
-
-    if (active)
-    {
-        // Loading the plugin is not enough on its own; interpolation only starts once the mode is set
-        renderState.frameGen.options.mode = sl::DLSSGMode::eOn;
-        renderState.frameGen.options.numFramesToGenerate = 1; // 2x; higher multipliers need Blackwell
-        CHECK_SL_RESULT(slDLSSGSetOptions(renderState.dlss.viewportHandle, renderState.frameGen.options));
-    }
+    // The resize re-fetches the back buffers and their RTVs from the new swap chain; queueing it
+    // rather than calling it here lets render() run a single resize even when one was already pending
+    renderState.needsResize = true;
 }
 
 void initRtTargets()

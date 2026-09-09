@@ -39,7 +39,7 @@ void initImgui()
     imguiDX12InitInfo.Device = renderState.device.Get();
     imguiDX12InitInfo.CommandQueue = renderState.graphicsCmdQueue.Get();
     imguiDX12InitInfo.NumFramesInFlight = NUM_FRAMES_IN_FLIGHT;
-    imguiDX12InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    imguiDX12InitInfo.RTVFormat = SWAP_CHAIN_FORMAT;
 
     imguiDX12InitInfo.SrvDescriptorHeap = renderState.sharedDescriptorHeap.Get();
     imguiDX12InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*,
@@ -152,17 +152,14 @@ void imguiEndFrame(double deltaTime)
         else if (antialiasingMode == AntialiasingMode::DLSS)
         {
             renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
-        }
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Frame generation");
-        if (renderState.frameGen.supported)
-        {
-            SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
-        }
-        else
-        {
-            ImGui::TextDisabled("not supported (check Hardware-accelerated GPU Scheduling)");
+            if (renderState.frameGen.supported)
+            {
+                SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
+            }
+            else
+            {
+                ImGui::TextDisabled("Frame generation not supported (check Hardware-accelerated GPU Scheduling)");
+            }
         }
 
         SettingsGuiHelpers::VerticalSpacing();
