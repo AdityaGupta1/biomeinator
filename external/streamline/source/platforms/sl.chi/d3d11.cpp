@@ -21,9 +21,11 @@
 */
 
 #include <d3d11_4.h>
+#include <system_error>
 #include <wrl/client.h>
 
 #include "source/core/sl.log/log.h"
+#include "source/core/sl.param/parameters.h"
 #include "source/platforms/sl.chi/d3d11.h"
 #include "nvapi.h"
 #include "_artifacts/shaders/copy_cs.h"
@@ -72,7 +74,7 @@ struct D3D11CommandListContext : public ICommandListContext
             }
             else
             {
-                m_compute->createFence(eFenceFlagsShared, m_syncValue, m_fence, "sl.dlssg.d3d11.fence");
+                m_compute->createFence(eFenceFlagsShared, m_syncValue, m_fence, (std::string(debugName) + ".fence").c_str());
             }
         }
     }
@@ -244,15 +246,22 @@ struct D3D11CommandListContext : public ICommandListContext
     {
         BOOL fullscreen = FALSE;
         ((IDXGISwapChain*)chain)->GetFullscreenState(&fullscreen, nullptr);
-        if (fullscreen || sync)
+        // DXGI_PRESENT_ALLOW_TEARING requires DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING on the
+        // swap chain — without it Present returns DXGI_ERROR_INVALID_CALL. Gate the OR
+        // on the actual capability so this layer is robust even if the proxy is created
+        // without tearing for any reason.
+        DXGI_SWAP_CHAIN_DESC desc{};
+        ((IDXGISwapChain*)chain)->GetDesc(&desc);
+        const bool tearingCapable = (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) != 0;
+        if (fullscreen || sync || !tearingCapable)
         {
             flags &= ~DXGI_PRESENT_ALLOW_TEARING;
         }
-        else if (sync == 0)
+        else
         {
             flags |= DXGI_PRESENT_ALLOW_TEARING;
         }
-        
+
         HRESULT res{};
         if (params)
         {
@@ -266,13 +275,6 @@ struct D3D11CommandListContext : public ICommandListContext
     }
 
     void getFrameStats(SwapChain chain, void* frameStats)
-    {
-        assert(false);
-        SL_LOG_ERROR("Not implemented");
-        return;
-    }
-
-    void getLastPresentID(SwapChain chain, uint32_t& id)
     {
         assert(false);
         SL_LOG_ERROR("Not implemented");
@@ -758,9 +760,16 @@ ComputeStatus D3D11::setFullscreenState(SwapChain chain, bool fullscreen, Output
 {
     if (!chain) return ComputeStatus::eInvalidArgument;
     IDXGISwapChain* swapChain = (IDXGISwapChain*)chain;
-    if (FAILED(swapChain->SetFullscreenState(fullscreen, (IDXGIOutput*)out)))
+    HRESULT hr = swapChain->SetFullscreenState(fullscreen, (IDXGIOutput*)out);
+    if (FAILED(hr))
     {
-        SL_LOG_ERROR( "Failed to set fullscreen state");
+        // Host frame from the Reflex present marker; 0 when the app sends none.
+        uint32_t hostFrame{};
+        m_parameters->get(sl::param::latency::kMarkerPresentFrame, &hostFrame);
+        SL_LOG_ERROR("Internal call to native IDXGISwapChain::SetFullscreenState failed for swap chain %p "
+                     "(requested state: %s, output: %p, HRESULT 0x%08X: %s, host frame %u).",
+                     swapChain, fullscreen ? "fullscreen" : "windowed", out,
+                     static_cast<uint32_t>(hr), std::system_category().message(hr).c_str(), hostFrame);
     }
     return ComputeStatus::eOk;
 }
@@ -833,7 +842,7 @@ ComputeStatus D3D11::bindConsts(uint32_t pos, uint32_t base, void *data, size_t 
         desc.height = 1;
         desc.heapType = eHeapTypeUpload;
         desc.state = ResourceState::eConstantBuffer;
-        createBuffer(desc, buffer, "sl.d3d11.const_buffer");
+        createBuffer(desc, buffer, SL_COMPOSE_NAME(kComputeTag, "buf.const-d3d11").c_str());
         ctx.kernel->constBuffers[base] = (ID3D11Buffer*)(buffer->native);
     }
     auto buffer = ctx.kernel->constBuffers[base];
@@ -933,8 +942,8 @@ ComputeStatus D3D11::getTextureDriverData(Resource res, ResourceDriverDataD3D11&
             SL_LOG_ERROR( "CreateShaderResourceView failed - status %d", status);
             return ComputeStatus::eError;
         }
-        constexpr char SRVFriendlyName[] = "sl.compute.textureCachedSRV";
-        data.SRV->SetPrivateData(WKPDID_D3DDebugObjectName, sizeof(SRVFriendlyName), SRVFriendlyName); // Narrow character type debug object name
+        auto srvName = SL_COMPOSE_NAME(kComputeTag, "srv.texture-cached");
+        data.SRV->SetPrivateData(WKPDID_D3DDebugObjectName, (DWORD)(srvName.size() + 1), srvName.c_str());
 
         SL_LOG_VERBOSE("Cached SRV resource 0x%llx node %u fmt %s size (%u,%u)", res, 0, getDXGIFormatStr(Desc.nativeFormat), (UINT)Desc.width, (UINT)Desc.height);
 
@@ -993,8 +1002,8 @@ ComputeStatus D3D11::getSurfaceDriverData(Resource res, ResourceDriverDataD3D11&
             return ComputeStatus::eError;
         }
 
-        constexpr char UAVFriendlyName[] = "sl.compute.surfaceCachedUAV";
-        data.UAV->SetPrivateData(WKPDID_D3DDebugObjectName, sizeof(UAVFriendlyName), UAVFriendlyName); // Narrow character type debug object name
+        auto uavName = SL_COMPOSE_NAME(kComputeTag, "uav.surface-cached");
+        data.UAV->SetPrivateData(WKPDID_D3DDebugObjectName, (DWORD)(uavName.size() + 1), uavName.c_str());
 
         SL_LOG_VERBOSE("Cached UAV resource 0x%llx node %u fmt %s size (%u,%u)", res, 0, getDXGIFormatStr(Desc.nativeFormat), (UINT)Desc.width, (UINT)Desc.height);
 
@@ -1377,6 +1386,7 @@ ComputeStatus D3D11::cloneResource(Resource resource, Resource &clone, const cha
     clone->width = desc.width;
     clone->height = desc.height;
 
+    setDebugName(clone, friendlyName);
     manageVRAM(clone, VRAMOperation::eAlloc);
 
     return ComputeStatus::eOk;
@@ -1619,20 +1629,6 @@ ComputeStatus D3D11::endPerfSection(CommandList cmdList, const char* key, float 
     return ComputeStatus::eOk;
 }
 
-ComputeStatus D3D11::beginProfiling(CommandList cmdList, unsigned int Metadata, const char* marker)
-{
-#if SL_ENABLE_PROFILING
-#endif
-    return ComputeStatus::eError;
-}
-
-ComputeStatus D3D11::endProfiling(CommandList cmdList)
-{
-#if SL_ENABLE_PROFILING
-#endif
-    return ComputeStatus::eError;
-}
-
  bool D3D11::signalCPUFence(Fence fence, uint64_t syncValue)
 {
     assert(false);
@@ -1766,7 +1762,7 @@ ComputeStatus D3D11::getResourceFromSharedHandle(ResourceType type, Handle handl
             return ComputeStatus::eError;
         }
         resource = new sl::Resource(ResourceType::eTex2d, tex);
-        setDebugName(resource, "sl.shared.from.d3d12");
+        setDebugName(resource, SL_COMPOSE_NAME(kComputeTag, "tex2d.shared-from-d3d12").c_str());
         // We free these buffers but never allocate them so account for the VRAM
         manageVRAM(resource, VRAMOperation::eAlloc);
     }

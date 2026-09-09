@@ -47,9 +47,13 @@ private:
 
     HMODULE m_hmodReflex{};
 public:
-    ComputeStatus init(VkDevice device, param::IParameters* params)
+    ComputeStatus init(VkDevice device, param::IParameters* params, interposer::VkTable* table)
     {
         m_device = device;
+        {
+            std::lock_guard lock{table->mutex};
+            m_ddt = table->dispatchDeviceMap[m_device];
+        }
 
         // Path where our modules are located
         wchar_t* pluginPath{};
@@ -104,11 +108,6 @@ public:
         return ComputeStatus::eOk;
     }
 
-    virtual void initDispatchTable(VkLayerDispatchTable table) override
-    {
-        m_ddt = table;
-    }
-
     virtual ComputeStatus setSleepMode(const ReflexOptions& consts) override
     {
         NVLL_VK_SET_SLEEP_MODE_PARAMS params{ 
@@ -130,8 +129,9 @@ public:
     virtual ComputeStatus getReport(ReflexState& settings) override
     {
         NVLL_VK_LATENCY_RESULT_PARAMS params{};
+        static_assert(std::size(params.frameReport) == kReflexFrameReportCount);
         LL_CHECK(NvLL_VK_GetLatency(m_device, &params));
-        for (auto i = 0; i < 64; i++)
+        for (auto i = 0; i < kReflexFrameReportCount; i++)
         {
             settings.frameReport[i].frameID = params.frameReport[i].frameID;
             settings.frameReport[i].inputSampleTime = params.frameReport[i].inputSampleTime;
@@ -164,35 +164,37 @@ public:
         waitInfo.semaphoreCount = 1;
         waitInfo.pSemaphores = &m_lowLatencySemaphore;
         waitInfo.pValues = &reflexSemaphoreValue;
-        m_ddt.WaitSemaphores(m_device, &waitInfo, kMaxSemaphoreWaitUs);
+        const VkResult res = m_ddt.WaitSemaphores(m_device, &waitInfo, kMaxSemaphoreWaitUs);
+        if (res < 0)
+        {
+            SL_LOG_ERROR("WaitSemaphores: %d", res);
+            return ComputeStatus::eError;
+        }
+        else if (res != VK_SUCCESS)
+        {
+            SL_LOG_WARN("WaitSemaphores %d", res);
+        }
         return ComputeStatus::eOk;
     }
 
-    virtual ComputeStatus setMarker(PCLMarker marker, uint64_t frameId)
+    virtual ComputeStatus setMarker(PCLMarker marker, uint64_t frameId) override
     {
         NVLL_VK_LATENCY_MARKER_PARAMS params{ frameId, (NVLL_VK_LATENCY_MARKER_TYPE)marker };
         LL_CHECK(NvLL_VK_SetLatencyMarker(m_device, &params));
         return ComputeStatus::eOk;
     }
 
-    virtual ComputeStatus notifyOutOfBandCommandQueue(ChiCommandQueue* queue, OutOfBandCommandQueueType type) override
+    virtual ComputeStatus notifyOutOfBandCommandQueue(CommandQueue queue, OutOfBandCommandQueueType type) override
     {
         LL_CHECK(NvLL_VK_NotifyOutOfBandQueue(m_device, (VkQueue)((CommandQueueVk*)queue)->native, (NVLL_VK_OUT_OF_BAND_QUEUE_TYPE)type));
         return ComputeStatus::eOk;
     }
-
-    virtual ComputeStatus setAsyncFrameMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) override
-    {
-        NVLL_VK_LATENCY_MARKER_PARAMS params{ frameId, (NVLL_VK_LATENCY_MARKER_TYPE)marker };
-        LL_CHECK(NvLL_VK_SetLatencyMarker(m_device, &params));
-        return ComputeStatus::eOk;
-    }
 };
 
-IReflexVk* CreateNvLowLatencyVk(VkDevice device, param::IParameters* params)
+IReflexVk* CreateNvLowLatencyVk(VkDevice device, param::IParameters* params, interposer::VkTable* table)
 {
     auto ptr = new NvLowLatencyVk();
-    ComputeStatus res = ptr->init(device, params);
+    ComputeStatus res = ptr->init(device, params, table);
     if (res != ComputeStatus::eOk)
     {
         SL_LOG_INFO("Failed to init NvLowLatencyVk: %d", res);

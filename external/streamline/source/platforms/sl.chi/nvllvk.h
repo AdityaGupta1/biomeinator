@@ -22,34 +22,16 @@
 
 #pragma once
 
-#include "include/sl.h"
-#include "include/sl_reflex.h"
-#include "source/platforms/sl.chi/compute.h"
-#include "source/platforms/sl.chi/vulkan.h"
+#include "vknvll2.h"
 
 namespace sl
 {
 namespace chi
 {
 
-class IReflexVk
-{
-public:
-	virtual ComputeStatus init(VkDevice device, param::IParameters* params) = 0;
-	virtual ComputeStatus shutdown() = 0;
-	virtual void initDispatchTable(VkLayerDispatchTable table) = 0;
-	virtual ComputeStatus setSleepMode(const ReflexOptions& consts) = 0;
-	virtual ComputeStatus getSleepStatus(ReflexState& settings) = 0;
-	virtual ComputeStatus getReport(ReflexState& settings) = 0;
-	virtual ComputeStatus sleep() = 0;
-	virtual ComputeStatus setMarker(PCLMarker marker, uint64_t frameId) = 0;
-	virtual ComputeStatus notifyOutOfBandCommandQueue(ChiCommandQueue* queue, OutOfBandCommandQueueType type) = 0;
-	virtual ComputeStatus setAsyncFrameMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) = 0;
-};
-
 #ifdef SL_WITH_NVLLVK
 
-IReflexVk* CreateNvLowLatencyVk(VkDevice device, param::IParameters* params);
+IReflexVk* CreateNvLowLatencyVk(VkDevice device, param::IParameters* params, interposer::VkTable* table);
 
 #endif //SL_WITH_NVLLVK
 

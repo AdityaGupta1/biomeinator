@@ -25,10 +25,8 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#ifdef SL_WINDOWS
 #include <windows.h>
 #include <unknwn.h>
-#endif
 
 #include "include/sl_struct.h"
 #include "include/sl_core_types.h"
@@ -67,14 +65,6 @@ struct ID3D12Device;
 struct ID3D12Resource;
 enum D3D12_BARRIER_LAYOUT;
 
-#ifdef SL_LINUX
-using HMODULE = void*;
-#define GetProcAddress dlsym
-#define FreeLibrary dlclose
-#define LoadLibraryA(lib) dlopen(lib, RTLD_LAZY)
-#define LoadLibraryW(lib) dlopen(sl::extra::toStr(lib).c_str(), RTLD_LAZY)
-#else
-
 constexpr uint32_t kTemporaryAppId = 100721531;
 //! Special marker
 constexpr uint32_t kReflexMarkerSleep = 0x1000;
@@ -84,8 +74,6 @@ struct DECLSPEC_UUID("ADEC44E2-61F0-45C3-AD9F-1B37379284FF") StreamlineRetrieveB
 {
 
 };
-
-#endif
 
 namespace sl
 {
@@ -182,5 +170,9 @@ using PFunVkDestroySwapchainKHRBefore = void(VkDevice Device, VkSwapchainKHR Swa
 using PFunVkCreateWin32SurfaceKHRBefore = VkResult(VkInstance Instance, const VkWin32SurfaceCreateInfoKHR* CreateInfo, const VkAllocationCallbacks* Allocator, VkSurfaceKHR* Surface, bool& Skip);
 using PFunVkCreateWin32SurfaceKHRAfter = VkResult(VkInstance Instance, const VkWin32SurfaceCreateInfoKHR* CreateInfo, const VkAllocationCallbacks* Allocator, VkSurfaceKHR* Surface);
 using PFunVkDestroySurfaceKHRBefore = void(VkInstance Instance, VkSurfaceKHR Surface, const VkAllocationCallbacks* Allocator, bool& Skip);
+
+//! Function to look up the HWND associated with a VkSurfaceKHR.
+//! Exposed through the parameter system (kPFunGetSurfaceWindow) so plugins can call it without linking to the plugin manager.
+using PFunGetSurfaceWindow = HWND(VkSurfaceKHR surface);
 
 } // namespace sl

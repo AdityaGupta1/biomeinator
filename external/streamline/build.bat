@@ -52,33 +52,55 @@ if exist .\_project\vs2022\streamline.sln (
 echo off
 set cfg=Debug
 set bld=Clean,Build
+set platform=x64
 
 :loop
 IF NOT "%1"=="" (
     IF "%1"=="-debug" (
         SET cfg=Debug
         SHIFT
+        GOTO :loop
     )
     IF "%1"=="-develop" (
         SET cfg=Develop
         SHIFT
+        GOTO :loop
     )
     IF "%1"=="-production" (
         SET cfg=Production
         SHIFT
+        GOTO :loop
+    )
+    IF "%1"=="-amd64" (
+        SET platform=x64
+        SHIFT
+        GOTO :loop
+    )
+    IF "%1"=="-arm64" (
+        SET platform=arm64
+        SHIFT
+        GOTO :loop
+    )
+    IF "%1"=="-aarch64" (
+        SET platform=arm64
+        SHIFT
+        GOTO :loop
     )
     :: Deprecated build configuration names
     IF "%1"=="-release" (
         SET cfg=Debug
         SHIFT
+        GOTO :loop
     )
     IF "%1"=="-profiling" (
         SET cfg=Develop
         SHIFT
+        GOTO :loop
     )
     IF "%1"=="-relextdev" (
         SET cfg=Develop
         SHIFT
+        GOTO :loop
     )
     SHIFT
     GOTO :loop
@@ -99,9 +121,9 @@ exit /b 1
 :SetVSEnvFinished
 
 if exist .\_project\vs2022\streamline.sln (
-    msbuild .\_project\vs2022\streamline.sln /m /t:%bld% /property:Configuration=%cfg% /property:Platform=x64
+    msbuild .\_project\vs2022\streamline.sln /m /t:%bld% /property:Configuration=%cfg% /property:Platform=%platform%
 ) else if exist .\_project\vs2019\streamline.sln (
-    msbuild .\_project\vs2019\streamline.sln /m /t:%bld% /property:Configuration=%cfg% /property:Platform=x64
+    msbuild .\_project\vs2019\streamline.sln /m /t:%bld% /property:Configuration=%cfg% /property:Platform=%platform%
 ) else (
     goto :ErrorExit
 )

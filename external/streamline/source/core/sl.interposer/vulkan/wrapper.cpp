@@ -21,6 +21,7 @@
 */
 
 #include <unordered_set>
+#include <algorithm>
 
 #include "include/sl.h"
 #include "source/core/sl.api/internal.h"
@@ -45,11 +46,7 @@ HMODULE loadVulkanLibrary()
 {
     if (!s_module)
     {
-#ifdef SL_WINDOWS
         s_module = ::LoadLibraryA("vulkan-1.dll");
-#else
-        s_module = ::LoadLibraryA("vulkan-1.so");
-#endif
     }
     return s_module;
 }
@@ -296,6 +293,10 @@ extern "C"
             VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
             VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         };
+        // Plugins can list extensions here that they want enabled when the device exposes them,
+        // without failing device creation when the device does not. Filtered against the device's
+        // actual extension list below before being merged into requiredSLDeviceExtensionNames.
+        std::unordered_set<std::string> optionalSLDeviceExtensionNames;
 
         // Figure out what extra features we need 
         uint32_t extraGraphicsQueues = 0;
@@ -350,6 +351,17 @@ extern "C"
                     {
                         SL_LOG_INFO("Adding device extension '%s' requested by a plugin(s)", ext.c_str());
                     }
+                }
+            }
+
+            // Optional device extensions: enabled if the device exposes them, silently dropped otherwise
+            if (cfg.contains("/external/vk/device/optional_extensions"_json_pointer))
+            {
+                std::vector<std::string> optionalPluginDeviceExtensionNames;
+                cfg["external"]["vk"]["device"]["optional_extensions"].get_to(optionalPluginDeviceExtensionNames);
+                for (auto ext : optionalPluginDeviceExtensionNames)
+                {
+                    optionalSLDeviceExtensionNames.insert(ext);
                 }
             }
 
@@ -785,6 +797,22 @@ extern "C"
         std::vector<VkExtensionProperties> availableDeviceExtensions(deviceExtensionCount);
         VK_CHECK_RI(vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &deviceExtensionCount, availableDeviceExtensions.data()));
 
+        // Promote optional plugin extensions to required only when the device exposes them.
+        if (!optionalSLDeviceExtensionNames.empty())
+        {
+            for (const auto& ext : availableDeviceExtensions)
+            {
+                auto it = optionalSLDeviceExtensionNames.find(ext.extensionName);
+                if (it != optionalSLDeviceExtensionNames.end())
+                {
+                    if (requiredSLDeviceExtensionNames.insert(*it).second)
+                    {
+                        SL_LOG_INFO("Adding optional device extension '%s' requested by a plugin(s)", it->c_str());
+                    }
+                }
+            }
+        }
+
         std::unordered_set<std::string> unsupportedDeviceExtensionNames(requiredSLDeviceExtensionNames);
         for (const auto& ext : availableDeviceExtensions)
         {
@@ -941,6 +969,26 @@ extern "C"
             SL_LOG_ERROR( "vkCreateDevice failed");
             return res;
         }
+        // Record whether synchronization2 ends up enabled on the device, so OTA-able SL code (sl.chi)
+        // can safely pick vkQueueSubmit2 over the v1 vkQueueSubmit. Walk the final pNext chain we passed
+        // to the driver - synchronization2 can only be enabled via VkPhysicalDeviceSynchronization2Features
+        // or VkPhysicalDeviceVulkan13Features (the two are mutually exclusive per VUID-02830). Published
+        // as a param rather than a VkTable field to keep the interposer<->sl.chi ABI OTA-safe: VkTable is
+        // owned by the interposer, so adding a field would break an OTA mix of new sl.chi + old interposer.
+        bool synchronization2Enabled = false;
+        for (auto* p = (const VkBaseInStructure*)createInfo.pNext; p != nullptr; p = p->pNext)
+        {
+            if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES)
+            {
+                synchronization2Enabled |= ((const VkPhysicalDeviceSynchronization2Features*)p)->synchronization2 == VK_TRUE;
+            }
+            else if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES)
+            {
+                synchronization2Enabled |= ((const VkPhysicalDeviceVulkan13Features*)p)->synchronization2 == VK_TRUE;
+            }
+        }
+        sl::param::getInterface()->set(sl::param::global::kVulkanSynchronization2Enabled, synchronization2Enabled);
+
         s_vk.instance = s_vk.instanceDeviceMap[physicalDevice];
         s_vk.mapVulkanInstanceAPI(s_vk.instance);
         s_idt = s_vk.dispatchInstanceMap[s_vk.instance];
@@ -2242,54 +2290,20 @@ extern "C"
 
     VkResult VKAPI_CALL vkCreateWin32SurfaceKHR(VkInstance Instance, const VkWin32SurfaceCreateInfoKHR* CreateInfo, const VkAllocationCallbacks* Allocator, VkSurfaceKHR* Surface)
     {
-        bool skip = false;
-        VkResult result = VK_SUCCESS;
+        VkResult result = s_idt.CreateWin32SurfaceKHR(Instance, CreateInfo, Allocator, Surface);
+        if (result == VK_SUCCESS)
         {
-            const auto& hooks = sl::plugin_manager::getInterface()->getBeforeHooks(sl::FunctionHookID::eVulkan_CreateWin32SurfaceKHR);
-            for (auto [hook, feature] : hooks)
-            {
-                result = ((sl::PFunVkCreateWin32SurfaceKHRBefore*)hook)(Instance, CreateInfo, Allocator, Surface, skip);
-                if (result != VK_SUCCESS)
-                {
-                    return result;
-                }
-            }
-        }
-
-        if (!skip)
-        {
-            result = s_idt.CreateWin32SurfaceKHR(Instance, CreateInfo, Allocator, Surface);
-        }
-
-        {
-            const auto& hooks = sl::plugin_manager::getInterface()->getAfterHooks(sl::FunctionHookID::eVulkan_CreateWin32SurfaceKHR);
-            for (auto [hook, feature] : hooks)
-            {
-                result = ((sl::PFunVkCreateWin32SurfaceKHRAfter*)hook)(Instance, CreateInfo, Allocator, Surface);
-                if (result != VK_SUCCESS)
-                {
-                   return result;
-                }
-            }
+            // Store surface-to-HWND mapping in plugin manager so plugins can look it up later
+            // (this fires before device creation, so the normal hook system is not available yet)
+            sl::plugin_manager::getInterface()->setSurfaceWindow(*Surface, CreateInfo->hwnd);
         }
         return result;
     }
 
     void VKAPI_CALL vkDestroySurfaceKHR(VkInstance Instance, VkSurfaceKHR Surface, const VkAllocationCallbacks* pAllocator)
     {
-        bool skip = false;
-        {
-            const auto& hooks = sl::plugin_manager::getInterface()->getBeforeHooks(sl::FunctionHookID::eVulkan_DestroySurfaceKHR);
-            for (auto [hook, feature] : hooks)
-            {
-                ((sl::PFunVkDestroySurfaceKHRBefore*)hook)(Instance, Surface, pAllocator, skip);
-            }
-        }
-
-        if (!skip)
-        {
-            s_idt.DestroySurfaceKHR(Instance, Surface, pAllocator);
-        }
+        sl::plugin_manager::getInterface()->removeSurfaceWindow(Surface);
+        s_idt.DestroySurfaceKHR(Instance, Surface, pAllocator);
     }
 
     // -- VK_KHR_get_physical_device_properties2
@@ -2382,6 +2396,8 @@ if (strcmp(pName, #F) == 0)          \
         SL_INTERCEPT(vkAcquireNextImageKHR);
         SL_INTERCEPT(vkBeginCommandBuffer);
         SL_INTERCEPT(vkDeviceWaitIdle);
+        SL_INTERCEPT(vkCreateWin32SurfaceKHR);
+        SL_INTERCEPT(vkDestroySurfaceKHR);
 
         return s_idt.GetInstanceProcAddr(instance, pName);
     }

@@ -3,10 +3,10 @@
 Streamline - Reflex
 =======================
 
->The focus of this guide is on using Streamline to integrate Reflex into an application.  For more information about Reflex itself, please visit the [NVIDIA Developer Reflex Page][2].
+>The focus of this guide is on using Streamline to integrate Reflex into an application.  For more information about Reflex itself, please visit the [Reflex Github](https://github.com/NVIDIA-RTX/REFLEX) or [NVIDIA Developer Reflex Page][2].
 >For information on user interface considerations when using this plugin, please see the ["RTX UI Developer Guidelines.pdf"][1] document included with this SDK.
 
-Version 2.11.1
+Version 2.14.1
 =======
 
 Here is an overview list of sub-features in the Reflex plugin:
@@ -207,7 +207,7 @@ if(SL_FAILED(res, slReflexSleep(*currentFrame)))
 ```
 
 > **NOTE:**
-> See [Reflex SDK Integration Guide][2] for details on `slReflexSleep` placement
+> See [Reflex SDK Integration Guide][3] for details on `slReflexSleep` placement
 
 ### 6.0 PCL STATS
 
@@ -253,7 +253,7 @@ Reflex UI settings are disabled or not available on other IHV Hardware |
 
 **Steps**
 
-1. Locate Reflex Verification tools in `utils/reflex/`
+1. Locate Reflex Verification tools in `utils/reflex/` (in release zip from [Streamline releases](https://github.com/NVIDIA-RTX/Streamline/releases) or `Reflex_Verification/` in [Reflex Github](https://github.com/NVIDIA-RTX/REFLEX))
 2. Install FrameView SDK
     * Double click the FrameView SDK Installer (`FVSDKSetup.exe`)
     * Restart the system
@@ -385,5 +385,16 @@ GPU Start/End Time | Timestamp | Start = GPU rendering starts; End = GPU renderi
 > **NOTE:**
 > All durations and timestamps should be non-zero. Start timestamps must be less than end values (I.e., start must come before end).
 
+### 9.0 SUPPORTED CONFIGURATIONS
+
+| Scenario | VRR | FG | Reflex
+|-|-|-|-
+| GPU bound | Any | Any | Reduces latency
+| VSync On | On | Any | Reduces latency
+| VSync On | Off | On | Reduces latency
+| VSync On | Off | Off | No latency reduction
+| CPU bound | Any | Any | No latency reduction
+
 [1]: <RTX UI Developer Guidelines.pdf>
 [2]: https://developer.nvidia.com/performance-rendering-tools/reflex
+[3]: https://github.com/NVIDIA-RTX/REFLEX/blob/main/NVIDIA%20Reflex%20SDK%20Integration%20Guide.pdf

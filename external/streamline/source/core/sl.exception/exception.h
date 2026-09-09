@@ -24,7 +24,6 @@
 
 #ifdef SL_ENABLE_EXCEPTION_HANDLING
 
-#ifdef SL_WINDOWS
 #include <windows.h>
 
 namespace sl
@@ -45,8 +44,6 @@ void destroyInterface();
 
 }
 }
-
-#endif // SL_WINDOWS
 
 #else
 #define SL_EXCEPTION_HANDLE_START

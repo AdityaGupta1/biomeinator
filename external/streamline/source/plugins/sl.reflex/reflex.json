@@ -9,5 +9,23 @@
     "rhi" : ["d3d11", "d3d12", "vk"],
     "hooks" :
     [
+        {
+            "class": "Vulkan",
+            "target" : "CreateSwapchainKHR",
+            "replacement" : "slHookVkCreateSwapchainKHRBefore",
+            "base" : "before"
+        },
+        {
+            "class": "Vulkan",
+            "target" : "CreateSwapchainKHR",
+            "replacement" : "slHookVkCreateSwapchainKHRAfter",
+            "base" : "after"
+        },
+        {
+            "class": "Vulkan",
+            "target" : "DestroySwapchainKHR",
+            "replacement" : "slHookVkDestroySwapchainKHRBefore",
+            "base" : "before"
+        }
     ]
 }

@@ -21,6 +21,7 @@
 */
 
 #include <unordered_set>
+#include <functional>
 
 #include "include/sl.h"
 #include "include/sl_consts.h"
@@ -43,6 +44,10 @@
 using json = nlohmann::json;
 using namespace std::chrono_literals;
 
+
+// VK_NV_low_latency2
+#include "source/platforms/sl.chi/vulkan.h"
+#include "source/platforms/sl.chi/vulkannv.h"
 
 // DEPRECATED (reflex-pcl):
 #include "source/core/sl.plugin-manager/pluginManager.h"
@@ -174,6 +179,7 @@ struct LatencyContext
     float4x4 prevWorldToViewMatrix{};
     float4x4 prevViewToClipMatrix{};
     bool predictCamera = false;
+    std::function<void(uint32_t frame, const sl::ReflexCameraData& cameraData)> cameraDataCallback;
 
 
     //! Can be overridden via sl.reflex.json config
@@ -195,15 +201,24 @@ struct LatencyContext
     std::atomic<bool> enabled = false;
 
     PFunSetPCLStatsMarker* setStatsMarkerFunc = nullptr;
-
+    
     sl::chi::Fence gameWaitFence{};
     uint32_t gameWaitSyncValue{};
     chi::ICommandListContext* gameWaitCmdList{};
 
-    //! Circular buffer to store simulation start timestamps
-    std::array<std::pair<uint32_t, std::chrono::high_resolution_clock::time_point>, kSimulationTimingHistorySize> simulationStartTimes{};
+    struct SimStartEntry
+    {
+        uint32_t frameId = 0;
+        std::chrono::high_resolution_clock::time_point timestamp{};
+        uint8_t driverFgMultiplier = 0;
+        bool bDfgControl = false;
+    };
+
+    //! Circular buffer to store simulation start data (timestamps + DFG driver info)
+    std::array<SimStartEntry, kSimulationTimingHistorySize> simulationStartData{};
     //! Mutex for thread-safe access to simulation timing data
     std::mutex simulationTimingMutex;
+    std::mutex callbacksMutex;
 };
 }
 
@@ -215,7 +230,9 @@ void updateEmbeddedJSON(json& config);
 sl::Result slReflexSetMarker(sl::PCLMarker marker, const sl::FrameToken& frame);
 sl::Result slReflexGetCameraDataInternal(const sl::ViewportHandle& viewport, const uint32_t frame, sl::ReflexCameraData& outCameraData);
 sl::Result slReflexSetCameraDataFenceInternal(const sl::ViewportHandle& viewport, sl::chi::Fence fence, const uint32_t syncValue, chi::ICommandListContext* cmdList);
+sl::Result slReflexSetCameraDataCallbackInternal(std::function<void(uint32_t frame, const sl::ReflexCameraData& cameraData)> callback);
 sl::Result slReflexGetSimulationDeltaUsInternal(uint32_t frameId, uint64_t& outDeltaTimeUs);
+sl::Result slReflexGetFrameGenParamsInternal(uint32_t frameId, uint8_t& outFgMultiplier, bool& outDfgControl);
 
 //! Define our plugin, make sure to update version numbers in versions.h
 SL_PLUGIN_DEFINE("sl.reflex", Version(VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH), Version(0, 0, 1), JSON.c_str(), updateEmbeddedJSON, reflex, LatencyContext)
@@ -268,6 +285,38 @@ void updateEmbeddedJSON(json& config)
         // Only require the Vk extension if Reflex is actually supported
         deviceExtensions.emplace("VK_NV_low_latency");
     }
+
+    // VK_NV_low_latency2 is the modern Reflex path. A new interposer honors optional_extensions and
+    // enables it when the device exposes it. An older interposer ignores that key, so under a
+    // conservative heuristic (NV adapter) we append it to the strict list instead. The two paths
+    // are mutually exclusive to avoid declaring the same extension in both buckets.
+    //
+    // The strict-list path bypasses the interposer's device-exposes-it check, so the heuristic must
+    // not enable LL2 on adapters that don't support it. Pre-Turing support is dropped, so gate on Turing.
+    bool ll2HeuristicSafe = false;
+    if (ctx.lowLatencyAvailable && caps)
+    {
+        for (uint32_t i = 0; i < caps->gpuCount; i++)
+        {
+            if (caps->adapters[i].vendor == chi::VendorId::eNVDA &&
+                caps->adapters[i].architecture >= NV_GPU_ARCHITECTURE_ID::NV_GPU_ARCHITECTURE_TU100)
+            {
+                ll2HeuristicSafe = true;
+                break;
+            }
+        }
+    }
+    if (ll2HeuristicSafe)
+    {
+        deviceExtensions.insert(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);
+    }
+    else
+    {
+        config["external"]["vk"]["device"]["optional_extensions"] = std::unordered_set<std::string>{
+            VK_NV_LOW_LATENCY_2_EXTENSION_NAME,
+        };
+    }
+
     config["external"]["vk"]["device"]["extensions"] = deviceExtensions;
     config["external"]["reflex"]["lowLatencyAvailable"] = ctx.lowLatencyAvailable;
     config["external"]["reflex"]["flashIndicatorDriverControlled"] = ctx.flashIndicatorDriverControlled;
@@ -334,6 +383,16 @@ Result slSetData(const BaseStructure* inputs, CommandBuffer* cmdBuffer)
                 && (pcl_marker != PCLMarker::eTriggerFlash || ctx.flashIndicatorDriverControlled))
             {
                 CHI_VALIDATE(ctx.compute->setReflexMarker(pcl_marker, *frame));
+            }
+
+            if (pcl_marker == PCLMarker::ePresentStart)
+            {
+                // The app emits its own PRESENT markers. Latch this so SL stops emitting its own on
+                // the Vulkan single-channel path and avoids double-stamping the driver (see
+                // Vulkan::setAsyncFrameMarker). Apps that never send a present marker (e.g. Unity,
+                // handled below via a render-marker substitute) leave this false, so SL keeps
+                // supplying present markers for them.
+                ctx.compute->setAppOwnsPresentMarkers(true);
             }
 
             if (pcl_marker == PCLMarker::ePresentStart
@@ -495,10 +554,18 @@ internal::shared::Status getSharedData(BaseStructure* requestedData, const BaseS
     // v5
     remote->slReflexGetSimulationDeltaUs = slReflexGetSimulationDeltaUsInternal;
 
+    // v6
+    remote->slReflexSetCameraDataCallback = slReflexSetCameraDataCallbackInternal;
+
+    // v7
+    remote->slReflexGetFrameGenParams = slReflexGetFrameGenParamsInternal;
+
+    memset(remote->reservedV7, 0, sizeof(remote->reservedV7));
+
     // Let newer requester know that we are older
-    if (remote->structVersion > kStructVersion5)
+    if (remote->structVersion > kStructVersion7)
     {
-        remote->structVersion = kStructVersion5;
+        remote->structVersion = kStructVersion7;
     }
 
     return internal::shared::Status::eOk;
@@ -564,6 +631,12 @@ sl::Result slReflexSetCameraData(const sl::ViewportHandle& viewport, const sl::F
     ctx.prevWorldToViewMatrix = inCameraData.worldToViewMatrix;
     ctx.prevViewToClipMatrix = inCameraData.viewToClipMatrix;
 
+    std::lock_guard<std::mutex> lock(ctx.callbacksMutex);
+    if (ctx.cameraDataCallback)
+    {
+        ctx.cameraDataCallback(frame, inCameraData);
+    }
+
     return sl::Result::eOk;
 }
 
@@ -591,6 +664,14 @@ sl::Result slReflexSetCameraDataFenceInternal(const sl::ViewportHandle& viewport
     return sl::Result::eOk;
 }
 
+sl::Result slReflexSetCameraDataCallbackInternal(std::function<void(uint32_t frame, const sl::ReflexCameraData& cameraData)> callback)
+{
+    auto& ctx = (*reflex::getContext());
+    std::lock_guard<std::mutex> lock(ctx.callbacksMutex);
+    ctx.cameraDataCallback = callback;
+    return sl::Result::eOk;
+}
+
 sl::Result slReflexGetPredictedCameraData(const sl::ViewportHandle& viewport, const sl::FrameToken& frame, sl::ReflexPredictedCameraData& outCameraData)
 {
     auto& ctx = (*reflex::getContext());
@@ -613,30 +694,47 @@ Result slReflexGetSimulationDeltaUsInternal(uint32_t frameId, uint64_t& outDelta
 
     if (frameId <= 1)
     {
-        // 0 is invalid, 1 is the first frame (so no delta can be calculated)
         return Result::eErrorInvalidState;
     }
 
     std::lock_guard<std::mutex> lock(ctx.simulationTimingMutex);
 
-    // Look up current frame
-    const auto& [currentFrameId, currentTimestamp] = ctx.simulationStartTimes[frameId % kSimulationTimingHistorySize];
-    if (currentFrameId != frameId)
+    const auto& current = ctx.simulationStartData[frameId % kSimulationTimingHistorySize];
+    if (current.frameId != frameId)
     {
-        // Frame not found or overwritten
         return Result::eErrorInvalidState;
     }
 
-    // Look up previous frame
-    const auto& [previousFrameId, previousTimestamp] = ctx.simulationStartTimes[(frameId - 1) % kSimulationTimingHistorySize];
-    if (previousFrameId != (frameId - 1))
+    const auto& previous = ctx.simulationStartData[(frameId - 1) % kSimulationTimingHistorySize];
+    if (previous.frameId != (frameId - 1))
     {
-        // Previous frame not found (skipped or overwritten)
         return Result::eErrorInvalidState;
     }
 
-    // Calculate delta in microseconds
-    outDeltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(currentTimestamp - previousTimestamp).count();
+    outDeltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(current.timestamp - previous.timestamp).count();
+
+    return Result::eOk;
+}
+
+Result slReflexGetFrameGenParamsInternal(uint32_t frameId, uint8_t& outFgMultiplier, bool& outDfgControl)
+{
+    auto& ctx = (*reflex::getContext());
+
+    if (frameId == 0)
+    {
+        return Result::eErrorInvalidState;
+    }
+
+    std::lock_guard<std::mutex> lock(ctx.simulationTimingMutex);
+
+    const auto& entry = ctx.simulationStartData[frameId % kSimulationTimingHistorySize];
+    if (entry.frameId != frameId)
+    {
+        return Result::eErrorInvalidState;
+    }
+
+    outFgMultiplier = entry.driverFgMultiplier;
+    outDfgControl = entry.bDfgControl;
 
     return Result::eOk;
 }
@@ -725,7 +823,7 @@ bool slOnPluginStartup(const char* jsonConfig, void* device)
         auto renderUI = [&ctx](imgui::ImGUI* ui, bool finalFrame)->void
         {
             auto v = api::getContext()->pluginVersion;
-            if (ui->collapsingHeader(extra::format("sl.reflex v{}", (v.toStr() + "." + GIT_LAST_COMMIT_SHORT)).c_str(), imgui::kTreeNodeFlagDefaultOpen))
+            if (ui->collapsingHeader(extra::format("{} v{}", api::getPluginName(), (v.toStr() + "." + GIT_LAST_COMMIT_SHORT)).c_str(), imgui::kTreeNodeFlagDefaultOpen))
             {
                 std::scoped_lock lock(ctx.uiStats.mtx);
                 ui->text(ctx.uiStats.mode.c_str());
@@ -774,13 +872,24 @@ sl::Result slReflexSetMarker(sl::PCLMarker marker, const sl::FrameToken& frame)
     inputs.next = (BaseStructure*)&frame;
 
 
-    // Track simulation start timing
+    // Track simulation start timing and query DFG driver info
     if (marker == sl::PCLMarker::eSimulationStart)
     {
+        uint8_t fgMult = 0;
+        bool dfgCtrl = false;
+        bool driverOk = false;
+        if (ctx.platform != RenderAPI::eVulkan)
+        {
+            driverOk = ctx.compute->getFrameGenParams(fgMult, dfgCtrl) == chi::ComputeStatus::eOk;
+        }
+
         std::lock_guard<std::mutex> lock(ctx.simulationTimingMutex);
 
-        auto timestamp = std::chrono::high_resolution_clock::now();
-        ctx.simulationStartTimes[frame % kSimulationTimingHistorySize] = {frame, timestamp};
+        auto& entry = ctx.simulationStartData[frame % kSimulationTimingHistorySize];
+        entry.frameId = frame;
+        entry.timestamp = std::chrono::high_resolution_clock::now();
+        entry.driverFgMultiplier = driverOk ? fgMult : 0;
+        entry.bDfgControl = driverOk && dfgCtrl;
     }
 
     if (marker == sl::PCLMarker::eRenderSubmitStart && ctx.gameWaitCmdList && ctx.gameWaitFence && ctx.gameWaitSyncValue && ctx.compute->getCompletedValue(ctx.gameWaitFence) < ctx.gameWaitSyncValue)
@@ -803,6 +912,90 @@ sl::Result slReflexSetOptions(const sl::ReflexOptions& options)
     return slSetData(&options, nullptr);
 }
 
+// Storage for the VkSwapchainLatencyCreateInfoNV we may inject into the host's
+// vkCreateSwapchainKHR pNext chain. Its lifetime must extend past the before-hook return so the
+// interposer's underlying CreateSwapchainKHR (which runs after us, on the same thread) sees it.
+// Thread-local rather than in the shared plugin context because vkCreateSwapchainKHR is not
+// externally synchronized: two threads can create swapchains concurrently. Each thread runs
+// before-hook -> real create -> after-hook serially, so one slot per thread is exactly the right
+// lifetime and there is no cross-thread sharing to race on.
+namespace { thread_local VkSwapchainLatencyCreateInfoNV t_swapchainLatencyInfo{}; }
+
+VkResult slHookVkCreateSwapchainKHRBefore(VkDevice device, const VkSwapchainCreateInfoKHR* info, const VkAllocationCallbacks*, VkSwapchainKHR*, bool& skip)
+{
+    skip = false;
+
+    // Only inject VkSwapchainLatencyCreateInfoNV when the LL2 device extension is actually enabled
+    // on this device. Resolving via vkGetDeviceProcAddr returns null when the extension wasn't
+    // enabled at vkCreateDevice time, which mirrors the prior interposer-side gate.
+    interposer::VkTable* vk{};
+    if (!param::getPointerParam(api::getContext()->parameters, sl::param::global::kVulkanTable, &vk) || !vk)
+    {
+        return VK_SUCCESS;
+    }
+    auto pfnLatencySleepNV = (PFN_vkLatencySleepNV)vk->getDeviceProcAddr(device, "vkLatencySleepNV");
+    if (!pfnLatencySleepNV)
+    {
+        return VK_SUCCESS;
+    }
+
+    // Walk the existing pNext chain to see if the host already provided VkSwapchainLatencyCreateInfoNV.
+    auto* nonConstInfo = const_cast<VkSwapchainCreateInfoKHR*>(info);
+    auto* next = (const VkBaseInStructure*)nonConstInfo->pNext;
+    while (next)
+    {
+        if (next->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV)
+        {
+            if (!reinterpret_cast<const VkSwapchainLatencyCreateInfoNV*>(next)->latencyModeEnable)
+            {
+                SL_LOG_WARN("vkCreateSwapchainKHR pNext chain has VkSwapchainLatencyCreateInfoNV but latency-mode not enabled");
+            }
+            return VK_SUCCESS;
+        }
+        next = next->pNext;
+    }
+
+    // Prepend our own VkSwapchainLatencyCreateInfoNV. The struct lives in thread-local storage to
+    // outlive this hook return; the interposer's underlying CreateSwapchainKHR runs after us.
+    t_swapchainLatencyInfo = VkSwapchainLatencyCreateInfoNV{
+        VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV,
+        nonConstInfo->pNext,
+        VK_TRUE,
+    };
+    nonConstInfo->pNext = &t_swapchainLatencyInfo;
+    return VK_SUCCESS;
+}
+
+VkResult slHookVkCreateSwapchainKHRAfter(VkDevice, const VkSwapchainCreateInfoKHR* info, const VkAllocationCallbacks*, VkSwapchainKHR* Swapchain)
+{
+    auto& ctx = (*reflex::getContext());
+    auto next = (const VkBaseInStructure*)info->pNext;
+    bool is_latency_mode_enabled = false;
+    while (next)
+    {
+        if (next->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV)
+        {
+            is_latency_mode_enabled = reinterpret_cast<const VkSwapchainLatencyCreateInfoNV*>(next)->latencyModeEnable;
+            break;
+        }
+        next = next->pNext;
+    }
+    ctx.compute->notifyCreateSwapchain(*Swapchain, is_latency_mode_enabled);
+    return VK_SUCCESS;
+}
+
+void slHookVkDestroySwapchainKHRBefore(VkDevice, VkSwapchainKHR Swapchain, const VkAllocationCallbacks*, bool& skip)
+{
+    skip = false;
+    // Fires before the driver frees the swapchain, so the LL2 backend can stop using the handle
+    // (see chi::VkNvLowLatency2::notifyDestroySwapchain). No-op on the v1 / D3D paths.
+    auto& ctx = (*reflex::getContext());
+    if (ctx.compute)
+    {
+        ctx.compute->notifyDestroySwapchain(Swapchain);
+    }
+}
+
 //! The only exported function - gateway to all functionality
 SL_EXPORT void* slGetPluginFunction(const char* functionName)
 {
@@ -817,6 +1010,10 @@ SL_EXPORT void* slGetPluginFunction(const char* functionName)
     SL_EXPORT_FUNCTION(slReflexSetMarker);
     SL_EXPORT_FUNCTION(slReflexSleep);
     SL_EXPORT_FUNCTION(slReflexSetOptions);
+
+    SL_EXPORT_FUNCTION(slHookVkCreateSwapchainKHRBefore);
+    SL_EXPORT_FUNCTION(slHookVkCreateSwapchainKHRAfter);
+    SL_EXPORT_FUNCTION(slHookVkDestroySwapchainKHRBefore);
 
     SL_EXPORT_FUNCTION(slReflexSetCameraData);
     SL_EXPORT_FUNCTION(slReflexGetPredictedCameraData);

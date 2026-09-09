@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2022-2023 NVIDIA CORPORATION. All rights reserved
+* Copyright (c) 2022-2026 NVIDIA CORPORATION. All rights reserved
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -25,14 +25,16 @@
 #include "include/sl.h"
 #include "include/sl_reflex.h"
 #include "source/core/sl.extra/extra.h"
+#include "source/core/sl.log/log.h"
 
-#if defined(SL_WINDOWS)
 #include <unknwn.h>
-#endif
 
 #if defined(SL_DEBUG)
 #define ASSERT_ONLY_CODE 1
 #endif
+
+#define SL_COMPOSE_NAME(featureId, detail) (std::string("nv.") + (featureId) + "." + (detail))
+#define SL_RESOURCE_NAME(detail) SL_COMPOSE_NAME(api::getPluginName(), detail)
 
 namespace sl
 {
@@ -44,6 +46,8 @@ struct IParameters;
 
 namespace chi
 {
+static constexpr const char* kComputeTag{ "sl.chi" };
+
 typedef uint32_t NativeFormat;
 
 using Device = void*;
@@ -410,10 +414,49 @@ struct ICommandListContext
     virtual Handle getFenceEvent() = 0;
     virtual Fence getFence(uint32_t index) = 0;
     virtual int present(SwapChain chain, uint32_t sync, uint32_t flags, void* params = nullptr) = 0;
+    virtual uint32_t resolvePresentFlags(SwapChain targetSwapChain, uint32_t presentSyncInterval, uint32_t presentFlags) { return presentFlags; }
     virtual void getFrameStats(SwapChain chain, void* frameStats) = 0;
-    virtual void getLastPresentID(SwapChain chain, uint32_t& id) = 0;
     virtual void waitForVblank(SwapChain chain) = 0;
     virtual void monitoringThreadTick() { assert(false); }
+
+    // Reflex/LL2 (Vulkan only): set the app frame id that this context's subsequent work submits
+    // carry, via VkLatencySubmissionPresentIdNV chained onto each vkQueueSubmit. Callers set it once
+    // per frame before submitting; passing 0 ("no frame") leaves the previous id in place. Tagging
+    // each submit directly - rather than relying on the driver's "reuse last id on this queue" rule -
+    // keeps frame attribution race-free even when SL shares a queue with the app. Default no-op on
+    // D3D and the NvAPI v1 path. See CommandListContextVK::executeCommandList.
+    virtual void setLatencyFrameId(uint64_t frameId) {}
+
+    bool m_nsightInitialized{ false };
+
+    virtual void delimitPresentRequest(uint32_t presentFrameIndex, uint32_t syncInterval, uint32_t flags, const void* presentParams) {}
+    virtual void delimitFrame(uint32_t presentFrameIndex, int32_t genFrameIndex, bool isBegin, uint32_t syncInterval, uint32_t flags, const void* presentParams) {}
+};
+
+struct FrameBoundaryGuard
+{
+    ICommandListContext* ctx;
+    uint32_t presentFrameIndex;
+    int32_t genFrameIndex;
+    uint32_t syncInterval;
+    uint32_t flags;
+    const void* presentParams;
+
+    FrameBoundaryGuard(ICommandListContext* c, SwapChain targetSwapChain, uint32_t presentFrameIdx, int32_t genFrameIdx,
+                       uint32_t presentSyncInterval, uint32_t presentFlags, const void* params)
+        : ctx{ c }, presentFrameIndex{ presentFrameIdx }, genFrameIndex{ genFrameIdx },
+          syncInterval{ presentSyncInterval },
+          flags{ c->resolvePresentFlags(targetSwapChain, presentSyncInterval, presentFlags) },
+          presentParams{ params }
+    {
+        ctx->delimitFrame(presentFrameIndex, genFrameIndex, true, syncInterval, flags, presentParams);
+    }
+    ~FrameBoundaryGuard()
+    {
+        ctx->delimitFrame(presentFrameIndex, genFrameIndex, false, syncInterval, flags, presentParams);
+    }
+    FrameBoundaryGuard(const FrameBoundaryGuard&) = delete;
+    FrameBoundaryGuard& operator=(const FrameBoundaryGuard&) = delete;
 };
 
 // HashedResource uses std::shared_ptr<> to keep track of references to the underlying
@@ -506,11 +549,12 @@ enum class VendorId : uint32_t
     eNVDA = 0x10DE,
     eAMD = 0x1002,
     eIntel = 0x8086,
+    eNVDA_ACPI = 0x4144564e, // reverse of string 'NVDA', See bug 3936088
 };
 
 inline bool isVendorNvidia(VendorId id)
 {
-    return id == VendorId::eNVDA;
+    return id == VendorId::eNVDA || id == VendorId::eNVDA_ACPI;
 }
 
 
@@ -558,6 +602,30 @@ public:
     virtual ComputeStatus getInstance(Instance& instance) = 0;
     virtual ComputeStatus getPhysicalDevice(PhysicalDevice& device) = 0;
     virtual ComputeStatus getHostQueueInfo(chi::CommandQueue queue, void* pQueueInfo) = 0;
+
+    // Reflex/LL2 latency-id attribution (Vulkan only). When the app drives explicit attribution, SL
+    // tags each of its own work submits with the app frame id by chaining VkLatencySubmissionPresentIdNV
+    // onto the submit (see ICommandListContext::setLatencyFrameId and the Vulkan submit path). The id
+    // is the app frame index - shared by all presents of a batch, hence "latency id" rather than a
+    // per-present id.
+
+    // Whether LL2 latency ids should be applied to SL's submissions. The driver requires
+    // all-or-nothing tagging: SL may tag its own submissions only when the application also tags
+    // its own with VkLatencySubmissionPresentIdNV. Mixing tagged and untagged submissions in a
+    // frame corrupts attribution, so SL must match the app exactly.
+    //
+    // This currently ALWAYS returns false (SL never tags; the driver uses implicit marker-based
+    // attribution, which is the known-good path). We have no reliable way yet to learn whether the
+    // app tags its submissions: SL cannot observe the app's vkQueueSubmit (apps call it directly,
+    // bypassing SL's interposer), and the all-or-nothing rule means guessing is unsafe in either
+    // direction. The two viable detection options for later: (1) a new Streamline API the app sets
+    // to declare it tags explicitly, or (2) a query to the Vulkan driver, if one becomes available.
+    virtual bool areLatencyIdsEnabled() const { return false; }
+
+    // Whether the active Reflex backend actually consumes VkLatencySubmissionPresentIdNV (i.e. the
+    // VK_NV_low_latency2 path is in use). False on D3D and on the NvAPI v1 Vulkan path, where the
+    // detector should not run and SL must not tag. Lets callers skip the per-submit pNext walk.
+    virtual bool areLatencyIdsSupported() const { return false; }
 
     virtual ComputeStatus waitForIdle(Device device) = 0;
 
@@ -675,27 +743,108 @@ public:
     virtual ComputeStatus getFullscreenState(SwapChain chain, bool& fullscreen) = 0;
     virtual ComputeStatus setFullscreenState(SwapChain chain, bool fullscreen, Output out = nullptr) = 0;
     virtual ComputeStatus getRefreshRate(WindowHandle window, float& refreshRate) = 0;
+    virtual ComputeStatus getDisplayId(WindowHandle window, uint32_t& displayId) = 0;
     virtual ComputeStatus getSwapChainBuffer(SwapChain chain, uint32_t index, Resource& buffer) = 0;
         
     virtual ComputeStatus beginPerfSection(CommandList cmdList, const char *section, uint32_t node = 0, bool reset = false) = 0;
     virtual ComputeStatus endPerfSection(CommandList cmdList, const char *section, float &avgTimeMS, uint32_t node = 0) = 0;
-    virtual ComputeStatus beginProfiling(CommandList cmdList, uint32_t metadata, const char* marker) = 0;
-    virtual ComputeStatus endProfiling(CommandList cmdList) = 0;
-    virtual ComputeStatus beginProfilingQueue(CommandQueue cmdQueue, uint32_t metadata, const char* marker) = 0;
-    virtual ComputeStatus endProfilingQueue(CommandQueue cmdQueue) = 0;
+
+    ComputeStatus beginProfiling(CommandList cmdList, const char* marker, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
+    {
+#if SL_ENABLE_PROFILING
+        if (cmdList == nullptr)
+        {
+            SL_LOG_WARN_ONCE("Invalid command list");
+            return ComputeStatus::eInvalidArgument;
+        }
+
+        return beginProfilingImpl(cmdList, marker, r, g, b);
+#else
+        return ComputeStatus::eNoImplementation;
+#endif
+    }
+
+    ComputeStatus endProfiling(CommandList cmdList)
+    {
+#if SL_ENABLE_PROFILING
+        if (cmdList == nullptr)
+        {
+            SL_LOG_WARN_ONCE("Invalid command list");
+            return ComputeStatus::eInvalidArgument;
+        }
+
+        return endProfilingImpl(cmdList);
+#else
+        return ComputeStatus::eNoImplementation;
+#endif
+    }
+
+    ComputeStatus beginProfilingQueue(CommandQueue cmdQueue, const char* marker, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255)
+    {
+#if SL_ENABLE_PROFILING
+        if (cmdQueue == nullptr)
+        {
+            SL_LOG_WARN_ONCE("Invalid command queue");
+            return ComputeStatus::eInvalidArgument;
+        }
+
+        return beginProfilingQueueImpl(cmdQueue, marker, r, g, b);
+#else
+        return ComputeStatus::eNoImplementation;
+#endif
+    }
+    
+    ComputeStatus endProfilingQueue(CommandQueue cmdQueue)
+    {
+#if SL_ENABLE_PROFILING
+        if (cmdQueue == nullptr)
+        {
+            SL_LOG_WARN_ONCE("Invalid command queue");
+            return ComputeStatus::eInvalidArgument;
+        }
+
+        return endProfilingQueueImpl(cmdQueue);
+#else
+        return ComputeStatus::eNoImplementation;
+#endif
+    }
 
     virtual bool signalCPUFence(Fence fence, uint64_t syncValue) = 0;
+
+protected:
+#if SL_ENABLE_PROFILING
+    virtual ComputeStatus beginProfilingImpl(CommandList cmdList, const char* marker, uint8_t r, uint8_t g, uint8_t b) = 0;
+    virtual ComputeStatus endProfilingImpl(CommandList cmdList) = 0;
+    virtual ComputeStatus beginProfilingQueueImpl(CommandQueue cmdQueue, const char* marker, uint8_t r, uint8_t g, uint8_t b) = 0;
+    virtual ComputeStatus endProfilingQueueImpl(CommandQueue cmdQueue) = 0;
+#endif
+public:
 
     // Latency API
     virtual ComputeStatus setSleepMode(const ReflexOptions& consts) = 0;
     virtual ComputeStatus getSleepStatus(ReflexState& settings) = 0;
+    virtual ComputeStatus getFrameGenParams(uint8_t& outFgMultiplier, bool& outDfgControl) { return ComputeStatus::eNotSupported; }
     virtual ComputeStatus getLatencyReport(ReflexState& settings) = 0;
     virtual ComputeStatus sleep() = 0;
     virtual ComputeStatus setReflexMarker(PCLMarker marker, uint64_t frameId) = 0;
     virtual ComputeStatus notifyOutOfBandCommandQueue(ChiCommandQueue* queue, OutOfBandCommandQueueType type) = 0;
     virtual ComputeStatus setAsyncFrameMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) = 0;
     virtual ComputeStatus setLatencyMarker(CommandQueue queue, PCLMarker marker, uint64_t frameId) = 0;
-    
+    virtual ComputeStatus setReflexSync(bool enable, int32_t timeInQueueUs, uint32_t timeInQueueUsTarget, uint32_t vblankIntervalUs) { return ComputeStatus::eNotSupported; }
+    virtual ComputeStatus setReflexSyncFG(uint8_t dfgMaxMultiplier, uint32_t dfgTargetFps, uint8_t fgMultiplier) { return ComputeStatus::eNotSupported; }
+
+    // Whether the application emits its own regular PRESENT_START/END Reflex markers. On Vulkan there
+    // is a single latency-marker channel (NvLL_VK_SetLatencyMarker), unlike D3D's separate async
+    // channel, so if both the app and SL emit PRESENT markers they double-stamp the driver. SL
+    // therefore suppresses its own PRESENT markers only when the app owns them; when the app does not
+    // (e.g. Unity, which cannot emit present markers) SL keeps supplying them. Detected by the Reflex
+    // plugin and latched here. No-op on D3D, where the two marker channels are distinct.
+    virtual bool appOwnsPresentMarkers() const { return false; }
+    virtual void setAppOwnsPresentMarkers(bool owns) {}
+
+    virtual ComputeStatus notifyCreateSwapchain(SwapChain chain, bool isLatencyModeEnabled){ return ComputeStatus::eOk; }
+    virtual ComputeStatus notifyDestroySwapchain(SwapChain chain){ return ComputeStatus::eOk; }
+
     // Sharing API
     virtual ComputeStatus fetchTranslatedResourceFromCache(ICompute* otherAPI, ResourceType type, Resource res, TranslatedResource& shared, const char friendlyName[] = "") = 0;
     virtual ComputeStatus prepareTranslatedResources(CommandList cmdList, const std::vector<std::pair<chi::TranslatedResource, chi::ResourceDescription>>& resourceList) = 0;
@@ -712,6 +861,90 @@ public:
 
     // check if an extension is available, vulkan only
     virtual ComputeStatus isDeviceExtensionSupported(const char* extension, uint32_t version) = 0;
+
+    // Hybrid GPU support - allows plugins to notify about swapchain lifecycle
+    virtual ComputeStatus notifySwapChainCreated(SwapChain chain, uint32_t bufferCount) = 0;
+    virtual void notifySwapChainDestroyed(SwapChain chain) = 0;
+    
+    // Hybrid GPU support - create/get presentation command queue if hybrid GPU is enabled
+    // Returns the iGPU command queue for swapchain/presentation operations, or nullptr if hybrid GPU is not enabled
+    // Note: This is cached - subsequent calls return the same queue without recreating
+    virtual ChiCommandQueue* getHybridPresentationQueue() = 0;
+       
+    // Parameters for a hybrid GPU cross-adapter copy.
+    // The caller is responsible for choosing the appropriate source-ready fence
+    // (e.g. present-sync fence on the async path, or a waitSemaphore fallback
+    // on the sync/presentStandard path) and clamping the value if needed.
+    struct HybridCopyParams
+    {
+        uint64_t vmFrame = 0;
+        uint32_t subFrame = 0;
+        Fence sourceReadyFence{};
+        uint64_t sourceReadyFenceValue = 0;
+    };
+
+    // Hybrid GPU cross-adapter copy pipeline. Acquires the next shared buffer internally
+    // and always performs both steps. Skips internally if already copied for (vmFrame, subFrame).
+    //
+    // Step 1: copy source to dGPU shared resource
+    //   - GPU-waits on sourceReadyFence (for DLSS-G output to be ready)
+    //   - GPU-waits for iGPU to finish reading from this shared resource slot
+    //   - Executes copy on dedicated copy queue (runs in parallel with 3D engine)
+    //   - Signals copy fence when complete; pacer queue GPU-waits on it
+    //   - Source must already be in COPY_SOURCE state when sourceReadyFence is signaled
+    //
+    // Step 2: copy shared resource to iGPU backbuffer
+    //   - Synchronizes with copy fence and copies shared resource to iGPU backbuffer
+    //   - Uses the present queue owned by the hybrid GPU context
+    //
+    virtual ComputeStatus copyFrameToHybridBackBuffer(SwapChain chain, Resource source,
+                                                      const HybridCopyParams& params,
+                                                      CommandQueue pacerQueue) = 0;
+
+    // CPU-wait for the cross-adapter copy to complete for a specific buffer slot.
+    // Blocks until the hybrid GPU present fence has been signaled.
+    // Returns eOk when the copy is complete (or if hybrid GPU is not active).
+    virtual ComputeStatus waitForHybridCopyComplete(SwapChain chain) = 0;
+
+    // Notify NvAPI of frame present on the dGPU queue (for hybrid GPU Reflex support).
+    // Must be called after the present on the dGPU command queue.
+    // Returns eOk if notification was sent or hybrid GPU is not active.
+    virtual ComputeStatus notifyHybridPresent(CommandQueue queue) = 0;
+
+    // Attach an opaque pointer-sized value to a native swap chain (cross-plugin storage).
+    // Backed by IDXGISwapChain::SetPrivateData (D3D12) / vkSetPrivateData (Vulkan).
+    //
+    // @param nativeSwapChain  D3D12: IDXGISwapChain*, Vulkan: VkSwapchainKHR. Must be non-null.
+    // @param data             Opaque value to store. The implementation does NOT take
+    //                         ownership and never frees it; callers are responsible for the
+    //                         lifetime of whatever 'data' points to. Pass nullptr to clear.
+    //
+    // Repeated calls overwrite the previously stored value (no leak — only the value is held,
+    // not the pointee). Callers must clear the slot before the pointee becomes invalid.
+    //
+    // Thread safety: not synchronized internally. Callers must not invoke set/get concurrently
+    // for the same nativeSwapChain. Different swap chains are independent.
+    //
+    // Returns:
+    //   eOk              - stored.
+    //   eInvalidArgument - nativeSwapChain is null.
+    //   eNotSupported    - backing slot/extension unavailable (e.g. pre-1.3 Vulkan driver).
+    //   eError           - underlying API call failed.
+    virtual ComputeStatus setSwapChainPrivateData(void* nativeSwapChain, void* data) = 0;
+
+    // Retrieve a pointer-sized value previously stored via setSwapChainPrivateData.
+    //
+    // @param nativeSwapChain  Same handle used in setSwapChainPrivateData. Must be non-null.
+    // @param data             [out] Receives the stored value, or nullptr if nothing was set.
+    //                         Only written on success (eOk).
+    //
+    // Returns:
+    //   eOk              - *data populated (may be nullptr if no value was ever set).
+    //   eInvalidArgument - nativeSwapChain or data is null.
+    //   eNotSupported    - backing slot/extension unavailable.
+    //   eError           - underlying API call failed; *data is left unchanged.
+    virtual ComputeStatus getSwapChainPrivateData(void* nativeSwapChain, void** data) = 0;
+
 };
 
 
@@ -730,7 +963,7 @@ class  ScopedProfilingSection
     ScopedProfilingSection(ICompute* compute, CommandList cmdList, const char* marker) 
         : ScopedProfilingSection(compute, cmdList)
     {
-        m_compute->beginProfiling(m_cmdList, 0, marker);
+        m_compute->beginProfiling(m_cmdList, marker);
     }
 
     // those are in generic.cpp since they use sl_helpers to stringify some of the arguments

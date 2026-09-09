@@ -24,12 +24,14 @@
 #include <d3d11.h>
 #include <mutex>
 
+#include "include/sl_helpers.h"
 #include "include/sl_hooks.h"
 #include "source/core/sl.interposer/dxgi/dxgiSwapchain.h"
 #include "source/core/sl.interposer/d3d12/d3d12Device.h"
 #include "source/core/sl.interposer/d3d12/d3d12CommandQueue.h"
 #include "source/core/sl.api/internal.h"
 #include "source/core/sl.log/log.h"
+#include "source/core/sl.param/parameters.h"
 #include "source/core/sl.plugin-manager/pluginManager.h"
 #include "source/core/sl.exception/exception.h"
 
@@ -38,6 +40,15 @@ namespace sl
 namespace interposer
 {
 extern UINT queryDevice(IUnknown*& device, Microsoft::WRL::ComPtr<IUnknown>& device_proxy);
+
+// Host frame from the Reflex present marker; 0 when the app sends none. On the
+// app's present thread this is the frame being presented right now.
+static uint32_t hostFrameForDiagnostics()
+{
+    uint32_t frame{};
+    param::getInterface()->get(param::latency::kMarkerPresentFrame, &frame);
+    return frame;
+}
 
 static_assert(offsetof(DXGISwapChain, m_base) == 16, "This location must be maintained to keep compatibility with Nsight tools");
 
@@ -252,7 +263,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::Present(UINT SyncInterval, UINT Flags)
             hr = ((PFunPresentBefore*)hook)(m_base, SyncInterval, Flags, skip);
             if (FAILED(hr))
             {
-                SL_LOG_WARN("PFunPresentBefore failed %s", std::system_category().message(hr).c_str());
+                SL_LOG_WARN("IDXGISwapChain::Present before hook for feature '%s' failed "
+                            "(HRESULT 0x%08X: %s, host frame %u).",
+                            sl::getFeatureAsStr(feature), static_cast<uint32_t>(hr),
+                            std::system_category().message(hr).c_str(), hostFrameForDiagnostics());
                 return hr;
             }
         }
@@ -267,7 +281,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::Present(UINT SyncInterval, UINT Flags)
                 hr = ((PFunPresentAfter*)hook)(Flags);
                 if (FAILED(hr))
                 {
-                    SL_LOG_WARN("PFunPresentAfter failed %s", std::system_category().message(hr).c_str());
+                    SL_LOG_WARN("IDXGISwapChain::Present after hook for feature '%s' failed "
+                                "(HRESULT 0x%08X: %s, host frame %u).",
+                                sl::getFeatureAsStr(feature), static_cast<uint32_t>(hr),
+                                std::system_category().message(hr).c_str(), hostFrameForDiagnostics());
                     return hr;
                 }
             }
@@ -489,7 +506,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::Present1(UINT SyncInterval, UINT Presen
             hr = ((PFunPresent1Before*)hook)(m_base, SyncInterval, PresentFlags, pPresentParameters, skip);
             if (FAILED(hr))
             {
-                SL_LOG_WARN("PFunPresent1Before failed %s", std::system_category().message(hr).c_str());
+                SL_LOG_WARN("IDXGISwapChain::Present1 before hook for feature '%s' failed "
+                            "(HRESULT 0x%08X: %s, host frame %u).",
+                            sl::getFeatureAsStr(feature), static_cast<uint32_t>(hr),
+                            std::system_category().message(hr).c_str(), hostFrameForDiagnostics());
                 return hr;
             }
         }
@@ -507,7 +527,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::Present1(UINT SyncInterval, UINT Presen
                 hr = ((PFunPresentAfter*)hook)(PresentFlags);
                 if (FAILED(hr))
                 {
-                    SL_LOG_WARN("PFunPresentAfter failed %s", std::system_category().message(hr).c_str());
+                    SL_LOG_WARN("IDXGISwapChain::Present1 after hook for feature '%s' failed "
+                                "(HRESULT 0x%08X: %s, host frame %u).",
+                                sl::getFeatureAsStr(feature), static_cast<uint32_t>(hr),
+                                std::system_category().message(hr).c_str(), hostFrameForDiagnostics());
                     return hr;
                 }
             }

@@ -20,9 +20,7 @@
 * SOFTWARE.
 */
 
-#ifdef SL_WINDOWS
 #include <Windows.h>
-#endif
 #include <filesystem>
 
 #include "include/sl.h"
@@ -132,8 +130,6 @@ if (config.contains(#a))                                                        
         return m_configPath;
     }
 
-#ifdef SL_WINDOWS
-
     bool enumerateModuleExports(const wchar_t* systemModule, ExportedFunctionList& list) override final
     {
         auto handle = LoadLibraryW(systemModule);
@@ -237,8 +233,6 @@ if (config.contains(#a))                                                        
         FlushInstructionCache(GetCurrentProcess(), f.target, kCodePatchSize);
         return true;
     }
-
-#endif
 
     std::wstring m_configPath{};
     InterposerConfig m_config{};

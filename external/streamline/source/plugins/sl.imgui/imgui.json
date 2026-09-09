@@ -27,18 +27,6 @@
     },
     {
       "class": "Vulkan",
-      "target": "CreateWin32SurfaceKHR",
-      "replacement": "slHookVkCreateWin32SurfaceKHR",
-      "base": "after"
-    },
-    {
-      "class": "Vulkan",
-      "target": "DestroySurfaceKHR",
-      "replacement": "slHookVkDestroySurfaceKHR",
-      "base": "before"
-    },
-    {
-      "class": "Vulkan",
       "target": "GetSwapchainImagesKHR",
       "replacement": "slHookVkGetSwapchainImagesKHR",
       "base": "before"
