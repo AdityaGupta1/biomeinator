@@ -715,7 +715,7 @@ void Chunk::createInstances()
                         terrainPerTriDatas.insert(terrainPerTriDatas.end(), triangleCount, data);
                         // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
                         if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), triangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
-                        if (blockData.emitsLight)
+                        if (blockData.markAsEmitter)
                             for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
                     }
                     else if (blockData.shape == BlockShape::X_SHAPED)
@@ -810,7 +810,7 @@ void Chunk::createInstances()
                                 appendOmmIdxs(texArraySliceIdx, 2);
                             }
 
-                            if (blockData.emitsLight)
+                            if (blockData.markAsEmitter)
                             {
                                 // water does not emit light so it will never reach this
                                 terrainEmissiveTriangleIdxs.emplace_back(triangleIdx);

@@ -57,7 +57,7 @@ side contrast is reduced while retaining average brightness. The brown mushroom
 uses a box stem and two box cap layers. These are art direction, not importer
 restrictions. The glowshroom aux mask is opaque, R=255 for atlas columns 0–7 and
 R=0 for columns 8–15, with G/B=0. Keep cap UVs in the left half and stem UVs in
-the right half when editing; `emitsLight=false` deliberately excludes these small
+the right half when editing; `markAsEmitter=false` deliberately excludes these small
 lights from explicit sampling without disabling emissive ray hits.
 
 The runtime PNGs are the authoritative final textures, including manual GIMP

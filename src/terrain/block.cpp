@@ -119,7 +119,7 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
             data.type = parseNamedValue(blockTypesByName, blockJson["type"], "type");
         }
 
-        data.emitsLight = blockJson.value("emitsLight", false);
+        data.markAsEmitter = blockJson.value("markAsEmitter", false);
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
         if (data.shape == BlockShape::DECORATOR_CUSTOM)

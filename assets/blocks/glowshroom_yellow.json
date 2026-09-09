@@ -5,5 +5,5 @@
     "model": "glowshroom_yellow.glb",
     "randomRotationY": [0, 90, 180, 270],
     "translucent": false,
-    "emitsLight": false
+    "markAsEmitter": false
 }
