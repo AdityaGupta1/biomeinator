@@ -34,7 +34,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 {
     const uint2 pixelIdx = DispatchRaysIndex().xy;
 
-    float linearDepth = cameraParams.farPlane;
     float3 motionHitPos_WS;
     float3 prevMotionHitPos_WS;
     float3 hitNor_WS = 0.f;
@@ -45,8 +44,6 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        linearDepth = distance(ray.Origin, payload.hitInfo.hitPos_WS);
-
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
         prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = payload.hitInfo.hitNor_WS;
@@ -80,21 +77,18 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     }
     else
     {
-        motionHitPos_WS = evalRayPos(ray, cameraParams.farPlane);
+        // Put the sky on the far plane itself, not on a sphere of radius farPlane, so its depth is 1
+        // everywhere rather than falling off towards the screen edges
+        const float distToFarPlane = cameraParams.farPlane / dot(ray.Direction, cameraParams.forward_WS);
+        motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
         hitNor_WS = normalize(-ray.Direction);
     }
 
-    RWTexture2D<float> linearDepthTarget = ResourceDescriptorHeap[heapIndices.uav.linearDepthTargetIdx];
-    linearDepthTarget[pixelIdx] = linearDepth;
-
-    // motionHitPos_WS is the hit position, or on a miss a point at ray distance farPlane, which puts the
-    // sky just short of the far plane for off-axis pixels
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);
 
-    // DLSS frame generation wants post-projection depth, not the ray distance in linearDepthTarget
-    RWTexture2D<float> ndcDepthTarget = ResourceDescriptorHeap[heapIndices.uav.ndcDepthTargetIdx];
-    ndcDepthTarget[pixelIdx] = currNdc.z;
+    RWTexture2D<float> depthTarget = ResourceDescriptorHeap[heapIndices.uav.depthTargetIdx];
+    depthTarget[pixelIdx] = currNdc.z;
 
     RWTexture2D<float2> motionTarget = ResourceDescriptorHeap[heapIndices.uav.motionTargetIdx];
     motionTarget[pixelIdx] = calculateMotionFromNdc(currNdc, prevMotionHitPos_WS);

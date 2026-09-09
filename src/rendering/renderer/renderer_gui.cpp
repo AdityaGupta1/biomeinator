@@ -92,7 +92,7 @@ static const std::vector<const char*> tonemappingComboOptions = {
     "Khronos PBR neutral",
 };
 static const std::vector<const char*> debugViewComboOptions = {
-    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "linearDepth", "ndcDepth", "motion", "specularHitDistance", "normals", "debug",
+    "off", "pathTracing", "diffuseAlbedo", "specularAlbedo", "depth", "motion", "specularHitDistance", "normals", "debug",
 };
 static const std::vector<const char*> dlssModeOptions = {
     "DLAA", "quality", "balanced", "performance", "ultra performance",

@@ -117,10 +117,17 @@ it gates swap chain creation, resize and the frame-start wait together.
 
 ### Depth
 
-DLSS-G requires post-projection depth (`kBufferTypeDepth`). `linearDepthTarget` cannot serve: it
-holds ray distance, not even view-space Z, and only DLSS-RR's `kBufferTypeLinearDepth` tolerates
-that. `ndcDepthTarget` exists for frame generation and is written alongside it in the G-buffer
-raygen shader.
+Both features read one `depthTarget` holding post-projection depth, tagged as `kBufferTypeDepth`.
+DLSS-RR would also accept view-space Z under `kBufferTypeLinearDepth`, but the ray *distance* the
+G-buffer naturally produces is neither, so the earlier linear depth target was subtly off-spec and
+was dropped once frame generation needed NDC depth anyway. The projection is standard non-reversed
+Z with a 0.1 / 10000 near/far ratio, so distant depth is coarse; DLSS only uses depth for
+disocclusion and history rejection, but if distant RR quality ever suffers, reversed-Z with
+`depthInverted` set is the fix.
+
+On a miss, the G-buffer shader places the sky on the far plane itself (ray distance
+`farPlane / dot(dir, forward)`), not on a sphere of radius `farPlane`, so sky depth is 1 across the
+whole frame instead of falling off towards the edges.
 
 ### Reporting frame rate
 

@@ -280,19 +280,18 @@ void resize()
         uav.pathTracingTargetIdx = renderState.pathTracingTarget.getUavIdx();
         uav.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getUavIdx();
         uav.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getUavIdx();
-        uav.linearDepthTargetIdx = renderState.linearDepthTarget.getUavIdx();
+        uav.depthTargetIdx = renderState.depthTarget.getUavIdx();
 
         uav.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getUavIdx();
         uav.motionTargetIdx = renderState.motionTarget.getUavIdx();
         uav.specularHitDistanceTargetIdx = renderState.specularHitDistanceTarget.getUavIdx();
         uav.debugTargetIdx = renderState.debugTarget.getUavIdx();
-        uav.ndcDepthTargetIdx = renderState.ndcDepthTarget.getUavIdx();
 
         auto& srv = frame.paramBlockManager.heapIndices->srv;
         srv.pathTracingTargetIdx = renderState.pathTracingTarget.getSrvIdx();
         srv.diffuseAlbedoTargetIdx = renderState.diffuseAlbedoTarget.getSrvIdx();
         srv.specularAlbedoTargetIdx = renderState.specularAlbedoTarget.getSrvIdx();
-        srv.linearDepthTargetIdx = renderState.linearDepthTarget.getSrvIdx();
+        srv.depthTargetIdx = renderState.depthTarget.getSrvIdx();
 
         srv.normalsAndRoughnessTargetIdx = renderState.normalsAndRoughnessTarget.getSrvIdx();
         srv.motionTargetIdx = renderState.motionTarget.getSrvIdx();
@@ -502,13 +501,12 @@ void render()
             // clang-format off
             sl::Resource pathTracingResource = makeSlResource(&renderState.pathTracingTarget);
             sl::Resource dlssOutputResource = makeSlResource(&renderState.dlssOutputTarget);
-            sl::Resource linearDepthResource = makeSlResource(&renderState.linearDepthTarget);
+            sl::Resource depthResource = makeSlResource(&renderState.depthTarget);
             sl::Resource motionResource = makeSlResource(&renderState.motionTarget);
             sl::Resource diffuseAlbedoResource = makeSlResource(&renderState.diffuseAlbedoTarget);
             sl::Resource specularAlbedoResource = makeSlResource(&renderState.specularAlbedoTarget);
             sl::Resource normalsAndRoughnessResource = makeSlResource(&renderState.normalsAndRoughnessTarget);
             sl::Resource specularHitDistanceResource = makeSlResource(&renderState.specularHitDistanceTarget);
-            sl::Resource ndcDepthResource = makeSlResource(&renderState.ndcDepthTarget);
             sl::Resource hudlessResource = makeSlResource(&renderState.hudlessTarget, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
             std::vector<sl::ResourceTag> resourceTags;
@@ -519,18 +517,16 @@ void render()
 
             addTag(&pathTracingResource, sl::kBufferTypeScalingInputColor, &renderState.dlss.renderExtent);
             addTag(&dlssOutputResource, sl::kBufferTypeScalingOutputColor, &renderState.dlss.viewportExtent);
-            addTag(&linearDepthResource, sl::kBufferTypeLinearDepth, &renderState.dlss.renderExtent);
+            addTag(&depthResource, sl::kBufferTypeDepth, &renderState.dlss.renderExtent);
             addTag(&motionResource, sl::kBufferTypeMotionVectors, &renderState.dlss.renderExtent);
             addTag(&diffuseAlbedoResource, sl::kBufferTypeAlbedo, &renderState.dlss.renderExtent);
             addTag(&specularAlbedoResource, sl::kBufferTypeSpecularAlbedo, &renderState.dlss.renderExtent);
             addTag(&normalsAndRoughnessResource, sl::kBufferTypeNormalRoughness, &renderState.dlss.renderExtent);
             addTag(&specularHitDistanceResource, sl::kBufferTypeSpecularHitDistance, &renderState.dlss.renderExtent);
 
-            // DLSS-G shares the motion vectors but needs post-projection depth, which is what
-            // ndcDepthTarget exists for (linearDepthTarget holds ray distance, which only DLSS-RR accepts)
+            // DLSS-G reads the depth and motion vectors tagged above and only adds the hudless copy
             if (renderState.frameGen.active)
             {
-                addTag(&ndcDepthResource, sl::kBufferTypeDepth, &renderState.dlss.renderExtent);
                 addTag(&hudlessResource, sl::kBufferTypeHUDLessColor, &renderState.dlss.viewportExtent);
             }
             // clang-format on
@@ -958,7 +954,7 @@ void render()
     {
         BufferHelper::TransitionBatch batch;
         renderState.motionTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        renderState.ndcDepthTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderState.depthTarget.addTransitionTo(batch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         batch.submit(renderState.cmdList.Get());
     }
 

@@ -27,19 +27,12 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint linearDepthTargetIdx;
+        uint depthTargetIdx;
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;
         uint specularHitDistanceTargetIdx;
         uint debugTargetIdx;
-
-        // HLSL starts every struct in a cbuffer on a 16-byte boundary, so the uint count here must
-        // stay a multiple of 4 or the srv block below lands at a different offset than it does in C++
-        uint ndcDepthTargetIdx;
-        uint pad0;
-        uint pad1;
-        uint pad2;
     } uav;
 
     struct
@@ -47,7 +40,7 @@ struct HeapIndices
         uint pathTracingTargetIdx;
         uint diffuseAlbedoTargetIdx;
         uint specularAlbedoTargetIdx;
-        uint linearDepthTargetIdx;
+        uint depthTargetIdx;
 
         uint normalsAndRoughnessTargetIdx;
         uint motionTargetIdx;

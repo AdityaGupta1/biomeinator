@@ -423,11 +423,10 @@ void initRtTargets()
     renderState.autoTransitionRtTargets.push_back(&renderState.pathTracingTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.diffuseAlbedoTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.specularAlbedoTarget);
-    renderState.autoTransitionRtTargets.push_back(&renderState.linearDepthTarget);
+    renderState.autoTransitionRtTargets.push_back(&renderState.depthTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.normalsAndRoughnessTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.motionTarget);
     renderState.autoTransitionRtTargets.push_back(&renderState.specularHitDistanceTarget);
-    renderState.autoTransitionRtTargets.push_back(&renderState.ndcDepthTarget);
 
     renderState.autoTransitionRtTargets.push_back(&renderState.dlssOutputTarget);
 

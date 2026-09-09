@@ -381,12 +381,12 @@ struct RendererState
     RtTarget pathTracingTarget{ L"pathTracingTarget", DXGI_FORMAT_R32G32B32A32_FLOAT, 3 };
     RtTarget diffuseAlbedoTarget{ L"diffuseAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget specularAlbedoTarget{ L"specularAlbedoTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
-    RtTarget linearDepthTarget{ L"linearDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
+    // Post-projection depth, which is what both DLSS-RR and DLSS-G ask for under kBufferTypeDepth
+    RtTarget depthTarget{ L"depthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
     // should really be 4 debug channels but it would look funny that way
     RtTarget normalsAndRoughnessTarget{ L"normalsAndRoughnessTarget", DXGI_FORMAT_R16G16B16A16_FLOAT, 3 };
     RtTarget motionTarget{ L"motionTarget", DXGI_FORMAT_R16G16_FLOAT, 2 };
     RtTarget specularHitDistanceTarget{ L"specularHitDistanceTarget", DXGI_FORMAT_R32_FLOAT, 1 };
-    RtTarget ndcDepthTarget{ L"ndcDepthTarget", DXGI_FORMAT_R32_FLOAT, 1 };
 
     // Copy of the back buffer taken before the GUI is drawn, so frame generation can interpolate
     // the scene without the overlay smearing across generated frames. Only allocated while frame
