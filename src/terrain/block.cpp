@@ -41,6 +41,7 @@ static const std::unordered_map<std::string, BlockType> blockTypesByName = {
     { "water", BlockType::WATER },
     { "solid", BlockType::SOLID },
     { "transparent_cutout", BlockType::TRANSPARENT_CUTOUT },
+    { "glass", BlockType::GLASS },
 };
 
 static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
@@ -120,6 +121,7 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
 
         data.emitsLight = blockJson.value("emitsLight", false);
         data.translucent = blockJson.value("translucent", false);
+        data.proceduralColor = blockJson.value("proceduralColor", false);
         if (data.shape == BlockShape::DECORATOR_CUSTOM)
         {
             if (!blockJson.at("textures").is_string() || data.texSlices[0] == TEX_SLICE_INVALID)

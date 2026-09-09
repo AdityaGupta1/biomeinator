@@ -1,0 +1,7 @@
+{
+    "textures": {
+        "top": "yuushya/basalt_top",
+        "side": "basalt_side",
+        "bottom": "yuushya/basalt_top"
+    }
+}

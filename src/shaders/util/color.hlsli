@@ -17,6 +17,13 @@ float3 srgbToLinear(float3 srgbColor) {
     return select(srgbColor < 0.04045f, lower, higher);
 }
 
+// h, s and v all in [0, 1]
+float3 hsvToRgb(const float3 hsv)
+{
+    const float3 hueRgb = saturate(abs(frac(hsv.x + float3(1.f, 2.f / 3.f, 1.f / 3.f)) * 6.f - 3.f) - 1.f);
+    return hsv.z * lerp(float3(1.f, 1.f, 1.f), hueRgb, hsv.y);
+}
+
 float3 linearToSrgb(float3 linearColor) {
     const float3 higher = 1.055f * pow(linearColor, 1.f / 2.4f) - 0.055f;
     const float3 lower = linearColor * 12.92f;

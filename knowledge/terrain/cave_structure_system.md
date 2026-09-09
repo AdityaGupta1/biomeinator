@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-08_
 
 # Cave Structure System
 
@@ -127,6 +127,28 @@ bottom layer index in gives each pocket an independent grid.
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.
+- **`CRYSTAL_CLUSTER` and `CRYSTAL_CLUSTER_HANGING` are one fill written in terms of a grow
+  direction**, since a hanging cluster is the exact mirror of a standing one. They are separate
+  types only because the fill has no other way to know which side of the pocket it was anchored to,
+  and separate types also give them independent placement grids, so a pocket can host both.
+- **A cluster's emitter and its glass are deliberately separate.** The CRYSTAL_CORE mound is bare
+  rather than sheathed, so its light reaches the cave directly and only picks up colour and
+  scattering from whichever WHITE_CRYSTAL knees happen to stand in its path. An earlier version
+  sealed the core inside glass, which left it lit by BSDF-sampled refraction alone (see
+  [shaders → materials.md](../shaders/materials.md)) — dark and noisy, and the sealed prisms read as
+  too geometric.
+- **Knees seat themselves by scanning their own column**, the way cypress knees do
+  ([structure_system.md](structure_system.md)), which is why every knee's parameters are drawn
+  *before* its surface scan and its chunk-bounds check: a chunk fills only its own columns, so any
+  draw skipped inside those branches would desynchronise the RNG stream between chunks. It accepts
+  only the biome's own rock, so a knee can't climb the mound this fill just wrote or perch on an
+  earlier structure's blocks.
+- **A cluster's reach is what `CAVE_STRUCTURE_BOUNDS` must cover**, and the knees set it, not the
+  mound: they scatter several times further out than the mound's radius. The bound is a constant
+  (`crystalClusterMaxReachXZ`) that has to be revisited whenever the knee distance changes. Reach
+  must stay under `chunkSizeXZ` for the 3x3 gather to cover every chunk the cluster touches; the
+  tighter `chunkSizeXZ / 2` limit above applies only to fills that read the neighbourhood air mask,
+  which this one does not.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
   blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`

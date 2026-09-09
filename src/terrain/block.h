@@ -20,6 +20,9 @@ enum class BlockType : uint8_t
     WATER,
     SOLID,
     TRANSPARENT_CUTOUT,
+    // Opaque-alpha cubes rendered as glass (specular reflection + refraction); see
+    // knowledge/terrain/block_system.md
+    GLASS,
 
     COUNT
 };
@@ -58,12 +61,14 @@ struct BlockData
     BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
+    // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
+    bool proceduralColor{ false };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
     uint8_t numRotationsY{ 1 };
 };
 
-// These shapes never hide a neighboring solid or cutout cube face.
+// These shapes never hide a neighboring solid, cutout, or glass cube face.
 constexpr bool isDecoratorShape(BlockShape shape)
 {
     return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
@@ -75,7 +80,7 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
                                 BlockShape neighborShape, int faceIdx)
 {
     if (neighborType == BlockType::AIR) return true;
-    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT) &&
+    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
         isDecoratorShape(neighborShape)) return true;
     switch (type)
     {
@@ -89,6 +94,8 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
         // Only the lower-positioned cube owns a shared cutout boundary.
         return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
                faceIdx == 0 || faceIdx == 1 || faceIdx == 4;
+    case BlockType::GLASS:
+        return neighborType != BlockType::GLASS && neighborType != BlockType::SOLID;
     case BlockType::WATER:
         return shape == BlockShape::LIQUID_TOP && faceIdx == 4;
     default:

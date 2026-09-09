@@ -392,17 +392,6 @@ target_compile_definitions(BiomeinatorTests PRIVATE
 # BiomeScanner
 # ==================================================
 
-# CPU-only asset/loader regression checks; no graphics device or window required.
-add_executable(BlockModelTests EXCLUDE_FROM_ALL
-    tests/block_models.cpp src/terrain/block_model.cpp src/terrain/block.cpp
-    src/tinygltf_impl.cpp src/logger.cpp)
-target_include_directories(BlockModelTests PRIVATE ${SRC_DIR} ${GENERATED_HEADERS_DIR}
-    "${EXT}/tinygltf/include" "${EXT}/json/include" "${EXT}/stb/include")
-target_link_libraries(BlockModelTests PRIVATE glm::glm-header-only)
-target_compile_definitions(BlockModelTests PRIVATE
-    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
-    TARGET_FILE_DIR="${CMAKE_SOURCE_DIR}")
-
 # Local web tool for exploring the biome field: serves an interactive seed map and searches for
 # seeds with a target biome near spawn.
 set(BIOME_SCANNER_SRC

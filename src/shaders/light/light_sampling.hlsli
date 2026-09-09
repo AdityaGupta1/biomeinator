@@ -142,8 +142,11 @@ bool traceToLight(const float3 surfPos_WS,
                       (1.f - lightBary2.x - lightBary2.y) * unpackUintToFloat2(v2.packedUv);
 
     const float coneWidth = getRayConeWidthAtDistance(rayCone, lightDistance);
-    // Untinted because this ctx is only used for emission, which is never tinted
-    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
+    // Untinted because this ctx is only used for emission, which the biome map never tints. The
+    // procedural ramp does reach emission, and has to be evaluated at the sampled point exactly as a
+    // BSDF hit there would, or NEE and BSDF sampling disagree about this light's color.
+    TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
+    texCtx.proceduralColor = getProceduralColor(lightPerTriData.flags, pointOnLight_WS);
     Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption;
     return true;
 }

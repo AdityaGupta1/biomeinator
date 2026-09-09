@@ -34,6 +34,25 @@ The non-obvious culling rules in `shouldGenerateFace`:
 - **TRANSPARENT_CUTOUT** between two cutout blocks: only the one at the lower/equal position generates the face. This prevents double-rendering the shared boundary (both quads would be coplanar and z-fight).
 - **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it). Exception: `LIQUID_TOP` blocks always generate the +Y (top) face regardless of neighbor, so the water surface is always visible.
 
+## GLASS blocks
+
+`BlockType::GLASS` is a fully opaque-alpha cube that the path tracer shades as glass (see
+[shaders → materials.md](../shaders/materials.md)). It is its own `BlockType` purely for the
+culling rules: a face between two glass blocks would be a refraction interface *inside* what should
+read as one solid crystal, and glass buried in rock is never seen, so both are culled — a crystal
+formation meshes as a hollow shell. Solid neighbors are unaffected and still generate their face
+towards glass, so rock and emitters behind a crystal stay visible through it.
+
+Glass is opaque to the acceleration structure: its texels have alpha 1, so it needs no OMM or
+anyhit handling, and shadow rays are blocked by it as they are by any rough transmissive surface.
+
+## Procedural color
+
+A block JSON's `proceduralColor` flag multiplies emission by a world-space ramp
+while leaving diffuse and transmission texture colors unchanged, by setting `TRIANGLE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
+uses it). The ramp itself lives in the shaders — see
+[shaders → materials.md](../shaders/materials.md).
+
 ## BlockShape
 
 `DECORATOR_CUSTOM` is an authored mesh that never hides adjacent solid/cutout cube
@@ -57,3 +76,8 @@ atlas named by the block, not glTF materials; see [custom_models.md](custom_mode
 Emission on ray hits does not require `emitsLight`: the glowshroom model deliberately
 uses an emissive cap mask with `emitsLight = false`, excluding its tiny triangles
 from explicit area-light sampling. Both mushroom models disable diffuse transmission.
+
+Cracked basalt crystal ore temporarily replaces 1% of generated cracked basalt, using
+a world-seed/position hash independent of other generation RNG streams. It registers
+as an area light; the texture aux-R mask limits emission to the user-authored ore pixels.
+Imported worlds keep their saved blocks and do not reroll ore.

@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <glm/gtc/constants.hpp>
 
 using namespace glm;
 using namespace StructureHelpers;
@@ -106,6 +107,164 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
             }
         }
     }
+}
+
+// The mound at the anchor: a stack of discs tapering to a peak
+inline constexpr int crystalMoundMinHeight = 3;
+inline constexpr int crystalMoundMaxHeight = 6;
+inline constexpr float crystalMoundMinBaseRadius = 2.5f;
+inline constexpr float crystalMoundMaxBaseRadius = 4.f;
+inline constexpr float crystalMoundWobbleStrength = 0.4f;
+inline constexpr float crystalMoundWobbleFrequency = 0.3f;
+// Second wobble octave: broad lumps alone read as a smooth blob, so a finer one roughens the
+// silhouette at block scale
+inline constexpr float crystalMoundWobbleDetailFrequency = 2.7f;
+inline constexpr float crystalMoundWobbleDetailStrength = 0.5f;
+// How far the base ring reaches down for local ground, so a mound on uneven floor isn't undercut
+inline constexpr int crystalMoundMaxRootDepth = 3;
+// Air blocks left between the peak and the far side of the pocket
+inline constexpr int crystalMoundTipGap = 2;
+
+// The knees: short WHITE_CRYSTAL columns standing straight off the surface around the mound
+inline constexpr int crystalKneeMinCount = 12;
+inline constexpr int crystalKneeMaxCount = 20;
+inline constexpr float crystalKneeMinDist = 2.f;
+inline constexpr float crystalKneeMaxDist = 9.f;
+inline constexpr int crystalKneeMinHeight = 2;
+inline constexpr int crystalKneeMaxHeight = 4;
+inline constexpr int crystalKneeSurfaceSearchDist = 6;
+// Widest a cluster reaches in XZ: the outermost knee, the mound being far narrower
+inline constexpr int crystalClusterMaxReachXZ = 10;
+
+// Natural cave rock a knee may stand on. The scan that finds it also sees blocks written by
+// structures filled earlier and by this fill's own mound, so the accepted set is a whitelist rather
+// than "anything solid" (see knowledge/terrain/structure_system.md).
+static bool isCrystalKneeGroundBlock(Block block)
+{
+    return block == Block::BASALT || block == Block::CRACKED_BASALT || block == Block::STONE;
+}
+
+// Discs from the anchor to the peak, each narrower than the last, with the base ring rooted to
+// local ground.
+static void placeCrystalMound(std::vector<Block>& blocks,
+                              ivec3 anchorPos_CS,
+                              ivec2 chunkPosXZ_WS,
+                              int height,
+                              float baseRadius,
+                              int yGrowDir)
+{
+    const uint worldSeed = SettingsManager::getWorldSeed();
+    const DiscWobble wobble{
+        .strength = crystalMoundWobbleStrength,
+        .frequency = crystalMoundWobbleFrequency,
+        .seed = worldSeed ^ hash(1902384571u),
+        .detailStrength = crystalMoundWobbleDetailStrength,
+        .detailFrequencyMultiplier = crystalMoundWobbleDetailFrequency,
+        .detailSeed = worldSeed ^ hash(3310277119u),
+    };
+
+    for (int layer = 0; layer < height; ++layer)
+    {
+        const float layerRadius = baseRadius * (1.f - static_cast<float>(layer) / height);
+        const ivec3 layerCenterPos_CS(anchorPos_CS.x, anchorPos_CS.y + yGrowDir * layer, anchorPos_CS.z);
+        placeWobbledDisc(blocks, layerCenterPos_CS, chunkPosXZ_WS, layerRadius, wobble, Block::CRYSTAL_CORE,
+                         -yGrowDir /*rootStepY*/, (layer == 0) ? crystalMoundMaxRootDepth : 0);
+    }
+}
+
+// Finds the surface a knee stands on by scanning this column back along the grow direction from a
+// little past the anchor, as cypress knees do. Draws no RNG (see the stream invariant in
+// knowledge/terrain/structure_system.md).
+static bool findCrystalKneeSurfaceY(
+    const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int yGrowDir, int& outSurfaceY)
+{
+    for (int i = -2; i <= crystalKneeSurfaceSearchDist; ++i)
+    {
+        const int y = anchorY - yGrowDir * i;
+        if (y < 0 || y >= static_cast<int>(chunkSizeY))
+        {
+            continue;
+        }
+
+        const Block block = columnBlockAt(blocks, colPosXZ_CS, y);
+        if (block == Block::AIR)
+        {
+            continue;
+        }
+        if (!isCrystalKneeGroundBlock(block))
+        {
+            return false;
+        }
+
+        outSurfaceY = y;
+        return true;
+    }
+    return false;
+}
+
+// A small mountain of bare CRYSTAL_CORE on a cave floor or ceiling, ringed by short WHITE_CRYSTAL
+// columns standing on the surface around it the way cypress knees ring a trunk. Keeping the emitter
+// and the glass apart is what makes a cluster interesting to light: the mound lights the cave
+// directly, and whichever knees stand in its path scatter and tint it.
+//
+// yGrowDir is +1 for a cluster on a floor and -1 for one hanging from a ceiling; the two are exact
+// mirrors, so the whole shape is written in terms of it.
+static void fillCrystalCluster(
+    const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, int yGrowDir)
+{
+    RandomNumberGenerator rng = initStructureRng(structure, 1174509823);
+
+    // The gen's minLayerHeight is what keeps this range non-empty
+    const int maxHeight = std::min(structure.availableHeight - crystalMoundTipGap, crystalMoundMaxHeight);
+    const int height = rng.nextInt(crystalMoundMinHeight, std::max(maxHeight, crystalMoundMinHeight) + 1);
+    const float baseRadius = rng.nextFloat(crystalMoundMinBaseRadius, crystalMoundMaxBaseRadius);
+    const ivec2 chunkPosXZ_WS =
+        ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
+    placeCrystalMound(blocks, structurePos_CS, chunkPosXZ_WS, height, baseRadius, yGrowDir);
+
+    const int numKnees = rng.nextInt(crystalKneeMinCount, crystalKneeMaxCount + 1);
+    for (int i = 0; i < numKnees; ++i)
+    {
+        // Every knee's parameters are drawn before its surface scan and its chunk-bounds check, so
+        // each chunk this cluster overlaps consumes the same RNG stream
+        const float angle = rng.nextFloat(glm::two_pi<float>());
+        const float dist = rng.nextFloat(crystalKneeMinDist, crystalKneeMaxDist);
+        const int kneeHeight = rng.nextInt(crystalKneeMinHeight, crystalKneeMaxHeight + 1);
+
+        const vec2 outwardXZ(glm::cos(angle), glm::sin(angle));
+        const ivec2 kneePosXZ_CS =
+            ivec2(structurePos_CS.x, structurePos_CS.z) + ivec2(glm::round(outwardXZ * dist));
+        if (!Chunk::isInChunkXZ(kneePosXZ_CS))
+        {
+            continue;
+        }
+
+        int surfaceY;
+        if (!findCrystalKneeSurfaceY(blocks, kneePosXZ_CS, structurePos_CS.y, yGrowDir, surfaceY))
+        {
+            continue;
+        }
+
+        for (int i = 1; i <= kneeHeight; ++i)
+        {
+            const int y = surfaceY + yGrowDir * i;
+            if (y < 0 || y >= static_cast<int>(chunkSizeY))
+            {
+                break;
+            }
+            tryPlaceStructureBlock(blocks, columnBlockIdx(kneePosXZ_CS, y), Block::WHITE_CRYSTAL);
+        }
+    }
+}
+
+fillCaveStructureBlocksHeader(CRYSTAL_CLUSTER)
+{
+    fillCrystalCluster(structure, structurePos_CS, blocks, 1);
+}
+
+fillCaveStructureBlocksHeader(CRYSTAL_CLUSTER_HANGING)
+{
+    fillCrystalCluster(structure, structurePos_CS, blocks, -1);
 }
 
 inline constexpr int lampClusterMaxRadius = 4;
@@ -381,6 +540,12 @@ void init()
 
     SET_FILL_CAVE_STRUCTURE_FUNC(STONE_COLUMN);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
+
+    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_CLUSTER);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_CLUSTER) = crystalClusterMaxReachXZ;
+
+    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_CLUSTER_HANGING);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_CLUSTER_HANGING) = crystalClusterMaxReachXZ;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(MOSS_PINK_CLUSTER);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(MOSS_PINK_CLUSTER) = mossPinkClusterMaxRadius;

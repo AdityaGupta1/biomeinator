@@ -1,0 +1,5 @@
+{
+    "textures": "crystal_core",
+    "emitsLight": true,
+    "proceduralColor": true
+}

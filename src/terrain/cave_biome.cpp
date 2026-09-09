@@ -63,6 +63,25 @@ void init()
         data.decorator.addEntry(Block::GLOWSHROOM_YELLOW, 1.f);
         data.decorator.addEntry(Block::AIR, 32.f);
     }
+
+    // CRYSTALS: cool and dry, mirroring LUSH through the origin
+    {
+        CaveBiomeData& data = CAVE_BIOME_DATA_BY_NAME(CRYSTALS);
+        data.biomeNoise = {
+            .temperature = -0.3f,
+            .humidity = -0.3f,
+        };
+        data.baseBlock = Block::BASALT;
+        data.flatSurfaceBlock = Block::CRACKED_BASALT;
+        data.secondaryBaseBlock = Block::STONE;
+        data.scatterLamps = false;
+        data.caveStructureGens = {
+            { .type = CaveStructureType::CRYSTAL_CLUSTER, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
+            { .type = CaveStructureType::CRYSTAL_CLUSTER_HANGING, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
+        };
+        data.decorator.addEntry(Block::CRYSTAL_SHARD, 1.f);
+        data.decorator.addEntry(Block::AIR, 25.f);
+    }
 }
 
 const CaveBiomeData& getCaveBiomeData(CaveBiome caveBiome)
