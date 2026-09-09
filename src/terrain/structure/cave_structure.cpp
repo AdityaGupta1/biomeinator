@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <glm/gtc/constants.hpp>
 
 using namespace glm;
 using namespace StructureHelpers;
@@ -108,105 +109,195 @@ fillCaveStructureBlocksHeader(STONE_COLUMN)
     }
 }
 
-inline constexpr ivec2 cardinalDirsXZ[4] = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } };
+// The mound at the anchor: a stack of discs tapering to a peak
+inline constexpr int crystalMoundMinHeight = 3;
+inline constexpr int crystalMoundMaxHeight = 6;
+inline constexpr float crystalMoundMinBaseRadius = 2.5f;
+inline constexpr float crystalMoundMaxBaseRadius = 4.f;
+inline constexpr float crystalMoundWobbleStrength = 0.4f;
+inline constexpr float crystalMoundWobbleFrequency = 0.3f;
+// Second wobble octave: broad lumps alone read as a smooth blob, so a finer one roughens the
+// silhouette at block scale
+inline constexpr float crystalMoundWobbleDetailFrequency = 2.7f;
+inline constexpr float crystalMoundWobbleDetailStrength = 0.5f;
+// How far the base ring reaches down for local ground, so a mound on uneven floor isn't undercut
+inline constexpr int crystalMoundMaxRootDepth = 3;
+// Air blocks left between the peak and the far side of the pocket
+inline constexpr int crystalMoundTipGap = 2;
 
-// Shell colors; the core is the same white emitter whichever one a crystal rolls
-inline constexpr Block crystalShellBlocks[3] = { Block::CRYSTAL_BLUE, Block::CRYSTAL_GREEN, Block::CRYSTAL_MAGENTA };
+// The knees: short WHITE_CRYSTAL columns standing straight off the surface around the mound
+inline constexpr int crystalKneeMinCount = 12;
+inline constexpr int crystalKneeMaxCount = 20;
+inline constexpr float crystalKneeMinDist = 2.f;
+inline constexpr float crystalKneeMaxDist = 9.f;
+inline constexpr int crystalKneeMinHeight = 2;
+inline constexpr int crystalKneeMaxHeight = 4;
+inline constexpr int crystalKneeSurfaceSearchDist = 6;
+// Widest a cluster reaches in XZ: the outermost knee, the mound being far narrower
+inline constexpr int crystalClusterMaxReachXZ = 10;
 
-inline constexpr int crystalPillarWideExtent = 2;
-inline constexpr float crystalPillarWideChance = 0.3f;
-inline constexpr int crystalPillarMinHeight = 4;
-inline constexpr int crystalPillarMaxHeight = 12;
-// Air blocks left between the prism's tip and the far side of its pocket
-inline constexpr int crystalPillarTipGap = 2;
-// How far past the anchor the outer columns may reach for their own surface
-inline constexpr int crystalPillarMaxSideOvershoot = 2;
-inline constexpr float crystalPillarSliceChance = 0.4f;
-
-// A prism of crystal glass, one color per crystal, with a CRYSTAL_CORE prism inside it kept a block
-// clear of every face of the shell so the emitter is only ever seen through glass. The cross-section
-// is a 3x3 block or, less often, a 5x5 with its corners cut; the core is the centre column or the
-// middle plus shape respectively. The free end is cut at 45 degrees along a cardinal direction and the core follows
-// the same cut one block down, so a sliced crystal stays sealed. The shell continues past the
-// anchor until it meets whatever surface each of its own columns has, so the prism sits flush on
-// uneven ground instead of hovering over the dips around the anchor; that overshoot is capped so
-// it can't chase a hole away from the surface.
-//
-// yGrowDir is +1 for a crystal standing on a floor and -1 for one hanging from a ceiling; the two
-// are exact mirrors, so the whole shape is written in terms of it.
-static void fillCrystalPillar(const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, int yGrowDir)
+static bool isCrystalBlock(Block block)
 {
-    RandomNumberGenerator rng = initStructureRng(structure, 1174509823);
-    const bool isWide = rng.chance(crystalPillarWideChance);
-    const int extent = isWide ? crystalPillarWideExtent : 1;
-    const bool isSliced = rng.chance(crystalPillarSliceChance);
-    const ivec2 sliceDir = cardinalDirsXZ[rng.nextInt(static_cast<int>(std::size(cardinalDirsXZ)))];
-    // The gen's minLayerHeight is what keeps this range non-empty
-    const int maxHeight = std::min(structure.availableHeight - crystalPillarTipGap, crystalPillarMaxHeight);
-    const int height = rng.nextInt(crystalPillarMinHeight, std::max(maxHeight, crystalPillarMinHeight) + 1);
-    const Block shellBlock = crystalShellBlocks[rng.nextInt(static_cast<int>(std::size(crystalShellBlocks)))];
+    return block == Block::CRYSTAL_CORE || block == Block::WHITE_CRYSTAL;
+}
 
-    for (int dz = -extent; dz <= extent; ++dz)
+// Discs from the anchor to the peak, each narrower than the last, with the base ring rooted down to
+// local ground. The radius wobble is world-position noise rather than a draw from the structure
+// RNG, so a chunk can skip the columns it doesn't own without desynchronising anything (the cypress
+// buttress wobbles the same way).
+static void placeCrystalMound(std::vector<Block>& blocks,
+                              ivec3 anchorPos_CS,
+                              ivec2 chunkPosXZ_WS,
+                              int height,
+                              float baseRadius,
+                              int yGrowDir)
+{
+    const uint worldSeed = SettingsManager::getWorldSeed();
+
+    for (int layer = 0; layer < height; ++layer)
     {
-        for (int dx = -extent; dx <= extent; ++dx)
+        const float layerRadius = baseRadius * (1.f - static_cast<float>(layer) / height);
+        const int radiusCeil = static_cast<int>(glm::ceil(layerRadius * (1.f + crystalMoundWobbleStrength)));
+        const int layerY = anchorPos_CS.y + yGrowDir * layer;
+
+        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
         {
-            const ivec2 offsetXZ(dx, dz);
-            const ivec2 absOffsetXZ = glm::abs(offsetXZ);
-            const int diamondDist = absOffsetXZ.x + absOffsetXZ.y;
-            if (isWide && diamondDist > 2 * extent - 1) // corners of the 5x5
+            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
             {
-                continue;
-            }
-
-            const ivec2 colPosXZ_CS(structurePos_CS.x + dx, structurePos_CS.z + dz);
-            if (!Chunk::isInChunkXZ(colPosXZ_CS))
-            {
-                continue;
-            }
-
-            // 45 degrees is one block of length lost per block travelled along the slice
-            // direction, offset so the side the cut rises towards keeps the full height
-            const int slice = isSliced ? (offsetXZ.x * sliceDir.x + offsetXZ.y * sliceDir.y + extent) : 0;
-            const int maxY = static_cast<int>(chunkSizeY) - 1;
-            const int tipY = std::clamp(structurePos_CS.y + yGrowDir * (height - 1 - slice), 0, maxY);
-            const int rootY = std::clamp(structurePos_CS.y - yGrowDir * crystalPillarMaxSideOvershoot, 0, maxY);
-            const bool isCoreColumn = isWide ? (diamondDist <= 1) : (diamondDist == 0);
-
-            // Tip first, so the column can be clipped at the free end but stops as soon as it
-            // reaches the surface it grows from
-            bool placedAny = false;
-            for (int i = 0; i <= glm::abs(tipY - rootY); ++i)
-            {
-                const int y = tipY - i * yGrowDir;
-                const uint32_t blockIdx = columnBlockIdx(colPosXZ_CS, y);
-                if (blocks[blockIdx] != Block::AIR)
+                const ivec3 pos_CS(anchorPos_CS.x + dx, layerY, anchorPos_CS.z + dz);
+                if (!Chunk::isInChunk(pos_CS))
                 {
-                    // Rock beyond the prism's tip just clips it, but rock past the part already
-                    // written is the surface it meets
-                    if (placedAny)
-                    {
-                        break;
-                    }
                     continue;
                 }
 
-                const bool isCore =
-                    isCoreColumn && (y - structurePos_CS.y) * yGrowDir >= 0 && y != tipY;
-                blocks[blockIdx] = isCore ? Block::CRYSTAL_CORE : shellBlock;
-                placedAny = true;
+                const vec3 pos_WS(chunkPosXZ_WS.x + pos_CS.x, pos_CS.y, chunkPosXZ_WS.y /*z*/ + pos_CS.z);
+                const float wobble =
+                    (valueNoise3(pos_WS * crystalMoundWobbleFrequency, worldSeed ^ hash(1902384571u)) +
+                     crystalMoundWobbleDetailStrength *
+                         valueNoise3(pos_WS * (crystalMoundWobbleFrequency * crystalMoundWobbleDetailFrequency),
+                                     worldSeed ^ hash(3310277119u))) /
+                    (1.f + crystalMoundWobbleDetailStrength);
+                const float radius = layerRadius * (1.f + crystalMoundWobbleStrength * wobble);
+                if (dx * dx + dz * dz >= radius * radius)
+                {
+                    continue;
+                }
+
+                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::CRYSTAL_CORE);
+
+                if (layer > 0)
+                {
+                    continue;
+                }
+                for (int depth = 1; depth <= crystalMoundMaxRootDepth; ++depth)
+                {
+                    const ivec3 rootPos_CS(pos_CS.x, layerY - yGrowDir * depth, pos_CS.z);
+                    if (!Chunk::isInChunk(rootPos_CS) ||
+                        blocks[Chunk::blockPosToIdx(uvec3(rootPos_CS))] != Block::AIR)
+                    {
+                        break;
+                    }
+                    blocks[Chunk::blockPosToIdx(uvec3(rootPos_CS))] = Block::CRYSTAL_CORE;
+                }
             }
         }
     }
 }
 
-fillCaveStructureBlocksHeader(CRYSTAL_PILLAR)
+// Finds the surface a knee stands on by scanning this column back along the grow direction from a
+// little past the anchor, as cypress knees do. Crystal blocks are rejected so knees ring the mound
+// instead of climbing it. Draws no RNG (see the stream invariant in
+// knowledge/terrain/structure_system.md).
+static bool findCrystalKneeSurfaceY(
+    const std::vector<Block>& blocks, ivec2 colPosXZ_CS, int anchorY, int yGrowDir, int& outSurfaceY)
 {
-    fillCrystalPillar(structure, structurePos_CS, blocks, 1);
+    for (int i = -2; i <= crystalKneeSurfaceSearchDist; ++i)
+    {
+        const int y = anchorY - yGrowDir * i;
+        if (y < 0 || y >= static_cast<int>(chunkSizeY))
+        {
+            continue;
+        }
+
+        const Block block = columnBlockAt(blocks, colPosXZ_CS, y);
+        if (block == Block::AIR)
+        {
+            continue;
+        }
+        if (isCrystalBlock(block))
+        {
+            return false;
+        }
+
+        outSurfaceY = y;
+        return true;
+    }
+    return false;
 }
 
-fillCaveStructureBlocksHeader(CRYSTAL_PILLAR_HANGING)
+// A small mountain of bare CRYSTAL_CORE on a cave floor or ceiling, ringed by short WHITE_CRYSTAL
+// columns standing on the surface around it the way cypress knees ring a trunk. Keeping the emitter
+// and the glass apart is what makes a cluster interesting to light: the mound lights the cave
+// directly, and whichever knees stand in its path scatter and tint it.
+//
+// yGrowDir is +1 for a cluster on a floor and -1 for one hanging from a ceiling; the two are exact
+// mirrors, so the whole shape is written in terms of it.
+static void fillCrystalCluster(
+    const CaveStructure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, int yGrowDir)
 {
-    fillCrystalPillar(structure, structurePos_CS, blocks, -1);
+    RandomNumberGenerator rng = initStructureRng(structure, 1174509823);
+
+    // The gen's minLayerHeight is what keeps this range non-empty
+    const int maxHeight = std::min(structure.availableHeight - crystalMoundTipGap, crystalMoundMaxHeight);
+    const int height = rng.nextInt(crystalMoundMinHeight, std::max(maxHeight, crystalMoundMinHeight) + 1);
+    const float baseRadius = rng.nextFloat(crystalMoundMinBaseRadius, crystalMoundMaxBaseRadius);
+    const ivec2 chunkPosXZ_WS =
+        ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
+    placeCrystalMound(blocks, structurePos_CS, chunkPosXZ_WS, height, baseRadius, yGrowDir);
+
+    const int numKnees = rng.nextInt(crystalKneeMinCount, crystalKneeMaxCount + 1);
+    for (int i = 0; i < numKnees; ++i)
+    {
+        // Every knee's parameters are drawn before its surface scan and its chunk-bounds check, so
+        // each chunk this cluster overlaps consumes the same RNG stream
+        const float angle = rng.nextFloat(glm::two_pi<float>());
+        const float dist = rng.nextFloat(crystalKneeMinDist, crystalKneeMaxDist);
+        const int kneeHeight = rng.nextInt(crystalKneeMinHeight, crystalKneeMaxHeight + 1);
+
+        const vec2 outwardXZ(glm::cos(angle), glm::sin(angle));
+        const ivec2 kneePosXZ_CS =
+            ivec2(structurePos_CS.x, structurePos_CS.z) + ivec2(glm::round(outwardXZ * dist));
+        if (!Chunk::isInChunkXZ(kneePosXZ_CS))
+        {
+            continue;
+        }
+
+        int surfaceY;
+        if (!findCrystalKneeSurfaceY(blocks, kneePosXZ_CS, structurePos_CS.y, yGrowDir, surfaceY))
+        {
+            continue;
+        }
+
+        for (int block = 1; block <= kneeHeight; ++block)
+        {
+            const int y = surfaceY + yGrowDir * block;
+            if (y < 0 || y >= static_cast<int>(chunkSizeY))
+            {
+                break;
+            }
+            tryPlaceStructureBlock(blocks, columnBlockIdx(kneePosXZ_CS, y), Block::WHITE_CRYSTAL);
+        }
+    }
+}
+
+fillCaveStructureBlocksHeader(CRYSTAL_CLUSTER)
+{
+    fillCrystalCluster(structure, structurePos_CS, blocks, 1);
+}
+
+fillCaveStructureBlocksHeader(CRYSTAL_CLUSTER_HANGING)
+{
+    fillCrystalCluster(structure, structurePos_CS, blocks, -1);
 }
 
 inline constexpr int lampClusterMaxRadius = 4;
@@ -483,11 +574,11 @@ void init()
     SET_FILL_CAVE_STRUCTURE_FUNC(STONE_COLUMN);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(STONE_COLUMN) = 1;
 
-    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_PILLAR);
-    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_PILLAR) = crystalPillarWideExtent;
+    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_CLUSTER);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_CLUSTER) = crystalClusterMaxReachXZ;
 
-    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_PILLAR_HANGING);
-    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_PILLAR_HANGING) = crystalPillarWideExtent;
+    SET_FILL_CAVE_STRUCTURE_FUNC(CRYSTAL_CLUSTER_HANGING);
+    CAVE_STRUCTURE_BOUNDS_BY_NAME(CRYSTAL_CLUSTER_HANGING) = crystalClusterMaxReachXZ;
 
     SET_FILL_CAVE_STRUCTURE_FUNC(MOSS_PINK_CLUSTER);
     CAVE_STRUCTURE_BOUNDS_BY_NAME(MOSS_PINK_CLUSTER) = mossPinkClusterMaxRadius;

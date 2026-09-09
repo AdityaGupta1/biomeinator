@@ -617,8 +617,8 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
         {
             // A face between two glass blocks would be a refraction interface inside what should
             // read as one solid crystal, and glass buried in rock is never seen. Solid neighbors
-            // still generate their own face towards the glass (the SOLID case above), so an
-            // emissive block sheathed in crystal stays visible.
+            // still generate their own face towards the glass (the SOLID case above), so whatever
+            // stands behind it stays visible through it.
             return neighborBlockData.type != BlockType::GLASS && neighborBlockData.type != BlockType::SOLID;
         }
     }

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-08_
 
 # Block System
 
@@ -39,8 +39,7 @@ The non-obvious culling rules in `shouldGenerateFace`:
 culling rules: a face between two glass blocks would be a refraction interface *inside* what should
 read as one solid crystal, and glass buried in rock is never seen, so both are culled — a crystal
 formation meshes as a hollow shell. Solid neighbors are unaffected and still generate their face
-towards glass, which is what lets an emissive block sheathed in crystal (CRYSTAL_CORE inside
-CRYSTAL_BLUE) stay visible through it.
+towards glass, so rock and emitters behind a crystal stay visible through it.
 
 Glass is opaque to the acceleration structure: its texels have alpha 1, so it needs no OMM or
 anyhit handling, and shadow rays are blocked by it as they are by any rough transmissive surface.

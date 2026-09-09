@@ -76,8 +76,8 @@ void init()
         data.secondaryBaseBlock = Block::STONE;
         data.scatterLamps = false;
         data.caveStructureGens = {
-            { .type = CaveStructureType::CRYSTAL_PILLAR, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 4, .chance = 0.7f },
-            { .type = CaveStructureType::CRYSTAL_PILLAR_HANGING, .generatesFromCeiling = true, .minLayerHeight = 7, .gridCellSideLength = 16, .gridCellPadding = 4, .chance = 0.7f },
+            { .type = CaveStructureType::CRYSTAL_CLUSTER, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
+            { .type = CaveStructureType::CRYSTAL_CLUSTER_HANGING, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
         };
     }
 }

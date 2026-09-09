@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-08_
 
 # Cave Structure System
 
@@ -127,21 +127,27 @@ bottom layer index in gives each pocket an independent grid.
   doesn't generate. Within a biome's gen list, order is priority for a *shared
   candidate column* only — different gens roll different candidate columns per cell,
   so a cell can host one of each.
-- **`CRYSTAL_PILLAR` and `CRYSTAL_PILLAR_HANGING` are one fill written in terms of a grow
-  direction**, since a hanging crystal is the exact mirror of a standing one. They are separate
+- **`CRYSTAL_CLUSTER` and `CRYSTAL_CLUSTER_HANGING` are one fill written in terms of a grow
+  direction**, since a hanging cluster is the exact mirror of a standing one. They are separate
   types only because the fill has no other way to know which side of the pocket it was anchored to,
   and separate types also give them independent placement grids, so a pocket can host both.
-- **`CRYSTAL_PILLAR` writes each column from the tip inwards**, rather than using `tryPlaceStructureBlock` per
-  cell: rock beyond the prism's tip just clips it, but rock past whatever the column has already
-  written is the surface it rests on, so the column stops there. Its glass shell continues past the
-  anchor so the prism meets the surface of each of its own columns, and a plain AIR-only test would
-  let the shell skip past a ledge and resume in an air pocket beyond it. Its height is rolled
-  per structure and capped at `availableHeight - 2`, so the gen's `minLayerHeight` is what keeps
-  that range non-empty.
-- **The crystal's emitter must stay sheathed.** The CRYSTAL_CORE prism is the same hexagon one
-  block in from the shell on every side and one block lower, including under a sliced top, so no core
-  face is ever exposed to air — an exposed one would light the cave directly instead of through the
-  glass. Changing the cross-section or the slice must preserve that block of shell.
+- **A cluster's emitter and its glass are deliberately separate.** The CRYSTAL_CORE spikes are bare
+  rather than sheathed, so their light reaches the cave directly and only picks up colour and
+  scattering from whichever WHITE_CRYSTAL knees happen to stand in its path. An earlier version
+  sealed the core inside glass, which left it lit by BSDF-sampled refraction alone (see
+  [shaders → materials.md](../shaders/materials.md)) — dark and noisy, and the sealed prisms read as
+  too geometric.
+- **Knees seat themselves by scanning their own column**, the way cypress knees do
+  ([structure_system.md](structure_system.md)), which is why every knee's parameters are drawn
+  *before* its surface scan and its chunk-bounds check: a chunk fills only its own columns, so any
+  draw skipped inside those branches would desynchronise the RNG stream between chunks. The scan
+  rejects crystal blocks so knees ring the clump rather than climbing the spikes it just wrote.
+- **A cluster's reach is what `CAVE_STRUCTURE_BOUNDS` must cover**, and it is not obvious from the
+  shape: a spike leaning at its steepest travels nearly its whole length horizontally. The bound is
+  a constant (`crystalClusterMaxReachXZ`) that has to be revisited whenever the spike length or the
+  lean limit changes. Reach must stay under `chunkSizeXZ` for the 3x3 gather to cover every chunk
+  the cluster touches; the tighter `chunkSizeXZ / 2` limit above applies only to fills that read the
+  neighbourhood air mask, which this one does not.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
   blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`
