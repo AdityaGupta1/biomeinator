@@ -117,6 +117,7 @@ static void parseBlockJson(const std::filesystem::path& jsonPath, BlockData& out
 
         outData.emitsLight = blockJson.value("emitsLight", false);
         outData.translucent = blockJson.value("translucent", false);
+        outData.proceduralColor = blockJson.value("proceduralColor", false);
     }
     catch (const std::exception& e)
     {

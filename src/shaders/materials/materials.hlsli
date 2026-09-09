@@ -39,6 +39,7 @@ struct TexSampleCtx
     float mipLevel;
     uint arraySliceIdx;
     float4 biomeTint; // rgb = biome map tint, a = 1 to apply it (see getBiomeTint)
+    float3 proceduralColor; // world-space ramp color, or 1 (see getProceduralColor)
 };
 
 // Ctx for samples that don't apply the biome tint; tinted hits build the ctx with getBiomeTint instead
@@ -49,6 +50,7 @@ TexSampleCtx makeUntintedTexSampleCtx(const float mipLevel, const uint arraySlic
     texCtx.mipLevel = mipLevel;
     texCtx.arraySliceIdx = arraySliceIdx;
     texCtx.biomeTint = float4(1.f, 1.f, 1.f, 0.f);
+    texCtx.proceduralColor = float3(1.f, 1.f, 1.f);
     return texCtx;
 }
 
@@ -88,6 +90,9 @@ float4 getMaterialBaseColor(const Material material, const float2 uv, const TexS
         // Tint-masked texels are authored grayscale; the biome tint provides the hue
         baseColor.rgb *= lerp(float3(1.f, 1.f, 1.f), texCtx.biomeTint.rgb, texCtx.biomeTint.a * aux.g);
     }
+    // Unmasked, unlike the biome tint: a procedural-color surface takes the ramp everywhere, which
+    // is what would tint a glass crystal's transmission
+    baseColor.rgb *= texCtx.proceduralColor;
     return baseColor;
 }
 
@@ -106,13 +111,13 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
             return float3(0.f, 0.f, 0.f);
         }
         const float3 emissiveColor = sampleTexture(material.hasArrayTexture(), material.baseColorTextureId, uv, texCtx).rgb;
-        return emissiveColor * auxStrength * material.emissiveStrength;
+        return emissiveColor * auxStrength * material.emissiveStrength * texCtx.proceduralColor;
     }
 
     const float3 emissiveColor = (material.auxTextureId == TEXTURE_ID_INVALID)
         ? material.emissiveColor
         : sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).rgb;
-    return emissiveColor * material.emissiveStrength;
+    return emissiveColor * material.emissiveStrength * texCtx.proceduralColor;
 }
 
 static const float glassIor = 1.55f; // quartz-ish

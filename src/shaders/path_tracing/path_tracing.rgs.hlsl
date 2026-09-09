@@ -146,7 +146,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
-            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
+            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
 
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS))
         {
@@ -417,7 +417,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const PerTriangleData secondHitPerTriData =
                             perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
                         const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
-                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS.xz);
+                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
                         if (surfMaterial.hasDiffuse())
                         {
                             secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;

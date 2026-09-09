@@ -58,6 +58,8 @@ struct BlockData
     BlockShape shape{ BlockShape::CUBE };
     bool emitsLight{ false };
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
+    // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
+    bool proceduralColor{ false };
 };
 
 namespace Blocks

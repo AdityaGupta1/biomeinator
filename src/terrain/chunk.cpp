@@ -773,6 +773,10 @@ void Chunk::createInstances()
                         {
                             faceData.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
                         }
+                        if (blockData.proceduralColor)
+                        {
+                            faceData.flags |= TRIANGLE_FLAG_PROCEDURAL_COLOR;
+                        }
                         faceData.texArraySliceIdx = texArraySliceIdx;
                         for (uint t = 0; t < 4; ++t)
                         {
@@ -843,6 +847,10 @@ void Chunk::createInstances()
                             if (blockData.type == BlockType::GLASS)
                             {
                                 faceData.flags |= TRIANGLE_FLAG_IS_GLASS;
+                            }
+                            if (blockData.proceduralColor)
+                            {
+                                faceData.flags |= TRIANGLE_FLAG_PROCEDURAL_COLOR;
                             }
                             faceData.texArraySliceIdx = texArraySliceIdx;
                             perTriDatas.emplace_back(faceData);

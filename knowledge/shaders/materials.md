@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-08_
 
 # Material Model and BSDFs
 
@@ -79,6 +79,30 @@ and specular albedo guides). It deliberately does *not* touch `acceptHitCandidat
 real bounce rather than a passthrough, so glass triangles occlude shadow rays like any opaque
 geometry. An emitter enclosed in glass is therefore lit into the world by BSDF-sampled refraction
 paths only — NEE towards it is always shadowed.
+
+## Procedural color
+
+`TRIANGLE_FLAG_PROCEDURAL_COLOR` replaces a surface's color with a world-space ramp
+(`common/procedural_color.hlsli`): hue sweeping green to magenta and back along the (1, 1, 1)
+diagonal, drifting with `animTime`. It multiplies both `getMaterialBaseColor` and
+`getMaterialEmissiveColor`, so it tints an emitter's light and a glass surface's transmission alike,
+and it is unmasked — unlike the biome tint, which only applies where the aux g channel says so.
+
+It is evaluated per shading point rather than baked per triangle at mesh time, which is what makes
+it smooth within a single block, lets it animate, and keeps it independent of the geometry, so a
+crystal model gets it on the same terms as a cube face.
+
+The invariant that makes this correct: **every path that shades a surface must evaluate the ramp at
+the same world position.** A BSDF hit evaluates it at the hit point (through
+`makeTintedTexSampleCtx`); NEE evaluates it at the sampled point on the light triangle
+(`traceToLight`, which otherwise builds an untinted ctx). If one of them skipped it, the two
+strategies would report different colors for the same emitter and MIS would blend them. Both add
+`globalInstanceOffset` so the ramp doesn't slide when the world origin shifts.
+
+The light tree's flux (`emitter_collect.cs.hlsl`) does not know about the ramp — it uses
+`colorTerm = 1` for packed-aux materials and never samples a texture. That costs a little sampling
+efficiency where the hue is dark (magenta carries less luminance than green at the same value) but
+introduces no bias, since flux is only an importance estimate.
 
 ## Verifying energy behaviour
 

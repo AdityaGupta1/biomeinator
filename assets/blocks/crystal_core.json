@@ -1,4 +1,5 @@
 {
     "textures": "crystal_core",
-    "emitsLight": true
+    "emitsLight": true,
+    "proceduralColor": true
 }

@@ -44,6 +44,13 @@ towards glass, so rock and emitters behind a crystal stay visible through it.
 Glass is opaque to the acceleration structure: its texels have alpha 1, so it needs no OMM or
 anyhit handling, and shadow rays are blocked by it as they are by any rough transmissive surface.
 
+## Procedural color
+
+A block JSON's `proceduralColor` flag makes its faces take their color from a world-space ramp
+instead of their texture, by setting `TRIANGLE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
+uses it). The ramp itself lives in the shaders — see
+[shaders → materials.md](../shaders/materials.md).
+
 ## BlockShape
 
 `X_SHAPED` blocks are rendered as two crossed diagonal quads (like Minecraft foliage). During mesh generation they also receive a random XZ jitter so adjacent grass blocks don't form a visible grid pattern.
