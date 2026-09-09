@@ -79,6 +79,8 @@ void init()
             { .type = CaveStructureType::CRYSTAL_CLUSTER, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
             { .type = CaveStructureType::CRYSTAL_CLUSTER_HANGING, .generatesFromCeiling = true, .minLayerHeight = 8, .gridCellSideLength = 24, .gridCellPadding = 6, .chance = 0.6f },
         };
+        data.decorator.addEntry(Block::CRYSTAL_SHARD, 1.f);
+        data.decorator.addEntry(Block::AIR, 25.f);
     }
 }
 

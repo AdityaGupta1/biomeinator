@@ -1,0 +1,6 @@
+{
+    "textures": "crystal_shard",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "proceduralColor": true
+}
