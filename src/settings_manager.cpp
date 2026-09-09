@@ -43,6 +43,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
     ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
+    ADD_OPTION("dlssPreset", "DLSS Ray Reconstruction preset (0=D, 1=F)", uint32_t, "1");
     ADD_OPTION("frameGeneration", "Enable DLSS frame generation", bool, "true");
     ADD_OPTION("doPathSplitting", "Enable path splitting", bool, "true");
     ADD_OPTION("useVsync", "Enable VSync", bool, "false");
@@ -132,6 +133,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("antialiasingMode", uint32_t);
     COPY_SETTING("maxAccumulatedFrames", uint32_t);
     COPY_SETTING("dlssMode", uint32_t);
+    COPY_SETTING("dlssPreset", uint32_t);
     COPY_SETTING("frameGeneration", bool);
     COPY_SETTING("doPathSplitting", bool);
     COPY_SETTING("useVsync", bool);
@@ -186,6 +188,12 @@ void parseArgs(const int argc, const char* const* argv)
     if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
     {
         std::cerr << "Invalid tonemapping option" << std::endl;
+        exit(1);
+    }
+
+    if (getAsUint("dlssPreset") >= 2)
+    {
+        std::cerr << "Invalid dlssPreset option" << std::endl;
         exit(1);
     }
 

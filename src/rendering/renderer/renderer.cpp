@@ -137,6 +137,11 @@ static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eUltraPerformance,
 };
 
+static const std::vector<sl::DLSSDPreset> dlssPresets = {
+    sl::DLSSDPreset::ePresetD,
+    sl::DLSSDPreset::ePresetF,
+};
+
 static void setFrameGenMode(sl::DLSSGMode mode)
 {
     renderState.frameGen.options.mode = mode;
@@ -179,11 +184,12 @@ void resize()
 
         renderState.dlss.renderExtent = { 0, 0, renderState.renderWidth, renderState.renderHeight };
 
-        renderState.dlss.options.dlaaPreset = sl::DLSSDPreset::ePresetD;
-        renderState.dlss.options.qualityPreset = sl::DLSSDPreset::ePresetD;
-        renderState.dlss.options.balancedPreset = sl::DLSSDPreset::ePresetD;
-        renderState.dlss.options.performancePreset = sl::DLSSDPreset::ePresetD;
-        renderState.dlss.options.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+        const sl::DLSSDPreset dlssPreset = dlssPresets[SettingsManager::getAsUint("dlssPreset")];
+        renderState.dlss.options.dlaaPreset = dlssPreset;
+        renderState.dlss.options.qualityPreset = dlssPreset;
+        renderState.dlss.options.balancedPreset = dlssPreset;
+        renderState.dlss.options.performancePreset = dlssPreset;
+        renderState.dlss.options.ultraPerformancePreset = dlssPreset;
         renderState.dlss.options.colorBuffersHDR = sl::Boolean::eTrue;
         renderState.dlss.options.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
         renderState.dlss.options.alphaUpscalingEnabled = sl::Boolean::eFalse;
