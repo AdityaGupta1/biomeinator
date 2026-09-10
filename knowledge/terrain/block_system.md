@@ -71,13 +71,14 @@ atlas named by the block, not glTF materials; see [custom_models.md](custom_mode
 
 ## Emissive
 
-`LAMP`, `LAVA`, and `LAVA_TOP` have `emitsLight = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Adding an emissive block means setting this flag *and* authoring its texels in the assets: emission color lives in the block's diffuse texture (with zero diffuse implied) and per-texel strength in the red channel of its `<name>.aux.png` companion in `assets/blocks/textures/` — see [scene → materials_textures.md](../scene/materials_textures.md).
+`LAMP`, `LAVA`, and `LAVA_TOP` have `markAsEmitter = true`. Their triangles are tracked separately during mesh generation and fed to the path tracer's area light system. Marking an emissive block for explicit light sampling means setting this flag *and* authoring its texels in the assets: emission color lives in the block's diffuse texture (with zero diffuse implied) and per-texel strength in the red channel of its `<name>.aux.png` companion in `assets/blocks/textures/` — see [scene → materials_textures.md](../scene/materials_textures.md).
 
-Emission on ray hits does not require `emitsLight`: the glowshroom model deliberately
-uses an emissive cap mask with `emitsLight = false`, excluding its tiny triangles
+Emission on ray hits does not require `markAsEmitter`: the glowshroom model deliberately
+uses an emissive cap mask with `markAsEmitter = false`, excluding its tiny triangles
 from explicit area-light sampling. Both mushroom models disable diffuse transmission.
 
 Cracked basalt crystal ore temporarily replaces 1% of generated cracked basalt, using
-a world-seed/position hash independent of other generation RNG streams. It registers
-as an area light; the texture aux-R mask limits emission to the user-authored ore pixels.
+a world-seed/position hash independent of other generation RNG streams. It remains
+emissive on ray hits but is not registered as an area light; the texture aux-R mask limits
+emission to the user-authored ore pixels.
 Imported worlds keep their saved blocks and do not reroll ore.

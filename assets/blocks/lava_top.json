@@ -1,5 +1,5 @@
 {
     "textures": "lava",
     "shape": "liquid_top",
-    "emitsLight": true
+    "markAsEmitter": true
 }

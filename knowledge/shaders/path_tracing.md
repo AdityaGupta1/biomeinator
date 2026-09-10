@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-09_
 
 # Path Tracing Shader
 
@@ -64,9 +64,17 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
 
 The loop also serves ReSTIR PT: every complete path is a candidate for the pixel's reservoir, and the same loop replays a stored path from its seed. RNG draws are per-vertex, per-purpose streams for that reason. See [restir → design.md](../restir/design.md).
 
-### ptDiffuseAlbedo Output
+### Albedo Guide Outputs
 
 Alongside `pathColor`, the shader computes `ptDiffuseAlbedo` — a denoiser input for first-bounce diffuse albedo. When the first bounce is specular with path splitting enabled, it looks through to the second hit's base color plus Reinhard-compressed emission, modulated by the first bounce's specular tint. It also implicitly captures volume absorption and other effects accumulated in `pathWeight` up to that point.
+
+A **rough glossy** first bounce takes a different route (`computeFirstBounceAlbedos`), because its lobe is picked stochastically per sample and the resulting path weight is pure noise as a guide: the two lobes are weighted analytically by the macro-normal Fresnel instead, and the shader writes the specular albedo target itself, overwriting what the G-buffer pass put there. Glass puts both of its lobes in the specular guide and leaves the diffuse guide black, since the diffuse guide has no lobe to represent refraction and demodulating it there would smear the refracted image; everything else splits diffuse from glossy reflection. Rough glass's real sampling weights its lobes per microfacet, so this is deliberately an approximation — a guide buffer only has to track the signal's magnitude. Notes:
+
+- The weight folded in is the path weight *before* scattering, so both guides carry the same absorption, fog transmittance and alpha-split weight as the radiance they demodulate.
+- Only `pathSplitIdx == 0` can reach a rough material — `trySplitMaterial` breaks split 1 out of anything it can't split, and the alpha split leaves split 1 a delta passthrough — so the single write to the shared specular albedo target has no second writer to race with.
+- Non-glossy materials keep the path weight as their guide: it is already noise-free for a lone diffuse lobe, and it is what carries the diffuse-transmission and passthrough cases.
+- The DLSS-RR integration guide names this case: §3.5 says a noisy guide confuses RR into grainy or ghosting output and that, where the noise can't be avoided *"such as with ray traced glossy refraction"*, constant values for the refracting surface's albedo, normal and roughness let RR converge to a smooth result. §3.4.1 leaves the blend formula to the application but requires that it not be noisy. It gives no rule for where refraction belongs — §3.4.2 defines specular albedo as reflectivity — but the diffuse guide is the worse home for it, since a sharp view-dependent refracted image demodulated as diffuse is what invites RR to reconstruct background detail through the glass.
+- `calculateDlssSpecularAlbedo` expects an F0 specular color (it ramps Fresnel over view angle internally), while `glossyReflectionTint` is a Cycles-style lobe tint whose dielectric Fresnel is applied outside the lobe. Multiplying the fit by the macro Fresnel is what reconciles the two conventions. **Roughness 0 still passes the tint unweighted** from the G-buffer pass, so the delta case reports a higher specular albedo than the guide's convention would.
 
 Emission stands in for albedo in this guide (a bright emitter must not read as a black surface), compressed with Reinhard so it stays in range. A surface can both emit and scatter, so the primary hit's emission is kept in a separate `ptEmissiveAlbedo` and summed (saturated) into the guide only after the loop: the specular look-through above scales and zeroes the scattered part, and must not touch the emission part. Pure emitters and pure scatterers get exactly one of the two terms, so this is a no-op for them; the `diffuse_albedo_modulation_*` and `diffuse_and_emission_diffuse_albedo` goldens pin all three cases.
 

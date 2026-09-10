@@ -592,7 +592,7 @@ bool trySplitMaterial(inout Material surfMaterial,
             {
                 // transparent
                 // TODO: use a special passthrough material type instead of co-opting specular transmission
-                surfMaterial.flags = MATERIAL_FLAG_GLOSSY_TRANSMISSION;
+                surfMaterial.flags = (surfMaterial.flags & ~MATERIAL_FLAGS_LOBES) | MATERIAL_FLAG_GLOSSY_TRANSMISSION;
                 surfMaterial.baseColor = float3(1.f, 1.f, 1.f);
                 surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
                 surfMaterial.glossyReflectionTint = float3(0.f, 0.f, 0.f);
@@ -618,14 +618,14 @@ bool trySplitMaterial(inout Material surfMaterial,
         if (pathSplitIdx == 0)
         {
             // diffuse and transmission lobes, and emission
-            surfMaterial.flags &= MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
+            surfMaterial.flags &= ~MATERIAL_FLAG_GLOSSY_REFLECTION;
             surfMaterial.glossyReflectionTint = float3(0, 0, 0);
             pathWeight *= (1.f - fresnelReflectance);
         }
         else
         {
             // glossy reflection lobes
-            surfMaterial.flags &= MATERIAL_FLAG_GLOSSY_REFLECTION;
+            surfMaterial.flags &= ~MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
             surfMaterial.baseColor = float3(0, 0, 0);
             surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
             surfMaterial.emissiveStrength = 0.f;

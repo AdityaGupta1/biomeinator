@@ -40,7 +40,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
-    // diffuse albedo is written in path_tracing.rgs.hlsl so it can be modulated by specular bounces
+    // diffuse albedo is written in path_tracing.rgs.hlsl so it can be modulated by specular bounces, which
+    // also overwrites the specular albedo below for a rough glossy first hit (see computeFirstBounceAlbedos)
 
     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {

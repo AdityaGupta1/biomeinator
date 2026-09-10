@@ -4,5 +4,5 @@
     "shape": "decorator_custom",
     "model": "brown_mushroom.glb",
     "translucent": false,
-    "emitsLight": false
+    "markAsEmitter": false
 }

@@ -114,7 +114,7 @@ bottom layer index in gives each pocket an independent grid.
   (`CaveBiomes::isCaveFloraGroundBlock`), so clusters follow the floor and never
   land on bare stone or clay. Per-column seeding as for vines.
 - **Vines never anchor to emissive blocks.** `isCaveVinesCeilingBlock` rejects
-  `emitsLight` cubes so a strand can't hang from a lamp's underside; combined with the
+  `markAsEmitter` cubes so a strand can't hang from a lamp's underside; combined with the
   type-major fill order this keeps lamps and vines from interleaving.
 - **A placement requires the candidate column to itself have a qualifying layer.**
   The grid picks one candidate XZ per (cell, type, layerIdx); the structure

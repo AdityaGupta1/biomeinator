@@ -24,7 +24,7 @@ Terrain textures are a `Texture2DArray` of 16×16 tiles (see [scene → material
 
 ## Emissive Triangle Tracking
 
-Faces from `emitsLight` blocks record their triangle indices into a separate list, which feeds `Instance::addAreaLights()`. The path tracer then importance-samples these triangles as area light sources.
+Faces from `markAsEmitter` blocks record their triangle indices into a separate list, which feeds `Instance::addAreaLights()`. The path tracer then importance-samples these triangles as area light sources.
 
 ## Why Separate From Segments
 

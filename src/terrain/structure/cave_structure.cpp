@@ -425,7 +425,7 @@ inline constexpr int caveVinesCeilingSearchDist = 6;
 // cluster's vine) and not a lamp.
 static bool isCaveVinesCeilingBlock(Block block)
 {
-    return isSolidCubeBlock(block) && !Blocks::getBlockData(block).emitsLight;
+    return isSolidCubeBlock(block) && !Blocks::getBlockData(block).markAsEmitter;
 }
 
 // Finds the topmost air block under this column's ceiling by searching from the anchor y.
