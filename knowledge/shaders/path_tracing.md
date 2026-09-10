@@ -6,6 +6,12 @@ _Last edited: 2026-09-09_
 
 This shader does NOT trace primary rays. It reads the G-buffer to get the primary hit, then traces secondary rays from there. See [render_passes.md](../rendering/render_passes.md) for the full pass sequence.
 
+SHaRC builds sparse-update and inline-query variants from this same shader. The update
+variant propagates local radiance through cache entries; the query variant terminates
+eligible secondary paths on a cache hit before NEE. The original variant remains the
+uncached reference. See [SHaRC](../rendering/sharc.md) for emission/MIS, throughput,
+query eligibility, coordinates, and debug-view conventions.
+
 ---
 
 ## Shared Code
@@ -57,6 +63,10 @@ Each iteration of the loop represents one bounce, up to `effectiveMaxPathDepth`:
    - **Area lights**: in MIS mode, one light is picked uniformly and a shadow ray is traced. In RTSL mode, the light tree picks a light instead. The MIS weight uses the solid-angle pdf of the chosen light.
 
    - **Dome light** (voxel mode only): a direction is sampled uniformly within the sun's spherical cap and a shadow ray is traced. If it misses all geometry, the dome light radiance (sun or sky gradient) is added. This is separate from area light sampling because the two can't produce each other's samples (dome light can't hit area lights and vice versa), so their MIS weights are independent.
+
+The shared ray cone scatters after BSDF sampling: diffuse/glossy spreads accumulate in
+quadrature, and transmission applies an approximate planar Snell transform. Its incoming
+width also gates SHaRC queries; see [SHaRC](../rendering/sharc.md).
 
 8. **Trace next ray** — `TraceRay` from the BSDF-sampled direction. Update material, ray cone width, segment absorption.
 

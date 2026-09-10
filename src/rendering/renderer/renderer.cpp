@@ -3,15 +3,15 @@
 
 #include "renderer_internal.h"
 
-#include "rendering/camera.h"
-#include "rendering/window_manager.h"
+#include "rendering/biome_map.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/camera.h"
 #include "rendering/common/common_enums.h"
 #include "rendering/common/common_settings.h"
-#include "rendering/biome_map.h"
 #include "rendering/sky_atmosphere.h"
 #include "rendering/water_displacer.h"
+#include "rendering/window_manager.h"
 #include "scene/gltf_loader.h"
 #include "scene/scene.h"
 #include "terrain/terrain.h"
@@ -23,12 +23,12 @@
 #include <cmath>
 #include <thread>
 
-#include "settings_manager.h"
 #include "logger.h"
+#include "settings_manager.h"
 
 #include <imgui.h>
-#include <imgui_impl_win32.h>
 #include <imgui_impl_dx12.h>
+#include <imgui_impl_win32.h>
 #include <implot.h>
 
 #include <sl.h>
@@ -127,7 +127,6 @@ void loadScene(const std::string& filePathStr)
     GltfLoader::loadGltf(filePathStr, renderState.scene);
     renderState.dlss.needsReset = true;
 }
-
 
 static const std::vector<sl::DLSSMode> dlssModes = {
     sl::DLSSMode::eDLAA,
@@ -378,17 +377,28 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 {
     GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "path tracing");
 
-    renderState.cmdList->SetPipelineState1(renderState.ptPso.Get());
+    const bool useSharc = paramBlockManager.sharcParams->enabled;
+    const bool decompose = useSharc && paramBlockManager.sharcParams->debugMode >= 5;
+    renderState.cmdList->SetPipelineState1(decompose ? renderState.sharc.diagnosticPso.Get() :
+        (useSharc ? renderState.sharc.queryPso.Get() : renderState.ptPso.Get()));
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
 
     bindPtCommonParams(paramBlockManager);
+    if (useSharc)
+        sharcBindPt();
 
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
     renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
-    renderState.cmdList->DispatchRays(&renderState.ptDispatchDesc);
+    auto desc = decompose ? renderState.sharc.diagnosticDispatch :
+        (useSharc ? renderState.sharc.queryDispatch : renderState.ptDispatchDesc);
+    desc.Width = renderState.ptDispatchDesc.Width;
+    desc.Height = renderState.ptDispatchDesc.Height;
+    renderState.cmdList->DispatchRays(&desc);
+    if (useSharc && paramBlockManager.sharcParams->diagnostics)
+        sharcCopyStats();
 }
 
 static void beginFrame();
@@ -600,7 +610,12 @@ void render()
 
     renderState.camera.copyParamsTo(paramBlockManager.cameraParams);
 
-    const bool resetAccumulation = didCameraChange || didSceneChange || renderState.didPathTracingSettingsChange;
+    sharcPrepare(paramBlockManager, didSceneChange);
+    const bool cacheWarming = paramBlockManager.sharcParams->enabled &&
+                              (renderState.sharc.resetRequested ||
+                               renderState.sharc.frameIndex < SettingsManager::getAsUint("sharcWarmupFrames"));
+    const bool resetAccumulation =
+        didCameraChange || didSceneChange || renderState.didPathTracingSettingsChange || cacheWarming;
 
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
@@ -747,7 +762,50 @@ void render()
         rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
     }
 
-    if (renderState.scene.hasTlas() && (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
+    if (SettingsManager::getAsBool("sharcSelfTest"))
+    {
+        if (!renderState.sharc.supported)
+        {
+            Logger::logError("SHARC self-test: unsupported GPU");
+            destroy();
+            exit(1);
+        }
+        sharcMaintenance(paramBlockManager, 5);
+        sharcMaintenance(paramBlockManager, 0);
+        sharcMaintenance(paramBlockManager, 4); // empty miss
+        sharcMaintenance(paramBlockManager, 2); // known radiance + weighted sky
+        sharcMaintenance(paramBlockManager, 1);
+        sharcMaintenance(paramBlockManager, 3); // known value
+        sharcCopyStats();
+        submitCmd();
+        flush();
+        sharcReadStats(renderState.frameCtxIdx);
+        const bool firstPass = renderState.sharc.lastStats[6] == 1 && renderState.sharc.lastStats[7] == 1;
+        // Reuse the completed allocator for an eviction and clear check.
+        CHECK_HRESULT(frameCtx.cmdAlloc->Reset());
+        CHECK_HRESULT(renderState.cmdList->Reset(frameCtx.cmdAlloc.Get(), nullptr));
+        ID3D12DescriptorHeap* heaps[] = { renderState.sharedDescriptorHeap.Get() };
+        renderState.cmdList->SetDescriptorHeaps(1, heaps);
+        sharcMaintenance(paramBlockManager, 5);
+        for (uint32_t i = 0; i <= paramBlockManager.sharcParams->staleFrames; ++i)
+            sharcMaintenance(paramBlockManager, 1);
+        sharcMaintenance(paramBlockManager, 4);
+        sharcMaintenance(paramBlockManager, 2); // refill then explicitly clear
+        sharcMaintenance(paramBlockManager, 0);
+        sharcMaintenance(paramBlockManager, 4);
+        sharcCopyStats();
+        submitCmd();
+        flush();
+        sharcReadStats(renderState.frameCtxIdx);
+        const bool passed = firstPass && renderState.sharc.lastStats[7] == 2;
+        Logger::log("SHARC GPU self-test: %s (empty miss, update/resolve/query, eviction, reset)",
+                    passed ? "PASS" : "FAIL");
+        destroy();
+        exit(passed ? 0 : 1);
+    }
+
+    if (renderState.scene.hasTlas() &&
+        (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
         // ===================================
         // SKY ATMOSPHERE LUTS
@@ -803,6 +861,36 @@ void render()
 
         GpuProfiler::endScope(renderState.cmdList.Get());
 
+        if (paramBlockManager.sharcParams->enabled)
+        {
+            auto& s = renderState.sharc;
+            if (s.resetRequested)
+            {
+                GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc clear");
+                sharcMaintenance(paramBlockManager, 0);
+                s.resetRequested = false;
+            }
+            if (paramBlockManager.sharcParams->diagnostics)
+                sharcMaintenance(paramBlockManager, 5);
+            {
+                GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc update");
+                renderState.cmdList->SetPipelineState1(s.updatePso.Get());
+                renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
+                bindPtCommonParams(paramBlockManager);
+                sharcBindPt();
+                const uint32_t stride = paramBlockManager.sharcParams->downscale;
+                s.updateDispatch.Width = (renderState.renderWidth + stride - 1) / stride;
+                s.updateDispatch.Height = (renderState.renderHeight + stride - 1) / stride;
+                renderState.cmdList->DispatchRays(&s.updateDispatch);
+                BufferHelper::uavBarrier(renderState.cmdList.Get(), nullptr);
+            }
+            {
+                GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc resolve");
+                sharcMaintenance(paramBlockManager, 1);
+            }
+            s.previousCamera = paramBlockManager.sharcParams->cameraPosition;
+            ++s.frameIndex;
+        }
         dispatchPathTracing(paramBlockManager, doPathSplitting);
 
         // ===================================
@@ -1043,6 +1131,7 @@ static void beginFrame()
 
     perfRunBeginCpuFrame();
 
+    sharcReadStats(renderState.frameCtxIdx);
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
@@ -1097,6 +1186,7 @@ void destroy()
 
     Terrain::shutdown();
 
+    sharcDestroy();
     renderState.gpuRadixSort.destroy();
     renderState.lightTreeManager.destroy();
     GpuProfiler::destroy();

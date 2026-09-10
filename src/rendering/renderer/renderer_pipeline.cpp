@@ -6,8 +6,8 @@
 #include <d3dcompiler.h>
 
 #include "pipeline_builder.h"
-#include "shaders.h"
 #include "rendering/common/common_hitgroups.h"
+#include "shaders.h"
 
 namespace Renderer
 {
@@ -154,6 +154,11 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
         ptParams[PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT)] = MAKE_PARAM(SRV, LIGHT_TREE, LEAF_TO_LIGHT_IN);
 
+        ptParams[PT_PARAM_IDX(SHARC_HASHES)] = MAKE_PARAM(UAV, SHARC, HASHES);
+        ptParams[PT_PARAM_IDX(SHARC_ACCUMULATION)] = MAKE_PARAM(UAV, SHARC, ACCUMULATION);
+        ptParams[PT_PARAM_IDX(SHARC_RESOLVED)] = MAKE_PARAM(UAV, SHARC, RESOLVED);
+        ptParams[PT_PARAM_IDX(SHARC_STATS)] = MAKE_PARAM(UAV, SHARC, STATS);
+
         if (renderState.useSer)
         {
             ptParams.push_back({
@@ -263,10 +268,41 @@ void initPipeline()
             makeRtPipeline(pipelineInputs);
         };
 
-        makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", renderState.gbufferRootSig.Get(),
-                             renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
-        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs", renderState.ptRootSig.Get(),
-                             renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
+        sharcInit();
+        makeCommonRtPipeline(L"gbuffer",
+                             "gbuffer_rgs",
+                             renderState.gbufferRootSig.Get(),
+                             renderState.gbufferPso,
+                             renderState.dev_gbufferShaderIds,
+                             renderState.gbufferDispatchDesc);
+        makeCommonRtPipeline(L"pathTracing",
+                             "path_tracing_rgs",
+                             renderState.ptRootSig.Get(),
+                             renderState.ptPso,
+                             renderState.dev_ptShaderIds,
+                             renderState.ptDispatchDesc);
+        if (renderState.sharc.supported)
+        {
+            auto& s = renderState.sharc;
+            makeCommonRtPipeline(L"sharcUpdate",
+                                 "sharc_update_rgs",
+                                 renderState.ptRootSig.Get(),
+                                 s.updatePso,
+                                 s.updateShaderIds,
+                                 s.updateDispatch);
+            makeCommonRtPipeline(L"sharcQuery",
+                                 "sharc_query_rgs",
+                                 renderState.ptRootSig.Get(),
+                                 s.queryPso,
+                                 s.queryShaderIds,
+                                 s.queryDispatch);
+            makeCommonRtPipeline(L"sharcDiagnostic",
+                                 "sharc_diagnostic_rgs",
+                                 renderState.ptRootSig.Get(),
+                                 s.diagnosticPso,
+                                 s.diagnosticShaderIds,
+                                 s.diagnosticDispatch);
+        }
     }
 
     // ===================================

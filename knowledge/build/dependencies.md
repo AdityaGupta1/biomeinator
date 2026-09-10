@@ -23,8 +23,8 @@ apart so that nothing in `reference/` can accidentally become a build input.
 ## SHARC
 
 SHARC is shader-only: its include directory and headers are wired into DXC's include
-search and build dependencies. It needs no host library or runtime DLL, and is not yet
-used by renderer shaders.
+search and build dependencies. It needs no host library or runtime DLL. The renderer uses separate update and query
+shader variants; see [SHaRC](../rendering/sharc.md).
 
 ## Adding a prebuilt SDK
 

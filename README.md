@@ -11,7 +11,7 @@ Video demo: https://youtu.be/6ehg5h1aBRI (somewhat outdated)
 Make sure to clone with `--recurse-submodules` to gather all required dependencies.
 
 For an existing checkout, run `git submodule update --init --recursive` after pulling dependency changes.
-The SHaRC shader library is included as a submodule for upcoming radiance-cache integration; it is not yet used by the renderer.
+SHaRC is enabled by default on supported GPUs for interactive rendering. Use `--sharc=false` for the reference path tracer, or configure CMake with `-DENABLE_SHARC=OFF` to disable support. Headless test/performance runs default to the reference path; pass `--sharc=true` to test the cache.
 
 Then, you should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
 
@@ -32,6 +32,21 @@ Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move 
 - Press <kbd>H</kbd> to toggle GUI visibility
 - Press <kbd>P</kbd> to pause and unpause world animation (day/night cycle, water waves)
 - Hold <kbd>[</kbd> or <kbd>]</kbd> to run world animation backwards or forwards at 50x speed
+
+## SHaRC validation
+
+`Biomeinator.exe --sharcSelfTest --width=64 --height=64 --sharcCapacityLog2=16` runs a deterministic GPU cache test.
+`python tests/run_sharc.py` (requires NumPy) compares warmed SHaRC renders with uncached renders of existing scenes and saves linear RGB PFM images, PNG previews, logs, and error metrics under `build/sharc_validation/`.
+Use `tests/run_perf.py` with `--sharc=false` and `--sharc=true` to compare total GPU cost, including update and resolve.
+
+The settings panel includes a cache reset button and hit/bounce/grid/cached-radiance views (`--sharcDebug=1`, `2`, `3`, or `4`).
+`--sharcDiagnostics=true` enables GPU counters and periodic log output. Keep it off for timing comparisons.
+For native 1-spp noise comparisons (path splitting disabled, 256 cache warmup frames), run
+`python tests/run_sharc.py --single-spp --scenes crystal_caves cornell_box_rtsl evil_room --width 960 --height 540 --out build/sharc_1spp`.
+`python tests/run_sharc_breakdown.py` separates the cave scenes into light-sampling,
+emitter-hit, cache, and remaining contributions (`--sharcDebug=5` through `11`), with
+1-spp images and 256-spp averages for diagnosing noise.
+See [SHaRC integration notes](knowledge/rendering/sharc.md) for cache behavior and limitations.
 
 ## Third-Party Licenses
 

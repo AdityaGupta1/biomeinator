@@ -6,8 +6,8 @@
 #define CXXOPTS_NO_EXCEPTIONS
 #include <cxxopts.hpp>
 
-#include <variant>
 #include <unordered_map>
+#include <variant>
 
 #include "rendering/common/common_enums.h"
 
@@ -25,13 +25,27 @@ void parseArgs(const int argc, const char* const* argv)
     Options options("Biomeinator", "Real-time path traced voxel engine");
     OptionAdder optionAdder = options.add_options();
 
-#define ADD_OPTION(name, desc, type, defaultValue) optionAdder(name, desc, cxxopts::value<type>()->default_value(defaultValue))
+#define ADD_OPTION(name, desc, type, defaultValue)                                                                     \
+    optionAdder(name, desc, cxxopts::value<type>()->default_value(defaultValue))
 
     optionAdder("h,help", "Print this message");
     ADD_OPTION("width", "Window width", uint32_t, "1920");
     ADD_OPTION("height", "Window height", uint32_t, "1080");
+    ADD_OPTION("rngSeed", "Fixed sampling seed (0=random)", uint32_t, "0");
+    ADD_OPTION("sharc", "Enable spatial hash radiance cache", bool, "true");
+    ADD_OPTION("sharcCapacityLog2", "SHARC cache capacity exponent (16-24)", uint32_t, "20");
+    ADD_OPTION("sharcDownscale", "SHARC update pixel stride (1-16)", uint32_t, "5");
+    ADD_OPTION("sharcSceneScale", "SHARC world-space grid scale", float, "50");
+    ADD_OPTION("sharcRoughnessMin", "Minimum update-path roughness", float, "0.4");
+    ADD_OPTION("sharcAccumulationFrames", "SHARC history length", uint32_t, "32");
+    ADD_OPTION("sharcStaleFrames", "SHARC eviction age", uint32_t, "64");
+    ADD_OPTION("sharcWarmupFrames", "Cache warmup before screenshot accumulation", uint32_t, "64");
+    ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance, 5 primary NEE, 6 cache contribution, 7 first-ray emission, 8 remainder, 9 later NEE, 10 later emission, 11 visible emission", uint32_t, "0");
+    ADD_OPTION("sharcDiagnostics", "Read back SHARC counters", bool, "false");
+    ADD_OPTION("sharcSelfTest", "Run deterministic SHARC GPU self-test and exit", bool, "false");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
+    ADD_OPTION("testRadianceOutput", "Optional linear RGB PFM companion to testOutput", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
@@ -120,8 +134,21 @@ void parseArgs(const int argc, const char* const* argv)
 
     COPY_SETTING("width", uint32_t);
     COPY_SETTING("height", uint32_t);
+    COPY_SETTING("rngSeed", uint32_t);
+    COPY_SETTING("sharc", bool);
+    COPY_SETTING("sharcCapacityLog2", uint32_t);
+    COPY_SETTING("sharcDownscale", uint32_t);
+    COPY_SETTING("sharcSceneScale", float);
+    COPY_SETTING("sharcRoughnessMin", float);
+    COPY_SETTING("sharcAccumulationFrames", uint32_t);
+    COPY_SETTING("sharcStaleFrames", uint32_t);
+    COPY_SETTING("sharcWarmupFrames", uint32_t);
+    COPY_SETTING("sharcDebug", uint32_t);
+    COPY_SETTING("sharcDiagnostics", bool);
+    COPY_SETTING("sharcSelfTest", bool);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
+    COPY_SETTING("testRadianceOutput", std::string);
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("perfOutput", std::string);
     COPY_SETTING("perfWarmupFrames", uint32_t);
@@ -197,6 +224,23 @@ void parseArgs(const int argc, const char* const* argv)
         exit(1);
     }
 
+    if (getAsUint("sharcCapacityLog2") < 16 || getAsUint("sharcCapacityLog2") > 24 || getAsUint("sharcDownscale") < 1 ||
+        getAsUint("sharcDownscale") > 16 ||
+        !(getAsFloat("sharcSceneScale") > 0.f && getAsFloat("sharcSceneScale") <= 10000.f) ||
+        !(getAsFloat("sharcRoughnessMin") >= 0.f && getAsFloat("sharcRoughnessMin") <= 1.f) ||
+        getAsUint("sharcDebug") > 11 || getAsUint("sharcAccumulationFrames") > 1024 ||
+        getAsUint("sharcStaleFrames") < 8 || getAsUint("sharcStaleFrames") > 1024)
+    {
+        std::cerr << "Invalid SHARC settings" << std::endl;
+        exit(1);
+    }
+
+    if (!getAsString("testRadianceOutput").empty() &&
+        (!isTestMode() || !getAsString("testRadianceOutput").ends_with(".pfm")))
+    {
+        std::cerr << "testRadianceOutput requires testOutput and a .pfm path" << std::endl;
+        exit(1);
+    }
     worldSeed = getAsUint("worldSeed");
 
     if (!getAsString("world").empty())
@@ -221,6 +265,7 @@ void parseArgs(const int argc, const char* const* argv)
                 settings[name] = value;
             }
         };
+        defaultTo("sharc", false); // Existing goldens and perf baselines remain uncached.
         defaultTo("lockCamera", true);
         defaultTo("showGui", false);
         defaultTo("animTimePaused", true);
@@ -314,7 +359,7 @@ bool isPerfMode()
 
 bool isHeadless()
 {
-    return isTestMode() || isPerfMode();
+    return isTestMode() || isPerfMode() || getAsBool("sharcSelfTest");
 }
 
 } // namespace SettingsManager

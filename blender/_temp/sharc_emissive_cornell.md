@@ -1,0 +1,1 @@
+Temporary SHARC validation scene derived from tests/gltf/cornell_box. The green wall keeps its diffuse BSDF and also emits, so secondary cache queries exercise emission separation and MIS. Geometry is referenced from the original scene; no binary copy is needed.

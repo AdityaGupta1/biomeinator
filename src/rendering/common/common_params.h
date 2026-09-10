@@ -146,6 +146,28 @@ struct RenderParams
     uint pad0;
 };
 
+struct SharcParams
+{
+    uint enabled;
+    uint capacity;
+    uint downscale;
+    uint frameIndex;
+
+    float sceneScale;
+    float roughnessMin;
+    uint accumulationFrames;
+    uint staleFrames;
+
+    float3 cameraPosition;
+    uint debugMode; // 0 beauty, 1 query hits, 2 bounce count, 3 hash grid, 4 cached radiance
+
+    float3 cameraPositionPrev;
+    uint diagnostics;
+
+    int3 originDelta; // renderer origin minus stable cache origin
+    uint padding;
+};
+
 struct RtslParams
 {
     uint treeLeafBase;  // M - 1, or 0 if no light tree built / scene has no area lights
@@ -189,4 +211,3 @@ struct DebugParams
 
 #undef float4x4
 #endif
-

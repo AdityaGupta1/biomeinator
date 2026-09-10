@@ -6,15 +6,15 @@
 #include <chrono>
 
 #include <imgui.h>
-#include <imgui_impl_win32.h>
 #include <imgui_impl_dx12.h>
+#include <imgui_impl_win32.h>
 #include <implot.h>
 
 #include "rendering/camera.h"
-#include "rendering/window_manager.h"
 #include "rendering/common/common_enums.h"
-#include "settings_manager.h"
+#include "rendering/window_manager.h"
 #include "settings_gui_helpers.h"
+#include "settings_manager.h"
 #include "terrain/biome.h"
 #include "terrain/terrain.h"
 
@@ -121,6 +121,29 @@ void imguiEndFrame(double deltaTime)
         SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
         renderState.needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "doPathSplitting");
 
+        SettingsGuiHelpers::VerticalSpacing();
+        SettingsGuiHelpers::SectionTitle("SHaRC");
+        if (renderState.sharc.supported)
+        {
+            bool changed = SettingsGuiHelpers::Checkbox("Enable SHaRC", "sharc");
+            changed |= SettingsGuiHelpers::SliderUint("Cache capacity log2", "sharcCapacityLog2", 16, 24);
+            changed |= SettingsGuiHelpers::SliderUint("Update stride", "sharcDownscale", 1, 16);
+            changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
+            changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
+            changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
+            changed |= SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance", "Primary NEE", "Cache contribution", "First-ray emission", "Remaining radiance", "Later NEE", "Later emission", "Visible emission" });
+            SettingsGuiHelpers::Checkbox("Cache counters", "sharcDiagnostics");
+            if (ImGui::Button("Reset cache"))
+                changed = true;
+            renderState.sharc.resetRequested |= changed;
+            renderState.didPathTracingSettingsChange |= changed;
+            const auto& stats = renderState.sharc.lastStats;
+            ImGui::Text("Queries %u, hits %u, bounces %u", stats[0], stats[1], stats[2]);
+            ImGui::Text("Update hits %u, failed inserts %u, occupied %u", stats[3], stats[4], stats[5]);
+            ImGui::Text("Primary BSDF rays %u, emitter hits %u", stats[6], stats[7]);
+        }
+        else
+            ImGui::TextUnformatted("SHaRC unavailable (native fp16 / int64 atomics required)");
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
         renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);

@@ -5,16 +5,16 @@
 
 #include <dxgi1_5.h>
 
-#include "rendering/dxr_common.h"
-#include "rendering/renderer.h"
 #include "fence.h"
-#include "rt_target.h"
 #include "param_block_manager.h"
 #include "rendering/buffer/descriptor_heap_allocator.h"
 #include "rendering/buffer/managed_buffer.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_registers.h"
 #include "rendering/common/common_settings.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
+#include "rt_target.h"
 #include "util/ring_buffer.h"
 
 #include <array>
@@ -153,6 +153,11 @@ enum class PtParam
 
     PATH_TRACING_RAW_BUFFER_OUT,
     PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT,
+
+    SHARC_HASHES,
+    SHARC_ACCUMULATION,
+    SHARC_RESOLVED,
+    SHARC_STATS,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -322,6 +327,9 @@ struct ScreenshotRequest
     ComPtr<ID3D12Resource> readbackBuffer{ nullptr };
     uint32_t width{ 0 };
     uint32_t height{ 0 };
+    ComPtr<ID3D12Resource> radianceReadback;
+    uint32_t radianceWidth{ 0 }, radianceHeight{ 0 }, radianceSplits{ 1 };
+    float radianceDivisor{ 1.f };
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
@@ -330,6 +338,35 @@ struct ScreenshotRequest
 // The back buffers and everything that has to match them exactly (PSO render target formats, the
 // hudless copy, the screenshot readback footprint)
 inline constexpr DXGI_FORMAT SWAP_CHAIN_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+struct SharcResources
+{
+    bool supported{ false };
+    bool resetRequested{ true };
+    bool wasEnabled{ false };
+    uint32_t capacity{ 0 };
+    uint32_t frameIndex{ 0 };
+    DirectX::XMINT3 origin{};
+    DirectX::XMFLOAT3 previousCamera{};
+    float previousScale{ 0.f };
+    ComPtr<ID3D12Resource> hashes, accumulation, resolved, stats;
+    ComPtr<ID3D12Resource> readback[NUM_FRAMES_IN_FLIGHT];
+    bool readbackPending[NUM_FRAMES_IN_FLIGHT]{};
+    std::array<uint32_t, 12> lastStats{};
+    ComPtr<ID3D12RootSignature> computeRootSig;
+    ComPtr<ID3D12PipelineState> maintenancePso;
+    ComPtr<ID3D12StateObject> updatePso, queryPso, diagnosticPso;
+    ComPtr<ID3D12Resource> updateShaderIds, queryShaderIds, diagnosticShaderIds;
+    D3D12_DISPATCH_RAYS_DESC updateDispatch{}, queryDispatch{}, diagnosticDispatch{};
+};
+
+void sharcInit();
+void sharcPrepare(ParamBlockManager& params, bool sceneChanged);
+void sharcMaintenance(ParamBlockManager& params, uint32_t mode);
+void sharcBindPt();
+void sharcReadStats(uint32_t slot);
+void sharcCopyStats();
+void sharcDestroy();
 
 struct RendererState
 {
@@ -366,6 +403,7 @@ struct RendererState
     Scene scene;
     Camera camera;
     LightTreeManager lightTreeManager;
+    SharcResources sharc;
     GpuRadixSort gpuRadixSort;
 
     // -- Mode flags --
