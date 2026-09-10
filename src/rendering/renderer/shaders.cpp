@@ -26,7 +26,6 @@
 #include "postprocess/postprocess.vs.fxh"
 #include "sharc/sharc_maintenance.cs.fxh"
 #include "sharc/sharc_query.rgs.fxh"
-#include "sharc/sharc_diagnostic.rgs.fxh"
 #include "sharc/sharc_update.rgs.fxh"
 #include "sky/multi_scattering_lut.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
@@ -41,7 +40,6 @@
 static const std::unordered_map<std::string_view, std::span<const unsigned char>> s_shaders = {
     REGISTER_SHADER(sharc_update_rgs),
     REGISTER_SHADER(sharc_query_rgs),
-    REGISTER_SHADER(sharc_diagnostic_rgs),
     REGISTER_SHADER(sharc_maintenance_cs),
     REGISTER_SHADER(collect_cs),
     REGISTER_SHADER(debug_view_ps),

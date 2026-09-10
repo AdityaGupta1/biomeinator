@@ -40,10 +40,9 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcAccumulationFrames", "SHARC history length", uint32_t, "32");
     ADD_OPTION("sharcStaleFrames", "SHARC eviction age", uint32_t, "64");
     ADD_OPTION("sharcWarmupFrames", "Cache warmup before screenshot accumulation", uint32_t, "64");
-    ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance, 5 primary NEE, 6 cache contribution, 7 first-ray emission, 8 remainder, 9 later NEE, 10 later emission, 11 visible emission", uint32_t, "0");
+    ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance", uint32_t, "0");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
-    ADD_OPTION("testRadianceOutput", "Optional linear RGB PFM companion to testOutput", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
@@ -144,7 +143,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("sharcDebug", uint32_t);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
-    COPY_SETTING("testRadianceOutput", std::string);
     COPY_SETTING("testOutput", std::string);
     COPY_SETTING("perfOutput", std::string);
     COPY_SETTING("perfWarmupFrames", uint32_t);
@@ -224,19 +222,13 @@ void parseArgs(const int argc, const char* const* argv)
         getAsUint("sharcDownscale") > 16 ||
         !(getAsFloat("sharcSceneScale") > 0.f && getAsFloat("sharcSceneScale") <= 10000.f) ||
         !(getAsFloat("sharcRoughnessMin") >= 0.f && getAsFloat("sharcRoughnessMin") <= 1.f) ||
-        getAsUint("sharcDebug") > 11 || getAsUint("sharcAccumulationFrames") > 1024 ||
+        getAsUint("sharcDebug") > 4 || getAsUint("sharcAccumulationFrames") > 1024 ||
         getAsUint("sharcStaleFrames") < 8 || getAsUint("sharcStaleFrames") > 1024)
     {
         std::cerr << "Invalid SHARC settings" << std::endl;
         exit(1);
     }
 
-    if (!getAsString("testRadianceOutput").empty() &&
-        (!isTestMode() || !getAsString("testRadianceOutput").ends_with(".pfm")))
-    {
-        std::cerr << "testRadianceOutput requires testOutput and a .pfm path" << std::endl;
-        exit(1);
-    }
     worldSeed = getAsUint("worldSeed");
 
     if (!getAsString("world").empty())

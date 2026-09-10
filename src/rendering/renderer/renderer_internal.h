@@ -327,9 +327,6 @@ struct ScreenshotRequest
     ComPtr<ID3D12Resource> readbackBuffer{ nullptr };
     uint32_t width{ 0 };
     uint32_t height{ 0 };
-    ComPtr<ID3D12Resource> radianceReadback;
-    uint32_t radianceWidth{ 0 }, radianceHeight{ 0 }, radianceSplits{ 1 };
-    float radianceDivisor{ 1.f };
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
     bool useTestOutputPath{ false };
@@ -352,9 +349,9 @@ struct SharcResources
     ComPtr<ID3D12Resource> hashes, accumulation, resolved;
     ComPtr<ID3D12RootSignature> computeRootSig;
     ComPtr<ID3D12PipelineState> maintenancePso;
-    ComPtr<ID3D12StateObject> updatePso, queryPso, diagnosticPso;
-    ComPtr<ID3D12Resource> updateShaderIds, queryShaderIds, diagnosticShaderIds;
-    D3D12_DISPATCH_RAYS_DESC updateDispatch{}, queryDispatch{}, diagnosticDispatch{};
+    ComPtr<ID3D12StateObject> updatePso, queryPso;
+    ComPtr<ID3D12Resource> updateShaderIds, queryShaderIds;
+    D3D12_DISPATCH_RAYS_DESC updateDispatch{}, queryDispatch{};
 };
 
 void sharcInit();

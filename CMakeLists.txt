@@ -157,7 +157,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
             "${SHADER_DIR}/sharc/sharc_common.hlsli" "${COMMON_DIR}/sharc_protocol.h")
     endif()
     # The SHARC raygeneration wrappers include the main path tracer directly.
-    if(FILE_NAME MATCHES "^sharc_(update|query|diagnostic)\\.rgs\\.hlsl$")
+    if(FILE_NAME MATCHES "^sharc_(update|query)\\.rgs\\.hlsl$")
         list(APPEND SHADER_EXTRA_DEPENDS "${SHADER_DIR}/path_tracing/path_tracing.rgs.hlsl")
     endif()
 

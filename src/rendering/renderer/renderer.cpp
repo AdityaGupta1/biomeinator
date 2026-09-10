@@ -378,9 +378,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
     GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "path tracing");
 
     const bool useSharc = paramBlockManager.sharcParams->enabled;
-    const bool decompose = useSharc && paramBlockManager.sharcParams->debugMode >= 5;
-    renderState.cmdList->SetPipelineState1(decompose ? renderState.sharc.diagnosticPso.Get() :
-        (useSharc ? renderState.sharc.queryPso.Get() : renderState.ptPso.Get()));
+    renderState.cmdList->SetPipelineState1(useSharc ? renderState.sharc.queryPso.Get() : renderState.ptPso.Get());
     renderState.cmdList->SetComputeRootSignature(renderState.ptRootSig.Get());
 
     bindPtCommonParams(paramBlockManager);
@@ -392,8 +390,7 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
 
     renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
     renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
-    auto desc = decompose ? renderState.sharc.diagnosticDispatch :
-        (useSharc ? renderState.sharc.queryDispatch : renderState.ptDispatchDesc);
+    auto desc = useSharc ? renderState.sharc.queryDispatch : renderState.ptDispatchDesc;
     desc.Width = renderState.ptDispatchDesc.Width;
     desc.Height = renderState.ptDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&desc);

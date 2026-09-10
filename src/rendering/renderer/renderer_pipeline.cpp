@@ -295,12 +295,6 @@ void initPipeline()
                                  s.queryPso,
                                  s.queryShaderIds,
                                  s.queryDispatch);
-            makeCommonRtPipeline(L"sharcDiagnostic",
-                                 "sharc_diagnostic_rgs",
-                                 renderState.ptRootSig.Get(),
-                                 s.diagnosticPso,
-                                 s.diagnosticShaderIds,
-                                 s.diagnosticDispatch);
         }
     }
 

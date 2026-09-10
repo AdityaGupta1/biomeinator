@@ -18,9 +18,6 @@
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-#ifndef SHARC_DECOMPOSE
-#define SHARC_DECOMPOSE 0
-#endif
 #ifndef SHARC_UPDATE
 #define SHARC_UPDATE 0
 #endif
@@ -119,22 +116,11 @@ FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
     return result;
 }
 
-struct PathRadianceBreakdown
-{
-    float3 primaryNee;
-    float3 cached;
-    float3 firstRayEmission;
-    float3 laterNee;
-    float3 laterEmission;
-    float3 visibleEmission;
-};
-
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx,
-    out float3 pathColor, out float3 ptDiffuseAlbedo, out PathRadianceBreakdown breakdown)
+    out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
     ptDiffuseAlbedo = 0.f;
-    breakdown = (PathRadianceBreakdown)0;
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
     const bool useRtsl = (samplingMode == SamplingMode::RTSL);
@@ -272,14 +258,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (any(emissiveContrib > 0))
         {
             pathColor += emissiveContrib;
-#if SHARC_DECOMPOSE
-            if (pathDepth == 1)
-                breakdown.firstRayEmission += emissiveContrib;
-            else if (pathDepth > 1)
-                breakdown.laterEmission += emissiveContrib;
-            else
-                breakdown.visibleEmission += emissiveContrib;
-#endif
             if (pathDepth == 0)
             {
                 ptEmissiveAlbedo = applyReinhard(emissiveContrib);
@@ -339,9 +317,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     // Query returns scattered radiance only; skip this vertex's NEE and BSDF.
                     const float3 cachedContribution = payload.pathWeight * radiance;
                     pathColor += cachedContribution;
-#if SHARC_DECOMPOSE
-                    breakdown.cached += cachedContribution;
-#endif
                     cacheHit = true;
                     break;
                 }
@@ -418,12 +393,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                                                                  // with divide by pdf
 
                     pathColor += contribution;
-#if SHARC_DECOMPOSE
-                    if (pathDepth == 0)
-                        breakdown.primaryNee += contribution;
-                    else
-                        breakdown.laterNee += contribution;
-#endif
                 }
 
                 // ------------------------------
@@ -450,12 +419,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                                                                      // cancels out with divide by pdf
 
                         pathColor += contribution;
-#if SHARC_DECOMPOSE
-                    if (pathDepth == 0)
-                        breakdown.primaryNee += contribution;
-                    else
-                        breakdown.laterNee += contribution;
-#endif
                     }
                 }
             }
@@ -633,12 +596,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
 
             pathColor += domeLightContrib;
-#if SHARC_DECOMPOSE
-            if (pathDepth == 0)
-                breakdown.firstRayEmission += domeLightContrib;
-            else
-                breakdown.laterEmission += domeLightContrib;
-#endif
 #if SHARC_UPDATE
             SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor);
 #endif
@@ -752,21 +709,7 @@ void RayGeneration()
     else
 #endif
     {
-        PathRadianceBreakdown breakdown;
-        pathTraceRay(payload, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo, breakdown);
-#if SHARC_DECOMPOSE
-        // Display only after tracing: all modes retain the same estimator, RNG draws,
-        // cache queries and guide generation. The seven components sum to beauty.
-        if (sharcParams.debugMode == 5) pathColor = breakdown.primaryNee;
-        if (sharcParams.debugMode == 6) pathColor = breakdown.cached;
-        if (sharcParams.debugMode == 7) pathColor = breakdown.firstRayEmission;
-        if (sharcParams.debugMode == 8)
-            pathColor = max(0.f, pathColor - breakdown.primaryNee - breakdown.cached - breakdown.firstRayEmission
-                - breakdown.laterNee - breakdown.laterEmission - breakdown.visibleEmission);
-        if (sharcParams.debugMode == 9) pathColor = breakdown.laterNee;
-        if (sharcParams.debugMode == 10) pathColor = breakdown.laterEmission;
-        if (sharcParams.debugMode == 11) pathColor = breakdown.visibleEmission;
-#endif
+        pathTraceRay(payload, pixelIdx, pathSplitIdx, pathColor, outPtDiffuseAlbedo);
     }
 
 
