@@ -48,7 +48,7 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     p.enabled = s.supported && SettingsManager::getAsBool("sharc");
     if (!p.enabled)
     {
-        s.wasEnabled = false;
+        s.resetRequested = true;
         return;
     }
     p.capacity = 1u << SettingsManager::getAsUint("sharcCapacityLog2");
@@ -63,9 +63,7 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     // spatial cache history and let normal updates/eviction refresh affected cells.
     // Non-voxel scene edits still invalidate history, as do explicit scene/world
     // replacement and material/texture changes (a pending invalidation flag).
-    bool reset = (sceneChanged && !renderState.voxelMode) ||
-                 radianceInvalidated || s.resetRequested || !s.wasEnabled ||
-                 s.previousScale != p.sceneScale;
+    bool reset = (sceneChanged && !renderState.voxelMode) || radianceInvalidated || s.resetRequested;
     auto& freeList = renderState.frameCtxs[renderState.frameCtxIdx].toFreeList;
     if (s.capacity != p.capacity)
     {
@@ -104,8 +102,6 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
         s.frameIndex = 0;
     p.frameIndex = s.frameIndex;
     s.resetRequested = reset;
-    s.previousScale = p.sceneScale;
-    s.wasEnabled = true;
 }
 
 void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode)

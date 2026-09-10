@@ -388,11 +388,9 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PATH_TRACING_RAW_BUFFER_OUT), renderState.dev_pathTracingRawBuffer->GetGPUVirtualAddress());
     renderState.cmdList->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(PT_DIFFUSE_ALBEDO_RAW_BUFFER_OUT), renderState.dev_ptDiffuseAlbedoRawBuffer->GetGPUVirtualAddress());
 
-    renderState.ptDispatchDesc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
-    renderState.ptDispatchDesc.Height = renderState.gbufferDispatchDesc.Height;
     auto desc = useSharc ? renderState.sharc.queryDispatch : renderState.ptDispatchDesc;
-    desc.Width = renderState.ptDispatchDesc.Width;
-    desc.Height = renderState.ptDispatchDesc.Height;
+    desc.Width = renderState.gbufferDispatchDesc.Width * (doPathSplitting ? 2 : 1);
+    desc.Height = renderState.gbufferDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&desc);
 }
 

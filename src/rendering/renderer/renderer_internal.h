@@ -340,12 +340,10 @@ struct SharcResources
 {
     bool supported{ false };
     bool resetRequested{ true };
-    bool wasEnabled{ false };
     uint32_t capacity{ 0 };
     uint32_t frameIndex{ 0 };
     DirectX::XMINT3 origin{};
     DirectX::XMFLOAT3 previousCamera{};
-    float previousScale{ 0.f };
     ComPtr<ID3D12Resource> hashes, accumulation, resolved;
     ComPtr<ID3D12RootSignature> computeRootSig;
     ComPtr<ID3D12PipelineState> maintenancePso;
