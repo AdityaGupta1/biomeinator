@@ -49,14 +49,14 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL, 3=ReSTIR PT)", uint32_t, "2");
     ADD_OPTION("restirDebugMode", "ReSTIR PT debug mode (0=off, 1=self replay, 2=self replay error, 3=spatial self)", uint32_t, "0");
     ADD_OPTION("restirSpatialNeighbors", "ReSTIR PT paired spatial neighbors per pixel (0-3)", uint32_t, "3");
-    ADD_OPTION("restirTemporalReuse", "ReSTIR PT temporal reuse", bool, "true");
+    ADD_OPTION("restirTemporalReuse", "ReSTIR PT temporal reuse", bool, "false");
     ADD_OPTION("restirTemporalConfidenceCap", "ReSTIR PT confidence cap on the temporal neighbor (0 disables its contribution)", uint32_t, "16");
-    ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "true");
+    ADD_OPTION("restirDecorrelation", "ReSTIR PT duplication-map decorrelation (biased, reduces correlation blobs)", bool, "false");
     ADD_OPTION("restirDecorrelationMinCap", "Confidence cap where the duplication score is 1", float, "1");
     ADD_OPTION("restirDecorrelationExponent", "Duplication score exponent driving the cap reduction", float, "0.1");
     ADD_OPTION("restirShiftStats", "Count ReSTIR PT shift outcomes into the perf report (needs a build with RESTIR_SHIFT_STATS)", bool, "false");
     ADD_OPTION("restirInitialBlend", "ReSTIR PT: weight of the pixel's own initial sample in the shading (0 = resampled only, 1 = initial sampling only); unbiased, restores per-frame noise for the denoiser", float, "0.2");
-    ADD_OPTION("restirDropoutProbability", "ReSTIR PT: probability of zeroing a pixel's color before DLSS, blue-noise distributed, survivors rescaled to keep the mean (0 disables); the DLSS-RR guide's fix for correlated input", float, "0.3");
+    ADD_OPTION("restirDropoutProbability", "ReSTIR PT: probability of zeroing a pixel's color before DLSS, blue-noise distributed, survivors rescaled to keep the mean (0 disables); the DLSS-RR guide's fix for correlated input", float, "0.2");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
