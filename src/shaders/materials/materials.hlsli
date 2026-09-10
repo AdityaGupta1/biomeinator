@@ -358,6 +358,11 @@ BsdfEval evaluateBsdf(const Material material,
     return result;
 }
 
+bool isDiffuseOnlyMaterial(const Material material)
+{
+    return material.hasDiffuse() && !material.hasGlossyReflection() && !material.hasGlossyTransmission();
+}
+
 struct BsdfSample
 {
     float3 wi_WS;

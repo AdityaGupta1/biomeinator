@@ -111,13 +111,14 @@ void imguiBeginFrame()
 void imguiEndFrame(double deltaTime)
 {
     renderState.didPathTracingSettingsChange = false;
+    bool radianceSettingsChanged = false;
 
     ImGui::SetNextWindowPos(ImVec2(10, 10));
 
     constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus;
     if (ImGui::Begin("Settings", nullptr, windowFlags | ImGuiWindowFlags_AlwaysAutoResize))
     {
-        renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+        radianceSettingsChanged |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
         SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
         renderState.needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "doPathSplitting");
 
@@ -131,36 +132,36 @@ void imguiEndFrame(double deltaTime)
             changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
             changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
             changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
-            changed |= SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance", "Primary NEE", "Cache contribution", "First-ray emission", "Remaining radiance", "Later NEE", "Later emission", "Visible emission" });
+            const bool viewChanged = SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance", "Primary NEE", "Cache contribution", "First-ray emission", "Remaining radiance", "Later NEE", "Later emission", "Visible emission" });
             SettingsGuiHelpers::Checkbox("Cache counters", "sharcDiagnostics");
             if (ImGui::Button("Reset cache"))
                 changed = true;
             renderState.sharc.resetRequested |= changed;
-            renderState.didPathTracingSettingsChange |= changed;
+            renderState.didPathTracingSettingsChange |= changed || viewChanged;
             const auto& stats = renderState.sharc.lastStats;
-            ImGui::Text("Queries %u, hits %u, bounces %u", stats[0], stats[1], stats[2]);
-            ImGui::Text("Update hits %u, failed inserts %u, occupied %u", stats[3], stats[4], stats[5]);
-            ImGui::Text("Primary BSDF rays %u, emitter hits %u", stats[6], stats[7]);
+            ImGui::Text("Queries %u, hits %u, bounces %u", stats[SHARC_COUNTER_QUERIES], stats[SHARC_COUNTER_HITS], stats[SHARC_COUNTER_BOUNCES]);
+            ImGui::Text("Update hits %u, failed inserts %u, occupied %u", stats[SHARC_COUNTER_UPDATES], stats[SHARC_COUNTER_FAILED_INSERTS], stats[SHARC_COUNTER_OCCUPIED]);
+            ImGui::Text("Primary BSDF rays %u, emitter hits %u", stats[SHARC_COUNTER_PRIMARY_RAYS], stats[SHARC_COUNTER_PRIMARY_EMITTER_HITS]);
         }
         else
             ImGui::TextUnformatted("SHaRC unavailable (native fp16 / int64 atomics required)");
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Sampling");
-        renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+        radianceSettingsChanged |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
 
         SettingsGuiHelpers::VerticalSpacing();
         SettingsGuiHelpers::SectionTitle("Materials");
-        renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
+        radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
 
         if (renderState.voxelMode)
         {
             SettingsGuiHelpers::VerticalSpacing();
             SettingsGuiHelpers::SectionTitle("Fog");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
         }
 
         SettingsGuiHelpers::VerticalSpacing();
@@ -206,22 +207,24 @@ void imguiEndFrame(double deltaTime)
 
             if (renderState.voxelMode)
             {
-                renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Color chunks", "debugColorChunks");
+                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Color chunks", "debugColorChunks");
             }
 
             SettingsGuiHelpers::VerticalSpacing();
 
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
         }
     }
     ImGui::End();
+    renderState.sharc.resetRequested |= radianceSettingsChanged;
+    renderState.didPathTracingSettingsChange |= radianceSettingsChanged;
 
     constexpr int performanceWindowHeight = 240;
     ImGui::SetNextWindowPos(ImVec2(10, renderState.viewport.Height - 10 - performanceWindowHeight));

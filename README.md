@@ -11,7 +11,7 @@ Video demo: https://youtu.be/6ehg5h1aBRI (somewhat outdated)
 Make sure to clone with `--recurse-submodules` to gather all required dependencies.
 
 For an existing checkout, run `git submodule update --init --recursive` after pulling dependency changes.
-SHaRC is enabled by default on supported GPUs for interactive rendering. Use `--sharc=false` for the reference path tracer, or configure CMake with `-DENABLE_SHARC=OFF` to disable support. Headless test/performance runs default to the reference path; pass `--sharc=true` to test the cache.
+SHaRC is enabled by default on supported GPUs for interactive rendering. Use `--sharc=false` for the reference path tracer. Headless test/performance runs default to the reference path; pass `--sharc=true` to test the cache.
 
 Then, you should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
 

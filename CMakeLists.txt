@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(Biomeinator LANGUAGES CXX)
 
-option(ENABLE_SHARC "Build SHARC radiance cache support" ON)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -105,6 +103,9 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 )
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
+# SHaRC-only includes must not invalidate unrelated shaders.
+list(FILTER SHADER_INCLUDE_FILES EXCLUDE REGEX "/sharc/")
+list(FILTER COMMON_HEADERS EXCLUDE REGEX "/sharc_protocol\\.h$")
 
 # SHARC is shader-only; no host library or runtime DLL is required.
 set(SHARC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/SHARC/include")
@@ -150,8 +151,12 @@ foreach(SHADER IN LISTS SHADER_FILES)
         message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl, .cs.hlsl)")
     endif()
 
-    # The SHARC raygeneration wrappers include the main path tracer directly.
     set(SHADER_EXTRA_DEPENDS "")
+    if(FILE_NAME MATCHES "^sharc_")
+        list(APPEND SHADER_EXTRA_DEPENDS ${SHARC_INCLUDE_FILES}
+            "${SHADER_DIR}/sharc/sharc_common.hlsli" "${COMMON_DIR}/sharc_protocol.h")
+    endif()
+    # The SHARC raygeneration wrappers include the main path tracer directly.
     if(FILE_NAME MATCHES "^sharc_(update|query|diagnostic)\\.rgs\\.hlsl$")
         list(APPEND SHADER_EXTRA_DEPENDS "${SHADER_DIR}/path_tracing/path_tracing.rgs.hlsl")
     endif()
@@ -169,7 +174,7 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 -enable-16bit-types
                 /I "${SHADER_DIR}"
                 /I "${SHARC_INCLUDE_DIR}"
-        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS} ${SHARC_INCLUDE_FILES} ${SHADER_EXTRA_DEPENDS}
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS} ${SHADER_EXTRA_DEPENDS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )
@@ -370,7 +375,6 @@ endforeach()
 add_dependencies(Biomeinator copy_assets)
 
 target_compile_definitions(Biomeinator PRIVATE
-    BIOMEINATOR_ENABLE_SHARC=$<BOOL:${ENABLE_SHARC}>
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     TARGET_FILE_DIR="$<TARGET_FILE_DIR:Biomeinator>"

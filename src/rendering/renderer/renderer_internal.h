@@ -12,6 +12,7 @@
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_registers.h"
 #include "rendering/common/common_settings.h"
+#include "rendering/common/sharc_protocol.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "rt_target.h"
@@ -352,7 +353,7 @@ struct SharcResources
     ComPtr<ID3D12Resource> hashes, accumulation, resolved, stats;
     ComPtr<ID3D12Resource> readback[NUM_FRAMES_IN_FLIGHT];
     bool readbackPending[NUM_FRAMES_IN_FLIGHT]{};
-    std::array<uint32_t, 12> lastStats{};
+    std::array<uint32_t, SHARC_COUNTER_COUNT> lastStats{};
     ComPtr<ID3D12RootSignature> computeRootSig;
     ComPtr<ID3D12PipelineState> maintenancePso;
     ComPtr<ID3D12StateObject> updatePso, queryPso, diagnosticPso;
@@ -362,7 +363,7 @@ struct SharcResources
 
 void sharcInit();
 void sharcPrepare(ParamBlockManager& params, bool sceneChanged);
-void sharcMaintenance(ParamBlockManager& params, uint32_t mode);
+void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode);
 void sharcBindPt();
 void sharcReadStats(uint32_t slot);
 void sharcCopyStats();

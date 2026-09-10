@@ -13,7 +13,7 @@ cbuffer Control : REGISTER_B(SHARC, CONTROL)
 {
     const uint i = id.x;
     SharcParameters p = makeSharcParameters();
-    if (mode == 0) // clear cache
+    if (mode == SHARC_MAINTENANCE_CLEAR) // clear cache
     {
         if (i >= sharcParams.capacity)
             return;
@@ -21,7 +21,7 @@ cbuffer Control : REGISTER_B(SHARC, CONTROL)
         sharcAccumulation[i] = SharcZeroAccumulationData();
         sharcResolved[i] = SharcZeroPackedData();
     }
-    else if (mode == 1) // temporal resolve, eviction, reset accumulation
+    else if (mode == SHARC_MAINTENANCE_RESOLVE) // temporal resolve, eviction, reset accumulation
     {
         SharcResolveParameters r = (SharcResolveParameters)0;
         r.cameraPositionPrev = sharcParams.cameraPositionPrev;
@@ -30,17 +30,17 @@ cbuffer Control : REGISTER_B(SHARC, CONTROL)
         r.frameIndex = sharcParams.frameIndex;
         SharcResolveEntry(i, p, r);
         if (i < sharcParams.capacity && sharcHashes[i] != 0)
-            sharcCount(5);
+            sharcCount(SHARC_COUNTER_OCCUPIED);
     }
-    else if (mode == 5) // per-frame diagnostic reset
+    else if (mode == SHARC_MAINTENANCE_RESET_STATS) // per-frame diagnostic reset
     {
-        if (i < 12)
+        if (i < SHARC_COUNTER_COUNT)
             sharcStats[i] = 0;
     }
     else if (i == 0) // deterministic GPU test; exercised only by --sharcSelfTest
     {
         SharcHitData hit = makeSharcHit(float3(1, 2, 3), float3(0, 1, 0), float3(1, 1, 1));
-        if (mode == 2)
+        if (mode == SHARC_MAINTENANCE_TEST_INSERT)
         {
             SharcState state;
             SharcInit(state);
@@ -54,10 +54,10 @@ cbuffer Control : REGISTER_B(SHARC, CONTROL)
         {
             float3 value = 0;
             bool found = SharcGetCachedRadiance(p, hit, value, false);
-            if (mode == 3)
-                sharcStats[6] = found && all(abs(value - float3(0.35, 0.7, 1.3)) < 0.003f);
-            else if (mode == 4)
-                sharcStats[7] += !found;
+            if (mode == SHARC_MAINTENANCE_TEST_QUERY)
+                sharcStats[SHARC_COUNTER_TEST_VALUE_PASSED] = found && all(abs(value - float3(0.35, 0.7, 1.3)) < 0.003f);
+            else if (mode == SHARC_MAINTENANCE_TEST_MISS)
+                sharcStats[SHARC_COUNTER_TEST_MISSES] += !found;
         }
     }
 }

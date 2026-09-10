@@ -6,7 +6,7 @@ The standalone NVIDIA shader library is pinned in `external/SHARC`. Host ownersh
 in `renderer/renderer_sharc.cpp`. The renderer keeps the reference pipeline and builds
 update/query variants of the same iterative path tracer. Interactive rendering enables
 SHaRC on supported devices; headless tests/perf default off to preserve reference goldens.
-`ENABLE_SHARC=OFF` disables host activation. The existing SM 6.9 requirement covers int64
+The existing SM 6.9 requirement covers int64
 atomics on root-descriptor structured buffers; native fp16 is checked separately.
 
 ## Scheduling and storage
@@ -26,8 +26,9 @@ not all pixels. Failed inserts exclude successful update-cache resampling early-
 `primaryRays` counts BSDF rays actually launched at path depth zero, excluding primary
 hits that never scatter. `primaryEmitterHits` counts those rays whose next accepted
 surface has positive emitted radiance, before throughput/MIS weighting. It excludes
-sky misses and later emitter hits. These use counter slots 6/7, which the isolated GPU
-self-test instead uses for its assertions.
+sky misses and later emitter hits. Counter indices and maintenance commands are shared
+in `rendering/common/sharc_protocol.h`; GPU self-test assertions have separate slots.
+Uniform counter updates aggregate active lanes into one atomic per wave.
 
 ## Transport invariants
 
@@ -53,6 +54,11 @@ Incoming-segment fog and water attenuation are evaluated before queries. Update 
 store camera-to-primary fog as surface lighting; inter-vertex in-scatter is propagated to
 preceding entries. Fog is depth-limited in the reference shader, so caching can approximate
 its depth dependence. Dynamic lighting and geometry may retain history for several frames.
+
+Display changes (SHaRC view, antialiasing mode, accumulation limit) restart image
+accumulation without clearing the cache. Radiance-affecting UI settings, scene changes,
+cache configuration changes and explicit reset still invalidate it. Hash-grid and cached-
+radiance views bypass beauty tracing and initialize their path-produced guides explicitly.
 
 ## Coordinates and history
 

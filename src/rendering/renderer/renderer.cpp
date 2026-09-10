@@ -770,34 +770,34 @@ void render()
             destroy();
             exit(1);
         }
-        sharcMaintenance(paramBlockManager, 5);
-        sharcMaintenance(paramBlockManager, 0);
-        sharcMaintenance(paramBlockManager, 4); // empty miss
-        sharcMaintenance(paramBlockManager, 2); // known radiance + weighted sky
-        sharcMaintenance(paramBlockManager, 1);
-        sharcMaintenance(paramBlockManager, 3); // known value
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS); // empty miss
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_INSERT); // known radiance + weighted sky
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESOLVE);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_QUERY); // known value
         sharcCopyStats();
         submitCmd();
         flush();
         sharcReadStats(renderState.frameCtxIdx);
-        const bool firstPass = renderState.sharc.lastStats[6] == 1 && renderState.sharc.lastStats[7] == 1;
+        const bool firstPass = renderState.sharc.lastStats[SHARC_COUNTER_TEST_VALUE_PASSED] == 1 && renderState.sharc.lastStats[SHARC_COUNTER_TEST_MISSES] == 1;
         // Reuse the completed allocator for an eviction and clear check.
         CHECK_HRESULT(frameCtx.cmdAlloc->Reset());
         CHECK_HRESULT(renderState.cmdList->Reset(frameCtx.cmdAlloc.Get(), nullptr));
         ID3D12DescriptorHeap* heaps[] = { renderState.sharedDescriptorHeap.Get() };
         renderState.cmdList->SetDescriptorHeaps(1, heaps);
-        sharcMaintenance(paramBlockManager, 5);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
         for (uint32_t i = 0; i <= paramBlockManager.sharcParams->staleFrames; ++i)
-            sharcMaintenance(paramBlockManager, 1);
-        sharcMaintenance(paramBlockManager, 4);
-        sharcMaintenance(paramBlockManager, 2); // refill then explicitly clear
-        sharcMaintenance(paramBlockManager, 0);
-        sharcMaintenance(paramBlockManager, 4);
+            sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESOLVE);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_INSERT); // refill then explicitly clear
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
+        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS);
         sharcCopyStats();
         submitCmd();
         flush();
         sharcReadStats(renderState.frameCtxIdx);
-        const bool passed = firstPass && renderState.sharc.lastStats[7] == 2;
+        const bool passed = firstPass && renderState.sharc.lastStats[SHARC_COUNTER_TEST_MISSES] == 2;
         Logger::log("SHARC GPU self-test: %s (empty miss, update/resolve/query, eviction, reset)",
                     passed ? "PASS" : "FAIL");
         destroy();
@@ -867,11 +867,11 @@ void render()
             if (s.resetRequested)
             {
                 GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc clear");
-                sharcMaintenance(paramBlockManager, 0);
+                sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
                 s.resetRequested = false;
             }
             if (paramBlockManager.sharcParams->diagnostics)
-                sharcMaintenance(paramBlockManager, 5);
+                sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
             {
                 GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc update");
                 renderState.cmdList->SetPipelineState1(s.updatePso.Get());
@@ -886,7 +886,7 @@ void render()
             }
             {
                 GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc resolve");
-                sharcMaintenance(paramBlockManager, 1);
+                sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESOLVE);
             }
             s.previousCamera = paramBlockManager.sharcParams->cameraPosition;
             ++s.frameIndex;

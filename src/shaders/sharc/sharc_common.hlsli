@@ -4,6 +4,7 @@
 #define SHARC_SEPARATE_EMISSIVE 1
 #define SHARC_MATERIAL_DEMODULATION 1
 #include "SharcCommon.h"
+#include "../rendering/common/sharc_protocol.h"
 #include "common/global_params.hlsli"
 
 RWStructuredBuffer<uint64_t> sharcHashes : REGISTER_U(SHARC, HASHES);
@@ -37,5 +38,15 @@ SharcHitData makeSharcHit(float3 position, float3 normal, float3 baseColor)
 void sharcCount(uint counter)
 {
     if (sharcParams.diagnostics)
-        InterlockedAdd(sharcStats[counter], 1);
+    {
+        // Reduce contention without assuming callers always pass a uniform counter.
+        if (WaveActiveAllEqual(counter))
+        {
+            const uint count = WaveActiveCountBits(true);
+            if (WaveIsFirstLane())
+                InterlockedAdd(sharcStats[counter], count);
+        }
+        else
+            InterlockedAdd(sharcStats[counter], 1);
+    }
 }

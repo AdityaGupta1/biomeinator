@@ -214,7 +214,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     const bool primaryGlass = surfMaterial.hasGlossyTransmission();
     bool primaryGlassQueried = false;
     if (primaryGlass)
-        sharcCount(8);
+        sharcCount(SHARC_COUNTER_PRIMARY_GLASS);
 #endif
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
@@ -243,7 +243,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if SHARC_QUERY
             // Count actual emissive surface hits independently of their throughput/MIS weight.
             if (pathDepth == 1 && any(hitEmission > 0.f))
-                sharcCount(7);
+                sharcCount(SHARC_COUNTER_PRIMARY_EMITTER_HITS);
 #endif
             emissiveContrib = payload.pathWeight * hitEmission;
 
@@ -297,9 +297,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 ptEmissiveAlbedo = applyReinhard(emissiveContrib);
             }
 
-            const bool isDiffuseOnly = surfMaterial.hasDiffuse()
-                && !surfMaterial.hasGlossyReflection()
-                && !surfMaterial.hasGlossyTransmission();
+            const bool isDiffuseOnly = isDiffuseOnlyMaterial(surfMaterial);
             if (isDiffuseOnly)
             {
                 const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
@@ -333,8 +331,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 
 #if SHARC_QUERY
-        const bool diffuseCacheSurface =
-            surfMaterial.hasDiffuse() && !surfMaterial.hasGlossyReflection() && !surfMaterial.hasGlossyTransmission();
+        const bool diffuseCacheSurface = isDiffuseOnlyMaterial(surfMaterial);
         if (pathDepth > 0 && diffuseCacheSurface && !isPassthrough)
         {
             const SharcParameters cache = makeSharcParameters();
@@ -347,10 +344,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // Two cells preserves the sample's conservative radius-vs-cell threshold.
             if (segmentLength > sqrt(3.f) * voxelSize && payload.rayCone.width > 2.f * voxelSize)
             {
-                sharcCount(0);
+                sharcCount(SHARC_COUNTER_QUERIES);
                 if (primaryGlass && !primaryGlassQueried)
                 {
-                    sharcCount(11); // Unique paths reaching an eligible lookup, not lookup attempts.
+                    sharcCount(SHARC_COUNTER_PRIMARY_GLASS_QUERIED); // Unique paths reaching an eligible lookup, not lookup attempts.
                     primaryGlassQueried = true;
                 }
                 float3 radiance;
@@ -363,9 +360,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if SHARC_DECOMPOSE
                     breakdown.cached += cachedContribution;
 #endif
-                    sharcCount(1);
+                    sharcCount(SHARC_COUNTER_HITS);
                     if (primaryGlass)
-                        sharcCount(10);
+                        sharcCount(SHARC_COUNTER_PRIMARY_GLASS_CACHE_HITS);
                     cacheHit = true;
                     break;
                 }
@@ -485,13 +482,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
 
 #if SHARC_UPDATE
-            const bool diffuseCacheSurface = surfMaterial.hasDiffuse() && !surfMaterial.hasGlossyReflection() &&
-                                             !surfMaterial.hasGlossyTransmission();
+            const bool diffuseCacheSurface = isDiffuseOnlyMaterial(surfMaterial);
             if (diffuseCacheSurface)
             {
                 SharcHitData hit = makeSharcHit(surfPos_WS, surfNor_WS, surfMaterial.baseColor);
                 hit.emissive = emissiveContrib;
-                sharcCount(3);
+                sharcCount(SHARC_COUNTER_UPDATES);
                 if (!SharcUpdateHit(makeSharcParameters(), sharcState, hit, pathColor, nextFloat(payload.rng)))
                 {
                     // False can mean successful cache resampling or hash allocation failure.
@@ -501,7 +497,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                                                                      hit.normalWorld,
                                                                      makeSharcParameters().hashGridParameters,
                                                                      key) == HASH_GRID_INVALID_CACHE_INDEX)
-                        sharcCount(4);
+                        sharcCount(SHARC_COUNTER_FAILED_INSERTS);
                     break;
                 }
             }
@@ -574,12 +570,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
 #if SHARC_QUERY
-        sharcCount(2);
+        sharcCount(SHARC_COUNTER_BOUNCES);
         if (pathDepth == 0)
         {
-            sharcCount(6); // BSDF rays actually launched from the primary surface
+            sharcCount(SHARC_COUNTER_PRIMARY_RAYS); // BSDF rays actually launched from the primary surface
             if (primaryGlass)
-                sharcCount(9);
+                sharcCount(SHARC_COUNTER_PRIMARY_GLASS_RAYS);
         }
         ++tracedBounces;
 #endif
@@ -754,7 +750,27 @@ void RayGeneration()
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
 #if SHARC_QUERY
-    if (sharcParams.debugMode == 4)
+    if (sharcParams.debugMode == 3 || sharcParams.debugMode == 4)
+    {
+        if (pathSplitIdx == 0)
+        {
+            RWTexture2D<float4> specularAlbedo = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
+            specularAlbedo[pixelIdx] = 0.f;
+            RWTexture2D<float> specularDistance = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+            specularDistance[pixelIdx] = 0.f;
+        }
+    }
+    if (sharcParams.debugMode == 3)
+    {
+        // Primary-hit visualization needs no beauty rays. G-buffer supplies geometry guides;
+        // clear the path-produced specular guides, as for the cached-radiance view below.
+        pathColor = pathSplitIdx == 0 && bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT)
+                        ? HashGridDebugColoredHash(gbufferData.hitInfo.hitPos_WS + float3(sharcParams.originDelta),
+                                                   gbufferData.hitInfo.hitNor_WS,
+                                                   makeSharcParameters().hashGridParameters)
+                        : float3(0, 0, 0);
+    }
+    else if (sharcParams.debugMode == 4)
     {
         // Intentional primary-hit query for visualizing the cache itself. This does not
         // change the production query eligibility or add camera-direction data to it.
@@ -788,14 +804,7 @@ void RayGeneration()
         if (sharcParams.debugMode == 11) pathColor = breakdown.visibleEmission;
 #endif
     }
-#if SHARC_QUERY
-    if (sharcParams.debugMode == 3)
-        pathColor = pathSplitIdx == 0 && bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT)
-                        ? HashGridDebugColoredHash(gbufferData.hitInfo.hitPos_WS + float3(sharcParams.originDelta),
-                                                   gbufferData.hitInfo.hitNor_WS,
-                                                   makeSharcParameters().hashGridParameters)
-                        : float3(0, 0, 0);
-#endif
+
 
 #if !SHARC_UPDATE
     const uint writePixelIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;

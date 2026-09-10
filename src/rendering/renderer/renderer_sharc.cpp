@@ -18,7 +18,6 @@ void sharcInit()
     // SM 6.9 is already required by initDevice. SM 6.6 guarantees int64 atomics
     // on root-descriptor structured buffers (we do not use typed/bindless atomics).
     s.supported =
-        BIOMEINATOR_ENABLE_SHARC &&
         SUCCEEDED(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options, sizeof(options))) &&
         options.Native16BitShaderOpsSupported;
     if (!s.supported)
@@ -62,7 +61,7 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     p.staleFrames = SettingsManager::getAsUint("sharcStaleFrames");
     p.debugMode = SettingsManager::getAsUint("sharcDebug");
     p.diagnostics = SettingsManager::getAsBool("sharcDiagnostics") || selfTest;
-    bool reset = sceneChanged || renderState.didPathTracingSettingsChange || s.resetRequested || !s.wasEnabled ||
+    bool reset = sceneChanged || s.resetRequested || !s.wasEnabled ||
                  s.previousScale != p.sceneScale;
     auto& freeList = renderState.frameCtxs[renderState.frameCtxIdx].toFreeList;
     if (s.capacity != p.capacity)
@@ -82,9 +81,9 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
         allocate(s.resolved, uint64_t(p.capacity) * 16, L"SHARC resolved");
         if (!s.stats)
         {
-            allocate(s.stats, 48, L"SHARC counters");
+            allocate(s.stats, sizeof(s.lastStats), L"SHARC counters");
             for (auto& buffer : s.readback)
-                buffer = BufferHelper::createBasicBuffer(48, &READBACK_HEAP);
+                buffer = BufferHelper::createBasicBuffer(sizeof(s.lastStats), &READBACK_HEAP);
         }
         s.capacity = p.capacity;
         reset = true;
@@ -112,7 +111,7 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     s.wasEnabled = true;
 }
 
-void sharcMaintenance(ParamBlockManager& params, uint32_t mode)
+void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode)
 {
     auto& s = renderState.sharc;
     auto* cmd = renderState.cmdList.Get();
@@ -124,7 +123,7 @@ void sharcMaintenance(ParamBlockManager& params, uint32_t mode)
     cmd->SetComputeRootUnorderedAccessView(3, s.resolved->GetGPUVirtualAddress());
     cmd->SetComputeRootUnorderedAccessView(4, s.stats->GetGPUVirtualAddress());
     cmd->SetComputeRoot32BitConstant(5, mode, 0);
-    cmd->Dispatch(mode == 2 || mode == 3 || mode == 4 || mode == 5 ? 1 : (s.capacity + 255) / 256, 1, 1);
+    cmd->Dispatch(mode == SHARC_MAINTENANCE_TEST_INSERT || mode == SHARC_MAINTENANCE_TEST_QUERY || mode == SHARC_MAINTENANCE_TEST_MISS || mode == SHARC_MAINTENANCE_RESET_STATS ? 1 : (s.capacity + 255) / 256, 1, 1);
     // All cache accesses stay in UAV state. Ordering covers clears, update atomics,
     // temporal resolve, and the subsequent read-only query in the path tracer.
     BufferHelper::uavBarrier(cmd, nullptr);
@@ -154,18 +153,18 @@ void sharcReadStats(uint32_t slot)
     s.readbackPending[slot] = false;
     if (renderState.frameNumber % 60 == 0)
         Logger::log("SHARC queries=%u hits=%u bounces=%u updates=%u failed=%u occupied=%u primaryRays=%u primaryEmitterHits=%u primaryGlass=%u primaryGlassRays=%u primaryGlassCacheHits=%u primaryGlassQueried=%u",
-                    s.lastStats[0],
-                    s.lastStats[1],
-                    s.lastStats[2],
-                    s.lastStats[3],
-                    s.lastStats[4],
-                    s.lastStats[5],
-                    s.lastStats[6],
-                    s.lastStats[7],
-                    s.lastStats[8],
-                    s.lastStats[9],
-                    s.lastStats[10],
-                    s.lastStats[11]);
+                    s.lastStats[SHARC_COUNTER_QUERIES],
+                    s.lastStats[SHARC_COUNTER_HITS],
+                    s.lastStats[SHARC_COUNTER_BOUNCES],
+                    s.lastStats[SHARC_COUNTER_UPDATES],
+                    s.lastStats[SHARC_COUNTER_FAILED_INSERTS],
+                    s.lastStats[SHARC_COUNTER_OCCUPIED],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_RAYS],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_EMITTER_HITS],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_RAYS],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_CACHE_HITS],
+                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_QUERIED]);
 }
 
 void sharcCopyStats()
