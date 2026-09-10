@@ -104,6 +104,13 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
 
+# SHARC is shader-only; no host library or runtime DLL is required.
+set(SHARC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/SHARC/include")
+if(NOT EXISTS "${SHARC_INCLUDE_DIR}/SharcCommon.h")
+    message(FATAL_ERROR "SHARC headers missing. Run git submodule update --init --recursive.")
+endif()
+file(GLOB_RECURSE SHARC_INCLUDE_FILES CONFIGURE_DEPENDS "${SHARC_INCLUDE_DIR}/*.h")
+
 SET(SHADER_VERSION "6_9")
 # Keep the runtime capability check aligned with the compiled shader target.
 string(REPLACE "_" "" REQUIRED_SHADER_MODEL_HEX "${SHADER_VERSION}")
@@ -153,7 +160,8 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /HV 2021
                 -enable-16bit-types
                 /I "${SHADER_DIR}"
-        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
+                /I "${SHARC_INCLUDE_DIR}"
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS} ${SHARC_INCLUDE_FILES}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )

@@ -23,3 +23,6 @@
 	path = reference/DirectX-Specs
 	url = https://github.com/microsoft/DirectX-Specs.git
 	shallow = true
+[submodule "external/SHARC"]
+	path = external/SHARC
+	url = https://github.com/NVIDIA-RTX/SHARC.git

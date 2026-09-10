@@ -10,6 +10,9 @@ Video demo: https://youtu.be/6ehg5h1aBRI (somewhat outdated)
 
 Make sure to clone with `--recurse-submodules` to gather all required dependencies.
 
+For an existing checkout, run `git submodule update --init --recursive` after pulling dependency changes.
+The SHaRC shader library is included as a submodule for upcoming radiance-cache integration; it is not yet used by the renderer.
+
 Then, you should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
 
 Or, you can:
@@ -48,6 +51,7 @@ This project uses various third-party libraries:
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [Blender Cycles](https://projects.blender.org/blender/blender) - Apache-2.0 (GGX energy compensation tables and the specular shading normal correction, ported into `src/shaders/util/`)
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
+- [SHaRC](https://github.com/NVIDIA-RTX/SHARC) - [NVIDIA RTX SDKs License](external/SHARC/License.md)
 - [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT (DLSS binaries are under the [NVIDIA RTX SDKs License](external/streamline/bin/x64/nvngx_dlss.license.txt))
 - [GLM](https://github.com/g-truc/glm/tree/master) - MIT
 - [FastNoiseLite](https://github.com/Auburn/FastNoiseLite) - MIT
