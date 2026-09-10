@@ -799,7 +799,7 @@ void Chunk::createInstances()
                         {
                             auto jitterRng = initRng(worldSeed ^ hash(392421012),
                                 static_cast<uint>(columnPos_WS.x), blockY, static_cast<uint>(columnPos_WS.y));
-                            const vec2 tangentJitter = (jitterRng.nextFloat2() - .5f) * .4f;
+                            const vec2 tangentJitter = (jitterRng.nextFloat2() - .5f) * 0.2f;
                             jitter = tangentJitter.x * vec3(mountBasis.tangentX) +
                                      tangentJitter.y * vec3(mountBasis.tangentZ);
                         }
@@ -838,7 +838,7 @@ void Chunk::createInstances()
                             RandomNumberGenerator jitterRng = initRng(worldSeed ^ hash(392421012),
                                                                       static_cast<uint>(columnPos_WS.x),
                                                                       static_cast<uint>(columnPos_WS.y /*z*/));
-                            jitter = (jitterRng.nextFloat2() - 0.5f) * 0.4f;
+                            jitter = (jitterRng.nextFloat2() - 0.5f) * 0.2f;
                         }
                         const vec3 basePos_CS = vec3(blockPos_CS) + vec3(jitter.x, 0, jitter.y /*z*/);
 
