@@ -21,7 +21,7 @@ import bpy
 bl_info = {
     'name': 'Biomeinator BSDF',
     'author': 'Aditya Gupta',
-    'version': (1, 0, 0),
+    'version': (1, 1, 0),
     'blender': (4, 4, 0),
     'location': 'Shader Editor > Add > Group, File > Export > Biomeinator glTF',
     'description': 'Biomeinator material node group and matching glTF export',
@@ -31,6 +31,7 @@ bl_info = {
 NODE_GROUP_NAME = 'Biomeinator BSDF'
 DIELECTRIC_SCRIPT_NAME = 'biomeinator_dielectric.osl'
 DIELECTRIC_NODE_NAME = 'Dielectric'
+NODE_GROUP_VERSION = 2
 
 # dielectric_bsdf takes alpha (not roughness) and does not flip the IOR on backfaces itself,
 # matching what Cycles' own glass node shader does before calling the closure.
@@ -39,13 +40,14 @@ shader biomeinator_dielectric(color ReflectionTint = 1.0,
                               color TransmissionTint = 1.0,
                               float Roughness = 0.0,
                               float IOR = 1.45,
+                              normal Normal = N,
                               output closure color BSDF = 0)
 {
     float alpha = clamp(Roughness, 0.0, 1.0);
     alpha = alpha * alpha;
     float eta = max(IOR, 1e-5);
     eta = backfacing() ? 1.0 / eta : eta;
-    BSDF = dielectric_bsdf(N, vector(0.0), ReflectionTint, TransmissionTint, alpha, alpha, eta, "multi_ggx");
+    BSDF = dielectric_bsdf(normalize(Normal), vector(0.0), ReflectionTint, TransmissionTint, alpha, alpha, eta, "multi_ggx");
 }
 '''
 
@@ -79,6 +81,27 @@ def _build_nodes(ng):
 
     group_in = nodes.new('NodeGroupInput')
     group_in.location = (-1000, 0)
+
+    # Shader groups cannot use the geometry-node interface's default_input='NORMAL'.
+    # An unconnected zero vector means the ordinary shading normal, preserving old materials.
+    geometry = nodes.new('ShaderNodeNewGeometry')
+    geometry.location = (-1500, -800)
+    normal_length = nodes.new('ShaderNodeVectorMath')
+    normal_length.operation = 'LENGTH'
+    normal_length.location = (-1500, -1000)
+    has_normal = nodes.new('ShaderNodeMath')
+    has_normal.operation = 'GREATER_THAN'
+    has_normal.inputs[1].default_value = 0.0
+    has_normal.location = (-1300, -1000)
+    shading_normal = nodes.new('ShaderNodeMix')
+    shading_normal.data_type = 'VECTOR'
+    shading_normal.label = 'Mapped normal or default shading normal'
+    shading_normal.location = (-1100, -800)
+    links.new(group_in.outputs['Normal'], normal_length.inputs[0])
+    links.new(normal_length.outputs['Value'], has_normal.inputs[0])
+    links.new(has_normal.outputs['Value'], shading_normal.inputs['Factor'])
+    links.new(geometry.outputs['Normal'], next(s for s in shading_normal.inputs if s.name == 'A' and s.enabled))
+    links.new(group_in.outputs['Normal'], next(s for s in shading_normal.inputs if s.name == 'B' and s.enabled))
 
     diffuse = nodes.new('ShaderNodeBsdfDiffuse')
     diffuse.location = (-600, 400)
@@ -168,6 +191,8 @@ def _build_nodes(ng):
     links.new(group_in.outputs['Specular Tint'], glossy.inputs['Color'])
     links.new(group_in.outputs['Roughness'], glossy.inputs['Roughness'])
     links.new(group_in.outputs['IOR'], fresnel.inputs['IOR'])
+    for node in (diffuse, refraction, dielectric, glossy, fresnel):
+        links.new(next(s for s in shading_normal.outputs if s.enabled), node.inputs['Normal'])
 
     links.new(group_in.outputs['Specular'], is_glass.inputs[0])
     links.new(group_in.outputs['Transmission'], is_glass.inputs[1])
@@ -201,6 +226,14 @@ def _build_nodes(ng):
     links.new(add_emission.outputs['Shader'], mix_alpha.inputs[2])
 
     links.new(mix_alpha.outputs['Shader'], group_out.inputs['BSDF'])
+    ng['biomeinator_version'] = NODE_GROUP_VERSION
+
+
+def _add_normal_input(ng):
+    sock = ng.interface.new_socket(name='Normal', in_out='INPUT', socket_type='NodeSocketVector')
+    sock.hide_value = True
+    sock.default_value = (0.0, 0.0, 0.0)
+    return sock
 
 
 def _upgrade_node_group(ng):
@@ -212,7 +245,10 @@ def _upgrade_node_group(ng):
         sock.min_value = 0.0
         sock.max_value = 1.0
         sock.subtype = 'FACTOR'
-    if ng.nodes.get(DIELECTRIC_NODE_NAME) is None:
+    if not any(item.item_type == 'SOCKET' and item.in_out == 'INPUT' and item.name == 'Normal'
+               for item in ng.interface.items_tree):
+        _add_normal_input(ng)
+    if ng.get('biomeinator_version', 0) != NODE_GROUP_VERSION or ng.nodes.get(DIELECTRIC_NODE_NAME) is None:
         _build_nodes(ng)
 
 
@@ -246,6 +282,7 @@ def ensure_node_group():
     add_input('Emission Color', 'NodeSocketColor', (1.0, 1.0, 1.0, 1.0))
     add_input('Emission Strength', 'NodeSocketFloat', 0.0, min_value=0.0)
     add_input('Alpha', 'NodeSocketFloat', 1.0, min_value=0.0, max_value=1.0, subtype='FACTOR')
+    _add_normal_input(ng)
 
     ng.interface.new_socket(name='BSDF', in_out='OUTPUT', socket_type='NodeSocketShader')
 
@@ -311,8 +348,9 @@ def _push_principled_proxy(material):
     _copy_input(node_tree, group_node, 'Specular Tint' if specularOnly else 'Base Color',
                 principled, 'Base Color')
     principled.inputs['Metallic'].default_value = 1.0 if specularOnly else 0.0
-    roughnessInput = group_node.inputs.get('Roughness')
-    principled.inputs['Roughness'].default_value = roughnessInput.default_value if roughnessInput is not None else 0.0
+    _copy_input(node_tree, group_node, 'Roughness', principled, 'Roughness')
+    if group_node.inputs['Normal'].is_linked:
+        _copy_input(node_tree, group_node, 'Normal', principled, 'Normal')
     principled.inputs['Transmission Weight'].default_value = 1.0 if hasTransmission else 0.0
     # Specular IOR Level 0.5 is the exporter's specularFactor 1 (extension omitted);
     # 0 exports specularFactor 0, which the loader reads as "no specular lobe".
@@ -353,13 +391,15 @@ def _make_material_factors_explicit(filepath):
 
 
 def export_gltf(filepath):
+    ensure_node_group()
     proxies = []
     for material in bpy.data.materials:
         state = _push_principled_proxy(material)
         if state is not None:
             proxies.append(state)
     try:
-        bpy.ops.export_scene.gltf(filepath=filepath, export_format='GLTF_SEPARATE', export_keep_originals=True)
+        bpy.ops.export_scene.gltf(filepath=filepath, export_format='GLTF_SEPARATE',
+                                 export_keep_originals=True, export_tangents=True)
     finally:
         for state in reversed(proxies):
             _pop_principled_proxy(state)
