@@ -66,6 +66,46 @@ float applySegmentFog(inout Payload payload, const float3 origin_WS, const float
     return fogTransmittance;
 }
 
+// The two guide buffers for a first bounce whose lobes are picked stochastically. Taking the guide from
+// the path weight (as the delta path does) would feed the denoiser the per-sample lobe choice as noise,
+// so the lobes are weighted analytically with the macro-normal Fresnel instead. This is the same
+// weighting evaluateBsdf gives a rough glossy reflection over diffuse; rough glass weights its lobes per
+// microfacet when sampling, but the macro-normal split is good enough for a guide buffer.
+struct FirstBounceAlbedos
+{
+    float3 diffuse;
+    float3 specular;
+};
+
+// weight is the path weight before scattering, so both guides inherit everything the path accumulated up
+// to the first bounce (volume absorption, fog transmittance, the alpha split weight) and stay consistent
+// with the radiance they demodulate.
+FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
+                                             const float2 uv,
+                                             const float3 wo_WS,
+                                             const float3 surfNor_WS,
+                                             const TexSampleCtx texCtx,
+                                             const float3 weight)
+{
+    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
+    const float3 glossyReflectionAlbedo = calculateDlssSpecularAlbedo(
+        material.glossyReflectionTint, material.roughness * material.roughness, cosTheta(wo_WS, surfNor_WS));
+    // The lobe the light reaches when it isn't reflected: diffuse, or transmission for glass
+    const float3 nonReflectedAlbedo =
+        weight * (1.f - fresnelReflectance) * getMaterialBaseColor(material, uv, texCtx).rgb;
+    // Refraction through rough glass reads as a specular signal, and glass has no diffuse lobe to put it in
+    const bool nonReflectedIsSpecular = material.hasGlossyTransmission();
+
+    FirstBounceAlbedos result;
+    result.diffuse = nonReflectedIsSpecular ? float3(0.f, 0.f, 0.f) : nonReflectedAlbedo;
+    result.specular = weight * fresnelReflectance * glossyReflectionAlbedo;
+    if (nonReflectedIsSpecular)
+    {
+        result.specular += nonReflectedAlbedo;
+    }
+    return result;
+}
+
 void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSplitIdx, out float3 pathColor, out float3 ptDiffuseAlbedo)
 {
     pathColor = 0.f;
@@ -322,6 +362,22 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 hasEncounteredNonDeltaSurface = true;
             }
 
+            // A rough glossy first bounce would otherwise write the stochastically chosen lobe's weight as its
+            // albedo. Only pathSplitIdx 0 can reach a rough material (trySplitMaterial breaks split 1 out for
+            // anything it can't split, and the alpha split makes split 1 a delta passthrough), so the single
+            // write to the shared specular albedo target has no other writer to race with.
+            const bool useAnalyticAlbedoGuides =
+                (pathDepth == 0) && surfMaterial.hasGlossy() && surfMaterial.roughness > 0.f;
+            if (useAnalyticAlbedoGuides)
+            {
+                const FirstBounceAlbedos albedos = computeFirstBounceAlbedos(
+                    surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfTexCtx, payload.pathWeight);
+                ptDiffuseAlbedo = albedos.diffuse;
+
+                RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
+                specularAlbedoTarget[pixelIdx] = float4(albedos.specular, 1.f);
+            }
+
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
             {
@@ -333,7 +389,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
 
-            if (pathDepth == 0)
+            if (pathDepth == 0 && !useAnalyticAlbedoGuides)
             {
                 ptDiffuseAlbedo = payload.pathWeight;
             }
