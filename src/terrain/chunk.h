@@ -14,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <glm/glm.hpp>
+#include <unordered_map>
 
 enum class ChunkState : uint8_t
 {
@@ -73,8 +74,11 @@ inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
 inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
+inline constexpr uint32_t caveMaxY = 320;
+inline constexpr uint8_t noCaveBiome = 0xff;
 
 static_assert(MathUtil::isPowerOfTwo(chunkSizeXZ), "chunkSizeXZ must be a power of two");
+static_assert(caveMaxY <= chunkSizeY);
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
@@ -100,22 +104,20 @@ private:
     // written again, so neighbors may read it during their structure pass while this chunk's
     // blocks are being mutated. See knowledge/terrain/cave_structure_system.md.
     std::vector<uint64_t> terrainAirMask{};
+    // One immutable bit per block identifying terrain full cubes. This permits race-free
+    // support checks while neighboring chunks concurrently fill structures into air/water.
+    std::vector<uint64_t> terrainSolidCubeMask{};
+    // Cave biome at terrain-carved cave-air voxels; 0xff means the voxel was not cave air.
+    std::vector<uint8_t> caveBiomes{};
+    // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
+    // if stateful blocks become common.
+    std::unordered_map<uint32_t, uint8_t> blockStates{};
     std::vector<glm::uvec3> segmentsToGenerate{};
 
     std::vector<Biome> biomes{};
     // Highest solid terrain block per column (pre-structure). Lets later passes tell an
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
-    // Cave floor solids with their cave biome, captured during the terrain scan (a few per column),
-    // grouped by column via caveFloorOffsets so the decorator pass can apply that biome's decorator.
-    struct CaveFloor
-    {
-        uint16_t y;
-        CaveBiome biome;
-    };
-    std::vector<CaveFloor> caveFloors{};
-    std::array<uint32_t, chunkSizeXZSquare + 1> caveFloorOffsets{};
-
     std::vector<Structure> structures{};
     std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
@@ -136,6 +138,7 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void buildTerrainAirMask();
+    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
@@ -187,8 +190,11 @@ public:
     const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
     const std::vector<Structure>& getStructures() const;
+    const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
 
-    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes, std::vector<Structure>&& structures);
+    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
+                            std::vector<Structure>&& structures,
+                            std::unordered_map<uint32_t, uint8_t>&& blockStates);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
@@ -200,6 +206,7 @@ public:
     // Whether the terrain pass left AIR at a world position within this chunk's structure
     // neighborhood (radius structureMaxChunkRadius). Only valid during the structure pass.
     bool isTerrainAir_WS(glm::ivec3 pos_WS) const;
+    bool isTerrainSolidCube_WS(glm::ivec3 pos_WS) const;
 
     static inline bool isInChunkXZ(glm::ivec2 pos_CS)
     {

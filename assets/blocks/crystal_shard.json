@@ -2,6 +2,8 @@
     "textures": "crystal_core",
     "type": "solid",
     "shape": "decorator_custom",
+    "randomJitter": true,
+    "blockState": "surface_mount",
     "model": "crystal_shard.glb",
     "proceduralColor": true,
     "randomRotationY": [

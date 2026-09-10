@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Cave Structure System
 
@@ -10,7 +10,7 @@ gens live on `CaveBiomeData.caveStructureGens`
 ([cave_biome_system.md](cave_biome_system.md)), keyed by `CaveBiome` of the
 floor/ceiling solid.
 
-## Terrain air mask: the one safe cross-chunk read during fill
+## Immutable terrain masks: safe cross-chunk reads during fill
 
 A structure is filled once by every chunk it overlaps, and a fill may only touch its
 own chunk's blocks. That is fine for shapes that are a pure function of the seed,
@@ -19,13 +19,16 @@ blocks are air across the *whole* footprint, including the parts in neighbouring
 chunks. Reading a neighbour's `blocks` during fill is a data race — neighbours run
 their own structure pass concurrently and mutate `blocks` in place.
 
-`Chunk::terrainAirMask` is the answer: one bit per block, captured from `blocks`
-right before `HAS_TERRAIN` and never written again. The structure pass is gated on
+`Chunk::terrainAirMask` and `terrainSolidCubeMask` are the answer: one bit per block,
+captured from `blocks` right before `HAS_TERRAIN` and never written again. The air
+mask protects cave-structure footprint checks; the solid-cube mask protects decorator
+support checks while a neighboring structure pass may be replacing air or water.
+The structure pass is gated on
 every neighbour being `>= HAS_TERRAIN` (acquire), and the mask is written before the
 release on that state advance, so `isTerrainAir_WS` can read any neighbour's mask
-race-free. It reports *terrain* air (pre-structure), which is exactly what makes it
+race-free. They report *terrain* state (pre-structure), which is exactly what makes it
 consistent: every chunk sees the same answer regardless of how far each has got in
-its own fill. Cost is `chunkSizeY / 8` bytes per column, 16 KB per chunk.
+its own fill. Together they cost `chunkSizeY / 4` bytes per column, 32 KB per chunk.
 
 Imported chunks build the mask from their loaded blocks (which already include
 structures), so a cluster whose footprint reaches into an imported chunk sees its
@@ -85,8 +88,8 @@ flag, and the floor/ceiling cave biome reuses the per-voxel biome already
 classified for the base-block choice. Floor event (solid→cave-air) opens a layer;
 ceiling event (cave-air→solid) closes it `closed=true`; cave-air→non-cave-air
 closes it `closed=false` (opened to sky — ceiling gens skipped). Biome is sampled
-at the floor/ceiling **once per layer**, never per voxel, preserving the
-"no per-voxel cave biome storage" invariant in cave_biome_system.md.
+at the floor/ceiling **once per layer**. The separate per-voxel cave-air biome
+array belongs to decorator surface discovery and is not used to choose structures.
 
 ## Why the seed folds in `layerIdx` (required, not optional)
 

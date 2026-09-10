@@ -1,9 +1,10 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Custom decorator models
 
-`block_model.h/cpp` loads geometry once and caches four quarter-turn vertex arrays
-with shared local indices. `Chunk::createInstances` chooses a variant, translates
+`block_model.h/cpp` loads geometry once and caches four floor rotations for ordinary
+custom decorators, or six attachment directions with four quarter-turn vertex arrays
+each for `surface_mount` blocks, all with shared local indices. `Chunk::createInstances` chooses a variant, translates
 its vertices, rebases its indices, and appends triangle metadata to the ordinary
 terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
 cache can be read concurrently without locks and survives chunk unload/reimport.
@@ -17,9 +18,10 @@ of the mesh. Invalid custom assets fail startup rather than silently becoming cu
 
 The contract is static uncompressed triangles, NORMAL and TEXCOORD_0, UVs within
 0–1, and bounds within one block: X/Z in [-0.5,0.5], Y in [-0.125,1]. The origin is at
-the center of the base. Placement adds (0.5,0,0.5) to the block position. Horizontal geometry stays within the owning voxel. The downward allowance is for
-buried decorator bases on solid floors, not geometry intended to be visible in the
-voxel below. This keeps floor-mounted crystals as intact tilted rectangular prisms.
+the center of the base. Placement moves that origin to the selected voxel face.
+Without jitter, horizontal geometry stays within the owning voxel. The downward
+allowance is for buried decorator bases in the support block, not geometry intended
+to be visible behind it. This keeps crystals as intact tilted rectangular prisms.
 Export from Blender with Y-up conversion, excluding the prototype studio and its
 parent presentation offsets. Preserve component transforms relative to the asset
 root (`root.matrix_world.inverted() @ child.matrix_world`); stripping all object
@@ -29,8 +31,18 @@ texture PNGs/aux PNGs, and block JSONs under `assets/blocks`, not Blender source
 `randomRotationY` chooses from distinct degrees 0/90/180/270, defaulting to 0.
 World seed and all three integer block coordinates choose a turn, using a salt
 independent of foliage jitter. Orientation is reproducible across remeshing and
-world imports without adding block-state storage. Quarter turns use sign/swap
-operations before normal packing, not trig in the worker loop.
+world imports. Surface-mounted models additionally store their attachment face in
+a sparse one-byte block-state map; the quarter turn remains reconstructed. Rotation
+is applied about local +Y before that axis is mapped to the attachment normal, so it
+becomes a roll around the selected block face. Quarter turns and face transforms use
+sign/swap operations before normal packing, not trig in the worker loop. The typed
+face basis in `block_orientation.h` is shared by generation, model caching, meshing,
+and jitter so those paths cannot drift apart.
+
+`randomJitter` opts a model into a deterministic ±0.2 offset within its attachment
+face. The same cached face basis used for orientation defines the tangent plane, so
+wall and ceiling models move sideways along their support rather than separating
+from it. The jitter hash is independent of the rotation hash.
 
 Opaque atlases are validated before meshing on all GPUs, including without OMM
 support. Custom UVs cannot reuse the pair of OMMs baked for full-tile quads.

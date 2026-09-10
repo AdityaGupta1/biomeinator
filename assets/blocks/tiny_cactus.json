@@ -1,5 +1,6 @@
 {
     "textures": "tiny_cactus",
     "type": "transparent_cutout",
-    "shape": "x_shaped"
+    "shape": "x_shaped",
+    "randomJitter": true
 }
