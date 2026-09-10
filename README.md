@@ -36,16 +36,10 @@ Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move 
 ## SHaRC validation
 
 `Biomeinator.exe --sharcSelfTest --width=64 --height=64 --sharcCapacityLog2=16` runs a deterministic GPU cache test.
-`python tests/run_sharc.py` (requires NumPy) compares warmed SHaRC renders with uncached renders of existing scenes and saves linear RGB PFM images, PNG previews, logs, and error metrics under `build/sharc_validation/`.
 Use `tests/run_perf.py` with `--sharc=false` and `--sharc=true` to compare total GPU cost, including update and resolve.
 
 The settings panel includes a cache reset button and hit/bounce/grid/cached-radiance views (`--sharcDebug=1`, `2`, `3`, or `4`).
 `--sharcDiagnostics=true` enables GPU counters and periodic log output. Keep it off for timing comparisons.
-For native 1-spp noise comparisons (path splitting disabled, 256 cache warmup frames), run
-`python tests/run_sharc.py --single-spp --scenes crystal_caves cornell_box_rtsl evil_room --width 960 --height 540 --out build/sharc_1spp`.
-`python tests/run_sharc_breakdown.py` separates the cave scenes into light-sampling,
-emitter-hit, cache, and remaining contributions (`--sharcDebug=5` through `11`), with
-1-spp images and 256-spp averages for diagnosing noise.
 See [SHaRC integration notes](knowledge/rendering/sharc.md) for cache behavior and limitations.
 
 ## Third-Party Licenses

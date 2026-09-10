@@ -71,8 +71,6 @@ prevents cold-cache frames from contaminating a warmed comparison.
 
 `--sharcSelfTest` executes actual GPU insertion, throughput propagation, resolve, known-value
 query, empty miss, eviction and reset checks. It exits nonzero on failure.
-`tests/run_sharc.py` reuses scenes from tests.json. Optional `--scene-file` can point at a
-fixture under `blender/_temp`; `--extra` forwards additional renderer arguments.
 `--testRadianceOutput=<path>.pfm` alongside testOutput exports the raw linear RGB result,
 combining path splits and normalizing accumulation, before tonemapping or DLSS. No lossy
 image conversion is involved. `--rngSeed` gives reproducible sampling; zero retains random
@@ -105,9 +103,9 @@ before tonemapping, up to floating-point subtraction error.
 These modes use a separate diagnostic raygeneration pipeline so the extra component
 accumulators are compiled out of the ordinary query and reference shaders.
 
-`python tests/run_sharc_breakdown.py` renders these components for both cave worlds
-at 1 spp and 256 spp after 256 warmup frames, with path splitting and jitter disabled.
-It reports linear energy and single-sample MSE against the accumulated SHaRC result.
+The local analysis rendered components at 1 spp and 256 spp after 256 warmup frames,
+with path splitting and jitter disabled, and measured single-sample MSE against the
+accumulated SHaRC result.
 Component MSE shares are a noise diagnostic, not exact shares of total beauty variance:
 they omit covariance, and the accumulated target still contains noise and cache bias.
 
