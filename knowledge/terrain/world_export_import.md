@@ -6,7 +6,12 @@ _Last edited: 2026-09-09_
 
 Sparse block-state records are sorted by local block index before export so the
 in-memory unordered map does not make world files nondeterministic. State bytes are
-validated against the referenced block's declared state kind during import.
+validated against the referenced block's declared state kind during import, including
+rejecting unused packed bits. Surface-mounted blocks explicitly store every face,
+including the ordinary upward/floor-facing value; absence never implicitly means floor.
+Region v5 imports predate block-state records; as a narrow migration, every block that
+now declares `surface_mount` receives an explicit upward-facing entry in memory. A later
+export writes those migrated entries in v6 format.
 
 ## Block palette decouples exports from enum values
 

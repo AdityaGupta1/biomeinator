@@ -4,6 +4,7 @@
 #pragma once
 
 #include "block_ids.h"
+#include "block_orientation.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -87,6 +88,7 @@ constexpr bool isDecoratorShape(BlockShape shape)
 constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neighborType,
                                 BlockShape neighborShape, int faceIdx)
 {
+    const BlockFace face = static_cast<BlockFace>(faceIdx);
     if (neighborType == BlockType::AIR) return true;
     if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
         isDecoratorShape(neighborShape)) return true;
@@ -94,18 +96,18 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
     {
     case BlockType::SOLID:
         if (neighborType != BlockType::SOLID) return true;
-        if (faceIdx == 4) return shape == BlockShape::LIQUID_TOP;
-        if (faceIdx == 5) return neighborShape == BlockShape::LIQUID_TOP;
+        if (face == BlockFace::Y_POS) return shape == BlockShape::LIQUID_TOP;
+        if (face == BlockFace::Y_NEG) return neighborShape == BlockShape::LIQUID_TOP;
         return neighborShape == BlockShape::LIQUID_TOP && shape != BlockShape::LIQUID_TOP;
     case BlockType::TRANSPARENT_CUTOUT:
         if (neighborType == BlockType::SOLID) return false;
         // Only the lower-positioned cube owns a shared cutout boundary.
         return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
-               faceIdx == 0 || faceIdx == 1 || faceIdx == 4;
+               face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;
     case BlockType::GLASS:
         return neighborType != BlockType::GLASS && neighborType != BlockType::SOLID;
     case BlockType::WATER:
-        return shape == BlockShape::LIQUID_TOP && faceIdx == 4;
+        return shape == BlockShape::LIQUID_TOP && face == BlockFace::Y_POS;
     default:
         return false;
     }

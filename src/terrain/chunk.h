@@ -74,8 +74,11 @@ inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
 inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
+inline constexpr uint32_t caveMaxY = 320;
+inline constexpr uint8_t noCaveBiome = 0xff;
 
 static_assert(MathUtil::isPowerOfTwo(chunkSizeXZ), "chunkSizeXZ must be a power of two");
+static_assert(caveMaxY <= chunkSizeY);
 
 inline constexpr uint32_t chunkSegmentSizeXZ = 4;
 inline constexpr uint32_t chunkSegmentSizeY = 8;
@@ -101,6 +104,9 @@ private:
     // written again, so neighbors may read it during their structure pass while this chunk's
     // blocks are being mutated. See knowledge/terrain/cave_structure_system.md.
     std::vector<uint64_t> terrainAirMask{};
+    // One immutable bit per block identifying terrain full cubes. This permits race-free
+    // support checks while neighboring chunks concurrently fill structures into air/water.
+    std::vector<uint64_t> terrainSolidCubeMask{};
     // Cave biome at terrain-carved cave-air voxels; 0xff means the voxel was not cave air.
     std::vector<uint8_t> caveBiomes{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
@@ -132,6 +138,7 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void buildTerrainAirMask();
+    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
@@ -199,6 +206,7 @@ public:
     // Whether the terrain pass left AIR at a world position within this chunk's structure
     // neighborhood (radius structureMaxChunkRadius). Only valid during the structure pass.
     bool isTerrainAir_WS(glm::ivec3 pos_WS) const;
+    bool isTerrainSolidCube_WS(glm::ivec3 pos_WS) const;
 
     static inline bool isInChunkXZ(glm::ivec2 pos_CS)
     {

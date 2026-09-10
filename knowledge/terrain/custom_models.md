@@ -2,8 +2,9 @@ _Last edited: 2026-09-09_
 
 # Custom decorator models
 
-`block_model.h/cpp` loads geometry once and caches six attachment directions with four quarter-turn vertex arrays each
-with shared local indices. `Chunk::createInstances` chooses a variant, translates
+`block_model.h/cpp` loads geometry once and caches four floor rotations for ordinary
+custom decorators, or six attachment directions with four quarter-turn vertex arrays
+each for `surface_mount` blocks, all with shared local indices. `Chunk::createInstances` chooses a variant, translates
 its vertices, rebases its indices, and appends triangle metadata to the ordinary
 terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
 cache can be read concurrently without locks and survives chunk unload/reimport.
@@ -34,7 +35,9 @@ world imports. Surface-mounted models additionally store their attachment face i
 a sparse one-byte block-state map; the quarter turn remains reconstructed. Rotation
 is applied about local +Y before that axis is mapped to the attachment normal, so it
 becomes a roll around the selected block face. Quarter turns and face transforms use
-sign/swap operations before normal packing, not trig in the worker loop.
+sign/swap operations before normal packing, not trig in the worker loop. The typed
+face basis in `block_orientation.h` is shared by generation, model caching, meshing,
+and jitter so those paths cannot drift apart.
 
 `randomJitter` opts a model into a deterministic ±0.2 offset within its attachment
 face. The same cached face basis used for orientation defines the tangent plane, so

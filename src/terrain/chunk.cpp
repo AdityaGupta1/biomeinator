@@ -5,6 +5,7 @@
 
 #include "block.h"
 #include "block_model.h"
+#include "block_orientation.h"
 #include "cave_biome.h"
 #include "terrain.h"
 #include "terrain_materials.h"
@@ -26,31 +27,18 @@ using namespace DirectX;
 
 namespace
 {
-inline constexpr uint8_t NO_CAVE_BIOME = 0xff;
-
-// First four match NeighborDirection. This is also the three-bit SURFACE_MOUNT state encoding.
-inline constexpr ivec3 faceOffsets[6] = {
-    ivec3(1, 0, 0),  // +x
-    ivec3(0, 0, 1),  // +z
-    ivec3(-1, 0, 0), // -x
-    ivec3(0, 0, -1), // -z
-    ivec3(0, 1, 0),  // +y
-    ivec3(0, -1, 0), // -y
-};
-
-inline constexpr vec3 faceTangentX[6] = {
-    vec3(0, -1, 0), vec3(1, 0, 0), vec3(0, 1, 0),
-    vec3(1, 0, 0), vec3(1, 0, 0), vec3(1, 0, 0),
-};
-inline constexpr vec3 faceTangentZ[6] = {
-    vec3(0, 0, 1), vec3(0, -1, 0), vec3(0, 0, 1),
-    vec3(0, 1, 0), vec3(0, 0, 1), vec3(0, 0, -1),
-};
-
-constexpr uint8_t surfaceForFace(uint8_t face)
+constexpr uint8_t surfaceForFace(BlockFace face)
 {
-    return face < 4 ? DECORATOR_SURFACE_WALL
-                    : (face == 4 ? DECORATOR_SURFACE_FLOOR : DECORATOR_SURFACE_CEILING);
+    switch (face)
+    {
+        case BlockFace::X_POS:
+        case BlockFace::Z_POS:
+        case BlockFace::X_NEG:
+        case BlockFace::Z_NEG: return DECORATOR_SURFACE_WALL;
+        case BlockFace::Y_POS: return DECORATOR_SURFACE_FLOOR;
+        case BlockFace::Y_NEG: return DECORATOR_SURFACE_CEILING;
+        default: ASSERT(false); return 0;
+    }
 }
 } // namespace
 
@@ -124,7 +112,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
         this->terrainTopY.resize(chunkSizeXZSquare);
-        this->caveBiomes.assign(numChunkBlocks, NO_CAVE_BIOME);
+        this->caveBiomes.assign(chunkSizeXZSquare * caveMaxY, noCaveBiome);
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
@@ -139,16 +127,24 @@ void Chunk::buildTerrainAirMask()
 {
     constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
     this->terrainAirMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+    this->terrainSolidCubeMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
     for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
     {
-        if (this->blocks[blockIdx] == Block::AIR)
+        const Block block = this->blocks[blockIdx];
+        if (block == Block::AIR)
         {
             this->terrainAirMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+        }
+        else
+        {
+            const BlockData& blockData = Blocks::getBlockData(block);
+            if (blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE)
+                this->terrainSolidCubeMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
         }
     }
 }
 
-bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
+bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const
 {
     if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
     {
@@ -165,7 +161,18 @@ bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
     const glm::ivec2 chunkOriginXZ_WS = posChunk * static_cast<int>(chunkSizeXZ);
     const uint32_t blockIdx =
         blockPosToIdx(glm::uvec3(pos_WS.x - chunkOriginXZ_WS.x, pos_WS.y, pos_WS.z - chunkOriginXZ_WS.y /*z*/));
-    return (chunk->terrainAirMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
+    const std::vector<uint64_t>& terrainMask = chunk->*mask;
+    return (terrainMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
+}
+
+bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
+{
+    return this->getTerrainMaskBit_WS(pos_WS, &Chunk::terrainAirMask);
+}
+
+bool Chunk::isTerrainSolidCube_WS(glm::ivec3 pos_WS) const
+{
+    return this->getTerrainMaskBit_WS(pos_WS, &Chunk::terrainSolidCubeMask);
 }
 
 void Chunk::checkStructureNeighbors()
@@ -265,7 +272,9 @@ void Chunk::runStructuresAndDecoratorPass()
                     Block decoratorBlock = Block::AIR;
                     // Cave-air cells are handled by the all-face pass below. Everything else at or
                     // above terrain top is the ordinary surface-biome floor pass.
-                    if (this->caveBiomes[baseBlockIdx + blockY] == NO_CAVE_BIOME &&
+                    const bool isCaveAir = blockY < caveMaxY &&
+                                           this->caveBiomes[blockY + caveMaxY * columnIdx] != noCaveBiome;
+                    if (!isCaveAir &&
                         groundY >= terrainTopY && !decorator.isEmpty())
                     {
                         decoratorBlock = decorator.getBlock(
@@ -288,9 +297,10 @@ void Chunk::runStructuresAndDecoratorPass()
         if (pos_CS.y < 0 || pos_CS.y >= static_cast<int>(chunkSizeY)) return Block::AIR;
         if (Chunk::isInChunkXZ(pos_CS)) return this->blocks[Chunk::blockPosToIdx(uvec3(pos_CS))];
 
-        int face = pos_CS.x < 0 ? 2 : (pos_CS.x >= static_cast<int>(chunkSizeXZ) ? 0
-                                  : (pos_CS.z < 0 ? 3 : 1));
-        const Chunk* neighbor = this->neighbors[face];
+        const NeighborDirection dir = pos_CS.x < 0 ? NeighborDirection::X_NEG
+            : (pos_CS.x >= static_cast<int>(chunkSizeXZ) ? NeighborDirection::X_POS
+            : (pos_CS.z < 0 ? NeighborDirection::Z_NEG : NeighborDirection::Z_POS));
+        const Chunk* neighbor = this->neighbors[static_cast<size_t>(dir)];
         ASSERT(neighbor != nullptr);
         const ivec3 neighborPos_CS = {
             (pos_CS.x + chunkSizeXZ) & (chunkSizeXZ - 1),
@@ -304,12 +314,13 @@ void Chunk::runStructuresAndDecoratorPass()
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
+            const uint columnIdx = blockX + chunkSizeXZ * blockZ;
             const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
-            for (uint blockY = 1; blockY + 1 < chunkSizeY; ++blockY)
+            for (uint blockY = 1; blockY < caveMaxY; ++blockY)
             {
                 const uint blockIdx = baseBlockIdx + blockY;
-                const uint8_t caveBiomeValue = this->caveBiomes[blockIdx];
-                if (caveBiomeValue == NO_CAVE_BIOME || this->blocks[blockIdx] != Block::AIR) continue;
+                const uint8_t caveBiomeValue = this->caveBiomes[blockY + caveMaxY * columnIdx];
+                if (caveBiomeValue == noCaveBiome || this->blocks[blockIdx] != Block::AIR) continue;
 
                 const CaveBiome caveBiome = static_cast<CaveBiome>(caveBiomeValue);
                 ASSERT(caveBiome < CaveBiome::COUNT);
@@ -318,29 +329,30 @@ void Chunk::runStructuresAndDecoratorPass()
 
                 const ivec3 blockPos_CS(blockX, blockY, blockZ);
                 const ivec3 blockPos_WS(chunkOriginXZ_WS.x + blockX, blockY, chunkOriginXZ_WS.y + blockZ);
-                uint8_t candidateFaces[6];
+                uint8_t candidateFaces[blockFaceCount];
                 uint8_t numCandidateFaces = 0;
-                for (uint8_t face = 0; face < 6; ++face)
+                for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                 {
+                    const BlockFace face = static_cast<BlockFace>(faceIdx);
+                    const ivec3 faceNormal = blockFaceBasis(face).normal;
                     const uint8_t surface = surfaceForFace(face);
-                    const ivec3 supportPos_CS = blockPos_CS - faceOffsets[face];
-                    const ivec3 supportPos_WS = blockPos_WS - faceOffsets[face];
-                    // Structure workers only write terrain-air cells. Reject those through the
-                    // immutable mask before reading a neighbor block that may be filling concurrently.
-                    if (this->isTerrainAir_WS(supportPos_WS)) continue;
+                    const ivec3 supportPos_CS = blockPos_CS - faceNormal;
+                    const ivec3 supportPos_WS = blockPos_WS - faceNormal;
+                    // Validate through immutable terrain state before reading a neighbor block that
+                    // may be filling concurrently. Solid terrain cubes are never structure targets.
+                    if (!this->isTerrainSolidCube_WS(supportPos_WS)) continue;
                     const Block supportBlock = getBlock(supportPos_CS);
-                    const BlockData& supportData = Blocks::getBlockData(supportBlock);
-                    if (supportData.type == BlockType::SOLID && supportData.shape == BlockShape::CUBE &&
-                        caveDecorator.supportsSurface(surface, supportBlock))
+                    if (caveDecorator.supportsSurface(surface, supportBlock))
                     {
-                        candidateFaces[numCandidateFaces++] = face;
+                        candidateFaces[numCandidateFaces++] = faceIdx;
                     }
                 }
                 if (numCandidateFaces == 0) continue;
 
                 auto faceRng = initRng(worldSeed ^ hash(0x7A11FACEu), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                const uint8_t face = candidateFaces[faceRng.nextUint() % numCandidateFaces];
-                const Block supportBlock = getBlock(blockPos_CS - faceOffsets[face]);
+                const uint8_t faceIdx = candidateFaces[faceRng.nextUint() % numCandidateFaces];
+                const BlockFace face = static_cast<BlockFace>(faceIdx);
+                const Block supportBlock = getBlock(blockPos_CS - blockFaceBasis(face).normal);
                 auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                 const Block decoratorBlock = caveDecorator.getBlock(
                     blockRng.nextFloat(), supportBlock, surfaceForFace(face));
@@ -349,7 +361,7 @@ void Chunk::runStructuresAndDecoratorPass()
                 this->blocks[blockIdx] = decoratorBlock;
                 if (Blocks::getBlockData(decoratorBlock).stateKind == BlockStateKind::SURFACE_MOUNT)
                 {
-                    this->blockStates.insert_or_assign(blockIdx, face);
+                    this->blockStates.insert_or_assign(blockIdx, faceIdx);
                 }
             }
         }
@@ -361,6 +373,7 @@ void Chunk::fillStructuresAndDecorators()
     if (!this->wasImported)
     {
         this->runStructuresAndDecoratorPass();
+        std::vector<uint8_t>().swap(this->caveBiomes);
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
@@ -772,27 +785,28 @@ void Chunk::createInstances()
                         auto rng = initRng(worldSeed ^ 0xB16B00B5u, static_cast<uint>(columnPos_WS.x),
                                            blockY, static_cast<uint>(columnPos_WS.y));
                         const uint turn = blockData.rotationY[rng.nextUint() % blockData.numRotationsY];
-                        uint8_t mountFace = 4;
+                        uint8_t mountFaceIdx = blockFaceIndex(BlockFace::Y_POS);
                         if (blockData.stateKind == BlockStateKind::SURFACE_MOUNT)
                         {
-                            const auto state = this->blockStates.find(blockIdx);
-                            if (state != this->blockStates.end()) mountFace = state->second & 0x7u;
-                            ASSERT(mountFace < 6);
+                            mountFaceIdx = this->blockStates.at(blockIdx) & blockStateFaceMask;
+                            ASSERT(mountFaceIdx < blockFaceCount);
                         }
-                        const vec3 mountNormal(faceOffsets[mountFace]);
+                        const BlockFace mountFace = static_cast<BlockFace>(mountFaceIdx);
+                        const BlockFaceBasis& mountBasis = blockFaceBasis(mountFace);
+                        const vec3 mountNormal(mountBasis.normal);
                         vec3 jitter(0.f);
                         if (blockData.randomJitter)
                         {
                             auto jitterRng = initRng(worldSeed ^ hash(392421012),
                                 static_cast<uint>(columnPos_WS.x), blockY, static_cast<uint>(columnPos_WS.y));
                             const vec2 tangentJitter = (jitterRng.nextFloat2() - .5f) * .4f;
-                            jitter = tangentJitter.x * faceTangentX[mountFace] +
-                                     tangentJitter.y * faceTangentZ[mountFace];
+                            jitter = tangentJitter.x * vec3(mountBasis.tangentX) +
+                                     tangentJitter.y * vec3(mountBasis.tangentZ);
                         }
                         const vec3 offset = vec3(blockPos_CS) + vec3(.5f) - .5f * mountNormal + jitter;
                         const auto baseVertex = static_cast<uint32_t>(terrainVerts.size());
                         const auto baseTriangle = static_cast<uint32_t>(terrainIdxs.size() / 3);
-                        const auto& vertices = model.orientations[mountFace * 4 + turn];
+                        const auto& vertices = model.getOrientation(mountFaceIdx, turn);
                         terrainVerts.insert(terrainVerts.end(), vertices.begin(), vertices.end());
                         for (size_t i = baseVertex; i < terrainVerts.size(); ++i)
                         {
@@ -863,9 +877,9 @@ void Chunk::createInstances()
                         std::vector<PerTriangleData>& perTriDatas = isWater ? waterPerTriDatas : terrainPerTriDatas;
                         const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
 
-                        for (uint faceIdx = 0; faceIdx < 6; ++faceIdx)
+                        for (uint faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                         {
-                            const ivec3 neighborOffset = faceOffsets[faceIdx];
+                            const ivec3 neighborOffset = blockFaceBases[faceIdx].normal;
                             const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
 
                             if (!shouldGenerateFace(blockPos_CS, blockData.type, blockData.shape, neighborPos_CS, faceIdx))
@@ -899,7 +913,8 @@ void Chunk::createInstances()
 
                             auto faceData = makeBlockTriangleData(blockData, texArraySliceIdx);
                             if (isWater) faceData.flags |= TRIANGLE_FLAG_IS_WATER;
-                            if (isWater && faceIdx == 4) faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
+                            if (isWater && faceIdx == blockFaceIndex(BlockFace::Y_POS))
+                                faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
                             perTriDatas.emplace_back(faceData);
                             perTriDatas.emplace_back(faceData);
 

@@ -29,6 +29,8 @@ class Decorator
 private:
     std::vector<DecoratorEntry> entries{};
     float totalWeight{ 0.f };
+    uint8_t unrestrictedSurfaces{ 0 };
+    std::unordered_set<uint32_t> supportedSurfaceBlocks{};
 
 public:
     void addEntry(Block block, float weight, std::initializer_list<Block> supportBlocks = {},

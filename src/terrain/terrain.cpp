@@ -5,6 +5,7 @@
 
 #include "biome.h"
 #include "block.h"
+#include "block_orientation.h"
 #include "cave_biome.h"
 #include "chunk.h"
 #include "chunk_generator.h"
@@ -475,6 +476,7 @@ void update(ToFreeList& toFreeList)
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;
 static constexpr uint16_t worldRegionVersion = 6;
+static constexpr uint16_t legacyWorldRegionVersion = 5;
 static constexpr uint32_t worldJsonVersion = 2;
 
 static_assert(sizeof(Block) == sizeof(uint16_t), "World export format assumes 2-byte Block");
@@ -689,6 +691,7 @@ void exportWorld()
             for (const auto& [blockIdx, state] : sortedBlockStates)
             {
                 ASSERT(blockIdx < numChunkBlocks);
+                ASSERT(state < blockFaceCount);
                 const uint32_t packed = blockIdx | (static_cast<uint32_t>(state) << blockStateIndexBits);
                 appendBytes(&packed, sizeof(packed));
             }
@@ -907,10 +910,11 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                          magic, regionFilePath.generic_string().c_str(), worldRegionMagic);
         return false;
     }
-    if (version != worldRegionVersion)
+    if (version != worldRegionVersion && version != legacyWorldRegionVersion)
     {
-        Logger::logError("world import: unsupported version %u in %s (expected %u)",
-                         version, regionFilePath.generic_string().c_str(), worldRegionVersion);
+        Logger::logError("world import: unsupported version %u in %s (expected %u or %u)",
+                         version, regionFilePath.generic_string().c_str(),
+                         legacyWorldRegionVersion, worldRegionVersion);
         return false;
     }
     if (fileRegionX != regionPos.x || fileRegionZ != regionPos.y)
@@ -939,7 +943,8 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
         {
             return false;
         }
-        if (!readBytes(&numBlockStates, sizeof(numBlockStates)))
+        numBlockStates = 0;
+        if (version >= worldRegionVersion && !readBytes(&numBlockStates, sizeof(numBlockStates)))
         {
             return false;
         }
@@ -1061,7 +1066,8 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
             if (!readBytes(&packed, sizeof(packed))) return false;
             const uint32_t blockIdx = packed & blockStateIndexMask;
             const uint8_t state = static_cast<uint8_t>(packed >> blockStateIndexBits);
-            if (blockIdx >= numChunkBlocks || state >= 6 ||
+            const uint32_t unusedBits = packed >> (blockStateIndexBits + 8);
+            if (unusedBits != 0 || blockIdx >= numChunkBlocks || state >= blockFaceCount ||
                 Blocks::getBlockData(blocks[blockIdx]).stateKind != BlockStateKind::SURFACE_MOUNT)
             {
                 Logger::logError("world import: invalid block state at block %u in chunk idx %u in %s",
@@ -1071,6 +1077,24 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
             if (!blockStates.emplace(blockIdx, state).second)
             {
                 Logger::logError("world import: duplicate block state at block %u in chunk idx %u in %s",
+                                 blockIdx, localIdx, regionFilePath.generic_string().c_str());
+                return false;
+            }
+        }
+        if (version == legacyWorldRegionVersion)
+        {
+            for (uint32_t blockIdx = 0; blockIdx < blocks.size(); ++blockIdx)
+            {
+                if (Blocks::getBlockData(blocks[blockIdx]).stateKind == BlockStateKind::SURFACE_MOUNT)
+                    blockStates.emplace(blockIdx, blockFaceIndex(BlockFace::Y_POS));
+            }
+        }
+        for (uint32_t blockIdx = 0; blockIdx < blocks.size(); ++blockIdx)
+        {
+            if (Blocks::getBlockData(blocks[blockIdx]).stateKind == BlockStateKind::SURFACE_MOUNT &&
+                !blockStates.contains(blockIdx))
+            {
+                Logger::logError("world import: missing block state at block %u in chunk idx %u in %s",
                                  blockIdx, localIdx, regionFilePath.generic_string().c_str());
                 return false;
             }

@@ -158,10 +158,13 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
                     data.rotationY[i] = static_cast<uint8_t>(degrees / 90);
                 }
             }
-            data.modelIdx = BlockModels::load(jsonPath.parent_path() / "models" / name);
+            data.modelIdx = BlockModels::load(
+                jsonPath.parent_path() / "models" / name, data.stateKind == BlockStateKind::SURFACE_MOUNT);
         }
         if (data.stateKind == BlockStateKind::SURFACE_MOUNT && data.shape != BlockShape::DECORATOR_CUSTOM)
             throw std::runtime_error("surface_mount block state requires a custom decorator model");
+        if (data.randomJitter && data.shape != BlockShape::X_SHAPED && data.shape != BlockShape::DECORATOR_CUSTOM)
+            throw std::runtime_error("randomJitter requires an x_shaped or decorator_custom block");
     }
     catch (const std::exception& e)
     {

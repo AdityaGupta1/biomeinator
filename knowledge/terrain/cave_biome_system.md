@@ -58,10 +58,12 @@ The biome's block effects (base block and skin) are classified on the fly inside
 the fill loop and baked straight into the block choice. The base block covers
 **all** solid stone with `y < caveNoiseMaxY` (not just cave walls), so exposed
 faces anywhere in the band read as the biome. Cave structures read the biome once
-per captured layer at fill time. Separately, chunks retain one byte per voxel for
-carved cave air (`0xff` means non-cave); this lets the post-structure decorator
-pass identify exact floor, wall, and ceiling cells across chunk boundaries without
-retaining the generation noise fields.
+per captured layer at fill time. Separately, chunks retain one byte per voxel below
+`caveMaxY` for carved cave air (`0xff` means non-cave); this lets the post-structure
+decorator pass identify exact floor, wall, and ceiling cells across chunk boundaries
+without retaining the generation noise fields. The compact 320-layer array is released
+as soon as that pass finishes, so it costs 80 KiB only during generation rather than
+128 KiB for the chunk's lifetime.
 
 ## Secondary rock
 

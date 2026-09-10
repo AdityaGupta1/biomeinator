@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aditya Gupta
 #include "block_model.h"
+#include "block_orientation.h"
 
+#include "debug.h"
 #include "logger.h"
 #include "util/packing.h"
 
@@ -70,22 +72,16 @@ glm::vec3 quarterTurn(glm::vec3 v, unsigned turn)
     }
 }
 
-// Proper axis-aligned rotations mapping the model's local +Y growth direction to a block face.
-glm::vec3 mountToFace(glm::vec3 v, unsigned face)
-{
-    switch (face)
-    {
-        case 0: return { v.y, -v.x, v.z };  // +X
-        case 1: return { v.x, -v.z, v.y };  // +Z
-        case 2: return { -v.y, v.x, v.z };  // -X
-        case 3: return { v.x, v.z, -v.y };  // -Z
-        case 5: return { v.x, -v.y, -v.z }; // -Y
-        default: return v;                  // +Y
-    }
-}
 } // namespace
 
-Model readGlb(const std::filesystem::path& path)
+const std::vector<Vertex>& Model::getOrientation(uint8_t face, uint8_t turn) const
+{
+    ASSERT(face < blockFaceCount && turn < 4);
+    ASSERT(this->hasAllFaceOrientations || face == blockFaceIndex(BlockFace::Y_POS));
+    return this->orientations[this->hasAllFaceOrientations ? face * 4 + turn : turn];
+}
+
+Model readGlb(const std::filesystem::path& path, bool allFaces)
 {
     try
     {
@@ -100,6 +96,7 @@ Model readGlb(const std::filesystem::path& path)
         require(!gltf.scenes.empty(), "block model has no scene");
 
         Model result;
+        result.hasAllFaceOrientations = allFaces;
         std::vector<bool> visiting(gltf.nodes.size(), false);
         std::function<void(int, const glm::mat4&)> visit;
         visit = [&](int nodeIdx, const glm::mat4& parent)
@@ -172,13 +169,16 @@ Model readGlb(const std::filesystem::path& path)
                                 "decorator model must fit one block, centered at its base (Y up)");
                         require(std::isfinite(uv[0]) && std::isfinite(uv[1]) && uv[0] >= 0.f && uv[0] <= 1.f &&
                                 uv[1] >= 0.f && uv[1] <= 1.f, "model UVs must stay within the block texture");
-                        for (unsigned face = 0; face < 6; ++face)
+                        const unsigned numFaces = allFaces ? blockFaceCount : 1;
+                        for (unsigned faceIdx = 0; faceIdx < numFaces; ++faceIdx)
                         {
+                            const BlockFace face = allFaces ? static_cast<BlockFace>(faceIdx) : BlockFace::Y_POS;
                             for (unsigned turn = 0; turn < 4; ++turn)
                             {
-                                const auto rp = mountToFace(quarterTurn(position, turn), face);
-                                const auto rn = mountToFace(quarterTurn(normal, turn), face);
-                                result.orientations[face * 4 + turn].push_back({ { rp.x, rp.y, rp.z },
+                                const auto rp = orientToBlockFace(quarterTurn(position, turn), face);
+                                const auto rn = orientToBlockFace(quarterTurn(normal, turn), face);
+                                const unsigned orientationIdx = allFaces ? faceIdx * 4 + turn : turn;
+                                result.orientations[orientationIdx].push_back({ { rp.x, rp.y, rp.z },
                                     Util::octEncode({ rn.x, rn.y, rn.z }), Util::packFloat2ToUint(uv[0], uv[1]) });
                             }
                         }
@@ -206,7 +206,7 @@ Model readGlb(const std::filesystem::path& path)
                     {
                         if (determinant < 0) std::swap(result.indices[i + 1], result.indices[i + 2]);
                         const auto point = [&](size_t j) {
-                            const auto& p = result.orientations[4 * 4][result.indices[j]].pos_OS;
+                            const auto& p = result.getOrientation(blockFaceIndex(BlockFace::Y_POS), 0)[result.indices[j]].pos_OS;
                             return glm::vec3(p.x, p.y, p.z);
                         };
                         require(glm::length(glm::cross(point(i + 1) - point(i), point(i + 2) - point(i))) > 1e-10f,
@@ -230,14 +230,19 @@ Model readGlb(const std::filesystem::path& path)
 
 void clear() { models.clear(); ids.clear(); }
 
-uint32_t load(const std::filesystem::path& path)
+uint32_t load(const std::filesystem::path& path, bool allFaces)
 {
     const auto key = path.lexically_normal().generic_string();
-    if (const auto it = ids.find(key); it != ids.end()) return it->second;
-    auto model = readGlb(path);
+    if (const auto it = ids.find(key); it != ids.end())
+    {
+        Model& model = models[it->second];
+        if (allFaces && !model.hasAllFaceOrientations) model = readGlb(path, true);
+        return it->second;
+    }
+    auto model = readGlb(path, allFaces);
     const auto id = static_cast<uint32_t>(models.size());
-    Logger::log("Loaded block model %s: %zu vertices, %zu triangles, 24 cached orientations",
-                key.c_str(), model.orientations[0].size(), model.indices.size() / 3);
+    Logger::log("Loaded block model %s: %zu vertices, %zu triangles, %u cached orientations",
+                key.c_str(), model.orientations[0].size(), model.indices.size() / 3, allFaces ? 24u : 4u);
     models.push_back(std::move(model));
     ids.emplace(key, id);
     return id;

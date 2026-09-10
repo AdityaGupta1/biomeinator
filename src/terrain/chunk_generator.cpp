@@ -32,8 +32,6 @@ static FN::SmartNode<FN::Generator> fnTerrainBase;
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
 // caves are fully suppressed by altitude squash well before this height
-inline constexpr int caveAbsoluteMaxY = 320;
-
 static FN::SmartNode<FN::Generator> fnCavesWorley;
 static FN::SmartNode<FN::Generator> fnCavesSimplex;
 
@@ -444,7 +442,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     // worley is read for y < caveSimplexBound, so max needed y across chunk is terrainBaseHeightMax * caveSimplexBoundFraction
     // simplex is read for y >= caveWorleyBound, so min needed y across chunk is terrainBaseHeightMin * caveWorleyBoundFraction
-    const int caveNoiseMaxY = std::min(terrainNoiseMaxY, caveAbsoluteMaxY);
+    const int caveNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(caveMaxY));
     const uint caveWorleyNoiseHeight = static_cast<uint>(std::min(caveNoiseMaxY, static_cast<int>(std::ceil(terrainBaseHeightMax * caveSimplexBoundFraction)) + 2));
     ASSERT(caveWorleyNoiseHeight > 0 && caveWorleyNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave worley noise height out of range");
     const int caveSimplexNoiseMinY = std::max(0, static_cast<int>(std::floor(terrainBaseHeightMin * caveWorleyBoundFraction)) - 2);
@@ -696,7 +694,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         voxelCaveBiome = caveBiome;
                         if (isCave)
                         {
-                            this->caveBiomes[blockIdx] = static_cast<uint8_t>(caveBiome);
+                            const uint caveBiomeIdx = y + caveMaxY * columnIdx;
+                            this->caveBiomes[caveBiomeIdx] = static_cast<uint8_t>(caveBiome);
                         }
                         else
                         {

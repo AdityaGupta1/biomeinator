@@ -15,7 +15,7 @@ Two cave noise sources: **worley** (cellular, produces rounded tunnels) below `c
 Both cave grids are generated with a one-block XZ margin (`caveNoiseSizeXZ`) so the
 slope classification in [cave_biome_system.md](cave_biome_system.md) can take central
 differences at chunk borders; per-voxel reads index by `caveColumnIdx`, not `columnIdx`.
-Each noise source is only generated for its relevant y-range across the chunk (worley up to `max(terrainBaseHeight) * caveSimplexBoundFraction + 2`, simplex from `min(terrainBaseHeight) * caveWorleyBoundFraction - 2`), and both are capped at `caveAbsoluteMaxY`. This avoids generating noise where it will never be read.
+Each noise source is only generated for its relevant y-range across the chunk (worley up to `max(terrainBaseHeight) * caveSimplexBoundFraction + 2`, simplex from `min(terrainBaseHeight) * caveWorleyBoundFraction - 2`), and both are capped at `caveMaxY`. This avoids generating noise where it will never be read.
 
 Two mechanisms suppress caves near the surface:
 - **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
