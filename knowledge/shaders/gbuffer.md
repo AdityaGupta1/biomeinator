@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-09_
 
 # G-Buffer Shader
 
@@ -23,4 +23,7 @@ normal perturbation is shading-only and intentionally ignored.
 
 **Diffuse albedo** is intentionally NOT written here — it's written by the path tracing
 shader because specular bounces modulate it (a specular first bounce looks through to the
-second hit's base color).
+second hit's base color). **Specular albedo** is written here, but the path tracing shader
+overwrites it for a rough glossy first hit, where the two guides are split by Fresnel instead
+(see [path_tracing.md](path_tracing.md)). What this pass writes is therefore the value for
+delta and non-glossy hits, and the fallback for paths that end before their first scatter.

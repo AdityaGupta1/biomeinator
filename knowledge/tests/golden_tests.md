@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-09_
 
 # Golden Image Tests
 
@@ -29,10 +29,18 @@ different things:
 - **`golden_blender.png`** — the same Cycles render saved through the scene's tonemapped view
   transform (Khronos PBR Neutral). Nothing in `tests.json` references it; it exists only for
   eyeballing against `golden.png`. New tests do not need one.
-- **`golden_diffuseAlbedo.png`** — an engine golden like `golden.png`, but of the
-  `--debugView="diffuseAlbedo"` output (the DLSS-RR guide buffer) rather than the beauty
-  image. Used by the `diffuse_albedo_modulation*` and `water_reflection_diffuse_albedo`
-  entries with near-zero thresholds, since the albedo view has no path-tracing noise.
+- **`golden_diffuseAlbedo.png`** / **`golden_specularAlbedo.png`** — engine goldens like
+  `golden.png`, but of the `--debugView="diffuseAlbedo"` / `"specularAlbedo"` output (the
+  DLSS-RR guide buffers) rather than the beauty image. Used by the
+  `diffuse_albedo_modulation*`, `water_reflection_diffuse_albedo` and `crystal_caves_*_albedo`
+  entries with near-zero thresholds, since the guide views carry no accumulation noise. Run
+  them with `--antialiasingMode=0 --noJitter`. The specular view is bit-exact run to run, but
+  the diffuse view is not, which is why the voxel entries sit at 0.001 rather than the 0.0001
+  the glTF ones hold: a diffuse first bounce takes its guide from `bsdf * cos / pdf`, which is
+  `albedo` algebraically but not to the last bit, and the residual depends on the sampled
+  direction — whose RNG is seeded from the frame number, which a voxel world reaches after a
+  variable number of chunk-streaming frames. It moves only pixels already sitting on an 8-bit
+  quantization boundary, by one LSB (~0.0002 RMSE over a 480x270 cave).
 
 A test for a feature the engine does not support yet still gets a `golden.png` snapshot of
 the current (wrong) output, so the `<name>` test goes red the moment the feature lands and is
