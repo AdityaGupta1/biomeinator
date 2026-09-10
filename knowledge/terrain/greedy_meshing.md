@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-09_
 
 # Mesh Generation
 
@@ -14,7 +14,10 @@ All vertex positions are integer-derived (block position + vertex offset from lo
 
 ## X-Shaped Block Jitter
 
-Each X-shaped block (grass, flowers) gets ±0.2 XZ jitter from a per-chunk RNG. This breaks the grid alignment that would otherwise be very visually obvious in fields of grass.
+Blocks opt into ±0.2 tangent-plane jitter with the `randomJitter` JSON flag.
+X-shaped flora uses its world XZ hash so vertically stacked plant segments remain
+aligned. Custom models include Y in their hash and rotate the jitter plane with the
+attachment face, keeping wall and ceiling models seated on their supports.
 
 ## Texture Slice Indexing
 

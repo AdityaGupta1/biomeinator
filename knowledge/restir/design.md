@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-09_
 
 # ReSTIR PT Design
 
@@ -56,8 +56,8 @@ integrand. Keeping both in one function is what guarantees they agree.
 
 **Vertex indexing follows the papers**, x1 = primary hit, x_k = light vertex, and passthrough hits
 are not vertices. Every candidate is identified by (k, technique, j) with j the rc vertex (0 = none).
-The four techniques (NEE area, NEE dome, BSDF-hit emission, BSDF miss to dome) are disjoint
-domains. A reservoir's `F` excludes the Russian roulette division: the resampling weight is still
+The techniques (NEE area, NEE dome, BSDF-hit emission, BSDF miss to dome, and in SHaRC builds a
+cache-answered vertex, see below) are disjoint domains. A reservoir's `F` excludes the Russian roulette division: the resampling weight is still
 `luminance(F_withRR)`, since that already equals `pHat / p_source` with roulette folded into the
 source pdf, and the shading output is unchanged because the roulette factor cancels in `F * W`.
 
@@ -234,6 +234,33 @@ match. The next frame's temporal pass looks the score up at the reprojected pixe
 history at `lerp(cap, minCap, score^exponent)`, so a sample that has already spread stops being
 trusted and cannot keep spreading. Defaults follow the paper: minCap 1, exponent 0.1. The
 `DUPLICATION` debug view shows the previous frame's map.
+
+## Radiance cache termination (SHaRC)
+
+With SHaRC on, the reuse passes run the same `SHARC_QUERY` variant of the raygen library as initial
+sampling, so a replay answers a vertex from the cache under exactly the rule initial sampling used.
+A cache-answered vertex is the fifth technique, `PATH_TECHNIQUE_CACHE`: the path ends at a
+BSDF-sampled diffuse-only vertex x_k whose "emission" is the cache's outgoing radiance. It is
+handled like a BSDF-hit light vertex (the same rc qualification with pdf 0, `rcRadiance` = the
+cached value, Jacobian terms = bsdf pdf times geometry term), with no MIS since NEE never produces
+it. Because only diffuse-only surfaces are cached the value is view-independent, which is what
+makes reconnecting to it from another prefix valid.
+
+Whether a vertex may be answered depends on the ray cone reaching it, and the cone depends on the
+pixel's own prefix, so eligibility is part of each pixel's integrand rather than a property of the
+path: at pixel y, a path continuing past a vertex y would answer has f_y = 0, and a cache path whose
+vertex y would not answer (cone too narrow, or no entry) has f_y = 0 too. Without the first rule a
+neighbor's long path would be counted on top of y's own cache-terminated estimate of the same
+light. Replay therefore probes the cache at every diffuse-only vertex it passes, including a
+mid-path rc vertex, and the reconnection cone is scattered by the stored lobe before the rc vertex
+is judged, as initial sampling scattered it. The cache changes between frames, so temporal reuse
+evaluates last frame's path against this frame's cache; this is the same staleness any lighting
+change causes and is accepted.
+
+The update pass is `initialSamplingRayGen` with `SHARC_UPDATE`: no split, no reservoir, no output
+writes, and the plain per-vertex estimate (`useRestirPt` is false there) with roulette off. The
+SHaRC debug views are drawn by initial sampling, so the host skips the reuse passes while one is
+active.
 
 ## RNG streams
 

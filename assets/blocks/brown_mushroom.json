@@ -2,6 +2,7 @@
     "textures": "brown_mushroom_model",
     "type": "solid",
     "shape": "decorator_custom",
+    "randomJitter": true,
     "model": "brown_mushroom.glb",
     "translucent": false,
     "markAsEmitter": false

@@ -25,7 +25,7 @@ static const float proceduralColorHueStart = 120.f / 360.f;   // green
 // Past magenta rather than at it: the sweep turns around in rose, so it passes through magenta
 // twice and that end of the ramp is a band rather than an instant
 static const float proceduralColorHueEnd = 320.f / 360.f;
-static const float proceduralColorSaturation = 0.8f;
+static const float proceduralColorSaturation = 0.55f;
 // Every hue on the ramp is scaled to this luminance. At a fixed value the sweep's own luminance
 // swings about eightfold (green is bright, the blue midpoint is very dark), which reads as the
 // clusters pulsing in brightness as the ramp drifts rather than changing color. Equalizing pushes

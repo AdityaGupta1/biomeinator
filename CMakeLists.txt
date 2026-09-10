@@ -103,6 +103,16 @@ file(GLOB_RECURSE SHADER_INCLUDE_FILES
 )
 
 file(GLOB_RECURSE COMMON_HEADERS CONFIGURE_DEPENDS "${COMMON_DIR}/*.h")
+# SHaRC-only includes must not invalidate unrelated shaders.
+list(FILTER SHADER_INCLUDE_FILES EXCLUDE REGEX "/sharc/")
+list(FILTER COMMON_HEADERS EXCLUDE REGEX "/sharc_protocol\\.h$")
+
+# SHARC is shader-only; no host library or runtime DLL is required.
+set(SHARC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/SHARC/include")
+if(NOT EXISTS "${SHARC_INCLUDE_DIR}/SharcCommon.h")
+    message(FATAL_ERROR "SHARC headers missing. Run git submodule update --init --recursive.")
+endif()
+file(GLOB_RECURSE SHARC_INCLUDE_FILES CONFIGURE_DEPENDS "${SHARC_INCLUDE_DIR}/*.h")
 
 SET(SHADER_VERSION "6_9")
 # Keep the runtime capability check aligned with the compiled shader target.
@@ -141,6 +151,16 @@ foreach(SHADER IN LISTS SHADER_FILES)
         message(FATAL_ERROR "Unknown shader stage for ${FILE_NAME} (expected .rgs.hlsl, .vs.hlsl, .ps.hlsl, .cs.hlsl)")
     endif()
 
+    set(SHADER_EXTRA_DEPENDS "")
+    if(FILE_NAME MATCHES "^sharc_")
+        list(APPEND SHADER_EXTRA_DEPENDS ${SHARC_INCLUDE_FILES}
+            "${SHADER_DIR}/sharc/sharc_common.hlsli" "${COMMON_DIR}/sharc_protocol.h")
+    endif()
+    # The SHARC raygeneration wrappers include the main path tracer directly.
+    if(FILE_NAME MATCHES "^sharc_(update|query)\\.rgs\\.hlsl$")
+        list(APPEND SHADER_EXTRA_DEPENDS "${SHADER_DIR}/path_tracing/path_tracing.rgs.hlsl")
+    endif()
+
     add_custom_command(
         OUTPUT ${FXH_OUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${FXH_DIR}
@@ -153,7 +173,8 @@ foreach(SHADER IN LISTS SHADER_FILES)
                 /HV 2021
                 -enable-16bit-types
                 /I "${SHADER_DIR}"
-        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS}
+                /I "${SHARC_INCLUDE_DIR}"
+        DEPENDS ${SHADER} ${SHADER_INCLUDE_FILES} ${COMMON_HEADERS} ${SHADER_EXTRA_DEPENDS}
         COMMENT "Compiling and embedding ${SHADER} to ${FXH_OUT}"
         VERBATIM
     )

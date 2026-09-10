@@ -2,5 +2,6 @@
     "textures": "moss_pink_bud",
     "type": "transparent_cutout",
     "shape": "x_shaped",
+    "randomJitter": true,
     "translucent": true
 }

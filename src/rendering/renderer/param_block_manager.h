@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "rendering/dxr_includes.h"
 #include "rendering/common/common_params.h"
+#include "rendering/dxr_includes.h"
 
 class ParamBlockManager
 {
@@ -18,6 +18,7 @@ public:
     CameraParams* cameraParams{ nullptr };
     SceneParams* sceneParams{ nullptr };
     RenderParams* renderParams{ nullptr };
+    SharcParams* sharcParams{ nullptr };
     RtslParams* rtslParams{ nullptr };
     RestirParams* restirParams{ nullptr };
     DebugParams* debugParams{ nullptr };

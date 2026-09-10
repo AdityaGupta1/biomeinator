@@ -15,6 +15,7 @@
 #define PATH_TECHNIQUE_NEE_DOME 1
 #define PATH_TECHNIQUE_BSDF_EMISSION 2
 #define PATH_TECHNIQUE_BSDF_DOME 3
+#define PATH_TECHNIQUE_CACHE 4 // BSDF-sampled diffuse vertex answered by the radiance cache (SHaRC builds only)
 
 // PathReservoir::flags layout. Vertex indices follow the papers: x1 is the primary hit, the light
 // vertex is x_k for a length-k path, and the reconnection vertex x_j has 2 <= j <= k (0 = none).
@@ -23,9 +24,9 @@
 #define PATH_FLAGS_RC_VERTEX_SHIFT 5
 #define PATH_FLAGS_TECHNIQUE_SHIFT 10
 #define PATH_FLAGS_INDEX_MASK 0x1F
-#define PATH_FLAGS_TECHNIQUE_MASK 0x3
-#define PATH_FLAGS_SPLIT_IDX (1 << 12)
-#define PATH_FLAGS_RC_PREV_LOBE_DIFFUSE (1 << 13) // lobe sampled at the vertex before the rc vertex; else glossy or dielectric
+#define PATH_FLAGS_TECHNIQUE_MASK 0x7
+#define PATH_FLAGS_SPLIT_IDX (1 << 13)
+#define PATH_FLAGS_RC_PREV_LOBE_DIFFUSE (1 << 14) // lobe sampled at the vertex before the rc vertex; else glossy or dielectric
 #define PATH_FLAGS_CONFIDENCE_SHIFT 16
 #define PATH_FLAGS_CONFIDENCE_MASK 0xFFFF
 #define PATH_FLAGS_CONFIDENCE_SCALE 256.f

@@ -7,8 +7,8 @@
 
 struct RayCone
 {
-    float width;
-    float angle;
+    float width; // Full cone diameter at the current vertex.
+    float angle; // Diameter growth per unit travel (small-angle spread).
 };
 
 float computeMipLevel(const float coneWidth)

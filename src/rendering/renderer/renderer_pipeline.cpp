@@ -6,8 +6,8 @@
 #include <d3dcompiler.h>
 
 #include "pipeline_builder.h"
-#include "shaders.h"
 #include "rendering/common/common_hitgroups.h"
+#include "shaders.h"
 
 namespace Renderer
 {
@@ -165,6 +165,10 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(RTSL_LIGHT_TO_LEAF)] = MAKE_PARAM(SRV, LIGHT_TREE, LIGHT_TO_LEAF_IN);
         ptParams[PT_PARAM_IDX(RTSL_LEAF_TO_LIGHT)] = MAKE_PARAM(SRV, LIGHT_TREE, LEAF_TO_LIGHT_IN);
 
+        ptParams[PT_PARAM_IDX(SHARC_HASHES)] = MAKE_PARAM(UAV, SHARC, HASHES);
+        ptParams[PT_PARAM_IDX(SHARC_ACCUMULATION)] = MAKE_PARAM(UAV, SHARC, ACCUMULATION);
+        ptParams[PT_PARAM_IDX(SHARC_RESOLVED)] = MAKE_PARAM(UAV, SHARC, RESOLVED);
+
         if (renderState.useSer)
         {
             ptParams.push_back({
@@ -307,13 +311,24 @@ void initPipeline()
             makeRtPipeline(pipelineInputs);
         };
 
+        sharcInit();
         makeCommonRtPipeline(L"gbuffer", "gbuffer_rgs", { L"RayGeneration" }, renderState.gbufferRootSig.Get(),
                              renderState.gbufferPso, renderState.dev_gbufferShaderIds, renderState.gbufferDispatchDesc);
         // One raygen entry per PtPass, in enum order, so each pass gets its own register allocation
-        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs",
-                             { L"RayGeneration_InitialSampling", L"RayGeneration_Temporal", L"RayGeneration_SpatialShift",
-                               L"RayGeneration_SpatialReplay" },
-                             renderState.ptRootSig.Get(), renderState.ptPso, renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
+        const std::vector<std::wstring> ptRaygens = { L"RayGeneration_InitialSampling", L"RayGeneration_Temporal",
+                                                      L"RayGeneration_SpatialShift", L"RayGeneration_SpatialReplay" };
+        makeCommonRtPipeline(L"pathTracing", "path_tracing_rgs", ptRaygens, renderState.ptRootSig.Get(), renderState.ptPso,
+                             renderState.dev_ptShaderIds, renderState.ptDispatchDesc);
+        if (renderState.sharc.supported)
+        {
+            // The update pass is initial sampling alone; the query variant replaces the whole pipeline
+            // so the reuse passes see the cache the same way initial sampling does
+            auto& s = renderState.sharc;
+            makeCommonRtPipeline(L"sharcUpdate", "sharc_update_rgs", { ptRaygens[0] }, renderState.ptRootSig.Get(),
+                                 s.updatePso, s.updateShaderIds, s.updateDispatch);
+            makeCommonRtPipeline(L"sharcQuery", "sharc_query_rgs", ptRaygens, renderState.ptRootSig.Get(), s.queryPso,
+                                 s.queryShaderIds, s.queryDispatch);
+        }
     }
 
     // ===================================

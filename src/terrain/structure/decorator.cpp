@@ -5,18 +5,54 @@
 
 #include "debug.h"
 
-void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> groundBlocks)
+namespace
+{
+
+uint32_t surfaceBlockKey(uint8_t surface, Block block)
+{
+    return (static_cast<uint32_t>(surface) << 16) | static_cast<uint32_t>(block);
+}
+
+} // namespace
+
+void Decorator::addEntry(Block block, float weight, std::initializer_list<Block> supportBlocks, uint8_t surfaces)
 {
     ASSERT(weight > 0.f);
+    ASSERT((surfaces & ~DECORATOR_SURFACE_ALL) == 0 && surfaces != 0);
+    if (block != Block::AIR && (surfaces & (DECORATOR_SURFACE_WALL | DECORATOR_SURFACE_CEILING)))
+    {
+        const BlockData& blockData = Blocks::getBlockData(block);
+        ASSERT(blockData.shape == BlockShape::DECORATOR_CUSTOM &&
+               blockData.stateKind == BlockStateKind::SURFACE_MOUNT,
+               "wall/ceiling decorators require a surface-mounted custom model");
+    }
     this->entries.push_back({
         block,
         weight,
-        std::unordered_set<Block>(groundBlocks),
+        std::unordered_set<Block>(supportBlocks),
+        surfaces,
     });
+    if (block != Block::AIR)
+    {
+        for (const uint8_t surface : { DECORATOR_SURFACE_FLOOR, DECORATOR_SURFACE_WALL,
+                                      DECORATOR_SURFACE_CEILING })
+        {
+            if (!(surfaces & surface)) continue;
+            if (supportBlocks.size() == 0)
+            {
+                this->unrestrictedSurfaces |= surface;
+            }
+            else
+            {
+                for (const Block supportBlock : supportBlocks)
+                    this->supportedSurfaceBlocks.insert(surfaceBlockKey(surface, supportBlock));
+            }
+        }
+    }
     totalWeight += weight;
 }
 
-Block Decorator::getBlock(float rndSample, Block bottomBlock) const
+Block Decorator::getBlock(float rndSample, Block supportBlock, uint8_t surface) const
 {
     if (this->isEmpty())
     {
@@ -40,8 +76,16 @@ Block Decorator::getBlock(float rndSample, Block bottomBlock) const
     ASSERT(entryIdx >= 0 && entryIdx < this->entries.size());
 
     const DecoratorEntry& entry = this->entries[entryIdx];
-    const bool groundBlockValid = entry.groundBlocks.empty() || entry.groundBlocks.contains(bottomBlock);
-    return groundBlockValid ? entry.block : Block::AIR;
+    const bool supportBlockValid = entry.supportBlocks.empty() || entry.supportBlocks.contains(supportBlock);
+    return supportBlockValid && (entry.surfaces & surface) ? entry.block : Block::AIR;
+}
+
+bool Decorator::supportsSurface(uint8_t surface, Block supportBlock) const
+{
+    ASSERT(surface == DECORATOR_SURFACE_FLOOR || surface == DECORATOR_SURFACE_WALL ||
+           surface == DECORATOR_SURFACE_CEILING);
+    return (this->unrestrictedSurfaces & surface) ||
+           this->supportedSurfaceBlocks.contains(surfaceBlockKey(surface, supportBlock));
 }
 
 bool Decorator::isEmpty() const

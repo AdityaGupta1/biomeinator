@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-09_
 
 # Third-Party Dependencies
 
@@ -9,7 +9,7 @@ apart so that nothing in `reference/` can accidentally become a build input.
 ## Three kinds of dependency
 
 - **Git submodules** (`.gitmodules`) for source that is built in-tree or used header-only:
-  imgui, implot, FastNoise2, lz4, GPUSorting, nvapi, DirectX-Headers. Update by moving the
+  imgui, implot, FastNoise2, lz4, GPUSorting, nvapi, DirectX-Headers, SHARC. Update by moving the
   submodule commit.
 - **Vendored prebuilt SDKs**, committed as files: AgilitySDK, streamline, dxc,
   WinPixEventRuntime. Each folder carries its own `LICENSE.txt` at the root and splits into
@@ -19,6 +19,12 @@ apart so that nothing in `reference/` can accidentally become a build input.
 - **`external/_licenses/`** for things that arrive without their own folder: FetchContent
   packages (glm) and code adapted piecemeal from other projects (Cycles, Khronos PBR
   Neutral).
+
+## SHARC
+
+SHARC is shader-only: its include directory and headers are wired into DXC's include
+search and build dependencies. It needs no host library or runtime DLL. The renderer uses separate update and query
+shader variants; see [SHaRC](../rendering/sharc.md).
 
 ## Adding a prebuilt SDK
 

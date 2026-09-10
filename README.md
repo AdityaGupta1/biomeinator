@@ -10,6 +10,9 @@ Video demo: https://youtu.be/6ehg5h1aBRI (somewhat outdated)
 
 Make sure to clone with `--recurse-submodules` to gather all required dependencies.
 
+For an existing checkout, run `git submodule update --init --recursive` after pulling dependency changes.
+SHaRC is enabled by default on supported GPUs for interactive rendering. Use `--sharc=false` for the reference path tracer. Headless test/performance runs default to the reference path; pass `--sharc=true` to test the cache.
+
 Then, you should be able to just open the folder with Visual Studio 2022 and have it automatically recognize the CMake project.
 
 Or, you can:
@@ -30,6 +33,13 @@ Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move 
 - Press <kbd>P</kbd> to pause and unpause world animation (day/night cycle, water waves)
 - Hold <kbd>[</kbd> or <kbd>]</kbd> to run world animation backwards or forwards at 50x speed
 
+## SHaRC settings
+
+Use `tests/run_perf.py` with `--sharc=false` and `--sharc=true` to compare total GPU cost, including update and resolve.
+
+The settings panel includes a cache reset button and hit/bounce/grid/cached-radiance views (`--sharcDebug=1`, `2`, `3`, or `4`).
+See [SHaRC integration notes](knowledge/rendering/sharc.md) for cache behavior and limitations.
+
 ## Third-Party Licenses
 
 This project uses various third-party libraries:
@@ -48,6 +58,7 @@ This project uses various third-party libraries:
 - [Khronos PBR Neutral tonemapper](https://github.com/KhronosGroup/ToneMapping) - Apache-2.0
 - [Blender Cycles](https://projects.blender.org/blender/blender) - Apache-2.0 (GGX energy compensation tables and the specular shading normal correction, ported into `src/shaders/util/`)
 - [NVAPI](https://github.com/NVIDIA/nvapi) - MIT
+- [SHaRC](https://github.com/NVIDIA-RTX/SHARC) - [NVIDIA RTX SDKs License](external/SHARC/License.md)
 - [Streamline](https://github.com/NVIDIA-RTX/Streamline) - MIT (DLSS binaries are under the [NVIDIA RTX SDKs License](external/streamline/bin/x64/nvngx_dlss.license.txt))
 - [GLM](https://github.com/g-truc/glm/tree/master) - MIT
 - [FastNoiseLite](https://github.com/Auburn/FastNoiseLite) - MIT

@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-09_
 
 # Render Passes
 
@@ -67,3 +67,5 @@ ImGui is rendered on top of the postprocess output before the back buffer transi
 `accumulatedFrameNumber` resets to 0 whenever the camera moves, the scene changes, or a path-tracing setting changes (`didPathTracingSettingsChange`). Accumulation stops entirely (`stopAccumulating = true`) when `maxAccumulatedFrames` is reached — at that point in test mode a screenshot is automatically captured.
 
 `didPathTracingSettingsChange` should only be set for settings that actually alter the accumulated linear radiance — i.e. settings that change what the path tracer computes, such as `maxPathDepth` or `samplingMode`. Settings that only affect post-processing of the final result (e.g. `tonemapping`) should not trigger a reset, since the underlying accumulated radiance is still valid.
+
+See [SHaRC](sharc.md) for cache scheduling, barriers, and transport conventions.

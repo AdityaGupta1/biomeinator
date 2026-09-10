@@ -5,6 +5,7 @@
 
 #include "biome.h"
 #include "block.h"
+#include "block_orientation.h"
 #include "cave_biome.h"
 #include "chunk.h"
 #include "chunk_generator.h"
@@ -474,7 +475,8 @@ void update(ToFreeList& toFreeList)
 }
 
 static constexpr uint32_t worldRegionMagic = 0x42494F4D;
-static constexpr uint16_t worldRegionVersion = 5;
+static constexpr uint16_t worldRegionVersion = 6;
+static constexpr uint16_t legacyWorldRegionVersion = 5;
 static constexpr uint32_t worldJsonVersion = 2;
 
 static_assert(sizeof(Block) == sizeof(uint16_t), "World export format assumes 2-byte Block");
@@ -495,6 +497,11 @@ static constexpr size_t blockBiomePayloadSize =
 static constexpr size_t maxStructuresPerChunk = 512;
 static constexpr size_t structureEntrySize = sizeof(uint32_t);
 static constexpr size_t structuresScratchSize = sizeof(uint32_t) + maxStructuresPerChunk * structureEntrySize;
+
+// Block-state record: low 17 bits are the local block index, next 8 bits are the state byte.
+static constexpr uint32_t blockStateIndexBits = 17;
+static constexpr uint32_t blockStateIndexMask = (1u << blockStateIndexBits) - 1;
+static_assert(numChunkBlocks == (1u << blockStateIndexBits), "Block-state packing assumes 17-bit block indices");
 
 static_assert(chunkSizeXZ == 16, "Structure packing assumes 4-bit localX/localZ (chunkSizeXZ == 16)");
 static_assert(chunkSizeY == 512, "Structure packing assumes 9-bit Y (chunkSizeY == 512)");
@@ -600,9 +607,9 @@ void exportWorld()
                    biomes.data(),
                    chunkSizeXZSquare * sizeof(Biome));
 
-            // reserve header slot; sizes patched in once known
+            // Reserve header slot; sizes/count are patched in once known.
             const size_t headerOffset = regionBuffer.size();
-            regionBuffer.resize(headerOffset + sizeof(uint16_t) + 2 * sizeof(uint32_t));
+            regionBuffer.resize(headerOffset + sizeof(uint16_t) + 3 * sizeof(uint32_t));
 
             const size_t blocksOffset = regionBuffer.size();
             regionBuffer.resize(blocksOffset + maxCompressedSize);
@@ -676,10 +683,24 @@ void exportWorld()
                 compressedStructuresSize = static_cast<uint32_t>(compressed);
             }
 
+            const auto& blockStates = chunk.getBlockStates();
+            std::vector<std::pair<uint32_t, uint8_t>> sortedBlockStates(blockStates.begin(), blockStates.end());
+            std::sort(sortedBlockStates.begin(), sortedBlockStates.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            const uint32_t numBlockStates = static_cast<uint32_t>(sortedBlockStates.size());
+            for (const auto& [blockIdx, state] : sortedBlockStates)
+            {
+                ASSERT(blockIdx < numChunkBlocks);
+                ASSERT(state < blockFaceCount);
+                const uint32_t packed = blockIdx | (static_cast<uint32_t>(state) << blockStateIndexBits);
+                appendBytes(&packed, sizeof(packed));
+            }
+
             char* headerPtr = regionBuffer.data() + headerOffset;
             memcpy(headerPtr, &localIdx, sizeof(uint16_t));
             memcpy(headerPtr + sizeof(uint16_t), &compressedBlocksSize, sizeof(uint32_t));
             memcpy(headerPtr + sizeof(uint16_t) + sizeof(uint32_t), &compressedStructuresSize, sizeof(uint32_t));
+            memcpy(headerPtr + sizeof(uint16_t) + 2 * sizeof(uint32_t), &numBlockStates, sizeof(uint32_t));
 
             ++totalChunksExported;
         }
@@ -889,10 +910,11 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
                          magic, regionFilePath.generic_string().c_str(), worldRegionMagic);
         return false;
     }
-    if (version != worldRegionVersion)
+    if (version != worldRegionVersion && version != legacyWorldRegionVersion)
     {
-        Logger::logError("world import: unsupported version %u in %s (expected %u)",
-                         version, regionFilePath.generic_string().c_str(), worldRegionVersion);
+        Logger::logError("world import: unsupported version %u in %s (expected %u or %u)",
+                         version, regionFilePath.generic_string().c_str(),
+                         legacyWorldRegionVersion, worldRegionVersion);
         return false;
     }
     if (fileRegionX != regionPos.x || fileRegionZ != regionPos.y)
@@ -907,6 +929,7 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
         uint16_t localIdx;
         uint32_t compressedBlocksSize;
         uint32_t compressedStructuresSize;
+        uint32_t numBlockStates;
 
         if (!readBytes(&localIdx, sizeof(localIdx)))
         {
@@ -917,6 +940,11 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
             return false;
         }
         if (!readBytes(&compressedStructuresSize, sizeof(compressedStructuresSize)))
+        {
+            return false;
+        }
+        numBlockStates = 0;
+        if (version >= worldRegionVersion && !readBytes(&numBlockStates, sizeof(numBlockStates)))
         {
             return false;
         }
@@ -1024,8 +1052,57 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
             }
         }
 
+        if (numBlockStates > numChunkBlocks || readPtr + numBlockStates * sizeof(uint32_t) > fileEnd)
+        {
+            Logger::logError("world import: invalid block-state payload for chunk idx %u in %s",
+                             localIdx, regionFilePath.generic_string().c_str());
+            return false;
+        }
+        std::unordered_map<uint32_t, uint8_t> blockStates;
+        blockStates.reserve(numBlockStates);
+        for (uint32_t s = 0; s < numBlockStates; ++s)
+        {
+            uint32_t packed;
+            if (!readBytes(&packed, sizeof(packed))) return false;
+            const uint32_t blockIdx = packed & blockStateIndexMask;
+            const uint8_t state = static_cast<uint8_t>(packed >> blockStateIndexBits);
+            const uint32_t unusedBits = packed >> (blockStateIndexBits + 8);
+            if (unusedBits != 0 || blockIdx >= numChunkBlocks || state >= blockFaceCount ||
+                Blocks::getBlockData(blocks[blockIdx]).stateKind != BlockStateKind::SURFACE_MOUNT)
+            {
+                Logger::logError("world import: invalid block state at block %u in chunk idx %u in %s",
+                                 blockIdx, localIdx, regionFilePath.generic_string().c_str());
+                return false;
+            }
+            if (!blockStates.emplace(blockIdx, state).second)
+            {
+                Logger::logError("world import: duplicate block state at block %u in chunk idx %u in %s",
+                                 blockIdx, localIdx, regionFilePath.generic_string().c_str());
+                return false;
+            }
+        }
+        if (version == legacyWorldRegionVersion)
+        {
+            for (uint32_t blockIdx = 0; blockIdx < blocks.size(); ++blockIdx)
+            {
+                if (Blocks::getBlockData(blocks[blockIdx]).stateKind == BlockStateKind::SURFACE_MOUNT)
+                    blockStates.emplace(blockIdx, blockFaceIndex(BlockFace::Y_POS));
+            }
+        }
+        for (uint32_t blockIdx = 0; blockIdx < blocks.size(); ++blockIdx)
+        {
+            if (Blocks::getBlockData(blocks[blockIdx]).stateKind == BlockStateKind::SURFACE_MOUNT &&
+                !blockStates.contains(blockIdx))
+            {
+                Logger::logError("world import: missing block state at block %u in chunk idx %u in %s",
+                                 blockIdx, localIdx, regionFilePath.generic_string().c_str());
+                return false;
+            }
+        }
+
         Chunk* chunk = region.createChunk(chunkPos);
-        chunk->loadSerializedData(std::move(blocks), std::move(biomes), std::move(structures));
+        chunk->loadSerializedData(
+            std::move(blocks), std::move(biomes), std::move(structures), std::move(blockStates));
 
         ++outChunksImported;
         if (glmUtil::chebyshevDistance(chunkPos, cameraChunkPos) <= createBlasDistance)
@@ -1142,6 +1219,8 @@ void importWorld()
 static void resetTerrainState()
 {
     Renderer::flush();
+    // Replacing the world must discard lighting even if its material palette is reused.
+    scene->invalidateRadianceHistory();
 
     ToFreeList scratchToFree;
     for (const auto& [regionPos, regionPtr] : regions)

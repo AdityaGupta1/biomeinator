@@ -1,5 +1,6 @@
 {
     "textures": "dead_bush",
     "type": "transparent_cutout",
-    "shape": "x_shaped"
+    "shape": "x_shaped",
+    "randomJitter": true
 }

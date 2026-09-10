@@ -32,8 +32,6 @@ static FN::SmartNode<FN::Generator> fnTerrainBase;
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
 // caves are fully suppressed by altitude squash well before this height
-inline constexpr int caveAbsoluteMaxY = 320;
-
 static FN::SmartNode<FN::Generator> fnCavesWorley;
 static FN::SmartNode<FN::Generator> fnCavesSimplex;
 
@@ -444,7 +442,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     // worley is read for y < caveSimplexBound, so max needed y across chunk is terrainBaseHeightMax * caveSimplexBoundFraction
     // simplex is read for y >= caveWorleyBound, so min needed y across chunk is terrainBaseHeightMin * caveWorleyBoundFraction
-    const int caveNoiseMaxY = std::min(terrainNoiseMaxY, caveAbsoluteMaxY);
+    const int caveNoiseMaxY = std::min(terrainNoiseMaxY, static_cast<int>(caveMaxY));
     const uint caveWorleyNoiseHeight = static_cast<uint>(std::min(caveNoiseMaxY, static_cast<int>(std::ceil(terrainBaseHeightMax * caveSimplexBoundFraction)) + 2));
     ASSERT(caveWorleyNoiseHeight > 0 && caveWorleyNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave worley noise height out of range");
     const int caveSimplexNoiseMinY = std::max(0, static_cast<int>(std::floor(terrainBaseHeightMin * caveWorleyBoundFraction)) - 2);
@@ -544,15 +542,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         }
     };
 
-    this->caveFloors.clear();
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const ivec2 blockPosXZ_WS = chunkPosBlocksXZ_WS + ivec2(blockX, blockZ);
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-            this->caveFloorOffsets[columnIdx] = static_cast<uint32_t>(this->caveFloors.size());
-
             const Biome biome = this->biomes[columnIdx];
             const BiomeData& biomeData = Biomes::getBiomeData(biome);
             const TopBlocks& topBlocks = biomeData.topBlocks;
@@ -687,19 +682,24 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        if (!isCave)
+                        const float caveTemperature =
+                            sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                        const float caveHumidity =
+                            sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                        const CaveBiomeNoise caveBiomeNoise = {
+                            .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
+                            .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
+                        };
+                        const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
+                        voxelCaveBiome = caveBiome;
+                        if (isCave)
+                        {
+                            const uint caveBiomeIdx = y + caveMaxY * columnIdx;
+                            this->caveBiomes[caveBiomeIdx] = static_cast<uint8_t>(caveBiome);
+                        }
+                        else
                         {
                             const float caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
-                            const float caveTemperature =
-                                sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                            const float caveHumidity =
-                                sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                            const CaveBiomeNoise caveBiomeNoise = {
-                                .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
-                                .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
-                            };
-                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
-                            voxelCaveBiome = caveBiome;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
                             Block flatSurfaceBlock = caveBiomeData.flatSurfaceBlock;
@@ -815,7 +815,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     layerOpen = true;
                     layerStart = static_cast<int>(y) - 1;
                     layerBottomBiome = lastSolidCaveBiome;
-                    this->caveFloors.push_back({ static_cast<uint16_t>(layerStart), layerBottomBiome });
                 }
                 else if (layerOpen && !isCave)
                 {
@@ -907,8 +906,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             placeCaveStructuresForColumn(blockPosXZ_WS);
         }
     }
-    this->caveFloorOffsets[chunkSizeXZSquare] = static_cast<uint32_t>(this->caveFloors.size());
-
     const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 
     for (Biome biome : biomeSet)

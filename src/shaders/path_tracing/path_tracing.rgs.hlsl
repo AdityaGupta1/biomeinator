@@ -2,18 +2,18 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "../rendering/common/common_hitgroups.h"
-#include "../rendering/common/common_structs.h"
 #include "../rendering/common/common_registers.h"
+#include "../rendering/common/common_structs.h"
 
 #include "common/nvapi_includes.hlsli"
 
 #include "common/global_params.hlsli"
+#include "common/light_tree_sampling.hlsli"
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "light/dome_light.hlsli"
 #include "light/fog.hlsli"
 #include "light/light_sampling.hlsli"
-#include "common/light_tree_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "restir/pairing.hlsli"
 #include "restir/pairwise_mis.hlsli"
@@ -22,6 +22,16 @@
 #include "restir/temporal.hlsli"
 #include "util/color.hlsli"
 #include "util/math.hlsli"
+
+#ifndef SHARC_UPDATE
+#define SHARC_UPDATE 0
+#endif
+#ifndef SHARC_QUERY
+#define SHARC_QUERY 0
+#endif
+#if SHARC_UPDATE || SHARC_QUERY
+#include "sharc/sharc_common.hlsli"
+#endif
 
 StructuredBuffer<GbufferData> gbufferIn : REGISTER_T(PT, GBUFFER_IN);
 
@@ -54,6 +64,7 @@ StructuredBuffer<float> duplicationMapIn : REGISTER_T(PT, DUPLICATION_MAP_IN);
 #define PATH_RNG_ROULETTE 5
 #define PATH_RNG_SHADOW_AREA 6
 #define PATH_RNG_SHADOW_DOME 7
+#define PATH_RNG_CACHE 8 // SHaRC update: the cache's own resampling decision at a vertex
 
 RandomNumberGenerator pathRng(const uint pathSeed, const uint idx, const uint purpose)
 {
@@ -362,6 +373,26 @@ bool traceReconnectionRay(const float3 surfPos_WS,
     return true;
 }
 
+#if SHARC_QUERY
+// Whether the cache may answer a diffuse vertex, and its outgoing radiance if so. The cone arriving
+// at the vertex must be wider than two cells and the segment from the last real vertex longer than
+// a cell diagonal, so nothing the camera or a sharp reflection would resolve is replaced by a cell
+// average. `coneWidth` is the incoming diameter, before scattering at the vertex.
+bool queryCache(const float3 prevPos_WS, const HitInfo hit, const float coneWidth, const float3 baseColor, out float3 radiance)
+{
+    radiance = 0.f;
+    const SharcParameters cache = makeSharcParameters();
+    const SharcHitData sharcHit = makeSharcHit(hit.hitPos_WS, hit.hitNor_WS, baseColor);
+    const uint level = HashGridGetLevel(sharcHit.positionWorld, cache.hashGridParameters);
+    const float voxelSize = HashGridGetVoxelSize(level, cache.hashGridParameters);
+    if (distance(prevPos_WS, hit.hitPos_WS) <= sqrt(3.f) * voxelSize || coneWidth <= 2.f * voxelSize)
+    {
+        return false;
+    }
+    return SharcGetCachedRadiance(cache, sharcHit, radiance, false);
+}
+#endif
+
 // Completes a replayed path at y_{j-1} by connecting to the stored reconnection vertex x_j. Returns
 // the product of every factor from y_{j-1}'s scatter onward, to be multiplied by the throughput at
 // y_{j-1}, plus the shift's Jacobian (Lin et al. 2026 Eq. 2) and the shifted path's own Jacobian
@@ -394,6 +425,9 @@ float3 evaluateReconnection(const ReplayTarget replay,
     jacobianTerms = 0.f;
 
     const bool rcIsLightVertex = (replay.rcVertexIdx == replay.pathLength);
+    // A cache vertex is a surface vertex with radiance in place of emission, evaluated below with the
+    // continuing-path case since it shares that case's material fetch
+    const bool rcIsCacheVertex = SHARC_QUERY && rcIsLightVertex && replay.pathTechnique == PATH_TECHNIQUE_CACHE;
     const bool rcIsDome = rcIsLightVertex && isDomeTechnique(replay.pathTechnique);
     const bool rcIsNeeLightVertex = rcIsLightVertex &&
         (replay.pathTechnique == PATH_TECHNIQUE_NEE_AREA || replay.pathTechnique == PATH_TECHNIQUE_NEE_DOME);
@@ -463,7 +497,7 @@ float3 evaluateReconnection(const ReplayTarget replay,
         debugZeroReason = 5; return 0.f;
     }
 
-    if (rcIsLightVertex)
+    if (rcIsLightVertex && !rcIsCacheVertex)
     {
         const float lightPdf = rcIsDome
             ? (rcIsNeeLightVertex ? neeDomeLightPdf() : domeLightPdf(wi_WS, surfNor_WS))
@@ -498,12 +532,54 @@ float3 evaluateReconnection(const ReplayTarget replay,
 
     const InstanceData rcInstanceData = instanceDatas[rcHit.instanceId];
     const PerTriangleData rcPerTriData = perTriDatas[rcInstanceData.perTriDatasBufferOffset + rcHit.triangleIdx];
-    const float rcConeWidth = getRayConeWidthAtDistance(rayCone, distance(surfPos_WS, rcHit.hitPos_WS));
+    // The cone reaching x_j is this vertex's cone scattered by the stored lobe, as initial sampling
+    // would have scattered it, so the cache answers the shifted path exactly where it answers the base
+    BsdfSample prevSample;
+    prevSample.wi_WS = wi_WS;
+    prevSample.pdf = prevEval.pdf;
+    prevSample.bsdfValue = prevEval.value;
+    prevSample.wasSpecular = false;
+    prevSample.lobeRoughness = prevLobeRoughness;
+    prevSample.sampledDiffuse = replay.rcPrevLobeDiffuse;
+    RayCone rcCone = rayCone;
+    scatterRayCone(rcCone, surfMaterial, prevSample, wo_WS, surfNor_WS);
+    const float rcConeWidth = getRayConeWidthAtDistance(rcCone, distance(surfPos_WS, rcHit.hitPos_WS));
     Material rcMaterial = getHitMaterialAt(rcInstanceData.materialIdx, rcPerTriData.flags, rcHit.uv,
         makeUntintedTexSampleCtx(computeMipLevel(rcConeWidth), rcPerTriData.texArraySliceIdx), rcIsBackface);
     const TexSampleCtx rcTexCtx = makeTintedTexSampleCtx(rcPerTriData, rcConeWidth, rcHit.hitPos_WS);
     rcMaterial.baseColor = getMaterialBaseColor(rcMaterial, rcHit.uv, rcTexCtx).rgb;
     rcMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+
+#if SHARC_QUERY
+    if (isDiffuseOnlyMaterial(rcMaterial))
+    {
+        float3 cachedRadiance;
+        const bool cached = queryCache(surfPos_WS, rcHit, rcConeWidth, rcMaterial.baseColor, cachedRadiance);
+        if (rcIsCacheVertex)
+        {
+            if (!cached)
+            {
+                debugZeroReason = 10; return 0.f;
+            }
+            if (!isReconnectionVertex(prevLobeRoughness, prevEval.pdf, surfPos_WS, surfNor_WS, rcHit.hitPos_WS, rcHit.hitNor_WS,
+                    0.f, false, false, footprintThreshold))
+            {
+                debugZeroReason = 6; return 0.f;
+            }
+            jacobianTerms = prevEval.pdf * reconnectionGeometryTerm(surfPos_WS, rcHit.hitPos_WS, rcHit.hitNor_WS);
+            jacobian = (replay.rcJacobianTerms > 0.f) ? jacobianTerms / replay.rcJacobianTerms : 0.f;
+            return prevFactor / prevEval.pdf * transmittance * cachedRadiance;
+        }
+        if (cached) // the offset path would end here rather than continue
+        {
+            debugZeroReason = 11; return 0.f;
+        }
+    }
+    else if (rcIsCacheVertex) // the surface is no longer one the cache answers
+    {
+        debugZeroReason = 10; return 0.f;
+    }
+#endif
 
     const BsdfEval rcEval = evaluateBsdf(rcMaterial, rcHit.uv, -wi_WS, rcWi_WS, rcHit.hitNor_WS, rcTexCtx);
     const float3 rcFactor = rcEval.value * absCosTheta(rcWi_WS, rcHit.hitNor_WS);
@@ -597,8 +673,10 @@ float3 pathTraceRay(inout Payload payload,
     replayJacobianTerms = 0.f;
 
     const SamplingMode samplingMode = (SamplingMode)renderParams.samplingMode;
-    const bool useRestirPt = (samplingMode == SamplingMode::RESTIR_PT);
-    const bool useRtsl = (samplingMode == SamplingMode::RTSL || useRestirPt);
+    // The SHaRC update pass feeds the cache plain estimates from the same sampler, so no path is a
+    // resampling candidate there
+    const bool useRestirPt = !SHARC_UPDATE && (samplingMode == SamplingMode::RESTIR_PT);
+    const bool useRtsl = (samplingMode == SamplingMode::RTSL || samplingMode == SamplingMode::RESTIR_PT);
     const bool doMis = (samplingMode == SamplingMode::MIS || useRtsl);
     const bool isReplay = replay.active;
     // Inline shadow rays win in initial sampling but not in the replay passes (see isSegmentOccluded);
@@ -652,6 +730,18 @@ float3 pathTraceRay(inout Payload payload,
         return 0.f;
     }
 
+#if SHARC_UPDATE
+    SharcState sharcState;
+    SharcInit(sharcState);
+    // Primary-segment radiance and attenuation belong to the camera, not this surface.
+    pathColor = 0.f;
+    throughput = 1.f;
+#endif
+#if SHARC_QUERY
+    bool cacheHit = false;
+    uint tracedBounces = 0;
+#endif
+
     // data of last "real" bounce (i.e. not passthrough); the bools share one register
     uint bounceFlags = 0;
     float bounceBsdfPdf = 0.f;
@@ -693,6 +783,17 @@ float3 pathTraceRay(inout Payload payload,
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
     {
+#if SHARC_UPDATE
+        // Fold the preceding segment's BSDF, passthrough tint and volume attenuation
+        // into all stored vertices before starting an independent local estimate.
+        SharcSetThroughput(sharcState, throughput);
+        throughput = 1.f;
+        pathColor = 0.f;
+        if (!surfMaterial.isDelta())
+        {
+            surfMaterial.roughness = max(surfMaterial.roughness, sharcParams.roughnessMin);
+        }
+#endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
         const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
@@ -705,10 +806,15 @@ float3 pathTraceRay(inout Payload payload,
         {
             Le = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfTexCtx);
         }
+#if SHARC_UPDATE
+        // This vertex's own emission, MIS-weighted, kept out of what its cache entry stores (a query
+        // adds the real emission) but carried to the entries before it
+        float3 emissiveContrib = 0.f;
+#endif
 
         const float3 wo_WS = -ray.Direction;
 
-        if (pathDepth == 0 && bool(renderParams.doPathSplitting))
+        if (!SHARC_UPDATE && pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
                 surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfTexCtx, pathSplitIdx, throughput);
@@ -754,6 +860,9 @@ float3 pathTraceRay(inout Payload payload,
                     misWeight = balanceHeuristic(bounceBsdfPdf, lightPdf);
                 }
                 const float3 F = throughput * Le * misWeight;
+#if SHARC_UPDATE
+                emissiveContrib = F;
+#endif
 
                 const bool lightVertexQualifies = useRestirPt &&
                     isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, surfPos_WS, surfNor_WS,
@@ -784,9 +893,7 @@ float3 pathTraceRay(inout Payload payload,
                 }
             }
 
-            const bool isDiffuseOnly = surfMaterial.hasDiffuse()
-                && !surfMaterial.hasGlossyReflection()
-                && !surfMaterial.hasGlossyTransmission();
+            const bool isDiffuseOnly = isDiffuseOnlyMaterial(surfMaterial);
             if (isDiffuseOnly)
             {
                 const float3 baseColor = getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
@@ -797,8 +904,53 @@ float3 pathTraceRay(inout Payload payload,
         const bool isLastBounce = (pathDepth == effectiveMaxPathDepth - 1);
         if (!surfMaterial.canScatter() || isLastBounce || isPureEmitter)
         {
+#if SHARC_UPDATE
+            SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor);
+#endif
             break;
         }
+
+#if SHARC_QUERY
+        // A diffuse vertex the cache can answer ends the path with the cache's outgoing radiance in
+        // place of everything the tracer would have gathered from here on (its NEE and continuation).
+        // It is a light vertex whose emission is the cached value: view-independent since only
+        // diffuse-only surfaces are cached, so any prefix may reconnect to it. Whether a vertex may be
+        // answered depends on the pixel's ray cone, which makes it part of the pixel's integrand: a
+        // path that continues past a vertex this pixel would answer here is not in this pixel's
+        // domain, so its shift is undefined (see knowledge/restir/design.md).
+        if (pathDepth > 0 && isDiffuseOnlyMaterial(surfMaterial))
+        {
+            float3 cachedRadiance;
+            if (queryCache(surfPos_WS, payload.hitInfo, payload.rayCone.width, surfMaterial.baseColor, cachedRadiance))
+            {
+                const float3 F = throughput * cachedRadiance;
+                const bool cacheVertexQualifies = useRestirPt &&
+                    isReconnectionVertex(bounceLobeRoughness, bounceBsdfPdf, surfPos_WS, surfNor_WS,
+                        payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, 0.f, false, false, footprintThreshold);
+                if (isReplay)
+                {
+                    const bool matches = replay.pathTechnique == PATH_TECHNIQUE_CACHE && vertexIdx == replay.pathLength && replay.rcVertexIdx == 0;
+                    return (matches && !cacheVertexQualifies) ? F : 0.f;
+                }
+
+                PathCandidate candidate = makePathCandidate(F, rrProduct, vertexIdx, PATH_TECHNIQUE_CACHE);
+                if (rc.vertexIdx != 0)
+                {
+                    setCandidateRcFromState(candidate, rc, ray.Direction, rcThroughput * cachedRadiance, rcThroughput * cachedRadiance, 0.f, false);
+                }
+                else if (cacheVertexQualifies)
+                {
+                    const float jacobianTerms =
+                        bounceBsdfPdf * reconnectionGeometryTerm(surfPos_WS, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS);
+                    setCandidateRcAtLightVertex(candidate, payload.hitInfo, instanceData.generation, cachedRadiance, jacobianTerms,
+                        bool(bounceFlags & BOUNCE_FLAG_SAMPLED_DIFFUSE));
+                }
+                addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
+                cacheHit = true;
+                break;
+            }
+        }
+#endif
 
         const bool isDeltaSurface = surfMaterial.isDelta();
 
@@ -870,8 +1022,12 @@ float3 pathTraceRay(inout Payload payload,
                 return 0.f;
             }
 
+#if SHARC_UPDATE
+            // Keep local NEE separate from emission, including on very bright emitters.
+            pathColor = 0.f;
+#endif
             // Russian roulette only shapes the initial samples; replay must never kill a stored path
-            if (!isReplay && pathDepth >= 2)
+            if (!SHARC_UPDATE && !isReplay && pathDepth >= 2)
             {
                 const float survivalProbability = max(saturate(luminance(throughput)), 0.1f);
                 RandomNumberGenerator rouletteRng = pathRng(pathSeed, vertexIdx, PATH_RNG_ROULETTE);
@@ -1028,6 +1184,27 @@ float3 pathTraceRay(inout Payload payload,
                 }
             }
 
+#if SHARC_UPDATE
+            const bool diffuseCacheSurface = isDiffuseOnlyMaterial(surfMaterial);
+            if (diffuseCacheSurface)
+            {
+                SharcHitData hit = makeSharcHit(surfPos_WS, surfNor_WS, surfMaterial.baseColor);
+                hit.emissive = emissiveContrib;
+                if (!SharcUpdateHit(makeSharcParameters(), sharcState, hit, pathColor, pathRng(pathSeed, vertexIdx, PATH_RNG_CACHE).nextFloat()))
+                {
+                    // False can mean successful cache resampling or hash allocation failure.
+                    break;
+                }
+            }
+            else
+            {
+                // Specular vertices carry lighting to earlier diffuse entries but never store
+                // a direction-dependent outgoing value in the diffuse cache.
+                SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor + emissiveContrib);
+            }
+            pathColor = 0.f;
+#endif
+
             if (!isDeltaSurface)
             {
                 bounceFlags |= BOUNCE_FLAG_ENCOUNTERED_NON_DELTA;
@@ -1038,7 +1215,7 @@ float3 pathTraceRay(inout Payload payload,
             // anything it can't split, and the alpha split makes split 1 a delta passthrough), so the single
             // write to the shared specular albedo target has no other writer to race with.
             const bool useAnalyticAlbedoGuides =
-                (pathDepth == 0) && !isReplay && surfMaterial.hasGlossy() && surfMaterial.roughness > 0.f;
+                !SHARC_UPDATE && (pathDepth == 0) && !isReplay && surfMaterial.hasGlossy() && surfMaterial.roughness > 0.f;
             if (useAnalyticAlbedoGuides)
             {
                 const FirstBounceAlbedos albedos = computeFirstBounceAlbedos(
@@ -1072,6 +1249,8 @@ float3 pathTraceRay(inout Payload payload,
                 break;
             }
 
+            scatterRayCone(payload.rayCone, surfMaterial, surfBsdfSample, wo_WS, surfNor_WS);
+
             setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
@@ -1090,6 +1269,9 @@ float3 pathTraceRay(inout Payload payload,
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
         payload.rng = pathRng(pathSeed, pathDepth, PATH_RNG_RAY);
+#if SHARC_QUERY
+        ++tracedBounces;
+#endif
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
@@ -1098,10 +1280,6 @@ float3 pathTraceRay(inout Payload payload,
             payload.rayCone.width = getRayConeWidthAtDistance(payload.rayCone, hitDistance);
             surfMaterial = getHitMaterial(payload, payload.rayCone.width);
 
-            if (surfMaterial.hasDiffuse())
-            {
-                payload.rayCone.angle += 0.5f;
-            }
         }
 
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
@@ -1116,6 +1294,9 @@ float3 pathTraceRay(inout Payload payload,
 
         if (isOrphanWaterBackfaceHit(payload))
         {
+#if SHARC_UPDATE
+            SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor);
+#endif
             break;
         }
 
@@ -1203,6 +1384,9 @@ float3 pathTraceRay(inout Payload payload,
                     bool(bounceFlags & BOUNCE_FLAG_SAMPLED_DIFFUSE));
             }
             addPathCandidate(reservoir, candidate, useRestirPt, pathSeed, pathSplitIdx, pathColor);
+#if SHARC_UPDATE
+            SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor);
+#endif
             break;
         }
         else if (payload.materialIdx == MATERIAL_IDX_INVALID)
@@ -1210,7 +1394,7 @@ float3 pathTraceRay(inout Payload payload,
             break;
         }
 
-        if (!isReplay && bool(renderParams.doPathSplitting) && pathDepth == 0 && bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR)) // TODO: support multiple specular bounces?
+        if (!SHARC_UPDATE && !isReplay && bool(renderParams.doPathSplitting) && pathDepth == 0 && bool(bounceFlags & BOUNCE_FLAG_WAS_SPECULAR)) // TODO: support multiple specular bounces?
         {
             if (pathSplitIdx == 0) // transmission
             {
@@ -1223,9 +1407,26 @@ float3 pathTraceRay(inout Payload payload,
                 specularHitDistanceTarget[pixelIdx] = distance(surfPos_WS, payload.hitInfo.hitPos_WS);
             }
         }
+#if SHARC_UPDATE
+        SharcUpdateMiss(makeSharcParameters(), sharcState, pathColor);
+#endif
     }
 
     ptDiffuseAlbedo = saturate(ptDiffuseAlbedo + ptEmissiveAlbedo);
+#if SHARC_QUERY
+    if (sharcParams.debugMode == 1)
+    {
+        pathColor = cacheHit ? float3(0, 1, 0) : float3(1, 0, 0);
+    }
+    if (sharcParams.debugMode == 2)
+    {
+        pathColor = lerp(float3(0, 1, 0), float3(1, 0, 0), saturate(tracedBounces / 8.f));
+    }
+    if (sharcParams.debugMode > 0 && sharcParams.debugMode <= 4 && pathSplitIdx != 0)
+    {
+        pathColor = 0;
+    }
+#endif
     return 0.f;
 }
 
@@ -1273,8 +1474,18 @@ ShiftedPath shiftPathToPixel(const PathReservoir path, const GbufferData gbuffer
 // outside the self-replay debug modes, shaded later by the resample pass.
 void initialSamplingRayGen()
 {
+#if SHARC_UPDATE
+    const uint2 tile = DispatchRaysIndex().xy;
+    RandomNumberGenerator pixelRng = initRng(tile.x, tile.y, sharcParams.frameIndex, 17423);
+    const uint2 pixelIdx =
+        tile * sharcParams.downscale + uint2(pixelRng.nextUint(), pixelRng.nextUint()) % sharcParams.downscale;
+    if (any(pixelIdx >= renderParams.renderSize))
+        return;
+    const uint pathSplitIdx = 0;
+#else
     const uint2 pixelIdx = getPixelIdx();
     const uint pathSplitIdx = getPathSplitIdx();
+#endif
 
     const uint linearPixelIdx = pixelIdx.y * renderParams.renderSize.x + pixelIdx.x;
     const uint slotIdx = linearPixelIdx * (bool(renderParams.doPathSplitting) ? 2 : 1) + pathSplitIdx;
@@ -1289,10 +1500,51 @@ void initialSamplingRayGen()
 
     float3 pathColor = 0.f;
     float3 outPtDiffuseAlbedo = 0.f;
-    float unusedJacobian, unusedJacobianTerms;
-    pathTraceRay(payload, reservoir, noReplay(), pixelIdx, cameraParams.pos_WS, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo,
-        unusedJacobian, unusedJacobianTerms);
+#if SHARC_QUERY
+    if (sharcParams.debugMode == 3 || sharcParams.debugMode == 4)
+    {
+        if (pathSplitIdx == 0)
+        {
+            RWTexture2D<float4> specularAlbedo = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
+            specularAlbedo[pixelIdx] = 0.f;
+            RWTexture2D<float> specularDistance = ResourceDescriptorHeap[heapIndices.uav.specularHitDistanceTargetIdx];
+            specularDistance[pixelIdx] = 0.f;
+        }
+    }
+    if (sharcParams.debugMode == 3)
+    {
+        // Primary-hit visualization needs no beauty rays. G-buffer supplies geometry guides;
+        // clear the path-produced specular guides, as for the cached-radiance view below.
+        pathColor = pathSplitIdx == 0 && bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT)
+                        ? HashGridDebugColoredHash(gbufferData.hitInfo.hitPos_WS + float3(sharcParams.originDelta),
+                                                   gbufferData.hitInfo.hitNor_WS,
+                                                   makeSharcParameters().hashGridParameters)
+                        : float3(0, 0, 0);
+    }
+    else if (sharcParams.debugMode == 4)
+    {
+        // Intentional primary-hit query for visualizing the cache itself. This does not
+        // change the production query eligibility or add camera-direction data to it.
+        if (pathSplitIdx == 0 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
+        {
+            const Material material = getHitMaterial(payload, payload.rayCone.width);
+            const PerTriangleData tri = perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+            const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS,
+                getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
+            float3 cachedRadiance;
+            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false)) pathColor = cachedRadiance;
+        }
+    }
+    else
+#endif
+    {
+        float unusedJacobian, unusedJacobianTerms;
+        pathTraceRay(payload, reservoir, noReplay(), pixelIdx, cameraParams.pos_WS, pathSplitIdx, pathSeed, pathColor, outPtDiffuseAlbedo,
+            unusedJacobian, unusedJacobianTerms);
+    }
 
+#if !SHARC_UPDATE
     if ((SamplingMode)renderParams.samplingMode == SamplingMode::RESTIR_PT)
     {
         // One path tree is one unit of confidence, empty or not
@@ -1359,6 +1611,7 @@ void initialSamplingRayGen()
     }
 
     ptDiffuseAlbedoRawBufferOut[slotIdx] = float4(outPtDiffuseAlbedo, 0.f);
+#endif
 }
 
 // The two split slots of a pixel sample disjoint parts of path space, so merging them is exact

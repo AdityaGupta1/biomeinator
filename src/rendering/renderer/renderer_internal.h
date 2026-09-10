@@ -5,16 +5,17 @@
 
 #include <dxgi1_5.h>
 
-#include "rendering/dxr_common.h"
-#include "rendering/renderer.h"
 #include "fence.h"
-#include "rt_target.h"
 #include "param_block_manager.h"
 #include "rendering/buffer/descriptor_heap_allocator.h"
 #include "rendering/buffer/managed_buffer.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/common/common_registers.h"
 #include "rendering/common/common_settings.h"
+#include "rendering/common/sharc_protocol.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
+#include "rt_target.h"
 #include "util/ring_buffer.h"
 
 #include <array>
@@ -164,6 +165,10 @@ enum class PtParam
     GBUFFER_PREV_IN,
     RESERVOIRS_HISTORY_IN,
     DUPLICATION_MAP_IN,
+
+    SHARC_HASHES,
+    SHARC_ACCUMULATION,
+    SHARC_RESOLVED,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -374,6 +379,28 @@ struct ScreenshotRequest
 // hudless copy, the screenshot readback footprint)
 inline constexpr DXGI_FORMAT SWAP_CHAIN_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
+struct SharcResources
+{
+    bool supported{ false };
+    bool resetRequested{ true };
+    uint32_t capacity{ 0 };
+    uint32_t frameIndex{ 0 };
+    DirectX::XMINT3 origin{};
+    DirectX::XMFLOAT3 previousCamera{};
+    ComPtr<ID3D12Resource> hashes, accumulation, resolved;
+    ComPtr<ID3D12RootSignature> computeRootSig;
+    ComPtr<ID3D12PipelineState> maintenancePso;
+    ComPtr<ID3D12StateObject> updatePso, queryPso;
+    ComPtr<ID3D12Resource> updateShaderIds, queryShaderIds;
+    D3D12_DISPATCH_RAYS_DESC updateDispatch{}, queryDispatch{};
+};
+
+void sharcInit();
+void sharcPrepare(ParamBlockManager& params, bool sceneChanged);
+void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode);
+void sharcBindPt();
+void sharcDestroy();
+
 struct RendererState
 {
     RendererState();
@@ -409,6 +436,7 @@ struct RendererState
     Scene scene;
     Camera camera;
     LightTreeManager lightTreeManager;
+    SharcResources sharc;
     GpuRadixSort gpuRadixSort;
 
     // -- Mode flags --

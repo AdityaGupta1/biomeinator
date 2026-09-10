@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-09_
 
 # Decorator System
 
@@ -6,31 +6,24 @@ _Last edited: 2026-09-07_
 
 ## Design
 
-Each biome has a `Decorator` — a weighted list of blocks. At each air-above-solid transition in a column, one entry is sampled. The ground must be a full cube: decorators never stand on other decorators or on X-shaped structure flora. AIR entries in the weight pool act as "nothing placed" outcomes, controlling density (e.g. Plains has weight-15 AIR vs weight-14 total vegetation).
+Each biome has a `Decorator` — a weighted list of blocks. Surface-biome decorators are sampled at air-above-solid transitions. Cave decorators are sampled once per cave-air voxel bordering an eligible full-cube terrain support. AIR entries in the weight pool act as "nothing placed" outcomes, controlling density.
 
-`groundBlocks` filtering lets entries restrict to specific surfaces (flowers only on grass, tiny cactus only on sand) without needing separate decorators.
+Support-block filtering lets entries restrict placement to particular blocks. A surface mask independently permits floors, walls, or ceilings; it defaults to floors so ordinary vegetation remains upright. Eligible surface/support pairs are indexed when entries are registered, so probing six neighboring faces does not repeatedly scan the weighted pool. If several eligible faces border one cave-air voxel, a position hash chooses one before the weighted draw, preventing corner density from multiplying.
 
-## Cave floor decorator
+## Cave surface decorator
 
-The pass visits every air-above-solid transition in a column. A transition whose
-ground sits below the column's terrain top (`Chunk::terrainTopY`, the highest
-solid terrain block before structures) is underground; the rest use the surface
-biome's decorator as before. Tree canopies don't confuse this: leaves are structure
-blocks placed above the terrain top, so the grass under a tree is still classed as
-surface.
+Terrain generation retains one byte per voxel below `caveMaxY` identifying the biome
+of carved cave air; `0xff` means non-cave. The decorator pass runs after structures,
+requires the target still to be AIR, and uses the immutable terrain-solid-cube mask
+to accept only supports that existed as full cubes before structures. This exact
+post-structure neighbor test works
+across chunk boundaries and avoids wall seams. Cave placement decisions use separate
+position-hashed streams for face choice and weighted sampling, so traversal changes
+do not shift unrelated results. The cave-biome array is released immediately after
+this pass.
 
-A transition is first matched against `Chunk::caveFloors`, the floor solids
-captured during the terrain scan together with their cave biome (a few entries per
-column, grouped by `caveFloorOffsets`; the scan is ascending so a single cursor
-walks them), and a match applies `CaveBiomeData::decorator` of that biome. This is
-the one place a per-position cave biome survives generation — far cheaper than a
-per-voxel store and exactly what floor decoration needs. Cave floors must be checked
-*before* the terrain-top test: a column whose topmost pocket opens to the sky has
-no terrain top above its floors (`terrainTopY` stays 0), so a top-first test would
-hand those floors the surface decorator. Ground that matches no floor and sits at
-or above the terrain top is surface; other underground ground (overhang undersides,
-blocks placed by structures) gets nothing. Cave draws come from their own per-chunk
-RNG stream so adding cave flora never shifts the surface decorator pattern.
+The surface-biome column pass skips cave-marked cells and otherwise still uses
+`terrainTopY`. Tree canopies therefore do not confuse surface classification.
 
 ## Ordering Guarantees
 
@@ -38,4 +31,5 @@ Decorators run **after** structures in `runStructuresAndDecoratorPass`. Since de
 
 ## RNG Is Per-Chunk
 
-The decorator RNG is seeded once per chunk (not per column). This means the same chunk always gets the same pattern, which matters for deterministic world generation, but adjacent columns within a chunk are correlated in their random draws.
+The surface decorator RNG remains seeded once per chunk. Cave placement is hashed
+from world position so adding a new candidate elsewhere does not perturb it.

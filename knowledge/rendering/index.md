@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-09_
 
 # Rendering Knowledgebase
 
@@ -21,3 +21,4 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [sky_atmosphere.md](sky_atmosphere.md) | PBR sky LUT passes: ordering invariants, unit calibration, horizon/occlusion gotchas |
 | [gpu_profiler.md](gpu_profiler.md) | Timestamp-query scopes with PIX markers: what is gated on perf mode, placement rules, readback lag |
 | [biome_map.md](biome_map.md) | World-XZ grass tint texture: noise-refill rationale, refill triggers, luminance-replace tinting |
+| [sharc.md](sharc.md) | SHaRC cache integration, coordinates, transport conventions, and validation |

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "block_ids.h"
+#include "block_orientation.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -37,6 +38,12 @@ enum class BlockShape : uint8_t
     COUNT
 };
 
+enum class BlockStateKind : uint8_t
+{
+    NONE,
+    SURFACE_MOUNT,
+};
+
 // Slice value for untextured blocks (air, water); never sampled
 inline constexpr uint32_t TEX_SLICE_INVALID = ~0u;
 
@@ -63,6 +70,8 @@ struct BlockData
     bool translucent{ false }; // thin diffuse transmission (leaves and living foliage)
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
+    bool randomJitter{ false };
+    BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
     uint8_t numRotationsY{ 1 };
@@ -79,6 +88,7 @@ constexpr bool isDecoratorShape(BlockShape shape)
 constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neighborType,
                                 BlockShape neighborShape, int faceIdx)
 {
+    const BlockFace face = static_cast<BlockFace>(faceIdx);
     if (neighborType == BlockType::AIR) return true;
     if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
         isDecoratorShape(neighborShape)) return true;
@@ -86,18 +96,18 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
     {
     case BlockType::SOLID:
         if (neighborType != BlockType::SOLID) return true;
-        if (faceIdx == 4) return shape == BlockShape::LIQUID_TOP;
-        if (faceIdx == 5) return neighborShape == BlockShape::LIQUID_TOP;
+        if (face == BlockFace::Y_POS) return shape == BlockShape::LIQUID_TOP;
+        if (face == BlockFace::Y_NEG) return neighborShape == BlockShape::LIQUID_TOP;
         return neighborShape == BlockShape::LIQUID_TOP && shape != BlockShape::LIQUID_TOP;
     case BlockType::TRANSPARENT_CUTOUT:
         if (neighborType == BlockType::SOLID) return false;
         // Only the lower-positioned cube owns a shared cutout boundary.
         return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
-               faceIdx == 0 || faceIdx == 1 || faceIdx == 4;
+               face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;
     case BlockType::GLASS:
         return neighborType != BlockType::GLASS && neighborType != BlockType::SOLID;
     case BlockType::WATER:
-        return shape == BlockShape::LIQUID_TOP && faceIdx == 4;
+        return shape == BlockShape::LIQUID_TOP && face == BlockFace::Y_POS;
     default:
         return false;
     }
