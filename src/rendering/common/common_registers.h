@@ -110,7 +110,6 @@
 #define SHARC_REGISTER_HASHES 0
 #define SHARC_REGISTER_ACCUMULATION 1
 #define SHARC_REGISTER_RESOLVED 2
-#define SHARC_REGISTER_STATS 3
 #define SHARC_REGISTER_CONTROL 0
 
 // =============================================

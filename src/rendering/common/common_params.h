@@ -162,7 +162,7 @@ struct SharcParams
     uint debugMode; // 0 beauty, 1 query hits, 2 bounce count, 3 hash grid, 4 cached radiance
 
     float3 cameraPositionPrev;
-    uint diagnostics;
+    uint padding1;
 
     int3 originDelta; // renderer origin minus stable cache origin
     uint padding;

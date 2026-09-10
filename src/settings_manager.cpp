@@ -41,8 +41,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcStaleFrames", "SHARC eviction age", uint32_t, "64");
     ADD_OPTION("sharcWarmupFrames", "Cache warmup before screenshot accumulation", uint32_t, "64");
     ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance, 5 primary NEE, 6 cache contribution, 7 first-ray emission, 8 remainder, 9 later NEE, 10 later emission, 11 visible emission", uint32_t, "0");
-    ADD_OPTION("sharcDiagnostics", "Read back SHARC counters", bool, "false");
-    ADD_OPTION("sharcSelfTest", "Run deterministic SHARC GPU self-test and exit", bool, "false");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testRadianceOutput", "Optional linear RGB PFM companion to testOutput", std::string, "");
@@ -144,8 +142,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("sharcStaleFrames", uint32_t);
     COPY_SETTING("sharcWarmupFrames", uint32_t);
     COPY_SETTING("sharcDebug", uint32_t);
-    COPY_SETTING("sharcDiagnostics", bool);
-    COPY_SETTING("sharcSelfTest", bool);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testRadianceOutput", std::string);
@@ -359,7 +355,7 @@ bool isPerfMode()
 
 bool isHeadless()
 {
-    return isTestMode() || isPerfMode() || getAsBool("sharcSelfTest");
+    return isTestMode() || isPerfMode();
 }
 
 } // namespace SettingsManager

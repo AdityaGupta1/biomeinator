@@ -10,7 +10,6 @@
 RWStructuredBuffer<uint64_t> sharcHashes : REGISTER_U(SHARC, HASHES);
 RWStructuredBuffer<SharcAccumulationData> sharcAccumulation : REGISTER_U(SHARC, ACCUMULATION);
 RWStructuredBuffer<SharcPackedData> sharcResolved : REGISTER_U(SHARC, RESOLVED);
-RWStructuredBuffer<uint> sharcStats : REGISTER_U(SHARC, STATS);
 
 SharcParameters makeSharcParameters()
 {
@@ -34,19 +33,4 @@ SharcHitData makeSharcHit(float3 position, float3 normal, float3 baseColor)
     hit.materialDemodulation = max(baseColor, 0.01f);
     hit.emissive = 0.f; // The renderer handles hit emission with its own MIS weight.
     return hit;
-}
-void sharcCount(uint counter)
-{
-    if (sharcParams.diagnostics)
-    {
-        // Reduce contention without assuming callers always pass a uniform counter.
-        if (WaveActiveAllEqual(counter))
-        {
-            const uint count = WaveActiveCountBits(true);
-            if (WaveIsFirstLane())
-                InterlockedAdd(sharcStats[counter], count);
-        }
-        else
-            InterlockedAdd(sharcStats[counter], 1);
-    }
 }

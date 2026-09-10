@@ -20,15 +20,8 @@ ordered graphics queue serializes their accesses. Retired allocations use the fr
 ToFreeList so capacity changes never free in-flight storage.
 
 The default 2^20 entries cost 40 MiB (8-byte hashes, 16-byte accumulation and resolved
-entries). Counters are optional, have per-frame-slot readbacks, and should be disabled
-when profiling. Occupancy is counted during resolve; hit rate is among eligible queries,
-not all pixels. Failed inserts exclude successful update-cache resampling early-outs.
-`primaryRays` counts BSDF rays actually launched at path depth zero, excluding primary
-hits that never scatter. `primaryEmitterHits` counts those rays whose next accepted
-surface has positive emitted radiance, before throughput/MIS weighting. It excludes
-sky misses and later emitter hits. Counter indices and maintenance commands are shared
-in `rendering/common/sharc_protocol.h`; GPU self-test assertions have separate slots.
-Uniform counter updates aggregate active lanes into one atomic per wave.
+entries). Runtime counter collection, atomics, logging and per-frame readbacks have
+been removed. Historical measurements below predate their removal.
 
 ## Transport invariants
 
@@ -75,15 +68,13 @@ prevents cold-cache frames from contaminating a warmed comparison.
 
 ## Validation
 
-`--sharcSelfTest` executes actual GPU insertion, throughput propagation, resolve, known-value
-query, empty miss, eviction and reset checks. It exits nonzero on failure.
 `--testRadianceOutput=<path>.pfm` alongside testOutput exports the raw linear RGB result,
 combining path splits and normalizing accumulation, before tonemapping or DLSS. No lossy
 image conversion is involved. `--rngSeed` gives reproducible sampling; zero retains random
 seeding. Compare mean energy and non-bright pixels separately, then inspect the images:
 small global error alone does not rule out local leakage.
 
-Use the existing performance runner with matched scenes/settings and diagnostics disabled.
+Use the existing performance runner with matched scenes/settings.
 Compare total frame time, not just the path-tracing scope: update and resolve are real costs.
 The uncached path can win on scenes with little reusable diffuse transport.
 
@@ -153,7 +144,7 @@ conservatively. This scalar approximation ignores curvature and anisotropy; it i
 an exact propagation of the full GGX distribution. Lookup remains a single-cell lookup.
 Both SHaRC-on and off use the same revised texture footprint.
 
-Validation: RelWithDebInfo build and GPU cache self-test passed. Paired 512-spp,
+Paired 512-spp,
 480x270 unsplit/no-jitter renders after 256 warmup frames gave mean radiance errors
 of -0.023% crystal_caves, -0.024% cave_lights, -0.473% Cornell, and -0.078% evil_room.
 All radiance values were finite/nonnegative. Results: `build/sharc_cone_validation`.
@@ -166,13 +157,12 @@ For a stable view of the default grid, render the Cornell scene with `--sharc=tr
 --sharcDebug=4 --antialiasingMode=1 --maxAccumulatedFrames=256 --sharcWarmupFrames=256
 --noJitter --frameGeneration=false --testOutput=build/sharc_validation/cache_radiance.png`.
 
-## Primary-glass cohort counters
+## Historical primary-glass measurements
 
-Diagnostic slots 8/9/10/11 count resolved primary glossy-transmission hits, BSDF rays
-launched from those hits, successful cache terminations from that cohort, and unique
-cohort paths that attempted an eligible cache lookup. A path remains in the cohort
-regardless of whether it initially reflects or transmits. These are per-path counts,
-not energy weights; with path splitting enabled they count subpaths, not unique pixels.
+The now-removed diagnostics counted resolved primary glossy-transmission hits, BSDF
+rays launched from those hits, successful cache terminations, and unique paths that
+attempted an eligible lookup. A path stayed in the cohort regardless of initial
+reflection or transmission. Counts were per path, not energy weighted.
 
 Crystal caves, current accumulated cone, 960x540, no splitting/jitter, seed 1738:
 last four logged frames after 256 warmup frames averaged 154991 primary-glass paths,

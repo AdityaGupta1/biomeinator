@@ -30,7 +30,6 @@ void sharcInit()
         MAKE_PARAM(UAV, SHARC, HASHES),
         MAKE_PARAM(UAV, SHARC, ACCUMULATION),
         MAKE_PARAM(UAV, SHARC, RESOLVED),
-        MAKE_PARAM(UAV, SHARC, STATS),
         { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
           .Constants = { SHARC_REGISTER_CONTROL, SHARC_REGISTER_SPACE, 1 } },
     };
@@ -46,8 +45,7 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     auto& s = renderState.sharc;
     auto& p = *params.sharcParams;
     p = {};
-    const bool selfTest = SettingsManager::getAsBool("sharcSelfTest");
-    p.enabled = s.supported && (SettingsManager::getAsBool("sharc") || selfTest);
+    p.enabled = s.supported && SettingsManager::getAsBool("sharc");
     if (!p.enabled)
     {
         s.wasEnabled = false;
@@ -60,7 +58,6 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     p.accumulationFrames = SettingsManager::getAsUint("sharcAccumulationFrames");
     p.staleFrames = SettingsManager::getAsUint("sharcStaleFrames");
     p.debugMode = SettingsManager::getAsUint("sharcDebug");
-    p.diagnostics = SettingsManager::getAsBool("sharcDiagnostics") || selfTest;
     bool reset = sceneChanged || s.resetRequested || !s.wasEnabled ||
                  s.previousScale != p.sceneScale;
     auto& freeList = renderState.frameCtxs[renderState.frameCtxIdx].toFreeList;
@@ -79,12 +76,6 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
         allocate(s.hashes, uint64_t(p.capacity) * 8, L"SHARC hashes");
         allocate(s.accumulation, uint64_t(p.capacity) * 16, L"SHARC accumulation");
         allocate(s.resolved, uint64_t(p.capacity) * 16, L"SHARC resolved");
-        if (!s.stats)
-        {
-            allocate(s.stats, sizeof(s.lastStats), L"SHARC counters");
-            for (auto& buffer : s.readback)
-                buffer = BufferHelper::createBasicBuffer(sizeof(s.lastStats), &READBACK_HEAP);
-        }
         s.capacity = p.capacity;
         reset = true;
     }
@@ -121,9 +112,8 @@ void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode)
     cmd->SetComputeRootUnorderedAccessView(1, s.hashes->GetGPUVirtualAddress());
     cmd->SetComputeRootUnorderedAccessView(2, s.accumulation->GetGPUVirtualAddress());
     cmd->SetComputeRootUnorderedAccessView(3, s.resolved->GetGPUVirtualAddress());
-    cmd->SetComputeRootUnorderedAccessView(4, s.stats->GetGPUVirtualAddress());
-    cmd->SetComputeRoot32BitConstant(5, mode, 0);
-    cmd->Dispatch(mode == SHARC_MAINTENANCE_TEST_INSERT || mode == SHARC_MAINTENANCE_TEST_QUERY || mode == SHARC_MAINTENANCE_TEST_MISS || mode == SHARC_MAINTENANCE_RESET_STATS ? 1 : (s.capacity + 255) / 256, 1, 1);
+    cmd->SetComputeRoot32BitConstant(4, mode, 0);
+    cmd->Dispatch((s.capacity + 255) / 256, 1, 1);
     // All cache accesses stay in UAV state. Ordering covers clears, update atomics,
     // temporal resolve, and the subsequent read-only query in the path tracer.
     BufferHelper::uavBarrier(cmd, nullptr);
@@ -136,48 +126,6 @@ void sharcBindPt()
     cmd->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHARC_HASHES), s.hashes->GetGPUVirtualAddress());
     cmd->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHARC_ACCUMULATION), s.accumulation->GetGPUVirtualAddress());
     cmd->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHARC_RESOLVED), s.resolved->GetGPUVirtualAddress());
-    cmd->SetComputeRootUnorderedAccessView(PT_PARAM_IDX(SHARC_STATS), s.stats->GetGPUVirtualAddress());
-}
-
-void sharcReadStats(uint32_t slot)
-{
-    auto& s = renderState.sharc;
-    if (!s.readbackPending[slot])
-        return;
-    void* data = nullptr;
-    D3D12_RANGE range{ 0, sizeof(s.lastStats) };
-    CHECK_HRESULT(s.readback[slot]->Map(0, &range, &data));
-    memcpy(s.lastStats.data(), data, sizeof(s.lastStats));
-    D3D12_RANGE empty{ 0, 0 };
-    s.readback[slot]->Unmap(0, &empty);
-    s.readbackPending[slot] = false;
-    if (renderState.frameNumber % 60 == 0)
-        Logger::log("SHARC queries=%u hits=%u bounces=%u updates=%u failed=%u occupied=%u primaryRays=%u primaryEmitterHits=%u primaryGlass=%u primaryGlassRays=%u primaryGlassCacheHits=%u primaryGlassQueried=%u",
-                    s.lastStats[SHARC_COUNTER_QUERIES],
-                    s.lastStats[SHARC_COUNTER_HITS],
-                    s.lastStats[SHARC_COUNTER_BOUNCES],
-                    s.lastStats[SHARC_COUNTER_UPDATES],
-                    s.lastStats[SHARC_COUNTER_FAILED_INSERTS],
-                    s.lastStats[SHARC_COUNTER_OCCUPIED],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_RAYS],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_EMITTER_HITS],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_RAYS],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_CACHE_HITS],
-                    s.lastStats[SHARC_COUNTER_PRIMARY_GLASS_QUERIED]);
-}
-
-void sharcCopyStats()
-{
-    auto& s = renderState.sharc;
-    const auto slot = renderState.frameCtxIdx;
-    auto* cmd = renderState.cmdList.Get();
-    BufferHelper::stateTransitionResourceBarrier(
-        cmd, s.stats.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    cmd->CopyBufferRegion(s.readback[slot].Get(), 0, s.stats.Get(), 0, sizeof(s.lastStats));
-    BufferHelper::stateTransitionResourceBarrier(
-        cmd, s.stats.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    s.readbackPending[slot] = true;
 }
 
 void sharcDestroy()

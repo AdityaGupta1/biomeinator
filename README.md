@@ -33,13 +33,11 @@ Use <kbd>WASD</kbd> to move horizontally, <kbd>Q</kbd> and <kbd>E</kbd> to move 
 - Press <kbd>P</kbd> to pause and unpause world animation (day/night cycle, water waves)
 - Hold <kbd>[</kbd> or <kbd>]</kbd> to run world animation backwards or forwards at 50x speed
 
-## SHaRC validation
+## SHaRC settings
 
-`Biomeinator.exe --sharcSelfTest --width=64 --height=64 --sharcCapacityLog2=16` runs a deterministic GPU cache test.
 Use `tests/run_perf.py` with `--sharc=false` and `--sharc=true` to compare total GPU cost, including update and resolve.
 
 The settings panel includes a cache reset button and hit/bounce/grid/cached-radiance views (`--sharcDebug=1`, `2`, `3`, or `4`).
-`--sharcDiagnostics=true` enables GPU counters and periodic log output. Keep it off for timing comparisons.
 See [SHaRC integration notes](knowledge/rendering/sharc.md) for cache behavior and limitations.
 
 ## Third-Party Licenses

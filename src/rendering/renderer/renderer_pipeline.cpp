@@ -157,7 +157,6 @@ void initRootSignature()
         ptParams[PT_PARAM_IDX(SHARC_HASHES)] = MAKE_PARAM(UAV, SHARC, HASHES);
         ptParams[PT_PARAM_IDX(SHARC_ACCUMULATION)] = MAKE_PARAM(UAV, SHARC, ACCUMULATION);
         ptParams[PT_PARAM_IDX(SHARC_RESOLVED)] = MAKE_PARAM(UAV, SHARC, RESOLVED);
-        ptParams[PT_PARAM_IDX(SHARC_STATS)] = MAKE_PARAM(UAV, SHARC, STATS);
 
         if (renderState.useSer)
         {

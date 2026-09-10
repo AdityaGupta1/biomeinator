@@ -158,7 +158,6 @@ enum class PtParam
     SHARC_HASHES,
     SHARC_ACCUMULATION,
     SHARC_RESOLVED,
-    SHARC_STATS,
 
     RTSL_LIGHT_TREE,
     RTSL_LIGHT_TO_LEAF,
@@ -350,10 +349,7 @@ struct SharcResources
     DirectX::XMINT3 origin{};
     DirectX::XMFLOAT3 previousCamera{};
     float previousScale{ 0.f };
-    ComPtr<ID3D12Resource> hashes, accumulation, resolved, stats;
-    ComPtr<ID3D12Resource> readback[NUM_FRAMES_IN_FLIGHT];
-    bool readbackPending[NUM_FRAMES_IN_FLIGHT]{};
-    std::array<uint32_t, SHARC_COUNTER_COUNT> lastStats{};
+    ComPtr<ID3D12Resource> hashes, accumulation, resolved;
     ComPtr<ID3D12RootSignature> computeRootSig;
     ComPtr<ID3D12PipelineState> maintenancePso;
     ComPtr<ID3D12StateObject> updatePso, queryPso, diagnosticPso;
@@ -365,8 +361,6 @@ void sharcInit();
 void sharcPrepare(ParamBlockManager& params, bool sceneChanged);
 void sharcMaintenance(ParamBlockManager& params, SharcMaintenanceMode mode);
 void sharcBindPt();
-void sharcReadStats(uint32_t slot);
-void sharcCopyStats();
 void sharcDestroy();
 
 struct RendererState

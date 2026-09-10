@@ -397,8 +397,6 @@ static void dispatchPathTracing(ParamBlockManager& paramBlockManager, bool doPat
     desc.Width = renderState.ptDispatchDesc.Width;
     desc.Height = renderState.ptDispatchDesc.Height;
     renderState.cmdList->DispatchRays(&desc);
-    if (useSharc && paramBlockManager.sharcParams->diagnostics)
-        sharcCopyStats();
 }
 
 static void beginFrame();
@@ -762,48 +760,6 @@ void render()
         rtslParams->treeLeafBase = (M == 0) ? 0u : (M - 1u);
     }
 
-    if (SettingsManager::getAsBool("sharcSelfTest"))
-    {
-        if (!renderState.sharc.supported)
-        {
-            Logger::logError("SHARC self-test: unsupported GPU");
-            destroy();
-            exit(1);
-        }
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS); // empty miss
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_INSERT); // known radiance + weighted sky
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESOLVE);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_QUERY); // known value
-        sharcCopyStats();
-        submitCmd();
-        flush();
-        sharcReadStats(renderState.frameCtxIdx);
-        const bool firstPass = renderState.sharc.lastStats[SHARC_COUNTER_TEST_VALUE_PASSED] == 1 && renderState.sharc.lastStats[SHARC_COUNTER_TEST_MISSES] == 1;
-        // Reuse the completed allocator for an eviction and clear check.
-        CHECK_HRESULT(frameCtx.cmdAlloc->Reset());
-        CHECK_HRESULT(renderState.cmdList->Reset(frameCtx.cmdAlloc.Get(), nullptr));
-        ID3D12DescriptorHeap* heaps[] = { renderState.sharedDescriptorHeap.Get() };
-        renderState.cmdList->SetDescriptorHeaps(1, heaps);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
-        for (uint32_t i = 0; i <= paramBlockManager.sharcParams->staleFrames; ++i)
-            sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESOLVE);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_INSERT); // refill then explicitly clear
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
-        sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_TEST_MISS);
-        sharcCopyStats();
-        submitCmd();
-        flush();
-        sharcReadStats(renderState.frameCtxIdx);
-        const bool passed = firstPass && renderState.sharc.lastStats[SHARC_COUNTER_TEST_MISSES] == 2;
-        Logger::log("SHARC GPU self-test: %s (empty miss, update/resolve/query, eviction, reset)",
-                    passed ? "PASS" : "FAIL");
-        destroy();
-        exit(passed ? 0 : 1);
-    }
-
     if (renderState.scene.hasTlas() &&
         (!renderState.stopAccumulating || antialiasingMode != AntialiasingMode::ACCUMULATE))
     {
@@ -870,8 +826,6 @@ void render()
                 sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_CLEAR);
                 s.resetRequested = false;
             }
-            if (paramBlockManager.sharcParams->diagnostics)
-                sharcMaintenance(paramBlockManager, SHARC_MAINTENANCE_RESET_STATS);
             {
                 GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sharc update");
                 renderState.cmdList->SetPipelineState1(s.updatePso.Get());
@@ -1131,7 +1085,6 @@ static void beginFrame()
 
     perfRunBeginCpuFrame();
 
-    sharcReadStats(renderState.frameCtxIdx);
     frame.toFreeList.freeAll();
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));

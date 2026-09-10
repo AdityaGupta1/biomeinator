@@ -209,13 +209,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     }
 
     Material surfMaterial = getHitMaterial(payload, payload.rayCone.width);
-#if SHARC_QUERY
-    // Cohort follows the resolved primary material, regardless of later BSDF choices.
-    const bool primaryGlass = surfMaterial.hasGlossyTransmission();
-    bool primaryGlassQueried = false;
-    if (primaryGlass)
-        sharcCount(SHARC_COUNTER_PRIMARY_GLASS);
-#endif
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
     {
@@ -240,11 +233,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if ((pathSplitIdx == 0 || pathDepth > 0) && surfMaterial.hasEmission())
         {
             const float3 hitEmission = getMaterialEmissiveColor(surfMaterial, payload.hitInfo.uv, surfTexCtx);
-#if SHARC_QUERY
-            // Count actual emissive surface hits independently of their throughput/MIS weight.
-            if (pathDepth == 1 && any(hitEmission > 0.f))
-                sharcCount(SHARC_COUNTER_PRIMARY_EMITTER_HITS);
-#endif
             emissiveContrib = payload.pathWeight * hitEmission;
 
             // MIS against direct light sampling from the previous real vertex. Only the emission term is weighted:
@@ -344,12 +332,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             // Two cells preserves the sample's conservative radius-vs-cell threshold.
             if (segmentLength > sqrt(3.f) * voxelSize && payload.rayCone.width > 2.f * voxelSize)
             {
-                sharcCount(SHARC_COUNTER_QUERIES);
-                if (primaryGlass && !primaryGlassQueried)
-                {
-                    sharcCount(SHARC_COUNTER_PRIMARY_GLASS_QUERIED); // Unique paths reaching an eligible lookup, not lookup attempts.
-                    primaryGlassQueried = true;
-                }
                 float3 radiance;
                 if (SharcGetCachedRadiance(cache, hit, radiance, false))
                 {
@@ -360,9 +342,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if SHARC_DECOMPOSE
                     breakdown.cached += cachedContribution;
 #endif
-                    sharcCount(SHARC_COUNTER_HITS);
-                    if (primaryGlass)
-                        sharcCount(SHARC_COUNTER_PRIMARY_GLASS_CACHE_HITS);
                     cacheHit = true;
                     break;
                 }
@@ -487,17 +466,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 SharcHitData hit = makeSharcHit(surfPos_WS, surfNor_WS, surfMaterial.baseColor);
                 hit.emissive = emissiveContrib;
-                sharcCount(SHARC_COUNTER_UPDATES);
                 if (!SharcUpdateHit(makeSharcParameters(), sharcState, hit, pathColor, nextFloat(payload.rng)))
                 {
                     // False can mean successful cache resampling or hash allocation failure.
-                    HashGridKey key;
-                    if (sharcParams.diagnostics && HashGridFindEntry(makeSharcParameters().hashGridData,
-                                                                     hit.positionWorld,
-                                                                     hit.normalWorld,
-                                                                     makeSharcParameters().hashGridParameters,
-                                                                     key) == HASH_GRID_INVALID_CACHE_INDEX)
-                        sharcCount(SHARC_COUNTER_FAILED_INSERTS);
                     break;
                 }
             }
@@ -570,13 +541,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
 #if SHARC_QUERY
-        sharcCount(SHARC_COUNTER_BOUNCES);
-        if (pathDepth == 0)
-        {
-            sharcCount(SHARC_COUNTER_PRIMARY_RAYS); // BSDF rays actually launched from the primary surface
-            if (primaryGlass)
-                sharcCount(SHARC_COUNTER_PRIMARY_GLASS_RAYS);
-        }
         ++tracedBounces;
 #endif
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);

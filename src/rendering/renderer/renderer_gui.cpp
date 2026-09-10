@@ -127,21 +127,20 @@ void imguiEndFrame(double deltaTime)
         if (renderState.sharc.supported)
         {
             bool changed = SettingsGuiHelpers::Checkbox("Enable SHaRC", "sharc");
-            changed |= SettingsGuiHelpers::SliderUint("Cache capacity log2", "sharcCapacityLog2", 16, 24);
-            changed |= SettingsGuiHelpers::SliderUint("Update stride", "sharcDownscale", 1, 16);
-            changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
-            changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
-            changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
-            const bool viewChanged = SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance", "Primary NEE", "Cache contribution", "First-ray emission", "Remaining radiance", "Later NEE", "Later emission", "Visible emission" });
-            SettingsGuiHelpers::Checkbox("Cache counters", "sharcDiagnostics");
-            if (ImGui::Button("Reset cache"))
-                changed = true;
+            bool viewChanged = false;
+            if (ImGui::CollapsingHeader("SHaRC settings"))
+            {
+                changed |= SettingsGuiHelpers::SliderUint("Cache capacity log2", "sharcCapacityLog2", 16, 24);
+                changed |= SettingsGuiHelpers::SliderUint("Update stride", "sharcDownscale", 1, 16);
+                changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
+                changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
+                changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
+                viewChanged = SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance", "Primary NEE", "Cache contribution", "First-ray emission", "Remaining radiance", "Later NEE", "Later emission", "Visible emission" });
+                if (ImGui::Button("Reset cache"))
+                    changed = true;
+            }
             renderState.sharc.resetRequested |= changed;
             renderState.didPathTracingSettingsChange |= changed || viewChanged;
-            const auto& stats = renderState.sharc.lastStats;
-            ImGui::Text("Queries %u, hits %u, bounces %u", stats[SHARC_COUNTER_QUERIES], stats[SHARC_COUNTER_HITS], stats[SHARC_COUNTER_BOUNCES]);
-            ImGui::Text("Update hits %u, failed inserts %u, occupied %u", stats[SHARC_COUNTER_UPDATES], stats[SHARC_COUNTER_FAILED_INSERTS], stats[SHARC_COUNTER_OCCUPIED]);
-            ImGui::Text("Primary BSDF rays %u, emitter hits %u", stats[SHARC_COUNTER_PRIMARY_RAYS], stats[SHARC_COUNTER_PRIMARY_EMITTER_HITS]);
         }
         else
             ImGui::TextUnformatted("SHaRC unavailable (native fp16 / int64 atomics required)");
@@ -157,11 +156,14 @@ void imguiEndFrame(double deltaTime)
         {
             SettingsGuiHelpers::VerticalSpacing();
             SettingsGuiHelpers::SectionTitle("Fog");
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+            if (ImGui::CollapsingHeader("Fog settings"))
+            {
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+            }
         }
 
         SettingsGuiHelpers::VerticalSpacing();
