@@ -206,6 +206,7 @@ void Scene::init()
 
 void Scene::reset()
 {
+    this->invalidateRadianceHistory();
     for (auto& [_, instance] : this->instances)
     {
         instance->reset(false);
@@ -354,6 +355,18 @@ uint32_t Scene::addTextureArray(std::vector<std::vector<std::vector<uint8_t>>>&&
     return texId;
 }
 
+void Scene::invalidateRadianceHistory()
+{
+    this->radianceHistoryInvalidated = true;
+}
+
+bool Scene::consumeRadianceHistoryInvalidation()
+{
+    const bool invalidated = this->radianceHistoryInvalidated;
+    this->radianceHistoryInvalidated = false;
+    return invalidated;
+}
+
 bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)
 {
     this->areaLightTopologyChanged = false;
@@ -370,7 +383,10 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     // mappedInstanceDescsArrays don't need device buffer copy since TLAS uses upload buffer directly
     didChange |= this->mappedInstanceDatasArray.copyFromUploadBufferIfDirty(cmdList);
 
-    didChange |= this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
+    const bool materialsChanged = this->mappedMaterialsArray.copyFromUploadBufferIfDirty(cmdList);
+    didChange |= materialsChanged;
+    if (materialsChanged || !this->pendingTextures.empty())
+        this->invalidateRadianceHistory();
 
     if (!this->pendingTextures.empty())
     {

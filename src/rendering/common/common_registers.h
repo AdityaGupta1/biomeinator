@@ -104,6 +104,15 @@
 #define SKY_REGISTER_LUT_SAMPLER 0
 
 // =============================================
+// SHARC
+// =============================================
+#define SHARC_REGISTER_SPACE 7
+#define SHARC_REGISTER_HASHES 0
+#define SHARC_REGISTER_ACCUMULATION 1
+#define SHARC_REGISTER_RESOLVED 2
+#define SHARC_REGISTER_CONTROL 0
+
+// =============================================
 // fake UAV slot for SER
 // =============================================
 
@@ -123,9 +132,12 @@
 // these macros are wacky but they make it much easier to define resources in shaders
 #define _REGISTER_CONCAT(a, b) a##b
 #define _REGISTER_EXPAND(x) x
-#define _REGISTER_IMPL_STEP3(type, regVal, spcVal) register(_REGISTER_CONCAT(type, regVal), _REGISTER_CONCAT(space, spcVal))
-#define _REGISTER_IMPL_STEP2(type, regName, spcName) _REGISTER_IMPL_STEP3(type, _REGISTER_EXPAND(regName), _REGISTER_EXPAND(spcName))
-#define _REGISTER_IMPL_STEP1(type, prefix, param) _REGISTER_IMPL_STEP2(type, prefix##_REGISTER_##param, prefix##_REGISTER_SPACE)
+#define _REGISTER_IMPL_STEP3(type, regVal, spcVal)                                                                     \
+    register(_REGISTER_CONCAT(type, regVal), _REGISTER_CONCAT(space, spcVal))
+#define _REGISTER_IMPL_STEP2(type, regName, spcName)                                                                   \
+    _REGISTER_IMPL_STEP3(type, _REGISTER_EXPAND(regName), _REGISTER_EXPAND(spcName))
+#define _REGISTER_IMPL_STEP1(type, prefix, param)                                                                      \
+    _REGISTER_IMPL_STEP2(type, prefix##_REGISTER_##param, prefix##_REGISTER_SPACE)
 #define REGISTER_U(prefix, param) _REGISTER_IMPL_STEP1(u, prefix, param)
 #define REGISTER_T(prefix, param) _REGISTER_IMPL_STEP1(t, prefix, param)
 #define REGISTER_B(prefix, param) _REGISTER_IMPL_STEP1(b, prefix, param)

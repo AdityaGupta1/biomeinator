@@ -24,14 +24,23 @@
 #include "postprocess/debug_view.ps.fxh"
 #include "postprocess/postprocess.ps.fxh"
 #include "postprocess/postprocess.vs.fxh"
+#include "sharc/sharc_maintenance.cs.fxh"
+#include "sharc/sharc_query.rgs.fxh"
+#include "sharc/sharc_update.rgs.fxh"
 #include "sky/multi_scattering_lut.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
 #include "sky/transmittance_lut.cs.fxh"
 #include "water/water_displace.cs.fxh"
 
-#define REGISTER_SHADER(name) { #name, name##_shaderBytecode }
+#define REGISTER_SHADER(name)                                                                                          \
+    {                                                                                                                  \
+        #name, name##_shaderBytecode                                                                                   \
+    }
 
 static const std::unordered_map<std::string_view, std::span<const unsigned char>> s_shaders = {
+    REGISTER_SHADER(sharc_update_rgs),
+    REGISTER_SHADER(sharc_query_rgs),
+    REGISTER_SHADER(sharc_maintenance_cs),
     REGISTER_SHADER(collect_cs),
     REGISTER_SHADER(debug_view_ps),
     REGISTER_SHADER(emitter_collect_cs),

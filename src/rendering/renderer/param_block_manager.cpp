@@ -3,22 +3,23 @@
 
 #include "param_block_manager.h"
 
-#include "rendering/dxr_common.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/dxr_common.h"
 
 static_assert(sizeof(HeapIndices) % 16 == 0, "HeapIndices size must be a multiple of 16 bytes");
 static_assert(sizeof(ConstantParams) % 16 == 0, "ConstantParams size must be a multiple of 16 bytes");
 static_assert(sizeof(CameraParams) % 16 == 0, "CameraParams size must be a multiple of 16 bytes");
 static_assert(sizeof(SceneParams) % 16 == 0, "SceneParams size must be a multiple of 16 bytes");
 static_assert(sizeof(RenderParams) % 16 == 0, "RenderParams size must be a multiple of 16 bytes");
+static_assert(sizeof(SharcParams) % 16 == 0);
 static_assert(sizeof(RtslParams) % 16 == 0, "RtslParams size must be a multiple of 16 bytes");
 static_assert(sizeof(DebugParams) % 16 == 0, "DebugParams size must be a multiple of 16 bytes");
 
 void ParamBlockManager::init()
 {
     constexpr uint32_t bufferSize = sizeof(HeapIndices) + sizeof(ConstantParams) + sizeof(CameraParams) +
-                                    sizeof(SceneParams) + sizeof(RenderParams) + sizeof(RtslParams) +
-                                    sizeof(DebugParams);
+                                    sizeof(SceneParams) + sizeof(RenderParams) + sizeof(SharcParams) +
+                                    sizeof(RtslParams) + sizeof(DebugParams);
     this->dev_paramBuffer = BufferHelper::createBasicBuffer(bufferSize, &UPLOAD_HEAP);
     this->dev_paramBuffer->Map(0, nullptr, &this->host_paramBuffer);
 
@@ -29,7 +30,8 @@ void ParamBlockManager::init()
     this->cameraParams = reinterpret_cast<CameraParams*>(this->constantParams + 1);
     this->sceneParams = reinterpret_cast<SceneParams*>(this->cameraParams + 1);
     this->renderParams = reinterpret_cast<RenderParams*>(this->sceneParams + 1);
-    this->rtslParams = reinterpret_cast<RtslParams*>(this->renderParams + 1);
+    this->sharcParams = reinterpret_cast<SharcParams*>(this->renderParams + 1);
+    this->rtslParams = reinterpret_cast<RtslParams*>(this->sharcParams + 1);
     this->debugParams = reinterpret_cast<DebugParams*>(this->rtslParams + 1);
 }
 

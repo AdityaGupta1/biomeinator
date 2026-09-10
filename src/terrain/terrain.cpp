@@ -1219,6 +1219,8 @@ void importWorld()
 static void resetTerrainState()
 {
     Renderer::flush();
+    // Replacing the world must discard lighting even if its material palette is reused.
+    scene->invalidateRadianceHistory();
 
     ToFreeList scratchToFree;
     for (const auto& [regionPos, regionPtr] : regions)

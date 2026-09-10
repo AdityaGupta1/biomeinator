@@ -3,22 +3,22 @@
 
 #include "renderer_internal.h"
 
-#include <random>
 #include <cstdlib>
+#include <random>
 
 #include "gpu_requirements.h"
 
 #include <sl_security.h>
 
-#include <nvapi.h>
 #include <nvShaderExtnEnums.h>
+#include <nvapi.h>
 #undef min
 #undef max
 
-#include "rendering/window_manager.h"
-#include "rendering/buffer/buffer_helper.h"
-#include "settings_manager.h"
 #include "logger.h"
+#include "rendering/buffer/buffer_helper.h"
+#include "rendering/window_manager.h"
+#include "settings_manager.h"
 #include "util/util.h"
 
 using WindowManager::hwnd;
@@ -119,8 +119,8 @@ void loadFrameGenPlugin(bool active)
 
 [[noreturn]] void failGpuCompatibility(const std::string& reason)
 {
-    const std::string message = reason +
-        "\nUpdate your graphics driver and try again. If this persists, use a GPU and driver that support these features.";
+    const std::string message = reason + "\nUpdate your graphics driver and try again. If this persists, use a GPU and "
+                                         "driver that support these features.";
     Logger::logError("%s", message.c_str());
     if (!renderState.headless)
     {
@@ -148,11 +148,15 @@ void initDevice()
     //typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
     typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
 
-    //const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod, "CreateDXGIFactory"));
-    //const auto slCreateDXGIFactory1 = reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
-    const auto slCreateDXGIFactory2 = reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
-    //const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod, "DXGIGetDebugInterface1"));
-    const auto slD3D12CreateDevice = reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
+    // const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod,
+    // "CreateDXGIFactory")); const auto slCreateDXGIFactory1 =
+    // reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
+    const auto slCreateDXGIFactory2 =
+        reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
+    // const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod,
+    // "DXGIGetDebugInterface1"));
+    const auto slD3D12CreateDevice =
+        reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
 
     UINT dxgiFactoryFlags = 0;
 
@@ -458,7 +462,8 @@ void initConstantParams()
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<uint32_t> dist(0, std::numeric_limits<uint32_t>::max());
-    const uint32_t rngSeed = dist(gen);
+    const uint32_t requestedSeed = SettingsManager::getAsUint("rngSeed");
+    const uint32_t rngSeed = requestedSeed ? requestedSeed : dist(gen);
 
     for (auto& frame : renderState.frameCtxs)
     {

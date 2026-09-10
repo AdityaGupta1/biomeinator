@@ -358,12 +358,18 @@ BsdfEval evaluateBsdf(const Material material,
     return result;
 }
 
+bool isDiffuseOnlyMaterial(const Material material)
+{
+    return material.hasDiffuse() && !material.hasGlossyReflection() && !material.hasGlossyTransmission();
+}
+
 struct BsdfSample
 {
     float3 wi_WS;
     float pdf;
     float3 bsdfValue;
     bool wasSpecular;
+    bool sampledDiffuse;
 };
 
 // A sample with no throughput. It keeps a valid direction so the zero-weight path doesn't feed NaN geometry into
@@ -375,6 +381,7 @@ BsdfSample deadBsdfSample(const float3 wi_WS)
     result.bsdfValue = 0.f;
     result.pdf = 1.f;
     result.wasSpecular = false;
+    result.sampledDiffuse = false;
     return result;
 }
 
@@ -405,6 +412,7 @@ BsdfSample sampleDielectricBsdf(const Material material,
 
     BsdfSample result;
     result.wasSpecular = isDelta;
+    result.sampledDiffuse = false;
     if (chooseReflect)
     {
         result.wi_WS = reflected_WS;
@@ -466,6 +474,7 @@ BsdfSample sampleBsdf(const Material material,
     BsdfSample result;
     result.bsdfValue = 0.f;
     result.wasSpecular = false;
+    result.sampledDiffuse = false;
 
     if (!material.canScatter())
     {
@@ -503,6 +512,7 @@ BsdfSample sampleBsdf(const Material material,
     }
     else
     {
+        result.sampledDiffuse = true;
         // Diffuse transmission splits the diffuse lobe across both hemispheres; when diffuse is the
         // only non-delta lobe, either pick has bsdf * cos / pdf = albedo, so path weights stay noise-free.
         float3 lobeNor_WS = surfNor_WS;
@@ -519,6 +529,36 @@ BsdfSample sampleBsdf(const Material material,
     result.pdf = eval.pdf;
     result.bsdfValue = eval.value;
     return result;
+}
+
+// Scalar, locally planar cone approximation. Width and angle use full diameters.
+// Quadrature combines independent scattering spreads; it is not a GGX variance
+// (GGX has long tails). Use the narrower refraction axis to avoid early cache use.
+void scatterRayCone(inout RayCone cone, const Material material, const BsdfSample sample,
+                    const float3 wo, const float3 normal)
+{
+    float spread = 0.f;
+    if (sample.sampledDiffuse)
+        spread = 2.f;
+    else if (!sample.wasSpecular)
+    {
+        const float alpha = min(material.roughness, 0.99f) * min(material.roughness, 0.99f);
+        spread = 2.f * sqrt(0.5f * alpha * alpha / max(1.f - alpha * alpha, 1e-6f));
+    }
+
+    if (material.hasGlossyTransmission() && dot(sample.wi_WS, normal) < 0.f)
+    {
+        const float eta = 1.f / material.ior;
+        const float3 h = sample.wasSpecular ? normal : normalize(wo + material.ior * sample.wi_WS);
+        const float cosIn = max(abs(dot(wo, h)), 1e-4f);
+        const float cosOut = max(abs(dot(sample.wi_WS, h)), 1e-4f);
+        const float meridianScale = eta * cosIn / cosOut;
+        cone.angle *= min(eta, meridianScale);
+        cone.width *= min(1.f, cosOut / cosIn);
+        // Reflection rotates by twice the microfacet tilt; refraction uses Snell's derivative.
+        spread *= 0.5f * min(abs(1.f - eta), abs(1.f - meridianScale));
+    }
+    cone.angle = min(sqrt(cone.angle * cone.angle + spread * spread), 16.f);
 }
 
 // Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
