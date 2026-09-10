@@ -58,7 +58,13 @@ void sharcPrepare(ParamBlockManager& params, bool sceneChanged)
     p.accumulationFrames = SettingsManager::getAsUint("sharcAccumulationFrames");
     p.staleFrames = SettingsManager::getAsUint("sharcStaleFrames");
     p.debugMode = SettingsManager::getAsUint("sharcDebug");
-    bool reset = sceneChanged || s.resetRequested || !s.wasEnabled ||
+    const bool radianceInvalidated = renderState.scene.consumeRadianceHistoryInvalidation();
+    // Streamed voxel instances change TLAS topology at chunk boundaries. Keep their
+    // spatial cache history and let normal updates/eviction refresh affected cells.
+    // Non-voxel scene edits still invalidate history, as do explicit scene/world
+    // replacement and material/texture changes (a pending invalidation flag).
+    bool reset = (sceneChanged && !renderState.voxelMode) ||
+                 radianceInvalidated || s.resetRequested || !s.wasEnabled ||
                  s.previousScale != p.sceneScale;
     auto& freeList = renderState.frameCtxs[renderState.frameCtxIdx].toFreeList;
     if (s.capacity != p.capacity)

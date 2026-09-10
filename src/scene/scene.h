@@ -153,6 +153,8 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
+    // Global radiance changes, distinct from streamed instance/TLAS updates.
+    bool radianceHistoryInvalidated{ false };
 
     glm::ivec3 globalInstanceOffset{};
     glm::ivec3 prevGlobalInstanceOffset{};
@@ -206,6 +208,8 @@ public:
     void init();
 
     void reset();
+    void invalidateRadianceHistory();
+    bool consumeRadianceHistoryInvalidation();
 
     bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime);
 

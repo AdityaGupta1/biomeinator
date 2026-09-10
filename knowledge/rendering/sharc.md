@@ -48,7 +48,7 @@ preceding entries. Fog is depth-limited in the reference shader, so caching can 
 its depth dependence. Dynamic lighting and geometry may retain history for several frames.
 
 Display changes (SHaRC view, antialiasing mode, accumulation limit) restart image
-accumulation without clearing the cache. Radiance-affecting UI settings, scene changes,
+accumulation without clearing the cache. Radiance-affecting UI settings, scene/world replacement, material/texture changes,
 cache configuration changes and explicit reset still invalidate it. Hash-grid and cached-
 radiance views bypass beauty tracing and initialize their path-produced guides explicitly.
 
@@ -57,9 +57,14 @@ radiance views bypass beauty tracing and initialize their path-produced guides e
 The renderer shifts its origin with the camera. Cache positions instead use a fixed anchor:
 `hitPos_WS + (globalInstanceOffset - cacheOrigin)`. Current/previous cache camera positions
 share that frame. Ordinary renderer-origin shifts do not clear the cache. Re-anchor and
-clear after 2048 units to bound quantization/float error. Scene/topology changes, relevant
-settings, manual reset, capacity changes, and re-enabling clear the cache. Camera motion
-alone resets image accumulation, not cache history.
+clear after 2048 units to bound quantization/float error. Ordinary voxel chunk streaming
+and visibility changes preserve cache history; affected cells refresh through updates
+and stale-entry eviction. Image accumulation still resets on those scene changes.
+Scene/world replacement and material/texture uploads set a pending invalidation flag
+that SHaRC consumes once to clear the cache. Non-voxel topology edits, relevant settings, manual reset, capacity
+changes, and re-enabling also clear it. Camera motion alone preserves cache history.
+Voxel edits share the streaming path and converge through cache updates rather than a
+global clear, so lighting can briefly lag behind edited geometry.
 
 For accumulation/screenshot runs, an explicit cache warmup keeps resetting image
 accumulation until the cache has received the requested number of update frames. This
