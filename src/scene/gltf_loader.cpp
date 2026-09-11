@@ -58,12 +58,38 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         throw std::runtime_error("Failed to load glTF file");
     }
 
-    std::vector<uint32_t> textureIds;
-    textureIds.reserve(model.images.size());
-    for (tinygltf::Image& image : model.images)
-    {
-        textureIds.push_back(scene.addTexture(std::move(image.image), image.width, image.height));
-    }
+    std::vector<uint32_t> textureIds(model.images.size(), TEXTURE_ID_INVALID);
+    const auto loadColorImage = [&](size_t imageIdx) {
+        auto& id = textureIds[imageIdx];
+        if (id == TEXTURE_ID_INVALID)
+        {
+            const auto& image = model.images[imageIdx];
+            id = scene.addTexture(std::vector<uint8_t>(image.image), image.width, image.height);
+        }
+        return id;
+    };
+
+    // An image may be used as both color and data. Cache a distinct linear upload by image,
+    // rather than changing the interpretation of the existing base-color/emission descriptor.
+    std::vector<uint32_t> linearTextureIds(model.images.size(), TEXTURE_ID_INVALID);
+    const auto loadDataTexture = [&](int textureIdx, int texCoord) {
+        if (textureIdx < 0) return TEXTURE_ID_INVALID;
+        if (texCoord != 0)
+            throw std::runtime_error("Normal/roughness textures currently require TEXCOORD_0");
+        if (static_cast<size_t>(textureIdx) >= model.textures.size())
+            throw std::runtime_error("Invalid glTF data texture index");
+        const int imageIdx = model.textures[textureIdx].source;
+        if (imageIdx < 0 || static_cast<size_t>(imageIdx) >= model.images.size())
+            throw std::runtime_error("Invalid glTF data texture image");
+        auto& id = linearTextureIds[imageIdx];
+        if (id == TEXTURE_ID_INVALID)
+        {
+            const auto& image = model.images[imageIdx];
+            id = scene.addTexture(std::vector<uint8_t>(image.image), image.width, image.height,
+                                  DXGI_FORMAT_R8G8B8A8_UNORM);
+        }
+        return id;
+    };
 
     ToFreeList toFreeList;
 
@@ -114,7 +140,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
                 if (imgIdx >= 0 && imgIdx < textureIds.size())
                 {
-                    material.auxTextureId = textureIds[imgIdx];
+                    material.auxTextureId = loadColorImage(imgIdx);
                 }
             }
         }
@@ -130,6 +156,10 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         // tinygltf's defaults match the glTF spec defaults, so this is correct even when the
         // pbrMetallicRoughness struct is absent
         material.roughness = static_cast<float>(pbr.roughnessFactor);
+        material.normalTextureId = loadDataTexture(gltfMat.normalTexture.index, gltfMat.normalTexture.texCoord);
+        material.normalScale = static_cast<float>(gltfMat.normalTexture.scale);
+        material.roughnessTextureId = loadDataTexture(pbr.metallicRoughnessTexture.index,
+                                                     pbr.metallicRoughnessTexture.texCoord);
         // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
         // Ideally, I would use some JSON utils to check this for real. But this works for now.
         const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
@@ -158,7 +188,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                         if (imgIdx >= 0 && imgIdx < textureIds.size())
 
                         {
-                            material.baseColorTextureId = textureIds[imgIdx];
+                            material.baseColorTextureId = loadColorImage(imgIdx);
                             hasDiffuse = true;
                         }
                     }
@@ -385,6 +415,22 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             }
 
             const size_t vertCount = posAccessor.count;
+            const Accessor* tangentAccessor = nullptr;
+            if (const auto it = prim.attributes.find("TANGENT"); it != prim.attributes.end())
+                tangentAccessor = &model.accessors[it->second];
+            if (prim.material >= 0 && static_cast<size_t>(prim.material) < model.materials.size())
+            {
+                const auto& mat = model.materials[prim.material];
+                if ((mat.normalTexture.index >= 0 || mat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) && !uvAccessor)
+                    throw std::runtime_error("Normal/roughness mapped glTF primitive has no TEXCOORD_0");
+                if (mat.normalTexture.index >= 0 && !tangentAccessor)
+                    throw std::runtime_error("Normal mapped glTF requires TANGENT; export with tangents enabled");
+            }
+            if (tangentAccessor && (tangentAccessor->count != vertCount || tangentAccessor->type != TINYGLTF_TYPE_VEC4 ||
+                                    tangentAccessor->componentType != TINYGLTF_COMPONENT_TYPE_FLOAT))
+                throw std::runtime_error("glTF TANGENT must be a float VEC4 per vertex");
+            const auto* tangentData = tangentAccessor ? readAccessorData(*tangentAccessor) : nullptr;
+            const size_t tangentStride = tangentAccessor ? getStride(*tangentAccessor) : 0;
             std::vector<Vertex>& host_verts = instance->host_verts;
             host_verts.resize(vertCount);
 
@@ -411,8 +457,14 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 host_verts[v] = {
                     { p[0], p[1], p[2] },
                     Util::octEncode({ n[0], n[1], n[2] }),
-                    Util::packFloat2ToUint(uv.x, uv.y),
+                    uv,
                 };
+                if (tangentAccessor)
+                {
+                    const float* t = reinterpret_cast<const float*>(tangentData + tangentStride * v);
+                    host_verts[v].packedTangent = Util::octEncode({ t[0], t[1], t[2] });
+                    host_verts[v].tangentSign = t[3];
+                }
             }
 
             std::vector<uint32_t>& host_idxs = instance->host_idxs;

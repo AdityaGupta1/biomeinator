@@ -100,15 +100,19 @@ Material getHitMaterial(const Payload payload, const float coneWidth)
         makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.texArraySliceIdx));
 }
 
-float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
-    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+float2 getUvAtHit(const InstanceData instanceData, const uint triIdx, const float2 bary2)
 {
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, triIdx, v0, v1, v2);
 
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-    const float2 uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                      unpackUintToFloat2(v2.packedUv) * bary.z;
+    return v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+}
+
+float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
+    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+{
+    const float2 uv = getUvAtHit(instanceData, triIdx, bary2);
 
     // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
     // adjustments, so skip the map sample and the aux texture sample
@@ -134,7 +138,17 @@ bool acceptHitCandidate(inout Payload payload,
         return true;
     }
 
-    const Material material = materials[materialIdx];
+    Material material = materials[materialIdx];
+    if (bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission() &&
+        material.roughnessTextureId != TEXTURE_ID_INVALID && !material.hasPackedAux())
+    {
+        // A roughness map can contain perfectly specular texels. Shadow passthrough must
+        // classify the same resolved surface as the path tracer, not just its scalar factor.
+        const float width = getRayConeWidthAtDistance(payload.rayCone, rayT);
+        const PerTriangleData data = perTriDatas[instanceData.perTriDatasBufferOffset + primitiveIdx];
+        material.roughness = getMaterialRoughness(material, getUvAtHit(instanceData, primitiveIdx, barycentrics),
+            makeUntintedTexSampleCtx(computeMipLevel(width), data.texArraySliceIdx));
+    }
     // Only specular transmission can be passed through without scattering; rough glass is a real bounce
     const bool testRefractionPassthrough =
         bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.isDeltaTransmission();
@@ -225,6 +239,49 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         geoNor_WS = -geoNor_WS;
     }
 
+    const float2 uv0 = v0.uv;
+    const float2 uv1 = v1.uv;
+    const float2 uv2 = v2.uv;
+    payload.hitInfo.uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    if (materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID)
+    {
+        const Material material = materials[materialIdx];
+        float3 tangent_WS;
+        float tangentSign;
+        if (v0.tangentSign != 0.f)
+        {
+            const float3 tangent_OS = octDecode(v0.packedTangent) * bary.x +
+                                     octDecode(v1.packedTangent) * bary.y + octDecode(v2.packedTangent) * bary.z;
+            tangent_WS = mul(tangent_OS, (float3x3) ObjectToWorld4x3());
+            tangentSign = v0.tangentSign * (determinant((float3x3) ObjectToWorld4x3()) < 0.f ? -1.f : 1.f);
+        }
+        else
+        {
+            // Terrain has no authored tangents. Derive a frame from its face UVs so block
+            // rotations and differently oriented faces rotate the normal texture with them.
+            const float3 e1 = mul(v1.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
+            const float3 e2 = mul(v2.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
+            const float2 duv1 = uv1 - uv0, duv2 = uv2 - uv0;
+            const float det = duv1.x * duv2.y - duv1.y * duv2.x;
+            tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
+            const float3 bitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
+            tangentSign = dot(cross(nor_WS, tangent_WS), bitangent_WS) < 0.f ? -1.f : 1.f;
+        }
+        tangent_WS -= nor_WS * dot(nor_WS, tangent_WS);
+        if (dot(tangent_WS, tangent_WS) > 1e-12f)
+        {
+            tangent_WS = normalize(tangent_WS);
+            const float3 bitangent_WS = tangentSign * cross(nor_WS, tangent_WS);
+            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
+            const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx);
+            float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
+            n.xy *= material.normalScale;
+            if (dot(n, n) > 1e-12f)
+                nor_WS = normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * nor_WS);
+        }
+    }
+
     // Which side of the surface the ray is on is decided by the geometric normal: the interpolated normal can
     // face away from the ray on grazing hits of coarse meshes, and treating those as backfaces would invert the
     // IOR for them
@@ -236,7 +293,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
 
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
     if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
@@ -247,7 +303,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     {
         // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
         // correction ensures); other materials keep the plain interpolated normal, facing the ray
-        const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossy();
+        const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
+            (materials[materialIdx].hasGlossy() ||
+             (materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
         if (hasGlossy)
         {
             nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
@@ -259,9 +317,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         }
     }
     payload.hitInfo.hitNor_WS = nor_WS;
+    payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
 
-    payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                         unpackUintToFloat2(v2.packedUv) * bary.z;
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
 
@@ -274,6 +331,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 void Miss(inout Payload payload)
 {
     payload.flags &= ~PAYLOAD_FLAG_DID_HIT;
+}
+
+float3 getHitOffsetNormal(const Payload payload)
+{
+    // Mapped normals may lean below the mesh; ray offsets must stay on the geometric surface's side.
+    // Preserve the existing offset on unmapped surfaces.
+    return payload.materialIdx != MATERIAL_IDX_INVALID && materials[payload.materialIdx].normalTextureId != TEXTURE_ID_INVALID
+        ? octDecode(payload.hitInfo.packedGeoNor) : payload.hitInfo.hitNor_WS;
 }
 
 // Occlusion test for a shadow ray, which only ever needs the anyhit's candidate handling. The

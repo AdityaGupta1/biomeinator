@@ -348,6 +348,7 @@ float lightPdfRtsl(const HitInfo hitInfo,
 // times the area-to-solid-angle pdf — flows into the MIS balance heuristic.
 DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const float3 surfNor_WS,
+                                              const float3 offsetNor_WS,
                                               const RayCone rayCone,
                                               const bool canPassthrough,
                                               const bool startUnderwater,
@@ -375,7 +376,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
 
     float3 Le;
     const bool didHit = traceToLight(
-        surfPos_WS, surfNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, offsetNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHit)
     {
         return result;

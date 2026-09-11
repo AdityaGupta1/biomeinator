@@ -46,8 +46,8 @@ vector falls back to Geometry Normal, preserving unmapped materials. The interfa
 Principled conversion and the export proxy preserve both Normal and Roughness links, not
 just their socket defaults. Export enables tangents. The statues scene uses normal images
 and green-channel roughness from the original ARM images, with metallic fixed at zero;
-normal and roughness images are Non-Color data. Its converted glTF requires engine support
-for normal textures and separate roughness textures (terrain continues to use packed aux).
+normal and roughness images are Non-Color data. The engine reads normal and separate
+roughness textures through the glTF path; terrain continues to use packed aux roughness.
 
 ## Why materials are proxied on export
 

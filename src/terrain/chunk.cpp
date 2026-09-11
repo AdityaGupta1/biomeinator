@@ -635,7 +635,7 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
 
 static inline Vertex makeVertex(const glm::vec3& pos, const glm::vec3& nor, const glm::vec2& uv)
 {
-    return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), Util::packFloat2ToUint(uv.x, uv.y) };
+    return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), { uv.x, uv.y } };
 }
 
 bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, ivec3 neighborPos_CS, int faceIdx)

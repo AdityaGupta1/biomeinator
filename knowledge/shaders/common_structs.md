@@ -1,4 +1,4 @@
-_Last edited: 2026-09-01_
+_Last edited: 2026-09-10_
 
 # Common CPU/GPU Structs
 
@@ -28,9 +28,21 @@ Diffuse and glossy transmission are mutually exclusive: a transmissive material 
 
 **`AreaLight`** — triangle light source. Positions do not include `transformOffset` or `globalInstanceOffset` — shaders must apply those offsets.
 
-**`Vertex`** — normal and uv are packed into one `uint` each (octahedron snorm16 and f16 pair). The CPU encoders in `util/packing.h` must stay bit-identical to the decoders in `shaders/util/packing.hlsli`. Only `pos_OS` is unpacked, which is what lets BLAS builds (pos at offset 0, `sizeof(Vertex)` stride) and the water displacement pass work without decoding. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
+**`Vertex`** — normal and tangent directions use octahedron snorm16 encoding. The CPU
+encoders in `util/packing.h` must stay bit-identical to the decoders in
+`shaders/util/packing.hlsli`. Positions remain at offset 0 for BLAS builds and water
+displacement. UVs use float32 pairs: half precision can shift a sample by a texel on
+2K normal/roughness textures. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary
+normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
 
 The remaining structs (`HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
+
+`Vertex` also carries an oct-encoded tangent and a handedness float (zero means absent),
+for a 32-byte stride. glTF reads exported tangents; terrain leaves them zero and can derive
+a face frame from its UVs. `HitInfo::packedGeoNor` reuses former padding to retain the
+face-oriented geometric normal for normal-mapped ray offsets without growing the payload.
+`Material` has separate normal/roughness descriptor IDs and a normal scale; terrain's
+roughness remains in packed aux, while normal maps use the separate slot in both paths.
 
 ---
 

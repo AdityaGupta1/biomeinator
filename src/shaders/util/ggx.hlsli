@@ -14,7 +14,10 @@
 float ggxDistribution(const float alpha, const float cosThetaH)
 {
     const float alpha2 = alpha * alpha;
-    const float d = cosThetaH * cosThetaH * (alpha2 - 1.f) + 1.f;
+    // Keep alpha^2 out of the subtraction from one: smooth roughness-map texels
+    // otherwise round the denominator to zero at the specular peak (Inf/NaN).
+    const float cos2 = saturate(cosThetaH * cosThetaH);
+    precise float d = (1.f - cos2) + cos2 * alpha2;
     return alpha2 * M_INV_PI / (d * d);
 }
 

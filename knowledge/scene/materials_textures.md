@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-10_
 
 # Materials and Textures
 
@@ -15,6 +15,12 @@ Material and texture management in `src/scene/scene.h/cpp`.
 Textures are 2D RGBA8 with optional precomputed mip chains; `addTextureArray()` takes a format (sRGB default, plain UNORM for data textures like the terrain aux map, whose mips must be averaged without the sRGB transfer). Upload is deferred: `addTexture()` / `addTextureArray()` stash raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
 
 Each texture gets an SRV in the shared descriptor heap. The returned texture ID is the descriptor heap index, which shaders use for bindless access.
+
+`Material::normalTextureId` is a separate linear tangent-space normal texture for either
+material path. `roughnessTextureId` holds glTF's linear metallic/roughness texture (G only),
+multiplied by scalar roughness at hit resolution; packed-aux terrain continues to resolve
+roughness from aux B. Both `addTexture` overloads accept an optional format, defaulting to
+sRGB, so data maps do not undergo the sRGB transfer.
 
 ## Why Deferred Upload
 
@@ -34,6 +40,7 @@ The glTF loader uses the single-mip overload (no mip generation). The terrain ma
 - **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `auxTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
 
 Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF materials never do.
+The same array/non-array invariant applies to the normal and separate roughness slots.
 
 ## Packed Aux (Terrain)
 

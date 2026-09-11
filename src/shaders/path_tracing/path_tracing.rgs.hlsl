@@ -334,7 +334,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
-            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, getHitOffsetNormal(payload), ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
@@ -368,13 +368,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfPos_WS, surfNor_WS, getHitOffsetNormal(payload), payload.rayCone, canPassthrough, isUnderwater,
                         surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
                 else
                 {
                     lightSample =
-                        sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                        sampleDirectLightingUniform(surfPos_WS, getHitOffsetNormal(payload), payload.rayCone, canPassthrough, isUnderwater, payload.rng);
                 }
 
                 if (lightSample.didHitLight)
@@ -401,7 +401,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rayCone,
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, getHitOffsetNormal(payload), payload.rayCone,
                         canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
@@ -490,7 +490,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             scatterRayCone(payload.rayCone, surfMaterial, surfBsdfSample, wo_WS, surfNor_WS);
 
-            setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, surfPos_WS, getHitOffsetNormal(payload), surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;

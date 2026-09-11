@@ -119,6 +119,15 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
 
 static const float glassIor = 1.55f; // quartz-ish
 
+float getMaterialRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    // Packed-aux terrain resolves roughness in its surface override. glTF uses G of a
+    // separate linear texture, multiplied by the material's scalar roughness factor.
+    return !material.hasPackedAux() && material.roughnessTextureId != TEXTURE_ID_INVALID
+        ? material.roughness * sampleTexture(material.hasArrayTexture(), material.roughnessTextureId, uv, texCtx).g
+        : material.roughness;
+}
+
 // Turns the hit's material into glass, for faces flagged TRIANGLE_FLAG_IS_GLASS. Terrain shares
 // one diffuse material across every block, so glass is a per-triangle override rather than its own
 // material and instance; the base color texture becomes the transmission tint and the packed aux
@@ -491,6 +500,13 @@ BsdfSample sampleBsdf(const Material material,
 
     if (chooseReflect)
     {
+        // A mapped normal can face away from wo even when its mirror reflection is
+        // above the geometric surface. GGX has no visible microfacets from that side;
+        // evaluating such a sample would give value = pdf = 0 and poison accumulation.
+        if (cosTheta(wo_WS, surfNor_WS) <= 0.f)
+        {
+            return deadBsdfSample(surfNor_WS);
+        }
         if (material.roughness == 0.f)
         {
             result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
@@ -526,6 +542,10 @@ BsdfSample sampleBsdf(const Material material,
     // Non-delta sample: use the full mixture bsdf and pdf over all lobes that could have produced
     // wi_WS, keeping the estimator consistent with the values NEE uses for MIS
     const BsdfEval eval = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, texCtx);
+    if (eval.pdf <= 0.f)
+    {
+        return deadBsdfSample(result.wi_WS);
+    }
     result.pdf = eval.pdf;
     result.bsdfValue = eval.value;
     return result;
@@ -570,6 +590,7 @@ Material getMaterialFromPayload(const Payload payload, const uint triangleFlags,
     // Resolve surface overrides before orienting IOR for this particular hit.
     if (bool(triangleFlags & TRIANGLE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
     if (bool(triangleFlags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
 

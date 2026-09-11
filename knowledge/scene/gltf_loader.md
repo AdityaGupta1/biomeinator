@@ -1,4 +1,4 @@
-_Last edited: 2026-09-04_
+_Last edited: 2026-09-10_
 
 # glTF Loader
 
@@ -10,6 +10,25 @@ scenes. It resets and reinitializes `Scene`, uploads textures/materials, creates
 
 The loader currently processes mesh nodes directly and does not traverse parent/child node
 hierarchy.
+
+## Normal and Roughness Textures
+
+`normalTexture` is uploaded as linear RGBA8; its decoded X/Y components are multiplied
+by `normalTexture.scale`. The closest-hit shader transforms it using interpolated exported
+`TANGENT` vectors and their handedness, with inverse-transpose normals, reorthogonalized
+tangents, and mirrored-transform sign correction. The mapped normal is shared by primary
+shading, secondary bounces, and DLSS guides. Geometric normals still determine backfacing
+and ray offsets on mapped surfaces.
+
+`pbrMetallicRoughness.metallicRoughnessTexture` is a separate linear texture. At each hit,
+roughness is `roughnessFactor * texture.g`; the metallic channel is not used. Terrain keeps
+its existing packed-aux roughness path. A shared image used as both color and data gets
+separate sRGB/linear descriptors rather than one usage changing the other.
+
+The supported subset requires `TEXCOORD_0` and float VEC4 `TANGENT` attributes for normal
+mapping (the Biomeinator Blender exporter enables tangents). Missing tangents or unsupported
+UV sets produce an explicit error; the loader does not generate MikkTSpace tangents.
+Textures retain the existing glTF mip-0, bilinear sampling policy.
 
 ## Material Lobes
 

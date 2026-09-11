@@ -324,21 +324,21 @@ uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
     return materialIdx;
 }
 
-uint32_t Scene::addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height)
+uint32_t Scene::addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height, DXGI_FORMAT format)
 {
     D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
     const uint32_t texId = Renderer::sharedDescHeapAlloc.alloc(&cpuHandle);
     std::vector<std::vector<std::vector<uint8_t>>> sliceMipData;
     sliceMipData.emplace_back(std::move(mipData));
-    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, 1u, cpuHandle, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB });
+    this->pendingTextures.push_back({ std::move(sliceMipData), width, height, 1u, cpuHandle, format });
     return texId;
 }
 
-uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t height)
+uint32_t Scene::addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t height, DXGI_FORMAT format)
 {
     std::vector<std::vector<uint8_t>> mipData;
     mipData.emplace_back(std::move(mip0));
-    return this->addTexture(std::move(mipData), width, height);
+    return this->addTexture(std::move(mipData), width, height, format);
 }
 
 uint32_t Scene::addTextureArray(std::vector<std::vector<std::vector<uint8_t>>>&& sliceMipData,

@@ -13,7 +13,11 @@ Material::Material()
       ior(1.5f),
       emissiveStrength(0),
       emissiveColor{ 1, 1, 1 },
-      auxTextureId(TEXTURE_ID_INVALID)
+      auxTextureId(TEXTURE_ID_INVALID),
+      normalTextureId(TEXTURE_ID_INVALID),
+      roughnessTextureId(TEXTURE_ID_INVALID),
+      normalScale(1.f),
+      pad0(0)
 {}
 
 PerTriangleData::PerTriangleData()

@@ -28,8 +28,8 @@ struct HitInfo
     uint triangleIdx;
 
     float2 uv;
+    uint packedGeoNor; // face-oriented geometric normal for offsets on normal-mapped surfaces
     uint pad0;
-    uint pad1;
 };
 
 struct GbufferData
@@ -46,7 +46,9 @@ struct Vertex
 {
     float3 pos_OS;
     uint packedNor; // octahedron-encoded, see packing.hlsli / util/packing.h
-    uint packedUv; // f16 pair
+    float2 uv; // full precision: f16 UVs can shift samples by a texel on 2K normal maps
+    uint packedTangent; // octahedron-encoded object-space tangent
+    float tangentSign; // glTF tangent.w; zero means no authored tangent
 };
 
 struct InstanceData
@@ -75,7 +77,7 @@ struct InstanceData
 // Roughness > 0 is only supported together with MATERIAL_FLAG_GLOSSY_REFLECTION (the dielectric lobe), so
 // transmission-only materials are delta. Both enforced in Scene::addMaterial.
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
-// Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
+// Per-material, not per-texture: all texture slots must be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
 // auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
@@ -106,6 +108,11 @@ public:
 
     float3 emissiveColor;
     uint auxTextureId; // emissive color texture, unless MATERIAL_FLAG_PACKED_AUX repurposes it
+
+    uint normalTextureId; // linear tangent-space normal, separate for both terrain and glTF
+    uint roughnessTextureId; // linear glTF metallicRoughnessTexture; only G is used
+    float normalScale; // scales normal texture X/Y before normalization
+    uint pad0;
 
     bool hasDiffuse()
     {

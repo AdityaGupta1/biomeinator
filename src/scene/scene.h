@@ -218,8 +218,10 @@ public:
 
     uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);
 
-    uint32_t addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height);
-    uint32_t addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t height);
+    uint32_t addTexture(std::vector<std::vector<uint8_t>>&& mipData, uint32_t width, uint32_t height,
+                        DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
+    uint32_t addTexture(std::vector<uint8_t>&& mip0, uint32_t width, uint32_t height,
+                        DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
     uint32_t addTextureArray(std::vector<std::vector<std::vector<uint8_t>>>&& sliceMipData,
                              uint32_t width,
                              uint32_t height,

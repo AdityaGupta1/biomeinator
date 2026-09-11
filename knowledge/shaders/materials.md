@@ -144,4 +144,18 @@ glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflec
 (`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops use the wave
 normal instead; other materials keep the plain interpolated normal, flipped to face the ray. The
 bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
-too, whereas Cycles bends only the specular closures' normal (a silhouette-only difference).
+too, whereas Cycles bends only the specular closures' normal. This can also change fine
+normal-mapped creases, not just mesh silhouettes.
+
+When a separate normal texture is present, closest-hit first maps its linear tangent-space
+sample through the surface frame (glTF exported tangents, or a UV-derived terrain frame),
+then applies facing/specular correction. `normalScale` multiplies X/Y before normalization.
+Both the G-buffer/DLSS guides and later bounces receive this normal. Backface classification
+still uses the geometric normal, which is also retained in `HitInfo` for mapped-surface
+bounce and shadow-ray offsets. The ray-cone payload explicitly allows closest-hit reads.
+
+Reflection sampling rejects outgoing view directions below the shading normal before
+sampling GGX, just as dielectric sampling does. A zero-density mixture sample is also
+terminated with `deadBsdfSample`, avoiding `0 / 0` throughput and accumulated black pixels.
+The GGX distribution keeps its small alpha-squared term separate from subtraction from one;
+`precise` prevents compiler reassociation from reintroducing cancellation near smooth peaks.
