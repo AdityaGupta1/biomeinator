@@ -58,20 +58,43 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         throw std::runtime_error("Failed to load glTF file");
     }
 
+    // Retain decoded bytes only until every required color-space upload has consumed them.
+    constexpr uint8_t colorUsage = 1, dataUsage = 2;
+    std::vector<uint8_t> imageUsage(model.images.size(), 0);
+    const auto markImageUsage = [&](int textureIdx, uint8_t usage) {
+        if (textureIdx < 0 || static_cast<size_t>(textureIdx) >= model.textures.size()) return;
+        const int imageIdx = model.textures[textureIdx].source;
+        if (imageIdx >= 0 && static_cast<size_t>(imageIdx) < model.images.size())
+            imageUsage[imageIdx] |= usage;
+    };
+    for (const auto& material : model.materials)
+    {
+        markImageUsage(material.emissiveTexture.index, colorUsage);
+        if (material.pbrMetallicRoughness.metallicFactor < 1.0)
+            markImageUsage(material.pbrMetallicRoughness.baseColorTexture.index, colorUsage);
+        markImageUsage(material.normalTexture.index, dataUsage);
+        markImageUsage(material.pbrMetallicRoughness.metallicRoughnessTexture.index, dataUsage);
+    }
+
     std::vector<uint32_t> textureIds(model.images.size(), TEXTURE_ID_INVALID);
-    const auto loadColorImage = [&](size_t imageIdx) {
-        auto& id = textureIds[imageIdx];
+    std::vector<uint32_t> linearTextureIds(model.images.size(), TEXTURE_ID_INVALID);
+    const auto loadImage = [&](size_t imageIdx, bool linear) {
+        auto& id = (linear ? linearTextureIds : textureIds)[imageIdx];
         if (id == TEXTURE_ID_INVALID)
         {
-            const auto& image = model.images[imageIdx];
-            id = scene.addTexture(std::vector<uint8_t>(image.image), image.width, image.height);
+            auto& image = model.images[imageIdx];
+            const bool needsOtherUpload = (imageUsage[imageIdx] & (linear ? colorUsage : dataUsage)) &&
+                (linear ? textureIds : linearTextureIds)[imageIdx] == TEXTURE_ID_INVALID;
+            auto pixels = needsOtherUpload ? std::vector<uint8_t>(image.image) : std::move(image.image);
+            id = scene.addTexture(std::move(pixels), image.width, image.height,
+                                  linear ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
         }
         return id;
     };
+    const auto loadColorImage = [&](size_t imageIdx) { return loadImage(imageIdx, false); };
 
     // An image may be used as both color and data. Cache a distinct linear upload by image,
     // rather than changing the interpretation of the existing base-color/emission descriptor.
-    std::vector<uint32_t> linearTextureIds(model.images.size(), TEXTURE_ID_INVALID);
     const auto loadDataTexture = [&](int textureIdx, int texCoord) {
         if (textureIdx < 0) return TEXTURE_ID_INVALID;
         if (texCoord != 0)
@@ -81,14 +104,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
         const int imageIdx = model.textures[textureIdx].source;
         if (imageIdx < 0 || static_cast<size_t>(imageIdx) >= model.images.size())
             throw std::runtime_error("Invalid glTF data texture image");
-        auto& id = linearTextureIds[imageIdx];
-        if (id == TEXTURE_ID_INVALID)
-        {
-            const auto& image = model.images[imageIdx];
-            id = scene.addTexture(std::vector<uint8_t>(image.image), image.width, image.height,
-                                  DXGI_FORMAT_R8G8B8A8_UNORM);
-        }
-        return id;
+        return loadImage(imageIdx, true);
     };
 
     ToFreeList toFreeList;
@@ -162,7 +178,8 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                                                      pbr.metallicRoughnessTexture.texCoord);
         // This is a super scuffed way of determining whether the material has the pbrMetallicRoughness struct.
         // Ideally, I would use some JSON utils to check this for real. But this works for now.
-        const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0);
+        const bool hasPbr = !(pbr.metallicFactor == 1.0 && pbr.roughnessFactor == 1.0) ||
+                            pbr.metallicRoughnessTexture.index >= 0;
         // Use metallicFactor to determine if material is metallic (specular-only) or dielectric (can have diffuse)
         // metallicFactor == 1.0 (default) = metallic/specular only
         // metallicFactor == 0 = dielectric, can have diffuse
