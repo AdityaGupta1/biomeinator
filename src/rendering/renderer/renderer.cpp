@@ -358,6 +358,7 @@ static void bindSceneSrvs(uint32_t baseIdx)
     renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 5, renderState.scene.getDevPerTriDatasBufferAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 6, renderState.scene.getDevAreaLightsBufferAddress());
     renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 7, renderState.scene.getDevAreaLightSamplingStructureAddress());
+    renderState.cmdList->SetComputeRootShaderResourceView(baseIdx + 8, renderState.scene.getDevTangentsBufferAddress());
 }
 
 static void bindPtCommonParams(ParamBlockManager& paramBlockManager)

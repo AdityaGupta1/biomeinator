@@ -1,6 +1,21 @@
 {
     "tests": [
         {
+            "name": "statues",
+            "scene": "gltf/statues/statues.gltf",
+            "args": [
+                "--width=540",
+                "--height=540",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=12",
+                "--tonemapping=0",
+                "--refractionIndirectPassthrough=false"
+            ],
+            "golden": "gltf/statues/golden.png",
+            "threshold": 0.01
+        },
+        {
             "name": "statues_blender_no_tonemap",
             "scene": "gltf/statues/statues.gltf",
             "args": [

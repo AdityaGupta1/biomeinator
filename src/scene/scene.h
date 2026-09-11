@@ -38,6 +38,7 @@ private:
 
     AcsHelper::GeometryWrapper geoWrapper{};
     ManagedBufferSection perTriDatasBufferSection{};
+    ManagedBufferSection tangentsBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
@@ -66,6 +67,7 @@ private:
 
 public:
     std::vector<Vertex> host_verts{};
+    std::vector<VertexTangent> host_tangents{}; // optional, indexed like host_verts
     std::vector<uint32_t> host_idxs{};
     std::vector<PerTriangleData> host_perTriDatas{};
     // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
@@ -125,6 +127,12 @@ private:
             .isResizable = true,
             .alignmentBytes = sizeof(PerTriangleData),
         },
+    };
+
+    CommittedManagedBuffer managedTangentsBuffer{
+        &DEFAULT_HEAP,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        { .isResizable = true, .alignmentBytes = sizeof(VertexTangent) },
     };
 
     uint32_t maxNumInstances{ 0 };
@@ -238,6 +246,7 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevTlasAddress() const;
 
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevTangentsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
 

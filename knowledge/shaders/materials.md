@@ -148,7 +148,8 @@ too, whereas Cycles bends only the specular closures' normal. This can also chan
 normal-mapped creases, not just mesh silhouettes.
 
 When a separate normal texture is present, closest-hit first maps its linear tangent-space
-sample through the surface frame (glTF exported tangents, or a UV-derived terrain frame),
+sample through interpolated authored glTF tangents from a separate buffer, or a
+triangle/UV-derived terrain frame when the instance has no tangent attributes,
 then applies facing/specular correction. `normalScale` multiplies X/Y before normalization.
 Both the G-buffer/DLSS guides and later bounces receive this normal. Backface classification
 still uses the geometric normal, which is also retained in `HitInfo` for mapped-surface

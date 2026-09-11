@@ -26,12 +26,14 @@ Instance::Instance(Scene* scene, uint32_t id)
 void Instance::stealVectors(Instance* other)
 {
     ASSERT(other->host_verts.empty());
+    ASSERT(other->host_tangents.empty());
     ASSERT(other->host_idxs.empty());
     ASSERT(other->host_perTriDatas.empty());
     ASSERT(other->host_ommIdxs.empty());
     ASSERT(other->host_areaLights.empty());
 
     this->host_verts = std::move(other->host_verts);
+    this->host_tangents = std::move(other->host_tangents);
     this->host_idxs = std::move(other->host_idxs);
     this->host_perTriDatas = std::move(other->host_perTriDatas);
     this->host_ommIdxs = std::move(other->host_ommIdxs);
@@ -45,9 +47,11 @@ void Instance::reset(bool alsoFreeFromScene)
     this->geoWrapper.idxsBufferSection.free();
     this->geoWrapper.ommIdxsBufferSection.free();
     this->perTriDatasBufferSection.free();
+    this->tangentsBufferSection.free();
     this->areaLightsBufferSection.free();
 
     this->host_verts.clear();
+    this->host_tangents.clear();
     this->host_idxs.clear();
     this->host_perTriDatas.clear();
     this->host_ommIdxs.clear();
@@ -170,6 +174,8 @@ void Scene::init()
 {
     this->managedVertsBuffer.setName(L"scene verts");
     this->managedVertsBuffer.init();
+    this->managedTangentsBuffer.setName(L"scene tangents");
+    this->managedTangentsBuffer.init(sizeof(VertexTangent));
     this->managedIdxsBuffer.setName(L"scene idxs");
     this->managedIdxsBuffer.init();
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
@@ -213,6 +219,7 @@ void Scene::reset()
     }
 
     this->managedVertsBuffer.reset();
+    this->managedTangentsBuffer.reset();
     this->managedIdxsBuffer.reset();
     this->managedPerTriDatasBuffer.reset();
 
@@ -547,12 +554,25 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
     {
-        InstanceData instanceData;
+        InstanceData instanceData{};
         instanceData.vertsBufferOffset =
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         instanceData.materialIdx = instance->materialIdx;
+        instanceData.tangentsBufferOffset = TANGENT_BUFFER_OFFSET_INVALID;
+        if (!instance->host_tangents.empty())
+        {
+            ASSERT(instance->host_tangents.size() == instance->host_verts.size());
+            const ManagedBufferSection upload =
+                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_tangents);
+            // This committed buffer can resize, so keep its copy transitions unbatched.
+            instance->tangentsBufferSection = this->managedTangentsBuffer.copyFromManagedBuffer(
+                cmdList, toFreeList, sharedBlasUploadBuffer, upload);
+            instanceData.tangentsBufferOffset =
+                Util::convertByteSizeToCount<VertexTangent>(instance->tangentsBufferSection.offsetBytes);
+            toFreeList.pushManagedBufferSection(upload);
+        }
 
         const ManagedBufferSection perTriDatasUploadBufferSection =
             sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
@@ -845,6 +865,11 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTlasAddress() const
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevVertsBufferAddress() const
 {
     return this->managedVertsBuffer.getGpuVirtualAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevTangentsBufferAddress() const
+{
+    return this->managedTangentsBuffer.getGpuVirtualAddress();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const

@@ -132,6 +132,8 @@ enum class GbufferParam
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
+    TANGENTS,
+
     GBUFFER_OUT,
 
     COUNT
@@ -149,6 +151,8 @@ enum class PtParam
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
+
+    TANGENTS,
 
     GBUFFER_IN,
 

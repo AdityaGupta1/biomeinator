@@ -22,6 +22,7 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
 StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
+StructuredBuffer<VertexTangent> tangents : REGISTER_T(RT, TANGENTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 #include "materials/water.hlsli"
@@ -56,7 +57,7 @@ bool isPixelOutOfBounds(int2 pixelIdx)
     return any(pixelIdx < int2(0, 0)) || any(pixelIdx >= renderParams.renderSize);
 }
 
-void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+uint3 getTriangleVertexIndices(const InstanceData instanceData, const uint triIdx)
 {
     uint i0, i1, i2;
     if (bool(instanceData.hasIdxs))
@@ -73,9 +74,15 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
         i2 = i0 + 2;
     }
 
-    v0 = verts[instanceData.vertsBufferOffset + i0];
-    v1 = verts[instanceData.vertsBufferOffset + i1];
-    v2 = verts[instanceData.vertsBufferOffset + i2];
+    return uint3(i0, i1, i2);
+}
+
+void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+{
+    const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
+    v0 = verts[instanceData.vertsBufferOffset + indices.x];
+    v1 = verts[instanceData.vertsBufferOffset + indices.y];
+    v2 = verts[instanceData.vertsBufferOffset + indices.z];
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
@@ -221,8 +228,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const InstanceData instanceData = instanceDatas[InstanceID()];
     const uint materialIdx = instanceData.materialIdx;
 
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+    const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
+    const Vertex v0 = verts[instanceData.vertsBufferOffset + vertexIndices.x];
+    const Vertex v1 = verts[instanceData.vertsBufferOffset + vertexIndices.y];
+    const Vertex v2 = verts[instanceData.vertsBufferOffset + vertexIndices.z];
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
@@ -249,24 +258,26 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         const Material material = materials[materialIdx];
         float3 tangent_WS;
         float tangentSign;
-        if (v0.tangentSign != 0.f)
+        if (instanceData.tangentsBufferOffset != TANGENT_BUFFER_OFFSET_INVALID)
         {
-            const float3 tangent_OS = octDecode(v0.packedTangent) * bary.x +
-                                     octDecode(v1.packedTangent) * bary.y + octDecode(v2.packedTangent) * bary.z;
+            const VertexTangent t0 = tangents[instanceData.tangentsBufferOffset + vertexIndices.x];
+            const VertexTangent t1 = tangents[instanceData.tangentsBufferOffset + vertexIndices.y];
+            const VertexTangent t2 = tangents[instanceData.tangentsBufferOffset + vertexIndices.z];
+            const float3 tangent_OS = octDecode(t0.packedTangent) * bary.x +
+                                     octDecode(t1.packedTangent) * bary.y + octDecode(t2.packedTangent) * bary.z;
             tangent_WS = mul(tangent_OS, (float3x3) ObjectToWorld4x3());
-            tangentSign = v0.tangentSign * (determinant((float3x3) ObjectToWorld4x3()) < 0.f ? -1.f : 1.f);
+            tangentSign = t0.handedness * (determinant((float3x3) ObjectToWorld4x3()) < 0.f ? -1.f : 1.f);
         }
         else
         {
-            // Terrain has no authored tangents. Derive a frame from its face UVs so block
-            // rotations and differently oriented faces rotate the normal texture with them.
+            // Terrain derives its UV frame without allocating tangent attributes.
             const float3 e1 = mul(v1.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
             const float3 e2 = mul(v2.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
             const float2 duv1 = uv1 - uv0, duv2 = uv2 - uv0;
             const float det = duv1.x * duv2.y - duv1.y * duv2.x;
             tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
-            const float3 bitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
-            tangentSign = dot(cross(nor_WS, tangent_WS), bitangent_WS) < 0.f ? -1.f : 1.f;
+            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
+            tangentSign = dot(cross(nor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
         }
         tangent_WS -= nor_WS * dot(nor_WS, tangent_WS);
         if (dot(tangent_WS, tangent_WS) > 1e-12f)

@@ -47,9 +47,15 @@ struct Vertex
     float3 pos_OS;
     uint packedNor; // octahedron-encoded, see packing.hlsli / util/packing.h
     float2 uv; // full precision: f16 UVs can shift samples by a texel on 2K normal maps
-    uint packedTangent; // octahedron-encoded object-space tangent
-    float tangentSign; // glTF tangent.w; zero means no authored tangent
 };
+
+struct VertexTangent
+{
+    uint packedTangent; // octahedron-encoded object-space direction
+    float handedness; // glTF tangent.w
+};
+
+#define TANGENT_BUFFER_OFFSET_INVALID ~0u
 
 struct InstanceData
 {
@@ -62,9 +68,9 @@ struct InstanceData
     uint areaLightsBufferOffset;
 
     uint materialIdx;
+    uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #define MATERIAL_IDX_INVALID ~0u

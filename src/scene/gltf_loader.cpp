@@ -433,21 +433,25 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
 
             const size_t vertCount = posAccessor.count;
             const Accessor* tangentAccessor = nullptr;
-            if (const auto it = prim.attributes.find("TANGENT"); it != prim.attributes.end())
-                tangentAccessor = &model.accessors[it->second];
             if (prim.material >= 0 && static_cast<size_t>(prim.material) < model.materials.size())
             {
                 const auto& mat = model.materials[prim.material];
                 if ((mat.normalTexture.index >= 0 || mat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) && !uvAccessor)
                     throw std::runtime_error("Normal/roughness mapped glTF primitive has no TEXCOORD_0");
-                if (mat.normalTexture.index >= 0 && !tangentAccessor)
-                    throw std::runtime_error("Normal mapped glTF requires TANGENT; export with tangents enabled");
+                if (mat.normalTexture.index >= 0)
+                {
+                    const auto it = prim.attributes.find("TANGENT");
+                    if (it == prim.attributes.end())
+                        throw std::runtime_error("Normal mapped glTF requires TANGENT; export with tangents enabled");
+                    tangentAccessor = &model.accessors[it->second];
+                }
             }
             if (tangentAccessor && (tangentAccessor->count != vertCount || tangentAccessor->type != TINYGLTF_TYPE_VEC4 ||
                                     tangentAccessor->componentType != TINYGLTF_COMPONENT_TYPE_FLOAT))
                 throw std::runtime_error("glTF TANGENT must be a float VEC4 per vertex");
             const auto* tangentData = tangentAccessor ? readAccessorData(*tangentAccessor) : nullptr;
             const size_t tangentStride = tangentAccessor ? getStride(*tangentAccessor) : 0;
+            if (tangentAccessor) instance->host_tangents.resize(vertCount);
             std::vector<Vertex>& host_verts = instance->host_verts;
             host_verts.resize(vertCount);
 
@@ -479,8 +483,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 if (tangentAccessor)
                 {
                     const float* t = reinterpret_cast<const float*>(tangentData + tangentStride * v);
-                    host_verts[v].packedTangent = Util::octEncode({ t[0], t[1], t[2] });
-                    host_verts[v].tangentSign = t[3];
+                    instance->host_tangents[v] = { Util::octEncode({ t[0], t[1], t[2] }), t[3] };
                 }
             }
 
