@@ -8,6 +8,7 @@
 #include "rendering/buffer/buffer_helper.h"
 
 #include "debug.h"
+#include "util/util.h"
 
 RtTarget::RtTarget(const std::wstring& name,
                    DXGI_FORMAT format,
@@ -65,15 +66,26 @@ void RtTarget::setDimensions(uint32_t width, uint32_t height)
     this->targetResourceDesc.Height = height;
 }
 
+void RtTarget::setVolumeDimensions(uint32_t width, uint32_t height, uint16_t depth)
+{
+    setDimensions(width, height);
+    targetResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+    targetResourceDesc.DepthOrArraySize = depth;
+    uav.desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+    uav.desc.Texture3D = { .MipSlice = 0, .FirstWSlice = 0, .WSize = depth };
+    srv.desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+    srv.desc.Texture3D = { .MostDetailedMip = 0, .MipLevels = 1, .ResourceMinLODClamp = 0.f };
+}
+
 void RtTarget::init()
 {
     this->targetResourceState = D3D12_RESOURCE_STATE_COMMON;
-    Renderer::getDevice()->CreateCommittedResource(&DEFAULT_HEAP,
+    CHECK_HRESULT(Renderer::getDevice()->CreateCommittedResource(&DEFAULT_HEAP,
                                                    D3D12_HEAP_FLAG_NONE,
                                                    &this->targetResourceDesc,
                                                    this->targetResourceState,
                                                    nullptr,
-                                                   IID_PPV_ARGS(&this->target));
+                                                   IID_PPV_ARGS(&this->target)));
     this->target->SetName(this->name.c_str());
 
     if (this->hasUav)

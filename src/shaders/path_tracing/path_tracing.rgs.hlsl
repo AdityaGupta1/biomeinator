@@ -145,7 +145,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
-        const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
+        const float3 domeLightColor = (pathSplitIdx == 0) ? getPrimaryDomeLightColor(pixelIdx, ray.Direction) : 0.f;
         pathColor += payload.pathWeight * domeLightColor;
         if (sceneParams.voxelMode == 1)
         {
@@ -550,7 +550,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 
         const bool didMiss = !bool(payload.flags & PAYLOAD_FLAG_DID_HIT);
-        const float3 missDomeLightColor = didMiss ? getDomeLightColor(ray.Direction) : float3(0.f, 0.f, 0.f);
+        const float3 missDomeLightColor = didMiss ? getDomeLightColor(ray.Origin, ray.Direction, uint(lerp(float(renderParams.cloudSteps), min(float(renderParams.cloudSteps), renderParams.cloud.secondarySteps), saturate((payload.rayCone.angle - 0.01f) / 0.12f)))) : float3(0.f, 0.f, 0.f);
 
         if (pathDepth == 0)
         {
@@ -609,7 +609,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (doMis)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfShadingNor_WS); // 0 if !voxelMode
-                domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);
+                // NEE samples direct solar radiance only. Cloud in-scattering
+                // must retain its full BSDF weight, even inside the sun disk.
+                const float3 solarContrib = payload.pathWeight * getDirectSunColor(ray.Origin, ray.Direction);
+                domeLightContrib += solarContrib * (balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf) - 1.f);
             }
 
             pathColor += domeLightContrib;

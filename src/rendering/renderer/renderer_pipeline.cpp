@@ -93,6 +93,13 @@ void initRootSignature()
         .RegisterSpace = RT_REGISTER_SPACE,
     };
     rtStaticSamplers.push_back(biomeMapSampler);
+    D3D12_STATIC_SAMPLER_DESC cloudSampler = lutSampler;
+    cloudSampler.AddressU = cloudSampler.AddressV = cloudSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    cloudSampler.ShaderRegister = RT_REGISTER_CLOUD_SAMPLER;
+    rtStaticSamplers.push_back(cloudSampler);
+    cloudSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    cloudSampler.ShaderRegister = RT_REGISTER_CLOUD_FIELD_SAMPLER;
+    rtStaticSamplers.push_back(cloudSampler);
 
     const D3D12_DESCRIPTOR_RANGE1 serDescriptorRange = {
         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,

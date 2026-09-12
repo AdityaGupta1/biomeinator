@@ -113,12 +113,12 @@ inline bool ComboUint(const char* label, const char* settingName, const std::vec
     return didChange;
 }
 
-inline bool SliderFloat(const char* label, const char* settingName, float minVal, float maxVal)
+inline bool SliderFloat(const char* label, const char* settingName, float minVal, float maxVal, const char* format = "%.3f")
 {
     ScopedItemWidth width(sliderWidth);
 
     float value = SettingsManager::getAsFloat(settingName);
-    const bool didChange = ImGui::SliderFloat(label, &value, minVal, maxVal);
+    const bool didChange = ImGui::SliderFloat(label, &value, minVal, maxVal, format);
     if (didChange)
     {
         value = std::clamp(value, minVal, maxVal);

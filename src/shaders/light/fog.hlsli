@@ -200,7 +200,7 @@ float3 computeFogInScatter(const float3 origin_WS,
             const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
             const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
             const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunVolumeDist);
-            sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
+            sunScatter += viewTransmittance * density * sunTransmittance * cloudSunTransmittance(stepPos_WS, sunDir_WS) * stepLength;
         }
 
         // getSunColor is radiance over the sun disk, so undo the solid-angle division to get
@@ -210,7 +210,7 @@ float3 computeFogInScatter(const float3 origin_WS,
 
     // NOTE: no visibility check, so this also brightens enclosed spaces (cave interiors)
     // with sky-colored haze; fogAmbientStrength is the artistic control for how much.
-    inScatter += renderParams.fogAmbientStrength * (1.f - segmentTransmittance) * getSkyColor(float3(0.f, 1.f, 0.f));
+    inScatter += renderParams.fogAmbientStrength * (1.f - segmentTransmittance) * getSkyColor(float3(0.f, 1.f, 0.f)) * lerp(0.65f, 1.f, cloudSunTransmittance(origin_WS, sunDir_WS));
 
     return inScatter;
 }

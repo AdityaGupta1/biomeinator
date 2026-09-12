@@ -77,6 +77,10 @@ void init()
     {
         frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudNoiseIdx = SkyAtmosphere::getCloudNoiseSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudShapeIdx = SkyAtmosphere::getCloudShapeSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudLightIdx = SkyAtmosphere::getCloudLightSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudViewIdx = SkyAtmosphere::getCloudViewSrvIdx();
     }
     initRtTargets();
     initCommand();
@@ -213,6 +217,8 @@ void resize()
     flush();
 
     CHECK_HRESULT(renderState.proxySwapChain->ResizeBuffers(0, viewportWidth, viewportHeight, DXGI_FORMAT_UNKNOWN, renderState.swapChainFlags));
+    SkyAtmosphere::resizeCloudView(renderState.renderWidth, renderState.renderHeight,
+        std::clamp(SettingsManager::getAsUint("cloudViewDownscale"), 1u, 4u));
     if (isWaitableSwapChainActive())
     {
         CHECK_HRESULT(renderState.swapChain->SetMaximumFrameLatency(2));
@@ -304,6 +310,7 @@ void resize()
         srv.dlssOutputTargetIdx = renderState.dlssOutputTarget.getSrvIdx();
 
         srv.debugTargetIdx = renderState.debugTarget.getSrvIdx();
+        srv.cloudViewIdx = SkyAtmosphere::getCloudViewSrvIdx();
     }
 
     renderState.camera.setAspectRatio(static_cast<float>(renderState.renderWidth) / static_cast<float>(renderState.renderHeight));
@@ -655,6 +662,38 @@ void render()
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
+    renderParams->clouds = SettingsManager::getAsBool("clouds") ? 1u : 0u;
+    renderParams->cloudCoverage = std::clamp(SettingsManager::getAsFloat("cloudCoverage"), 0.f, 1.f);
+    renderParams->cloudDensity = std::clamp(SettingsManager::getAsFloat("cloudDensity"), 0.f, 0.1f);
+    renderParams->cloudSteps = std::clamp(SettingsManager::getAsUint("cloudSteps"), 8u, 256u);
+    renderParams->cloud.baseHeight = std::clamp(SettingsManager::getAsFloat("cloudBaseHeight"), 200.0f, 3000.0f);
+    renderParams->cloud.thickness = std::clamp(SettingsManager::getAsFloat("cloudThickness"), 100.0f, 1500.0f);
+    renderParams->cloud.period = std::clamp(SettingsManager::getAsFloat("cloudPeriod"), 1024.0f, 16384.0f);
+    renderParams->cloud.maxDistance = std::clamp(SettingsManager::getAsFloat("cloudMaxDistance"), 4000.0f, 100000.0f);
+    renderParams->cloud.weatherScale = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudWeatherScale")), 1.0f, 4.0f);
+    renderParams->cloud.billowScale = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudBillowScale")), 1.0f, 8.0f);
+    renderParams->cloud.perlinWeight = std::clamp(SettingsManager::getAsFloat("cloudPerlinWeight"), 0.0f, 1.0f);
+    renderParams->cloud.shapeThreshold = std::clamp(SettingsManager::getAsFloat("cloudShapeThreshold"), 0.0f, 0.6f);
+    renderParams->cloud.shapeGain = std::clamp(SettingsManager::getAsFloat("cloudShapeGain"), 0.5f, 8.0f);
+    renderParams->cloud.weatherSoftness = std::clamp(SettingsManager::getAsFloat("cloudWeatherSoftness"), 0.005f, 0.15f);
+    renderParams->cloud.bottomFade = std::clamp(SettingsManager::getAsFloat("cloudBottomFade"), 0.02f, 0.4f);
+    renderParams->cloud.topStart = std::clamp(SettingsManager::getAsFloat("cloudTopStart"), 0.1f, 0.9f);
+    renderParams->cloud.topVariance = std::clamp(SettingsManager::getAsFloat("cloudTopVariance"), 0.0f, 0.6f);
+    renderParams->cloud.mediumRepeats = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudMediumRepeats")), 1.0f, 16.0f);
+    renderParams->cloud.fineRepeats = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudFineRepeats")), 4.0f, 64.0f);
+    renderParams->cloud.mediumErosion = std::clamp(SettingsManager::getAsFloat("cloudMediumErosion"), 0.0f, 0.5f);
+    renderParams->cloud.fineErosion = std::clamp(SettingsManager::getAsFloat("cloudFineErosion"), 0.0f, 0.3f);
+    renderParams->cloud.warpStrength = std::clamp(SettingsManager::getAsFloat("cloudWarpStrength"), 0.0f, 2.0f);
+    renderParams->cloud.ambient = std::clamp(SettingsManager::getAsFloat("cloudAmbient"), 0.0f, 2.0f);
+    renderParams->cloud.phaseG = std::clamp(SettingsManager::getAsFloat("cloudPhaseG"), 0.0f, 0.95f);
+    renderParams->cloud.multiScatter = std::clamp(SettingsManager::getAsFloat("cloudMultiScatter"), 0.0f, 3.0f);
+    renderParams->cloud.powder = std::clamp(SettingsManager::getAsFloat("cloudPowder"), 0.0f, 2.0f);
+    renderParams->cloud.aerial = std::clamp(SettingsManager::getAsFloat("cloudAerial"), 0.0f, 0.0001f);
+    renderParams->cloud.windX = std::clamp(SettingsManager::getAsFloat("cloudWindX"), -50.0f, 50.0f);
+    renderParams->cloud.windZ = std::clamp(SettingsManager::getAsFloat("cloudWindZ"), -50.0f, 50.0f);
+    renderParams->cloud.lightSteps = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudLightSteps")), 4.0f, 32.0f);
+    renderParams->cloud.secondarySteps = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudSecondarySteps")), 4.0f, 32.0f);
+    renderParams->cloud.viewDownscale = std::clamp(static_cast<float>(SettingsManager::getAsUint("cloudViewDownscale")), 1.0f, 4.0f);
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -768,7 +807,9 @@ void render()
             GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sky luts");
             const float cameraY = paramBlockManager.cameraParams->pos_WS.y +
                 static_cast<float>(paramBlockManager.cameraParams->globalInstanceOffset.y);
-            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY);
+            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY,
+                renderParams->clouds != 0, renderParams->cloudCoverage, renderParams->cloudDensity,
+                renderParams->cloud, paramBlockManager.getParamBufferGpuAddress());
         }
 
         // ===================================

@@ -9,61 +9,18 @@
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
 
-// Deliberately larger than the real sun (~0.8° radius vs. 0.27°)
-static const float sunCosTheta = 0.9999f;
-static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
+#include "sky/sky_lighting.hlsli"
 
-// Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
-// angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
-static const float3 sunIlluminance = float3(10.f, 10.f, 10.f);
+#include "sky/clouds.hlsli"
 
-// Constant floor on every sky lookup, sized so nights aren't pitch black until the moon exists;
-// it tints the daytime sky slightly too. Added at the lookup rather than baked into the sky-view
-// LUT so it's trivial to delete when the moon lands.
-static const float3 ambientSkyLight = float3(0.015f, 0.0225f, 0.0375f);
-
-SamplerState skyLutSampler : REGISTER_S(RT, LUT_SAMPLER);
-SamplerState skyViewSampler : REGISTER_S(RT, SKY_VIEW_SAMPLER);
-
-float3 getSunDir_WS()
+float3 getDirectSunColor(float3 origin_WS, float3 wi_WS)
 {
-    return computeSunDir_WS(renderParams.animTime);
+    if (sceneParams.voxelMode == 0 || !isInSun(wi_WS) || isSunOccluded(wi_WS))
+        return 0.f;
+    return getSunColor(wi_WS) * cloudSunTransmittance(origin_WS, wi_WS);
 }
 
-bool isInSun(float3 wi_WS)
-{
-    return dot(wi_WS, getSunDir_WS()) >= sunCosTheta;
-}
-
-float getCameraAtmosphereRadius()
-{
-    return atmosphereRadiusForCameraY(cameraParams.pos_WS.y + cameraParams.globalInstanceOffset.y);
-}
-
-float3 getSkyColor(float3 wi_WS)
-{
-    Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
-    const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
-    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + ambientSkyLight;
-}
-
-// True if the ray from the camera towards wi_WS is occluded by the virtual planet. The
-// transmittance parameterization only covers rays that don't hit the ground sphere, and isInSun
-// alone would show the disk through the horizon at night.
-bool isSunOccluded(float3 wi_WS)
-{
-    const float r = getCameraAtmosphereRadius();
-    return raySphereIntersectNearest(float3(0.f, r, 0.f), wi_WS, atmosphereGroundRadius) >= 0.f;
-}
-
-float3 getSunColor(float3 wi_WS)
-{
-    Texture2D<float4> transmittanceLut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
-    const float3 transmittance = sampleTransmittanceLut(transmittanceLut, skyLutSampler, getCameraAtmosphereRadius(), wi_WS.y);
-    return sunIlluminance * transmittance / sunSolidAngle;
-}
-
-float3 getDomeLightColor(float3 wi_WS)
+float3 getDomeLightColor(float3 origin_WS, float3 wi_WS, uint steps)
 {
     if (sceneParams.voxelMode == 0)
     {
@@ -72,10 +29,26 @@ float3 getDomeLightColor(float3 wi_WS)
 
     if (isInSun(wi_WS) && !isSunOccluded(wi_WS))
     {
-        return getSunColor(wi_WS);
+        // Use the same spatially filtered solar visibility as NEE. Scattered
+        // cloud radiance is separate: sun NEE does not sample that component.
+        return compositeClouds(origin_WS, wi_WS, 0.f, steps) + getDirectSunColor(origin_WS, wi_WS);
     }
 
-    return getSkyColor(wi_WS);
+    return compositeClouds(origin_WS, wi_WS, getSkyColor(wi_WS), steps);
+}
+
+float3 getPrimaryDomeLightColor(uint2 pixelIdx, float3 dir)
+{
+    if (sceneParams.voxelMode == 0)
+        return 0.f;
+    if (renderParams.clouds == 0 || renderParams.cloudCoverage <= 0.f || renderParams.cloudDensity <= 0.f)
+        return getDomeLightColor(cameraParams.pos_WS, dir, renderParams.cloudSteps);
+    Texture2D<float4> cloudView = ResourceDescriptorHeap[heapIndices.srv.cloudViewIdx];
+    const float2 uv = (float2(pixelIdx) + cameraParams.jitter) / float2(renderParams.renderSize);
+    const float4 cloud = cloudView.SampleLevel(skyLutSampler, uv, 0);
+    // Keep the solar disk at full resolution; only the cloud layer is upsampled.
+    return cloud.rgb + ((isInSun(dir) && !isSunOccluded(dir)) ?
+        getDirectSunColor(cameraParams.pos_WS, dir) : cloud.a * getSkyColor(dir));
 }
 
 float domeLightPdf(float3 wi_WS, float3 surfShadingNor_WS)
@@ -161,7 +134,11 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     if (result.didReachDomeLight)
     {
         const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight * passthroughAbsorption;
+        // Sun NEE only needs direct solar transmittance. Cloud in-scattering
+        // spans the hemisphere and is handled by escaping BSDF rays.
+        result.Le = isSunOccluded(ray.Direction) ? 0.f :
+            getSunColor(ray.Direction) * cloudSunTransmittance(ray.Origin, ray.Direction) *
+            domeLightPayload.pathWeight * passthroughAbsorption;
     }
     else
     {

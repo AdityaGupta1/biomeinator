@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common_enums.h"
+#include "common_cloud_settings.h"
 
 #ifdef __cplusplus
 #include <DirectXMath.h>
@@ -51,6 +52,10 @@ struct HeapIndices
         uint transmittanceLutIdx;
         uint skyViewLutIdx;
         uint biomeMapIdx;
+        uint cloudNoiseIdx;
+        uint cloudShapeIdx;
+        uint cloudLightIdx;
+        uint cloudViewIdx;
     } srv;
 };
 
@@ -144,6 +149,11 @@ struct RenderParams
     uint fogMarchSteps;
     float fogAmbientStrength;
     uint pad0;
+    uint clouds;
+    float cloudCoverage;
+    float cloudDensity;
+    uint cloudSteps;
+    CloudSettings cloud;
 };
 
 struct SharcParams

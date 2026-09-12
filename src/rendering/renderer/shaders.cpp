@@ -28,6 +28,10 @@
 #include "sharc/sharc_query.rgs.fxh"
 #include "sharc/sharc_update.rgs.fxh"
 #include "sky/multi_scattering_lut.cs.fxh"
+#include "sky/cloud_noise.cs.fxh"
+#include "sky/cloud_shape.cs.fxh"
+#include "sky/cloud_light.cs.fxh"
+#include "sky/cloud_view.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
 #include "sky/transmittance_lut.cs.fxh"
 #include "water/water_displace.cs.fxh"
@@ -57,6 +61,10 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(light_tree_scene_bbox_reset_cs),
     REGISTER_SHADER(path_tracing_rgs),
     REGISTER_SHADER(multi_scattering_lut_cs),
+    REGISTER_SHADER(cloud_noise_cs),
+    REGISTER_SHADER(cloud_shape_cs),
+    REGISTER_SHADER(cloud_light_cs),
+    REGISTER_SHADER(cloud_view_cs),
     REGISTER_SHADER(postprocess_ps),
     REGISTER_SHADER(postprocess_vs),
     REGISTER_SHADER(sky_view_lut_cs),

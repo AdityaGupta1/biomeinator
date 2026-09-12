@@ -46,6 +46,7 @@ public:
              bool hasSrv = true);
 
     void setDimensions(uint32_t width, uint32_t height);
+    void setVolumeDimensions(uint32_t width, uint32_t height, uint16_t depth);
 
     void init();
     void reset();
