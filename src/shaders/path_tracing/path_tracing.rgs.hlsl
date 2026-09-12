@@ -476,6 +476,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     specularAlbedoTarget[pixelIdx] = float4(albedos.specular, 1.f);
             }
 
+            const bool useDiffuseMaterialAlbedo = (pathDepth == 0) && isDiffuseOnlyMaterial(surfMaterial);
+            if (useDiffuseMaterialAlbedo)
+            {
+                // The diffuse guide describes reflectance, independent of whether the continuation is rejected.
+                // The incoming weight includes volume absorption, fog transmittance and opacity splitting.
+                ptDiffuseAlbedo = payload.pathWeight * surfMaterial.baseColor;
+            }
+
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
             {
@@ -487,7 +495,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
 
-            if (pathDepth == 0 && !useAnalyticAlbedoGuides)
+            if (pathDepth == 0 && !useAnalyticAlbedoGuides && !useDiffuseMaterialAlbedo)
             {
                 ptDiffuseAlbedo = payload.pathWeight;
             }

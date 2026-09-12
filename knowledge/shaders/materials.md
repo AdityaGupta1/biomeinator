@@ -163,6 +163,11 @@ A rejected continuation has zero throughput but does not discard the hit's direc
 Samples are not retried or renormalized, so MIS retains the original sampling densities.
 Transmission materials allow backside directions.
 
+For a diffuse-only first hit, the diffuse-albedo guide is the resolved material color
+times the incoming path weight (including absorption, fog and opacity splitting).
+It does not depend on whether the continuation sample survives geometric-horizon
+rejection. Rejected samples still contribute zero continuation radiance.
+
 Reflection sampling rejects outgoing view directions below the shading normal before
 sampling GGX, just as dielectric sampling does. A zero-density mixture sample is also
 terminated with `deadBsdfSample`, avoiding `0 / 0` throughput and accumulated black pixels.
