@@ -256,6 +256,24 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const bool hasNormalMap = materialIdx != MATERIAL_IDX_INVALID &&
         materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID &&
         (!materials[materialIdx].hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
+    const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
+        (materials[materialIdx].hasGlossy() ||
+         (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
+    const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
+
+    // Orient the base surface before perturbing it. A mapped normal facing away from
+    // the ray must not be flipped into the solid at grazing angles.
+    const float3 frameNor_WS = nor_WS;
+    const float3 wo_WS = -WorldRayDirection();
+    if (dot(geoNor_WS, wo_WS) < 0.f)
+    {
+        geoNor_WS = -geoNor_WS;
+        nor_WS = -nor_WS;
+        payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
+    }
+    if (!isWaterTop && !hasGlossy && dot(nor_WS, wo_WS) < 0.f)
+        nor_WS = -nor_WS;
+
     payload.flags &= ~PAYLOAD_FLAG_NORMAL_MAPPED;
     if (hasNormalMap)
     {
@@ -281,37 +299,32 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             const float det = duv1.x * duv2.y - duv1.y * duv2.x;
             tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
             const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
-            tangentSign = dot(cross(nor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
+            tangentSign = dot(cross(frameNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
         }
-        tangent_WS -= nor_WS * dot(nor_WS, tangent_WS);
+        tangent_WS -= frameNor_WS * dot(frameNor_WS, tangent_WS);
         if (dot(tangent_WS, tangent_WS) > 1e-12f)
         {
             tangent_WS = normalize(tangent_WS);
-            const float3 bitangent_WS = tangentSign * cross(nor_WS, tangent_WS);
+            const float3 bitangent_WS = tangentSign * cross(frameNor_WS, tangent_WS);
             const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
             const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx);
             float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
             n.xy *= material.normalScale;
             if (dot(n, n) > 1e-12f)
             {
-                nor_WS = normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * nor_WS);
+                // Flip the entire authored frame with the base normal, preserving backface UV orientation.
+                const float frameSign = dot(nor_WS, frameNor_WS) < 0.f ? -1.f : 1.f;
+                nor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameNor_WS);
+                // Keep mapped normals in the actual surface's hemisphere, including on smooth meshes.
+                const float geoCos = dot(nor_WS, geoNor_WS);
+                if (geoCos < 1e-4f)
+                    nor_WS = normalize(nor_WS + (1e-4f - geoCos) * geoNor_WS);
                 payload.flags |= PAYLOAD_FLAG_NORMAL_MAPPED;
             }
         }
     }
 
-    // Which side of the surface the ray is on is decided by the geometric normal: the interpolated normal can
-    // face away from the ray on grazing hits of coarse meshes, and treating those as backfaces would invert the
-    // IOR for them
-    const float3 wo_WS = -WorldRayDirection();
-    if (dot(geoNor_WS, wo_WS) < 0.f)
-    {
-        geoNor_WS = -geoNor_WS;
-        nor_WS = -nor_WS;
-        payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
-    }
-
-    if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+    if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
         nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
@@ -319,19 +332,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
     else
     {
-        // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
-        // correction ensures); other materials keep the plain interpolated normal, facing the ray
-        const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
-            (materials[materialIdx].hasGlossy() ||
-             (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
+        // Glossy lobes additionally need reflections to stay above the surface.
         if (hasGlossy)
         {
             nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
-        }
-        else if (dot(nor_WS, wo_WS) < 0.f)
-        {
-            // TODO: mirror Cycles instead, keeping the normal and killing samples that go under the geometric normal (see #371)
-            nor_WS = -nor_WS;
         }
     }
     payload.hitInfo.hitNor_WS = nor_WS;

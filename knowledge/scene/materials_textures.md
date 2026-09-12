@@ -49,7 +49,10 @@ linear RGB, opaque alpha). They use a separate array aligned with the color/aux 
 Missing slices contain flat +Z normals and are skipped using `TRIANGLE_FLAG_NORMAL_MAP`.
 Mips average encoded vectors linearly; the shader normalizes after sampling and derives
 the frame from triangle positions/UVs, without terrain tangent attributes. A payload flag
-records mapped hits so ray offsets use their geometric normals.
+records mapped hits so ray offsets use their geometric normals. Base normals are oriented
+before applying the map; mapped normals are constrained to the geometric hemisphere and
+are never flipped just because they face away from the viewing ray. Glossy surfaces retain
+the additional reflection-normal correction.
 
 Generate maps with `blender --background --python-exit-code 1 --python
 blender/generate_normal_maps.py -- <block> --strength <value> --exponent <value>`.
