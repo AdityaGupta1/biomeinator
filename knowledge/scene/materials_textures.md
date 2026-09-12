@@ -69,6 +69,12 @@ Edges wrap for tiling, with no heightfield blur. Current asset settings are:
 - `cracked_basalt --strength 2 --exponent 2`
 - `clay --strength 0.5 --exponent 1`
 - `white_crystal --strength 0.5 --exponent 1`
+- `moss --strength 0.5 --exponent 1`
+
+The overgrown marble and stone side normal maps use the same per-texel moss masks as
+their color textures: moss texels come from `moss_block.normal.png`, while all other
+texels come from `marble.normal.png` or `stone.normal.png`, respectively. Their top
+and bottom faces reuse those source normal maps directly through the block textures.
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass
