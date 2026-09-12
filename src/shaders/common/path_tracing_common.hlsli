@@ -270,8 +270,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         shadingNor_WS = -shadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
-    // Retain the interpolated normal when it faces away from the ray (Cycles-style handling; see #371).
-    // Opaque geometric-backside directions are rejected by continuation and direct-light sampling.
 
     if (hasNormalMap)
     {
