@@ -138,8 +138,8 @@ void init()
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudViewPso)));
     cloudView.setDimensions(1, 1);
     cloudView.init();
-    cloudNoise.setVolumeDimensions(64, 64, 64);
-    cloudShape.setVolumeDimensions(128, 32, 128);
+    cloudNoise.setVolumeDimensions(1024, 1, 1024);
+    cloudShape.setVolumeDimensions(1024, 1, 1024);
     cloudLight.setVolumeDimensions(128, 32, 128);
     cloudNoise.init();
     cloudShape.init();
@@ -229,19 +229,25 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const f
                 .cloud = settings,
             };
             cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &cloudConstants, 0);
-            cmdList->Dispatch(x / 4, y / 4, z / 4);
+            cmdList->Dispatch((x + 3) / 4, (y + 3) / 4, (z + 3) / 4);
             BufferHelper::uavBarrier(cmdList, target.getTarget());
             target.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         };
-        if (!cloudNoiseReady)
+        const bool timeChanged = previousCloudTime != animTime;
+        const bool noiseChanged = !cloudNoiseReady || previousCloudSettings.warpScale != settings.warpScale ||
+            previousCloudSettings.warpDetail != settings.warpDetail || previousCloudSettings.warpRoughness != settings.warpRoughness ||
+            previousCloudSettings.warpTime != settings.warpTime || previousCloudSettings.warpSpeed != settings.warpSpeed ||
+            (timeChanged && settings.warpSpeed != 0.f);
+        if (noiseChanged)
         {
-            generate(cloudNoise, cloudNoisePso.Get(), 64, 64, 64);
+            generate(cloudNoise, cloudNoisePso.Get(), 1024, 1, 1024);
             cloudNoiseReady = true;
         }
-        const bool shapeChanged = previousCoverage != coverage ||
-            std::memcmp(&previousCloudSettings, &settings, sizeof(settings)) != 0;
+        const bool shapeChanged = noiseChanged || previousCoverage != coverage ||
+            std::memcmp(&previousCloudSettings, &settings, sizeof(settings)) != 0 ||
+            (timeChanged && settings.voronoiSpeed != 0.f);
         if (shapeChanged)
-            generate(cloudShape, cloudShapePso.Get(), 128, 32, 128);
+            generate(cloudShape, cloudShapePso.Get(), 1024, 1, 1024);
         if (shapeChanged || previousDensity != density || previousCloudTime != animTime)
             generate(cloudLight, cloudLightPso.Get(), 128, 32, 128);
         previousCoverage = coverage;

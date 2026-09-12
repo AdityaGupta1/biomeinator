@@ -175,15 +175,21 @@ float3 computeFogInScatter(const float3 origin_WS,
 
     float3 inScatter = float3(0.f, 0.f, 0.f);
 
-    // Below the horizon the sun contributes nothing, so skip the march entirely at night.
-    if (!isSunOccluded(sunDir_WS))
+    // Use finite-disk visibility at each scattering point, not a binary test at
+    // the camera (which made the entire fog volume switch off at sunset).
     {
         const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
 
         const float stepLength = dist / numSteps;
-        float sunScatter = 0.f;
+        float3 sunScatter = 0.f;
+        const float3 sunRight = normalize(cross(sunDir_WS, abs(sunDir_WS.y) < 0.99f ? float3(0.f,1.f,0.f) : float3(1.f,0.f,0.f)));
+        const float3 sunUp = cross(sunRight, sunDir_WS);
         for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
         {
+            // Fixed midpoint planes alias spatial cloud shadows into parallel
+            // bands, particularly where the ray's exit switches box faces.
+            // Stratify along each ray so reconstruction integrates the shadow
+            // field instead of preserving eight copies of its silhouette.
             const float t = (stepIdx + rng.nextFloat()) * stepLength;
             const float3 stepPos_WS = origin_WS + dir * t;
             const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
@@ -192,20 +198,30 @@ float3 computeFogInScatter(const float3 origin_WS,
                 continue;
             }
 
-            if (isRayOccluded(stepPos_WS, sunDir_WS))
+            const float3 sunEnergy = getVolumeSunEnergy(sunDir_WS, stepPos_WS.y + globalOffsetY);
+            if (!any(sunEnergy > 0.f))
             {
                 continue;
             }
 
             const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-            const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
-            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunVolumeDist);
-            sunScatter += viewTransmittance * density * sunTransmittance * cloudSunTransmittance(stepPos_WS, sunDir_WS) * stepLength;
+            float visibility = 0.f;
+            [unroll] for (uint diskIdx = 0; diskIdx < 4; ++diskIdx)
+            {
+                const float2 offset = float2((diskIdx & 1u) ? 0.5f : -0.5f, (diskIdx & 2u) ? 0.5f : -0.5f);
+                const float3 lightDir = normalize(sunDir_WS + acos(sunCosTheta) * (sunRight * offset.x + sunUp * offset.y));
+                if (!isRayOccluded(stepPos_WS, lightDir))
+                {
+                    const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, lightDir);
+                    visibility += 0.25f * computeFogTransmittance(stepPos_WS, lightDir, sunVolumeDist);
+                }
+            }
+            sunScatter += viewTransmittance * density * visibility * cloudSunTransmittance(stepPos_WS, sunDir_WS) * stepLength * sunEnergy;
         }
 
-        // getSunColor is radiance over the sun disk, so undo the solid-angle division to get
-        // illuminance; this also picks up atmospheric transmittance, reddening rays at sunset.
-        inScatter = sunScatter * phase * sunSolidAngle * getSunColor(sunDir_WS);
+        // Solar energy already includes disk visibility and atmospheric
+        // transmittance at each scattering point, including sunset reddening.
+        inScatter = sunScatter * phase;
     }
 
     // NOTE: no visibility check, so this also brightens enclosed spaces (cave interiors)

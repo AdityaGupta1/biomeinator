@@ -1,5 +1,57 @@
 # Clouds: implementation and handoff
 
+## Current: Blender reference and user tuning (2026-09-12)
+
+The user supplied `blender/clouds/clouds_ref.blend` and requested its basic
+shape, preserving Smooth F1 and intentionally flat bottoms. Their latest
+instruction is to expose controls and let them refine the appearance in game.
+That implementation replaces the earlier weather/erosion/taper model below.
+
+See `blender/clouds/README.md` for the exact graph, scaling, implementation,
+and validation. Fourteen graph parameters are exposed in Atmosphere → Cloud
+settings, with CLI, reset, export, and cache invalidation support. The old
+shape CLI options have been replaced. Defaults reproduce the Blender graph;
+tile size is 34285.714 m and density 0.006666667/m for a 1500 m layer.
+
+Build and numeric reference comparison passed. Top/bottom reference and engine
+captures plus changed-parameter smoke checks are under `build/cloud-reference/`.
+Final appearance and performance are not established; leave visual tuning to
+the user. Prior fog fixes and bounded marching remain in place.
+
+## PC follow-up: cloud shape and sunset fixes (2026-09-12)
+
+The sections below describe the earlier implementation and its historical
+constraints. This follow-up uses the user's supplied 3000–4500 m, 50% coverage,
+0.015/m density, 128-step preset as the launch and GUI-reset defaults.
+
+- View integration now caps travel **after layer entry** at six layer thicknesses,
+  capped at 12 km (9 km for this preset). The draw-distance setting still limits
+  entry/end distance from the ray origin. Existing termination below 0.002
+  transmittance remains. Sampling offsets no longer change every frame.
+- Weather/billows use periodic domain distortion; the spatial cache and erosion
+  share a rotated horizontal basis, including the inverse transform when building
+  sunlight. The model is still periodic, but no longer aligned to cardinal axes.
+- Height-independent column summits and increasing occupancy thresholds narrow
+  upper cloud lobes, in addition to the existing bottom/top density fades.
+- The sunlight cache now integrates toward either layer exit, continuously across
+  sun elevation zero, rather than resetting optical depth to zero below it.
+- Fog and cloud illumination use fractional solar-disk visibility and valid-domain
+  atmospheric transmittance. Fog evaluates this at the scattering height, uses
+  stable midpoint integration, and averages four terrain shadow directions.
+  This increases fog shadow-query cost; performance has not been benchmarked.
+
+Validation: all shaders and RelWithDebInfo built successfully using the documented
+environment cleanup plus single-node MSBuild with node reuse disabled. Runtime
+captures in `build/cloud-fixes/` exercise the supplied defaults below the layer,
+inside it at 3250 m, and just after sunset. Captures use 960×540, 32 accumulated
+frames, SHaRC/frame generation off, max path depth 4. Static captures do not
+establish animated DLSS quality or eliminate all temporal artifacts. The existing
+post-capture shutdown stall persists; only owned capture processes were stopped.
+
+Remaining approximations: hard integration range, periodic finite-resolution
+fields, four-point terrain penumbra, and no cloud integration on finite geometry
+segments. These fixes do not implement anvil clouds or a new cloud temporal filter.
+
 Updated 2026-09-12. Work is on branch `clouds`, pushed to `origin/clouds`.
 Implementation commit: `d5bb7ee` (this handoff is a subsequent documentation commit).
 The user is moving development/testing to a PC with an RTX 4070.

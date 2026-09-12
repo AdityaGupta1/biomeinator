@@ -16,8 +16,7 @@ float3 cloudAdvectedPosition(float3 worldPos)
 
 float cloudExtinction(float3 p, float body)
 {
-    Texture3D<float4> noise = ResourceDescriptorHeap[heapIndices.srv.cloudNoiseIdx];
-    return cloudDetailDensity(body, p, noise, cloudSampler) * renderParams.cloudDensity;
+    return cloudDetailDensity(body, p) * renderParams.cloudDensity;
 }
 
 bool cloudInterval(float3 worldOrigin, float3 dir, out float start, out float end)
@@ -67,16 +66,20 @@ float4 integrateClouds(float3 origin_WS, float3 dir, uint steps)
         return float4(0.f, 0.f, 0.f, 1.f);
 
     const float3 sunDir = getSunDir_WS();
-    const bool sunVisible = !isSunOccluded(sunDir);
-    const float3 sunEnergy = sunVisible ? getSunColor(sunDir) * sunSolidAngle : 0.f;
+    const float3 sunEnergy = getVolumeSunEnergy(sunDir, cloudBase + 0.5f * CLOUD_CONFIG.thickness);
     const float phase = 0.85f * cloudPhase(dot(dir, sunDir), renderParams.cloud.phaseG) + 0.15f * cloudPhase(dot(dir, sunDir), -0.25f);
     const float3 ambient = getSkyColor(float3(0.f, 1.f, 0.f)) * renderParams.cloud.ambient;
     const float3 clearSky = getSkyColor(dir);
     Texture3D<float> shape = ResourceDescriptorHeap[heapIndices.srv.cloudShapeIdx];
+    // Draw distance limits entry distance; the integration budget limits travel
+    // INSIDE the layer. Never dilute 128 samples across a 100 km horizontal ray.
+    end = min(end, start + min(12000.f, 6.f * CLOUD_CONFIG.thickness));
+    steps = max(steps, 1u);
     const float stepLength = (end - start) / steps;
     // Stratify the march instead of exposing parallel sample planes as bands.
-    // Keep this RNG separate from path sampling; RR/accumulation integrates it.
-    uint cloudSeed = hash(asuint(dir.x) ^ hash(asuint(dir.y)) ^ hash(asuint(dir.z)) ^ hash(renderParams.frameNumber));
+    // Keep the offset stable across frames; cloud sampling must not sparkle
+    // independently of path sampling in an otherwise stationary view.
+    uint cloudSeed = hash(asuint(dir.x) ^ hash(asuint(dir.y)) ^ hash(asuint(dir.z)));
     const float jitter = float(cloudSeed & 0x00ffffffu) / 16777216.f;
     float transmittance = 1.f;
     float3 radiance = 0.f;
@@ -84,13 +87,13 @@ float4 integrateClouds(float3 origin_WS, float3 dir, uint steps)
     {
         const float distance = start + (i + jitter) * stepLength;
         const float3 pos = cloudAdvectedPosition(origin + dir * distance);
-        const float body = shape.SampleLevel(cloudFieldSampler, cloudFieldUv(pos), 0);
+        const float body = cloudBodyMargin(pos, shape, cloudFieldSampler, renderParams.cloudCoverage);
         if (body <= 0.f)
             continue;
         const float extinction = cloudExtinction(pos, body);
         if (extinction <= 0.f)
             continue;
-        const float lightDepth = sunVisible ? cloudLightDepth(pos) : 0.f;
+        const float lightDepth = cloudLightDepth(pos);
         // Analytic integration per step with a scattering-octave approximation for
         // bright cloud interiors. This is not a multiple-scattering path tracer.
         const float scatter = phase * exp(-lightDepth) +

@@ -175,32 +175,39 @@ void imguiEndFrame(double deltaTime)
                 {
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud base (m)", "cloudBaseHeight", 200.0f, 3000.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Layer thickness (m)", "cloudThickness", 100.0f, 1500.0f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Weather tile size (m)", "cloudPeriod", 1024.0f, 16384.0f);
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud tile size (m)", "cloudPeriod", 1024.0f, 65536.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud draw distance (m)", "cloudMaxDistance", 4000.0f, 100000.0f);
                     ImGui::TreePop();
                 }
 
-                if (ImGui::TreeNode("Shape"))
+                if (ImGui::TreeNode("Cloud shape"))
                 {
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Large shape frequency", "cloudWeatherScale", 1, 4);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Billow frequency", "cloudBillowScale", 1, 8);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Perlin / cellular blend", "cloudPerlinWeight", 0.0f, 1.0f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Billow threshold", "cloudShapeThreshold", 0.0f, 0.6f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Billow contrast", "cloudShapeGain", 0.5f, 8.0f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Weather edge softness", "cloudWeatherSoftness", 0.005f, 0.15f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Bottom softness", "cloudBottomFade", 0.02f, 0.4f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Top fade start", "cloudTopStart", 0.1f, 0.9f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Top height variation", "cloudTopVariance", 0.0f, 0.6f);
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion noise scale", "cloudWarpScale", 0.5f, 8.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion noise detail", "cloudWarpDetail", 0.0f, 4.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion noise roughness", "cloudWarpRoughness", 0.0f, 1.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion strength", "cloudWarpStrength", 0.0f, 2.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Voronoi Smooth F1 smoothness", "cloudVoronoiSmoothness", 0.0f, 1.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Voronoi randomness", "cloudVoronoiRandomness", 0.0f, 1.0f, "%.3f");
+                    ImGui::TextWrapped("Smooth F1 blends adjacent cells. Noise scales snap to 1/16 to keep the cloud tile seamless.");
                     ImGui::TreePop();
                 }
 
-                if (ImGui::TreeNode("Erosion"))
+                if (ImGui::TreeNode("Surface detail"))
                 {
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Medium detail frequency", "cloudMediumRepeats", 1, 16);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fine detail frequency", "cloudFineRepeats", 4, 64);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Medium erosion strength", "cloudMediumErosion", 0.0f, 0.5f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fine erosion strength", "cloudFineErosion", 0.0f, 0.3f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fine detail distortion", "cloudWarpStrength", 0.0f, 2.0f);
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail noise scale", "cloudFineScale", 1.0f, 64.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail noise octaves", "cloudFineDetail", 0.0f, 4.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail noise roughness", "cloudFineRoughness", 0.0f, 1.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail noise strength", "cloudFineStrength", 0.0f, 0.5f, "%.3f");
+                    ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNode("Height and density"))
+                {
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Height ramp white position", "cloudHeightRampEnd", 0.01f, 1.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Height influence", "cloudHeightGain", 0.0f, 12.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Density ramp white position", "cloudDensityRampStart", 0.0f, 0.8f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Density ramp black position", "cloudDensityRampEnd", 0.001f, 1.0f, "%.3f");
+                    ImGui::TextWrapped("The layer base is a hard cut, matching the Blender reference. Keep the black ramp position above the white position.");
                     ImGui::TreePop();
                 }
 
@@ -211,6 +218,18 @@ void imguiEndFrame(double deltaTime)
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Multiple scattering", "cloudMultiScatter", 0.0f, 3.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Powder effect", "cloudPowder", 0.0f, 2.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distance haze", "cloudAerial", 0.0f, 0.0001f, "%.6f");
+                    ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNode("Evolution"))
+                {
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion time offset", "cloudWarpTime", -1000.0f, 1000.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Distortion evolution speed", "cloudWarpSpeed", 0.0f, 0.2f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cell time offset", "cloudVoronoiTime", -1000.0f, 1000.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cell evolution speed", "cloudVoronoiSpeed", 0.0f, 0.2f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail time offset", "cloudFineTime", -1000.0f, 1000.0f, "%.3f");
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Detail evolution speed", "cloudFineSpeed", 0.0f, 0.5f, "%.3f");
+                    ImGui::TextWrapped("Each noise uses time offset + animation time * speed. Zero speed freezes evolution; pausing animation freezes evolution and wind.");
                     ImGui::TreePop();
                 }
 
@@ -233,28 +252,28 @@ void imguiEndFrame(double deltaTime)
                 if (ImGui::Button("Reset cloud defaults"))
                 {
                     SettingsManager::setAsBool("clouds", true);
-                    SettingsManager::setAsFloat("cloudCoverage", 0.3f);
-                    SettingsManager::setAsFloat("cloudDensity", 0.025f);
-                    SettingsManager::setAsUint("cloudSteps", 32u);
-                    SettingsManager::setAsFloat("cloudBaseHeight", 650.0f);
-                    SettingsManager::setAsFloat("cloudThickness", 450.0f);
-                    SettingsManager::setAsFloat("cloudPeriod", 4096.0f);
-                    SettingsManager::setAsFloat("cloudMaxDistance", 30000.0f);
-                    SettingsManager::setAsUint("cloudWeatherScale", 1u);
-                    SettingsManager::setAsUint("cloudBillowScale", 3u);
-                    SettingsManager::setAsFloat("cloudPerlinWeight", 0.55f);
-                    SettingsManager::setAsFloat("cloudShapeThreshold", 0.2f);
-                    SettingsManager::setAsFloat("cloudShapeGain", 2.5f);
-                    SettingsManager::setAsFloat("cloudWeatherSoftness", 0.025f);
-                    SettingsManager::setAsFloat("cloudBottomFade", 0.1f);
-                    SettingsManager::setAsFloat("cloudTopStart", 0.55f);
-                    SettingsManager::setAsFloat("cloudTopVariance", 0.35f);
-                    SettingsManager::setAsUint("cloudMediumRepeats", 4u);
-                    SettingsManager::setAsUint("cloudFineRepeats", 16u);
-                    SettingsManager::setAsFloat("cloudMediumErosion", 0.16f);
-                    SettingsManager::setAsFloat("cloudFineErosion", 0.04f);
-                    SettingsManager::setAsFloat("cloudWarpStrength", 0.4f);
-                    SettingsManager::setAsFloat("cloudAmbient", 0.3f);
+                    SettingsManager::setAsFloat("cloudCoverage", 0.5f);
+                    SettingsManager::setAsFloat("cloudDensity", 0.007f);
+                    SettingsManager::setAsUint("cloudSteps", 128u);
+                    SettingsManager::setAsFloat("cloudBaseHeight", 1500.0f);
+                    SettingsManager::setAsFloat("cloudThickness", 1500.0f);
+                    SettingsManager::setAsFloat("cloudPeriod", 55368.347656f);
+                    SettingsManager::setAsFloat("cloudMaxDistance", 100000.0f);
+                    SettingsManager::setAsFloat("cloudWarpScale", 2.5f);
+                    SettingsManager::setAsFloat("cloudWarpDetail", 2.0f);
+                    SettingsManager::setAsFloat("cloudWarpRoughness", 0.5f);
+                    SettingsManager::setAsFloat("cloudWarpStrength", 1.0f);
+                    SettingsManager::setAsFloat("cloudVoronoiSmoothness", 1.0f);
+                    SettingsManager::setAsFloat("cloudVoronoiRandomness", 0.666667f);
+                    SettingsManager::setAsFloat("cloudFineScale", 30.0f);
+                    SettingsManager::setAsFloat("cloudFineDetail", 2.0f);
+                    SettingsManager::setAsFloat("cloudFineRoughness", 0.5f);
+                    SettingsManager::setAsFloat("cloudFineStrength", 0.1f);
+                    SettingsManager::setAsFloat("cloudHeightRampEnd", 0.177273f);
+                    SettingsManager::setAsFloat("cloudHeightGain", 6.1f);
+                    SettingsManager::setAsFloat("cloudDensityRampStart", 0.145455f);
+                    SettingsManager::setAsFloat("cloudDensityRampEnd", 0.363636f);
+                    SettingsManager::setAsFloat("cloudAmbient", 0.68f);
                     SettingsManager::setAsFloat("cloudPhaseG", 0.65f);
                     SettingsManager::setAsFloat("cloudMultiScatter", 1.0f);
                     SettingsManager::setAsFloat("cloudPowder", 1.0f);
@@ -264,6 +283,12 @@ void imguiEndFrame(double deltaTime)
                     SettingsManager::setAsUint("cloudLightSteps", 12u);
                     SettingsManager::setAsUint("cloudSecondarySteps", 8u);
                     SettingsManager::setAsUint("cloudViewDownscale", 2u);
+                    SettingsManager::setAsFloat("cloudWarpTime", 0.0f);
+                    SettingsManager::setAsFloat("cloudWarpSpeed", 0.02f);
+                    SettingsManager::setAsFloat("cloudVoronoiTime", 0.0f);
+                    SettingsManager::setAsFloat("cloudVoronoiSpeed", 0.01f);
+                    SettingsManager::setAsFloat("cloudFineTime", 0.0f);
+                    SettingsManager::setAsFloat("cloudFineSpeed", 0.05f);
                     renderState.needsResize = true;
                     radianceSettingsChanged = true;
                 }
@@ -276,20 +301,20 @@ void imguiEndFrame(double deltaTime)
                     text += " --cloudThickness=" + std::to_string(SettingsManager::getAsFloat("cloudThickness"));
                     text += " --cloudPeriod=" + std::to_string(SettingsManager::getAsFloat("cloudPeriod"));
                     text += " --cloudMaxDistance=" + std::to_string(SettingsManager::getAsFloat("cloudMaxDistance"));
-                    text += " --cloudWeatherScale=" + std::to_string(SettingsManager::getAsUint("cloudWeatherScale"));
-                    text += " --cloudBillowScale=" + std::to_string(SettingsManager::getAsUint("cloudBillowScale"));
-                    text += " --cloudPerlinWeight=" + std::to_string(SettingsManager::getAsFloat("cloudPerlinWeight"));
-                    text += " --cloudShapeThreshold=" + std::to_string(SettingsManager::getAsFloat("cloudShapeThreshold"));
-                    text += " --cloudShapeGain=" + std::to_string(SettingsManager::getAsFloat("cloudShapeGain"));
-                    text += " --cloudWeatherSoftness=" + std::to_string(SettingsManager::getAsFloat("cloudWeatherSoftness"));
-                    text += " --cloudBottomFade=" + std::to_string(SettingsManager::getAsFloat("cloudBottomFade"));
-                    text += " --cloudTopStart=" + std::to_string(SettingsManager::getAsFloat("cloudTopStart"));
-                    text += " --cloudTopVariance=" + std::to_string(SettingsManager::getAsFloat("cloudTopVariance"));
-                    text += " --cloudMediumRepeats=" + std::to_string(SettingsManager::getAsUint("cloudMediumRepeats"));
-                    text += " --cloudFineRepeats=" + std::to_string(SettingsManager::getAsUint("cloudFineRepeats"));
-                    text += " --cloudMediumErosion=" + std::to_string(SettingsManager::getAsFloat("cloudMediumErosion"));
-                    text += " --cloudFineErosion=" + std::to_string(SettingsManager::getAsFloat("cloudFineErosion"));
+                    text += " --cloudWarpScale=" + std::to_string(SettingsManager::getAsFloat("cloudWarpScale"));
+                    text += " --cloudWarpDetail=" + std::to_string(SettingsManager::getAsFloat("cloudWarpDetail"));
+                    text += " --cloudWarpRoughness=" + std::to_string(SettingsManager::getAsFloat("cloudWarpRoughness"));
                     text += " --cloudWarpStrength=" + std::to_string(SettingsManager::getAsFloat("cloudWarpStrength"));
+                    text += " --cloudVoronoiSmoothness=" + std::to_string(SettingsManager::getAsFloat("cloudVoronoiSmoothness"));
+                    text += " --cloudVoronoiRandomness=" + std::to_string(SettingsManager::getAsFloat("cloudVoronoiRandomness"));
+                    text += " --cloudFineScale=" + std::to_string(SettingsManager::getAsFloat("cloudFineScale"));
+                    text += " --cloudFineDetail=" + std::to_string(SettingsManager::getAsFloat("cloudFineDetail"));
+                    text += " --cloudFineRoughness=" + std::to_string(SettingsManager::getAsFloat("cloudFineRoughness"));
+                    text += " --cloudFineStrength=" + std::to_string(SettingsManager::getAsFloat("cloudFineStrength"));
+                    text += " --cloudHeightRampEnd=" + std::to_string(SettingsManager::getAsFloat("cloudHeightRampEnd"));
+                    text += " --cloudHeightGain=" + std::to_string(SettingsManager::getAsFloat("cloudHeightGain"));
+                    text += " --cloudDensityRampStart=" + std::to_string(SettingsManager::getAsFloat("cloudDensityRampStart"));
+                    text += " --cloudDensityRampEnd=" + std::to_string(SettingsManager::getAsFloat("cloudDensityRampEnd"));
                     text += " --cloudAmbient=" + std::to_string(SettingsManager::getAsFloat("cloudAmbient"));
                     text += " --cloudPhaseG=" + std::to_string(SettingsManager::getAsFloat("cloudPhaseG"));
                     text += " --cloudMultiScatter=" + std::to_string(SettingsManager::getAsFloat("cloudMultiScatter"));
@@ -300,6 +325,12 @@ void imguiEndFrame(double deltaTime)
                     text += " --cloudLightSteps=" + std::to_string(SettingsManager::getAsUint("cloudLightSteps"));
                     text += " --cloudSecondarySteps=" + std::to_string(SettingsManager::getAsUint("cloudSecondarySteps"));
                     text += " --cloudViewDownscale=" + std::to_string(SettingsManager::getAsUint("cloudViewDownscale"));
+                    text += " --cloudWarpTime=" + std::to_string(SettingsManager::getAsFloat("cloudWarpTime"));
+                    text += " --cloudWarpSpeed=" + std::to_string(SettingsManager::getAsFloat("cloudWarpSpeed"));
+                    text += " --cloudVoronoiTime=" + std::to_string(SettingsManager::getAsFloat("cloudVoronoiTime"));
+                    text += " --cloudVoronoiSpeed=" + std::to_string(SettingsManager::getAsFloat("cloudVoronoiSpeed"));
+                    text += " --cloudFineTime=" + std::to_string(SettingsManager::getAsFloat("cloudFineTime"));
+                    text += " --cloudFineSpeed=" + std::to_string(SettingsManager::getAsFloat("cloudFineSpeed"));
                     ImGui::SetClipboardText(text.c_str());
                 }
             }

@@ -58,3 +58,16 @@ float3 getSunColor(float3 wi_WS)
     const float3 transmittance = sampleTransmittanceLut(transmittanceLut, skyLutSampler, getCameraAtmosphereRadius(), wi_WS.y);
     return sunIlluminance * transmittance / sunSolidAngle;
 }
+
+// Integrate the visible fraction of the finite solar disk at the scattering
+// height. Keep below-ground directions out of the transmittance LUT domain.
+float3 getVolumeSunEnergy(float3 sunDir, float worldY)
+{
+    const float r = atmosphereRadiusForCameraY(worldY);
+    const float horizonMu = -sqrt(max(0.f, 1.f - (atmosphereGroundRadius / r) * (atmosphereGroundRadius / r)));
+    const float radius = acos(sunCosTheta);
+    const float x = clamp((asin(clamp(sunDir.y, -1.f, 1.f)) - asin(horizonMu)) / radius, -1.f, 1.f);
+    const float visibility = (acos(-x) + x * sqrt(max(0.f, 1.f - x*x))) / M_PI;
+    Texture2D<float4> lut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
+    return visibility * sunIlluminance * sampleTransmittanceLut(lut, skyLutSampler, r, max(sunDir.y, horizonMu + 1.e-5f));
+}
