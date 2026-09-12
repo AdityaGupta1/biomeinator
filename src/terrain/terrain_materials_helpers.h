@@ -344,7 +344,9 @@ static uint32_t loadBlockTextureArray(Scene* scene,
     std::vector<std::vector<std::vector<uint8_t>>> sliceMipData(numSlices);
 
     if (options.outSliceHasFile != nullptr)
+    {
         options.outSliceHasFile->assign(numSlices, false);
+    }
 
     if (options.outSliceHasBiomeTintMask != nullptr)
     {
@@ -366,7 +368,9 @@ static uint32_t loadBlockTextureArray(Scene* scene,
 
         const bool exists = fs::exists(fullPath);
         if (options.outSliceHasFile != nullptr)
+        {
             (*options.outSliceHasFile)[slice] = exists;
+        }
         if (exists || (!options.missingFilesAreZero && !options.isNormalMap))
         {
             int width = 0;

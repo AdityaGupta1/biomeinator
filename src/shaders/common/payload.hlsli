@@ -13,7 +13,6 @@
 #define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
 #define PAYLOAD_FLAG_UNDERWATER (1 << 3)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
-#define PAYLOAD_FLAG_NORMAL_MAPPED (1 << 5)
 
 struct [raypayload] Payload
 {

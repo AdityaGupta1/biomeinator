@@ -42,8 +42,8 @@ separate 8-byte `VertexTangent` record (oct-encoded tangent plus handedness). It
 offset reuses padding in `InstanceData`; an invalid offset selects the triangle-derived
 terrain frame. Tangent records use the same local vertex indices as the position buffer.
 The scene uploads, resizes, and frees their buffer sections with the instance lifecycle.
-`HitInfo::packedGeoNor` reuses former padding to retain the
-face-oriented geometric normal for normal-mapped ray offsets without growing the payload.
+`HitInfo::packedGeoNor` stores the face-oriented geometric normal for all surface ray
+offsets; `hitShadingNor_WS` stores the shading normal used for lighting and BSDF evaluation.
 `Material` has separate normal/roughness descriptor IDs and a normal scale; terrain's
 roughness remains in packed aux, while normal maps use the separate slot in both paths.
 

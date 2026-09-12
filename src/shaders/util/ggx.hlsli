@@ -40,9 +40,9 @@ float ggxSmithG2(const float alpha, const float cosThetaWo, const float cosTheta
 
 // "Sampling the GGX Distribution of Visible Normals", Heitz, 2018
 // Returns a half vector; the caller reflects wo about it to get wi.
-float3 sampleGgxVndf(const float3 wo_WS, const float3 surfNor_WS, const float alpha, inout RandomNumberGenerator rng)
+float3 sampleGgxVndf(const float3 wo_WS, const float3 surfShadingNor_WS, const float alpha, inout RandomNumberGenerator rng)
 {
-    const float3x3 tbn = computeTBN(surfNor_WS);
+    const float3x3 tbn = computeTBN(surfShadingNor_WS);
     const float3 wo_TS = mul(wo_WS, tbn);
 
     const float3 vh = normalize(float3(alpha * wo_TS.x, alpha * wo_TS.y, wo_TS.z));

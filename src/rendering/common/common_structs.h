@@ -24,11 +24,11 @@ struct HitInfo
     float3 hitPos_WS;
     uint instanceId;
 
-    float3 hitNor_WS;
+    float3 hitShadingNor_WS;
     uint triangleIdx;
 
     float2 uv;
-    uint packedGeoNor; // face-oriented geometric normal for offsets on normal-mapped surfaces
+    uint packedGeoNor; // face-oriented geometric normal for surface ray offsets
     uint pad0;
 };
 

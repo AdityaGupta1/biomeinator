@@ -48,8 +48,8 @@ Terrain tangent-space normal maps are optional `<name>.normal.png` companions (1
 linear RGB, opaque alpha). They use a separate array aligned with the color/aux slices.
 Missing slices contain flat +Z normals and are skipped using `TRIANGLE_FLAG_NORMAL_MAP`.
 Mips average encoded vectors linearly; the shader normalizes after sampling and derives
-the frame from triangle positions/UVs, without terrain tangent attributes. A payload flag
-records mapped hits so ray offsets use their geometric normals. Base normals are oriented
+the frame from triangle positions/UVs, without terrain tangent attributes. All surface ray
+offsets use the geometric normal. Base normals are oriented
 before applying the map; mapped normals are constrained to the geometric hemisphere and
 are never flipped just because they face away from the viewing ray. Glossy surfaces retain
 the additional reflection-normal correction.

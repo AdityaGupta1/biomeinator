@@ -25,11 +25,11 @@ SharcParameters makeSharcParameters()
     p.radianceScale = 1000.f;
     return p;
 }
-SharcHitData makeSharcHit(float3 position, float3 normal, float3 baseColor)
+SharcHitData makeSharcHit(float3 position, float3 surfShadingNor_WS, float3 baseColor)
 {
     SharcHitData hit;
     hit.positionWorld = position + float3(sharcParams.originDelta);
-    hit.normalWorld = normal;
+    hit.normalWorld = surfShadingNor_WS;
     hit.materialDemodulation = max(baseColor, 0.01f);
     hit.emissive = 0.f; // The renderer handles hit emission with its own MIS weight.
     return hit;

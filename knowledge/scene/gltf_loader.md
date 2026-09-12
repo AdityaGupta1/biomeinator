@@ -19,7 +19,7 @@ handedness into a separate buffer. Closest-hit interpolates them, transforms to 
 and reorthogonalizes against the interpolated normal, accounting for mirrored instances.
 The mapped normal is shared by primary
 shading, secondary bounces, and DLSS guides. Geometric normals still determine backfacing
-and ray offsets on mapped surfaces.
+and ray offsets on all surfaces.
 
 `pbrMetallicRoughness.metallicRoughnessTexture` is a separate linear texture. At each hit,
 roughness is `roughnessFactor * texture.g`; the metallic channel is not used. Terrain keeps

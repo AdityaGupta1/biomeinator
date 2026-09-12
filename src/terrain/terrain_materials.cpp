@@ -75,7 +75,9 @@ static void createMaterials(Scene* scene)
     const uint32_t normalTextureId = loadBlockTextureArray(scene, textureNames, ".normal",
         { .sRGB = false, .isNormalMap = true, .outSliceHasFile = &sliceNormalMap });
     if (normalTextureId == TEXTURE_ID_INVALID)
+    {
         return;
+    }
 
     {
         Material defaultMaterial{};

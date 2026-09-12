@@ -152,7 +152,7 @@ sample through interpolated authored glTF tangents from a separate buffer, or a
 triangle/UV-derived terrain frame when the instance has no tangent attributes,
 then applies facing/specular correction. `normalScale` multiplies X/Y before normalization.
 Both the G-buffer/DLSS guides and later bounces receive this normal. Backface classification
-still uses the geometric normal, which is also retained in `HitInfo` for mapped-surface
+uses the geometric normal, which is also retained in `HitInfo` for all surface
 bounce and shadow-ray offsets. The ray-cone payload explicitly allows closest-hit reads.
 
 Reflection sampling rejects outgoing view directions below the shading normal before

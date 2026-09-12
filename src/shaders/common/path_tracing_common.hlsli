@@ -240,10 +240,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
 
     const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
-    float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+    float3 surfShadingNor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
     // Geometric normal, oriented to agree with the interpolated normal so no winding convention is assumed
     float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
-    if (dot(geoNor_WS, nor_WS) < 0.f)
+    if (dot(geoNor_WS, surfShadingNor_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
     }
@@ -263,18 +263,19 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     // Orient the base surface before perturbing it. A mapped normal facing away from
     // the ray must not be flipped into the solid at grazing angles.
-    const float3 frameNor_WS = nor_WS;
+    const float3 frameShadingNor_WS = surfShadingNor_WS;
     const float3 wo_WS = -WorldRayDirection();
     if (dot(geoNor_WS, wo_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
-        nor_WS = -nor_WS;
+        surfShadingNor_WS = -surfShadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
-    if (!isWaterTop && !hasGlossy && dot(nor_WS, wo_WS) < 0.f)
-        nor_WS = -nor_WS;
+    if (!isWaterTop && !hasGlossy && dot(surfShadingNor_WS, wo_WS) < 0.f)
+    {
+        surfShadingNor_WS = -surfShadingNor_WS;
+    }
 
-    payload.flags &= ~PAYLOAD_FLAG_NORMAL_MAPPED;
     if (hasNormalMap)
     {
         const Material material = materials[materialIdx];
@@ -299,13 +300,13 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             const float det = duv1.x * duv2.y - duv1.y * duv2.x;
             tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
             const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
-            tangentSign = dot(cross(frameNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
+            tangentSign = dot(cross(frameShadingNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
         }
-        tangent_WS -= frameNor_WS * dot(frameNor_WS, tangent_WS);
+        tangent_WS -= frameShadingNor_WS * dot(frameShadingNor_WS, tangent_WS);
         if (dot(tangent_WS, tangent_WS) > 1e-12f)
         {
             tangent_WS = normalize(tangent_WS);
-            const float3 bitangent_WS = tangentSign * cross(frameNor_WS, tangent_WS);
+            const float3 bitangent_WS = tangentSign * cross(frameShadingNor_WS, tangent_WS);
             const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
             const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx);
             float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
@@ -313,13 +314,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             if (dot(n, n) > 1e-12f)
             {
                 // Flip the entire authored frame with the base normal, preserving backface UV orientation.
-                const float frameSign = dot(nor_WS, frameNor_WS) < 0.f ? -1.f : 1.f;
-                nor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameNor_WS);
+                const float frameSign = dot(surfShadingNor_WS, frameShadingNor_WS) < 0.f ? -1.f : 1.f;
+                surfShadingNor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameShadingNor_WS);
                 // Keep mapped normals in the actual surface's hemisphere, including on smooth meshes.
-                const float geoCos = dot(nor_WS, geoNor_WS);
+                const float geoCos = dot(surfShadingNor_WS, geoNor_WS);
                 if (geoCos < 1e-4f)
-                    nor_WS = normalize(nor_WS + (1e-4f - geoCos) * geoNor_WS);
-                payload.flags |= PAYLOAD_FLAG_NORMAL_MAPPED;
+                {
+                    surfShadingNor_WS = normalize(surfShadingNor_WS + (1e-4f - geoCos) * geoNor_WS);
+                }
             }
         }
     }
@@ -327,7 +329,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
+        surfShadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     else
@@ -335,10 +337,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         // Glossy lobes additionally need reflections to stay above the surface.
         if (hasGlossy)
         {
-            nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
+            surfShadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, surfShadingNor_WS);
         }
     }
-    payload.hitInfo.hitNor_WS = nor_WS;
+    payload.hitInfo.hitShadingNor_WS = surfShadingNor_WS;
     payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
 
     payload.hitInfo.instanceId = InstanceID();
@@ -353,14 +355,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 void Miss(inout Payload payload)
 {
     payload.flags &= ~PAYLOAD_FLAG_DID_HIT;
-}
-
-float3 getHitOffsetNormal(const Payload payload)
-{
-    // Mapped normals may lean below the mesh; ray offsets must stay on the geometric surface's side.
-    // Preserve the existing offset on unmapped surfaces.
-    return bool(payload.flags & PAYLOAD_FLAG_NORMAL_MAPPED)
-        ? octDecode(payload.hitInfo.packedGeoNor) : payload.hitInfo.hitNor_WS;
 }
 
 // Occlusion test for a shadow ray, which only ever needs the anyhit's candidate handling. The

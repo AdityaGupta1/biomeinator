@@ -62,16 +62,23 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     constexpr uint8_t colorUsage = 1, dataUsage = 2;
     std::vector<uint8_t> imageUsage(model.images.size(), 0);
     const auto markImageUsage = [&](int textureIdx, uint8_t usage) {
-        if (textureIdx < 0 || static_cast<size_t>(textureIdx) >= model.textures.size()) return;
+        if (textureIdx < 0 || static_cast<size_t>(textureIdx) >= model.textures.size())
+        {
+            return;
+        }
         const int imageIdx = model.textures[textureIdx].source;
         if (imageIdx >= 0 && static_cast<size_t>(imageIdx) < model.images.size())
+        {
             imageUsage[imageIdx] |= usage;
+        }
     };
     for (const auto& material : model.materials)
     {
         markImageUsage(material.emissiveTexture.index, colorUsage);
         if (material.pbrMetallicRoughness.metallicFactor < 1.0)
+        {
             markImageUsage(material.pbrMetallicRoughness.baseColorTexture.index, colorUsage);
+        }
         markImageUsage(material.normalTexture.index, dataUsage);
         markImageUsage(material.pbrMetallicRoughness.metallicRoughnessTexture.index, dataUsage);
     }
@@ -96,14 +103,23 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
     // An image may be used as both color and data. Cache a distinct linear upload by image,
     // rather than changing the interpretation of the existing base-color/emission descriptor.
     const auto loadDataTexture = [&](int textureIdx, int texCoord) {
-        if (textureIdx < 0) return TEXTURE_ID_INVALID;
+        if (textureIdx < 0)
+        {
+            return TEXTURE_ID_INVALID;
+        }
         if (texCoord != 0)
+        {
             throw std::runtime_error("Normal/roughness textures currently require TEXCOORD_0");
+        }
         if (static_cast<size_t>(textureIdx) >= model.textures.size())
+        {
             throw std::runtime_error("Invalid glTF data texture index");
+        }
         const int imageIdx = model.textures[textureIdx].source;
         if (imageIdx < 0 || static_cast<size_t>(imageIdx) >= model.images.size())
+        {
             throw std::runtime_error("Invalid glTF data texture image");
+        }
         return loadImage(imageIdx, true);
     };
 
@@ -437,21 +453,30 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             {
                 const auto& mat = model.materials[prim.material];
                 if ((mat.normalTexture.index >= 0 || mat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) && !uvAccessor)
+                {
                     throw std::runtime_error("Normal/roughness mapped glTF primitive has no TEXCOORD_0");
+                }
                 if (mat.normalTexture.index >= 0)
                 {
                     const auto it = prim.attributes.find("TANGENT");
                     if (it == prim.attributes.end())
+                    {
                         throw std::runtime_error("Normal mapped glTF requires TANGENT; export with tangents enabled");
+                    }
                     tangentAccessor = &model.accessors[it->second];
                 }
             }
             if (tangentAccessor && (tangentAccessor->count != vertCount || tangentAccessor->type != TINYGLTF_TYPE_VEC4 ||
                                     tangentAccessor->componentType != TINYGLTF_COMPONENT_TYPE_FLOAT))
+            {
                 throw std::runtime_error("glTF TANGENT must be a float VEC4 per vertex");
+            }
             const auto* tangentData = tangentAccessor ? readAccessorData(*tangentAccessor) : nullptr;
             const size_t tangentStride = tangentAccessor ? getStride(*tangentAccessor) : 0;
-            if (tangentAccessor) instance->host_tangents.resize(vertCount);
+            if (tangentAccessor)
+            {
+                instance->host_tangents.resize(vertCount);
+            }
             std::vector<Vertex>& host_verts = instance->host_verts;
             host_verts.resize(vertCount);
 
