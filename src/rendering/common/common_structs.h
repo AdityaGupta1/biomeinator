@@ -115,8 +115,8 @@ public:
     float3 emissiveColor;
     uint auxTextureId; // emissive color texture, unless MATERIAL_FLAG_PACKED_AUX repurposes it
 
-    uint normalTextureId; // linear tangent-space normal, separate for both terrain and glTF
     uint roughnessTextureId; // linear glTF metallicRoughnessTexture; only G is used
+    uint normalTextureId; // linear tangent-space normal, separate for both terrain and glTF
     float normalScale; // scales normal texture X/Y before normalization
     uint pad0;
 
