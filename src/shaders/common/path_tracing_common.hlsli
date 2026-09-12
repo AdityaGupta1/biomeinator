@@ -22,6 +22,7 @@ StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
 StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
+StructuredBuffer<VertexTangent> tangents : REGISTER_T(RT, TANGENTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
 #include "materials/water.hlsli"
@@ -56,7 +57,7 @@ bool isPixelOutOfBounds(int2 pixelIdx)
     return any(pixelIdx < int2(0, 0)) || any(pixelIdx >= renderParams.renderSize);
 }
 
-void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+uint3 getTriangleVertexIndices(const InstanceData instanceData, const uint triIdx)
 {
     uint i0, i1, i2;
     if (bool(instanceData.hasIdxs))
@@ -73,9 +74,15 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
         i2 = i0 + 2;
     }
 
-    v0 = verts[instanceData.vertsBufferOffset + i0];
-    v1 = verts[instanceData.vertsBufferOffset + i1];
-    v2 = verts[instanceData.vertsBufferOffset + i2];
+    return uint3(i0, i1, i2);
+}
+
+void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+{
+    const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
+    v0 = verts[instanceData.vertsBufferOffset + indices.x];
+    v1 = verts[instanceData.vertsBufferOffset + indices.y];
+    v2 = verts[instanceData.vertsBufferOffset + indices.z];
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
@@ -100,15 +107,19 @@ Material getHitMaterial(const Payload payload, const float coneWidth)
         makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.texArraySliceIdx));
 }
 
-float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
-    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+float2 getUvAtHit(const InstanceData instanceData, const uint triIdx, const float2 bary2)
 {
     Vertex v0, v1, v2;
     loadVertsFromInstance(instanceData, triIdx, v0, v1, v2);
 
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
-    const float2 uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                      unpackUintToFloat2(v2.packedUv) * bary.z;
+    return v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+}
+
+float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
+    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+{
+    const float2 uv = getUvAtHit(instanceData, triIdx, bary2);
 
     // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
     // adjustments, so skip the map sample and the aux texture sample
@@ -134,7 +145,17 @@ bool acceptHitCandidate(inout Payload payload,
         return true;
     }
 
-    const Material material = materials[materialIdx];
+    Material material = materials[materialIdx];
+    if (bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.hasGlossyTransmission() &&
+        material.roughnessTextureId != TEXTURE_ID_INVALID && !material.hasPackedAux())
+    {
+        // A roughness map can contain perfectly specular texels. Shadow passthrough must
+        // classify the same resolved surface as the path tracer, not just its scalar factor.
+        const float width = getRayConeWidthAtDistance(payload.rayCone, rayT);
+        const PerTriangleData data = perTriDatas[instanceData.perTriDatasBufferOffset + primitiveIdx];
+        material.roughness = getMaterialRoughness(material, getUvAtHit(instanceData, primitiveIdx, barycentrics),
+            makeUntintedTexSampleCtx(computeMipLevel(width), data.texArraySliceIdx));
+    }
     // Only specular transmission can be passed through without scattering; rough glass is a real bounce
     const bool testRefractionPassthrough =
         bool(payload.flags & PAYLOAD_FLAG_REFRACTION_PASSTHROUGH) && material.isDeltaTransmission();
@@ -207,8 +228,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const InstanceData instanceData = instanceDatas[InstanceID()];
     const uint materialIdx = instanceData.materialIdx;
 
-    Vertex v0, v1, v2;
-    loadVertsFromInstance(instanceData, PrimitiveIndex(), v0, v1, v2);
+    const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
+    const Vertex v0 = verts[instanceData.vertsBufferOffset + vertexIndices.x];
+    const Vertex v1 = verts[instanceData.vertsBufferOffset + vertexIndices.y];
+    const Vertex v2 = verts[instanceData.vertsBufferOffset + vertexIndices.z];
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
@@ -216,58 +239,117 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
 
-    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
-    float3 nor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+    const float3 hitShadingNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
+    float3 shadingNor_WS = normalize(mul(hitShadingNor_OS, (float3x3) WorldToObject3x4()));
     // Geometric normal, oriented to agree with the interpolated normal so no winding convention is assumed
     float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
-    if (dot(geoNor_WS, nor_WS) < 0.f)
+    if (dot(geoNor_WS, shadingNor_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
     }
 
-    // Which side of the surface the ray is on is decided by the geometric normal: the interpolated normal can
-    // face away from the ray on grazing hits of coarse meshes, and treating those as backfaces would invert the
-    // IOR for them
+    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
+    payload.materialIdx = materialIdx;
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
+
+    // Orient the base surface before perturbing it. A mapped normal facing away from
+    // the ray must not be flipped into the solid at grazing angles.
+    const float3 frameShadingNor_WS = shadingNor_WS;
     const float3 wo_WS = -WorldRayDirection();
+    // Classify backfaces using the geometric normal: interpolated normals can face away at grazing
+    // angles on coarse meshes, and using them here would incorrectly invert the IOR.
     if (dot(geoNor_WS, wo_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
-        nor_WS = -nor_WS;
+        shadingNor_WS = -shadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
 
+    payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
+    if (materialIdx == MATERIAL_IDX_INVALID)
+    {
+        // Missing-material surfaces still supply geometry for guide buffers and segment attenuation.
+        payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
+        return;
+    }
+
+    const Material material = materials[materialIdx];
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
-    if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+    const bool hasNormalMap = material.normalTextureId != TEXTURE_ID_INVALID &&
+                              (!material.hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
+    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS));
+    const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
+
+    if (hasNormalMap)
+    {
+        float3 tangent_WS;
+        float tangentSign;
+        if (instanceData.tangentsBufferOffset != TANGENT_BUFFER_OFFSET_INVALID)
+        {
+            const VertexTangent t0 = tangents[instanceData.tangentsBufferOffset + vertexIndices.x];
+            const VertexTangent t1 = tangents[instanceData.tangentsBufferOffset + vertexIndices.y];
+            const VertexTangent t2 = tangents[instanceData.tangentsBufferOffset + vertexIndices.z];
+            const float3 tangent_OS = octDecode(t0.packedTangent) * bary.x +
+                                     octDecode(t1.packedTangent) * bary.y + octDecode(t2.packedTangent) * bary.z;
+            tangent_WS = mul(tangent_OS, (float3x3) ObjectToWorld4x3());
+            tangentSign = t0.handedness * (determinant((float3x3) ObjectToWorld4x3()) < 0.f ? -1.f : 1.f);
+        }
+        else
+        {
+            // Terrain derives its frame from face UVs without stored tangent attributes, so block rotations
+            // and differently oriented faces rotate the normal texture with them.
+            const float3 e1 = mul(v1.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
+            const float3 e2 = mul(v2.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
+            const float2 duv1 = v1.uv - v0.uv, duv2 = v2.uv - v0.uv;
+            const float det = duv1.x * duv2.y - duv1.y * duv2.x;
+            tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
+            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
+            tangentSign = dot(cross(frameShadingNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
+        }
+
+        tangent_WS -= frameShadingNor_WS * dot(frameShadingNor_WS, tangent_WS);
+
+        if (dot(tangent_WS, tangent_WS) > 1e-12f)
+        {
+            tangent_WS = normalize(tangent_WS);
+            const float3 bitangent_WS = tangentSign * cross(frameShadingNor_WS, tangent_WS);
+            const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
+            const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx);
+            float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
+            n.xy *= material.normalScale;
+            if (dot(n, n) > 1e-12f)
+            {
+                // Flip the entire authored frame with the base normal, preserving backface UV orientation.
+                const float frameSign = dot(shadingNor_WS, frameShadingNor_WS) < 0.f ? -1.f : 1.f;
+                shadingNor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameShadingNor_WS);
+                // Keep mapped normals in the actual surface's hemisphere, including on smooth meshes.
+                const float geoCos = dot(shadingNor_WS, geoNor_WS);
+                if (geoCos < 1e-4f)
+                {
+                    shadingNor_WS = normalize(shadingNor_WS + (1e-4f - geoCos) * geoNor_WS);
+                }
+            }
+        }
+    }
+
+    if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        nor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
+        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     else
     {
-        // Glossy lobes need a shading normal whose reflections stay above the surface (as Cycles' bump map
-        // correction ensures); other materials keep the plain interpolated normal, facing the ray
-        const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].hasGlossy();
+        // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map
+        // correction (ensure_valid_specular_reflection; see util/shading_normal.hlsli).
         if (hasGlossy)
         {
-            nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
-        }
-        else if (dot(nor_WS, wo_WS) < 0.f)
-        {
-            // TODO: mirror Cycles instead, keeping the normal and killing samples that go under the geometric normal (see #371)
-            nor_WS = -nor_WS;
+            shadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, shadingNor_WS);
         }
     }
-    payload.hitInfo.hitNor_WS = nor_WS;
-
-    payload.hitInfo.uv = unpackUintToFloat2(v0.packedUv) * bary.x + unpackUintToFloat2(v1.packedUv) * bary.y +
-                         unpackUintToFloat2(v2.packedUv) * bary.z;
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    payload.materialIdx = materialIdx;
-
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
+    payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
 }
 
 [shader("miss")]

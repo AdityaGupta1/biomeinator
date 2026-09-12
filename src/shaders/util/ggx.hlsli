@@ -14,7 +14,10 @@
 float ggxDistribution(const float alpha, const float cosThetaH)
 {
     const float alpha2 = alpha * alpha;
-    const float d = cosThetaH * cosThetaH * (alpha2 - 1.f) + 1.f;
+    // Keep alpha^2 out of the subtraction from one: smooth roughness-map texels
+    // otherwise round the denominator to zero at the specular peak (Inf/NaN).
+    const float cos2 = saturate(cosThetaH * cosThetaH);
+    precise float d = (1.f - cos2) + cos2 * alpha2;
     return alpha2 * M_INV_PI / (d * d);
 }
 
@@ -37,9 +40,9 @@ float ggxSmithG2(const float alpha, const float cosThetaWo, const float cosTheta
 
 // "Sampling the GGX Distribution of Visible Normals", Heitz, 2018
 // Returns a half vector; the caller reflects wo about it to get wi.
-float3 sampleGgxVndf(const float3 wo_WS, const float3 surfNor_WS, const float alpha, inout RandomNumberGenerator rng)
+float3 sampleGgxVndf(const float3 wo_WS, const float3 surfShadingNor_WS, const float alpha, inout RandomNumberGenerator rng)
 {
-    const float3x3 tbn = computeTBN(surfNor_WS);
+    const float3x3 tbn = computeTBN(surfShadingNor_WS);
     const float3 wo_TS = mul(wo_WS, tbn);
 
     const float3 vh = normalize(float3(alpha * wo_TS.x, alpha * wo_TS.y, wo_TS.z));

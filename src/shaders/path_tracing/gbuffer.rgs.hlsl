@@ -36,7 +36,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     float3 motionHitPos_WS;
     float3 prevMotionHitPos_WS;
-    float3 hitNor_WS = 0.f;
+    float3 hitShadingNor_WS = 0.f;
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
@@ -47,7 +47,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     {
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
         prevMotionHitPos_WS = motionHitPos_WS;
-        hitNor_WS = payload.hitInfo.hitNor_WS;
+        hitShadingNor_WS = payload.hitInfo.hitShadingNor_WS;
 
         // water displacement is vertical at fixed XZ, so the previous position of a water
         // surface point is the same column's wave height at the previous frame's time
@@ -68,7 +68,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
             {
                 roughness = surfMaterial.roughness;
                 const float alpha = roughness * roughness;
-                const float nDotV = dot(hitNor_WS, -ray.Direction);
+                const float nDotV = dot(hitShadingNor_WS, -ray.Direction);
                 specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.glossyReflectionTint, alpha, nDotV);
             }
             else
@@ -84,7 +84,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         const float distToFarPlane = cameraParams.farPlane / dot(ray.Direction, cameraParams.forward_WS);
         motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
-        hitNor_WS = normalize(-ray.Direction);
+        hitShadingNor_WS = normalize(-ray.Direction);
     }
 
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);
@@ -96,7 +96,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     motionTarget[pixelIdx] = calculateMotionFromNdc(currNdc, prevMotionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
+    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitShadingNor_WS, roughness);
 
     RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
     specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);

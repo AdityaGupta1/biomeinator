@@ -304,6 +304,9 @@ static void debugExportMipmaps(const std::string& fileName, const std::vector<st
 struct LoadTextureOptions
 {
     bool sRGB = true;
+    // Linear tangent-space normals; missing tiles use flat +Z, with opaque alpha.
+    bool isNormalMap = false;
+    std::vector<bool>* outSliceHasFile = nullptr;
     // One bool per texture array slice: whether the tile has any biome tint mask coverage at
     // mip 0. Only meaningful for the aux maps.
     std::vector<bool>* outSliceHasBiomeTintMask = nullptr;
@@ -340,6 +343,11 @@ static uint32_t loadBlockTextureArray(Scene* scene,
     const uint32_t numSlices = static_cast<uint32_t>(textureNames.size());
     std::vector<std::vector<std::vector<uint8_t>>> sliceMipData(numSlices);
 
+    if (options.outSliceHasFile != nullptr)
+    {
+        options.outSliceHasFile->assign(numSlices, false);
+    }
+
     if (options.outSliceHasBiomeTintMask != nullptr)
     {
         options.outSliceHasBiomeTintMask->resize(numSlices);
@@ -358,7 +366,12 @@ static uint32_t loadBlockTextureArray(Scene* scene,
         mipData.resize(numMips);
         mipData[0].resize(texelCount * 4, 0);
 
-        if (fs::exists(fullPath) || !options.missingFilesAreZero)
+        const bool exists = fs::exists(fullPath);
+        if (options.outSliceHasFile != nullptr)
+        {
+            (*options.outSliceHasFile)[slice] = exists;
+        }
+        if (exists || (!options.missingFilesAreZero && !options.isNormalMap))
         {
             int width = 0;
             int height = 0;
@@ -373,6 +386,20 @@ static uint32_t loadBlockTextureArray(Scene* scene,
             ASSERT(width == TERRAIN_TILE_SIZE && height == TERRAIN_TILE_SIZE);
             std::memcpy(mipData[0].data(), data, mipData[0].size());
             stbi_image_free(data);
+        }
+
+        if (options.isNormalMap)
+        {
+            for (size_t i = 0; i < texelCount; ++i)
+            {
+                if (!exists)
+                {
+                    mipData[0][i * 4] = 128;
+                    mipData[0][i * 4 + 1] = 128;
+                    mipData[0][i * 4 + 2] = 255;
+                }
+                mipData[0][i * 4 + 3] = 255;
+            }
         }
 
         if (options.alphaOverrides != nullptr)

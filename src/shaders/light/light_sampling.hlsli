@@ -14,10 +14,10 @@
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
-void getLightNormalAndArea(const AreaLight light, out float3 lightNor_WS, out float area)
+void getLightNormalAndArea(const AreaLight light, out float3 lightGeoNor_WS, out float area)
 {
     const float3 crossVec = cross(light.pos0_WS - light.pos1_WS, light.pos2_WS - light.pos0_WS);
-    lightNor_WS = normalize(crossVec);
+    lightGeoNor_WS = normalize(crossVec);
     area = length(crossVec) * 0.5f;
 }
 
@@ -40,13 +40,13 @@ void sampleAreaLightPoint(const AreaLight light,
     pointOnLight_WS = bary2.x * light.pos0_WS + bary2.y * light.pos1_WS + (1.f - bary2.x - bary2.y) * light.pos2_WS;
     pointOnLight_WS += instanceDatas[light.instanceId].transformOffset - cameraParams.globalInstanceOffset;
 
-    float3 lightNor_WS;
+    float3 lightGeoNor_WS;
     float lightArea;
-    getLightNormalAndArea(light, lightNor_WS, lightArea);
+    getLightNormalAndArea(light, lightGeoNor_WS, lightArea);
 
     wi_WS = normalize(pointOnLight_WS - surfPos_WS);
     const float r2 = distance2(surfPos_WS, pointOnLight_WS);
-    lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+    lightSamplePdf = r2 / (absCosTheta(-wi_WS, lightGeoNor_WS) * lightArea);
 }
 
 AreaLight sampleLightUniform(const float3 surfPos_WS,
@@ -81,7 +81,7 @@ struct DirectLightingSample
 // water entry/exit tracking for absorption. Le is evaluated from the sampled point's
 // barycentrics rather than a closest hit.
 bool traceToLight(const float3 surfPos_WS,
-                  const float3 surfNor_WS,
+                  const float3 surfGeoNor_WS,
                   const float3 wi_WS,
                   const float3 pointOnLight_WS,
                   const float2 lightBary2,
@@ -97,18 +97,18 @@ bool traceToLight(const float3 surfPos_WS,
     RayDesc ray;
     // Faceforwarding keeps the offset on the ray's side for diffuse-transmission surfaces sampling
     // lights behind them; for opaque surfaces a backside direction contributes zero via the BSDF.
-    setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, wi_WS, true /*faceforwardNormal*/);
+    setRayOriginAndDirection(ray, surfPos_WS, surfGeoNor_WS, wi_WS, true /*faceforwardNormal*/);
     ray.TMin = 0.f;
 
     // The origin offset shifts the ray parallel to itself, so it crosses the light's plane
     // earlier than lightDistance at oblique angles — TMax must stop short of that plane
     // crossing, not of lightDistance, or the light triangle itself gets committed as an
     // occluder at grazing angles.
-    float3 lightNor_WS;
+    float3 lightGeoNor_WS;
     float lightArea;
-    getLightNormalAndArea(light, lightNor_WS, lightArea);
+    getLightNormalAndArea(light, lightGeoNor_WS, lightArea);
     const float tLightPlane =
-        dot(lightNor_WS, pointOnLight_WS - ray.Origin) / dot(lightNor_WS, wi_WS);
+        dot(lightGeoNor_WS, pointOnLight_WS - ray.Origin) / dot(lightGeoNor_WS, wi_WS);
     ray.TMax = tLightPlane - rayOriginOffsetEpsilon(pointOnLight_WS);
     if (ray.TMax <= ray.TMin)
     {
@@ -137,9 +137,7 @@ bool traceToLight(const float3 surfPos_WS,
 
     Vertex v0, v1, v2;
     loadVertsFromInstance(lightInstanceData, light.triangleIdx, v0, v1, v2);
-    const float2 uv = lightBary2.x * unpackUintToFloat2(v0.packedUv) +
-                      lightBary2.y * unpackUintToFloat2(v1.packedUv) +
-                      (1.f - lightBary2.x - lightBary2.y) * unpackUintToFloat2(v2.packedUv);
+    const float2 uv = lightBary2.x * v0.uv + lightBary2.y * v1.uv + (1.f - lightBary2.x - lightBary2.y) * v2.uv;
 
     const float coneWidth = getRayConeWidthAtDistance(rayCone, lightDistance);
     // Untinted because this ctx is only used for emission, which the biome map never tints. The
@@ -152,10 +150,11 @@ bool traceToLight(const float3 surfPos_WS,
 }
 
 DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
-                                                 const float3 surfNor_WS,
+                                                 const float3 surfGeoNor_WS,
                                                  const RayCone rayCone,
                                                  const bool canPassthrough,
                                                  const bool startUnderwater,
+                                                 const bool acceptsBacksideLight,
                                                  inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
@@ -168,9 +167,14 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
+    if (!acceptsBacksideLight && dot(result.wi_WS, surfGeoNor_WS) <= 0.f)
+    {
+        return result;
+    }
+
     float3 Le;
     const bool didHitLight = traceToLight(
-        surfPos_WS, surfNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfGeoNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHitLight)
     {
         return result;
@@ -206,11 +210,11 @@ float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const floa
 
     const AreaLight light = areaLights[areaLightIdx];
 
-    float3 lightNor_WS;
+    float3 lightGeoNor_WS;
     float lightArea;
-    getLightNormalAndArea(light, lightNor_WS, lightArea);
+    getLightNormalAndArea(light, lightGeoNor_WS, lightArea);
 
     const float lightPickPdf = 1.f / sceneParams.numAreaLights;
     const float r2 = distance2(surfPos_WS, hitInfo.hitPos_WS);
-    return lightPickPdf * r2 / (absCosTheta(-wi_WS, lightNor_WS) * lightArea);
+    return lightPickPdf * r2 / (absCosTheta(-wi_WS, lightGeoNor_WS) * lightArea);
 }

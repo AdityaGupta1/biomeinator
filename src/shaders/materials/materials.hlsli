@@ -119,6 +119,15 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
 
 static const float glassIor = 1.55f; // quartz-ish
 
+float getMaterialRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    // Packed-aux terrain resolves roughness in its surface override. glTF uses G of a
+    // separate linear texture, multiplied by the material's scalar roughness factor.
+    return !material.hasPackedAux() && material.roughnessTextureId != TEXTURE_ID_INVALID
+        ? material.roughness * sampleTexture(material.hasArrayTexture(), material.roughnessTextureId, uv, texCtx).g
+        : material.roughness;
+}
+
 // Turns the hit's material into glass, for faces flagged TRIANGLE_FLAG_IS_GLASS. Terrain shares
 // one diffuse material across every block, so glass is a per-triangle override rather than its own
 // material and instance; the base color texture becomes the transmission tint and the packed aux
@@ -163,7 +172,7 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
 // Probability of choosing the glossy reflection lobe in sampleBsdf; also the Fresnel weight applied
 // to that lobe, so it cancels out of the sampling weight. sampleBsdf and evaluateBsdf must use the exact
 // same value or MIS breaks silently.
-float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfNor_WS)
+float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
     if (!material.hasGlossyReflection())
     {
@@ -173,7 +182,7 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     {
         return 1.f;
     }
-    return walterFresnel(material.ior, cosTheta(wo_WS, surfNor_WS));
+    return walterFresnel(material.ior, cosTheta(wo_WS, surfShadingNor_WS));
 }
 
 // Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
@@ -203,13 +212,13 @@ bool isDeltaDielectric(const Material material)
     return material.roughness == 0.f || abs(material.ior - 1.f) < DIELECTRIC_PASSTHROUGH_IOR_EPSILON;
 }
 
-DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfNor_WS)
+DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo_WS, const float3 wi_WS, const float3 surfShadingNor_WS)
 {
     DielectricLobeTerms terms;
     terms.isValid = false;
-    terms.isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
-    terms.cosThetaWo = cosTheta(wo_WS, surfNor_WS);
-    terms.absCosThetaWi = absCosTheta(wi_WS, surfNor_WS);
+    terms.isTransmission = dot(wi_WS, surfShadingNor_WS) < 0.f;
+    terms.cosThetaWo = cosTheta(wo_WS, surfShadingNor_WS);
+    terms.absCosThetaWi = absCosTheta(wi_WS, surfShadingNor_WS);
     // Delta lobes can't be evaluated for arbitrary directions
     if (isDeltaDielectric(material) || terms.cosThetaWo <= 0.f || terms.absCosThetaWi <= 0.f)
     {
@@ -219,7 +228,7 @@ DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo
     float3 h_WS = terms.isTransmission ? refractionHalfVector(wo_WS, wi_WS, material.ior) : normalize(wo_WS + wi_WS);
     // D, G and Fresnel are symmetric in the half vector's sign, so keep it on wo's side (the refraction half
     // vector points to the lower-ior side, which is behind the surface when leaving the denser medium)
-    if (dot(h_WS, surfNor_WS) < 0.f)
+    if (dot(h_WS, surfShadingNor_WS) < 0.f)
     {
         h_WS = -h_WS;
     }
@@ -234,7 +243,7 @@ DielectricLobeTerms dielectricLobeTerms(const Material material, const float3 wo
 
     const float alpha = material.roughness * material.roughness;
     terms.fresnelReflectance = material.hasGlossyReflection() ? walterFresnel(material.ior, terms.cosThetaWoH) : 0.f;
-    terms.d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
+    terms.d = ggxDistribution(alpha, cosTheta(h_WS, surfShadingNor_WS));
     terms.g1Wo = ggxSmithG1(alpha, terms.cosThetaWo);
     terms.g2 = ggxSmithG2(alpha, terms.cosThetaWo, terms.absCosThetaWi);
     terms.jacobian = terms.isTransmission
@@ -290,7 +299,7 @@ BsdfEval evaluateBsdf(const Material material,
                       const float2 uv,
                       const float3 wo_WS,
                       const float3 wi_WS,
-                      const float3 surfNor_WS,
+                      const float3 surfShadingNor_WS,
                       const TexSampleCtx texCtx)
 {
     BsdfEval result;
@@ -299,14 +308,14 @@ BsdfEval evaluateBsdf(const Material material,
 
     if (material.hasGlossyTransmission())
     {
-        const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, wi_WS, surfNor_WS);
+        const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, wi_WS, surfShadingNor_WS);
         result.value = evaluateDielectricBsdf(material, uv, texCtx, terms);
         result.pdf = dielectricBsdfPdf(terms);
         return result;
     }
 
-    const bool isTransmission = dot(wi_WS, surfNor_WS) < 0.f;
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
+    const bool isTransmission = dot(wi_WS, surfShadingNor_WS) < 0.f;
+    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
 
     if (material.hasDiffuse())
     {
@@ -317,13 +326,13 @@ BsdfEval evaluateBsdf(const Material material,
         float diffuseFresnelWeight;
         if (isTransmission)
         {
-            diffuseNor_WS = -surfNor_WS;
+            diffuseNor_WS = -surfShadingNor_WS;
             diffuseHemisphereWeight = material.diffuseTransmission;
             diffuseFresnelWeight = 1.f;
         }
         else
         {
-            diffuseNor_WS = surfNor_WS;
+            diffuseNor_WS = surfShadingNor_WS;
             diffuseHemisphereWeight = 1.f - material.diffuseTransmission;
             diffuseFresnelWeight = 1.f - fresnelReflectance;
         }
@@ -335,13 +344,13 @@ BsdfEval evaluateBsdf(const Material material,
 
     if (material.hasGlossyReflection() && material.roughness > 0.f && !isTransmission)
     {
-        const float cosThetaWo = cosTheta(wo_WS, surfNor_WS);
-        const float cosThetaWi = cosTheta(wi_WS, surfNor_WS);
+        const float cosThetaWo = cosTheta(wo_WS, surfShadingNor_WS);
+        const float cosThetaWi = cosTheta(wi_WS, surfShadingNor_WS);
         if (cosThetaWo > 0.f && cosThetaWi > 0.f)
         {
             const float alpha = material.roughness * material.roughness;
             const float3 h_WS = normalize(wo_WS + wi_WS);
-            const float d = ggxDistribution(alpha, cosTheta(h_WS, surfNor_WS));
+            const float d = ggxDistribution(alpha, cosTheta(h_WS, surfShadingNor_WS));
             const float g2 = ggxSmithG2(alpha, cosThetaWo, cosThetaWi);
             // The glossy lobe matches Cycles' Glossy BSDF node (Multiscatter GGX): constant Fresnel with the tint as
             // the single-scattering albedo. Any dielectric Fresnel weighting is applied outside the lobe via
@@ -391,20 +400,20 @@ BsdfSample deadBsdfSample(const float3 wi_WS)
 BsdfSample sampleDielectricBsdf(const Material material,
                                 const float2 uv,
                                 const float3 wo_WS,
-                                const float3 surfNor_WS,
+                                const float3 surfShadingNor_WS,
                                 const TexSampleCtx texCtx,
                                 inout RandomNumberGenerator rng)
 {
-    if (cosTheta(wo_WS, surfNor_WS) <= 0.f) // no valid microfacets from below the shading normal
+    if (cosTheta(wo_WS, surfShadingNor_WS) <= 0.f) // no valid microfacets from below the shading normal
     {
-        return deadBsdfSample(surfNor_WS);
+        return deadBsdfSample(surfShadingNor_WS);
     }
 
     const bool isDelta = isDeltaDielectric(material);
-    float3 h_WS = surfNor_WS;
+    float3 h_WS = surfShadingNor_WS;
     if (!isDelta)
     {
-        h_WS = sampleGgxVndf(wo_WS, surfNor_WS, material.roughness * material.roughness, rng); // consumes random numbers, so not a ternary
+        h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, material.roughness * material.roughness, rng); // consumes random numbers, so not a ternary
     }
     const float fresnelReflectance = material.hasGlossyReflection() ? walterFresnel(material.ior, dot(wo_WS, h_WS)) : 0.f;
     const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
@@ -448,13 +457,13 @@ BsdfSample sampleDielectricBsdf(const Material material,
         return result;
     }
 
-    if ((cosTheta(result.wi_WS, surfNor_WS) > 0.f) != chooseReflect) // sample crossed the surface plane the wrong way
+    if ((cosTheta(result.wi_WS, surfShadingNor_WS) > 0.f) != chooseReflect) // sample crossed the surface plane the wrong way
     {
         return deadBsdfSample(result.wi_WS);
     }
 
     // Use the full lobe value and pdf so the estimator stays consistent with the values NEE uses for MIS
-    const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, result.wi_WS, surfNor_WS);
+    const DielectricLobeTerms terms = dielectricLobeTerms(material, wo_WS, result.wi_WS, surfShadingNor_WS);
     result.pdf = dielectricBsdfPdf(terms);
     if (result.pdf <= 0.f) // the half vector reconstructed from wi can disagree with the sampled one at float precision
     {
@@ -467,7 +476,7 @@ BsdfSample sampleDielectricBsdf(const Material material,
 BsdfSample sampleBsdf(const Material material,
                       const float2 uv,
                       const float3 wo_WS,
-                      const float3 surfNor_WS,
+                      const float3 surfShadingNor_WS,
                       const TexSampleCtx texCtx,
                       inout RandomNumberGenerator rng)
 {
@@ -483,17 +492,24 @@ BsdfSample sampleBsdf(const Material material,
 
     if (material.hasGlossyTransmission())
     {
-        return sampleDielectricBsdf(material, uv, wo_WS, surfNor_WS, texCtx, rng);
+        return sampleDielectricBsdf(material, uv, wo_WS, surfShadingNor_WS, texCtx, rng);
     }
 
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
+    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
 
     if (chooseReflect)
     {
+        // A mapped normal can face away from wo even when its mirror reflection is
+        // above the geometric surface. GGX has no visible microfacets from that side;
+        // evaluating such a sample would give value = pdf = 0 and poison accumulation.
+        if (cosTheta(wo_WS, surfShadingNor_WS) <= 0.f)
+        {
+            return deadBsdfSample(surfShadingNor_WS);
+        }
         if (material.roughness == 0.f)
         {
-            result.wi_WS = normalize(reflect(-wo_WS, surfNor_WS));
+            result.wi_WS = normalize(reflect(-wo_WS, surfShadingNor_WS));
             // pdf cancels out with the `* fresnelReflectance` in bsdfValue, so actual bsdf value is
             // material.glossyReflectionTint * implicit fresnelReflectance from random chance of choosing reflection
             result.pdf = fresnelReflectance;
@@ -503,9 +519,9 @@ BsdfSample sampleBsdf(const Material material,
         }
 
         const float alpha = material.roughness * material.roughness;
-        const float3 h_WS = sampleGgxVndf(wo_WS, surfNor_WS, alpha, rng);
+        const float3 h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
         result.wi_WS = normalize(reflect(-wo_WS, h_WS));
-        if (cosTheta(result.wi_WS, surfNor_WS) <= 0.f) // sample fell below the horizon
+        if (cosTheta(result.wi_WS, surfShadingNor_WS) <= 0.f) // sample fell below the horizon
         {
             return deadBsdfSample(result.wi_WS);
         }
@@ -515,17 +531,21 @@ BsdfSample sampleBsdf(const Material material,
         result.sampledDiffuse = true;
         // Diffuse transmission splits the diffuse lobe across both hemispheres; when diffuse is the
         // only non-delta lobe, either pick has bsdf * cos / pdf = albedo, so path weights stay noise-free.
-        float3 lobeNor_WS = surfNor_WS;
+        float3 lobeNor_WS = surfShadingNor_WS;
         if (material.diffuseTransmission > 0.f && rng.nextFloat() < material.diffuseTransmission)
         {
-            lobeNor_WS = -surfNor_WS;
+            lobeNor_WS = -surfShadingNor_WS;
         }
         result.wi_WS = sampleHemisphereCosineWeighted(lobeNor_WS, rng);
     }
 
     // Non-delta sample: use the full mixture bsdf and pdf over all lobes that could have produced
     // wi_WS, keeping the estimator consistent with the values NEE uses for MIS
-    const BsdfEval eval = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfNor_WS, texCtx);
+    const BsdfEval eval = evaluateBsdf(material, uv, wo_WS, result.wi_WS, surfShadingNor_WS, texCtx);
+    if (eval.pdf <= 0.f)
+    {
+        return deadBsdfSample(result.wi_WS);
+    }
     result.pdf = eval.pdf;
     result.bsdfValue = eval.value;
     return result;
@@ -535,7 +555,7 @@ BsdfSample sampleBsdf(const Material material,
 // Quadrature combines independent scattering spreads; it is not a GGX variance
 // (GGX has long tails). Use the narrower refraction axis to avoid early cache use.
 void scatterRayCone(inout RayCone cone, const Material material, const BsdfSample sample,
-                    const float3 wo, const float3 normal)
+                    const float3 wo, const float3 shadingNor_WS)
 {
     float spread = 0.f;
     if (sample.sampledDiffuse)
@@ -546,10 +566,10 @@ void scatterRayCone(inout RayCone cone, const Material material, const BsdfSampl
         spread = 2.f * sqrt(0.5f * alpha * alpha / max(1.f - alpha * alpha, 1e-6f));
     }
 
-    if (material.hasGlossyTransmission() && dot(sample.wi_WS, normal) < 0.f)
+    if (material.hasGlossyTransmission() && dot(sample.wi_WS, shadingNor_WS) < 0.f)
     {
         const float eta = 1.f / material.ior;
-        const float3 h = sample.wasSpecular ? normal : normalize(wo + material.ior * sample.wi_WS);
+        const float3 h = sample.wasSpecular ? shadingNor_WS : normalize(wo + material.ior * sample.wi_WS);
         const float cosIn = max(abs(dot(wo, h)), 1e-4f);
         const float cosOut = max(abs(dot(sample.wi_WS, h)), 1e-4f);
         const float meridianScale = eta * cosIn / cosOut;
@@ -570,6 +590,7 @@ Material getMaterialFromPayload(const Payload payload, const uint triangleFlags,
     // Resolve surface overrides before orienting IOR for this particular hit.
     if (bool(triangleFlags & TRIANGLE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
     if (bool(triangleFlags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
 
@@ -586,7 +607,7 @@ Material getMaterialFromPayload(const Payload payload, const uint triangleFlags,
 // applies; the caller should then early-out for pathSplitIdx == 1.
 bool trySplitMaterial(inout Material surfMaterial,
                       const float2 uv,
-                      const float3 surfNor_WS,
+                      const float3 surfShadingNor_WS,
                       const float3 wo_WS,
                       const TexSampleCtx texCtx,
                       const uint pathSplitIdx,
@@ -630,7 +651,7 @@ bool trySplitMaterial(inout Material surfMaterial,
     if (surfMaterial.hasGlossyReflection() &&
         (surfMaterial.hasDiffuseOrGlossyTransmission() || surfMaterial.hasEmission()) && surfMaterial.roughness == 0.f)
     {
-        const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfNor_WS));
+        const float fresnelReflectance = walterFresnel(surfMaterial.ior, cosTheta(wo_WS, surfShadingNor_WS));
 
         if (pathSplitIdx == 0)
         {

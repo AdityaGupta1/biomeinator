@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-10_
 
 # Materials and Textures
 
@@ -15,6 +15,12 @@ Material and texture management in `src/scene/scene.h/cpp`.
 Textures are 2D RGBA8 with optional precomputed mip chains; `addTextureArray()` takes a format (sRGB default, plain UNORM for data textures like the terrain aux map, whose mips must be averaged without the sRGB transfer). Upload is deferred: `addTexture()` / `addTextureArray()` stash raw pixel data in `pendingTextures`, and `uploadPendingTextures()` does the actual D3D12 texture creation + row-pitch-aligned copy on the next `Scene::update()`.
 
 Each texture gets an SRV in the shared descriptor heap. The returned texture ID is the descriptor heap index, which shaders use for bindless access.
+
+`Material::normalTextureId` is a separate linear tangent-space normal texture for either
+material path. `roughnessTextureId` holds glTF's linear metallic/roughness texture (G only),
+multiplied by scalar roughness at hit resolution; packed-aux terrain continues to resolve
+roughness from aux B. Both `addTexture` overloads accept an optional format, defaulting to
+sRGB, so data maps do not undergo the sRGB transfer.
 
 ## Why Deferred Upload
 
@@ -34,8 +40,35 @@ The glTF loader uses the single-mip overload (no mip generation). The terrain ma
 - **`MATERIAL_FLAG_ARRAY_TEXTURE` is per-material, not per-texture.** A material with this flag must have *both* `baseColorTextureId` and `auxTextureId` be array textures (or invalid). The shader (`sampleTexture` in `materials.hlsli`) uses one flag to branch the SRV cast for both. Mixing array+non-array on the same material miscasts the descriptor.
 
 Terrain sets the flag (`setHasArrayTexture(true)`) on the DEFAULT material; glTF materials never do.
+The same array/non-array invariant applies to the normal and separate roughness slots.
 
 ## Packed Aux (Terrain)
+
+Terrain tangent-space normal maps are optional `<name>.normal.png` companions (16x16,
+linear RGB, opaque alpha). They use a separate array aligned with the color/aux slices.
+Missing slices contain flat +Z normals and are skipped using `TRIANGLE_FLAG_NORMAL_MAP`.
+Mips average encoded vectors linearly; the shader normalizes after sampling and derives
+the frame from triangle positions/UVs, without terrain tangent attributes. All surface ray
+offsets use the geometric normal. Base normals are oriented
+before applying the map; mapped normals are constrained to the geometric hemisphere and
+are never flipped just because they face away from the viewing ray. Glossy surfaces retain
+the additional reflection-normal correction.
+
+Generate maps with `blender --background --python-exit-code 1 --python
+blender/generate_normal_maps.py -- <block> --strength <value> --exponent <value>`.
+The script resolves and deduplicates the block JSON's textures, then overwrites their
+`.normal.png` companions. Shared textures affect every block using them. Strength
+controls height range in texels (default 1, zero is flat); exponent controls the curve
+`1-(1-h)^exponent` (default 1, larger values emphasize dark cracks). Optional `--invert`
+makes bright areas recessed; `--face top|side|bottom` selects a single face's texture.
+Edges wrap for tiling, with no heightfield blur. Current asset settings are:
+
+- `stone --strength 1 --exponent 2`
+- `marble --strength 1 --exponent 2`
+- `basalt --strength 2 --exponent 2`
+- `cracked_basalt --strength 2 --exponent 2`
+- `clay --strength 0.5 --exponent 1`
+- `white_crystal --strength 0.5 --exponent 1`
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass

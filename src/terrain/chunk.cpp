@@ -635,7 +635,7 @@ static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)
 
 static inline Vertex makeVertex(const glm::vec3& pos, const glm::vec3& nor, const glm::vec2& uv)
 {
-    return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), Util::packFloat2ToUint(uv.x, uv.y) };
+    return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), { uv.x, uv.y } };
 }
 
 bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, ivec3 neighborPos_CS, int faceIdx)
@@ -710,6 +710,10 @@ static PerTriangleData makeBlockTriangleData(const BlockData& block, uint32_t sl
     PerTriangleData data{};
     data.texArraySliceIdx = slice;
     if (TerrainMaterials::sliceHasBiomeTint(slice)) data.flags |= TRIANGLE_FLAG_BIOME_TINT;
+    if (TerrainMaterials::sliceHasNormalMap(slice))
+    {
+        data.flags |= TRIANGLE_FLAG_NORMAL_MAP;
+    }
     if (block.translucent) data.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
     if (block.proceduralColor) data.flags |= TRIANGLE_FLAG_PROCEDURAL_COLOR;
     if (block.type == BlockType::GLASS) data.flags |= TRIANGLE_FLAG_IS_GLASS;

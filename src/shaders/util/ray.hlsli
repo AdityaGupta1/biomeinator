@@ -50,14 +50,14 @@ float rayOriginOffsetEpsilon(const float3 origin_WS)
     return max(RAY_ORIGIN_OFFSET_EPSILON, 4e-6f * length(origin_WS));
 }
 
-void setRayOriginAndDirection(inout RayDesc ray, const float3 origin_WS, float3 normal_WS, const float3 wi_WS, bool faceforwardNormal)
+void setRayOriginAndDirection(inout RayDesc ray, const float3 origin_WS, float3 geoNor_WS, const float3 wi_WS, bool faceforwardNormal)
 {
     if (faceforwardNormal)
     {
-        normal_WS = faceforward(normal_WS, wi_WS);
+        geoNor_WS = faceforward(geoNor_WS, wi_WS);
     }
 
-    ray.Origin = mad(normal_WS, rayOriginOffsetEpsilon(origin_WS), origin_WS);
+    ray.Origin = mad(geoNor_WS, rayOriginOffsetEpsilon(origin_WS), origin_WS);
     ray.Direction = wi_WS;
 }
 

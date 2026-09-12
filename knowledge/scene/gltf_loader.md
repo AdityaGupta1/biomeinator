@@ -1,4 +1,4 @@
-_Last edited: 2026-09-04_
+_Last edited: 2026-09-10_
 
 # glTF Loader
 
@@ -10,6 +10,27 @@ scenes. It resets and reinitializes `Scene`, uploads textures/materials, creates
 
 The loader currently processes mesh nodes directly and does not traverse parent/child node
 hierarchy.
+
+## Normal and Roughness Textures
+
+`normalTexture` is uploaded as linear RGBA8; its decoded X/Y components are multiplied
+by `normalTexture.scale`. Normal-mapped glTF meshes upload authored tangent directions and
+handedness into a separate buffer. Closest-hit interpolates them, transforms to world space,
+and reorthogonalizes against the interpolated normal, accounting for mirrored instances.
+The mapped normal is shared by primary
+shading, secondary bounces, and DLSS guides. Geometric normals still determine backfacing
+and ray offsets on all surfaces.
+
+`pbrMetallicRoughness.metallicRoughnessTexture` is a separate linear texture. At each hit,
+roughness is `roughnessFactor * texture.g`; the metallic channel is not used. Terrain keeps
+its existing packed-aux roughness path. A shared image used as both color and data gets
+separate sRGB/linear descriptors rather than one usage changing the other.
+
+The supported subset requires `TEXCOORD_0` and float VEC4 `TANGENT` attributes for normal
+mapping. Missing tangents or unsupported UV sets produce an explicit error. Meshes without
+normal maps do not upload tangents. The shared vertex remains 24 bytes with full-precision
+UVs; each optional tangent record is 8 bytes, indexed like its mesh's vertices.
+Textures retain the existing glTF mip-0, bilinear sampling policy.
 
 ## Material Lobes
 
