@@ -248,15 +248,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         geoNor_WS = -geoNor_WS;
     }
 
-    const Material material = materials[materialIdx];
-
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
-    const bool hasNormalMap = materialIdx != MATERIAL_IDX_INVALID && material.normalTextureId != TEXTURE_ID_INVALID &&
-                              (!material.hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
-    const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
-                           (material.hasGlossy() || (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
-    const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
+    payload.hitInfo.instanceId = InstanceID();
+    payload.hitInfo.triangleIdx = PrimitiveIndex();
+    payload.materialIdx = materialIdx;
+    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 
     // Orient the base surface before perturbing it. A mapped normal facing away from
     // the ray must not be flipped into the solid at grazing angles.
@@ -270,6 +266,21 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         shadingNor_WS = -shadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
+
+    payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
+    if (materialIdx == MATERIAL_IDX_INVALID)
+    {
+        // Missing-material surfaces still supply geometry for guide buffers and segment attenuation.
+        payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
+        return;
+    }
+
+    const Material material = materials[materialIdx];
+    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    const bool hasNormalMap = material.normalTextureId != TEXTURE_ID_INVALID &&
+                              (!material.hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
+    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS));
+    const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
 
     if (hasNormalMap)
     {
@@ -339,14 +350,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         }
     }
     payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
-    payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
-
-    payload.hitInfo.instanceId = InstanceID();
-    payload.hitInfo.triangleIdx = PrimitiveIndex();
-
-    payload.materialIdx = materialIdx;
-
-    payload.flags |= PAYLOAD_FLAG_DID_HIT;
 }
 
 [shader("miss")]
