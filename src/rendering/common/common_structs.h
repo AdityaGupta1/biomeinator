@@ -24,7 +24,7 @@ struct HitInfo
     float3 hitPos_WS;
     uint instanceId;
 
-    float3 hitShadingNor_WS;
+    float3 hitShadingNor_WS; // TODO: pack this?
     uint triangleIdx;
 
     float2 uv;

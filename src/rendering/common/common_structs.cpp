@@ -16,8 +16,7 @@ Material::Material()
       auxTextureId(TEXTURE_ID_INVALID),
       normalTextureId(TEXTURE_ID_INVALID),
       roughnessTextureId(TEXTURE_ID_INVALID),
-      normalScale(1.f),
-      pad0(0)
+      normalScale(1.f)
 {}
 
 PerTriangleData::PerTriangleData()

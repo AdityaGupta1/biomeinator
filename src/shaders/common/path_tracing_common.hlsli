@@ -248,17 +248,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         geoNor_WS = -geoNor_WS;
     }
 
-    const float2 uv0 = v0.uv;
-    const float2 uv1 = v1.uv;
-    const float2 uv2 = v2.uv;
-    payload.hitInfo.uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
+    const Material material = materials[materialIdx];
+
+    payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
-    const bool hasNormalMap = materialIdx != MATERIAL_IDX_INVALID &&
-        materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID &&
-        (!materials[materialIdx].hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
+    const bool hasNormalMap = materialIdx != MATERIAL_IDX_INVALID && material.normalTextureId != TEXTURE_ID_INVALID &&
+                              (!material.hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
     const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
-        (materials[materialIdx].hasGlossy() ||
-         (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
+                           (material.hasGlossy() || (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
     const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
 
     // Orient the base surface before perturbing it. A mapped normal facing away from
@@ -278,7 +275,6 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     if (hasNormalMap)
     {
-        const Material material = materials[materialIdx];
         float3 tangent_WS;
         float tangentSign;
         if (instanceData.tangentsBufferOffset != TANGENT_BUFFER_OFFSET_INVALID)
@@ -296,13 +292,15 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             // Terrain derives its UV frame without allocating tangent attributes.
             const float3 e1 = mul(v1.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
             const float3 e2 = mul(v2.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
-            const float2 duv1 = uv1 - uv0, duv2 = uv2 - uv0;
-            const float det = duv1.x * duv2.y - duv1.y * duv2.x;
-            tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
-            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
+            const float2 dv1.uv = v1.uv - v0.uv, dv2.uv = v2.uv - v0.uv;
+            const float det = dv1.uv.x * dv2.uv.y - dv1.uv.y * dv2.uv.x;
+            tangent_WS = abs(det) > 1e-10f ? (e1 * dv2.uv.y - e2 * dv1.uv.y) / det : float3(0.f, 0.f, 0.f);
+            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * dv1.uv.x - e1 * dv2.uv.x) / det : float3(0.f, 0.f, 0.f);
             tangentSign = dot(cross(frameShadingNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
         }
+
         tangent_WS -= frameShadingNor_WS * dot(frameShadingNor_WS, tangent_WS);
+
         if (dot(tangent_WS, tangent_WS) > 1e-12f)
         {
             tangent_WS = normalize(tangent_WS);

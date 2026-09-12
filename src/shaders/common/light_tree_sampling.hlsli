@@ -179,7 +179,7 @@ void rtslChildProbs(LightTreeNode c1,
 // The caller still counts a "null light" as one sample (no shadow ray, no
 // contribution). Do NOT retry — retrying introduces bias (offline paper §3.2.2).
 bool selectLightFromSubtree(uint subtreeRoot,
-                            float3 hitPos,
+                            float3 hitPos_WS,
                             float3 hitShadingNor_WS,
                             bool acceptsBacksideLight,
                             inout RandomNumberGenerator rng,
@@ -209,7 +209,7 @@ bool selectLightFromSubtree(uint subtreeRoot,
         const LightTreeNode rightNode = rtslLightTree[rightIdx];
 
         float p1, p2;
-        rtslChildProbs(leftNode, rightNode, hitPos, hitShadingNor_WS, acceptsBacksideLight, p1, p2);
+        rtslChildProbs(leftNode, rightNode, hitPos_WS, hitShadingNor_WS, acceptsBacksideLight, p1, p2);
 
         if (p1 + p2 <= 0.0f)
         {
