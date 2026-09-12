@@ -64,9 +64,11 @@ makes bright areas recessed; `--face top|side|bottom` selects a single face's te
 Edges wrap for tiling, with no heightfield blur. Current asset settings are:
 
 - `stone --strength 1 --exponent 2`
-- `marble --strength 2 --exponent 2`
-- `basalt --strength 2 --exponent 4`
-- `cracked_basalt --strength 2 --exponent 4`
+- `marble --strength 1 --exponent 2`
+- `basalt --strength 2 --exponent 2`
+- `cracked_basalt --strength 2 --exponent 2`
+- `clay --strength 1 --exponent 1`
+- `white_crystal --strength 1 --exponent 1`
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass
