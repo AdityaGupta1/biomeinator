@@ -129,6 +129,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     wi_WS = generateDomeLightSampleDir(surfShadingNor_WS, rng, pdf);
 
     // Opaque surfaces require light above both the shading and geometric horizons.
+    // Transmission surfaces accept backside light. Rejecting opaque backside samples here saves a
+    // shadow ray, including when the sun is below the shading point's horizon.
     if (!acceptsBacksideLight &&
         (dot(wi_WS, surfShadingNor_WS) <= 0.f || dot(wi_WS, surfGeoNor_WS) <= 0.f))
     {

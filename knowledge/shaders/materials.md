@@ -142,7 +142,8 @@ microfacet; other rough glossy materials simply aren't split yet.
 away from the ray on grazing hits, which would invert the IOR for them) and, for materials with a
 glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflection`
 (`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops use the wave
-normal instead; other materials keep the plain interpolated normal, flipped to face the ray. The
+normal instead; diffuse-only materials retain the interpolated normal after geometric backface
+orientation, even when that shading normal faces away from the ray (see #371). The
 bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
 too, whereas Cycles bends only the specular closures' normal. This can also change fine
 normal-mapped creases, not just mesh silhouettes.

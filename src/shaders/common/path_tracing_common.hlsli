@@ -262,16 +262,16 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     // the ray must not be flipped into the solid at grazing angles.
     const float3 frameShadingNor_WS = shadingNor_WS;
     const float3 wo_WS = -WorldRayDirection();
+    // Classify backfaces using the geometric normal: interpolated normals can face away at grazing
+    // angles on coarse meshes, and using them here would incorrectly invert the IOR.
     if (dot(geoNor_WS, wo_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
         shadingNor_WS = -shadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
-    if (!isWaterTop && !hasGlossy && dot(shadingNor_WS, wo_WS) < 0.f)
-    {
-        shadingNor_WS = -shadingNor_WS;
-    }
+    // Retain the interpolated normal when it faces away from the ray (Cycles-style handling; see #371).
+    // Opaque geometric-backside directions are rejected by continuation and direct-light sampling.
 
     if (hasNormalMap)
     {
@@ -289,13 +289,14 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         }
         else
         {
-            // Terrain derives its UV frame without allocating tangent attributes.
+            // Terrain derives its frame from face UVs without stored tangent attributes, so block rotations
+            // and differently oriented faces rotate the normal texture with them.
             const float3 e1 = mul(v1.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
             const float3 e2 = mul(v2.pos_OS - v0.pos_OS, (float3x3) ObjectToWorld4x3());
-            const float2 dv1.uv = v1.uv - v0.uv, dv2.uv = v2.uv - v0.uv;
-            const float det = dv1.uv.x * dv2.uv.y - dv1.uv.y * dv2.uv.x;
-            tangent_WS = abs(det) > 1e-10f ? (e1 * dv2.uv.y - e2 * dv1.uv.y) / det : float3(0.f, 0.f, 0.f);
-            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * dv1.uv.x - e1 * dv2.uv.x) / det : float3(0.f, 0.f, 0.f);
+            const float2 duv1 = v1.uv - v0.uv, duv2 = v2.uv - v0.uv;
+            const float det = duv1.x * duv2.y - duv1.y * duv2.x;
+            tangent_WS = abs(det) > 1e-10f ? (e1 * duv2.y - e2 * duv1.y) / det : float3(0.f, 0.f, 0.f);
+            const float3 uvBitangent_WS = abs(det) > 1e-10f ? (e2 * duv1.x - e1 * duv2.x) / det : float3(0.f, 0.f, 0.f);
             tangentSign = dot(cross(frameShadingNor_WS, tangent_WS), uvBitangent_WS) < 0.f ? -1.f : 1.f;
         }
 
@@ -332,7 +333,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
     else
     {
-        // Glossy lobes additionally need reflections to stay above the surface.
+        // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map
+        // correction (ensure_valid_specular_reflection; see util/shading_normal.hlsli).
         if (hasGlossy)
         {
             shadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, shadingNor_WS);
