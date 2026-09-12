@@ -773,6 +773,19 @@
             "threshold": 0.01
         },
         {
+            "name": "crystal_caves",
+            "world": "voxel/crystal_caves",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=8192",
+                "--maxPathDepth=4"
+            ],
+            "golden": "voxel/crystal_caves/golden.png",
+            "threshold": 0.01
+        },
+        {
             "name": "crystal_caves_diffuse_albedo",
             "world": "voxel/crystal_caves",
             "args": [
