@@ -81,7 +81,7 @@ struct DirectLightingSample
 // water entry/exit tracking for absorption. Le is evaluated from the sampled point's
 // barycentrics rather than a closest hit.
 bool traceToLight(const float3 surfPos_WS,
-                  const float3 geoNor_WS,
+                  const float3 surfGeoNor_WS,
                   const float3 wi_WS,
                   const float3 pointOnLight_WS,
                   const float2 lightBary2,
@@ -97,7 +97,7 @@ bool traceToLight(const float3 surfPos_WS,
     RayDesc ray;
     // Faceforwarding keeps the offset on the ray's side for diffuse-transmission surfaces sampling
     // lights behind them; for opaque surfaces a backside direction contributes zero via the BSDF.
-    setRayOriginAndDirection(ray, surfPos_WS, geoNor_WS, wi_WS, true /*faceforwardNormal*/);
+    setRayOriginAndDirection(ray, surfPos_WS, surfGeoNor_WS, wi_WS, true /*faceforwardNormal*/);
     ray.TMin = 0.f;
 
     // The origin offset shifts the ray parallel to itself, so it crosses the light's plane
@@ -150,10 +150,11 @@ bool traceToLight(const float3 surfPos_WS,
 }
 
 DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
-                                                 const float3 geoNor_WS,
+                                                 const float3 surfGeoNor_WS,
                                                  const RayCone rayCone,
                                                  const bool canPassthrough,
                                                  const bool startUnderwater,
+                                                 const bool acceptsBacksideLight,
                                                  inout RandomNumberGenerator rng)
 {
     DirectLightingSample result;
@@ -166,9 +167,14 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 
     result.wi_WS = normalize(pointOnLight_WS - surfPos_WS);
 
+    if (!acceptsBacksideLight && dot(result.wi_WS, surfGeoNor_WS) <= 0.f)
+    {
+        return result;
+    }
+
     float3 Le;
     const bool didHitLight = traceToLight(
-        surfPos_WS, geoNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfGeoNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
     if (!didHitLight)
     {
         return result;

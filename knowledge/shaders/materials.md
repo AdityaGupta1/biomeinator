@@ -147,13 +147,20 @@ bent normal is shared by all of a material's lobes, so a diffuse lobe under a gl
 too, whereas Cycles bends only the specular closures' normal. This can also change fine
 normal-mapped creases, not just mesh silhouettes.
 
-When a separate normal texture is present, closest-hit first maps its linear tangent-space
+Closest-hit orients the base surface before applying a normal map. It maps the linear tangent-space
 sample through interpolated authored glTF tangents from a separate buffer, or a
 triangle/UV-derived terrain frame when the instance has no tangent attributes,
-then applies facing/specular correction. `normalScale` multiplies X/Y before normalization.
+then constrains the result to the geometric hemisphere and applies glossy reflection correction.
+`normalScale` multiplies X/Y before normalization.
 Both the G-buffer/DLSS guides and later bounces receive this normal. Backface classification
 uses the geometric normal, which is also retained in `HitInfo` for all surface
 bounce and shadow-ray offsets. The ray-cone payload explicitly allows closest-hit reads.
+
+Opaque surfaces reject continuation and direct-light directions at or below the geometric
+horizon. Area and dome light sampling reject these directions before tracing a shadow ray.
+A rejected continuation has zero throughput but does not discard the hit's direct lighting.
+Samples are not retried or renormalized, so MIS retains the original sampling densities.
+Transmission materials allow backside directions.
 
 Reflection sampling rejects outgoing view directions below the shading normal before
 sampling GGX, just as dielectric sampling does. A zero-density mixture sample is also

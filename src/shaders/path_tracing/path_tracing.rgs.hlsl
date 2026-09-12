@@ -323,7 +323,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
         }
 #endif
-        const float3 geoNor_WS = octDecode(payload.hitInfo.packedGeoNor);
+        const float3 surfGeoNor_WS = octDecode(payload.hitInfo.packedGeoNor);
         const uint coherenceHint = (pathDepth == 0 ? (1 << 2) : 0) | (isPassthrough ? (1 << 1) : 0) |
                                    ((!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0);
         NvReorderThread(coherenceHint, 3 /*numCoherenceHintBits*/);
@@ -335,7 +335,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
-            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, geoNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfGeoNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
@@ -355,7 +355,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 payload.pathWeight /= survivalProbability;
             }
 
-            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfShadingNor_WS, surfTexCtx, payload.rng);
+            BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfShadingNor_WS, surfTexCtx, payload.rng);
+            // Opaque reflection cannot cross the geometric surface, even when it is above the shading horizon.
+            // A rejected continuation still receives direct lighting at this vertex.
+            if (!surfMaterial.hasGlossyTransmission() && !surfMaterial.hasDiffuseTransmission() &&
+                dot(surfBsdfSample.wi_WS, surfGeoNor_WS) <= 0.f)
+            {
+                surfBsdfSample = deadBsdfSample(surfBsdfSample.wi_WS);
+            }
 
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
@@ -369,13 +376,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfShadingNor_WS, geoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
                         surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
                 else
                 {
                     lightSample =
-                        sampleDirectLightingUniform(surfPos_WS, geoNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                            surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
 
                 if (lightSample.didHitLight)
@@ -402,7 +410,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfShadingNor_WS, geoNor_WS, payload.rayCone,
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone,
                         canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
@@ -491,7 +499,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
             scatterRayCone(payload.rayCone, surfMaterial, surfBsdfSample, wo_WS, surfShadingNor_WS);
 
-            setRayOriginAndDirection(ray, surfPos_WS, geoNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, surfPos_WS, surfGeoNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;

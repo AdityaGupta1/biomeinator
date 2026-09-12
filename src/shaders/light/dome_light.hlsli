@@ -115,7 +115,7 @@ float3 generateDomeLightSampleDir(const float3 surfShadingNor_WS, inout RandomNu
 
 DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const float3 surfShadingNor_WS,
-                                const float3 geoNor_WS,
+                                const float3 surfGeoNor_WS,
                                 const RayCone rayCone,
                                 const bool canPassthrough,
                                 const bool startUnderwater,
@@ -128,16 +128,16 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     float pdf;
     wi_WS = generateDomeLightSampleDir(surfShadingNor_WS, rng, pdf);
 
-    // Surfaces that accept backside light transmit backside samples, so only opaque surfaces get the
-    // rejection (which saves a shadow ray whenever the sun is below the shading point's horizon).
-    if (!acceptsBacksideLight && dot(wi_WS, surfShadingNor_WS) < 0.f)
+    // Opaque surfaces require light above both the shading and geometric horizons.
+    if (!acceptsBacksideLight &&
+        (dot(wi_WS, surfShadingNor_WS) <= 0.f || dot(wi_WS, surfGeoNor_WS) <= 0.f))
     {
         result.didReachDomeLight = false;
         return result;
     }
 
     RayDesc ray;
-    setRayOriginAndDirection(ray, surfPos_WS, geoNor_WS, wi_WS, true /*faceforwardNormal*/);
+    setRayOriginAndDirection(ray, surfPos_WS, surfGeoNor_WS, wi_WS, true /*faceforwardNormal*/);
     ray.TMin = 0.f;
     ray.TMax = RAY_DEFAULT_TMAX;
 

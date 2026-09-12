@@ -239,11 +239,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float3 hitPos_OS = v0.pos_OS * bary.x + v1.pos_OS * bary.y + v2.pos_OS * bary.z;
     payload.hitInfo.hitPos_WS = mul(float4(hitPos_OS, 1.f), ObjectToWorld4x3()).xyz;
 
-    const float3 hitNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
-    float3 surfShadingNor_WS = normalize(mul(hitNor_OS, (float3x3) WorldToObject3x4()));
+    const float3 hitShadingNor_OS = octDecode(v0.packedNor) * bary.x + octDecode(v1.packedNor) * bary.y + octDecode(v2.packedNor) * bary.z;
+    float3 shadingNor_WS = normalize(mul(hitShadingNor_OS, (float3x3) WorldToObject3x4()));
     // Geometric normal, oriented to agree with the interpolated normal so no winding convention is assumed
     float3 geoNor_WS = normalize(mul(cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS), (float3x3) WorldToObject3x4()));
-    if (dot(geoNor_WS, surfShadingNor_WS) < 0.f)
+    if (dot(geoNor_WS, shadingNor_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
     }
@@ -263,17 +263,17 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
 
     // Orient the base surface before perturbing it. A mapped normal facing away from
     // the ray must not be flipped into the solid at grazing angles.
-    const float3 frameShadingNor_WS = surfShadingNor_WS;
+    const float3 frameShadingNor_WS = shadingNor_WS;
     const float3 wo_WS = -WorldRayDirection();
     if (dot(geoNor_WS, wo_WS) < 0.f)
     {
         geoNor_WS = -geoNor_WS;
-        surfShadingNor_WS = -surfShadingNor_WS;
+        shadingNor_WS = -shadingNor_WS;
         payload.flags |= PAYLOAD_FLAG_BACKFACE_HIT;
     }
-    if (!isWaterTop && !hasGlossy && dot(surfShadingNor_WS, wo_WS) < 0.f)
+    if (!isWaterTop && !hasGlossy && dot(shadingNor_WS, wo_WS) < 0.f)
     {
-        surfShadingNor_WS = -surfShadingNor_WS;
+        shadingNor_WS = -shadingNor_WS;
     }
 
     if (hasNormalMap)
@@ -314,13 +314,13 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             if (dot(n, n) > 1e-12f)
             {
                 // Flip the entire authored frame with the base normal, preserving backface UV orientation.
-                const float frameSign = dot(surfShadingNor_WS, frameShadingNor_WS) < 0.f ? -1.f : 1.f;
-                surfShadingNor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameShadingNor_WS);
+                const float frameSign = dot(shadingNor_WS, frameShadingNor_WS) < 0.f ? -1.f : 1.f;
+                shadingNor_WS = frameSign * normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * frameShadingNor_WS);
                 // Keep mapped normals in the actual surface's hemisphere, including on smooth meshes.
-                const float geoCos = dot(surfShadingNor_WS, geoNor_WS);
+                const float geoCos = dot(shadingNor_WS, geoNor_WS);
                 if (geoCos < 1e-4f)
                 {
-                    surfShadingNor_WS = normalize(surfShadingNor_WS + (1e-4f - geoCos) * geoNor_WS);
+                    shadingNor_WS = normalize(shadingNor_WS + (1e-4f - geoCos) * geoNor_WS);
                 }
             }
         }
@@ -329,7 +329,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        surfShadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
+        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     else
@@ -337,10 +337,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         // Glossy lobes additionally need reflections to stay above the surface.
         if (hasGlossy)
         {
-            surfShadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, surfShadingNor_WS);
+            shadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, shadingNor_WS);
         }
     }
-    payload.hitInfo.hitShadingNor_WS = surfShadingNor_WS;
+    payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
     payload.hitInfo.packedGeoNor = octEncode(geoNor_WS);
 
     payload.hitInfo.instanceId = InstanceID();
