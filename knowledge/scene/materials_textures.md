@@ -44,6 +44,27 @@ The same array/non-array invariant applies to the normal and separate roughness 
 
 ## Packed Aux (Terrain)
 
+Terrain tangent-space normal maps are optional `<name>.normal.png` companions (16x16,
+linear RGB, opaque alpha). They use a separate array aligned with the color/aux slices.
+Missing slices contain flat +Z normals and are skipped using `TRIANGLE_FLAG_NORMAL_MAP`.
+Mips average encoded vectors linearly; the shader normalizes after sampling and derives
+the frame from triangle positions/UVs, without terrain tangent attributes. A payload flag
+records mapped hits so ray offsets use their geometric normals.
+
+Generate maps with `blender --background --python-exit-code 1 --python
+blender/generate_normal_maps.py -- <block> --strength <value> --exponent <value>`.
+The script resolves and deduplicates the block JSON's textures, then overwrites their
+`.normal.png` companions. Shared textures affect every block using them. Strength
+controls height range in texels (default 1, zero is flat); exponent controls the curve
+`1-(1-h)^exponent` (default 1, larger values emphasize dark cracks). Optional `--invert`
+makes bright areas recessed; `--face top|side|bottom` selects a single face's texture.
+Edges wrap for tiling, with no heightfield blur. Current asset settings are:
+
+- `stone --strength 1 --exponent 2`
+- `marble --strength 2 --exponent 2`
+- `basalt --strength 2 --exponent 4`
+- `cracked_basalt --strength 2 --exponent 4`
+
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
 r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass
 (read only there, so every other block's zero-filled b costs nothing). Aux data is authored as an optional

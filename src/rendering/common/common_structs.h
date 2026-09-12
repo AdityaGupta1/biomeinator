@@ -278,6 +278,8 @@ static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for p
 #define TRIANGLE_FLAG_IS_GLASS (1 << 4)
 // Faces whose base and emissive color come from a world-space ramp (see getProceduralColor)
 #define TRIANGLE_FLAG_PROCEDURAL_COLOR (1 << 5)
+// The terrain texture array slice has a normal map.
+#define TRIANGLE_FLAG_NORMAL_MAP (1 << 6)
 
 struct PerTriangleData
 {

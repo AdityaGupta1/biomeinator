@@ -253,7 +253,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const float2 uv2 = v2.uv;
     payload.hitInfo.uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
     const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
-    if (materialIdx != MATERIAL_IDX_INVALID && materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID)
+    const bool hasNormalMap = materialIdx != MATERIAL_IDX_INVALID &&
+        materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID &&
+        (!materials[materialIdx].hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
+    payload.flags &= ~PAYLOAD_FLAG_NORMAL_MAPPED;
+    if (hasNormalMap)
     {
         const Material material = materials[materialIdx];
         float3 tangent_WS;
@@ -289,7 +293,10 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
             n.xy *= material.normalScale;
             if (dot(n, n) > 1e-12f)
+            {
                 nor_WS = normalize(n.x * tangent_WS + n.y * bitangent_WS + n.z * nor_WS);
+                payload.flags |= PAYLOAD_FLAG_NORMAL_MAPPED;
+            }
         }
     }
 
@@ -316,7 +323,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
         // correction ensures); other materials keep the plain interpolated normal, facing the ray
         const bool hasGlossy = materialIdx != MATERIAL_IDX_INVALID &&
             (materials[materialIdx].hasGlossy() ||
-             (materials[materialIdx].normalTextureId != TEXTURE_ID_INVALID && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
+             (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS)));
         if (hasGlossy)
         {
             nor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, nor_WS);
@@ -348,7 +355,7 @@ float3 getHitOffsetNormal(const Payload payload)
 {
     // Mapped normals may lean below the mesh; ray offsets must stay on the geometric surface's side.
     // Preserve the existing offset on unmapped surfaces.
-    return payload.materialIdx != MATERIAL_IDX_INVALID && materials[payload.materialIdx].normalTextureId != TEXTURE_ID_INVALID
+    return bool(payload.flags & PAYLOAD_FLAG_NORMAL_MAPPED)
         ? octDecode(payload.hitInfo.packedGeoNor) : payload.hitInfo.hitNor_WS;
 }
 
