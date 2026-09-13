@@ -55,24 +55,26 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 }
 
-// Adds the segment's fog in-scatter to pathColor and folds fog transmittance into
-// pathWeight. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
-float applySegmentFog(inout Payload payload, const float3 origin_WS, const float3 dir,
-    const uint numInScatterSteps, inout float3 pathColor)
+// Cloud in-scattering includes foreground fog/water attenuation; endpoint weights
+// contain each medium's transmittance once. Fog's own march accounts for cloud occlusion.
+float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
+    const RayCone cone, const uint numInScatterSteps, const bool cloudScatter,
+    inout float3 pathColor, out CloudResult cloud)
 {
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
-    if (!fogEnabled || bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
-    {
-        return 1.f;
-    }
-
-    const float segmentDist = getSegmentVolumeDistance(payload, origin_WS, dir);
-
-    float fogTransmittance;
-    const float3 inScatter =
-        computeFogInScatter(origin_WS, dir, segmentDist, numInScatterSteps, payload.rng, fogTransmittance);
-    pathColor += payload.pathWeight * inScatter;
-    payload.pathWeight *= fogTransmittance;
+    const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
+    const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloud.maxDistance;
+    cloud = integrateClouds(origin_WS, dir, segmentDistance, cone,
+        fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
+    float fogTransmittance = 1.f;
+    float3 fogScatter = 0.f;
+    if (fogEnabled)
+        fogScatter = computeFogInScatter(origin_WS, dir, volumeDistance, numInScatterSteps,
+            payload.rng, fogTransmittance);
+    pathColor += payload.pathWeight * (fogScatter + cloud.radiance);
+    payload.pathWeight *= fogTransmittance * cloud.transmittance;
     return fogTransmittance;
 }
 
@@ -133,8 +135,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     // The primary segment is identical for both path splits and collect sums them, so
     // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
-    applySegmentFog(payload, cameraParams.pos_WS, ray.Direction,
-        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathColor);
+    RayCone primaryCone;
+    primaryCone.width = 0.f;
+    primaryCone.angle = getRayConePixelAngle();
+    CloudResult primaryCloud;
+    applySegmentAtmosphere(payload, cameraParams.pos_WS, ray.Direction, primaryCone,
+        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathSplitIdx == 0, pathColor, primaryCloud);
 
     payload.pathWeight *= segmentAbsorption;
 
@@ -149,9 +155,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         pathColor += payload.pathWeight * domeLightColor;
         if (sceneParams.voxelMode == 1)
         {
-            // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
-            // light rather than pathWeight, which would fold in fog transmittance.
-            ptDiffuseAlbedo = applyReinhard(domeLightColor);
+            // Give the cloud-composited sky an albedo without applying endpoint throughput.
+            ptDiffuseAlbedo = applyReinhard(primaryCloud.radiance + primaryCloud.transmittance * domeLightColor);
         }
         return;
     }
@@ -523,6 +528,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if SHARC_QUERY
         ++tracedBounces;
 #endif
+        const RayCone segmentCone = payload.rayCone;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
@@ -537,7 +543,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
         const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
-        const float fogTransmittance = applySegmentFog(payload, ray.Origin, ray.Direction, numFogSteps, pathColor);
+        CloudResult segmentCloud;
+        const float fogTransmittance = applySegmentAtmosphere(payload, ray.Origin, ray.Direction, segmentCone,
+            numFogSteps, true, pathColor, segmentCloud);
 
         payload.pathWeight *= segmentAbsorption;
 
@@ -585,13 +593,12 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance * segmentCloud.transmittance;
                     }
                     else if (didMiss && sceneParams.voxelMode == 1)
                     {
-                        // Specular reflection of the sky. Excludes fog and absorption to match
-                        // how the primary miss builds its albedo.
-                        ptDiffuseAlbedo *= applyReinhard(missDomeLightColor);
+                        // Use the same cloud-composited environment as the primary sky guide.
+                        ptDiffuseAlbedo *= applyReinhard(segmentCloud.radiance + segmentCloud.transmittance * missDomeLightColor);
                     }
                     else
                     {

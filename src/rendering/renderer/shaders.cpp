@@ -27,6 +27,7 @@
 #include "sharc/sharc_maintenance.cs.fxh"
 #include "sharc/sharc_query.rgs.fxh"
 #include "sharc/sharc_update.rgs.fxh"
+#include "sky/cloud_noise_cache.cs.fxh"
 #include "sky/multi_scattering_lut.cs.fxh"
 #include "sky/sky_view_lut.cs.fxh"
 #include "sky/transmittance_lut.cs.fxh"
@@ -56,6 +57,7 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(light_tree_morton_emit_cs),
     REGISTER_SHADER(light_tree_scene_bbox_reset_cs),
     REGISTER_SHADER(path_tracing_rgs),
+    REGISTER_SHADER(cloud_noise_cache_cs),
     REGISTER_SHADER(multi_scattering_lut_cs),
     REGISTER_SHADER(postprocess_ps),
     REGISTER_SHADER(postprocess_vs),

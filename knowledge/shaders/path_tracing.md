@@ -14,6 +14,9 @@ query eligibility, coordinates, and debug-view conventions.
 
 ---
 
+Cloud transport is integrated on finite segments as well as sky misses. See
+[clouds](../rendering/clouds.md) for cone propagation, volume ordering and sun MIS.
+
 ## Shared Code
 
 `common/path_tracing_common.hlsli` is shared by this shader, the G-buffer shader, and the light sampling code. It declares the TLAS, vertex/index/instance/per-tri buffers, and provides:

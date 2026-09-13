@@ -23,6 +23,7 @@ namespace
 enum class SkyParam
 {
     CONSTANTS,
+    GLOBAL_PARAMS,
 
     COUNT
 };
@@ -47,6 +48,9 @@ RtTarget transmittanceLut{ L"skyTransmittanceLut", DXGI_FORMAT_R16G16B16A16_FLOA
 RtTarget multiScatteringLut{ L"skyMultiScatteringLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 RtTarget skyViewLut{ L"skyViewLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 
+ComPtr<ID3D12PipelineState> cloudNoisePso;
+RtTarget cloudNoiseCache{ L"cloudNoiseCoefficients", DXGI_FORMAT_R32G32B32A32_FLOAT };
+
 bool staticLutsGenerated{ false };
 
 } // namespace
@@ -61,6 +65,11 @@ void init()
             .RegisterSpace = SKY_REGISTER_SPACE,
             .Num32BitValues = sizeof(SkyConstants) / 4,
         },
+    };
+
+    params[SKY_PARAM_IDX(GLOBAL_PARAMS)] = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+        .Descriptor = { .ShaderRegister = COMMON_REGISTER_GLOBAL_PARAMS, .RegisterSpace = COMMON_REGISTER_SPACE },
     };
 
     const D3D12_STATIC_SAMPLER_DESC lutSamplerDesc = {
@@ -91,6 +100,11 @@ void init()
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&skyViewPso)));
     skyViewPso->SetName(L"skyViewLutPso");
 
+    psoDesc.CS = makeShaderBytecode(getShader("cloud_noise_cache_cs"));
+    CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudNoisePso)));
+    cloudNoiseCache.setDimensions(1024, 18);
+    cloudNoiseCache.init();
+
     transmittanceLut.setDimensions(SKY_TRANSMITTANCE_LUT_WIDTH, SKY_TRANSMITTANCE_LUT_HEIGHT);
     transmittanceLut.init();
 
@@ -101,9 +115,21 @@ void init()
     skyViewLut.init();
 }
 
-void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const float cameraY)
+void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const float cameraY, bool clouds, D3D12_GPU_VIRTUAL_ADDRESS globalParams)
 {
     cmdList->SetComputeRootSignature(rootSig.Get());
+    if (clouds)
+    {
+        GPU_PROFILE_SCOPE(cmdList, "cloud noise coefficients");
+        cloudNoiseCache.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        cmdList->SetPipelineState(cloudNoisePso.Get());
+        cmdList->SetComputeRoot32BitConstant(SKY_PARAM_IDX(CONSTANTS), cloudNoiseCache.getUavIdx(), 0);
+        cmdList->SetComputeRootConstantBufferView(SKY_PARAM_IDX(GLOBAL_PARAMS), globalParams);
+        cmdList->Dispatch(16, 18, 1);
+        BufferHelper::uavBarrier(cmdList, cloudNoiseCache.getTarget());
+        cloudNoiseCache.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+
 
     if (!staticLutsGenerated)
     {
@@ -167,8 +193,12 @@ uint32_t getSkyViewLutSrvIdx()
     return skyViewLut.getSrvIdx();
 }
 
+uint32_t getCloudNoiseCacheSrvIdx() { return cloudNoiseCache.getSrvIdx(); }
+
 void destroy()
 {
+    cloudNoiseCache.reset();
+    cloudNoisePso.Reset();
     transmittanceLut.reset();
     multiScatteringLut.reset();
     skyViewLut.reset();
