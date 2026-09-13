@@ -14,8 +14,8 @@ but now controls horizontal scale; the lattice is unbounded and frequencies do n
 
 `clouds.hlsli` marches actual camera/path segments, including segments ending at geometry.
 Fine detail is selected by the accumulated ray-cone diameter at each sample. The fixed
-8-block cutoff was calibrated from a 60-degree vertical FOV, 720 internal vertical pixels,
-and roughly 5 km to the cloud plus a 200-block specular reflection. It is not recalculated
+64-block cutoff extends the original 8-block cutoff's detail range eightfold for the same
+cone angle, retaining erosion farther away even at reduced DLSS resolution. It is not recalculated
 when the camera changes. Diffuse scattering rapidly exceeds it. Refraction uses the existing
 cone propagation. The cone passed to the march must be the one at the segment origin,
 not its already-advanced width at the next surface hit.
@@ -26,7 +26,7 @@ zero would be incorrect. Empty skips bound both the signed noise and Smooth F1 b
 concluding that the final ramp is zero.
 
 March spacing is in blocks, with separate detailed-view, broad-view and shadow settings.
-Viewing rays cover the whole layer intersection up to `cloudMaxDistance` (100,000 blocks),
+Viewing rays cover the whole layer intersection up to `cloudMaxDistance` (80,000 blocks),
 including empty space before distant clouds. Do not apply the shadow travel budget to
 view rays: a camera inside the nominal layer but above its occupied portion can spend
 that entire budget in empty space, clipping cloud tops at grazing angles. Distant view
@@ -118,6 +118,13 @@ Rebuilding each frame handles wind, evolving noise and settings without temporal
 The current default horizontal scale is 110,736.695312 blocks, thickness is 3,000 blocks,
 and coverage is 0.3. Base altitude remains 1,500 blocks. These double the earlier preset's
 dimensions, including the detail proportions, without importing Blender scene units.
+The user's exported preset sets extinction to 0.004, draw distance to 80,000, top ramp end
+to 0.257, bottom width to 0.044, density ramp endpoints to 0.086364 / 0.359091, and ambient
+to 0.8. Startup and the UI reset action use the same preset.
+All 38 exported values were checked against both default definitions. With this preset
+and the 64-block detail cutoff, the lower-export daytime benchmark measured 4.42 ms
+(same RTX 4070 SUPER / 960 x 540 setup described below); a DLSS/SHaRC capture completed.
+Both the preset and cutoff changed, so this does not isolate the cost of the cutoff alone.
 
 ## Validation
 

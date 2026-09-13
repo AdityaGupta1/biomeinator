@@ -6,9 +6,9 @@
 #include "sky/cloud_density.hlsli"
 #include "light/fog_density.hlsli"
 
-// 60-degree vertical FOV / 720 pixels, over about 5 km to clouds plus a 200-block reflection.
-// Fixed in world units; the live ray cone still carries the actual camera and scattering footprint.
-static const float cloudFineFootprint = 8.f;
+// Fixed world-space footprint; allow distant cloud detail even at reduced DLSS resolution.
+// The live cone still accounts for the camera and widening from scattering.
+static const float cloudFineFootprint = 64.f;
 
 bool cloudInterval(float3 origin, float3 dir, float maxDistance, out float start, out float end)
 {
