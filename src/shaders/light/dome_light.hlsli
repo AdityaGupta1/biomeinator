@@ -79,7 +79,7 @@ struct DomeLightSample
 float3 generateDomeLightSampleDir(const float3 surfShadingNor_WS, inout RandomNumberGenerator rng, out float pdf)
 {
     const float3 sunDir_WS = getSunDir_WS();
-    const float3 wi_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
+    const float3 wi_WS = sampleSunDirection(sunDir_WS, rng);
     // The sample is inside the cap by construction; testing the rounded direction against the cap
     // edge would give boundary samples a zero pdf due to float precision
     pdf = sphericalCapUniformPdfInside(sunCosTheta);

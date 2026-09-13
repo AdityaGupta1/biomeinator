@@ -61,3 +61,42 @@ float cloudDetailDensity(float margin, float3 p)
     const float fine = cloudReferenceFine(cloudReferencePosition(p),CLOUD_CONFIG.fineScale,CLOUD_CONFIG.fineDetail,CLOUD_CONFIG.fineRoughness,CLOUD_CONFIG.fineTime+CLOUD_TIME*CLOUD_CONFIG.fineSpeed);
     return cloudReferenceRamp(CLOUD_CONFIG.densityRampEnd+1.f/256.f-margin+CLOUD_CONFIG.fineStrength*fine,CLOUD_CONFIG.densityRampStart,CLOUD_CONFIG.densityRampEnd);
 }
+
+// Optical depth along the supplied solar ray, including below-horizontal rays.
+// Positions are already wind-advected. The view draw distance must not make
+// distant layer entry abruptly change from shadowed to fully illuminated.
+float cloudRayOpticalDepth(float3 origin, float3 dir, Texture3D<float> shape,
+                          SamplerState fieldSampler, float coverage, float density)
+{
+    float start = 0.f;
+    float end = 12000.f;
+    if (abs(dir.y) < 1.e-6f)
+    {
+        if (origin.y <= cloudBase || origin.y >= cloudTop)
+            return 0.f;
+    }
+    else
+    {
+        const float a = (cloudBase - origin.y) / dir.y;
+        const float b = (cloudTop - origin.y) / dir.y;
+        start = max(0.f, min(a, b));
+        end = min(max(a, b), start + 12000.f);
+        if (end <= start)
+            return 0.f;
+    }
+    const uint steps = max(1u, uint(CLOUD_CONFIG.lightSteps));
+    // Midpoint quadrature within the ray keeps nearby solar directions coherent.
+    // Randomizing the SUN direction is independent of density integration.
+    const float ds = (end - start) / steps;
+    float depth = 0.f;
+    [loop] for (uint i = 0; i < steps; ++i)
+    {
+        const float3 p = origin + dir * (start + (i + 0.5f) * ds);
+        const float body = cloudBodyMargin(p, shape, fieldSampler, coverage);
+        if (body > 0.f)
+            depth += cloudDetailDensity(body, p) * density * ds;
+        if (depth >= 8.f)
+            break;
+    }
+    return depth;
+}

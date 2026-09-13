@@ -156,6 +156,7 @@ void imguiEndFrame(double deltaTime)
         {
             SettingsGuiHelpers::VerticalSpacing();
             SettingsGuiHelpers::SectionTitle("Atmosphere");
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky strength (excluding sun)", "skyStrength", 0.f, 10.f, "%.2fx");
             if (ImGui::CollapsingHeader("Cloud settings"))
             {
                 radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Clouds", "clouds");
@@ -242,7 +243,8 @@ void imguiEndFrame(double deltaTime)
 
                 if (ImGui::TreeNode("Quality"))
                 {
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Light cache samples", "cloudLightSteps", 4, 32);
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Sun ray march steps", "cloudLightSteps", 4, 32);
+                    ImGui::TextWrapped("Density samples along one sun ray, not additional sun rays.");
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Broad ray samples", "cloudSecondarySteps", 4, 32);
                     const bool resolutionChanged = SettingsGuiHelpers::SliderUint("Primary resolution divisor", "cloudViewDownscale", 1, 4);
                     renderState.needsResize |= resolutionChanged;

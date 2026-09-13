@@ -74,6 +74,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
     ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
+    ADD_OPTION("skyStrength", "Sky radiance multiplier (excludes direct sunlight)", float, "1.0");
     ADD_OPTION("clouds", "World-space volumetric clouds (voxel mode only)", bool, "true");
     ADD_OPTION("cloudCoverage", "Cloud coverage", float, "0.5");
     ADD_OPTION("cloudDensity", "Cloud extinction per meter", float, "0.007");
@@ -103,7 +104,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudAerial", "Distance haze", float, "2.5e-05");
     ADD_OPTION("cloudWindX", "Wind X (m/s)", float, "8");
     ADD_OPTION("cloudWindZ", "Wind Z (m/s)", float, "3");
-    ADD_OPTION("cloudLightSteps", "Light cache samples", uint32_t, "12");
+    ADD_OPTION("cloudLightSteps", "Sun ray march steps", uint32_t, "12");
     ADD_OPTION("cloudSecondarySteps", "Broad ray samples", uint32_t, "8");
     ADD_OPTION("cloudViewDownscale", "Primary resolution divisor", uint32_t, "2");
     ADD_OPTION("cloudWarpTime", "Distortion time offset", float, "0");
@@ -212,6 +213,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("fogG", float);
     COPY_SETTING("fogMarchSteps", uint32_t);
     COPY_SETTING("fogAmbientStrength", float);
+    COPY_SETTING("skyStrength", float);
     COPY_SETTING("clouds", bool);
     COPY_SETTING("cloudCoverage", float);
     COPY_SETTING("cloudDensity", float);

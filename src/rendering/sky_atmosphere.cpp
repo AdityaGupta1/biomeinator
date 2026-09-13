@@ -42,7 +42,8 @@ struct SkyConstants
     uint32_t cloudShapeIdx;
     float cloudCoverage;
     float cloudDensity;
-    float padding[3];
+    uint32_t sunSampleFrame;
+    float padding[2];
     CloudSettings cloud;
 };
 
@@ -65,6 +66,7 @@ RtTarget multiScatteringLut{ L"skyMultiScatteringLut", DXGI_FORMAT_R16G16B16A16_
 RtTarget skyViewLut{ L"skyViewLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 
 bool staticLutsGenerated{ false };
+uint32_t sunSampleFrame = 0;
 
 } // namespace
 
@@ -203,6 +205,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const f
         .multiScatteringLutSrvIdx = multiScatteringLut.getSrvIdx(),
         .animTime = animTime,
         .cameraY = cameraY,
+        .sunSampleFrame = sunSampleFrame++,
     };
     cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &constants, 0);
     cmdList->Dispatch(Util::calculateDispatchSize(SKY_VIEW_LUT_WIDTH, SKY_WORKGROUP_SIZE_X),
@@ -226,6 +229,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const f
                 .cloudShapeIdx = cloudShape.getSrvIdx(),
                 .cloudCoverage = coverage,
                 .cloudDensity = density,
+                .sunSampleFrame = sunSampleFrame,
                 .cloud = settings,
             };
             cmdList->SetComputeRoot32BitConstants(SKY_PARAM_IDX(CONSTANTS), sizeof(SkyConstants) / 4, &cloudConstants, 0);

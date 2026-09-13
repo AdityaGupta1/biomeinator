@@ -6,6 +6,7 @@
 
 #include "sky/atmosphere.hlsli"
 #include "sky/sky_constants.hlsli"
+#include "sky/sun_sampling.hlsli"
 
 // Lat/long map of single-scattered sky luminance around the camera (Eq. 1-4 of the paper), for
 // unit sun illuminance — dome_light.hlsli multiplies by the actual solar illuminance. The
@@ -37,9 +38,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float tMax = tGround >= 0.f ? tGround : tTop;
     const float dt = tMax / SKY_VIEW_LUT_NUM_STEPS;
 
-    const float cosTheta = dot(rayDir, sunDir_WS);
-    const float rayleighPhaseValue = rayleighPhase(cosTheta);
-    const float miePhaseValue = miePhase(cosTheta);
+    RandomNumberGenerator rng = initRng(dispatchThreadId.x, dispatchThreadId.y, sunSampleFrame);
 
     float3 luminance = float3(0.f, 0.f, 0.f);
     float3 throughput = float3(1.f, 1.f, 1.f);
@@ -54,8 +53,12 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         // The transmittance LUT only covers rays that don't hit the ground, so the planet's own
         // shadow needs an explicit visibility check
-        const float earthShadow = raySphereIntersectNearest(samplePos, sunDir_WS, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
-        const float muSun = dot(samplePos, sunDir_WS) / sampleRadius;
+        const float3 lightDir = sampleSunDirection(sunDir_WS, rng);
+        const float cosTheta = dot(rayDir, lightDir);
+        const float rayleighPhaseValue = rayleighPhase(cosTheta);
+        const float miePhaseValue = miePhase(cosTheta);
+        const float earthShadow = raySphereIntersectNearest(samplePos, lightDir, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
+        const float muSun = dot(samplePos, lightDir) / sampleRadius;
         const float3 transmittanceToSun = sampleTransmittanceLut(transmittanceLut, lutSampler, sampleRadius, muSun);
 
         const float3 phaseTimesScattering =
@@ -63,7 +66,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         // Eq. 11: multiple scattering (Ψms · σs) added alongside the phase-weighted single
         // scattering; Ψms already includes the sun shadowing of the second order
-        const float3 psiMs = sampleMultiScatteringLut(multiScatteringLut, lutSampler, sampleRadius, muSun);
+        const float3 psiMs = sampleMultiScatteringLut(multiScatteringLut, lutSampler, sampleRadius, dot(samplePos, sunDir_WS) / sampleRadius);
         const float3 multiScatteredLuminance = psiMs * (medium.rayleighScattering + medium.mieScattering);
 
         const float3 scatteredLuminance = earthShadow * transmittanceToSun * phaseTimesScattering + multiScatteredLuminance;
@@ -78,7 +81,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         const float3 groundPos = rayOrigin + rayDir * tGround;
         const float3 groundNormal = normalize(groundPos);
-        const float NdotL = saturate(dot(groundNormal, sunDir_WS));
+        const float3 lightDir = sampleSunDirection(sunDir_WS, rng);
+        const float NdotL = saturate(dot(groundNormal, lightDir));
         const float3 transmittanceToSun =
             sampleTransmittanceLut(transmittanceLut, lutSampler, atmosphereGroundRadius, NdotL);
         luminance += throughput * transmittanceToSun * NdotL * (atmosphereGroundAlbedo * M_INV_PI);

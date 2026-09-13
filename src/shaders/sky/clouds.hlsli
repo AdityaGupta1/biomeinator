@@ -46,11 +46,12 @@ float cloudLightDepth(float3 advectedPos)
 
 float cloudSunTransmittance(float3 origin_WS, float3 dir)
 {
-    const float3 origin = origin_WS + float3(cameraParams.globalInstanceOffset);
-    float start, end;
-    if (!cloudInterval(origin, dir, start, end))
+    if (renderParams.clouds == 0 || sceneParams.voxelMode == 0 || renderParams.cloudDensity <= 0.f || renderParams.cloudCoverage <= 0.f)
         return 1.f;
-    return exp(-cloudLightDepth(cloudAdvectedPosition(origin + dir * start)));
+    const float3 origin = cloudAdvectedPosition(origin_WS + float3(cameraParams.globalInstanceOffset));
+    Texture3D<float> shape = ResourceDescriptorHeap[heapIndices.srv.cloudShapeIdx];
+    return exp(-cloudRayOpticalDepth(origin, dir, shape, cloudFieldSampler,
+        renderParams.cloudCoverage, renderParams.cloudDensity));
 }
 
 float cloudPhase(float mu, float g)
@@ -65,9 +66,6 @@ float4 integrateClouds(float3 origin_WS, float3 dir, uint steps)
     if (!cloudInterval(origin, dir, start, end))
         return float4(0.f, 0.f, 0.f, 1.f);
 
-    const float3 sunDir = getSunDir_WS();
-    const float3 sunEnergy = getVolumeSunEnergy(sunDir, cloudBase + 0.5f * CLOUD_CONFIG.thickness);
-    const float phase = 0.85f * cloudPhase(dot(dir, sunDir), renderParams.cloud.phaseG) + 0.15f * cloudPhase(dot(dir, sunDir), -0.25f);
     const float3 ambient = getSkyColor(float3(0.f, 1.f, 0.f)) * renderParams.cloud.ambient;
     const float3 clearSky = getSkyColor(dir);
     Texture3D<float> shape = ResourceDescriptorHeap[heapIndices.srv.cloudShapeIdx];
@@ -81,6 +79,7 @@ float4 integrateClouds(float3 origin_WS, float3 dir, uint steps)
     // independently of path sampling in an otherwise stationary view.
     uint cloudSeed = hash(asuint(dir.x) ^ hash(asuint(dir.y)) ^ hash(asuint(dir.z)));
     const float jitter = float(cloudSeed & 0x00ffffffu) / 16777216.f;
+    RandomNumberGenerator sunRng = initRng(cloudSeed, renderParams.frameNumber);
     float transmittance = 1.f;
     float3 radiance = 0.f;
     [loop] for (uint i = 0; i < steps; ++i)
@@ -93,10 +92,19 @@ float4 integrateClouds(float3 origin_WS, float3 dir, uint steps)
         const float extinction = cloudExtinction(pos, body);
         if (extinction <= 0.f)
             continue;
+        const float3 sunDir = sampleSunDirection(getSunDir_WS(), sunRng);
+        const float3 sunEnergy = getVolumeSunEnergy(sunDir, pos.y);
+        const float phase = 0.85f * cloudPhase(dot(dir, sunDir), renderParams.cloud.phaseG)
+            + 0.15f * cloudPhase(dot(dir, sunDir), -0.25f);
+        const float directDepth = any(sunEnergy > 0.f)
+            ? cloudRayOpticalDepth(pos, sunDir, shape, cloudFieldSampler,
+                renderParams.cloudCoverage, renderParams.cloudDensity) : 8.f;
+        // The cache is only an approximation for higher scattering orders;
+        // direct light follows the actual sampled solar direction above.
         const float lightDepth = cloudLightDepth(pos);
         // Analytic integration per step with a scattering-octave approximation for
         // bright cloud interiors. This is not a multiple-scattering path tracer.
-        const float scatter = phase * exp(-lightDepth) +
+        const float scatter = phase * exp(-directDepth) +
             renderParams.cloud.multiScatter * (0.45f * exp(-lightDepth * 0.35f) + 0.2f * exp(-lightDepth * 0.12f)) / (4.f * M_PI);
         const float height = saturate((pos.y - cloudBase) / (cloudTop - cloudBase));
         const float powder = 1.f - exp(-extinction * 120.f);

@@ -19,7 +19,8 @@ cbuffer SkyConstants : REGISTER_B(SKY, CONSTANTS)
     uint cloudShapeIdx;
     float cloudCoverage;
     float cloudDensity;
-    float3 cloudPadding;
+    uint sunSampleFrame;
+    float2 cloudPadding;
     CloudSettings cloud;
 };
 

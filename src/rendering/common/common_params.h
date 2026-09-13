@@ -148,7 +148,7 @@ struct RenderParams
     float fogG;
     uint fogMarchSteps;
     float fogAmbientStrength;
-    uint pad0;
+    float skyStrength;
     uint clouds;
     float cloudCoverage;
     float cloudDensity;

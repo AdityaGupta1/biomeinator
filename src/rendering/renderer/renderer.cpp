@@ -662,6 +662,7 @@ void render()
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
+    renderParams->skyStrength = std::clamp(SettingsManager::getAsFloat("skyStrength"), 0.f, 10.f);
     renderParams->clouds = SettingsManager::getAsBool("clouds") ? 1u : 0u;
     renderParams->cloudCoverage = std::clamp(SettingsManager::getAsFloat("cloudCoverage"), 0.f, 1.f);
     renderParams->cloudDensity = std::clamp(SettingsManager::getAsFloat("cloudDensity"), 0.f, 0.1f);

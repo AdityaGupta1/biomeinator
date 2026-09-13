@@ -3,11 +3,7 @@
 #pragma once
 #include "common/global_params.hlsli"
 #include "sky/atmosphere.hlsli"
-#include "util/rng.hlsli"
-
-// Deliberately larger than the real sun (~0.8° radius vs. 0.27°)
-static const float sunCosTheta = 0.9999f;
-static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
+#include "sky/sun_sampling.hlsli"
 
 // Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
 // angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
@@ -40,7 +36,9 @@ float3 getSkyColor(float3 wi_WS)
 {
     Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
     const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
-    return skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + ambientSkyLight;
+    // Shared by visible sky, indirect surface lighting, and volume ambient.
+    // Solar-disk radiance and direct solar energy use separate functions.
+    return renderParams.skyStrength * (skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + ambientSkyLight);
 }
 
 // True if the ray from the camera towards wi_WS is occluded by the virtual planet. The
@@ -59,15 +57,14 @@ float3 getSunColor(float3 wi_WS)
     return sunIlluminance * transmittance / sunSolidAngle;
 }
 
-// Integrate the visible fraction of the finite solar disk at the scattering
-// height. Keep below-ground directions out of the transmittance LUT domain.
+// Energy / sampling PDF for ONE uniformly sampled solar direction. Planet
+// visibility is tested at the scattering point, not at the camera. Do not also
+// multiply by the visible disk fraction: random disk samples integrate that.
 float3 getVolumeSunEnergy(float3 sunDir, float worldY)
 {
     const float r = atmosphereRadiusForCameraY(worldY);
-    const float horizonMu = -sqrt(max(0.f, 1.f - (atmosphereGroundRadius / r) * (atmosphereGroundRadius / r)));
-    const float radius = acos(sunCosTheta);
-    const float x = clamp((asin(clamp(sunDir.y, -1.f, 1.f)) - asin(horizonMu)) / radius, -1.f, 1.f);
-    const float visibility = (acos(-x) + x * sqrt(max(0.f, 1.f - x*x))) / M_PI;
+    if (raySphereIntersectNearest(float3(0.f, r, 0.f), sunDir, atmosphereGroundRadius) >= 0.f)
+        return 0.f;
     Texture2D<float4> lut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
-    return visibility * sunIlluminance * sampleTransmittanceLut(lut, skyLutSampler, r, max(sunDir.y, horizonMu + 1.e-5f));
+    return sunIlluminance * sampleTransmittanceLut(lut, skyLutSampler, r, sunDir.y);
 }

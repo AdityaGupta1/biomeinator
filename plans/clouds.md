@@ -1,5 +1,45 @@
 # Clouds: implementation and handoff
 
+## Current sun sampling and sky strength (2026-09-12)
+
+Prior cloud/evolution/fog work was committed as `b8e7a0f`. The subsequent
+`skyStrength` setting exposes a 0–10× sky multiplier (default 1×) under Atmosphere.
+It scales sky radiance and volume ambient, leaving direct solar energy unchanged.
+
+Every explicit solar lighting sample now selects **one random uniform direction
+on the solar disk**, through `sky/sun_sampling.hlsli`. Surface NEE, fog, cloud
+single scattering, cloud light-cache generation, and both atmosphere scattering
+LUT passes use it. The center remains only for disk geometry, PDF support and
+LUT coordinates. Camera/BSDF rays that hit the disk retain their actual direction.
+
+Fog traces at most one terrain shadow ray per scattering sample, replacing the
+four fixed directions. Phase, planet visibility, atmospheric transmittance, fog
+attenuation and cloud attenuation use the same sampled direction. Stratified
+random view-march positions remain. Volume sun energy no longer multiplies by
+an analytical visible-disk fraction on top of the random visibility estimate.
+The old sun-center shadow multiplier on fog ambient was removed.
+
+Direct cloud attenuation now marches the actual selected ray, returning
+`exp(-optical depth)` instead of using center-direction cached depth. Light
+marches use midpoint density quadrature, are bounded to 12 km inside the layer,
+and stop once optical
+depth reaches 8 (transmittance below 0.00034). Layer entry is independent of the
+view draw-distance cutoff. `cloudLightSteps` controls density evaluations along
+that single ray; the UI now calls it "Sun ray march steps". The spatial optical
+depth cache remains only for the approximate higher scattering orders and is
+built with one random disk ray per texel whenever it refreshes. That cache uses
+midpoint density quadrature to avoid baking spatial integration noise into it.
+
+Validation: all shaders and RelWithDebInfo built. A GPU test of 1,048,576 samples
+checked direction normalization, cap support, radial/azimuth distribution, and
+sunset horizon visibility; maximum visible-fraction error was 0.0022. Animated
+1280×720 runs in the user's world (launch time 585, SHaRC/frame generation off,
+max depth 4, 32 measured frames) measured median GPU frame times of 12.02 ms
+before and 13.60 ms after. These short animated runs are indicative, not a
+controlled temporal-quality comparison. Direct cloud marching adds work despite
+reducing fog terrain rays. Reports and captures (`final.png` is the revised density quadrature) are in
+`build/sun-sampling/`. Static captures cannot establish flicker-free animation.
+
 ## Current: Blender reference and user tuning (2026-09-12)
 
 The user supplied `blender/clouds/clouds_ref.blend` and requested its basic

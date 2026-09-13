@@ -6,6 +6,7 @@
 
 #include "sky/atmosphere.hlsli"
 #include "sky/sky_constants.hlsli"
+#include "sky/sun_sampling.hlsli"
 
 // Multi-scattering transfer function Ψms (paper §5.5): per texel, integrate the second-order
 // in-scattered luminance L_2ndorder (Eq. 5-6, isotropic phase, unit illuminance, including the
@@ -36,6 +37,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
                                  atmosphereTopRadius - atmosphereGroundRadius - 1.f);
     const float3 rayOrigin = float3(0.f, atmosphereGroundRadius + altitude, 0.f);
 
+    RandomNumberGenerator rng = initRng(dispatchThreadId.x, dispatchThreadId.y);
     float3 secondOrderLuminance = float3(0.f, 0.f, 0.f);
     float3 transferFactor = float3(0.f, 0.f, 0.f);
 
@@ -71,9 +73,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             luminanceFactor += throughput * (scattering - scattering * sampleTransmittance) / max(medium.extinction, 1e-12f);
 
             // The L' integrand (Eq. 6) with unit illuminance and the isotropic phase function
+            const float3 lightDir = sampleSunDirection(sunDir, rng);
             const float earthShadow =
-                raySphereIntersectNearest(samplePos, sunDir, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
-            const float sampleMuSun = dot(samplePos, sunDir) / sampleRadius;
+                raySphereIntersectNearest(samplePos, lightDir, atmosphereGroundRadius) >= 0.f ? 0.f : 1.f;
+            const float sampleMuSun = dot(samplePos, lightDir) / sampleRadius;
             const float3 transmittanceToSun = sampleTransmittanceLut(transmittanceLut, lutSampler, sampleRadius, sampleMuSun);
             const float3 scatteredLuminance = earthShadow * transmittanceToSun * scattering * isotropicPhase;
             luminance += throughput * (scatteredLuminance - scatteredLuminance * sampleTransmittance) / max(medium.extinction, 1e-12f);
@@ -85,7 +88,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             const float3 groundPos = rayOrigin + rayDir * tGround;
             const float3 groundNormal = normalize(groundPos);
-            const float NdotL = saturate(dot(groundNormal, sunDir));
+            const float3 lightDir = sampleSunDirection(sunDir, rng);
+            const float NdotL = saturate(dot(groundNormal, lightDir));
             const float3 transmittanceToSun =
                 sampleTransmittanceLut(transmittanceLut, lutSampler, atmosphereGroundRadius, NdotL);
             luminance += throughput * transmittanceToSun * NdotL * (atmosphereGroundAlbedo * M_INV_PI);
