@@ -12,6 +12,7 @@
 #include "light/dome_light.hlsli"
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
+#include "util/sampling.hlsli"
 
 static const float fogSeaLevelY = float(SEA_LEVEL);
 static const float fogUndergroundRampBlocks = 24.f;
@@ -194,14 +195,18 @@ float3 computeFogInScatter(const float3 origin_WS,
                 continue;
             }
 
-            if (isRayOccluded(stepPos_WS, sunDir_WS))
+            // The sun is a disk, not a point, so shadowing is tested against a fresh direction
+            // within its cap each step. The weighting below is already the uniform cap estimator
+            // (Le / pdf, with pdf = 1 / sunSolidAngle), so no extra sample weight is needed.
+            const float3 sunSampleDir_WS = sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
+            if (isRayOccluded(stepPos_WS, sunSampleDir_WS))
             {
                 continue;
             }
 
             const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t);
-            const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunDir_WS);
-            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunDir_WS, sunVolumeDist);
+            const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunSampleDir_WS);
+            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunSampleDir_WS, sunVolumeDist);
             sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
 
