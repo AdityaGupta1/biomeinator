@@ -155,8 +155,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         pathColor += payload.pathWeight * domeLightColor;
         if (sceneParams.voxelMode == 1)
         {
-            // Give the cloud-composited sky an albedo without applying endpoint throughput.
-            ptDiffuseAlbedo = applyReinhard(primaryCloud.radiance + primaryCloud.transmittance * domeLightColor);
+            if (pathSplitIdx == 0)
+            {
+                ptDiffuseAlbedo = applyReinhard(cloudGuideColor(cameraParams.pos_WS, ray.Direction,
+                    domeLightColor));
+            }
         }
         return;
     }
@@ -597,8 +600,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     }
                     else if (didMiss && sceneParams.voxelMode == 1)
                     {
-                        // Use the same cloud-composited environment as the primary sky guide.
-                        ptDiffuseAlbedo *= applyReinhard(segmentCloud.radiance + segmentCloud.transmittance * missDomeLightColor);
+                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Origin, ray.Direction,
+                            missDomeLightColor));
                     }
                     else
                     {
