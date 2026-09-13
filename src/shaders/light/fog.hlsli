@@ -122,9 +122,11 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
         }
 
         const Material material = materials[instanceData.materialIdx];
-        if (material.hasGlossyTransmission())
+        // Only the scalar roughness factor is considered: resolving a roughness map's specular
+        // texels would cost a texture sample per candidate, which is far too expensive here.
+        if (material.isDeltaTransmission())
         {
-            continue; // transmissive surfaces (e.g. water) let sunlight through
+            continue; // perfectly specular transmitters (e.g. water) let sunlight through
         }
 
         if (!material.hasDiffuse() || material.baseColorTextureId == TEXTURE_ID_INVALID)
