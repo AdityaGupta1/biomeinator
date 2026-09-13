@@ -77,13 +77,13 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("skyStrength", "Sky strength excluding sun", float, "1.0");
     ADD_OPTION("clouds", "Clouds", bool, "true");
     ADD_OPTION("cloudMultiScatter", "Approximate multiple scattering", bool, "true");
-    ADD_OPTION("cloudCoverage", "Coverage", float, "0.5");
+    ADD_OPTION("cloudCoverage", "Coverage", float, "0.3");
     ADD_OPTION("cloudDensity", "Extinction", float, "0.007");
     ADD_OPTION("cloudBaseHeight", "Base height (blocks)", float, "1500");
-    ADD_OPTION("cloudThickness", "Thickness (blocks)", float, "1500");
-    ADD_OPTION("cloudPeriod", "Horizontal scale (blocks)", float, "55368.347656");
+    ADD_OPTION("cloudThickness", "Thickness (blocks)", float, "3000");
+    ADD_OPTION("cloudPeriod", "Horizontal scale (blocks)", float, "110736.695312");
     ADD_OPTION("cloudMaxDistance", "Draw distance (blocks)", float, "100000");
-    ADD_OPTION("cloudMarchDistance", "Maximum march distance (blocks)", float, "9000");
+    ADD_OPTION("cloudMarchDistance", "Shadow march distance (blocks)", float, "9000");
     ADD_OPTION("cloudWarpScale", "Distortion scale", float, "2.5");
     ADD_OPTION("cloudWarpDetail", "Distortion detail", float, "2");
     ADD_OPTION("cloudWarpRoughness", "Distortion roughness", float, "0.5");

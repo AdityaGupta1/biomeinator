@@ -29,7 +29,6 @@ bool cloudInterval(float3 origin, float3 dir, float maxDistance, out float start
         start = max(0.f, min(a, b));
         end = min(end, max(a, b));
     }
-    end = min(end, start + c.marchDistance);
     return end > start;
 }
 
@@ -39,6 +38,7 @@ float cloudOpticalDepth(float3 origin_WS, float3 dir, float maxDistance, inout R
     float start, end;
     if (!cloudInterval(origin, dir, maxDistance, start, end))
         return 0.f;
+    end = min(end, start + renderParams.cloud.marchDistance);
     const float ds = renderParams.cloud.lightStepSize;
     float depth = 0.f;
     [loop] for (float t = start; t < end; t += ds)
@@ -83,7 +83,10 @@ CloudResult integrateClouds(float3 origin_WS, float3 dir, float maxDistance, Ray
     [loop] for (float t = start; t < end;)
     {
         const bool fine = getRayConeWidthAtDistance(cone, t) < cloudFineFootprint;
-        const float ds = min(fine ? c.stepSize : c.secondaryStepSize, end - t);
+        const float nearStep = fine ? c.stepSize : c.secondaryStepSize;
+        // Grow distant steps, but retain samples across both horizontal lobes and layer height.
+        const float featureStep = min(c.period / 256.f, c.thickness / (16.f * max(abs(dir.y), 0.01f)));
+        const float ds = min(max(nearStep, min(t * 0.02f, featureStep)), end - t);
         const float distance = t + rng.nextFloat() * ds;
         const float3 pos_WS = origin_WS + dir * distance;
         const float extinction = cloudDensity(origin + dir * distance,

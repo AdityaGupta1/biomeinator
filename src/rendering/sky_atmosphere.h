@@ -23,6 +23,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, float animTime, float cameraY
 uint32_t getTransmittanceLutSrvIdx();
 uint32_t getSkyViewLutSrvIdx();
 uint32_t getCloudNoiseCacheSrvIdx();
+uint32_t getCloudShapeSrvIdx();
 
 void destroy();
 

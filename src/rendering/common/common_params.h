@@ -53,7 +53,7 @@ struct HeapIndices
         uint skyViewLutIdx;
         uint biomeMapIdx;
         uint cloudNoiseCacheIdx;
-        uint cloudPadding0;
+        uint cloudShapeIdx;
         uint cloudPadding1;
         uint cloudPadding2;
     } srv;

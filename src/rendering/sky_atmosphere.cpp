@@ -48,7 +48,8 @@ RtTarget transmittanceLut{ L"skyTransmittanceLut", DXGI_FORMAT_R16G16B16A16_FLOA
 RtTarget multiScatteringLut{ L"skyMultiScatteringLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 RtTarget skyViewLut{ L"skyViewLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 
-ComPtr<ID3D12PipelineState> cloudNoisePso;
+ComPtr<ID3D12PipelineState> cloudNoisePso, cloudShapePso;
+RtTarget cloudShape{ L"cloudHorizontalField", DXGI_FORMAT_R16_FLOAT };
 RtTarget cloudNoiseCache{ L"cloudNoiseCoefficients", DXGI_FORMAT_R32G32B32A32_FLOAT };
 
 bool staticLutsGenerated{ false };
@@ -104,6 +105,10 @@ void init()
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudNoisePso)));
     cloudNoiseCache.setDimensions(1024, 18);
     cloudNoiseCache.init();
+    psoDesc.CS = makeShaderBytecode(getShader("cloud_shape_cs"));
+    CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudShapePso)));
+    cloudShape.setDimensions(1024, 1024);
+    cloudShape.init();
 
     transmittanceLut.setDimensions(SKY_TRANSMITTANCE_LUT_WIDTH, SKY_TRANSMITTANCE_LUT_HEIGHT);
     transmittanceLut.init();
@@ -128,6 +133,16 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const f
         cmdList->Dispatch(16, 18, 1);
         BufferHelper::uavBarrier(cmdList, cloudNoiseCache.getTarget());
         cloudNoiseCache.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    if (clouds)
+    {
+        GPU_PROFILE_SCOPE(cmdList, "cloud shape");
+        cloudShape.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        cmdList->SetPipelineState(cloudShapePso.Get());
+        cmdList->SetComputeRoot32BitConstant(SKY_PARAM_IDX(CONSTANTS), cloudShape.getUavIdx(), 0);
+        cmdList->Dispatch(128, 128, 1);
+        BufferHelper::uavBarrier(cmdList, cloudShape.getTarget());
+        cloudShape.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
 
@@ -195,8 +210,12 @@ uint32_t getSkyViewLutSrvIdx()
 
 uint32_t getCloudNoiseCacheSrvIdx() { return cloudNoiseCache.getSrvIdx(); }
 
+uint32_t getCloudShapeSrvIdx() { return cloudShape.getSrvIdx(); }
+
 void destroy()
 {
+    cloudShape.reset();
+    cloudShapePso.Reset();
     cloudNoiseCache.reset();
     cloudNoisePso.Reset();
     transmittanceLut.reset();

@@ -78,6 +78,7 @@ void init()
         frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.cloudNoiseCacheIdx = SkyAtmosphere::getCloudNoiseCacheSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudShapeIdx = SkyAtmosphere::getCloudShapeSrvIdx();
     }
     initRtTargets();
     initCommand();

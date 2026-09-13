@@ -10,6 +10,36 @@
 #endif
 #include "sky/cloud_reference_noise.hlsli"
 
+#ifndef CLOUD_USE_SHAPE_CACHE
+#define CLOUD_USE_SHAPE_CACHE 1
+#endif
+#if CLOUD_USE_SHAPE_CACHE
+#include "sky/cloud_shape.hlsli"
+#endif
+
+float cloudBaseField(float2 position)
+{
+    const CloudSettings c = renderParams.cloud;
+    const float2 warp = cloudReferenceWarp(position, c.warpScale, c.warpDetail, c.warpRoughness,
+        c.warpTime + renderParams.animTime * c.warpSpeed);
+    return cloudSmoothF1(position + warp * c.warpStrength, c.voronoiSmoothness,
+        c.voronoiRandomness, c.voronoiTime + renderParams.animTime * c.voronoiSpeed);
+}
+
+float cloudHorizontalField(float2 position)
+{
+#if CLOUD_USE_SHAPE_CACHE
+    const float2 uv = (position - cloudShapeOrigin()) / (float(cloudShapeSize) * cloudShapeTexelSize());
+    const float border = 0.5f / float(cloudShapeSize);
+    if (all(uv >= border) && all(uv <= 1.f - border))
+    {
+        Texture2D<float> shape = ResourceDescriptorHeap[heapIndices.srv.cloudShapeIdx];
+        return shape.SampleLevel(skyLutSampler, uv, 0);
+    }
+#endif
+    return cloudBaseField(position * (16.f / renderParams.cloud.period));
+}
+
 float3 cloudPosition(float3 origin_WS)
 {
     float3 p = origin_WS + float3(cameraParams.globalInstanceOffset);
@@ -35,11 +65,7 @@ float cloudDensity(float3 p, bool fineDetail)
     // Smooth F1 cannot fall below minus its blend width, even for coincident sites.
     if (top + bottom - threshold - fineBound - 0.5f * c.voronoiSmoothness >= c.densityRampEnd + 1.f / 256.f)
         return 0.f;
-    const float2 warp = cloudReferenceWarp(q.xy, c.warpScale, c.warpDetail, c.warpRoughness,
-        c.warpTime + renderParams.animTime * c.warpSpeed);
-    float field = cloudSmoothF1(q.xy + warp * c.warpStrength, c.voronoiSmoothness,
-        c.voronoiRandomness, c.voronoiTime + renderParams.animTime * c.voronoiSpeed)
-        + top + bottom - threshold;
+    float field = cloudHorizontalField(p.xz) + top + bottom - threshold;
     // Centered detail can add density beyond the base field.
     if (field - fineBound >= c.densityRampEnd + 1.f / 256.f)
         return 0.f;

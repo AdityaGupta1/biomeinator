@@ -168,7 +168,7 @@ void imguiEndFrame(double deltaTime)
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Thickness (blocks)", "cloudThickness", 10.0f, 10000.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Horizontal scale (blocks)", "cloudPeriod", 256.0f, 131072.0f);
                     radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Draw distance (blocks)", "cloudMaxDistance", 100.0f, 200000.0f);
-                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Maximum march distance (blocks)", "cloudMarchDistance", 100.0f, 20000.0f);
+                    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Shadow march distance (blocks)", "cloudMarchDistance", 100.0f, 20000.0f);
                     ImGui::TreePop();
                 }
                 if (ImGui::TreeNode("Shape"))
@@ -233,11 +233,11 @@ void imguiEndFrame(double deltaTime)
                 {
                     SettingsManager::setAsBool("clouds", true);
                     SettingsManager::setAsBool("cloudMultiScatter", true);
-                    SettingsManager::setAsFloat("cloudCoverage", 0.5f);
+                    SettingsManager::setAsFloat("cloudCoverage", 0.3f);
                     SettingsManager::setAsFloat("cloudDensity", 0.007f);
                     SettingsManager::setAsFloat("cloudBaseHeight", 1500.0f);
-                    SettingsManager::setAsFloat("cloudThickness", 1500.0f);
-                    SettingsManager::setAsFloat("cloudPeriod", 55368.347656f);
+                    SettingsManager::setAsFloat("cloudThickness", 3000.0f);
+                    SettingsManager::setAsFloat("cloudPeriod", 110736.695312f);
                     SettingsManager::setAsFloat("cloudMaxDistance", 100000.0f);
                     SettingsManager::setAsFloat("cloudMarchDistance", 9000.0f);
                     SettingsManager::setAsFloat("cloudWarpScale", 2.5f);
