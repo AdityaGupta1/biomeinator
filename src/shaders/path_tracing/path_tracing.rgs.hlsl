@@ -58,7 +58,7 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
 // Cloud in-scattering includes foreground fog/water attenuation; endpoint weights
 // contain each medium's transmittance once. Fog's own march accounts for cloud occlusion.
 float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
-    const RayCone cone, const uint numInScatterSteps, const bool cloudScatter,
+    const uint numInScatterSteps, const bool cloudScatter,
     inout float3 pathColor, out CloudResult cloud)
 {
     const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
@@ -66,7 +66,12 @@ float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, cons
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloud.maxDistance;
-    cloud = integrateClouds(origin_WS, dir, segmentDistance, cone,
+    CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, 1.e30f);
+    float2 cloudInterval;
+    const bool cloudHit = nextCloudInterval(cloudState, cloudInterval);
+    if (sceneParams.voxelMode == 1 && renderParams.clouds != 0 && renderParams.cloud.ser != 0)
+        NvReorderThread(cloudHit ? 1 : 0, 1);
+    cloud = integrateClouds(origin_WS, dir, cloudState, cloudHit, cloudInterval,
         fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;
@@ -135,11 +140,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     // The primary segment is identical for both path splits and collect sums them, so
     // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
-    RayCone primaryCone;
-    primaryCone.width = 0.f;
-    primaryCone.angle = getRayConePixelAngle();
     CloudResult primaryCloud;
-    applySegmentAtmosphere(payload, cameraParams.pos_WS, ray.Direction, primaryCone,
+    applySegmentAtmosphere(payload, cameraParams.pos_WS, ray.Direction,
         (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathSplitIdx == 0, pathColor, primaryCloud);
 
     payload.pathWeight *= segmentAbsorption;
@@ -157,8 +159,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         {
             if (pathSplitIdx == 0)
             {
-                ptDiffuseAlbedo = applyReinhard(cloudGuideColor(cameraParams.pos_WS, ray.Direction,
-                    domeLightColor));
+                ptDiffuseAlbedo = applyReinhard(cloudGuideColor(ray.Direction,
+                    domeLightColor, primaryCloud.transmittance));
             }
         }
         return;
@@ -531,7 +533,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #if SHARC_QUERY
         ++tracedBounces;
 #endif
-        const RayCone segmentCone = payload.rayCone;
         TraceRay(raytracingAcs, RAY_FLAG_NONE, 0xFF, HITGROUP_PRIMARY, 0, 0, ray, payload);
 
         if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
@@ -547,7 +548,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
         const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
         CloudResult segmentCloud;
-        const float fogTransmittance = applySegmentAtmosphere(payload, ray.Origin, ray.Direction, segmentCone,
+        const float fogTransmittance = applySegmentAtmosphere(payload, ray.Origin, ray.Direction,
             numFogSteps, true, pathColor, segmentCloud);
 
         payload.pathWeight *= segmentAbsorption;
@@ -600,8 +601,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     }
                     else if (didMiss && sceneParams.voxelMode == 1)
                     {
-                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Origin, ray.Direction,
-                            missDomeLightColor));
+                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Direction,
+                            missDomeLightColor, segmentCloud.transmittance));
                     }
                     else
                     {

@@ -77,7 +77,6 @@ void init()
     {
         frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
-        frame.paramBlockManager.heapIndices->srv.cloudNoiseCacheIdx = SkyAtmosphere::getCloudNoiseCacheSrvIdx();
         frame.paramBlockManager.heapIndices->srv.cloudShapeIdx = SkyAtmosphere::getCloudShapeSrvIdx();
     }
     initRtTargets();
@@ -663,41 +662,18 @@ void render()
     renderParams->cloud.density = std::clamp(SettingsManager::getAsFloat("cloudDensity"), 0.0f, 0.1f);
     renderParams->cloud.baseHeight = std::clamp(SettingsManager::getAsFloat("cloudBaseHeight"), 0.0f, 10000.0f);
     renderParams->cloud.thickness = std::clamp(SettingsManager::getAsFloat("cloudThickness"), 10.0f, 10000.0f);
+    renderParams->cloud.cellSize = std::clamp(SettingsManager::getAsFloat("cloudCellSize"), 64.0f, 4096.0f);
     renderParams->cloud.period = std::clamp(SettingsManager::getAsFloat("cloudPeriod"), 256.0f, 131072.0f);
     renderParams->cloud.maxDistance = std::clamp(SettingsManager::getAsFloat("cloudMaxDistance"), 100.0f, 200000.0f);
     renderParams->cloud.marchDistance = std::clamp(SettingsManager::getAsFloat("cloudMarchDistance"), 100.0f, 20000.0f);
-    renderParams->cloud.warpScale = std::clamp(SettingsManager::getAsFloat("cloudWarpScale"), 0.5f, 8.0f);
-    renderParams->cloud.warpDetail = std::clamp(SettingsManager::getAsFloat("cloudWarpDetail"), 0.0f, 4.0f);
-    renderParams->cloud.warpRoughness = std::clamp(SettingsManager::getAsFloat("cloudWarpRoughness"), 0.0f, 1.0f);
-    renderParams->cloud.warpStrength = std::clamp(SettingsManager::getAsFloat("cloudWarpStrength"), 0.0f, 2.0f);
-    renderParams->cloud.voronoiSmoothness = std::clamp(SettingsManager::getAsFloat("cloudVoronoiSmoothness"), 0.0f, 1.0f);
-    renderParams->cloud.voronoiRandomness = std::clamp(SettingsManager::getAsFloat("cloudVoronoiRandomness"), 0.0f, 1.0f);
-    renderParams->cloud.fineScale = std::clamp(SettingsManager::getAsFloat("cloudFineScale"), 1.0f, 64.0f);
-    renderParams->cloud.fineDetail = std::clamp(SettingsManager::getAsFloat("cloudFineDetail"), 0.0f, 4.0f);
-    renderParams->cloud.fineRoughness = std::clamp(SettingsManager::getAsFloat("cloudFineRoughness"), 0.0f, 1.0f);
-    renderParams->cloud.fineStrength = std::clamp(SettingsManager::getAsFloat("cloudFineStrength"), 0.0f, 0.5f);
-    renderParams->cloud.heightRampEnd = std::clamp(SettingsManager::getAsFloat("cloudHeightRampEnd"), 0.01f, 1.0f);
-    renderParams->cloud.heightGain = std::clamp(SettingsManager::getAsFloat("cloudHeightGain"), 0.0f, 12.0f);
-    renderParams->cloud.bottomWidth = std::clamp(SettingsManager::getAsFloat("cloudBottomWidth"), 0.001f, 0.5f);
-    renderParams->cloud.bottomGain = std::clamp(SettingsManager::getAsFloat("cloudBottomGain"), 0.0f, 2.0f);
-    renderParams->cloud.densityRampStart = std::clamp(SettingsManager::getAsFloat("cloudDensityRampStart"), 0.0f, 0.8f);
-    renderParams->cloud.densityRampEnd = std::clamp(SettingsManager::getAsFloat("cloudDensityRampEnd"), 0.001f, 1.0f);
-    renderParams->cloud.ambient = std::clamp(SettingsManager::getAsFloat("cloudAmbient"), 0.0f, 2.0f);
+    renderParams->cloud.ambient = SettingsManager::getAsBool("cloudAmbientEnabled") ? std::clamp(SettingsManager::getAsFloat("cloudAmbient"), 0.0f, 2.0f) : 0.f;
     renderParams->cloud.phaseG = std::clamp(SettingsManager::getAsFloat("cloudPhaseG"), 0.0f, 0.95f);
     renderParams->cloud.windX = std::clamp(SettingsManager::getAsFloat("cloudWindX"), -50.0f, 50.0f);
     renderParams->cloud.windZ = std::clamp(SettingsManager::getAsFloat("cloudWindZ"), -50.0f, 50.0f);
-    renderParams->cloud.warpTime = std::clamp(SettingsManager::getAsFloat("cloudWarpTime"), -1000.0f, 1000.0f);
-    renderParams->cloud.warpSpeed = std::clamp(SettingsManager::getAsFloat("cloudWarpSpeed"), 0.0f, 0.2f);
-    renderParams->cloud.voronoiTime = std::clamp(SettingsManager::getAsFloat("cloudVoronoiTime"), -1000.0f, 1000.0f);
-    renderParams->cloud.voronoiSpeed = std::clamp(SettingsManager::getAsFloat("cloudVoronoiSpeed"), 0.0f, 0.2f);
-    renderParams->cloud.fineTime = std::clamp(SettingsManager::getAsFloat("cloudFineTime"), -1000.0f, 1000.0f);
-    renderParams->cloud.fineSpeed = std::clamp(SettingsManager::getAsFloat("cloudFineSpeed"), 0.0f, 0.5f);
-    renderParams->cloud.stepSize = std::clamp(SettingsManager::getAsFloat("cloudStepSize"), 1.0f, 1000.0f);
-    renderParams->cloud.secondaryStepSize = std::clamp(SettingsManager::getAsFloat("cloudSecondaryStepSize"), 1.0f, 2000.0f);
-    renderParams->cloud.lightStepSize = std::clamp(SettingsManager::getAsFloat("cloudLightStepSize"), 1.0f, 2000.0f);
-    renderParams->cloud.multiScatter = SettingsManager::getAsBool("cloudMultiScatter") ? 1.f : 0.f;
-    renderParams->cloud.densityRampEnd = std::max(renderParams->cloud.densityRampEnd, renderParams->cloud.densityRampStart + 0.001f);
-
+    renderParams->cloud.multiScatterStrength = SettingsManager::getAsBool("cloudMultiScatter") ? std::clamp(SettingsManager::getAsFloat("cloudMultiScatterStrength"), 0.0f, 2.0f) : 0.f;
+    renderParams->cloud.samples = std::clamp(SettingsManager::getAsUint("cloudSamples"), 1u, 32u);
+    renderParams->cloud.seed = std::clamp(SettingsManager::getAsUint("cloudSeed"), 0u, 65535u);
+    renderParams->cloud.ser = SettingsManager::getAsBool("cloudSer") ? 1u : 0u;
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

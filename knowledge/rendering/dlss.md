@@ -1,4 +1,4 @@
-_Last edited: 2026-09-12_
+_Last edited: 2026-09-17_
 
 # DLSS
 
@@ -46,12 +46,11 @@ upscales to viewport resolution. When DLSS is off, render = viewport.
 
 ## Cloud Albedo
 
-Cloud sky albedo uses a separate deterministic base-density opacity march to blend unshadowed
+Block-cloud sky albedo reuses analytic occupied-cell transmittance to blend unshadowed
 cloud color with sky color, including first perfect-specular sky reflections. It must
-not use the stochastic cloud radiance or shadowed samples; guide noise is reproduced
-as detail by reconstruction. Rendered view samples stay jittered; making their fine erosion
-deterministic creates banding during camera movement. See [clouds.md](clouds.md#dlss-albedo)
-for the approximation.
+not use sampled lighting or cloud self-shadowing; guide noise is reproduced as detail
+by reconstruction. Opacity is independent of the lighting sample count and RNG, so no
+separate guide march is needed. See [clouds.md](clouds.md#dlss-albedo).
 
 ## Resource Tagging
 
