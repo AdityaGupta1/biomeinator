@@ -7,11 +7,14 @@
 
 #include "common/global_params.hlsli"
 
-// Position in the cloud grid's frame: true world space with the wind translation removed.
+// Position in the cloud grid's frame: true world space with the wind translation removed. The
+// integer parts of both offsets combine in integer arithmetic before touching the float position.
 float3 cloudPosition(const float3 position_WS)
 {
-    float3 p = position_WS + float3(cameraParams.globalInstanceOffset);
-    p.xz -= float2(renderParams.cloudSettings.windX, renderParams.cloudSettings.windZ) * renderParams.animTime;
+    const int2 originInt_WS = cameraParams.globalInstanceOffset.xz - renderParams.cloudSettings.windOffsetInt;
+    float3 p = position_WS;
+    p.y += float(cameraParams.globalInstanceOffset.y);
+    p.xz += float2(originInt_WS) - renderParams.cloudSettings.windOffsetFrac;
     return p;
 }
 

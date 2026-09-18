@@ -67,10 +67,8 @@ float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, cons
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
-    CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
-    float2 cloudInterval;
-    const bool cloudHit = nextCloudInterval(cloudState, cloudInterval);
-    cloud = integrateClouds(origin_WS, dir, cloudState, cloudHit, cloudInterval,
+    const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
+    cloud = integrateClouds(origin_WS, dir, cloudState,
         fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;

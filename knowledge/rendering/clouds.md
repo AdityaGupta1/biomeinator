@@ -10,7 +10,10 @@ that is independent of sample count and RNG. Voxel mode only.
 
 The noise is evaluated in world cell coordinates, so the pattern never tiles. Wind translates
 the whole grid (`cloudPosition` removes the translation before lookup); cells never change
-shape on their own. Coverage is a threshold on the noise, not a guaranteed occupied fraction.
+shape on their own. The translation is `wind * animTime`, which would drift past float
+precision within a day of animation, so the CPU computes it in double and ships it split into
+integer blocks plus a fraction, the same fixed-point emulation the camera position uses.
+Coverage is a threshold on the noise, not a guaranteed occupied fraction.
 
 ## Occupancy map
 
@@ -43,7 +46,7 @@ atmospheric attenuation and cloud self-shadowing. Multiple scattering is two ext
 exponential terms on the same sun optical depth (`cloudSunScattering`), not extra bounces;
 the ambient term is the zenith sky color scaled by a setting.
 
-`applySegmentAtmosphere` finds the first occupied interval before shading either medium.
+`applySegmentAtmosphere` integrates clouds and fog on the same segment.
 Cloud in-scatter is attenuated by fog and water in front of it, and the fog march attenuates
 its own samples by clouds, so the two media compose without double-counting. In-scatter is
 computed only at path depths ≤ 1, matching fog; deeper bounces get transmittance only.

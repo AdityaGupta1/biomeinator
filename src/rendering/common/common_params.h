@@ -138,13 +138,16 @@ struct CloudSettings
 
     float ambient;
     float phaseG;
-    float windX;
-    float windZ;
+    float2 windDelta; // blocks moved since the previous frame, for motion vectors
 
     float multiScatterStrength;
     uint samples;
     uint seed;
     uint enableClouds;
+
+    // Wind translation in blocks, split like the camera position so it stays exact as animTime grows
+    int2 windOffsetInt;
+    float2 windOffsetFrac;
 };
 
 struct RenderParams

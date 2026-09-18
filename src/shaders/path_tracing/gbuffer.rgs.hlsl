@@ -97,8 +97,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     {
         motionHitPos_WS = evalRayPos(ray, cloudDistance);
         prevMotionHitPos_WS = motionHitPos_WS;
-        prevMotionHitPos_WS.xz -= float2(renderParams.cloudSettings.windX, renderParams.cloudSettings.windZ)
-            * (renderParams.animTime - renderParams.prevAnimTime);
+        prevMotionHitPos_WS.xz -= renderParams.cloudSettings.windDelta;
     }
 
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);

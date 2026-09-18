@@ -615,8 +615,9 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
     renderParams->animTime = animTimeFloat;
-    renderParams->prevAnimTime = renderState.prevAnimTime;
-    renderState.prevAnimTime = animTimeFloat;
+    renderParams->prevAnimTime = static_cast<float>(renderState.prevAnimTime);
+    const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
+    renderState.prevAnimTime = renderState.animTime;
 
     const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessImport();
 
@@ -668,11 +669,17 @@ void render()
     renderParams->cloudSettings.shadowDistance = SettingsManager::getAsFloat("cloudShadowDistance");
     renderParams->cloudSettings.ambient = SettingsManager::getAsFloat("cloudAmbient");
     renderParams->cloudSettings.phaseG = SettingsManager::getAsFloat("cloudPhaseG");
-    renderParams->cloudSettings.windX = SettingsManager::getAsFloat("cloudWindX");
-    renderParams->cloudSettings.windZ = SettingsManager::getAsFloat("cloudWindZ");
     renderParams->cloudSettings.multiScatterStrength = SettingsManager::getAsFloat("cloudMultiScatterStrength");
     renderParams->cloudSettings.samples = SettingsManager::getAsUint("cloudSamples");
     renderParams->cloudSettings.seed = SettingsManager::getAsUint("cloudSeed");
+    const glm::dvec2 wind(SettingsManager::getAsFloat("cloudWindX"), SettingsManager::getAsFloat("cloudWindZ"));
+    const glm::dvec2 windOffset = wind * renderState.animTime;
+    const glm::dvec2 windOffsetInt = glm::floor(windOffset);
+    const glm::dvec2 windOffsetFrac = windOffset - windOffsetInt;
+    const glm::dvec2 windDelta = wind * animTimeDelta;
+    renderParams->cloudSettings.windOffsetInt = { static_cast<int>(windOffsetInt.x), static_cast<int>(windOffsetInt.y) };
+    renderParams->cloudSettings.windOffsetFrac = { static_cast<float>(windOffsetFrac.x), static_cast<float>(windOffsetFrac.y) };
+    renderParams->cloudSettings.windDelta = { static_cast<float>(windDelta.x), static_cast<float>(windDelta.y) };
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

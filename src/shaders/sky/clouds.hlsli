@@ -70,18 +70,18 @@ struct CloudResult
     float transmittance;
 };
 
-// Integrates the occupied intervals of a segment, starting from the one the caller already found.
-// Opacity is analytic per interval; the samples only estimate in-scattering, stratified over the
-// interval's extinction-weighted depth so an opaque cloud still lights its visible skin.
+// Integrates the occupied intervals of a segment. Opacity is analytic per interval; the samples
+// only estimate in-scattering, stratified over the interval's extinction-weighted depth so an
+// opaque cloud still lights its visible skin.
 // fogDistance and waterDistance are the lengths of those media in front of the clouds (0 if none).
-CloudResult integrateClouds(const float3 origin_WS, const float3 dir, CloudTraversal state, const bool cloudHit,
-    float2 interval, const float fogDistance, const float waterDistance, const bool scatter,
-    inout RandomNumberGenerator rng)
+CloudResult integrateClouds(const float3 origin_WS, const float3 dir, CloudTraversal state, const float fogDistance,
+    const float waterDistance, const bool scatter, inout RandomNumberGenerator rng)
 {
     CloudResult result;
     result.radiance = 0.f;
     result.transmittance = 1.f;
-    if (!cloudHit)
+    float2 interval;
+    if (!nextCloudInterval(state, interval))
     {
         return result;
     }
