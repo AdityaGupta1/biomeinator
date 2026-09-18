@@ -7,7 +7,6 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <string>
 #include <cstdarg>
 
 #define RESET "\033[0m"
@@ -28,8 +27,7 @@ static std::string timestamp()
     return oss.str();
 }
 
-// The whole line is assembled before it is written so lines logged from different threads
-// (e.g. the pipeline creation workers) do not interleave
+// One write per line so lines from different threads do not interleave
 static void vlog(FILE* out, const char* level, const char* color, const char* fmt, va_list ap)
 {
     std::string line;

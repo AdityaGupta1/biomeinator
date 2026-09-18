@@ -3,6 +3,7 @@
 
 #include "renderer_internal.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <future>
 #include <random>
@@ -27,11 +28,19 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-// slInit mostly loads plugin DLLs and needs no device, so it runs alongside native device
-// creation; initDevice joins it before handing the device to Streamline
+void timedInitStep(const char* name, const std::function<void()>& step)
+{
+    const auto start = std::chrono::steady_clock::now();
+    step();
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    Logger::log("init: %s took %.1f ms", name, ms);
+}
+
+// Joined by initDevice; see knowledge/rendering/startup.md for why slInit runs on a thread
 static std::future<sl::Result> slInitResult;
 
-// DLSS-G cannot run without Reflex, and Reflex in turn requires PCL for its latency markers
+// DLSS-G cannot run without Reflex, and Reflex in turn requires PCL for its latency markers.
+// File scope because the slInit thread reads this after initStreamline has returned.
 static constexpr sl::Feature slFeatures[] = { sl::kFeatureDLSS_RR, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeaturePCL };
 
 void initStreamline()
@@ -144,29 +153,20 @@ std::string shaderModelName(D3D_SHADER_MODEL model)
     return std::to_string(value >> 4) + "." + std::to_string(value & 0xf);
 }
 
-void checkRaytracingSupport(const std::string& adapterName)
+// slUpgradeInterface hands back an owned reference to a new proxy, or leaves the pointer
+// untouched (and adds no reference) when the interposer is disabled
+template <typename T>
+void upgradeToSlProxy(const ComPtr<T>& native, ComPtr<T>& proxy)
 {
-    D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
-    if (FAILED(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    T* upgraded = native.Get();
+    CHECK_SL_RESULT(slUpgradeInterface(reinterpret_cast<void**>(&upgraded)));
+    if (upgraded == native.Get())
     {
-        failGpuCompatibility("GPU '" + adapterName + "': unable to query DirectX raytracing support.");
+        proxy = native;
     }
-    if (options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
+    else
     {
-        failGpuCompatibility("GPU '" + adapterName +
-                             "' does not support the required DirectX Raytracing tier 1.1 (inline raytracing).");
-    }
-    renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2;
-    if (renderState.voxelMode)
-    {
-        if (renderState.useOmms)
-        {
-            Logger::log("Raytracing tier 1.2 supported, using opacity micromaps");
-        }
-        else
-        {
-            Logger::logWarning("Raytracing tier 1.2 not supported, disabling opacity micromaps");
-        }
+        proxy.Attach(upgraded);
     }
 }
 } // namespace
@@ -244,7 +244,6 @@ void initDevice()
                                      shaderModelName(requiredShaderModel) + ".");
             }
             Logger::log("Shader Model %s requirement satisfied", shaderModelName(requiredShaderModel).c_str());
-            checkRaytracingSupport(renderState.adapterName);
             Logger::log("Selected adapter: %ls", adapterDesc.Description);
             break;
         }
@@ -257,24 +256,36 @@ void initDevice()
         failGpuCompatibility("No hardware adapter supporting Direct3D feature level 12.1 was found.");
     }
 
-    // The RT pipelines only need the native device, so their creation overlaps with the
-    // Streamline setup below and the rest of init
+    D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
+    if (FAILED(renderState.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    {
+        failGpuCompatibility("GPU '" + renderState.adapterName + "': unable to query DirectX raytracing support.");
+    }
+    if (options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
+    {
+        failGpuCompatibility("GPU '" + renderState.adapterName +
+                             "' does not support the required DirectX Raytracing tier 1.1 (inline raytracing).");
+    }
+    renderState.useOmms = renderState.voxelMode && options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_2;
+    if (renderState.voxelMode)
+    {
+        if (renderState.useOmms)
+        {
+            Logger::log("Raytracing tier 1.2 supported, using opacity micromaps");
+        }
+        else
+        {
+            Logger::logWarning("Raytracing tier 1.2 not supported, disabling opacity micromaps");
+        }
+    }
+
+    // Only needs the native device, so it overlaps with the Streamline setup below
     startRtPipelineCreation();
 
     timedInitStep("slInit", []() { CHECK_SL_RESULT(slInitResult.get()); });
 
-    // Manual hooking: the native interfaces are wrapped in Streamline proxies after the fact.
-    // Only the calls Streamline hooks (queue and swap chain creation, present) go through the
-    // proxies; everything else uses the native interfaces.
-    {
-        ID3D12Device* proxyDevice = renderState.device.Get();
-        CHECK_SL_RESULT(slUpgradeInterface(reinterpret_cast<void**>(&proxyDevice)));
-        CHECK_HRESULT(proxyDevice->QueryInterface(IID_PPV_ARGS(&renderState.proxyDevice)));
-
-        IDXGIFactory* proxyFactory = renderState.factory.Get();
-        CHECK_SL_RESULT(slUpgradeInterface(reinterpret_cast<void**>(&proxyFactory)));
-        CHECK_HRESULT(proxyFactory->QueryInterface(IID_PPV_ARGS(&renderState.proxyFactory)));
-    }
+    upgradeToSlProxy(renderState.device, renderState.proxyDevice);
+    upgradeToSlProxy(renderState.factory, renderState.proxyFactory);
 
     timedInitStep("slSetD3DDevice", []() { CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get())); });
 

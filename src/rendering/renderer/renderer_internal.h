@@ -244,7 +244,6 @@ void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
 void initConstantParams();
-void initRootSignature();
 void startRtPipelineCreation();
 void initPipeline();
 void initImgui();

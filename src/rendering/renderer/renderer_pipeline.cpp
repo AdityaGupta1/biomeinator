@@ -4,12 +4,11 @@
 #include "renderer_internal.h"
 
 #include <d3dcompiler.h>
+#include <future>
 
 #include "pipeline_builder.h"
 #include "rendering/common/common_hitgroups.h"
 #include "shaders.h"
-
-#include <future>
 
 namespace Renderer
 {
@@ -38,7 +37,7 @@ void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
     CHECK_HRESULT(renderState.device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&outRootSig)));
 }
 
-void initRootSignature()
+static void initRootSignature()
 {
     std::vector<D3D12_STATIC_SAMPLER_DESC> rtStaticSamplers;
 
@@ -226,11 +225,7 @@ void initRootSignature()
 
 static std::future<void> rtPipelineCreation;
 
-// The driver's first CreateStateObject pays a one-off DXR initialization cost (~1 s) on top of
-// the per-pipeline compiles (~1 s each when the driver's shader cache is cold), so the RT
-// pipelines are built on worker threads that overlap with the rest of device setup; initPipeline
-// joins them. Everything the workers need (NVAPI extension slot, root signatures, SHaRC support)
-// is set up first on the same thread.
+// Joined by initPipeline; see knowledge/rendering/startup.md for the ordering constraints
 void startRtPipelineCreation()
 {
     rtPipelineCreation = std::async(std::launch::async, []()

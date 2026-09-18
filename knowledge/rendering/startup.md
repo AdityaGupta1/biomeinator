@@ -4,7 +4,7 @@ _Last edited: 2026-09-17_
 
 `Renderer::init()` runs after the window is created, so its whole duration is the white window
 the user sees. Three fixed costs dominate and none of them is in our code, so init is arranged
-to overlap them rather than shrink them:
+to overlap them rather than shrink them (measured 2026-09 on an RTX 4070 SUPER):
 
 - **`slInit`** (~0.6 s): loading the Streamline plugin DLLs. `initStreamline()` runs it on a
   worker thread; nothing before device creation needs it.
@@ -24,9 +24,23 @@ proxies; only the calls Streamline hooks (command queue creation, swap chain cre
 go through the proxies. Everything else, including all pipeline creation, uses the native
 interfaces, as the manual-hooking guide requires.
 
+Gotchas:
+
+- `slUpgradeInterface` returns an *owned* reference to a new proxy that has already AddRef'd the
+  native object, so it must be `Attach`ed, not `QueryInterface`d into a `ComPtr` (that leaks the
+  proxy and keeps the device alive past `destroy()`). When the interposer is disabled it leaves
+  the pointer unchanged and adds no reference, which `upgradeToSlProxy` handles.
+- The Streamline headers say `slUpgradeInterface` / `slSetD3DDevice` should be called
+  "immediately after" the base interface is created and that `slInit` must precede any D3D call.
+  Deliberately ignored: the manual-hooking guide allows native creation before `slInit`, and the
+  upgrade is a pure wrapper with no dependence on what was done through the native interface
+  before it.
+- `slFeatures` lives at file scope because the `slInit` thread reads `featuresToLoad` after
+  `initStreamline()` has returned.
+
 ## RT pipeline worker
 
-`startRtPipelineCreation()` must run before `slSetD3DDevice` to get the overlap, and its worker
+`startRtPipelineCreation()` runs before the `slInit` join to get the overlap, and its worker
 sets up its own prerequisites (NVAPI extension slot, root signatures, `sharcInit`) so no main
 thread step has to be ordered ahead of it. The four RT pipelines are built on separate threads
 because the driver compiles them concurrently on a cold cache (~2 s in parallel instead of ~4 s
@@ -36,6 +50,10 @@ Anything on the main thread between `startRtPipelineCreation()` and `initPipelin
 read the RT PSOs, dispatch descs, root signatures, `renderState.useSer` or
 `renderState.sharc.supported`.
 
+The NVAPI extension slot has to be set with the device-global
+`NvAPI_D3D12_SetNvShaderExtnSlotSpace`, not the `LocalThread` variant: the state objects are
+created on the per-pipeline threads, not on the thread that set the slot.
+
 ## Over-the-air updates
 
 Streamline's OTA update check is on by default and costs ~0.4 s of network round trip inside
@@ -44,6 +62,5 @@ that new plugin versions only arrive with an SDK update in `external/streamline`
 
 ## Timing log
 
-`timedInitStep()` wraps the steps above and logs `init: <step> took N ms` plus a total, so a
-slow launch can be attributed without re-instrumenting. Lines from the worker threads are
-assembled before being written (see `logger.cpp`) so they do not interleave.
+`timedInitStep()` wraps the steps above so a slow launch can be attributed from the log without
+re-instrumenting.

@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <functional>
 #include <thread>
 
 #include "logger.h"
@@ -46,14 +45,6 @@ namespace Renderer
 static constexpr float defaultFovYDegrees = 35;
 
 static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
-
-void timedInitStep(const char* name, const std::function<void()>& step)
-{
-    const auto start = std::chrono::steady_clock::now();
-    step();
-    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-    Logger::log("init: %s took %.1f ms", name, ms);
-}
 
 void init()
 {
