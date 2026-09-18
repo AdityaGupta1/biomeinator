@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <thread>
 
 #include "logger.h"
@@ -46,8 +47,18 @@ static constexpr float defaultFovYDegrees = 35;
 
 static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
 
+void timedInitStep(const char* name, const std::function<void()>& step)
+{
+    const auto start = std::chrono::steady_clock::now();
+    step();
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    Logger::log("init: %s took %.1f ms", name, ms);
+}
+
 void init()
 {
+    const auto initStart = std::chrono::steady_clock::now();
+
     renderState.testMode = SettingsManager::isTestMode();
     renderState.headless = SettingsManager::isHeadless();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
@@ -57,8 +68,6 @@ void init()
 
     initDevice();
     initDescriptorHeaps();
-
-    initNvapi();
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -91,8 +100,7 @@ void init()
 
     renderState.scene.init();
 
-    initRootSignature();
-    initPipeline();
+    timedInitStep("initPipeline (join)", initPipeline);
 
     WaterDisplacer::init();
 
@@ -105,13 +113,13 @@ void init()
     if (renderState.voxelMode)
     {
         Terrain::init(&renderState.scene);
-        Terrain::importWorld();
+        timedInitStep("Terrain::importWorld", Terrain::importWorld);
     }
     else
     {
         if (!defaultScene.empty())
         {
-            loadScene(defaultScene);
+            timedInitStep("loadScene", [&]() { loadScene(defaultScene); });
         }
     }
 
@@ -119,6 +127,9 @@ void init()
     {
         SetForegroundWindow(hwnd);
     }
+
+    const double totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - initStart).count();
+    Logger::log("init: total %.1f ms", totalMs);
 }
 
 void loadScene(const std::string& filePathStr)

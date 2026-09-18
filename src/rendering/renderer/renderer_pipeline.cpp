@@ -9,6 +9,8 @@
 #include "rendering/common/common_hitgroups.h"
 #include "shaders.h"
 
+#include <future>
+
 namespace Renderer
 {
 
@@ -222,12 +224,21 @@ void initRootSignature()
     }
 }
 
-void initPipeline()
+static std::future<void> rtPipelineCreation;
+
+// The driver's first CreateStateObject pays a one-off DXR initialization cost (~1 s) on top of
+// the per-pipeline compiles (~1 s each when the driver's shader cache is cold), so the RT
+// pipelines are built on worker threads that overlap with the rest of device setup; initPipeline
+// joins them. Everything the workers need (NVAPI extension slot, root signatures, SHaRC support)
+// is set up first on the same thread.
+void startRtPipelineCreation()
 {
-    // ===================================
-    // RT PIPELINES
-    // ===================================
+    rtPipelineCreation = std::async(std::launch::async, []()
     {
+        initNvapi();
+        initRootSignature();
+        timedInitStep("sharcInit", sharcInit);
+
         const auto makeCommonRtPipeline = [](const std::wstring& name, const char* rgsShader,
                                              ID3D12RootSignature* rootSig, ComPtr<ID3D12StateObject>& pso,
                                              ComPtr<ID3D12Resource>& dev_shaderIds, D3D12_DISPATCH_RAYS_DESC& dispatchDesc)
@@ -264,39 +275,58 @@ void initPipeline()
                 .AnyHitShaderImport = L"AnyHit",
             };
 
-            makeRtPipeline(pipelineInputs);
+            timedInitStep(rgsShader, [&]() { makeRtPipeline(pipelineInputs); });
         };
 
-        sharcInit();
-        makeCommonRtPipeline(L"gbuffer",
-                             "gbuffer_rgs",
-                             renderState.gbufferRootSig.Get(),
-                             renderState.gbufferPso,
-                             renderState.dev_gbufferShaderIds,
-                             renderState.gbufferDispatchDesc);
-        makeCommonRtPipeline(L"pathTracing",
-                             "path_tracing_rgs",
-                             renderState.ptRootSig.Get(),
-                             renderState.ptPso,
-                             renderState.dev_ptShaderIds,
-                             renderState.ptDispatchDesc);
+        std::vector<std::future<void>> pipelines;
+        const auto makeCommonRtPipelineAsync = [&](const wchar_t* name, const char* rgsShader,
+                                                   ID3D12RootSignature* rootSig, ComPtr<ID3D12StateObject>& pso,
+                                                   ComPtr<ID3D12Resource>& dev_shaderIds, D3D12_DISPATCH_RAYS_DESC& dispatchDesc)
+        {
+            pipelines.push_back(std::async(std::launch::async, [&, name, rgsShader, rootSig]()
+            {
+                makeCommonRtPipeline(name, rgsShader, rootSig, pso, dev_shaderIds, dispatchDesc);
+            }));
+        };
+
+        makeCommonRtPipelineAsync(L"gbuffer",
+                                  "gbuffer_rgs",
+                                  renderState.gbufferRootSig.Get(),
+                                  renderState.gbufferPso,
+                                  renderState.dev_gbufferShaderIds,
+                                  renderState.gbufferDispatchDesc);
+        makeCommonRtPipelineAsync(L"pathTracing",
+                                  "path_tracing_rgs",
+                                  renderState.ptRootSig.Get(),
+                                  renderState.ptPso,
+                                  renderState.dev_ptShaderIds,
+                                  renderState.ptDispatchDesc);
         if (renderState.sharc.supported)
         {
             auto& s = renderState.sharc;
-            makeCommonRtPipeline(L"sharcUpdate",
-                                 "sharc_update_rgs",
-                                 renderState.ptRootSig.Get(),
-                                 s.updatePso,
-                                 s.updateShaderIds,
-                                 s.updateDispatch);
-            makeCommonRtPipeline(L"sharcQuery",
-                                 "sharc_query_rgs",
-                                 renderState.ptRootSig.Get(),
-                                 s.queryPso,
-                                 s.queryShaderIds,
-                                 s.queryDispatch);
+            makeCommonRtPipelineAsync(L"sharcUpdate",
+                                      "sharc_update_rgs",
+                                      renderState.ptRootSig.Get(),
+                                      s.updatePso,
+                                      s.updateShaderIds,
+                                      s.updateDispatch);
+            makeCommonRtPipelineAsync(L"sharcQuery",
+                                      "sharc_query_rgs",
+                                      renderState.ptRootSig.Get(),
+                                      s.queryPso,
+                                      s.queryShaderIds,
+                                      s.queryDispatch);
         }
-    }
+        for (auto& pipeline : pipelines)
+        {
+            pipeline.get();
+        }
+    });
+}
+
+void initPipeline()
+{
+    rtPipelineCreation.get();
 
     // ===================================
     // COLLECT
