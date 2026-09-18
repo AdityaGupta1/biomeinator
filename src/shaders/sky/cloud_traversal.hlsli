@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aditya Gupta
+
 #pragma once
 
-#include "sky/cloud_shape.hlsli"
+#include "sky/cloud_occupancy.hlsli"
 
+// Distance limit meaning "no limit"; larger than any draw or shadow distance.
+static const float cloudUnboundedDistance = 1e30f;
+
+// 2D DDA state over the cloud grid along one ray, clipped to the layer's height range.
 struct CloudTraversal
 {
     int2 cell;
@@ -12,33 +17,40 @@ struct CloudTraversal
     float2 delta;
     float t;
     float end;
+    float layerExit; // where the ray leaves the layer's height range, ignoring the other limits
 };
 
-CloudTraversal beginCloudTraversal(float3 origin_WS, float3 dir, float maxDistance, float layerDistance,
-    bool geometryOnly = false)
+// Clips the ray to the layer and to min(maxDistance, draw distance, layer entry + layerDistance).
+// ignoreExtinction keeps traversing at zero extinction, for the G-buffer's cloud surface.
+CloudTraversal beginCloudTraversal(const float3 origin_WS, const float3 dir, const float maxDistance,
+    const float layerDistance, const bool ignoreExtinction = false)
 {
     CloudTraversal state = (CloudTraversal)0;
     const CloudSettings c = renderParams.cloudSettings;
-    if (sceneParams.voxelMode == 0 || renderParams.cloudSettings.enableClouds == 0 || c.coverage <= 0.f || (!geometryOnly && c.density <= 0.f))
+    if (sceneParams.voxelMode == 0 || c.enableClouds == 0 || c.coverage <= 0.f
+        || (!ignoreExtinction && c.extinction <= 0.f))
     {
         return state;
     }
+
     const float3 origin = cloudPosition(origin_WS);
     float start = 0.f;
-    float end = min(maxDistance, c.maxDistance);
-    if (abs(dir.y) < 1.e-7f)
+    float end = min(maxDistance, c.drawDistance);
+    if (abs(dir.y) < 1e-7f)
     {
         if (origin.y < c.baseHeight || origin.y >= c.baseHeight + c.thickness)
         {
             return state;
         }
+        state.layerExit = cloudUnboundedDistance;
     }
     else
     {
         const float a = (c.baseHeight - origin.y) / dir.y;
         const float b = (c.baseHeight + c.thickness - origin.y) / dir.y;
         start = max(0.f, min(a, b));
-        end = min(end, max(a, b));
+        state.layerExit = max(a, b);
+        end = min(end, state.layerExit);
     }
     end = min(end, start + layerDistance);
     if (end <= start)
@@ -58,21 +70,22 @@ CloudTraversal beginCloudTraversal(float3 origin_WS, float3 dir, float maxDistan
         {
             --state.cell[axis];
         }
-        state.delta[axis] = d != 0.f ? c.cellSize / abs(d) : 1.e30f;
+        state.delta[axis] = d != 0.f ? c.cellSize / abs(d) : cloudUnboundedDistance;
         const float boundary = float(state.cell[axis] + (d > 0.f ? 1 : 0));
         state.nextBoundary[axis] = d != 0.f
-            ? start + max(0.f, (boundary - p[axis]) * c.cellSize / d) : 1.e30f;
+            ? start + max(0.f, (boundary - p[axis]) * c.cellSize / d) : cloudUnboundedDistance;
     }
     return state;
 }
 
+// Advances to the next run of adjacent occupied cells and returns it as one [t0, t1) interval.
 bool nextCloudInterval(inout CloudTraversal state, out float2 interval)
 {
     interval = 0.f;
     bool found = false;
     [loop] while (state.t < state.end)
     {
-        const bool occupied = cloudCellOccupied(state.cell);
+        const bool occupied = isCloudCellOccupied(state.cell);
         if (!occupied && found)
         {
             break;
@@ -97,30 +110,28 @@ bool nextCloudInterval(inout CloudTraversal state, out float2 interval)
     return found;
 }
 
-bool cloudSurfaceDistance(float3 origin_WS, float3 dir, float maxDistance, out float distance)
+// First cloud boundary along the ray, for the G-buffer's depth and motion vectors. Starting
+// inside a cloud, it is the exit boundary, which may be the top or bottom of the layer; a
+// geometry endpoint or the draw distance is never reported as a surface.
+bool cloudSurfaceDistance(const float3 origin_WS, const float3 dir, const float maxDistance, out float surfaceDistance)
 {
-    CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, 1.e30f, true);
+    surfaceDistance = 0.f;
+    CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, cloudUnboundedDistance, true);
     float2 interval;
-    distance = 0.f;
     if (!nextCloudInterval(state, interval))
     {
         return false;
     }
     if (interval.x > 0.f)
     {
-        distance = interval.x;
+        surfaceDistance = interval.x;
         return true;
     }
-
-    // Inside a cloud, use its exit surface rather than projecting the camera position.
-    const float worldY = cloudPosition(origin_WS).y;
-    const float layerExit = abs(dir.y) < 1.e-7f ? 1.e30f
-        : ((dir.y > 0.f ? renderParams.cloudSettings.baseHeight + renderParams.cloudSettings.thickness
-            : renderParams.cloudSettings.baseHeight) - worldY) / dir.y;
-    if (interval.y >= state.end && layerExit > state.end)
+    const bool cutByLayer = state.end >= state.layerExit;
+    if (interval.y >= state.end && !cutByLayer)
     {
         return false;
     }
-    distance = interval.y;
-    return distance > 0.f && distance < maxDistance;
+    surfaceDistance = interval.y;
+    return true;
 }

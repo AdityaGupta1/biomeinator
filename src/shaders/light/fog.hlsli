@@ -3,25 +3,15 @@
 
 #pragma once
 
-// NOTE: needs the sun constants, so this file must be included after dome_light.hlsli.
-
 #include "../rendering/common/common_settings.h"
 
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
 #include "light/dome_light.hlsli"
+#include "light/fog_density.hlsli"
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
-
-#include "light/fog_density.hlsli"
-
-float henyeyGreensteinPhase(const float cosAngle, const float g)
-{
-    const float g2 = g * g;
-    const float denom = 1.f + g2 - 2.f * g * cosAngle;
-    return (1.f - g2) / (4.f * M_PI * denom * sqrt(denom));
-}
 
 // Inline ray query instead of TraceRay: no payload or shader-table indirection on the fog
 // march's hot loop, and alpha-cutout foliage can be tested per candidate so leaves don't
@@ -108,29 +98,43 @@ float3 computeFogInScatter(const float3 origin_WS,
 
     float3 inScatter = float3(0.f, 0.f, 0.f);
 
-    const float stepLength = dist / numSteps;
-    for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
+    // Below the horizon the sun contributes nothing, so skip the march entirely at night.
+    const float3 sunLight = getAttenuatedSunIlluminance(sunDir_WS, origin_WS.y + globalOffsetY);
+    if (any(sunLight > 0.f))
     {
-        const float t = (stepIdx + rng.nextFloat()) * stepLength;
-        const float3 stepPos_WS = origin_WS + dir * t;
-        const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
-        if (density <= 0.f)
+        const float phase = henyeyGreensteinPhase(dot(dir, sunDir_WS), renderParams.fogG);
+
+        const float stepLength = dist / numSteps;
+        float sunScatter = 0.f;
+        for (uint stepIdx = 0; stepIdx < numSteps; ++stepIdx)
         {
-            continue;
+            const float t = (stepIdx + rng.nextFloat()) * stepLength;
+            const float3 stepPos_WS = origin_WS + dir * t;
+            const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
+            if (density <= 0.f)
+            {
+                continue;
+            }
+
+            // The sun is a disk, not a point, so shadowing is tested against a fresh direction
+            // within its cap each step. The weighting below is already the uniform cap estimator
+            // (Le / pdf, with pdf = 1 / sunSolidAngle), so no extra sample weight is needed.
+            const float3 sunSampleDir_WS = sampleSunDirection(sunDir_WS, rng);
+            if (isRayOccluded(stepPos_WS, sunSampleDir_WS))
+            {
+                continue;
+            }
+
+            const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t)
+                * cloudTransmittance(origin_WS, dir, t);
+            const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunSampleDir_WS);
+            const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunSampleDir_WS, sunVolumeDist)
+                * cloudTransmittance(stepPos_WS, sunSampleDir_WS, cloudUnboundedDistance);
+            sunScatter += viewTransmittance * density * sunTransmittance * stepLength;
         }
-        const float3 sunSampleDir_WS = sampleSunDirection(sunDir_WS, rng);
-        const float3 sunEnergy = getVolumeSunEnergy(sunSampleDir_WS, stepPos_WS.y + globalOffsetY);
-        if (!any(sunEnergy > 0.f) || isRayOccluded(stepPos_WS, sunSampleDir_WS))
-        {
-            continue;
-        }
-        const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t)
-            * cloudTransmittance(origin_WS, dir, min(t, renderParams.cloudSettings.maxDistance), rng);
-        const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunSampleDir_WS);
-        const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunSampleDir_WS, sunVolumeDist)
-            * cloudTransmittance(stepPos_WS, sunSampleDir_WS, 1.e30f, rng);
-        const float phase = henyeyGreensteinPhase(dot(dir, sunSampleDir_WS), renderParams.fogG);
-        inScatter += viewTransmittance * density * sunTransmittance * stepLength * phase * sunEnergy;
+
+        // Atmospheric transmittance is folded into sunLight, reddening the shafts at sunset.
+        inScatter = sunScatter * phase * sunLight;
     }
 
     // NOTE: no visibility check, so this also brightens enclosed spaces (cave interiors)

@@ -159,72 +159,22 @@ void imguiEndFrame(double deltaTime)
             radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky strength", "skyStrength", 0.f, 10.f);
             if (ImGui::CollapsingHeader("Cloud settings"))
             {
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Clouds", "clouds");
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Coverage", "cloudCoverage", 0.0f, 1.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Extinction", "cloudDensity", 0.0f, 0.1f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Base height (blocks)", "cloudBaseHeight", 0.0f, 10000.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Thickness (blocks)", "cloudThickness", 10.0f, 10000.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cell size (blocks)", "cloudCellSize", 64.0f, 4096.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Pattern scale (blocks)", "cloudPeriod", 256.0f, 131072.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Pattern seed", "cloudSeed", 0, 65535);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Draw distance (blocks)", "cloudMaxDistance", 100.0f, 200000.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Shadow distance in layer (blocks)", "cloudMarchDistance", 100.0f, 20000.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Lighting samples per cloud interval", "cloudSamples", 1, 32);
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Ambient lighting", "cloudAmbientEnabled");
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Ambient strength", "cloudAmbient", 0.0f, 2.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Anisotropy", "cloudPhaseG", 0.0f, 0.95f);
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Multiple scattering", "cloudMultiScatter");
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Multiple scattering strength", "cloudMultiScatterStrength", 0.0f, 2.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Wind X (blocks/s)", "cloudWindX", -50.0f, 50.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Wind Z (blocks/s)", "cloudWindZ", -50.0f, 50.0f);
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Reorder cloud rays", "cloudSer");
-                if (ImGui::Button("Reset cloud defaults"))
-                {
-                    SettingsManager::setAsBool("clouds", true);
-                    SettingsManager::setAsFloat("cloudCoverage", 0.3f);
-                    SettingsManager::setAsFloat("cloudDensity", 0.002f);
-                    SettingsManager::setAsFloat("cloudBaseHeight", 3000.0f);
-                    SettingsManager::setAsFloat("cloudThickness", 512.0f);
-                    SettingsManager::setAsFloat("cloudCellSize", 1024.0f);
-                    SettingsManager::setAsFloat("cloudPeriod", 4096.0f);
-                    SettingsManager::setAsUint("cloudSeed", 0);
-                    SettingsManager::setAsFloat("cloudMaxDistance", 100000.0f);
-                    SettingsManager::setAsFloat("cloudMarchDistance", 9000.0f);
-                    SettingsManager::setAsUint("cloudSamples", 4);
-                    SettingsManager::setAsBool("cloudAmbientEnabled", true);
-                    SettingsManager::setAsFloat("cloudAmbient", 0.8f);
-                    SettingsManager::setAsFloat("cloudPhaseG", 0.65f);
-                    SettingsManager::setAsBool("cloudMultiScatter", true);
-                    SettingsManager::setAsFloat("cloudMultiScatterStrength", 1.0f);
-                    SettingsManager::setAsFloat("cloudWindX", 10.0f);
-                    SettingsManager::setAsFloat("cloudWindZ", 50.0f);
-                    SettingsManager::setAsBool("cloudSer", false);
-                    radianceSettingsChanged = true;
-                }
-                if (ImGui::Button("Copy cloud settings"))
-                {
-                    std::string text;
-                    text += std::string("--clouds=") + (SettingsManager::getAsBool("clouds") ? "true" : "false");
-                    text += std::string(" --cloudCoverage=") + std::to_string(SettingsManager::getAsFloat("cloudCoverage"));
-                    text += std::string(" --cloudDensity=") + std::to_string(SettingsManager::getAsFloat("cloudDensity"));
-                    text += std::string(" --cloudBaseHeight=") + std::to_string(SettingsManager::getAsFloat("cloudBaseHeight"));
-                    text += std::string(" --cloudThickness=") + std::to_string(SettingsManager::getAsFloat("cloudThickness"));
-                    text += std::string(" --cloudCellSize=") + std::to_string(SettingsManager::getAsFloat("cloudCellSize"));
-                    text += std::string(" --cloudPeriod=") + std::to_string(SettingsManager::getAsFloat("cloudPeriod"));
-                    text += std::string(" --cloudSeed=") + std::to_string(SettingsManager::getAsUint("cloudSeed"));
-                    text += std::string(" --cloudMaxDistance=") + std::to_string(SettingsManager::getAsFloat("cloudMaxDistance"));
-                    text += std::string(" --cloudMarchDistance=") + std::to_string(SettingsManager::getAsFloat("cloudMarchDistance"));
-                    text += std::string(" --cloudSamples=") + std::to_string(SettingsManager::getAsUint("cloudSamples"));
-                    text += std::string(" --cloudAmbientEnabled=") + (SettingsManager::getAsBool("cloudAmbientEnabled") ? "true" : "false");
-                    text += std::string(" --cloudAmbient=") + std::to_string(SettingsManager::getAsFloat("cloudAmbient"));
-                    text += std::string(" --cloudPhaseG=") + std::to_string(SettingsManager::getAsFloat("cloudPhaseG"));
-                    text += std::string(" --cloudMultiScatter=") + (SettingsManager::getAsBool("cloudMultiScatter") ? "true" : "false");
-                    text += std::string(" --cloudMultiScatterStrength=") + std::to_string(SettingsManager::getAsFloat("cloudMultiScatterStrength"));
-                    text += std::string(" --cloudWindX=") + std::to_string(SettingsManager::getAsFloat("cloudWindX"));
-                    text += std::string(" --cloudWindZ=") + std::to_string(SettingsManager::getAsFloat("cloudWindZ"));
-                    text += std::string(" --cloudSer=") + (SettingsManager::getAsBool("cloudSer") ? "true" : "false");
-                    ImGui::SetClipboardText(text.c_str());
-                }
+                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Enable clouds", "clouds");
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud coverage", "cloudCoverage", 0.f, 1.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud extinction", "cloudExtinction", 0.f, 0.1f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud base height", "cloudBaseHeight", 0.f, 10000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud thickness", "cloudThickness", 10.f, 10000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud cell size", "cloudCellSize", 64.f, 4096.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud pattern scale", "cloudPatternScale", 256.f, 131072.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud pattern seed", "cloudSeed", 0, 65535);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud draw distance", "cloudDrawDistance", 100.f, 100000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud shadow distance", "cloudShadowDistance", 100.f, 20000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud lighting samples", "cloudSamples", 1, 32);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud ambient strength", "cloudAmbient", 0.f, 2.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud anisotropy", "cloudPhaseG", 0.f, 0.95f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud multiple scattering", "cloudMultiScatterStrength", 0.f, 2.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind X", "cloudWindX", -50.f, 50.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind Z", "cloudWindZ", -50.f, 50.f);
             }
             if (ImGui::CollapsingHeader("Fog settings"))
             {

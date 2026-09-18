@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-08-02_
 
 # NVAPI and Shader Execution Reordering
 
@@ -11,11 +11,6 @@ On the shader side, the path tracer calls `NvReorderThread()` with a coherence h
 bounce. Hints differentiate: first-bounce hits, passthrough (delta transmissive), and
 scattering (non-delta) surfaces. This groups threads that will follow similar code paths
 together.
-
-Clouds have a separate optional one-bit reorder after segment classification and before
-volume lighting. Classification retains the first occupied interval and traversal
-continuation, including segments ending at geometry. `cloudSer` controls only this
-additional reorder; it does not disable surface SER. See [clouds.md](clouds.md#ser).
 
 The hint reorder is load-bearing: removing it measured a **43%** frame-time loss on a voxel
 forest scene (2026-08).

@@ -64,6 +64,8 @@
 #define SKY_WORKGROUP_SIZE_X 8
 #define SKY_WORKGROUP_SIZE_Y 8
 
+#define CLOUD_OCCUPANCY_MAP_SIZE 512
+
 // =============================================
 // LIGHT TREE
 // =============================================

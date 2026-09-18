@@ -88,8 +88,10 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         hitShadingNor_WS = normalize(-ray.Direction);
     }
 
+    // A cloud boundary in front of the endpoint takes over depth and motion regardless of its
+    // opacity, so DLSS tracks the clouds rather than the sky or terrain behind them.
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.maxDistance;
+        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
     float cloudDistance;
     if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
     {

@@ -48,8 +48,8 @@ RtTarget transmittanceLut{ L"skyTransmittanceLut", DXGI_FORMAT_R16G16B16A16_FLOA
 RtTarget multiScatteringLut{ L"skyMultiScatteringLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 RtTarget skyViewLut{ L"skyViewLut", DXGI_FORMAT_R16G16B16A16_FLOAT };
 
-ComPtr<ID3D12PipelineState> cloudShapePso;
-RtTarget cloudShape{ L"cloudOccupancy", DXGI_FORMAT_R32_UINT };
+ComPtr<ID3D12PipelineState> cloudOccupancyPso;
+RtTarget cloudOccupancy{ L"cloudOccupancy", DXGI_FORMAT_R32_UINT };
 
 bool staticLutsGenerated{ false };
 
@@ -100,10 +100,11 @@ void init()
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&skyViewPso)));
     skyViewPso->SetName(L"skyViewLutPso");
 
-    psoDesc.CS = makeShaderBytecode(getShader("cloud_shape_cs"));
-    CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudShapePso)));
-    cloudShape.setDimensions(512, 512);
-    cloudShape.init();
+    psoDesc.CS = makeShaderBytecode(getShader("cloud_occupancy_cs"));
+    CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&cloudOccupancyPso)));
+    cloudOccupancyPso->SetName(L"cloudOccupancyPso");
+    cloudOccupancy.setDimensions(CLOUD_OCCUPANCY_MAP_SIZE, CLOUD_OCCUPANCY_MAP_SIZE);
+    cloudOccupancy.init();
 
     transmittanceLut.setDimensions(SKY_TRANSMITTANCE_LUT_WIDTH, SKY_TRANSMITTANCE_LUT_HEIGHT);
     transmittanceLut.init();
@@ -115,21 +116,24 @@ void init()
     skyViewLut.init();
 }
 
-void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const float cameraY, bool clouds, D3D12_GPU_VIRTUAL_ADDRESS globalParams)
+void dispatch(ID3D12GraphicsCommandList4* cmdList, const float animTime, const float cameraY, const bool clouds,
+    const D3D12_GPU_VIRTUAL_ADDRESS globalParams)
 {
     cmdList->SetComputeRootSignature(rootSig.Get());
+
     if (clouds)
     {
         GPU_PROFILE_SCOPE(cmdList, "cloud occupancy");
-        cloudShape.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        cmdList->SetPipelineState(cloudShapePso.Get());
-        cmdList->SetComputeRoot32BitConstant(SKY_PARAM_IDX(CONSTANTS), cloudShape.getUavIdx(), 0);
+        constexpr uint32_t numGroups = CLOUD_OCCUPANCY_MAP_SIZE / SKY_WORKGROUP_SIZE_X;
+        static_assert(SKY_WORKGROUP_SIZE_X == SKY_WORKGROUP_SIZE_Y && CLOUD_OCCUPANCY_MAP_SIZE % SKY_WORKGROUP_SIZE_X == 0);
+        cloudOccupancy.transitionToState(cmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        cmdList->SetPipelineState(cloudOccupancyPso.Get());
+        cmdList->SetComputeRoot32BitConstant(SKY_PARAM_IDX(CONSTANTS), cloudOccupancy.getUavIdx(), 0);
         cmdList->SetComputeRootConstantBufferView(SKY_PARAM_IDX(GLOBAL_PARAMS), globalParams);
-        cmdList->Dispatch(64, 64, 1);
-        BufferHelper::uavBarrier(cmdList, cloudShape.getTarget());
-        cloudShape.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        cmdList->Dispatch(numGroups, numGroups, 1);
+        BufferHelper::uavBarrier(cmdList, cloudOccupancy.getTarget());
+        cloudOccupancy.transitionToState(cmdList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
-
 
     if (!staticLutsGenerated)
     {
@@ -193,13 +197,15 @@ uint32_t getSkyViewLutSrvIdx()
     return skyViewLut.getSrvIdx();
 }
 
-
-uint32_t getCloudShapeSrvIdx() { return cloudShape.getSrvIdx(); }
+uint32_t getCloudOccupancySrvIdx()
+{
+    return cloudOccupancy.getSrvIdx();
+}
 
 void destroy()
 {
-    cloudShape.reset();
-    cloudShapePso.Reset();
+    cloudOccupancy.reset();
+    cloudOccupancyPso.Reset();
     transmittanceLut.reset();
     multiScatteringLut.reset();
     skyViewLut.reset();

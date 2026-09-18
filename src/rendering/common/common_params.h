@@ -52,7 +52,7 @@ struct HeapIndices
         uint skyViewLutIdx;
         uint biomeMapIdx;
 
-        uint cloudShapeIdx;
+        uint cloudOccupancyIdx;
         uint pad0;
         uint pad1;
         uint pad2;
@@ -126,20 +126,15 @@ struct SceneParams
 
 struct CloudSettings
 {
-    uint enableClouds;
-    uint pad0;
-    uint pad1;
-    uint pad2;
-
     float coverage;
-    float density;
+    float extinction;
     float baseHeight;
     float thickness;
 
     float cellSize;
-    float period;
-    float maxDistance;
-    float marchDistance;
+    float patternScale;
+    float drawDistance;
+    float shadowDistance;
 
     float ambient;
     float phaseG;
@@ -149,7 +144,7 @@ struct CloudSettings
     float multiScatterStrength;
     uint samples;
     uint seed;
-    uint ser;
+    uint enableClouds;
 };
 
 struct RenderParams

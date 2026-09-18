@@ -77,7 +77,7 @@ void init()
     {
         frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
-        frame.paramBlockManager.heapIndices->srv.cloudShapeIdx = SkyAtmosphere::getCloudShapeSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudOccupancyIdx = SkyAtmosphere::getCloudOccupancySrvIdx();
     }
     initRtTargets();
     initCommand();
@@ -656,24 +656,23 @@ void render()
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
-    renderParams->skyStrength = std::clamp(SettingsManager::getAsFloat("skyStrength"), 0.f, 10.f);
-    renderParams->cloudSettings.enableClouds = SettingsManager::getAsBool("clouds");
-    renderParams->cloudSettings.coverage = std::clamp(SettingsManager::getAsFloat("cloudCoverage"), 0.0f, 1.0f);
-    renderParams->cloudSettings.density = std::clamp(SettingsManager::getAsFloat("cloudDensity"), 0.0f, 0.1f);
-    renderParams->cloudSettings.baseHeight = std::clamp(SettingsManager::getAsFloat("cloudBaseHeight"), 0.0f, 10000.0f);
-    renderParams->cloudSettings.thickness = std::clamp(SettingsManager::getAsFloat("cloudThickness"), 10.0f, 10000.0f);
-    renderParams->cloudSettings.cellSize = std::clamp(SettingsManager::getAsFloat("cloudCellSize"), 64.0f, 4096.0f);
-    renderParams->cloudSettings.period = std::clamp(SettingsManager::getAsFloat("cloudPeriod"), 256.0f, 131072.0f);
-    renderParams->cloudSettings.maxDistance = std::clamp(SettingsManager::getAsFloat("cloudMaxDistance"), 100.0f, 200000.0f);
-    renderParams->cloudSettings.marchDistance = std::clamp(SettingsManager::getAsFloat("cloudMarchDistance"), 100.0f, 20000.0f);
-    renderParams->cloudSettings.ambient = SettingsManager::getAsBool("cloudAmbientEnabled") ? std::clamp(SettingsManager::getAsFloat("cloudAmbient"), 0.0f, 2.0f) : 0.f;
-    renderParams->cloudSettings.phaseG = std::clamp(SettingsManager::getAsFloat("cloudPhaseG"), 0.0f, 0.95f);
-    renderParams->cloudSettings.windX = std::clamp(SettingsManager::getAsFloat("cloudWindX"), -50.0f, 50.0f);
-    renderParams->cloudSettings.windZ = std::clamp(SettingsManager::getAsFloat("cloudWindZ"), -50.0f, 50.0f);
-    renderParams->cloudSettings.multiScatterStrength = SettingsManager::getAsBool("cloudMultiScatter") ? std::clamp(SettingsManager::getAsFloat("cloudMultiScatterStrength"), 0.0f, 2.0f) : 0.f;
-    renderParams->cloudSettings.samples = std::clamp(SettingsManager::getAsUint("cloudSamples"), 1u, 32u);
-    renderParams->cloudSettings.seed = std::clamp(SettingsManager::getAsUint("cloudSeed"), 0u, 65535u);
-    renderParams->cloudSettings.ser = SettingsManager::getAsBool("cloudSer") ? 1u : 0u;
+    renderParams->skyStrength = SettingsManager::getAsFloat("skyStrength");
+    renderParams->cloudSettings.enableClouds = SettingsManager::getAsBool("clouds") ? 1 : 0;
+    renderParams->cloudSettings.coverage = SettingsManager::getAsFloat("cloudCoverage");
+    renderParams->cloudSettings.extinction = SettingsManager::getAsFloat("cloudExtinction");
+    renderParams->cloudSettings.baseHeight = SettingsManager::getAsFloat("cloudBaseHeight");
+    renderParams->cloudSettings.thickness = SettingsManager::getAsFloat("cloudThickness");
+    renderParams->cloudSettings.cellSize = SettingsManager::getAsFloat("cloudCellSize");
+    renderParams->cloudSettings.patternScale = SettingsManager::getAsFloat("cloudPatternScale");
+    renderParams->cloudSettings.drawDistance = SettingsManager::getAsFloat("cloudDrawDistance");
+    renderParams->cloudSettings.shadowDistance = SettingsManager::getAsFloat("cloudShadowDistance");
+    renderParams->cloudSettings.ambient = SettingsManager::getAsFloat("cloudAmbient");
+    renderParams->cloudSettings.phaseG = SettingsManager::getAsFloat("cloudPhaseG");
+    renderParams->cloudSettings.windX = SettingsManager::getAsFloat("cloudWindX");
+    renderParams->cloudSettings.windZ = SettingsManager::getAsFloat("cloudWindZ");
+    renderParams->cloudSettings.multiScatterStrength = SettingsManager::getAsFloat("cloudMultiScatterStrength");
+    renderParams->cloudSettings.samples = SettingsManager::getAsUint("cloudSamples");
+    renderParams->cloudSettings.seed = SettingsManager::getAsUint("cloudSeed");
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");

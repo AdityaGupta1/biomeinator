@@ -5,15 +5,13 @@
 #include "sky/atmosphere.hlsli"
 #include "util/sampling.hlsli"
 
-// Deliberately larger than the real sun (~0.8 degree radius).
+// Deliberately larger than the real sun (~0.8° radius vs. 0.27°)
 static const float sunCosTheta = 0.9999f;
 static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
 
-// One uniform solid-angle sample. Reuse this direction for every part of the
-// lighting estimate (phase/BRDF, atmosphere, terrain and cloud visibility).
-float3 sampleSunDirection(float3 center, inout RandomNumberGenerator rng)
+float3 sampleSunDirection(const float3 sunDir_WS, inout RandomNumberGenerator rng)
 {
-    return sampleSphericalCapUniform(center, sunCosTheta, rng);
+    return sampleSphericalCapUniform(sunDir_WS, sunCosTheta, rng);
 }
 
 // Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
@@ -47,8 +45,6 @@ float3 getSkyColor(float3 wi_WS)
 {
     Texture2D<float4> skyViewLut = ResourceDescriptorHeap[heapIndices.srv.skyViewLutIdx];
     const float2 uv = skyViewDirToUv(wi_WS, getSunDir_WS());
-    // Shared by visible sky, indirect surface lighting, and volume ambient.
-    // Solar-disk radiance and direct solar energy use separate functions.
     return renderParams.skyStrength * (skyViewLut.SampleLevel(skyViewSampler, uv, 0).rgb * sunIlluminance + ambientSkyLight);
 }
 
@@ -68,16 +64,16 @@ float3 getSunColor(float3 wi_WS)
     return sunIlluminance * transmittance / sunSolidAngle;
 }
 
-// Energy / sampling PDF for ONE uniformly sampled solar direction. Planet
-// visibility is tested at the scattering point, not at the camera. Do not also
-// multiply by the visible disk fraction: random disk samples integrate that.
-float3 getVolumeSunEnergy(float3 sunDir, float worldY)
+// Sun illuminance after atmospheric transmittance at the given true world height, or zero when the
+// virtual planet occludes the sun there. Already Le / pdf for a uniformly sampled cap direction, so
+// a sampled direction needs no further weighting.
+float3 getAttenuatedSunIlluminance(const float3 sunDir_WS, const float worldY)
 {
     const float r = atmosphereRadiusForCameraY(worldY);
-    if (raySphereIntersectNearest(float3(0.f, r, 0.f), sunDir, atmosphereGroundRadius) >= 0.f)
+    if (raySphereIntersectNearest(float3(0.f, r, 0.f), sunDir_WS, atmosphereGroundRadius) >= 0.f)
     {
         return 0.f;
     }
-    Texture2D<float4> lut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
-    return sunIlluminance * sampleTransmittanceLut(lut, skyLutSampler, r, sunDir.y);
+    Texture2D<float4> transmittanceLut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
+    return sunIlluminance * sampleTransmittanceLut(transmittanceLut, skyLutSampler, r, sunDir_WS.y);
 }

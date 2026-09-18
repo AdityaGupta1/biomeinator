@@ -9,8 +9,8 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "materials/materials.hlsli"
-#include "util/math.hlsli"
 #include "sky/clouds.hlsli"
+#include "util/math.hlsli"
 
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SAMPLING_STRUCTURE);
@@ -147,7 +147,7 @@ bool traceToLight(const float3 surfPos_WS,
     TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
     texCtx.proceduralColor = getProceduralColor(lightPerTriData.flags, pointOnLight_WS);
     Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption
-        * cloudTransmittance(ray.Origin, wi_WS, min(lightDistance, renderParams.cloudSettings.maxDistance), rng);
+        * cloudTransmittance(ray.Origin, wi_WS, lightDistance);
     return true;
 }
 

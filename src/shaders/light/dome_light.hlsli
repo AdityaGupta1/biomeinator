@@ -5,12 +5,10 @@
 
 #include "common/global_params.hlsli"
 #include "common/path_tracing_common.hlsli"
-#include "sky/atmosphere.hlsli"
+#include "sky/clouds.hlsli"
+#include "sky/sky_lighting.hlsli"
 #include "util/rng.hlsli"
 #include "util/sampling.hlsli"
-
-#include "sky/sky_lighting.hlsli"
-#include "sky/clouds.hlsli"
 
 float3 getDomeLightColor(float3 wi_WS)
 {
@@ -110,13 +108,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     if (result.didReachDomeLight)
     {
         const float3 passthroughAbsorption = computePassthroughAbsorption(domeLightPayload, getDistanceToVoxelBounds(ray.Origin, ray.Direction));
-        const float3 sunEnergy = getVolumeSunEnergy(ray.Direction,
-            ray.Origin.y + float(cameraParams.globalInstanceOffset.y));
-        result.Le = sunEnergy / sunSolidAngle * domeLightPayload.pathWeight * passthroughAbsorption;
-        if (any(result.Le > 0.f))
-        {
-            result.Le *= cloudTransmittance(ray.Origin, ray.Direction, 1.e30f, rng);
-        }
+        result.Le = getDomeLightColor(ray.Direction) * domeLightPayload.pathWeight * passthroughAbsorption
+            * cloudTransmittance(ray.Origin, ray.Direction, cloudUnboundedDistance);
     }
     else
     {
