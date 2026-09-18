@@ -38,7 +38,7 @@ struct WaterDisplaceConstants
     uint32_t vertCount;
     int32_t transformOffsetX;
     int32_t transformOffsetZ;
-    float animTime;
+    float waveTime;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
@@ -58,22 +58,22 @@ inline constexpr float chopSpeeds[WATER_CHOP_WAVE_COUNT] = WATER_CHOP_SPEEDS;
 inline constexpr glm::vec2 sineChopFreqs[2] = WATER_SINE_CHOP_FREQS;
 inline constexpr glm::vec2 sineChopSpeeds = WATER_SINE_CHOP_SPEEDS;
 
-float waveHeight(const glm::vec2 posXZ_WS, const float time)
+float waveHeight(const glm::vec2 posXZ_WS, const float waveTime)
 {
     float height = 0.f;
     for (int i = 0; i < WATER_SWELL_WAVE_COUNT; ++i)
     {
-        height += swellStrengths[i] * std::sin(glm::dot(posXZ_WS, swellFreqs[i]) + swellSpeeds[i] * time);
+        height += swellStrengths[i] * std::sin(glm::dot(posXZ_WS, swellFreqs[i]) + swellSpeeds[i] * waveTime);
     }
 
-    const float phaseA = glm::dot(posXZ_WS, sineChopFreqs[0]) + sineChopSpeeds.x * time;
-    const float phaseB = glm::dot(posXZ_WS, sineChopFreqs[1]) + sineChopSpeeds.y * time;
+    const float phaseA = glm::dot(posXZ_WS, sineChopFreqs[0]) + sineChopSpeeds.x * waveTime;
+    const float phaseB = glm::dot(posXZ_WS, sineChopFreqs[1]) + sineChopSpeeds.y * waveTime;
     const float envelope = 0.5f + 0.5f * std::sin(phaseA) * std::sin(phaseB);
 
     float chop = 0.f;
     for (int j = 0; j < WATER_CHOP_WAVE_COUNT; ++j)
     {
-        chop += chopStrengths[j] * std::sin(glm::dot(posXZ_WS, chopFreqs[j]) + chopSpeeds[j] * time);
+        chop += chopStrengths[j] * std::sin(glm::dot(posXZ_WS, chopFreqs[j]) + chopSpeeds[j] * waveTime);
     }
 
     return height + envelope * chop;
@@ -107,7 +107,7 @@ void init()
 
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
-              float animTime,
+              float waveTime,
               const std::vector<DispatchInputs>& allInputs)
 {
     cmdList->SetPipelineState(pso.Get());
@@ -124,7 +124,7 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
             .vertCount = inputs.vertCount,
             .transformOffsetX = inputs.transformOffsetX,
             .transformOffsetZ = inputs.transformOffsetZ,
-            .animTime = animTime,
+            .waveTime = waveTime,
         };
         cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
                                               sizeof(WaterDisplaceConstants) / 4, &constants, 0);
@@ -140,12 +140,12 @@ void destroy()
     rootSig.Reset();
 }
 
-float sampleMeshWaveOffsetY(const glm::ivec2 blockXZ_WS, const glm::vec2 blockFraction, const float time)
+float sampleMeshWaveOffsetY(const glm::ivec2 blockXZ_WS, const glm::vec2 blockFraction, const float waveTime)
 {
-    const float h00 = waveHeight(glm::vec2(blockXZ_WS), time);
-    const float h10 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 0)), time);
-    const float h01 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(0, 1)), time);
-    const float h11 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 1)), time);
+    const float h00 = waveHeight(glm::vec2(blockXZ_WS), waveTime);
+    const float h10 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 0)), waveTime);
+    const float h01 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(0, 1)), waveTime);
+    const float h11 = waveHeight(glm::vec2(blockXZ_WS + glm::ivec2(1, 1)), waveTime);
 
     const float fx = blockFraction.x;
     const float fz = blockFraction.y;

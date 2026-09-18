@@ -55,24 +55,30 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 }
 
-// Adds the segment's fog in-scatter to pathColor and folds fog transmittance into
-// pathWeight. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
-float applySegmentFog(inout Payload payload, const float3 origin_WS, const float3 dir,
-    const uint numInScatterSteps, inout float3 pathColor)
+// Adds the segment's fog and cloud in-scatter to pathColor and folds both transmittances into
+// pathWeight. Cloud radiance is attenuated by the fog and water in front of it inside
+// integrateClouds, and the fog march attenuates its own samples by clouds, so neither medium is
+// applied twice. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
+float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
+    const uint numInScatterSteps, const bool cloudScatter, inout float3 pathColor, out CloudResult cloud)
 {
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
-    if (!fogEnabled || bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
+    const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
+    const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
+    cloud = integrateClouds(origin_WS, dir, cloudState,
+        fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
+    float fogTransmittance = 1.f;
+    float3 fogScatter = 0.f;
+    if (fogEnabled)
     {
-        return 1.f;
+        fogScatter = computeFogInScatter(origin_WS, dir, volumeDistance, numInScatterSteps,
+            payload.rng, fogTransmittance);
     }
-
-    const float segmentDist = getSegmentVolumeDistance(payload, origin_WS, dir);
-
-    float fogTransmittance;
-    const float3 inScatter =
-        computeFogInScatter(origin_WS, dir, segmentDist, numInScatterSteps, payload.rng, fogTransmittance);
-    pathColor += payload.pathWeight * inScatter;
-    payload.pathWeight *= fogTransmittance;
+    pathColor += payload.pathWeight * (fogScatter + cloud.radiance);
+    payload.pathWeight *= fogTransmittance * cloud.transmittance;
     return fogTransmittance;
 }
 
@@ -133,8 +139,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     // The primary segment is identical for both path splits and collect sums them, so
     // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
-    applySegmentFog(payload, cameraParams.pos_WS, ray.Direction,
-        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathColor);
+    CloudResult primaryCloud;
+    applySegmentAtmosphere(payload, cameraParams.pos_WS, ray.Direction,
+        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathSplitIdx == 0, pathColor, primaryCloud);
 
     payload.pathWeight *= segmentAbsorption;
 
@@ -147,11 +154,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     {
         const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
         pathColor += payload.pathWeight * domeLightColor;
-        if (sceneParams.voxelMode == 1)
+        if (sceneParams.voxelMode == 1 && pathSplitIdx == 0)
         {
             // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
             // light rather than pathWeight, which would fold in fog transmittance.
-            ptDiffuseAlbedo = applyReinhard(domeLightColor);
+            ptDiffuseAlbedo = applyReinhard(cloudGuideColor(ray.Direction, domeLightColor, primaryCloud.transmittance));
         }
         return;
     }
@@ -205,7 +212,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.pathWeight = 1.f;
         pathColor = 0.f;
         if (!surfMaterial.isDelta())
+        {
             surfMaterial.roughness = max(surfMaterial.roughness, sharcParams.roughnessMin);
+        }
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
@@ -473,7 +482,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 RWTexture2D<float4> specularAlbedoTarget =
                     ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
                 if (!SHARC_UPDATE)
+                {
                     specularAlbedoTarget[pixelIdx] = float4(albedos.specular, 1.f);
+                }
             }
 
             const bool useDiffuseMaterialAlbedo = (pathDepth == 0) && isDiffuseOnlyMaterial(surfMaterial);
@@ -536,8 +547,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
 
         // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
-        const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
-        const float fogTransmittance = applySegmentFog(payload, ray.Origin, ray.Direction, numFogSteps, pathColor);
+        const bool inScatter = (pathDepth <= 1);
+        const uint numFogSteps = inScatter ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
+        CloudResult segmentCloud;
+        const float fogTransmittance = applySegmentAtmosphere(payload, ray.Origin, ray.Direction,
+            numFogSteps, inScatter, pathColor, segmentCloud);
 
         payload.pathWeight *= segmentAbsorption;
 
@@ -585,13 +599,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance * segmentCloud.transmittance;
                     }
                     else if (didMiss && sceneParams.voxelMode == 1)
                     {
                         // Specular reflection of the sky. Excludes fog and absorption to match
                         // how the primary miss builds its albedo.
-                        ptDiffuseAlbedo *= applyReinhard(missDomeLightColor);
+                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Direction, missDomeLightColor, segmentCloud.transmittance));
                     }
                     else
                     {
@@ -645,11 +659,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     ptDiffuseAlbedo = saturate(ptDiffuseAlbedo + ptEmissiveAlbedo);
 #if SHARC_QUERY
     if (sharcParams.debugMode == 1)
+    {
         pathColor = cacheHit ? float3(0, 1, 0) : float3(1, 0, 0);
+    }
     if (sharcParams.debugMode == 2)
+    {
         pathColor = lerp(float3(0, 1, 0), float3(1, 0, 0), saturate(tracedBounces / 8.f));
+    }
     if (sharcParams.debugMode > 0 && sharcParams.debugMode <= 4 && pathSplitIdx != 0)
+    {
         pathColor = 0;
+    }
 #endif
 }
 
@@ -662,7 +682,9 @@ void RayGeneration()
     const uint2 pixelIdx =
         tile * sharcParams.downscale + uint2(pixelRng.nextUint(), pixelRng.nextUint()) % sharcParams.downscale;
     if (any(pixelIdx >= renderParams.renderSize))
+    {
         return;
+    }
     const uint pathSplitIdx = 0;
 #else
     const uint2 pixelIdx = getPixelIdx();
@@ -720,7 +742,10 @@ void RayGeneration()
             SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
             float3 cachedRadiance;
-            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false)) pathColor = cachedRadiance;
+            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false))
+            {
+                pathColor = cachedRadiance;
+            }
         }
     }
     else

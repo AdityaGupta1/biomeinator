@@ -74,6 +74,23 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
     ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
+    ADD_OPTION("skyStrength", "Multiplier on sky radiance, excluding the sun disk", float, "1.3");
+    ADD_OPTION("clouds", "Enable clouds", bool, "true");
+    ADD_OPTION("cloudCoverage", "Cloud coverage threshold", float, "0.3");
+    ADD_OPTION("cloudExtinction", "Cloud extinction coefficient per block", float, "0.002");
+    ADD_OPTION("cloudBaseHeight", "Cloud layer base height in blocks", float, "3000");
+    ADD_OPTION("cloudThickness", "Cloud layer thickness in blocks", float, "512");
+    ADD_OPTION("cloudCellSize", "Cloud grid cell size in blocks", float, "1024");
+    ADD_OPTION("cloudPatternScale", "Cloud noise pattern scale in blocks", float, "4096");
+    ADD_OPTION("cloudSeed", "Cloud noise pattern seed", uint32_t, "0");
+    ADD_OPTION("cloudDrawDistance", "Cloud draw distance in blocks", float, "100000");
+    ADD_OPTION("cloudShadowDistance", "Cloud shadow ray distance within the layer in blocks", float, "9000");
+    ADD_OPTION("cloudSamples", "Cloud lighting samples per occupied interval", uint32_t, "4");
+    ADD_OPTION("cloudAmbient", "Strength of the cloud ambient sky term", float, "0.8");
+    ADD_OPTION("cloudPhaseG", "Cloud Henyey-Greenstein anisotropy", float, "0.65");
+    ADD_OPTION("cloudMultiScatterStrength", "Strength of the cloud multiple scattering approximation", float, "1");
+    ADD_OPTION("cloudWindX", "Cloud wind X in blocks/s", float, "10");
+    ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
@@ -174,6 +191,23 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("fogG", float);
     COPY_SETTING("fogMarchSteps", uint32_t);
     COPY_SETTING("fogAmbientStrength", float);
+    COPY_SETTING("skyStrength", float);
+    COPY_SETTING("clouds", bool);
+    COPY_SETTING("cloudCoverage", float);
+    COPY_SETTING("cloudExtinction", float);
+    COPY_SETTING("cloudBaseHeight", float);
+    COPY_SETTING("cloudThickness", float);
+    COPY_SETTING("cloudCellSize", float);
+    COPY_SETTING("cloudPatternScale", float);
+    COPY_SETTING("cloudSeed", uint32_t);
+    COPY_SETTING("cloudDrawDistance", float);
+    COPY_SETTING("cloudShadowDistance", float);
+    COPY_SETTING("cloudSamples", uint32_t);
+    COPY_SETTING("cloudAmbient", float);
+    COPY_SETTING("cloudPhaseG", float);
+    COPY_SETTING("cloudMultiScatterStrength", float);
+    COPY_SETTING("cloudWindX", float);
+    COPY_SETTING("cloudWindZ", float);
     COPY_SETTING("renderDistance", int);
     COPY_SETTING("world", std::string);
 

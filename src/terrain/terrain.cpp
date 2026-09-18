@@ -224,7 +224,7 @@ void update(ToFreeList& toFreeList)
                                 WaterDisplacer::sampleMeshWaveOffsetY(
                                     glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z),
                                     glm::vec2(cameraPosFloat_WS.x, cameraPosFloat_WS.z),
-                                    Renderer::getAnimTime());
+                                    Renderer::getWaveTime());
                             cameraUnderwater = cameraPosFloat_WS.y < surfaceY;
                         }
                         else

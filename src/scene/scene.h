@@ -206,7 +206,7 @@ private:
     // returns true if TLAS is now dirty
     bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
-    void updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime);
+    void updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
 
     void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights);
 
@@ -219,7 +219,7 @@ public:
     void invalidateRadianceHistory();
     bool consumeRadianceHistoryInvalidation();
 
-    bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime);
+    bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

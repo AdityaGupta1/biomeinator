@@ -9,6 +9,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "materials/materials.hlsli"
+#include "sky/clouds.hlsli"
 #include "util/math.hlsli"
 
 StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);
@@ -145,7 +146,8 @@ bool traceToLight(const float3 surfPos_WS,
     // BSDF hit there would, or NEE and BSDF sampling disagree about this light's color.
     TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
     texCtx.proceduralColor = getProceduralColor(lightPerTriData.flags, pointOnLight_WS);
-    Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption;
+    Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption
+        * cloudTransmittance(ray.Origin, wi_WS, lightDistance);
     return true;
 }
 

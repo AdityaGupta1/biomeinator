@@ -34,6 +34,11 @@
 #define WATER_SINE_CHOP_FREQS { { 0.0167f, 0.01f }, { -0.0067f, 0.02f } }
 #define WATER_SINE_CHOP_SPEEDS { 0.1f, 0.13f }
 
+// The sine wave model is evaluated at animTime wrapped to this period (200 pi seconds) so its
+// float phases stay precise however long the animation runs. Every speed above must therefore
+// be a multiple of 0.01 rad/s, which makes each wave exactly periodic in it and the wrap seamless.
+#define WATER_WAVE_PERIOD_SECONDS (200.0 * 3.14159265358979323846)
+
 // =============================================
 // TERRAIN
 // =============================================
@@ -63,6 +68,8 @@
 
 #define SKY_WORKGROUP_SIZE_X 8
 #define SKY_WORKGROUP_SIZE_Y 8
+
+#define CLOUD_OCCUPANCY_MAP_SIZE 512
 
 // =============================================
 // LIGHT TREE

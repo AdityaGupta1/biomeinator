@@ -15,13 +15,16 @@ namespace SkyAtmosphere
 
 void init();
 
-// Records the one-time transmittance LUT generation (first call only) and the per-frame sky-view
-// LUT update. Must run before the path trace pass each frame; leaves both LUTs in
-// NON_PIXEL_SHADER_RESOURCE state. The descriptor heap must already be bound.
-void dispatch(ID3D12GraphicsCommandList4* cmdList, float animTime, float cameraY);
+// Records the one-time transmittance LUT generation (first call only), the per-frame sky-view
+// LUT update and, when clouds are enabled, the cloud occupancy map rebuild. Must run before the
+// path trace pass each frame; leaves all outputs in NON_PIXEL_SHADER_RESOURCE state. The
+// descriptor heap must already be bound.
+void dispatch(ID3D12GraphicsCommandList4* cmdList, float animTime, float cameraY, bool clouds,
+    D3D12_GPU_VIRTUAL_ADDRESS globalParams);
 
 uint32_t getTransmittanceLutSrvIdx();
 uint32_t getSkyViewLutSrvIdx();
+uint32_t getCloudOccupancySrvIdx();
 
 void destroy();
 

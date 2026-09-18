@@ -6,6 +6,13 @@
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 
+float henyeyGreensteinPhase(const float cosAngle, const float g)
+{
+    const float g2 = g * g;
+    const float denom = 1.f + g2 - 2.f * g * cosAngle;
+    return (1.f - g2) / (4.f * M_PI * denom * sqrt(denom));
+}
+
 float3 sampleHemisphereCosineWeighted(const float3 surfShadingNor_WS, inout RandomNumberGenerator rng)
 {
     const float2 rndSample = rng.nextFloat2();
