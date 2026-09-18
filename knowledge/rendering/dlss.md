@@ -52,6 +52,10 @@ not use sampled lighting or cloud self-shadowing; guide noise is reproduced as d
 by reconstruction. Opacity is independent of the lighting sample count and RNG, so no
 separate guide march is needed. See [clouds.md](clouds.md#dlss-albedo).
 
+Primary cloud hits override depth and motion with the first occupied boundary, without
+an opacity threshold. Wind displacement is reversed using the actual animation-time
+delta to project that point into the previous frame. Geometry in front still wins.
+
 ## Resource Tagging
 
 Streamline requires tagging input resources (`slSetTagForFrame`) each frame BEFORE the

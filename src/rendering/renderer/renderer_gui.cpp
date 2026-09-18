@@ -182,22 +182,22 @@ void imguiEndFrame(double deltaTime)
                 {
                     SettingsManager::setAsBool("clouds", true);
                     SettingsManager::setAsFloat("cloudCoverage", 0.3f);
-                    SettingsManager::setAsFloat("cloudDensity", 0.004f);
+                    SettingsManager::setAsFloat("cloudDensity", 0.002f);
                     SettingsManager::setAsFloat("cloudBaseHeight", 3000.0f);
-                    SettingsManager::setAsFloat("cloudThickness", 256.0f);
-                    SettingsManager::setAsFloat("cloudCellSize", 512.0f);
-                    SettingsManager::setAsFloat("cloudPeriod", 8192.0f);
+                    SettingsManager::setAsFloat("cloudThickness", 512.0f);
+                    SettingsManager::setAsFloat("cloudCellSize", 1024.0f);
+                    SettingsManager::setAsFloat("cloudPeriod", 4096.0f);
                     SettingsManager::setAsUint("cloudSeed", 0);
-                    SettingsManager::setAsFloat("cloudMaxDistance", 80000.0f);
+                    SettingsManager::setAsFloat("cloudMaxDistance", 100000.0f);
                     SettingsManager::setAsFloat("cloudMarchDistance", 9000.0f);
-                    SettingsManager::setAsUint("cloudSamples", 1);
+                    SettingsManager::setAsUint("cloudSamples", 4);
                     SettingsManager::setAsBool("cloudAmbientEnabled", true);
                     SettingsManager::setAsFloat("cloudAmbient", 0.8f);
                     SettingsManager::setAsFloat("cloudPhaseG", 0.65f);
                     SettingsManager::setAsBool("cloudMultiScatter", true);
                     SettingsManager::setAsFloat("cloudMultiScatterStrength", 1.0f);
-                    SettingsManager::setAsFloat("cloudWindX", 8.0f);
-                    SettingsManager::setAsFloat("cloudWindZ", 3.0f);
+                    SettingsManager::setAsFloat("cloudWindX", 10.0f);
+                    SettingsManager::setAsFloat("cloudWindZ", 50.0f);
                     SettingsManager::setAsBool("cloudSer", false);
                     radianceSettingsChanged = true;
                 }

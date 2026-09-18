@@ -14,11 +14,12 @@ struct CloudTraversal
     float end;
 };
 
-CloudTraversal beginCloudTraversal(float3 origin_WS, float3 dir, float maxDistance, float layerDistance)
+CloudTraversal beginCloudTraversal(float3 origin_WS, float3 dir, float maxDistance, float layerDistance,
+    bool geometryOnly = false)
 {
     CloudTraversal state = (CloudTraversal)0;
     const CloudSettings c = renderParams.cloud;
-    if (sceneParams.voxelMode == 0 || renderParams.clouds == 0 || c.coverage <= 0.f || c.density <= 0.f)
+    if (sceneParams.voxelMode == 0 || renderParams.clouds == 0 || c.coverage <= 0.f || (!geometryOnly && c.density <= 0.f))
         return state;
     const float3 origin = cloudPosition(origin_WS);
     float start = 0.f;
@@ -86,4 +87,26 @@ bool nextCloudInterval(inout CloudTraversal state, out float2 interval)
     }
     interval.y = state.t;
     return found;
+}
+
+bool cloudSurfaceDistance(float3 origin_WS, float3 dir, float maxDistance, out float distance)
+{
+    CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, 1.e30f, true);
+    float2 interval;
+    distance = 0.f;
+    if (!nextCloudInterval(state, interval)) return false;
+    if (interval.x > 0.f)
+    {
+        distance = interval.x;
+        return true;
+    }
+
+    // Inside a cloud, use its exit surface rather than projecting the camera position.
+    const float worldY = cloudPosition(origin_WS).y;
+    const float layerExit = abs(dir.y) < 1.e-7f ? 1.e30f
+        : ((dir.y > 0.f ? renderParams.cloud.baseHeight + renderParams.cloud.thickness
+            : renderParams.cloud.baseHeight) - worldY) / dir.y;
+    if (interval.y >= state.end && layerExit > state.end) return false;
+    distance = interval.y;
+    return distance > 0.f && distance < maxDistance;
 }

@@ -9,6 +9,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "materials/materials.hlsli"
+#include "sky/cloud_traversal.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 
@@ -85,6 +86,17 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
         hitShadingNor_WS = normalize(-ray.Direction);
+    }
+
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloud.maxDistance;
+    float cloudDistance;
+    if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
+    {
+        motionHitPos_WS = evalRayPos(ray, cloudDistance);
+        prevMotionHitPos_WS = motionHitPos_WS;
+        prevMotionHitPos_WS.xz -= float2(renderParams.cloud.windX, renderParams.cloud.windZ)
+            * (renderParams.animTime - renderParams.prevAnimTime);
     }
 
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);

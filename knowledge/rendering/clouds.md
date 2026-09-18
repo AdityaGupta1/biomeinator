@@ -9,9 +9,11 @@ fraction of occupied cells in a particular view. The retained `cloudPeriod` CLI 
 controls pattern scale, not a repeating period. Wind translates the entire grid;
 occupancy does not evolve independently or snap with the camera.
 
-The default layer starts at 3,000 blocks and is 256 blocks thick. Cells are 512 blocks
-wide, with an 8,192-block pattern scale and coverage control 0.3. The higher base was
-requested after viewing the initial block-cloud captures at 1,500 blocks.
+The user's default preset starts at 3,000 blocks and is 512 blocks thick. Cells are
+1,024 blocks wide, with a 4,096-block pattern scale, coverage control 0.3, extinction
+0.002 and draw distance 100,000 blocks. Lighting defaults to four samples and wind to
+X=10, Z=50 blocks/s. Sky strength defaults to 1.3. Startup and the cloud UI reset use
+the same cloud preset.
 
 The earlier Blender-shaped smooth clouds have been replaced. The user's
 `blender/clouds/clouds_ref.blend` remains a reference asset, but its noise graph and mesh
@@ -27,7 +29,7 @@ cells become a single continuous interval. There is no fixed iteration budget th
 exhaust itself before reaching distant clouds.
 
 Each occupied interval attenuates by `exp(-extinction * length)`. Its configured 1–32
-lighting samples (default 1) estimate only in-scattering; changing their count or RNG
+lighting samples (default 4) estimate only in-scattering; changing their count or RNG
 does not change opacity. Samples are stratified over the truncated exponential within
 the interval, so even a very long opaque cloud samples its visible skin. Sun-disk
 directions remain stochastic. View integration stops below transmittance 0.002.
@@ -78,7 +80,13 @@ No separate guide march is needed. The guide uses sun-centre phase and atmospher
 energy at the layer midpoint; it never uses sampled lighting or cloud self-shadowing.
 Thus increasing lighting samples or changing their RNG cannot add noise to this mask.
 Camera jitter, animated wind and stochastic geometry visibility remain separate.
-Cloud depth and motion are not supplied as separate reconstruction guides.
+The primary G-buffer uses the first occupied cloud boundary in front of geometry for
+depth and motion, regardless of opacity (including zero extinction). Previous position
+subtracts wind times the animation-time delta before projection through the previous
+camera. Pausing animation therefore stops wind motion while retaining camera motion.
+Inside an occupied cloud, the exit boundary supplies a finite surface position; a
+geometry endpoint or draw-distance cutoff is never mistaken for that exit. Reflections
+retain their primary reflecting-surface guides.
 
 ## Validation
 
