@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-17_
 
 # Build Configurations
 
@@ -40,6 +40,17 @@ Gotchas:
 - The three configs share one build tree; only the `build/<Config>/` output directories
   differ. Runtime DLLs are copied per config, so a freshly built config always has its own
   copies.
+- **Incremental builds can silently miss header changes after the fallback launcher below has
+  been used.** MSBuild decides what to recompile from `CL.read.1.tlog` next to the objects;
+  a build run through the fallback can leave entries for the sources it compiled with no
+  header dependencies recorded. Later normal builds then recompile only sources whose own
+  `.cpp` changed, so a change to a shared header such as `common_params.h` leaves stale
+  objects behind. The symptom is a CPU/GPU layout mismatch with no compile error: everything
+  in `GlobalParams` after the changed struct shifts, so debug views go black or white and
+  SHaRC/RTSL read garbage. Diagnose by comparing `.obj` timestamps in
+  `build/Biomeinator.dir/RelWithDebInfo/` against the header, or by decoding the tlog
+  (`Get-Content -Encoding Unicode`) and checking which sources list the header. Fix with a
+  clean rebuild of the target (`--clean-first`) after any fallback build.
 
 ## Windows fallback for duplicate environment paths
 
