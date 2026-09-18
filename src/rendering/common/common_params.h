@@ -167,14 +167,19 @@ struct RenderParams
     float mipBias;
 
     float animTime; // can be frozen by animTimePaused setting
-    float prevAnimTime;
+    float waveTime; // animTime wrapped to WATER_WAVE_PERIOD_SECONDS, for the sine wave model
+    float prevWaveTime;
     float fogSigmaS;
-    float fogScaleHeight;
 
+    float fogScaleHeight;
     float fogG;
     uint fogMarchSteps;
     float fogAmbientStrength;
+
     float skyStrength;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 
     CloudSettings cloudSettings;
 };

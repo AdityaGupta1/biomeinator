@@ -337,7 +337,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.animTime, WorldRayDirection(),
+        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.waveTime, renderParams.animTime, WorldRayDirection(),
                                    bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
     else

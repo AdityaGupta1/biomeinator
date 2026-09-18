@@ -433,6 +433,12 @@ static constexpr float fogPeakSigmaS = 0.004f;
 static constexpr float fogFullStrengthSeconds = 30.f;
 static constexpr float fogFadeEndSeconds = 120.f;
 
+// Wrapped in double: the float result stays precise no matter how large animTime has grown.
+static float computeWaveTime(const double animTime)
+{
+    return static_cast<float>(std::fmod(animTime, WATER_WAVE_PERIOD_SECONDS));
+}
+
 static float computeFogSigmaS(const float animTime)
 {
     float dayTime = std::fmod(animTime, SUN_PERIOD_SECONDS);
@@ -476,6 +482,7 @@ void render()
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);
+    const float waveTimeFloat = computeWaveTime(renderState.animTime);
 
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
@@ -589,7 +596,7 @@ void render()
     bool didSceneChange;
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "scene update");
-        didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
+        didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, waveTimeFloat);
     }
 
     const bool didCameraChange = renderState.camera.update();
@@ -615,7 +622,8 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
     renderParams->animTime = animTimeFloat;
-    renderParams->prevAnimTime = static_cast<float>(renderState.prevAnimTime);
+    renderParams->waveTime = waveTimeFloat;
+    renderParams->prevWaveTime = computeWaveTime(renderState.prevAnimTime);
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
@@ -1255,9 +1263,9 @@ void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, f
     renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
-float getAnimTime()
+float getWaveTime()
 {
-    return static_cast<float>(renderState.animTime);
+    return computeWaveTime(renderState.animTime);
 }
 
 const Scene& getScene()

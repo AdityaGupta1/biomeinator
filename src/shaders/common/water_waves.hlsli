@@ -25,6 +25,11 @@
 //
 // Wave parameters come in triples: STRENGTH (amplitude), FREQ (angular wave vector; its
 // magnitude sets the spatial frequency) and SPEED (time scale).
+//
+// Two clocks: the sine waves take waveTime (animTime wrapped to WATER_WAVE_PERIOD_SECONDS, in
+// which every sine speed is exactly periodic, so the wrap is seamless and float phases stay
+// precise for arbitrarily long sessions), while the noise terms take the unwrapped animTime as
+// a plain coordinate, since noise has no period to wrap to.
 
 // ===== Displacement =====
 // Sine waves that move the vertices (waveHeight) and, via their analytic gradient, also
@@ -79,45 +84,45 @@ static const fnl_state MED_CHOP_NOISE_STATE = makeNoiseState(9001, FNL_FRACTAL_N
 static const fnl_state NOISE_WAVE_STATE = makeNoiseState(1337, FNL_FRACTAL_FBM, NOISE_WAVE_OCTAVES);
 
 // accumulates one sine wave's height into x and its analytic XZ gradient into yz
-void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float time, inout float3 heightAndGrad)
+void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float waveTime, inout float3 heightAndGrad)
 {
-    const float phase = dot(posXZ_WS, waveVec) + speed * time;
+    const float phase = dot(posXZ_WS, waveVec) + speed * waveTime;
     heightAndGrad.x += amplitude * sin(phase);
     heightAndGrad.yz += amplitude * cos(phase) * waveVec;
 }
 
 // large-scale sine/cos choppiness envelope: value in [0, 1] in x, XZ gradient in yz
-float3 sineChop01AndGradient(float2 posXZ_WS, float time)
+float3 sineChop01AndGradient(float2 posXZ_WS, float waveTime)
 {
-    const float phaseA = dot(posXZ_WS, SINE_CHOP_FREQS[0]) + SINE_CHOP_SPEEDS.x * time;
-    const float phaseB = dot(posXZ_WS, SINE_CHOP_FREQS[1]) + SINE_CHOP_SPEEDS.y * time;
+    const float phaseA = dot(posXZ_WS, SINE_CHOP_FREQS[0]) + SINE_CHOP_SPEEDS.x * waveTime;
+    const float phaseB = dot(posXZ_WS, SINE_CHOP_FREQS[1]) + SINE_CHOP_SPEEDS.y * waveTime;
     const float2 grad = 0.5f * (cos(phaseA) * sin(phaseB) * SINE_CHOP_FREQS[0]
                               + sin(phaseA) * cos(phaseB) * SINE_CHOP_FREQS[1]);
     return float3(0.5f + 0.5f * sin(phaseA) * sin(phaseB), grad);
 }
 
-float sineChop01(float2 posXZ_WS, float time)
+float sineChop01(float2 posXZ_WS, float waveTime)
 {
-    return sineChop01AndGradient(posXZ_WS, time).x;
+    return sineChop01AndGradient(posXZ_WS, waveTime).x;
 }
 
 // returns height in x, d(height)/dx in y, d(height)/dz in z
-float3 waveHeightAndGradient(float2 posXZ_WS, float time)
+float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime)
 {
     float3 result = float3(0.f, 0.f, 0.f);
     [unroll]
     for (int i = 0; i < SWELL_WAVE_COUNT; i++)
     {
-        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, time, result);
+        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, waveTime, result);
     }
 
-    const float3 envelope = sineChop01AndGradient(posXZ_WS, time);
+    const float3 envelope = sineChop01AndGradient(posXZ_WS, waveTime);
 
     float3 chop = float3(0.f, 0.f, 0.f);
     [unroll]
     for (int j = 0; j < CHOP_WAVE_COUNT; j++)
     {
-        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, time, chop);
+        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, waveTime, chop);
     }
 
     // product rule: d(envelope * chop.x) = envelopeGrad * chop.x + envelope * chopGrad
@@ -127,26 +132,26 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float time)
     return result;
 }
 
-float waveHeight(float2 posXZ_WS, float time)
+float waveHeight(float2 posXZ_WS, float waveTime)
 {
-    return waveHeightAndGradient(posXZ_WS, time).x;
+    return waveHeightAndGradient(posXZ_WS, waveTime).x;
 }
 
 // medium-scale OpenSimplex2 choppiness envelope in [0, 1]
-float medChop01(float2 posXZ_WS, float time)
+float medChop01(float2 posXZ_WS, float noiseTime)
 {
-    const float n = fnlGetNoise3D(MED_CHOP_NOISE_STATE, posXZ_WS.x * MED_CHOP_FREQ, posXZ_WS.y * MED_CHOP_FREQ, time * MED_CHOP_SPEED);
+    const float n = fnlGetNoise3D(MED_CHOP_NOISE_STATE, posXZ_WS.x * MED_CHOP_FREQ, posXZ_WS.y * MED_CHOP_FREQ, noiseTime * MED_CHOP_SPEED);
     return 0.5f + 0.5f * n;
 }
 
 // noise tilt added to the shading normal via the wave gradient. Two decorrelated
 // OpenSimplex2 FBM samples give independent X and Z perturbation, scaled by a choppiness
 // factor (large-scale sine envelope * medium-scale noise envelope), floored at CHOP_FLOOR.
-float2 waveNormalPerturbation(float2 posXZ_WS, float time)
+float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 {
-    const float chop = CHOP_FLOOR + (1.f - CHOP_FLOOR) * sineChop01(posXZ_WS, time) * medChop01(posXZ_WS, time);
+    const float chop = CHOP_FLOOR + (1.f - CHOP_FLOOR) * sineChop01(posXZ_WS, waveTime) * medChop01(posXZ_WS, noiseTime);
 
-    const float3 samplePos = float3(posXZ_WS * NOISE_WAVE_FREQ, time * NOISE_WAVE_SPEED);
+    const float3 samplePos = float3(posXZ_WS * NOISE_WAVE_FREQ, noiseTime * NOISE_WAVE_SPEED);
     const float3 decorrelated = samplePos + float3(137.f, -91.f, 0.f) * NOISE_WAVE_FREQ;
     const float nx = fnlGetNoise3D(NOISE_WAVE_STATE, samplePos.x, samplePos.y, samplePos.z);
     const float nz = fnlGetNoise3D(NOISE_WAVE_STATE, decorrelated.x, decorrelated.y, decorrelated.z);
@@ -162,10 +167,10 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float time)
 // flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
 // surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
 // view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
-float3 waveShadingNormal(float2 posXZ_WS, float time, float3 rayDir_WS, bool backfaceHit)
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit)
 {
-    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, time).yz;
-    const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, time);
+    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz;
+    const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
     const float flip = backfaceHit ? -1.f : 1.f;
     const float3 baseNor_WS = flip * normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));
     float3 waveNor_WS = flip * normalize(float3(-grad.x, 1.f, -grad.y));

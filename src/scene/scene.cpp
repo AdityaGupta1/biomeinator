@@ -374,7 +374,7 @@ bool Scene::consumeRadianceHistoryInvalidation()
     return invalidated;
 }
 
-bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)
+bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime)
 {
     this->areaLightTopologyChanged = false;
 
@@ -383,7 +383,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
     }
 
-    this->updateDeformableInstances(cmdList, toFreeList, animTime);
+    this->updateDeformableInstances(cmdList, toFreeList, waveTime);
 
     bool didChange = false;
 
@@ -423,7 +423,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     return didChange;
 }
 
-void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float animTime)
+void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime)
 {
     if (this->deformableInstances.empty())
     {
@@ -457,7 +457,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
-        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), animTime, allDispatchInputs);
+        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);

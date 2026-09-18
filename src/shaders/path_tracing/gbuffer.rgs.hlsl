@@ -57,7 +57,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
+            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevWaveTime) - waveHeight(posXZ_WS, renderParams.waveTime);
         }
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
