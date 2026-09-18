@@ -89,13 +89,13 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     }
 
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloud.maxDistance;
+        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.maxDistance;
     float cloudDistance;
     if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
     {
         motionHitPos_WS = evalRayPos(ray, cloudDistance);
         prevMotionHitPos_WS = motionHitPos_WS;
-        prevMotionHitPos_WS.xz -= float2(renderParams.cloud.windX, renderParams.cloud.windZ)
+        prevMotionHitPos_WS.xz -= float2(renderParams.cloudSettings.windX, renderParams.cloudSettings.windZ)
             * (renderParams.animTime - renderParams.prevAnimTime);
     }
 

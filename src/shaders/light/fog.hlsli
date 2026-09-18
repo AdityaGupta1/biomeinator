@@ -115,13 +115,17 @@ float3 computeFogInScatter(const float3 origin_WS,
         const float3 stepPos_WS = origin_WS + dir * t;
         const float density = getFogDensity(stepPos_WS.y + globalOffsetY);
         if (density <= 0.f)
+        {
             continue;
+        }
         const float3 sunSampleDir_WS = sampleSunDirection(sunDir_WS, rng);
         const float3 sunEnergy = getVolumeSunEnergy(sunSampleDir_WS, stepPos_WS.y + globalOffsetY);
         if (!any(sunEnergy > 0.f) || isRayOccluded(stepPos_WS, sunSampleDir_WS))
+        {
             continue;
+        }
         const float viewTransmittance = computeFogTransmittance(origin_WS, dir, t)
-            * cloudTransmittance(origin_WS, dir, min(t, renderParams.cloud.maxDistance), rng);
+            * cloudTransmittance(origin_WS, dir, min(t, renderParams.cloudSettings.maxDistance), rng);
         const float sunVolumeDist = getDistanceToVoxelBounds(stepPos_WS, sunSampleDir_WS);
         const float sunTransmittance = computeFogTransmittance(stepPos_WS, sunSampleDir_WS, sunVolumeDist)
             * cloudTransmittance(stepPos_WS, sunSampleDir_WS, 1.e30f, rng);

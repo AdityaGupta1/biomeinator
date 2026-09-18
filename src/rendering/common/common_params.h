@@ -4,7 +4,6 @@
 #pragma once
 
 #include "common_enums.h"
-#include "common_cloud_settings.h"
 
 #ifdef __cplusplus
 #include <DirectXMath.h>
@@ -52,10 +51,11 @@ struct HeapIndices
         uint transmittanceLutIdx;
         uint skyViewLutIdx;
         uint biomeMapIdx;
-        uint cloudPadding0;
+
         uint cloudShapeIdx;
-        uint cloudPadding1;
-        uint cloudPadding2;
+        uint pad0;
+        uint pad1;
+        uint pad2;
     } srv;
 };
 
@@ -124,6 +124,34 @@ struct SceneParams
     uint pad3;
 };
 
+struct CloudSettings
+{
+    uint enableClouds;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+
+    float coverage;
+    float density;
+    float baseHeight;
+    float thickness;
+
+    float cellSize;
+    float period;
+    float maxDistance;
+    float marchDistance;
+
+    float ambient;
+    float phaseG;
+    float windX;
+    float windZ;
+
+    float multiScatterStrength;
+    uint samples;
+    uint seed;
+    uint ser;
+};
+
 struct RenderParams
 {
     uint frameNumber;
@@ -149,11 +177,8 @@ struct RenderParams
     uint fogMarchSteps;
     float fogAmbientStrength;
     float skyStrength;
-    uint clouds;
-    uint cloudPadding0;
-    uint cloudPadding1;
-    uint cloudPadding2;
-    CloudSettings cloud;
+
+    CloudSettings cloudSettings;
 };
 
 struct SharcParams

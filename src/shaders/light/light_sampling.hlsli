@@ -147,7 +147,7 @@ bool traceToLight(const float3 surfPos_WS,
     TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
     texCtx.proceduralColor = getProceduralColor(lightPerTriData.flags, pointOnLight_WS);
     Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption
-        * cloudTransmittance(ray.Origin, wi_WS, min(lightDistance, renderParams.cloud.maxDistance), rng);
+        * cloudTransmittance(ray.Origin, wi_WS, min(lightDistance, renderParams.cloudSettings.maxDistance), rng);
     return true;
 }
 

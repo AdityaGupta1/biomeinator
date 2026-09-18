@@ -65,19 +65,23 @@ float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, cons
     const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
-        ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloud.maxDistance;
+        ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.maxDistance;
     CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, 1.e30f);
     float2 cloudInterval;
     const bool cloudHit = nextCloudInterval(cloudState, cloudInterval);
-    if (sceneParams.voxelMode == 1 && renderParams.clouds != 0 && renderParams.cloud.ser != 0)
+    if (sceneParams.voxelMode == 1 && renderParams.cloudSettings.enableClouds != 0 && renderParams.cloudSettings.ser != 0)
+    {
         NvReorderThread(cloudHit ? 1 : 0, 1);
+    }
     cloud = integrateClouds(origin_WS, dir, cloudState, cloudHit, cloudInterval,
         fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;
     if (fogEnabled)
+    {
         fogScatter = computeFogInScatter(origin_WS, dir, volumeDistance, numInScatterSteps,
             payload.rng, fogTransmittance);
+    }
     pathColor += payload.pathWeight * (fogScatter + cloud.radiance);
     payload.pathWeight *= fogTransmittance * cloud.transmittance;
     return fogTransmittance;
@@ -215,7 +219,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.pathWeight = 1.f;
         pathColor = 0.f;
         if (!surfMaterial.isDelta())
+        {
             surfMaterial.roughness = max(surfMaterial.roughness, sharcParams.roughnessMin);
+        }
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
@@ -483,7 +489,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 RWTexture2D<float4> specularAlbedoTarget =
                     ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
                 if (!SHARC_UPDATE)
+                {
                     specularAlbedoTarget[pixelIdx] = float4(albedos.specular, 1.f);
+                }
             }
 
             const bool useDiffuseMaterialAlbedo = (pathDepth == 0) && isDiffuseOnlyMaterial(surfMaterial);
@@ -656,11 +664,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     ptDiffuseAlbedo = saturate(ptDiffuseAlbedo + ptEmissiveAlbedo);
 #if SHARC_QUERY
     if (sharcParams.debugMode == 1)
+    {
         pathColor = cacheHit ? float3(0, 1, 0) : float3(1, 0, 0);
+    }
     if (sharcParams.debugMode == 2)
+    {
         pathColor = lerp(float3(0, 1, 0), float3(1, 0, 0), saturate(tracedBounces / 8.f));
+    }
     if (sharcParams.debugMode > 0 && sharcParams.debugMode <= 4 && pathSplitIdx != 0)
+    {
         pathColor = 0;
+    }
 #endif
 }
 
@@ -673,7 +687,9 @@ void RayGeneration()
     const uint2 pixelIdx =
         tile * sharcParams.downscale + uint2(pixelRng.nextUint(), pixelRng.nextUint()) % sharcParams.downscale;
     if (any(pixelIdx >= renderParams.renderSize))
+    {
         return;
+    }
     const uint pathSplitIdx = 0;
 #else
     const uint2 pixelIdx = getPixelIdx();
@@ -731,7 +747,10 @@ void RayGeneration()
             SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
             float3 cachedRadiance;
-            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false)) pathColor = cachedRadiance;
+            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false))
+            {
+                pathColor = cachedRadiance;
+            }
         }
     }
     else

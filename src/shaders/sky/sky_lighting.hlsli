@@ -3,7 +3,18 @@
 #pragma once
 #include "common/global_params.hlsli"
 #include "sky/atmosphere.hlsli"
-#include "sky/sun_sampling.hlsli"
+#include "util/sampling.hlsli"
+
+// Deliberately larger than the real sun (~0.8 degree radius).
+static const float sunCosTheta = 0.9999f;
+static const float sunSolidAngle = M_TWO_PI * (1.f - sunCosTheta);
+
+// One uniform solid-angle sample. Reuse this direction for every part of the
+// lighting estimate (phase/BRDF, atmosphere, terrain and cloud visibility).
+float3 sampleSunDirection(float3 center, inout RandomNumberGenerator rng)
+{
+    return sampleSphericalCapUniform(center, sunCosTheta, rng);
+}
 
 // Calibrated against the previous hand-tuned sun (radiance 16000 over the oversized disk's solid
 // angle, ~10 lux) so overall exposure and tonemapping don't shift drastically.
@@ -64,7 +75,9 @@ float3 getVolumeSunEnergy(float3 sunDir, float worldY)
 {
     const float r = atmosphereRadiusForCameraY(worldY);
     if (raySphereIntersectNearest(float3(0.f, r, 0.f), sunDir, atmosphereGroundRadius) >= 0.f)
+    {
         return 0.f;
+    }
     Texture2D<float4> lut = ResourceDescriptorHeap[heapIndices.srv.transmittanceLutIdx];
     return sunIlluminance * sampleTransmittanceLut(lut, skyLutSampler, r, sunDir.y);
 }

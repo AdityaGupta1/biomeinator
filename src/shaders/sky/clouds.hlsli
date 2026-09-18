@@ -8,13 +8,16 @@
 
 float cloudOpticalDepth(float3 origin_WS, float3 dir, float maxDistance, inout RandomNumberGenerator rng)
 {
-    CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, renderParams.cloud.marchDistance);
+    CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, renderParams.cloudSettings.marchDistance);
     float depth = 0.f;
     float2 interval;
     [loop] while (nextCloudInterval(state, interval))
     {
-        depth += renderParams.cloud.density * (interval.y - interval.x);
-        if (depth > 12.f) break;
+        depth += renderParams.cloudSettings.density * (interval.y - interval.x);
+        if (depth > 12.f)
+        {
+            break;
+        }
     }
     return depth;
 }
@@ -30,20 +33,20 @@ float cloudPhase(float mu, float g)
     return (1.f - g * g) / (4.f * M_PI * d * sqrt(d));
 }
 
-float3 cloudUnshadowedColor(float3 dir)
+float3 cloudGuideColor(float3 dir, float3 skyColor, float transmittance)
 {
-    const CloudSettings c = renderParams.cloud;
+    if (transmittance == 1.f)
+    {
+        return skyColor;
+    }
+
+    const CloudSettings c = renderParams.cloudSettings;
     const float3 sunDir = getSunDir_WS();
     const float phase = cloudPhase(dot(dir, sunDir), c.phaseG)
         + c.multiScatterStrength * 0.65f / (4.f * M_PI);
-    return c.ambient * getSkyColor(float3(0.f, 1.f, 0.f))
+    const float3 unshadowedColor = c.ambient * getSkyColor(float3(0.f, 1.f, 0.f))
         + phase * getVolumeSunEnergy(sunDir, c.baseHeight + 0.5f * c.thickness);
-}
-
-float3 cloudGuideColor(float3 dir, float3 skyColor, float transmittance)
-{
-    if (transmittance == 1.f) return skyColor;
-    return lerp(cloudUnshadowedColor(dir), skyColor, transmittance);
+    return lerp(unshadowedColor, skyColor, transmittance);
 }
 
 struct CloudResult
@@ -59,8 +62,11 @@ CloudResult integrateClouds(float3 origin_WS, float3 dir, CloudTraversal state,
     CloudResult result;
     result.radiance = 0.f;
     result.transmittance = 1.f;
-    if (!cloudHit) return result;
-    const CloudSettings c = renderParams.cloud;
+    if (!cloudHit)
+    {
+        return result;
+    }
+    const CloudSettings c = renderParams.cloudSettings;
     const float3 ambient = c.ambient * getSkyColor(float3(0.f, 1.f, 0.f));
     [loop] do
     {
@@ -94,7 +100,10 @@ CloudResult integrateClouds(float3 origin_WS, float3 dir, CloudTraversal state,
             result.radiance += result.transmittance * (1.f - intervalT) * lighting / float(c.samples);
         }
         result.transmittance *= intervalT;
-        if (result.transmittance < 0.002f) break;
+        if (result.transmittance < 0.002f)
+        {
+            break;
+        }
     } while (nextCloudInterval(state, interval));
     return result;
 }

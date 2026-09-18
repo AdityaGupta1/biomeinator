@@ -11,19 +11,19 @@ static const uint cloudShapeSize = 512;
 float3 cloudPosition(float3 position_WS)
 {
     float3 p = position_WS + float3(cameraParams.globalInstanceOffset);
-    p.xz -= float2(renderParams.cloud.windX, renderParams.cloud.windZ) * renderParams.animTime;
+    p.xz -= float2(renderParams.cloudSettings.windX, renderParams.cloudSettings.windZ) * renderParams.animTime;
     return p;
 }
 
 int2 cloudShapeOrigin()
 {
-    return int2(floor(cloudPosition(cameraParams.pos_WS).xz / renderParams.cloud.cellSize))
+    return int2(floor(cloudPosition(cameraParams.pos_WS).xz / renderParams.cloudSettings.cellSize))
         - int(cloudShapeSize / 2);
 }
 
 float cloudHash(int2 cell)
 {
-    uint h = uint(cell.x) * 0x8da6b343u ^ uint(cell.y) * 0xd8163841u ^ renderParams.cloud.seed;
+    uint h = uint(cell.x) * 0x8da6b343u ^ uint(cell.y) * 0xd8163841u ^ renderParams.cloudSettings.seed;
     h ^= h >> 16;
     h *= 0x7feb352du;
     h ^= h >> 15;
@@ -43,10 +43,16 @@ float cloudNoise(float2 p)
 
 uint cloudCellOccupancy(int2 cell)
 {
-    const float coverage = renderParams.cloud.coverage;
-    if (coverage <= 0.f) return 0;
-    if (coverage >= 1.f) return 1;
-    const float2 p = (float2(cell) + 0.5f) * (renderParams.cloud.cellSize / renderParams.cloud.period);
+    const float coverage = renderParams.cloudSettings.coverage;
+    if (coverage <= 0.f)
+    {
+        return 0;
+    }
+    if (coverage >= 1.f)
+    {
+        return 1;
+    }
+    const float2 p = (float2(cell) + 0.5f) * (renderParams.cloudSettings.cellSize / renderParams.cloudSettings.period);
     const float noise = (cloudNoise(p) + 0.5f * cloudNoise(p * 2.f + 17.3f)
         + 0.25f * cloudNoise(p * 4.f - 9.1f)) / 1.75f;
     // Expand the clustered noise values to give the coverage control a useful range.

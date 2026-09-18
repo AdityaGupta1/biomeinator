@@ -114,7 +114,9 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
             ray.Origin.y + float(cameraParams.globalInstanceOffset.y));
         result.Le = sunEnergy / sunSolidAngle * domeLightPayload.pathWeight * passthroughAbsorption;
         if (any(result.Le > 0.f))
+        {
             result.Le *= cloudTransmittance(ray.Origin, ray.Direction, 1.e30f, rng);
+        }
     }
     else
     {
