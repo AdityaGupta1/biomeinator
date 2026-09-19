@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-10_
 
 # Blender glTF Export
 
@@ -32,10 +32,22 @@ Shading Language option (`scene.cycles.shading_system`); with it off the node is
 dropped, which is harmless for materials whose mix factor never selects it.
 
 Each .blend carries its own copy of the group. `ensure_node_group` upgrades a stale copy in
-place (adds missing sockets, then rebuilds the internal nodes when the dielectric node is
-absent), preserving material-level socket values and links. Old test scenes do not need
+place (adds missing sockets, then rebuilds internal nodes using `biomeinator_version`),
+preserving material-level socket values and links. Old test scenes do not need
 upgrading: the rewiring is render-identical for every lobe combination they use, and only a
 scene with rough transmission needs the new closure.
+
+The Normal input accepts a tangent-space Normal Map node's output (already transformed to
+the shading coordinate space by Blender). It feeds every scattering closure and the Fresnel
+node, including an explicit Normal parameter on the OSL dielectric. An unconnected zero
+vector falls back to Geometry Normal, preserving unmapped materials. The interface's
+`default_input = 'NORMAL'` is not supported for shader groups, so the fallback is explicit.
+
+Principled conversion and the export proxy preserve both Normal and Roughness links, not
+just their socket defaults. Export enables tangents. The statues scene uses normal images
+and green-channel roughness from the original ARM images, with metallic fixed at zero;
+normal and roughness images are Non-Color data. The engine reads normal and separate
+roughness textures through the glTF path; terrain continues to use packed aux roughness.
 
 ## Why materials are proxied on export
 

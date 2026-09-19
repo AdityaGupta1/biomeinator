@@ -5,8 +5,8 @@
 
 #include "../rendering/common/common_registers.h"
 
-// Root constants shared by both sky LUT generation passes; the transmittance pass only uses
-// lutUavIdx.
+// Root constants shared by the sky LUT generation passes; the transmittance and cloud occupancy
+// passes only use lutUavIdx.
 cbuffer SkyConstants : REGISTER_B(SKY, CONSTANTS)
 {
     uint lutUavIdx;

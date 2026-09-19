@@ -24,12 +24,12 @@ struct HitInfo
     float3 hitPos_WS;
     uint instanceId;
 
-    float3 hitNor_WS;
+    float3 hitShadingNor_WS; // TODO: pack this?
     uint triangleIdx;
 
     float2 uv;
+    uint packedGeoNor; // face-oriented geometric normal for surface ray offsets
     uint pad0;
-    uint pad1;
 };
 
 struct GbufferData
@@ -46,8 +46,16 @@ struct Vertex
 {
     float3 pos_OS;
     uint packedNor; // octahedron-encoded, see packing.hlsli / util/packing.h
-    uint packedUv; // f16 pair
+    float2 uv; // full precision: f16 UVs can shift samples by a texel on 2K normal maps
 };
+
+struct VertexTangent
+{
+    uint packedTangent; // octahedron-encoded object-space direction
+    float handedness; // glTF tangent.w
+};
+
+#define TANGENT_BUFFER_OFFSET_INVALID ~0u
 
 struct InstanceData
 {
@@ -60,9 +68,9 @@ struct InstanceData
     uint areaLightsBufferOffset;
 
     uint materialIdx;
+    uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 
 #define MATERIAL_IDX_INVALID ~0u
@@ -75,7 +83,7 @@ struct InstanceData
 // Roughness > 0 is only supported together with MATERIAL_FLAG_GLOSSY_REFLECTION (the dielectric lobe), so
 // transmission-only materials are delta. Both enforced in Scene::addMaterial.
 #define MATERIAL_FLAG_GLOSSY_TRANSMISSION (1 << 2)
-// Per-material, not per-texture: base + aux must both be Texture2DArray (or invalid).
+// Per-material, not per-texture: all texture slots must be Texture2DArray (or invalid).
 #define MATERIAL_FLAG_ARRAY_TEXTURE (1 << 3)
 // auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
@@ -106,6 +114,11 @@ public:
 
     float3 emissiveColor;
     uint auxTextureId; // emissive color texture, unless MATERIAL_FLAG_PACKED_AUX repurposes it
+
+    uint roughnessTextureId; // linear glTF metallicRoughnessTexture; only G is used
+    uint normalTextureId; // linear tangent-space normal, separate for both terrain and glTF
+    float normalScale; // scales normal texture X/Y before normalization
+    uint pad0;
 
     bool hasDiffuse()
     {
@@ -265,6 +278,8 @@ static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for p
 #define TRIANGLE_FLAG_IS_GLASS (1 << 4)
 // Faces whose base and emissive color come from a world-space ramp (see getProceduralColor)
 #define TRIANGLE_FLAG_PROCEDURAL_COLOR (1 << 5)
+// The terrain texture array slice has a normal map.
+#define TRIANGLE_FLAG_NORMAL_MAP (1 << 6)
 
 struct PerTriangleData
 {

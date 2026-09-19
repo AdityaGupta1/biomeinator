@@ -142,6 +142,34 @@ microfacet; other rough glossy materials simply aren't split yet.
 away from the ray on grazing hits, which would invert the IOR for them) and, for materials with a
 glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflection`
 (`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops use the wave
-normal instead; other materials keep the plain interpolated normal, flipped to face the ray. The
+normal instead; diffuse-only materials retain the interpolated normal after geometric backface
+orientation, even when that shading normal faces away from the ray (see #371). The
 bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
-too, whereas Cycles bends only the specular closures' normal (a silhouette-only difference).
+too, whereas Cycles bends only the specular closures' normal. This can also change fine
+normal-mapped creases, not just mesh silhouettes.
+
+Closest-hit orients the base surface before applying a normal map. It maps the linear tangent-space
+sample through interpolated authored glTF tangents from a separate buffer, or a
+triangle/UV-derived terrain frame when the instance has no tangent attributes,
+then constrains the result to the geometric hemisphere and applies glossy reflection correction.
+`normalScale` multiplies X/Y before normalization.
+Both the G-buffer/DLSS guides and later bounces receive this normal. Backface classification
+uses the geometric normal, which is also retained in `HitInfo` for all surface
+bounce and shadow-ray offsets. The ray-cone payload explicitly allows closest-hit reads.
+
+Opaque surfaces reject continuation and direct-light directions at or below the geometric
+horizon. Area and dome light sampling reject these directions before tracing a shadow ray.
+A rejected continuation has zero throughput but does not discard the hit's direct lighting.
+Samples are not retried or renormalized, so MIS retains the original sampling densities.
+Transmission materials allow backside directions.
+
+For a diffuse-only first hit, the diffuse-albedo guide is the resolved material color
+times the incoming path weight (including absorption, fog and opacity splitting).
+It does not depend on whether the continuation sample survives geometric-horizon
+rejection. Rejected samples still contribute zero continuation radiance.
+
+Reflection sampling rejects outgoing view directions below the shading normal before
+sampling GGX, just as dielectric sampling does. A zero-density mixture sample is also
+terminated with `deadBsdfSample`, avoiding `0 / 0` throughput and accumulated black pixels.
+The GGX distribution keeps its small alpha-squared term separate from subtraction from one;
+`precise` prevents compiler reassociation from reintroducing cancellation near smooth peaks.

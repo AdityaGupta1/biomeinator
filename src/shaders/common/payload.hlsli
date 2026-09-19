@@ -24,7 +24,7 @@ struct [raypayload] Payload
     float waterEntryT : read(caller, anyhit) : write(caller, anyhit); // for REFRACTION_PASSTHROUGH rays: T where water was first entered (0 if starting underwater, RAY_DEFAULT_TMAX if not)
     float waterExitT : read(caller, anyhit) : write(caller, anyhit);  // for REFRACTION_PASSTHROUGH rays: T where water was first exited (RAY_DEFAULT_TMAX if not yet exited)
 
-    RayCone rayCone : read(caller, anyhit) : write(caller);
+    RayCone rayCone : read(caller, anyhit, closesthit) : write(caller);
 
     HitInfo hitInfo : read(caller) : write(closesthit);
 };

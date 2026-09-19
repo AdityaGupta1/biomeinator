@@ -55,24 +55,30 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
 }
 
-// Adds the segment's fog in-scatter to pathColor and folds fog transmittance into
-// pathWeight. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
-float applySegmentFog(inout Payload payload, const float3 origin_WS, const float3 dir,
-    const uint numInScatterSteps, inout float3 pathColor)
+// Adds the segment's fog and cloud in-scatter to pathColor and folds both transmittances into
+// pathWeight. Cloud radiance is attenuated by the fog and water in front of it inside
+// integrateClouds, and the fog march attenuates its own samples by clouds, so neither medium is
+// applied twice. Returns the segment's fog transmittance (1 if fog is inactive for this segment).
+float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
+    const uint numInScatterSteps, const bool cloudScatter, inout float3 pathColor, out CloudResult cloud)
 {
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f;
-    if (!fogEnabled || bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
+    const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
+    const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
+    cloud = integrateClouds(origin_WS, dir, cloudState,
+        fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
+    float fogTransmittance = 1.f;
+    float3 fogScatter = 0.f;
+    if (fogEnabled)
     {
-        return 1.f;
+        fogScatter = computeFogInScatter(origin_WS, dir, volumeDistance, numInScatterSteps,
+            payload.rng, fogTransmittance);
     }
-
-    const float segmentDist = getSegmentVolumeDistance(payload, origin_WS, dir);
-
-    float fogTransmittance;
-    const float3 inScatter =
-        computeFogInScatter(origin_WS, dir, segmentDist, numInScatterSteps, payload.rng, fogTransmittance);
-    pathColor += payload.pathWeight * inScatter;
-    payload.pathWeight *= fogTransmittance;
+    pathColor += payload.pathWeight * (fogScatter + cloud.radiance);
+    payload.pathWeight *= fogTransmittance * cloud.transmittance;
     return fogTransmittance;
 }
 
@@ -93,13 +99,13 @@ struct FirstBounceAlbedos
 FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
                                              const float2 uv,
                                              const float3 wo_WS,
-                                             const float3 surfNor_WS,
+                                             const float3 surfShadingNor_WS,
                                              const TexSampleCtx texCtx,
                                              const float3 weight)
 {
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfNor_WS);
+    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const float3 glossyReflectionAlbedo = calculateDlssSpecularAlbedo(
-        material.glossyReflectionTint, material.roughness * material.roughness, cosTheta(wo_WS, surfNor_WS));
+        material.glossyReflectionTint, material.roughness * material.roughness, cosTheta(wo_WS, surfShadingNor_WS));
     // The lobe the light reaches when it isn't reflected: diffuse, or transmission for glass
     const float3 nonReflectedAlbedo =
         weight * (1.f - fresnelReflectance) * getMaterialBaseColor(material, uv, texCtx).rgb;
@@ -133,8 +139,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
     // The primary segment is identical for both path splits and collect sums them, so
     // in-scattered radiance is added only by split 0 (same as emission and the dome light miss).
-    applySegmentFog(payload, cameraParams.pos_WS, ray.Direction,
-        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathColor);
+    CloudResult primaryCloud;
+    applySegmentAtmosphere(payload, cameraParams.pos_WS, ray.Direction,
+        (pathSplitIdx == 0) ? renderParams.fogMarchSteps : 0u, pathSplitIdx == 0, pathColor, primaryCloud);
 
     payload.pathWeight *= segmentAbsorption;
 
@@ -147,11 +154,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     {
         const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
         pathColor += payload.pathWeight * domeLightColor;
-        if (sceneParams.voxelMode == 1)
+        if (sceneParams.voxelMode == 1 && pathSplitIdx == 0)
         {
             // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
             // light rather than pathWeight, which would fold in fog transmittance.
-            ptDiffuseAlbedo = applyReinhard(domeLightColor);
+            ptDiffuseAlbedo = applyReinhard(cloudGuideColor(ray.Direction, domeLightColor, primaryCloud.transmittance));
         }
         return;
     }
@@ -177,7 +184,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     bool bounceWasSpecular = false; // TODO: pack this and bounceAcceptedBacksideLight together (and see if they can be eliminated entirely)
     bool bounceAcceptedBacksideLight = false;
     float bounceBsdfPdf = 0.f;
-    float3 surfPos_WS, surfNor_WS;
+    float3 surfPos_WS, surfShadingNor_WS;
 
     bool hasEncounteredNonDeltaSurface = false;
 
@@ -205,7 +212,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         payload.pathWeight = 1.f;
         pathColor = 0.f;
         if (!surfMaterial.isDelta())
+        {
             surfMaterial.roughness = max(surfMaterial.roughness, sharcParams.roughnessMin);
+        }
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
@@ -228,7 +237,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (pathDepth > 0 && doMis && !bounceWasSpecular)
             {
                 const float bsdfSampleLightPdf = useRtsl
-                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfNor_WS, ray.Direction, bounceAcceptedBacksideLight)
+                    ? lightPdfRtsl(payload.hitInfo, surfPos_WS, surfShadingNor_WS, ray.Direction, bounceAcceptedBacksideLight)
                     : lightPdfUniform(payload.hitInfo, surfPos_WS, ray.Direction);
                 emissiveContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleLightPdf);
             }
@@ -239,7 +248,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (!SHARC_UPDATE && pathDepth == 0 && bool(renderParams.doPathSplitting))
         {
             const bool didSplitMaterial = trySplitMaterial(
-                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitNor_WS, wo_WS, surfTexCtx, pathSplitIdx, payload.pathWeight);
+                surfMaterial, payload.hitInfo.uv, payload.hitInfo.hitShadingNor_WS, wo_WS, surfTexCtx, pathSplitIdx, payload.pathWeight);
             if (!didSplitMaterial && pathSplitIdx == 1)
             {
                 break;
@@ -292,7 +301,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         // traces only one ray and ignores passthrough surfaces in the anyhit shader.
         if (!isPassthrough)
         {
-            surfNor_WS = payload.hitInfo.hitNor_WS;
+            surfShadingNor_WS = payload.hitInfo.hitShadingNor_WS;
             surfPos_WS = payload.hitInfo.hitPos_WS;
         }
 
@@ -302,7 +311,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         {
             const SharcParameters cache = makeSharcParameters();
             const SharcHitData hit =
-                makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, surfMaterial.baseColor);
+                makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS, surfMaterial.baseColor);
             const uint level = HashGridGetLevel(hit.positionWorld, cache.hashGridParameters);
             const float segmentLength = distance(ray.Origin, payload.hitInfo.hitPos_WS);
             const float voxelSize = HashGridGetVoxelSize(level, cache.hashGridParameters);
@@ -323,6 +332,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
         }
 #endif
+        const float3 surfGeoNor_WS = octDecode(payload.hitInfo.packedGeoNor);
         const uint coherenceHint = (pathDepth == 0 ? (1 << 2) : 0) | (isPassthrough ? (1 << 1) : 0) |
                                    ((!isDeltaSurface && surfMaterial.canScatter()) ? (1 << 0) : 0);
         NvReorderThread(coherenceHint, 3 /*numCoherenceHintBits*/);
@@ -334,7 +344,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
-            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS, ray.Direction, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfGeoNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
         else // !isPassthrough
@@ -354,7 +364,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 payload.pathWeight /= survivalProbability;
             }
 
-            const BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfTexCtx, payload.rng);
+            BsdfSample surfBsdfSample = sampleBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, surfShadingNor_WS, surfTexCtx, payload.rng);
+            // Opaque reflection cannot cross the geometric surface, even when it is above the shading horizon.
+            // A rejected continuation still receives direct lighting at this vertex.
+            if (!surfMaterial.hasGlossyTransmission() && !surfMaterial.hasDiffuseTransmission() &&
+                dot(surfBsdfSample.wi_WS, surfGeoNor_WS) <= 0.f)
+            {
+                surfBsdfSample = deadBsdfSample(surfBsdfSample.wi_WS);
+            }
 
             if (doMis && surfMaterial.canScatter() && !isDeltaSurface)
             {
@@ -368,13 +385,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
                         surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
                 else
                 {
                     lightSample =
-                        sampleDirectLightingUniform(surfPos_WS, surfNor_WS, payload.rayCone, canPassthrough, isUnderwater, payload.rng);
+                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                            surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
 
                 if (lightSample.didHitLight)
@@ -382,10 +400,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     // no need to consider dome light pdf because dome light sampling can't hit area lights
 
                     const BsdfEval bsdfEval =
-                        evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfNor_WS, surfTexCtx);
+                        evaluateBsdf(surfMaterial, payload.hitInfo.uv, wo_WS, lightSample.wi_WS, surfShadingNor_WS, surfTexCtx);
 
                     float3 contribution =
-                        payload.pathWeight * bsdfEval.value * absCosTheta(lightSample.wi_WS, surfNor_WS) * lightSample.Le;
+                        payload.pathWeight * bsdfEval.value * absCosTheta(lightSample.wi_WS, surfShadingNor_WS) * lightSample.Le;
 
                     const float balanceHeuristicDenominator = lightSample.pdf + bsdfEval.pdf;
 
@@ -401,17 +419,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                 if (sceneParams.voxelMode == 1)
                 {
-                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfNor_WS, payload.rayCone,
+                    DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone,
                         canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
 
                         const BsdfEval bsdfEval = evaluateBsdf(
-                            surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfNor_WS, surfTexCtx);
+                            surfMaterial, payload.hitInfo.uv, wo_WS, domeLightSample.wi_WS, surfShadingNor_WS, surfTexCtx);
 
                         float3 contribution = payload.pathWeight * bsdfEval.value *
-                                              absCosTheta(domeLightSample.wi_WS, surfNor_WS) * domeLightSample.Le;
+                                              absCosTheta(domeLightSample.wi_WS, surfShadingNor_WS) * domeLightSample.Le;
 
                         const float balanceHeuristicDenominator = domeLightSample.pdf + bsdfEval.pdf;
 
@@ -427,7 +445,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             const bool diffuseCacheSurface = isDiffuseOnlyMaterial(surfMaterial);
             if (diffuseCacheSurface)
             {
-                SharcHitData hit = makeSharcHit(surfPos_WS, surfNor_WS, surfMaterial.baseColor);
+                SharcHitData hit = makeSharcHit(surfPos_WS, surfShadingNor_WS, surfMaterial.baseColor);
                 hit.emissive = emissiveContrib;
                 if (!SharcUpdateHit(makeSharcParameters(), sharcState, hit, pathColor, nextFloat(payload.rng)))
                 {
@@ -458,27 +476,37 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (useAnalyticAlbedoGuides)
             {
                 const FirstBounceAlbedos albedos = computeFirstBounceAlbedos(
-                    surfMaterial, payload.hitInfo.uv, wo_WS, surfNor_WS, surfTexCtx, payload.pathWeight);
+                    surfMaterial, payload.hitInfo.uv, wo_WS, surfShadingNor_WS, surfTexCtx, payload.pathWeight);
                 ptDiffuseAlbedo = albedos.diffuse;
 
                 RWTexture2D<float4> specularAlbedoTarget =
                     ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
                 if (!SHARC_UPDATE)
+                {
                     specularAlbedoTarget[pixelIdx] = float4(albedos.specular, 1.f);
+                }
+            }
+
+            const bool useDiffuseMaterialAlbedo = (pathDepth == 0) && isDiffuseOnlyMaterial(surfMaterial);
+            if (useDiffuseMaterialAlbedo)
+            {
+                // The diffuse guide describes reflectance, independent of whether the continuation is rejected.
+                // The incoming weight includes volume absorption, fog transmittance and opacity splitting.
+                ptDiffuseAlbedo = payload.pathWeight * surfMaterial.baseColor;
             }
 
             payload.pathWeight *= surfBsdfSample.bsdfValue / surfBsdfSample.pdf;
             if (!surfBsdfSample.wasSpecular)
             {
-                payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfNor_WS);
+                payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfShadingNor_WS);
             }
 
-            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfNor_WS) < 0.f) // apply only for rays that will transmit through the water
+            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f) // apply only for rays that will transmit through the water
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
             }
 
-            if (pathDepth == 0 && !useAnalyticAlbedoGuides)
+            if (pathDepth == 0 && !useAnalyticAlbedoGuides && !useDiffuseMaterialAlbedo)
             {
                 ptDiffuseAlbedo = payload.pathWeight;
             }
@@ -488,9 +516,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 break;
             }
 
-            scatterRayCone(payload.rayCone, surfMaterial, surfBsdfSample, wo_WS, surfNor_WS);
+            scatterRayCone(payload.rayCone, surfMaterial, surfBsdfSample, wo_WS, surfShadingNor_WS);
 
-            setRayOriginAndDirection(ray, surfPos_WS, surfNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
+            setRayOriginAndDirection(ray, surfPos_WS, surfGeoNor_WS, surfBsdfSample.wi_WS, true /*faceforwardNormal*/);
 
             bounceBsdfPdf = surfBsdfSample.pdf;
             bounceWasSpecular = surfBsdfSample.wasSpecular;
@@ -519,8 +547,11 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const float3 segmentAbsorption = computeSegmentAbsorption(payload, ray.Origin, ray.Direction);
 
         // Bounces at pathDepth > 1 get only transmittance, no in-scattering.
-        const uint numFogSteps = (pathDepth <= 1) ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
-        const float fogTransmittance = applySegmentFog(payload, ray.Origin, ray.Direction, numFogSteps, pathColor);
+        const bool inScatter = (pathDepth <= 1);
+        const uint numFogSteps = inScatter ? max(renderParams.fogMarchSteps / 2, 1u) : 0u;
+        CloudResult segmentCloud;
+        const float fogTransmittance = applySegmentAtmosphere(payload, ray.Origin, ray.Direction,
+            numFogSteps, inScatter, pathColor, segmentCloud);
 
         payload.pathWeight *= segmentAbsorption;
 
@@ -568,13 +599,13 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
                     if (secondHitHasDiffuseAlbedo)
                     {
-                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance;
+                        ptDiffuseAlbedo *= secondHitDiffuseAlbedo * segmentAbsorption * fogTransmittance * segmentCloud.transmittance;
                     }
                     else if (didMiss && sceneParams.voxelMode == 1)
                     {
                         // Specular reflection of the sky. Excludes fog and absorption to match
                         // how the primary miss builds its albedo.
-                        ptDiffuseAlbedo *= applyReinhard(missDomeLightColor);
+                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Direction, missDomeLightColor, segmentCloud.transmittance));
                     }
                     else
                     {
@@ -591,7 +622,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             float3 domeLightContrib = payload.pathWeight * missDomeLightColor;
             if (doMis)
             {
-                const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfNor_WS); // 0 if !voxelMode
+                const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfShadingNor_WS); // 0 if !voxelMode
                 domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);
             }
 
@@ -612,7 +643,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (pathSplitIdx == 0) // transmission
             {
                 RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-                normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitNor_WS;
+                normalsAndRoughnessTarget[pixelIdx].xyz = payload.hitInfo.hitShadingNor_WS;
             }
             else // reflection
             {
@@ -628,11 +659,17 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     ptDiffuseAlbedo = saturate(ptDiffuseAlbedo + ptEmissiveAlbedo);
 #if SHARC_QUERY
     if (sharcParams.debugMode == 1)
+    {
         pathColor = cacheHit ? float3(0, 1, 0) : float3(1, 0, 0);
+    }
     if (sharcParams.debugMode == 2)
+    {
         pathColor = lerp(float3(0, 1, 0), float3(1, 0, 0), saturate(tracedBounces / 8.f));
+    }
     if (sharcParams.debugMode > 0 && sharcParams.debugMode <= 4 && pathSplitIdx != 0)
+    {
         pathColor = 0;
+    }
 #endif
 }
 
@@ -645,7 +682,9 @@ void RayGeneration()
     const uint2 pixelIdx =
         tile * sharcParams.downscale + uint2(pixelRng.nextUint(), pixelRng.nextUint()) % sharcParams.downscale;
     if (any(pixelIdx >= renderParams.renderSize))
+    {
         return;
+    }
     const uint pathSplitIdx = 0;
 #else
     const uint2 pixelIdx = getPixelIdx();
@@ -687,7 +726,7 @@ void RayGeneration()
         // clear the path-produced specular guides, as for the cached-radiance view below.
         pathColor = pathSplitIdx == 0 && bool(gbufferData.payloadFlags & PAYLOAD_FLAG_DID_HIT)
                         ? HashGridDebugColoredHash(gbufferData.hitInfo.hitPos_WS + float3(sharcParams.originDelta),
-                                                   gbufferData.hitInfo.hitNor_WS,
+                                                   gbufferData.hitInfo.hitShadingNor_WS,
                                                    makeSharcParameters().hashGridParameters)
                         : float3(0, 0, 0);
     }
@@ -700,10 +739,13 @@ void RayGeneration()
             const Material material = getHitMaterial(payload, payload.rayCone.width);
             const PerTriangleData tri = perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
             const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo.hitPos_WS);
-            SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitNor_WS,
+            SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
             float3 cachedRadiance;
-            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false)) pathColor = cachedRadiance;
+            if (SharcGetCachedRadiance(makeSharcParameters(), hit, cachedRadiance, false))
+            {
+                pathColor = cachedRadiance;
+            }
         }
     }
     else

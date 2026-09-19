@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-17_
 
 # HLSL Utility Libraries
 
@@ -20,12 +20,18 @@ _Last edited: 2026-09-02_
 - **`materials/water.hlsli`** — water absorption and underwater logic. Included from
   `path_tracing_common.hlsli` so its helpers are available to `AnyHit` and every consumer
   of the common header (e.g. `dome_light.hlsli`, `light_sampling.hlsli`).
-- **`light/dome_light.hlsli`** — dome light (sun + sky gradient), voxel mode only. The sun
-  direction is a closed-form function of `renderParams.animTime` rather than integrated state, so
-  scrubbing time in either direction always reproduces the same sky.
-- **`light/fog.hlsli`** — all air fog math: closed-form density profile and segment/to-sky
-  optical depth, plus the in-scattering march (god rays). Needs the sun constants:
-  **must be included after `dome_light.hlsli`**.
+- **`sky/sky_lighting.hlsli`** — sun constants, sun direction and the sky/sun colour lookups
+  shared by surfaces, fog and clouds. The sun direction is a closed-form function of
+  `renderParams.animTime` rather than integrated state, so scrubbing time in either direction
+  always reproduces the same sky. Lives outside `light/` because the sky LUT passes and the
+  cloud code need it without pulling in the dome light's NEE machinery.
+- **`light/dome_light.hlsli`** — dome light NEE and PDFs (sun cap sampling), voxel mode only.
+- **`light/fog_density.hlsli`** — closed-form fog density profile and segment optical depth,
+  split out so cloud lighting can attenuate by fog without depending on the fog march.
+- **`light/fog.hlsli`** — the fog in-scattering march (god rays) on top of `fog_density.hlsli`.
+- **`sky/cloud_occupancy.hlsli`**, **`sky/cloud_traversal.hlsli`**, **`sky/clouds.hlsli`** —
+  block clouds, layered as cell occupancy → DDA intervals → transport. See
+  [rendering → clouds.md](../rendering/clouds.md).
 - **`light/light_sampling.hlsli`** — shared helpers for sampling points on area light
   triangles and computing solid-angle PDFs.
 - **`util/rng.hlsli`** — PCG-based hash RNG. Sequential state — call order within a shader

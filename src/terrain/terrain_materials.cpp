@@ -24,6 +24,7 @@ static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materia
 
 // Aux map g channel is the biome tint mask; per-slice presence drives TRIANGLE_FLAG_BIOME_TINT
 static std::vector<bool> sliceBiomeTintMask;
+static std::vector<bool> sliceNormalMap;
 
 #define MATERIAL_IDX(material) materialIdxs[static_cast<size_t>(material)]
 
@@ -71,11 +72,19 @@ static void createMaterials(Scene* scene)
         return;
     }
 
+    const uint32_t normalTextureId = loadBlockTextureArray(scene, textureNames, ".normal",
+        { .sRGB = false, .isNormalMap = true, .outSliceHasFile = &sliceNormalMap });
+    if (normalTextureId == TEXTURE_ID_INVALID)
+    {
+        return;
+    }
+
     {
         Material defaultMaterial{};
         defaultMaterial.emissiveStrength = 5.0f;
         defaultMaterial.baseColorTextureId = diffuseTextureId;
         defaultMaterial.auxTextureId = auxTextureId;
+        defaultMaterial.normalTextureId = normalTextureId;
         defaultMaterial.setHasDiffuse(true);
         defaultMaterial.setHasArrayTexture(true);
         defaultMaterial.setHasPackedAux(true);
@@ -103,6 +112,11 @@ uint32_t getMaterialIdx(TerrainMaterial terrainMaterial)
 bool sliceHasBiomeTint(uint32_t sliceIdx)
 {
     return sliceIdx < sliceBiomeTintMask.size() && sliceBiomeTintMask[sliceIdx];
+}
+
+bool sliceHasNormalMap(uint32_t sliceIdx)
+{
+    return sliceIdx < sliceNormalMap.size() && sliceNormalMap[sliceIdx];
 }
 
 } // namespace TerrainMaterials

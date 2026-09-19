@@ -179,7 +179,7 @@ Model readGlb(const std::filesystem::path& path, bool allFaces)
                                 const auto rn = orientToBlockFace(quarterTurn(normal, turn), face);
                                 const unsigned orientationIdx = allFaces ? faceIdx * 4 + turn : turn;
                                 result.orientations[orientationIdx].push_back({ { rp.x, rp.y, rp.z },
-                                    Util::octEncode({ rn.x, rn.y, rn.z }), Util::packFloat2ToUint(uv[0], uv[1]) });
+                                    Util::octEncode({ rn.x, rn.y, rn.z }), { uv[0], uv[1] } });
                             }
                         }
                     }

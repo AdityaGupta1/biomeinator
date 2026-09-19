@@ -50,7 +50,7 @@ bool getUseOmms();
 const Camera& getCamera();
 void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta);
 
-float getAnimTime();
+float getWaveTime(); // animTime wrapped to WATER_WAVE_PERIOD_SECONDS, for the CPU wave mirror
 
 const Scene& getScene();
 

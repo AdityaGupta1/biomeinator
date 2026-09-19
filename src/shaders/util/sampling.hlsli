@@ -6,18 +6,25 @@
 #include "util/math.hlsli"
 #include "util/rng.hlsli"
 
-float3 sampleHemisphereCosineWeighted(const float3 surfNor_WS, inout RandomNumberGenerator rng)
+float henyeyGreensteinPhase(const float cosAngle, const float g)
+{
+    const float g2 = g * g;
+    const float denom = 1.f + g2 - 2.f * g * cosAngle;
+    return (1.f - g2) / (4.f * M_PI * denom * sqrt(denom));
+}
+
+float3 sampleHemisphereCosineWeighted(const float3 surfShadingNor_WS, inout RandomNumberGenerator rng)
 {
     const float2 rndSample = rng.nextFloat2();
     const float r = sqrt(rndSample.x);
     const float theta = M_TWO_PI * rndSample.y;
     const float3 sampledDir_OS = float3(r * cos(theta), r * sin(theta), sqrt(1 - rndSample.x));
-    return normalize(mul(computeTBN(surfNor_WS), sampledDir_OS));
+    return normalize(mul(computeTBN(surfShadingNor_WS), sampledDir_OS));
 }
 
-float hemisphereCosineWeightedPdf(const float3 wi_WS, const float3 surfNor_WS)
+float hemisphereCosineWeightedPdf(const float3 wi_WS, const float3 surfShadingNor_WS)
 {
-    return max(cosTheta(wi_WS, surfNor_WS), 0.f) * M_INV_PI;
+    return max(cosTheta(wi_WS, surfShadingNor_WS), 0.f) * M_INV_PI;
 }
 
 float3 sampleSphericalCapUniform(const float3 axis_WS, const float minCosTheta, inout RandomNumberGenerator rng)

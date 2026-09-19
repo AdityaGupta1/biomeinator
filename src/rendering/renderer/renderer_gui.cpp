@@ -155,7 +155,27 @@ void imguiEndFrame(double deltaTime)
         if (renderState.voxelMode)
         {
             SettingsGuiHelpers::VerticalSpacing();
-            SettingsGuiHelpers::SectionTitle("Fog");
+            SettingsGuiHelpers::SectionTitle("Atmosphere");
+            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky strength", "skyStrength", 0.f, 10.f);
+            if (ImGui::CollapsingHeader("Cloud settings"))
+            {
+                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Enable clouds", "clouds");
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud coverage", "cloudCoverage", 0.f, 1.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud extinction", "cloudExtinction", 0.f, 0.1f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud base height", "cloudBaseHeight", 0.f, 10000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud thickness", "cloudThickness", 10.f, 10000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud cell size", "cloudCellSize", 64.f, 4096.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud pattern scale", "cloudPatternScale", 256.f, 131072.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud pattern seed", "cloudSeed", 0, 65535);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud draw distance", "cloudDrawDistance", 100.f, 100000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud shadow distance", "cloudShadowDistance", 100.f, 20000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud lighting samples", "cloudSamples", 1, 32);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud ambient strength", "cloudAmbient", 0.f, 2.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud anisotropy", "cloudPhaseG", 0.f, 0.95f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud multiple scattering", "cloudMultiScatterStrength", 0.f, 2.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind X", "cloudWindX", -50.f, 50.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind Z", "cloudWindZ", -50.f, 50.f);
+            }
             if (ImGui::CollapsingHeader("Fog settings"))
             {
                 radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);

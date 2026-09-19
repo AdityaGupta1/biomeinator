@@ -134,6 +134,8 @@ enum class GbufferParam
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
+    TANGENTS,
+
     GBUFFER_OUT,
 
     COUNT
@@ -151,6 +153,8 @@ enum class PtParam
     PER_TRI_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
+
+    TANGENTS,
 
     GBUFFER_IN,
 
@@ -377,7 +381,7 @@ struct RendererState
     HANDLE frameLatencyWaitable{ nullptr };
     std::chrono::high_resolution_clock::time_point lastTimePoint{ std::chrono::high_resolution_clock::now() };
     double animTime{ 0.0 }; // world animation time in seconds; advances unless paused, or at 50x while scrubbing
-    float prevAnimTime{ 0.f }; // previous frame's RenderParams::animTime, for water motion vectors
+    double prevAnimTime{ 0.0 }; // previous frame's animTime, for water and cloud motion vectors
     bool stopAccumulating{ false };
 
     // -- Device and infrastructure --

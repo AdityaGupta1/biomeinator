@@ -9,6 +9,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "materials/materials.hlsli"
+#include "sky/cloud_traversal.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 
@@ -36,7 +37,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
 
     float3 motionHitPos_WS;
     float3 prevMotionHitPos_WS;
-    float3 hitNor_WS = 0.f;
+    float3 hitShadingNor_WS = 0.f;
     float roughness = 0.f;
     float3 specularAlbedo = 0.f;
 
@@ -47,7 +48,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     {
         motionHitPos_WS = payload.hitInfo.hitPos_WS;
         prevMotionHitPos_WS = motionHitPos_WS;
-        hitNor_WS = payload.hitInfo.hitNor_WS;
+        hitShadingNor_WS = payload.hitInfo.hitShadingNor_WS;
 
         // water displacement is vertical at fixed XZ, so the previous position of a water
         // surface point is the same column's wave height at the previous frame's time
@@ -56,7 +57,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
+            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevWaveTime) - waveHeight(posXZ_WS, renderParams.waveTime);
         }
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
@@ -68,7 +69,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
             {
                 roughness = surfMaterial.roughness;
                 const float alpha = roughness * roughness;
-                const float nDotV = dot(hitNor_WS, -ray.Direction);
+                const float nDotV = dot(hitShadingNor_WS, -ray.Direction);
                 specularAlbedo = calculateDlssSpecularAlbedo(surfMaterial.glossyReflectionTint, alpha, nDotV);
             }
             else
@@ -84,7 +85,19 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         const float distToFarPlane = cameraParams.farPlane / dot(ray.Direction, cameraParams.forward_WS);
         motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
-        hitNor_WS = normalize(-ray.Direction);
+        hitShadingNor_WS = normalize(-ray.Direction);
+    }
+
+    // A cloud boundary in front of the endpoint takes over depth and motion regardless of its
+    // opacity, so DLSS tracks the clouds rather than the sky or terrain behind them.
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
+    float cloudDistance;
+    if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
+    {
+        motionHitPos_WS = evalRayPos(ray, cloudDistance);
+        prevMotionHitPos_WS = motionHitPos_WS;
+        prevMotionHitPos_WS.xz -= renderParams.cloudSettings.windDelta;
     }
 
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);
@@ -96,7 +109,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     motionTarget[pixelIdx] = calculateMotionFromNdc(currNdc, prevMotionHitPos_WS);
 
     RWTexture2D<float4> normalsAndRoughnessTarget = ResourceDescriptorHeap[heapIndices.uav.normalsAndRoughnessTargetIdx];
-    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitNor_WS, roughness);
+    normalsAndRoughnessTarget[pixelIdx].xyzw = float4(hitShadingNor_WS, roughness);
 
     RWTexture2D<float4> specularAlbedoTarget = ResourceDescriptorHeap[heapIndices.uav.specularAlbedoTargetIdx];
     specularAlbedoTarget[pixelIdx] = float4(specularAlbedo, 1);

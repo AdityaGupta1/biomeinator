@@ -28,13 +28,13 @@ void init();
 // transitions and the UAV barrier after the dispatches.
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
-              float time,
+              float waveTime,
               const std::vector<DispatchInputs>& allInputs);
 
 void destroy();
 
 // Height of the displaced water top surface above its rest level at a point inside a block,
 // sampled to match the actual mesh geometry (by sampling corners and interpolating).
-float sampleMeshWaveOffsetY(glm::ivec2 blockXZ_WS, glm::vec2 blockFraction, float time);
+float sampleMeshWaveOffsetY(glm::ivec2 blockXZ_WS, glm::vec2 blockFraction, float waveTime);
 
 } // namespace WaterDisplacer
