@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include <dxgi1_5.h>
 
 #include "fence.h"
@@ -226,6 +228,10 @@ void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
 // Internal function declarations
 // =============================================
 
+// Logs how long a startup step takes so slow launches can be attributed to a step
+void timedInitStep(const char* name, const std::function<void()>& step);
+
+void prepareNvapi();
 void initStreamline();
 void initDevice();
 void initDescriptorHeaps();
@@ -243,7 +249,7 @@ void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
 void initConstantParams();
-void initRootSignature();
+void startRtPipelineCreation();
 void initPipeline();
 void initImgui();
 void imguiBeginFrame();

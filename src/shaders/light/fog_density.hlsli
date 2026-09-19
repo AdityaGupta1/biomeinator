@@ -75,4 +75,3 @@ float computeFogTransmittance(const float3 origin_WS, const float3 dir, const fl
 {
     return exp(-computeFogOpticalDepth(origin_WS, dir, dist));
 }
-

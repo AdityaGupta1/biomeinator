@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-18_
 
 # Build Configurations
 
@@ -40,36 +40,31 @@ Gotchas:
 - The three configs share one build tree; only the `build/<Config>/` output directories
   differ. Runtime DLLs are copied per config, so a freshly built config always has its own
   copies.
-- **Incremental builds can silently miss header changes after the fallback launcher below has
-  been used.** MSBuild decides what to recompile from `CL.read.1.tlog` next to the objects;
-  a build run through the fallback can leave entries for the sources it compiled with no
-  header dependencies recorded. Later normal builds then recompile only sources whose own
-  `.cpp` changed, so a change to a shared header such as `common_params.h` leaves stale
-  objects behind. The symptom is a CPU/GPU layout mismatch with no compile error: everything
-  in `GlobalParams` after the changed struct shifts, so debug views go black or white and
-  SHaRC/RTSL read garbage. Diagnose by comparing `.obj` timestamps in
-  `build/Biomeinator.dir/RelWithDebInfo/` against the header, or by decoding the tlog
-  (`Get-Content -Encoding Unicode`) and checking which sources list the header. Fix with a
-  clean rebuild of the target (`--clean-first`) after any fallback build.
 
-## Windows fallback for duplicate environment paths
+## Windows build with a sanitized environment
 
 **Use this only after the normal `cmake --build` command above fails.** Codex's Windows host
-can expose case variants of the same environment variable (for example `Path` and `PATH`, or
-`TEMP` and `TMP`) to child processes. MSBuild and CMake `try_compile` then fail with a duplicate
-environment-path error, or FastSIMD misleadingly reports `unknown` / `SCALAR` and creates
-`FastSIMD_FastNoise` with no sources.
+can expose case variants of the same environment variable, such as `Path` and `PATH`, to child
+processes. Windows treats those names as equivalent, but a child process can still receive both
+entries. MSBuild rejects the duplicate key before compilation starts. During configuration, the
+same problem can also make CMake `try_compile` fail, causing FastSIMD to misleadingly report
+`unknown` / `SCALAR` and create `FastSIMD_FastNoise` with no sources.
 
-For an existing `build/` Visual Studio tree, launch MSBuild with those case-insensitive keys
-removed and re-added exactly once. Keep compiler temporary files inside the build directory:
+Run the normal CMake build in a child process whose environment is copied after removing all
+case variants of `Path`, `TEMP`, and `TMP`, then add those three canonical keys exactly once.
+Clearing `ProcessStartInfo.Environment` first is important: otherwise it starts with the inherited
+entries and assigning `Path` does not necessarily remove a separate `PATH` entry. Keep compiler
+temporary files inside the build directory:
 
 ```powershell
 $tempDir = Join-Path (Get-Location) 'build/msbuild-temp'
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+$cmake = (Get-Command cmake.exe -ErrorAction Stop).Source
 $psi = [System.Diagnostics.ProcessStartInfo]::new()
-$psi.FileName = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe'
+$psi.FileName = $cmake
 $psi.WorkingDirectory = (Get-Location).Path
 $psi.UseShellExecute = $false
+$psi.Environment.Clear()
 
 foreach ($entry in [System.Environment]::GetEnvironmentVariables().GetEnumerator()) {
     if ($entry.Key -inotmatch '^(path|temp|tmp)$') {
@@ -81,12 +76,12 @@ $psi.Environment['TEMP'] = $tempDir
 $psi.Environment['TMP'] = $tempDir
 
 @(
-    'build/Biomeinator.vcxproj'
-    '/m:2'
-    '/p:Configuration=RelWithDebInfo'
-    '/p:Platform=x64'
-    '/p:BuildProjectReferences=false'
-    '/v:minimal'
+    '--build'
+    'build'
+    '--config'
+    'RelWithDebInfo'
+    '--target'
+    'Biomeinator'
 ) | ForEach-Object { [void]$psi.ArgumentList.Add($_) }
 
 $buildProcess = [System.Diagnostics.Process]::Start($psi)
@@ -94,6 +89,8 @@ $buildProcess.WaitForExit()
 exit $buildProcess.ExitCode
 ```
 
-This is a recovery path, not the default build command. `BuildProjectReferences=false` relies on
-the dependencies already present in the configured build tree; return to the normal CMake command
-when dependencies or generated project structure need a full rebuild.
+The child still executes the same `cmake --build` workflow, so CMake regeneration, generated
+shaders, project dependencies, and MSVC's normal incremental dependency tracking all remain
+active. A change to a shared header must therefore rebuild every translation unit that includes
+it. If that does not happen, run once with `--clean-first` and investigate the dependency state;
+the sanitized environment itself should not change which sources are considered out of date.

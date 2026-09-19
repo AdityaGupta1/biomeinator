@@ -11,6 +11,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [frame_contexts.md](frame_contexts.md) | Triple buffering, per-frame resources, CPU-GPU pipelining |
 | [render_passes.md](render_passes.md) | G-buffer → path trace → collect → present |
 | [pipeline.md](pipeline.md) | DXR pipeline state object, PipelineBuilder, shader tables |
+| [startup.md](startup.md) | Renderer init ordering: what makes launch slow, Streamline manual hooking, threaded RT pipeline creation |
 | [param_blocks.md](param_blocks.md) | ParamBlockManager, constant buffer layout and upload |
 | [rt_targets.md](rt_targets.md) | RtTarget, UAV/SRV descriptor pairs, G-buffer output textures |
 | [camera.md](camera.md) | Spherical coordinate camera, Halton TAA jitter, motion vectors |

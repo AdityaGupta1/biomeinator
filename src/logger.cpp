@@ -27,22 +27,35 @@ static std::string timestamp()
     return oss.str();
 }
 
+// One write per line so lines from different threads do not interleave
 static void vlog(FILE* out, const char* level, const char* color, const char* fmt, va_list ap)
 {
+    std::string line;
     if (color)
     {
-        std::fputs(color, out);
+        line += color;
     }
 
-    std::fprintf(out, "[%s][%s] ", timestamp().c_str(), level);
-    std::vfprintf(out, fmt, ap);
+    line += "[" + timestamp() + "][" + level + "] ";
+
+    va_list apCopy;
+    va_copy(apCopy, ap);
+    const int messageLength = std::vsnprintf(nullptr, 0, fmt, apCopy);
+    va_end(apCopy);
+    if (messageLength > 0)
+    {
+        const size_t prefixLength = line.size();
+        line.resize(prefixLength + messageLength);
+        std::vsnprintf(line.data() + prefixLength, messageLength + 1, fmt, ap);
+    }
 
     if (color)
     {
-        std::fputs(RESET, out);
+        line += RESET;
     }
 
-    std::fputc('\n', out);
+    line += '\n';
+    std::fputs(line.c_str(), out);
     std::fflush(out);
 }
 

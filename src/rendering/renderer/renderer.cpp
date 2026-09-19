@@ -48,17 +48,18 @@ static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a br
 
 void init()
 {
+    const auto initStart = std::chrono::steady_clock::now();
+
     renderState.testMode = SettingsManager::isTestMode();
     renderState.headless = SettingsManager::isHeadless();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
+    prepareNvapi();
     initStreamline();
 
     initDevice();
     initDescriptorHeaps();
-
-    initNvapi();
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -92,8 +93,7 @@ void init()
 
     renderState.scene.init();
 
-    initRootSignature();
-    initPipeline();
+    timedInitStep("initPipeline (join)", initPipeline);
 
     WaterDisplacer::init();
 
@@ -106,13 +106,13 @@ void init()
     if (renderState.voxelMode)
     {
         Terrain::init(&renderState.scene);
-        Terrain::importWorld();
+        timedInitStep("Terrain::importWorld", Terrain::importWorld);
     }
     else
     {
         if (!defaultScene.empty())
         {
-            loadScene(defaultScene);
+            timedInitStep("loadScene", [&]() { loadScene(defaultScene); });
         }
     }
 
@@ -120,6 +120,9 @@ void init()
     {
         SetForegroundWindow(hwnd);
     }
+
+    const double totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - initStart).count();
+    Logger::log("init: total %.1f ms", totalMs);
 }
 
 void loadScene(const std::string& filePathStr)

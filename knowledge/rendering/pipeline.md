@@ -1,9 +1,10 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-17_
 
 # DXR Pipeline
 
 `pipeline_builder.h` provides `makeRtPipeline()` which creates a DXR state object, builds
-the shader table, and fills a `D3D12_DISPATCH_RAYS_DESC`.
+the shader table, and fills a `D3D12_DISPATCH_RAYS_DESC`. The RT pipelines are created on worker
+threads during startup; see [startup.md](startup.md) for the ordering constraints.
 
 All pipelines use `PIPELINE_CONFIG1` with `SKIP_PROCEDURAL_PRIMITIVES` (all geometry is
 triangles) — measured ~2% frame time (2026-08).
