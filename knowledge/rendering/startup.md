@@ -40,9 +40,11 @@ Gotchas:
 
 ## RT pipeline worker
 
+`prepareNvapi()` performs NVIDIA's required NVAPI initialize/unload sequence before `slInit`
+starts so those process-global lifetime calls cannot overlap Streamline's capability discovery.
 `startRtPipelineCreation()` runs before the `slInit` join to get the overlap, and its worker
-sets up its own prerequisites (NVAPI extension slot, root signatures, `sharcInit`) so no main
-thread step has to be ordered ahead of it. The four RT pipelines are built on separate threads
+sets up the device-specific prerequisites (NVAPI extension slot, root signatures, `sharcInit`).
+The four RT pipelines are built on separate threads
 because the driver compiles them concurrently on a cold cache (~2 s in parallel instead of ~4 s
 in sequence). `initPipeline()` joins the worker and then builds the cheap compute/graphics PSOs.
 

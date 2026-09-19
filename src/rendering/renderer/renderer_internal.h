@@ -227,6 +227,7 @@ void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
 // Logs how long a startup step takes so slow launches can be attributed to a step
 void timedInitStep(const char* name, const std::function<void()>& step);
 
+void prepareNvapi();
 void initStreamline();
 void initDevice();
 void initDescriptorHeaps();

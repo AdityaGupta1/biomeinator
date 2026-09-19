@@ -39,9 +39,33 @@ void timedInitStep(const char* name, const std::function<void()>& step)
 // Joined by initDevice; see knowledge/rendering/startup.md for why slInit runs on a thread
 static std::future<sl::Result> slInitResult;
 
+// NVIDIA's SER integration sequence initializes and immediately unloads NVAPI before using
+// the D3D12 extension entry points. Do it before the asynchronous Streamline initialization so
+// the process-global NVAPI lifetime calls cannot overlap Streamline's own capability discovery.
+static bool nvapiPrepared = false;
+
 // DLSS-G cannot run without Reflex, and Reflex in turn requires PCL for its latency markers.
 // File scope because the slInit thread reads this after initStreamline has returned.
 static constexpr sl::Feature slFeatures[] = { sl::kFeatureDLSS_RR, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeaturePCL };
+
+void prepareNvapi()
+{
+    const NvAPI_Status initStatus = NvAPI_Initialize();
+    if (initStatus != NVAPI_OK)
+    {
+        Logger::logWarning("NVAPI initialization failed: %d", static_cast<int>(initStatus));
+        return;
+    }
+
+    const NvAPI_Status unloadStatus = NvAPI_Unload();
+    if (unloadStatus != NVAPI_OK)
+    {
+        Logger::logWarning("NVAPI unload after initialization failed: %d", static_cast<int>(unloadStatus));
+        return;
+    }
+
+    nvapiPrepared = true;
+}
 
 void initStreamline()
 {
@@ -76,7 +100,14 @@ void initStreamline()
     // The over-the-air update check is a network round trip inside slInit
     prefs.flags &= ~(sl::PreferenceFlags::eAllowOTA | sl::PreferenceFlags::eLoadDownloadedPlugins);
 
-    slInitResult = std::async(std::launch::async, [prefs]() { return slInit(prefs); });
+    slInitResult = std::async(std::launch::async, [prefs]()
+    {
+        const auto start = std::chrono::steady_clock::now();
+        const sl::Result result = slInit(prefs);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        Logger::log("init: slInit took %.1f ms", ms);
+        return result;
+    });
 }
 
 namespace
@@ -282,7 +313,7 @@ void initDevice()
     // Only needs the native device, so it overlaps with the Streamline setup below
     startRtPipelineCreation();
 
-    timedInitStep("slInit", []() { CHECK_SL_RESULT(slInitResult.get()); });
+    timedInitStep("slInit (join)", []() { CHECK_SL_RESULT(slInitResult.get()); });
 
     upgradeToSlProxy(renderState.device, renderState.proxyDevice);
     upgradeToSlProxy(renderState.factory, renderState.proxyFactory);
@@ -327,22 +358,37 @@ void initDescriptorHeaps()
 
 void initNvapi()
 {
-    NvAPI_Initialize();
-    NvAPI_Unload();
+    renderState.useSer = false;
+    if (!nvapiPrepared)
+    {
+        Logger::logWarning("SER API unavailable because NVAPI preparation failed");
+        return;
+    }
 
     bool serSupported = false;
-    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(renderState.device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-    if (serSupported)
+    const NvAPI_Status supportStatus = NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(
+        renderState.device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    if (supportStatus != NVAPI_OK)
     {
-        Logger::log("SER API supported");
-        renderState.useSer = true;
-        NvAPI_D3D12_SetNvShaderExtnSlotSpace(renderState.device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        Logger::logWarning("Failed to query SER API support: %d", static_cast<int>(supportStatus));
+        return;
     }
-    else
+    if (!serSupported)
     {
         Logger::logWarning("SER API not supported");
-        renderState.useSer = false;
+        return;
     }
+
+    const NvAPI_Status slotStatus = NvAPI_D3D12_SetNvShaderExtnSlotSpace(
+        renderState.device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+    if (slotStatus != NVAPI_OK)
+    {
+        Logger::logWarning("Failed to configure the SER extension slot: %d", static_cast<int>(slotStatus));
+        return;
+    }
+
+    Logger::log("SER API supported");
+    renderState.useSer = true;
 }
 
 void initSwapChain()

@@ -1,4 +1,4 @@
-_Last edited: 2026-08-02_
+_Last edited: 2026-09-18_
 
 # NVAPI and Shader Execution Reordering
 
@@ -17,7 +17,9 @@ forest scene (2026-08).
 
 ## NVAPI Init Quirk
 
-`initNvapi()` calls `NvAPI_Initialize()` then immediately `NvAPI_Unload()` before calling
+`prepareNvapi()` calls `NvAPI_Initialize()` then immediately `NvAPI_Unload()` before
+`initStreamline()` starts. Later, the RT pipeline worker calls
 `NvAPI_D3D12_IsNvShaderExtnOpCodeSupported` and `NvAPI_D3D12_SetNvShaderExtnSlotSpace`. This
-pattern comes from [NVIDIA's SER integration guide](https://developer.nvidia.com/blog/improve-shader-performance-and-in-game-frame-rates-with-shader-execution-reordering/)
-which shows it without explanation. The D3D12 NVAPI functions apparently work after unload.
+pattern comes from [NVIDIA's SER integration guide](https://developer.nvidia.com/blog/improve-shader-performance-and-in-game-frame-rates-with-shader-execution-reordering/),
+which shows it without explanation. Keeping the lifetime calls ahead of asynchronous Streamline
+initialization prevents them from overlapping Streamline's own NVAPI capability discovery.

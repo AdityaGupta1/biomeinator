@@ -55,6 +55,7 @@ void init()
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
+    prepareNvapi();
     initStreamline();
 
     initDevice();
