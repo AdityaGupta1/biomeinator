@@ -234,10 +234,21 @@ static nlohmann::json buildResultsJson()
     std::vector<ScopeSamples> scopeSamples;
     std::map<std::pair<uint32_t, std::string>, size_t> scopeIdxByKey;
     std::vector<double> gpuFrameMs;
+    // Consecutive frames also give the idle time between them on the graphics queue (gap) and the
+    // rendered frame period (begin to begin); frameMs alone hides both
+    std::vector<double> gpuGapMs;
+    std::vector<double> gpuPeriodMs;
     gpuFrameMs.reserve(perfRun.gpuSamples.size());
+    const GpuProfiler::FrameTimings* prevFrame = nullptr;
     for (const GpuProfiler::FrameTimings& frame : perfRun.gpuSamples)
     {
         gpuFrameMs.push_back(frame.totalMs);
+        if (prevFrame != nullptr && prevFrame->frameNumber + 1 == frame.frameNumber)
+        {
+            gpuGapMs.push_back(frame.beginMs - prevFrame->endMs);
+            gpuPeriodMs.push_back(frame.beginMs - prevFrame->beginMs);
+        }
+        prevFrame = &frame;
         for (const GpuProfiler::ScopeTiming& scope : frame.scopes)
         {
             const auto key = std::make_pair(scope.depth, std::string(scope.name));
@@ -268,10 +279,11 @@ static nlohmann::json buildResultsJson()
           {
               { "scene", sceneName },
               { "adapter", renderState.adapterName },
-              { "width", SettingsManager::getAsUint("width") },
-              { "height", SettingsManager::getAsUint("height") },
+              { "width", static_cast<uint32_t>(renderState.viewport.Width) },
+              { "height", static_cast<uint32_t>(renderState.viewport.Height) },
               { "renderWidth", renderState.renderWidth },
               { "renderHeight", renderState.renderHeight },
+              { "frameGenActive", renderState.frameGen.active },
               { "measuredFrames", perfRun.gpuSamples.size() },
               { "measureStartFrame", perfRun.measureStartFrame },
               { "stablePowerState", perfRun.stablePowerState },
@@ -280,7 +292,11 @@ static nlohmann::json buildResultsJson()
           } },
         { "settings", settingsJson() },
         { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) } } },
-        { "gpu", { { "frameMs", statsJson(gpuFrameMs) }, { "scopes", scopesJson } } },
+        { "gpu",
+          { { "frameMs", statsJson(gpuFrameMs) },
+            { "gapMs", statsJson(gpuGapMs) },
+            { "periodMs", statsJson(gpuPeriodMs) },
+            { "scopes", scopesJson } } },
     };
 }
 

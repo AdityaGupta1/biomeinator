@@ -116,7 +116,8 @@ void init()
         }
     }
 
-    if (!renderState.headless)
+    // Perf runs come to the front too: fullscreen presentation needs an unoccluded window
+    if (!renderState.testMode)
     {
         SetForegroundWindow(hwnd);
     }

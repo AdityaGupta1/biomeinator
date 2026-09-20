@@ -4,8 +4,9 @@
             "name": "cornell_box",
             "scene": "gltf/cornell_box/cornell_box.gltf",
             "args": [
-                "--width=1920",
-                "--height=1080",
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
                 "--antialiasingMode=2"
             ]
         },
@@ -13,8 +14,9 @@
             "name": "evil_room",
             "scene": "gltf/evil_room/evil_room.gltf",
             "args": [
-                "--width=1920",
-                "--height=1080",
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
                 "--antialiasingMode=2",
                 "--maxPathDepth=20"
             ]
@@ -23,8 +25,9 @@
             "name": "cave_lights",
             "world": "voxel/cave_lights",
             "args": [
-                "--width=1920",
-                "--height=1080",
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
                 "--antialiasingMode=2"
             ]
         },
@@ -32,8 +35,9 @@
             "name": "fog_god_rays",
             "world": "voxel/fog_god_rays",
             "args": [
-                "--width=1920",
-                "--height=1080",
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
                 "--antialiasingMode=2",
                 "--maxPathDepth=6",
                 "--animTime=585"

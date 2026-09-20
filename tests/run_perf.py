@@ -59,12 +59,16 @@ def scope_rows(report):
     yield "frame", report["gpu"]["frameMs"]
     for scope in report["gpu"]["scopes"]:
         yield "  " * (scope["depth"] + 1) + scope["name"], scope["ms"]
+    # Older reports predate these
+    yield "gap before frame", report["gpu"].get("gapMs")
+    yield "frame period", report["gpu"].get("periodMs")
 
 
 def print_report(name, report):
     meta = report["meta"]
     print(f"\n{name}: {meta['measuredFrames']} frames at {meta['renderWidth']}x{meta['renderHeight']} "
-          f"-> {meta['width']}x{meta['height']} on {meta['adapter']}")
+          f"-> {meta['width']}x{meta['height']} on {meta['adapter']}"
+          f"{', frame generation on' if meta.get('frameGenActive') else ''}")
     if not meta["stablePowerState"]:
         print("  (stable power state unavailable; timings will be noisier)")
     if meta["timedOut"]:

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-20_
 
 # Render Loop
 
@@ -43,12 +43,13 @@ Gotchas:
 ## Headless Runs
 
 `--testOutput` (golden screenshot) and `--perfOutput` (timing report) both make the run
-*headless*: Streamline logging is suppressed, the window is not brought to foreground, and in
-voxel mode the world import is awaited before anything counts. `renderState.headless` gates
+*headless*: Streamline logging is suppressed and in voxel mode the world import is awaited
+before anything counts. `renderState.headless` gates
 those shared behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause
 and vsync for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
-`renderState.testMode` gates only the golden-specific exit, where
-accumulation runs to `maxAccumulatedFrames` then auto-captures a screenshot and exits. The
+`renderState.testMode` gates the golden-specific exit, where accumulation runs to
+`maxAccumulatedFrames` then auto-captures a screenshot and exits, plus the two things only a
+golden run gives up: frame generation and the foreground window. The
 perf lifecycle is separate and independent of accumulation; see
 [tests → perf_runs.md](../tests/perf_runs.md).
 

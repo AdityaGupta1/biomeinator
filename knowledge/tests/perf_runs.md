@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-20_
 
 # Perf Runs
 
@@ -60,12 +60,37 @@ loose for the delta being checked; warmup rarely needs touching.
   it. The partial report is for diagnosing the timeout, not for comparison.
 
 Perf mode is a *headless* run, sharing that flag with `--testOutput`: camera locked, GUI
-hidden, animation paused, vsync off, no foreground window, Streamline logging off, voxel
-import awaited. `SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays
-specific to the golden screenshot-and-exit path. The headless defaults (`lockCamera`,
+hidden, animation paused, vsync off, Streamline logging off, voxel import awaited.
+`SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays specific to the
+golden screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
+generation with Reflex, and bringing the window to the foreground (fullscreen presentation
+needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
+the game shows). The headless defaults (`lockCamera`,
 `showGui`, `animTimePaused`, `useVsync`) live in `parseArgs` and are only applied when the
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.
+
+## Gap and period
+
+`gpu.frameMs` is the command list's own duration and hides everything outside it. The report
+therefore also gives, from consecutive frames' absolute timestamps, `gapMs` (idle on the
+graphics queue between one frame's last timestamp and the next frame's first) and `periodMs`
+(begin to begin, the true rendered frame period). A gap that is not near zero means the queue
+is waiting on something other than its own work.
+
+### What frame generation costs
+
+Measured 2026-09-20, fullscreen 1440p on an RTX 4070 SUPER under stable power state: DLSS-G
+adds 0.7 ms (cave_lights) to 3.5 ms (fog_god_rays) per rendered frame period. Almost none of it
+is gap (~0.4 ms median): the cost is in-frame slowdown of path tracing and ray reconstruction
+while the TLAS build does not move, i.e. contention with DLSS-G's own work, not clocks, and it
+scales with how heavy the frame already is. D3D12 DLSS-G only offers
+`eBlockPresentingClientQueue`, but in practice the interpolation overlaps the next frame rather
+than stalling the queue in front of it.
+
+The same measurement windowed at 1080p with the window in the background instead showed a
+constant 2.2 ms gap and a smaller in-frame slowdown, so a non-fullscreen run mismeasures where
+frame generation's cost lands. This is why the scenes run fullscreen.
 
 ## Why DLSS mode, not accumulate mode
 
@@ -109,5 +134,6 @@ If a future change to the profiler breaks attribution, this is the quickest way 
 
 Entries in `tests/perf_scenes.json` have the same shape as `tests/tests.json` minus the golden:
 `name`, one of `scene`/`world`, and `args`. Pin `width` and `height` in `args` (and `dlssMode`
-if the default balanced preset is not wanted); DLSS render resolution derives from them and
-the report records the resolved values in `meta`.
+if the default balanced preset is not wanted) and pass `--fullscreen=true`; DLSS render
+resolution derives from them and the report records the actual viewport and render sizes in
+`meta`, along with whether frame generation was active.
