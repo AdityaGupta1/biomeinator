@@ -76,10 +76,17 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
 {
     const ivec2 siteXZ_WS = swampCellSiteXZ_WS(cellCornerXZ_WS);
     const BiomeNoise siteNoise = BiomeNoiseFields::sampleAt(vec2(siteXZ_WS));
+    if (BiomeNoiseFields::computeFloodFactor(siteNoise) <= BiomeNoiseFields::floodCellThreshold)
+    {
+        // Dry cells never use pondLevel in shaping or cave sealing.
+        return { .swampy = false, .pondLevel = seaLevel };
+    }
 
-    // The pond level tracks the second-lowest of nine natural-height samples across the cell
-    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise).baseHeight;
-    float secondMinNaturalBase = std::numeric_limits<float>::max();
+    // The site already supplies the center sample. Batch the other eight positions and
+    // request only the two fields that contribute to natural terrain height.
+    float sampleX[8];
+    float sampleZ[8];
+    int numSamples = 0;
     for (int sampleIdx = 0; sampleIdx < 9; ++sampleIdx)
     {
         if (sampleIdx == 4)
@@ -88,8 +95,22 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         }
 
         const ivec2 sampleXZ_WS = cellCornerXZ_WS + (swampCellSize / 2) * ivec2(sampleIdx % 3, sampleIdx / 3);
-        const float sampleBase =
-            BiomeNoiseFields::computeNaturalTerrain(BiomeNoiseFields::sampleAt(vec2(sampleXZ_WS))).baseHeight;
+        sampleX[numSamples] = static_cast<float>(sampleXZ_WS.x);
+        sampleZ[numSamples] = static_cast<float>(sampleXZ_WS.y);
+        ++numSamples;
+    }
+    float peak[8];
+    float inland[8];
+    BiomeNoiseFields::fillPositions({ .temperature = nullptr, .humidity = nullptr, .peak = peak, .inland = inland },
+                                   sampleX, sampleZ, numSamples);
+
+    // Keep the same second-lowest height and sample ordering as the scalar path.
+    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise).baseHeight;
+    float secondMinNaturalBase = std::numeric_limits<float>::max();
+    for (int sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
+    {
+        const float sampleBase = BiomeNoiseFields::computeNaturalTerrain(
+            { .peak = peak[sampleIdx], .inland = inland[sampleIdx] }).baseHeight;
         if (sampleBase < minNaturalBase)
         {
             secondMinNaturalBase = minNaturalBase;
@@ -103,7 +124,7 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
 
     const int naturalBase = static_cast<int>(std::floor(secondMinNaturalBase));
     return {
-        .swampy = BiomeNoiseFields::computeFloodFactor(siteNoise) > BiomeNoiseFields::floodCellThreshold,
+        .swampy = true,
         .pondLevel = std::max((naturalBase - 2) / swampLevelQuantize * swampLevelQuantize, seaLevel + 3),
     };
 }

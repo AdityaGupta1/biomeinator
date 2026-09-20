@@ -1,0 +1,647 @@
+_Last edited: 2026-09-20_
+
+Historical source reference for knowledge/tests/cpu_terrain_benchmarks.md.
+Read and adapt; do not git apply or run unchanged.
+Experiment baseline: 7c6240a; retained production changes: 21e7056.
+These are the scripts and harness used locally, including their old paths and
+compatibility branches. Source snapshots, generated files, binaries, and results
+are intentionally omitted. Recreate variants from the current tree. The older
+noise builder is included because the cleanup builder imports its setup prefix.
+
+diff --git a/build/terrain_cleanup_perf/benchmark.cpp b/build/terrain_cleanup_perf/benchmark.cpp
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/benchmark.cpp
+@@ -0,0 +1,256 @@
++// Actual generation, immutable masks, structures and decorators, with engine startup omitted.
++#include "terrain/chunk.h"
++#include "terrain/chunk_generator.h"
++#include "multithreading/thread_memory_allocator.h"
++#include <chrono>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <map>
++#include <memory>
++#include <set>
++#include <json.hpp>
++
++struct Timings { double columns{}, terrain{}, worley{}, simplex{}, materials{}, fill{}, structures{}, decorators{}; } timings;
++#ifdef BENCH_VERIFY
++static bool verifyCandidates=false;
++static std::vector<uint32_t> verifiedCandidates;
++#endif
++using Clock = std::chrono::steady_clock;
++static double elapsed(Clock::time_point start) { return std::chrono::duration<double, std::milli>(Clock::now()-start).count(); }
++#include "terrain/generator.cpp"
++#include "terrain/chunk_methods.cpp"
++
++template<typename Tag, typename Tag::Type member> struct Access
++{ friend typename Tag::Type access(Tag) { return member; } };
++#define FIELD_ACCESS(name, ...) \
++    struct name##Tag { using Type = __VA_ARGS__ Chunk::*; friend Type access(name##Tag); }; \
++    template struct Access<name##Tag, &Chunk::name>;
++FIELD_ACCESS(blocks, std::vector<Block>)
++FIELD_ACCESS(biomes, std::vector<Biome>)
++FIELD_ACCESS(terrainTopY, std::vector<uint16_t>)
++FIELD_ACCESS(structures, std::vector<Structure>)
++FIELD_ACCESS(caveStructures, std::vector<CaveStructure>)
++FIELD_ACCESS(blockStates, std::unordered_map<uint32_t,uint8_t>)
++FIELD_ACCESS(structureNeighbors, std::vector<const Chunk*>)
++FIELD_ACCESS(neighbors, std::array<Chunk*,4>)
++#ifdef BENCH_GROUPED
++FIELD_ACCESS(caveDecoration, CaveDecorationData)
++#else
++FIELD_ACCESS(caveAirMask, std::vector<uint64_t>)
++FIELD_ACCESS(caveBiomeNoise, std::vector<float>)
++FIELD_ACCESS(caveBiomeSurfaceBias, std::vector<CaveBiomeNoise>)
++FIELD_ACCESS(caveBiomeNoiseHeight, uint32_t)
++#endif
++struct FillTag { using Type = void (Chunk::*)(ThreadMemoryAllocator&); friend Type access(FillTag); };
++template struct Access<FillTag, &Chunk::fillTerrainBlocksAndCreateStructures>;
++struct MasksTag { using Type = void (Chunk::*)(); friend Type access(MasksTag); };
++template struct Access<MasksTag, &Chunk::buildTerrainAirMask>;
++struct DecorateTag { using Type = void (Chunk::*)(); friend Type access(DecorateTag); };
++template struct Access<DecorateTag, &Chunk::runStructuresAndDecoratorPass>;
++Chunk::Chunk(glm::ivec2 pos, Region* region) : chunkPos(pos), region(region) {}
++extern uint32_t benchmarkSeed;
++void initBenchmarkBlocks();
++
++struct MetadataView
++{
++    std::vector<uint64_t>& airMask;
++    std::vector<float>& noise;
++    std::vector<CaveBiomeNoise>& bias;
++    uint32_t& height;
++};
++static MetadataView metadata(Chunk& chunk)
++{
++#ifdef BENCH_GROUPED
++    auto& data = chunk.*access(caveDecorationTag{});
++    return {data.airMask,data.noise,data.surfaceBias,data.noiseHeight};
++#else
++    return {chunk.*access(caveAirMaskTag{}),chunk.*access(caveBiomeNoiseTag{}),
++            chunk.*access(caveBiomeSurfaceBiasTag{}),chunk.*access(caveBiomeNoiseHeightTag{})};
++#endif
++}
++
++static void prepare(Chunk& chunk)
++{
++    (chunk.*access(blocksTag{})).assign(numChunkBlocks, Block::AIR);
++    (chunk.*access(biomesTag{})).resize(chunkSizeXZSquare);
++    (chunk.*access(terrainTopYTag{})).assign(chunkSizeXZSquare,0);
++    (chunk.*access(structuresTag{})).clear();
++    (chunk.*access(caveStructuresTag{})).clear();
++    (chunk.*access(blockStatesTag{})).clear();
++#ifdef BENCH_GROUPED
++    (chunk.*access(caveDecorationTag{})).prepare();
++#else
++    metadata(chunk).airMask.assign((chunkSizeXZSquare*caveMaxY+63)/64,0);
++    metadata(chunk).bias.resize(chunkSizeXZSquare);
++#endif
++}
++
++static size_t retainedBytes(Chunk& chunk)
++{
++    return metadata(chunk).airMask.size()*8 + metadata(chunk).noise.size()*4 +
++        metadata(chunk).bias.size()*sizeof(CaveBiomeNoise);
++}
++
++static void release(Chunk& chunk)
++{
++#ifdef BENCH_GROUPED
++    (chunk.*access(caveDecorationTag{})).release();
++#else
++    std::vector<uint64_t>().swap(metadata(chunk).airMask);
++    std::vector<float>().swap(metadata(chunk).noise);
++    std::vector<CaveBiomeNoise>().swap(metadata(chunk).bias);
++    metadata(chunk).height = 0;
++#endif
++#ifdef BENCH_VERIFY
++    const auto data = metadata(chunk);
++    if (data.airMask.capacity() || data.noise.capacity() || data.bias.capacity() || data.height)
++        throw std::runtime_error("retained cave data was not released");
++#endif
++}
++
++// Snapshot all original cave-air IDs, including interiors, outside the timing window.
++// Deferred IDs are reconstructed only here to verify the retained data exactly.
++static std::vector<uint8_t> caveIds(Chunk& chunk)
++{
++    std::vector<uint8_t> ids(chunkSizeXZSquare*caveMaxY,0xff);
++    const auto& mask = metadata(chunk).airMask;
++    const auto& fields = metadata(chunk).noise;
++    const auto& bias = metadata(chunk).bias;
++    const uint height = metadata(chunk).height;
++    const uint size = chunkSizeXZ/CaveBiomeFields::downsample+1;
++    for (uint z=0;z<chunkSizeXZ;++z) for (uint x=0;x<chunkSizeXZ;++x)
++    {
++        const uint col=x+chunkSizeXZ*z;
++        CaveBiomeFields::Column t(fields.data(),size,height,x,z), h(fields.data()+size*size*height,size,height,x,z);
++        for (uint y=0;y<caveMaxY;++y)
++        {
++            const uint index=col*caveMaxY+y;
++            if ((mask[index/64] >> (index%64)) & 1)
++                ids[index] = static_cast<uint8_t>(CaveBiomes::getClosestCaveBiome({t.sample(y)+bias[col].temperature,h.sample(y)+bias[col].humidity}));
++        }
++    }
++    return ids;
++}
++
++static void verifyGrids()
++{
++    VERIFY_GRIDS
++}
++
++#include "fixtures.cpp"
++
++template<class T> void writeVector(std::ofstream& file,const std::vector<T>& data)
++{ file.write(reinterpret_cast<const char*>(data.data()),data.size()*sizeof(T)); }
++
++int main(int argc,char** argv)
++{
++    if (argc<3) return 2;
++    const std::filesystem::path output(argv[1]);
++    const int repeats=std::stoi(argv[2]);
++    const bool snapshot=argc>3 && std::string(argv[3])=="snapshot";
++    std::filesystem::create_directories(output);
++    initBenchmarkBlocks(); Biomes::init(); CaveBiomes::init(); Structures::init(); CaveStructures::init();
++    if(argc>3 && std::string(argv[3])=="fixtures") { syntheticFixtures(output); return 0; }
++    std::ofstream csv(output/"timings.csv");
++    csv << "seed,x,z,biome,iteration,prepare_ms,generation_ms,masks_ms,structures_ms,decorators_ms,release_ms,total_ms,retained_bytes\n" << std::setprecision(9);
++    std::ofstream before,after,heights,caves,states,candidates,manifest;
++    if(snapshot)
++    {
++        before.open(output/"before.bin",std::ios::binary); after.open(output/"after.bin",std::ios::binary);
++        heights.open(output/"heights.bin",std::ios::binary); caves.open(output/"cave_ids.bin",std::ios::binary);
++        states.open(output/"states.jsonl"); candidates.open(output/"candidates.jsonl");
++        manifest.open(output/"chunks.csv"); manifest<<"seed,x,z,biome\n";
++    }
++    ThreadMemoryAllocator scratch;
++    uint64_t checksum=0;
++    for (const uint32_t seed : {1738u,42u,2026u,987654u})
++    {
++        if(const char* requested=std::getenv("TERRAIN_BENCH_SEED"); requested && seed!=std::stoul(requested)) continue;
++        benchmarkSeed=seed; ChunkGenerator::init(); verifyGrids();
++        std::array<bool,static_cast<size_t>(Biome::COUNT)> found{};
++        struct Location { glm::ivec2 pos; Biome biome; };
++        std::vector<Location> locations;
++        for(int z=-8192;z<=8192;z+=128)
++        {
++            for(int x=-8192;x<=8192;x+=128)
++            {
++                const Biome biome=BiomeNoiseFields::biomeFromNoise(BiomeNoiseFields::sampleAt(glm::vec2(x,z)));
++                if(found[static_cast<size_t>(biome)]) continue;
++                found[static_cast<size_t>(biome)]=true;
++                for(int dz=0;dz<2;++dz) for(int dx=0;dx<2;++dx) locations.push_back({{x/16+dx,z/16+dz},biome});
++            }
++            if(std::all_of(found.begin(),found.end(),[](bool value){return value;})) break;
++        }
++        for(auto pos : {glm::ivec2(0,0),glm::ivec2(-1,-1),glm::ivec2(0,-1),glm::ivec2(-1,0)})
++            locations.push_back({pos,BiomeNoiseFields::biomeFromNoise(BiomeNoiseFields::sampleAt(glm::vec2(pos*16)))});
++        using Key=std::pair<int,int>;
++        std::map<Key,std::unique_ptr<Chunk>> chunks;
++        for(const auto& location:locations) for(int dz=-1;dz<=1;++dz) for(int dx=-1;dx<=1;++dx)
++        {
++            const glm::ivec2 pos=location.pos+glm::ivec2(dx,dz);
++            chunks.try_emplace({pos.x,pos.y},std::make_unique<Chunk>(pos,nullptr));
++        }
++        for(const auto& location:locations)
++        {
++            auto& chunk=*chunks.at({location.pos.x,location.pos.y});
++            auto& neighborhood=chunk.*access(structureNeighborsTag{});
++            for(int dz=-1;dz<=1;++dz) for(int dx=-1;dx<=1;++dx)
++                neighborhood.push_back(chunks.at({location.pos.x+dx,location.pos.y+dz}).get());
++            for(uint d=0;d<4;++d)
++            {
++                const auto offset=neighborOffset(static_cast<NeighborDirection>(d));
++                (chunk.*access(neighborsTag{}))[d]=chunks.at({location.pos.x+offset.x,location.pos.y+offset.y}).get();
++            }
++        }
++        for(int iteration=-1;iteration<repeats;++iteration)
++        {
++            struct Generation { double prepare,fill,masks; size_t bytes; };
++            std::map<Key,Generation> times;
++            for(auto& [key,pointer]:chunks)
++            {
++                auto& chunk=*pointer; scratch.clear(); timings={};
++                auto start=Clock::now(); prepare(chunk); const double prep=elapsed(start);
++                start=Clock::now(); (chunk.*access(FillTag{}))(scratch); const double gen=elapsed(start);
++                start=Clock::now(); (chunk.*access(MasksTag{}))(); const double masks=elapsed(start);
++                times[key]={prep,gen,masks,retainedBytes(chunk)};
++            }
++            for(const auto& location:locations)
++            {
++                auto& chunk=*chunks.at({location.pos.x,location.pos.y});
++                if(snapshot&&iteration==0)
++                {
++                    writeVector(before,chunk.*access(blocksTag{})); writeVector(heights,chunk.*access(terrainTopYTag{})); writeVector(caves,caveIds(chunk));
++                    manifest<<seed<<','<<location.pos.x<<','<<location.pos.y<<','<<static_cast<int>(location.biome)<<'\n';
++                    nlohmann::json items={{"surface",nlohmann::json::array()},{"cave",nlohmann::json::array()}};
++                    for(const auto& s:chunk.*access(structuresTag{})) items["surface"].push_back({static_cast<int>(s.type),s.pos_WS.x,s.pos_WS.y,s.pos_WS.z});
++                    for(const auto& s:chunk.*access(caveStructuresTag{})) items["cave"].push_back({static_cast<int>(s.type),s.pos_WS.x,s.pos_WS.y,s.pos_WS.z,s.availableHeight});
++                    candidates<<items.dump()<<'\n';
++                }
++                timings={}; (chunk.*access(DecorateTag{}))();
++                const auto& data=chunk.*access(blocksTag{});
++                if(iteration>=0) for(uint i=0;i<numChunkBlocks;i+=97) checksum=checksum*31+static_cast<BlockId>(data[i]);
++                if(snapshot&&iteration==0)
++                {
++                    writeVector(after,data);
++                    std::map<uint32_t,uint8_t> ordered;
++                    for(auto [index,state]:chunk.*access(blockStatesTag{})) ordered[index]=state;
++                    nlohmann::json items=nlohmann::json::array();
++                    for(auto [index,state]:ordered) items.push_back({index,state});
++                    states<<items.dump()<<'\n';
++                }
++                const auto start=Clock::now(); release(chunk); const double cleanup=elapsed(start);
++                const auto& t=times.at({location.pos.x,location.pos.y});
++                if(iteration>=0)
++                    csv<<seed<<','<<location.pos.x<<','<<location.pos.y<<','<<static_cast<int>(location.biome)<<','<<iteration<<','
++                       <<t.prepare<<','<<t.fill<<','<<t.masks<<','<<timings.structures<<','<<timings.decorators<<','<<cleanup<<','
++                       <<t.prepare+t.fill+t.masks+timings.structures+timings.decorators+cleanup<<','<<t.bytes<<'\n';
++            }
++            // Halo chunks only supply immutable terrain and candidate lists. Their fields are
++            // released too, so each iteration starts with the production allocation lifecycle.
++            for(auto& [key,pointer]:chunks) release(*pointer);
++        }
++        std::cout<<"seed="<<seed<<" targets="<<locations.size()<<" generated_with_halo="<<chunks.size()<<'\n'<<std::flush;
++    }
++    std::cout<<"checksum="<<checksum<<'\n';
++}
+diff --git a/build/terrain_cleanup_perf/fixtures.cpp b/build/terrain_cleanup_perf/fixtures.cpp
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/fixtures.cpp
+@@ -0,0 +1,94 @@
++// Exercise mask-word carries, every XZ edge, empty biomes, non-cube supports,
++// non-cave air and targets already occupied by structures.
++static void syntheticFixtures(const std::filesystem::path& output)
++{
++    std::ofstream blocksFile(output/"fixtures.bin",std::ios::binary), statesFile(output/"fixture_states.jsonl");
++    uint64_t checked=0;
++    for (uint phase=0;phase<6;++phase) for (uint trial=0;trial<8;++trial)
++    {
++        benchmarkSeed=1738+trial;
++        std::array<std::unique_ptr<Chunk>,9> chunks;
++        for (int z=0;z<3;++z) for(int x=0;x<3;++x)
++        {
++            auto& pointer=chunks[z*3+x]; pointer=std::make_unique<Chunk>(glm::ivec2(x-2,z-2),nullptr);
++            auto& chunk=*pointer; prepare(chunk);
++            auto& blocks=chunk.*access(blocksTag{});
++            std::fill((chunk.*access(biomesTag{})).begin(),(chunk.*access(biomesTag{})).end(),Biome::PLAINS);
++            for(uint bz=0;bz<16;++bz) for(uint bx=0;bx<16;++bx)
++            {
++                blocks[Chunk::blockPosToIdx({bx,0,bz})]=Block::BEDROCK;
++                const int wx=(x-2)*16+bx,wz=(z-2)*16+bz;
++                const uint pattern=hash(wx^hash(wz));
++                for(uint y : {1u,62u,63u,64u,65u,126u,127u,128u,129u,190u,191u,192u,193u,254u,255u,256u,257u,318u,319u,320u})
++                {
++                    if ((pattern+y)%4==0) continue;
++                    const Block support=(phase%3==0)?Block::BASALT:(phase%3==1)?Block::STONE:Block::MOSS;
++                    blocks[Chunk::blockPosToIdx({bx,y,bz})]=((pattern+y)%17==0)?Block::FERN:support;
++                }
++            }
++            (chunk.*access(MasksTag{}))();
++        }
++        auto& chunk=*chunks[4];
++        for(auto& pointer:chunks) (chunk.*access(structureNeighborsTag{})).push_back(pointer.get());
++        (chunk.*access(neighborsTag{}))={chunks[5].get(),chunks[7].get(),chunks[3].get(),chunks[1].get()};
++        constexpr uint size=5,height=82,fieldSize=size*size*height;
++        std::vector<float> fields(2*fieldSize);
++        for(uint z=0;z<size;++z) for(uint x=0;x<size;++x) for(uint y=0;y<height;++y)
++        {
++            const uint i=(z*size+x)*height+y;
++            const float base=(static_cast<int>(phase%3)-1)*0.45f;
++            fields[i]=base+(phase>=3?(static_cast<int>(y%20)-10)*0.05f:0.f);
++            fields[fieldSize+i]=base+(phase>=3?(static_cast<int>((x+2*z)%5)-2)*0.12f:0.f);
++        }
++        std::vector<uint8_t> ids(256*caveMaxY,0xff);
++        metadata(chunk).noise=fields;
++        metadata(chunk).height=height;
++        auto& blocks=chunk.*access(blocksTag{});
++        for(uint z=0;z<16;++z) for(uint x=0;x<16;++x)
++        {
++            const uint col=x+16*z;
++            constexpr uint tops[]={0,63,64,127,128,319,320,511};
++            (chunk.*access(terrainTopYTag{}))[col]=tops[(x+z)%8];
++            (chunk.*access(biomesTag{}))[col]=((x+z)%4==0)?Biome::OCEAN:Biome::PLAINS;
++            const CaveBiomeNoise bias={0.01f*(static_cast<int>(x)-8),0.01f*(static_cast<int>(z)-8)};
++            ChunkGenerator::CaveNoiseColumn t(fields.data(),size,height,x,z),h(fields.data()+fieldSize,size,height,x,z);
++            metadata(chunk).bias[col]=bias;
++            for(uint y=1;y<caveMaxY;++y)
++            {
++                if(blocks[col*chunkSizeY+y]!=Block::AIR || (x+z+y)%19==0) continue;
++                const uint i=col*caveMaxY+y;
++                ids[i]=static_cast<uint8_t>(CaveBiomes::getClosestCaveBiome({t.sample(y)+bias.temperature,h.sample(y)+bias.humidity}));
++                metadata(chunk).airMask[i/64] |= uint64_t(1) << (i%64);
++                // Simulate a structure occupying original cave air after the masks were built.
++                if((x+z+y)%23==0) blocks[col*chunkSizeY+y]=Block::OAK_LOG;
++            }
++        }
++        if(caveIds(chunk)!=ids) throw std::runtime_error("fixture retained field mismatch");
++#ifdef BENCH_VERIFY
++        std::vector<uint32_t> expected;
++        for(uint z=0;z<16;++z) for(uint x=0;x<16;++x) for(uint y=1;y<caveMaxY;++y)
++        {
++            const uint col=x+16*z,blockIdx=col*chunkSizeY+y;
++            if(ids[col*caveMaxY+y]==0xff || blocks[blockIdx]!=Block::AIR) continue;
++            for(uint f=0;f<blockFaceCount;++f)
++                if(chunk.isTerrainSolidCube_WS(glm::ivec3(static_cast<int>(x)-16,y,static_cast<int>(z)-16)-blockFaceBasis(static_cast<BlockFace>(f)).normal))
++                { expected.push_back(blockIdx); break; }
++        }
++        verifiedCandidates.clear(); verifyCandidates=true;
++#endif
++        (chunk.*access(DecorateTag{}))();
++#ifdef BENCH_VERIFY
++        verifyCandidates=false;
++        if(verifiedCandidates!=expected) throw std::runtime_error("bit candidate filter differs from scalar six-face reference");
++        checked+=expected.size();
++#endif
++        blocksFile.write(reinterpret_cast<const char*>(blocks.data()),blocks.size()*sizeof(Block));
++        std::map<uint32_t,uint8_t> ordered;
++        for(auto [index,state]:chunk.*access(blockStatesTag{})) ordered[index]=state;
++        nlohmann::json items=nlohmann::json::array();
++        for(auto [index,state]:ordered) items.push_back({index,state});
++        statesFile<<items.dump()<<'\n';
++        release(chunk);
++    }
++    std::cout<<"synthetic_fixtures=48 verified_candidates="<<checked<<'\n';
++}
+diff --git a/build/terrain_cleanup_perf/support.cpp b/build/terrain_cleanup_perf/support.cpp
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/support.cpp
+@@ -0,0 +1,23 @@
++#include "terrain/block.h"
++#include <fstream>
++#include <json.hpp>
++uint32_t benchmarkSeed;
++namespace SettingsManager { uint32_t getWorldSeed() { return benchmarkSeed; } }
++static std::array<BlockData, static_cast<size_t>(Block::COUNT)> blockDatas;
++namespace Blocks { const BlockData& getBlockData(Block block) { return blockDatas[static_cast<size_t>(block)]; } }
++void initBenchmarkBlocks()
++{
++    for (size_t i = 0; i < Blocks::blockIdNames.size(); ++i)
++    {
++        std::ifstream file(std::filesystem::path("assets/blocks") / (std::string(Blocks::blockIdNames[i]) + ".json"));
++        const auto json = nlohmann::json::parse(file);
++        const auto type = json.value("type", "solid");
++        blockDatas[i].type = type == "air" ? BlockType::AIR : type == "water" ? BlockType::WATER :
++            type == "transparent_cutout" ? BlockType::TRANSPARENT_CUTOUT : type == "glass" ? BlockType::GLASS : BlockType::SOLID;
++        const auto shape = json.value("shape", "cube");
++        blockDatas[i].shape = shape == "decorator_custom" ? BlockShape::DECORATOR_CUSTOM :
++            shape == "x_shaped" ? BlockShape::X_SHAPED : shape == "liquid_top" ? BlockShape::LIQUID_TOP : BlockShape::CUBE;
++        if (json.value("blockState", "none") == "surface_mount") blockDatas[i].stateKind = BlockStateKind::SURFACE_MOUNT;
++        blockDatas[i].markAsEmitter = json.value("markAsEmitter", false);
++    }
++}
+diff --git a/build/terrain_cleanup_perf/build_bench.py b/build/terrain_cleanup_perf/build_bench.py
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/build_bench.py
+@@ -0,0 +1,79 @@
++from pathlib import Path
++import shutil
++
++original = Path(__file__).resolve().parents[1] / 'terrain_noise_perf/build_bench.py'
++setup = original.read_text().split("support = work / 'support.obj'")[0]
++setup = setup.replace("work = root / 'build/terrain_noise_perf'", "work = root / 'build/terrain_cleanup_perf'")
++exec(setup)
++
++def function(source, signature):
++    start = source.index(signature)
++    opening = source.index('{', start)
++    depth = 1
++    end = opening + 1
++    while depth:
++        if source[end] == '{': depth += 1
++        if source[end] == '}': depth -= 1
++        end += 1
++    return source[start:end] + '\n'
++
++for variant in sys.argv[1:] or ['baseline','surface','directional','combined']:
++    out = work / variant
++    terrain = out / 'terrain'
++    terrain.mkdir(parents=True, exist_ok=True)
++    for header in (root/'src/terrain').rglob('*.h'):
++        target = terrain / header.relative_to(root/'src/terrain')
++        target.parent.mkdir(parents=True, exist_ok=True)
++        shutil.copyfile(header, target)
++    case = variant.removesuffix('_verify')
++    source_root = root/'src/terrain' if case=='combined' else work/(case+'_sources')
++    shutil.copyfile(source_root/'chunk.h', terrain/'chunk.h')
++    source = (source_root/'chunk_generator.cpp').read_text()
++    (terrain/'generator.cpp').write_text(instrument(source))
++    chunk_source = (source_root/'chunk.cpp').read_text()
++    methods = '#include "chunk.h"\n#include "cave_biome_noise.h"\n#include "settings_manager.h"\n#include "util/rng.h"\n#include <bit>\nusing namespace glm;\n'
++    start = chunk_source.index('namespace\n{')
++    end = chunk_source.index('} // namespace',start) + len('} // namespace')
++    methods += chunk_source[start:end] + '\n'
++    for signature in ['void Chunk::buildTerrainAirMask(', 'bool Chunk::getTerrainMaskBit_WS(',
++                      'bool Chunk::isTerrainAir_WS(', 'bool Chunk::isTerrainSolidCube_WS(',
++                      'void Chunk::runStructuresAndDecoratorPass(', 'uint32_t Chunk::blockPosToIdx(',
++                      'uint32_t Chunk::blockPosXZToIdx(']:
++        methods += function(chunk_source,signature)
++    # Clock the existing structure and decorator portions independently, without changing work.
++    marker = '    const uint worldSeed = SettingsManager::getWorldSeed();'
++    methods = methods.replace('void Chunk::runStructuresAndDecoratorPass()\n{',
++        'void Chunk::runStructuresAndDecoratorPass()\n{\n    auto passStart = Clock::now();')
++    methods = methods.replace(marker,'    timings.structures += elapsed(passStart);\n    passStart = Clock::now();\n'+marker)
++    next_method = methods.index('uint32_t Chunk::blockPosToIdx(')
++    closing = methods.rfind('}', 0, next_method)
++    methods = methods[:closing] + '    timings.decorators += elapsed(passStart);\n' + methods[closing:]
++    if variant.endswith('_verify'):
++        marker='const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome({'
++        methods=methods.replace(marker,'if (verifyCandidates) verifiedCandidates.push_back(blockIdx);\n                    '+marker)
++    if variant.endswith('_verify') and case in ['directional','combined']:
++        marker='if (!(supportByFace[faceIdx] & candidateBit)) continue;'
++        hook='if (verifyCandidates)\n                        {\n                            const glm::ivec3 checkPos(chunkOriginXZ_WS.x + blockX, blockY, chunkOriginXZ_WS.y + blockZ);\n                            const bool expected = this->isTerrainSolidCube_WS(checkPos - blockFaceBasis(static_cast<BlockFace>(faceIdx)).normal);\n                            if (expected != bool(supportByFace[faceIdx] & candidateBit))\n                                throw std::runtime_error("directional support mask mismatch");\n                        }\n                        '
++        assert marker in methods
++        methods=methods.replace(marker,hook+marker)
++    (terrain/'chunk_methods.cpp').write_text(methods)
++    (out/'main.cpp').write_text((work/'benchmark.cpp').read_text().replace('VERIFY_GRIDS',verification))
++    shutil.copyfile(work/'fixtures.cpp',out/'fixtures.cpp')
++    compile_flags = flags + ['/I'+str(out),'/I'+str(terrain),'/I'+str(terrain/'structure')]
++    # Put the mirrored headers before the real src root to isolate baseline Chunk layout.
++    compile_flags = [f for f in compile_flags if not f.startswith('/I')] + ['/I'+str(out),'/I'+str(terrain),'/I'+str(terrain/'structure')] + [f for f in flags if f.startswith('/I')]
++    compile_flags += ['/DBENCH_GROUPED=1'] if case=='combined' else []
++    compile_flags += ['/DBENCH_VERIFY=1'] if variant.endswith('_verify') else []
++    extra_objects = []
++    for name in ['structure','cave_structure']:
++        src = terrain/'structure'/f'{name}.cpp'
++        shutil.copyfile(root/'src/terrain/structure'/f'{name}.cpp', src)
++        obj = out/f'{name}.obj'
++        subprocess.run([str(vc/'bin/Hostx64/x64/cl.exe'),*compile_flags,'/c',str(src),'/Fo'+str(obj),'/Fd'+str(out/'compile.pdb')],cwd=root,env=env,check=True)
++        extra_objects.append(obj)
++    support = out/'support.obj'
++    subprocess.run([str(vc/'bin/Hostx64/x64/cl.exe'),*compile_flags,'/c',str(work/'support.cpp'),'/Fo'+str(support),'/Fd'+str(out/'compile.pdb')],cwd=root,env=env,check=True)
++    cmd = [str(vc/'bin/Hostx64/x64/cl.exe'),*compile_flags,str(out/'main.cpp'),'/Fo'+str(out/'main.obj'),'/Fd'+str(out/'main.pdb'),'/Fe'+str(out/'benchmark.exe'),
++           str(support),*map(str,extra_objects),*map(str,objects),*map(str,libs),'/link','/OPT:REF','/INCREMENTAL:NO',
++           '/LIBPATH:'+str(vc/'lib/x64'),'/LIBPATH:'+str(sdk/'Lib'/sdk_version/'um/x64'),'/LIBPATH:'+str(sdk/'Lib'/sdk_version/'ucrt/x64')]
++    subprocess.run(cmd,cwd=root,env=env,check=True)
+diff --git a/build/terrain_cleanup_perf/run_bench.py b/build/terrain_cleanup_perf/run_bench.py
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/run_bench.py
+@@ -0,0 +1,35 @@
++from pathlib import Path
++import csv,json,os,statistics,subprocess
++
++work=Path(__file__).resolve().parent
++variants=['baseline','surface','directional','combined']
++seeds=[1738,42,2026,987654]
++results=work/'results'
++for run in range(3):
++    for seed_index,seed in enumerate(seeds):
++        shift=(run+seed_index)%len(variants)
++        order=variants[shift:]+variants[:shift]
++        if run%2: order=list(reversed(order))
++        for variant in order:
++            print(f'run={run} seed={seed} variant={variant}',flush=True)
++            env=dict(os.environ);env['TERRAIN_BENCH_SEED']=str(seed)
++            subprocess.run([str(work/variant/'benchmark.exe'),str(results/variant/str(run)/str(seed)),'5'],env=env,check=True,timeout=60)
++summary={}
++for variant in variants:
++    rows=[]
++    for filename in (results/variant).rglob('timings.csv'): rows.extend(csv.DictReader(filename.open()))
++    fields=['prepare_ms','generation_ms','masks_ms','structures_ms','decorators_ms','release_ms','total_ms','retained_bytes']
++    summary[variant]={'samples':len(rows),'means':{field:statistics.mean(float(row[field]) for row in rows) for field in fields}}
++    summary[variant]['by_biome']={biome:statistics.mean(float(row['total_ms']) for row in rows if row['biome']==biome) for biome in sorted({row['biome'] for row in rows})}
++    paired=[]
++    for run in range(3):
++        for seed in seeds:
++            means=[]
++            for case in ['baseline',variant]:
++                rows=list(csv.DictReader((results/case/str(run)/str(seed)/'timings.csv').open()))
++                means.append(statistics.mean(float(row['total_ms']) for row in rows))
++            paired.append(100*(means[1]/means[0]-1))
++    summary[variant]['pair_changes_percent']=paired
++(results/'summary.json').write_text(json.dumps(summary,indent=2))
++print(json.dumps(summary,indent=2))
++
+diff --git a/build/terrain_cleanup_perf/verify.py b/build/terrain_cleanup_perf/verify.py
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_cleanup_perf/verify.py
+@@ -0,0 +1,24 @@
++from pathlib import Path
++import hashlib,json,subprocess
++
++work=Path(__file__).resolve().parent
++variants=['baseline','surface','directional','combined']
++for variant in variants:
++    subprocess.run([str(work/variant/'benchmark.exe'),str(work/'verification'/variant),'1','snapshot'],check=True,timeout=60)
++for variant in ['baseline_verify','combined_verify']:
++    subprocess.run([str(work/variant/'benchmark.exe'),str(work/'verification'/variant),'0','fixtures'],check=True,timeout=60)
++comparison={}
++for variant in variants[1:]:
++    comparison[variant]={}
++    for name in ['before.bin','after.bin','heights.bin','cave_ids.bin','states.jsonl','candidates.jsonl','chunks.csv']:
++        a=(work/'verification/baseline'/name).read_bytes()
++        b=(work/'verification'/variant/name).read_bytes()
++        if a!=b: raise RuntimeError(f'{variant}/{name} differs')
++        comparison[variant][name]={'equal':True,'bytes':len(a),'sha256':hashlib.sha256(b).hexdigest()}
++for name in ['fixtures.bin','fixture_states.jsonl']:
++    a=(work/'verification/baseline_verify'/name).read_bytes()
++    b=(work/'verification/combined_verify'/name).read_bytes()
++    if a!=b: raise RuntimeError(f'{name} differs')
++    comparison[name]={'equal':True,'bytes':len(a),'sha256':hashlib.sha256(b).hexdigest()}
++(work/'verification/equivalence.json').write_text(json.dumps(comparison,indent=2))
++print('All generated blocks, candidates, cave IDs, heights, decoration states, and synthetic fixtures match.')
+diff --git a/build/terrain_noise_perf/build_bench.py b/build/terrain_noise_perf/build_bench.py
+new file mode 100644
+--- /dev/null
++++ b/build/terrain_noise_perf/build_bench.py
+@@ -0,0 +1,91 @@
++import os, re, subprocess, sys
++from pathlib import Path
++import xml.etree.ElementTree as ET
++
++root = Path(__file__).resolve().parents[2]
++work = root / 'build/terrain_noise_perf'
++vc = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207')
++sdk = Path('C:/Program Files (x86)/Windows Kits/10')
++sdk_version = '10.0.26100.0'
++env = dict(os.environ)
++env['PATH'] = str(vc / 'bin/Hostx64/x64') + os.pathsep + env.get('PATH', '')
++env['TEMP'] = env['TMP'] = str(work)
++project = ET.parse(root / 'build/Biomeinator.vcxproj')
++includes = project.find('.//{*}AdditionalIncludeDirectories').text.split(';')[:-1]
++includes += [str(root / 'src/terrain'), str(vc / 'include')]
++includes += [str(sdk / 'Include' / sdk_version / name) for name in ['ucrt','shared','um','winrt','cppwinrt']]
++flags = ['/nologo','/O2','/Ob1','/MD','/Zi','/Gy','/EHsc','/std:c++20','/bigobj',
++         '/DENABLE_ASSERTS=1','/DNDEBUG','/DFASTNOISE_STATIC_LIB','/DFASTSIMD_STATIC_LIB','/DFASTSIMD_IS_RELAXED=1']
++flags += ['/I' + path for path in includes]
++objects = [root / 'build/Biomeinator.dir/RelWithDebInfo' / (name + '.obj') for name in
++           ['biome','biome_noise','cave_biome','swamp_shaping','structure_gen','decorator','thread_memory_allocator','logger']]
++libs = list((root / 'build/external/FastNoise2').rglob('*.lib'))
++libs += list((root / 'build/_deps/fastsimd-build').rglob('*.lib'))
++
++verification = r'''
++    using namespace ChunkGenerator;
++    for (const int spacing : {2, 4})
++    {
++        ThreadMemoryAllocator memory;
++        std::vector<float> whole(35 * 35 * 21), left(18 * 18 * 17), right(18 * 18 * 13);
++        const auto fill = [&](float* data, glm::ivec2 pos, unsigned size, unsigned height, int y)
++        {
++            if (spacing == 2) fillNoiseArray3D<2>(data, fnTerrainBase, pos, size, height, memory, y);
++            else fillNoiseArray3D<4>(data, fnTerrainBase, pos, size, height, memory, y);
++        };
++        fill(whole.data(), {-17,-17}, 35, 21, 3);
++        fill(left.data(), {-17,-17}, 18, 17, 5);
++        fill(right.data(), {-1,-1}, 18, 13, 7);
++        for (unsigned z=0; z<18; ++z) for (unsigned x=0; x<18; ++x)
++        {
++            for (unsigned y=0; y<17; ++y)
++                if (left[(z*18+x)*17+y] != whole[(z*35+x)*21+y+2]) throw std::runtime_error("left grid seam");
++            for (unsigned y=0; y<13; ++y)
++                if (right[(z*18+x)*13+y] != whole[((z+16)*35+x+16)*21+y+4]) throw std::runtime_error("right grid seam");
++        }
++        // Very short Y bands, including exact lattice endpoints.
++        for (int yStart=0; yStart<9; ++yStart) for (unsigned height=1; height<6; ++height)
++        {
++            std::vector<float> shortBand(16*16*height);
++            fill(shortBand.data(), {0,0}, 16, height, yStart);
++            for (float value : shortBand) if (!std::isfinite(value)) throw std::runtime_error("non-finite noise");
++        }
++    }
++'''
++
++def instrument(source):
++    source = source.replace('    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos',
++                            '    auto benchStart = Clock::now();\n    const ivec2 chunkPosBlocksXZ_WS = this->chunkPos', 1)
++    for name, field in [('terrainNoise','terrain'),('caveNoiseWorley','worley'),('caveNoiseSimplex','simplex')]:
++        pattern = r'    fillNoiseArray3D(?:<[^>]+>)?\(' + name + r',[\s\S]*?;'
++        match = re.search(pattern, source)
++        assert match, name
++        before = '    timings.columns += elapsed(benchStart);\n' if field == 'terrain' else ''
++        source = source[:match.start()] + before + '    benchStart = Clock::now();\n' + match.group() + '\n    timings.' + field + ' += elapsed(benchStart);\n    benchStart = Clock::now();' + source[match.end():]
++    marker = '    const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;'
++    source = source.replace(marker, '    timings.materials += elapsed(benchStart);\n    benchStart = Clock::now();\n' + marker, 1)
++    end = source.rfind('}')
++    source = source[:end] + '    timings.fill += elapsed(benchStart);\n' + source[end:]
++    return source
++
++support = work / 'support.obj'
++if not support.exists() or support.stat().st_mtime < (work/'support.cpp').stat().st_mtime:
++    subprocess.run([str(vc/'bin/Hostx64/x64/cl.exe'), *flags, '/c', str(work/'support.cpp'), '/Fo'+str(support), '/Fd'+str(work/'support.pdb')], cwd=root, env=env, check=True)
++
++for variant in sys.argv[1:] or ['baseline','terrain4','terrain4_caves2','terrain4_caves4']:
++    out = work / variant
++    out.mkdir(exist_ok=True)
++    source = (work/'baseline.cpp').read_text() if variant == 'baseline' else (root/'src/terrain/chunk_generator.cpp').read_text()
++    if variant != 'baseline':
++        terrain = 2 if variant == 'terrain2_caves2' else 4
++        caves = 1 if variant == 'terrain4' else 4 if variant == 'terrain4_caves4' else 2
++        source = source.replace('terrainNoiseDownsample = 4;', f'terrainNoiseDownsample = {terrain};')
++        source = source.replace('caveShapeNoiseDownsample = 2;', f'caveShapeNoiseDownsample = {caves};')
++    (out/'generator.cpp').write_text(instrument(source))
++    harness = (work/'benchmark.cpp').read_text().replace('    VERIFY_GRIDS', verification if variant != 'baseline' else '')
++    (out/'main.cpp').write_text(harness)
++    cmd = [str(vc/'bin/Hostx64/x64/cl.exe'), *flags, str(out/'main.cpp'), '/Fo'+str(out/'main.obj'), '/Fd'+str(out/'main.pdb'), '/Fe'+str(out/'benchmark.exe'),
++           str(support), *map(str,objects), *map(str,libs), '/link','/OPT:REF','/INCREMENTAL:NO',
++           '/LIBPATH:'+str(vc/'lib/x64'), '/LIBPATH:'+str(sdk/'Lib'/sdk_version/'um/x64'), '/LIBPATH:'+str(sdk/'Lib'/sdk_version/'ucrt/x64')]
++    subprocess.run(cmd, cwd=root, env=env, check=True)
++
