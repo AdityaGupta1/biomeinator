@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-20_
 
 # Build Configurations
 
@@ -59,6 +59,7 @@ $psi = [System.Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe'
 $psi.WorkingDirectory = (Get-Location).Path
 $psi.UseShellExecute = $false
+$psi.Environment.Clear()
 
 foreach ($entry in [System.Environment]::GetEnvironmentVariables().GetEnumerator()) {
     if ($entry.Key -inotmatch '^(path|temp|tmp)$') {

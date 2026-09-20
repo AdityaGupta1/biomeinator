@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-20_
 
 # Perf Runs
 
@@ -8,6 +8,9 @@ programmatic way to check whether a change made rendering faster, and the intend
 for agents doing performance work. `tests/run_perf.py` drives it over the entries in
 `tests/perf_scenes.json`; `run` produces a directory of reports, `compare` diffs two such directories
 by median, `show` prints one.
+
+For CPU terrain generation, use the [ad hoc terrain experiment workflow](cpu_terrain_benchmarks.md).
+These frame runs start after world import and do not measure terrain generation cost.
 
 ```
 python tests/run_perf.py run -o build/perf_output/baseline
