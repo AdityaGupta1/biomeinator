@@ -75,7 +75,6 @@ inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 inline constexpr uint32_t caveMaxY = 320;
-inline constexpr uint8_t noCaveBiome = 0xff;
 
 static_assert(MathUtil::isPowerOfTwo(chunkSizeXZ), "chunkSizeXZ must be a power of two");
 static_assert(caveMaxY <= chunkSizeY);
@@ -107,8 +106,14 @@ private:
     // One immutable bit per block identifying terrain full cubes. This permits race-free
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
-    // Cave biome at terrain-carved cave-air voxels; 0xff means the voxel was not cave air.
-    std::vector<uint8_t> caveBiomes{};
+    // Original cave air is distinct from ordinary surface air, even after structures fill it.
+    // Its biome is classified only when decoration finds adjacent terrain support.
+    std::vector<uint64_t> caveAirMask{};
+    // Two coarse fields (temperature followed by humidity) and the column's surface bias.
+    // Owned by this chunk until its decorator pass ends; never read by neighboring chunks.
+    std::vector<float> caveBiomeNoise{};
+    std::vector<CaveBiomeNoise> caveBiomeSurfaceBias{};
+    uint32_t caveBiomeNoiseHeight = 0;
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
     // if stateful blocks become common.
     std::unordered_map<uint32_t, uint8_t> blockStates{};

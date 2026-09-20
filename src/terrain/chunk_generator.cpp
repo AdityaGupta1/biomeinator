@@ -6,6 +6,7 @@
 #include "biome.h"
 #include "biome_noise.h"
 #include "cave_biome.h"
+#include "cave_biome_noise.h"
 #include "chunk.h"
 #include "swamp_shaping.h"
 #include "rendering/common/common_settings.h"
@@ -45,7 +46,7 @@ static FN::SmartNode<FN::Generator> fnCavesSimplex;
 // regions are far larger than a block, so this costs ~1/64 of a full-resolution
 // 3D field with no visible difference. caveBiomeSurfaceNoiseBias mixes in the column's
 // 2D temperature/humidity so cave biomes loosely track the surface above them.
-inline constexpr int caveBiomeNoiseDownsample = 4;
+inline constexpr int caveBiomeNoiseDownsample = CaveBiomeFields::downsample;
 inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
@@ -327,52 +328,7 @@ static inline void fillCaveBiomeNoiseArray(float* data, const FN::SmartNode<FN::
                          worldSeed ^ hash(391023545));
 }
 
-// Reuses a column's XZ interpolation across each coarse Y interval. Material fields are
-// sampled lazily: skipped air/biomes/skin regions do not pay for unused planes.
-class CaveNoiseColumn
-{
-    const float* c00;
-    const float* c10;
-    const float* c01;
-    const float* c11;
-    float tx;
-    float tz;
-    uint cachedY = std::numeric_limits<uint>::max();
-    float low = 0.f;
-    float high = 0.f;
-
-    float samplePlane(uint y) const
-    {
-        return glm::mix(glm::mix(c00[y], c10[y], tx), glm::mix(c01[y], c11[y], tx), tz);
-    }
-
-public:
-    CaveNoiseColumn(const float* coarseNoise, uint coarseSizeXZ, uint coarseHeight, uint blockX, uint blockZ)
-    {
-        const uint x = blockX / caveBiomeNoiseDownsample;
-        const uint z = blockZ / caveBiomeNoiseDownsample;
-        tx = (blockX % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
-        tz = (blockZ % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
-        c00 = coarseNoise + (z * coarseSizeXZ + x) * coarseHeight;
-        c10 = c00 + coarseHeight;
-        c01 = c00 + coarseSizeXZ * coarseHeight;
-        c11 = c01 + coarseHeight;
-    }
-
-    float sample(uint y)
-    {
-        const uint gridY = y / caveBiomeNoiseDownsample;
-        if (gridY != cachedY)
-        {
-            low = cachedY != std::numeric_limits<uint>::max() && gridY == cachedY + 1
-                ? high : samplePlane(gridY);
-            high = samplePlane(gridY + 1);
-            cachedY = gridY;
-        }
-        const float ty = (y % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
-        return glm::mix(low, high, ty);
-    }
-};
+using CaveNoiseColumn = CaveBiomeFields::Column;
 
 // Finds the grid cell containing posXZ_WS (accounting for the staggered odd-row x shift) and
 // returns its corner. Shared by surface and cave placement so both lay grids over the same cells.
@@ -544,8 +500,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
         return static_cast<const float*>(data);
     };
-    const float* caveTemperatureNoise = requestCaveBiomeField(fnCaveTemperature);
-    const float* caveHumidityNoise = requestCaveBiomeField(fnCaveHumidity);
+    // Keep only the two biome axes until decoration. Generate directly into owned storage
+    // so deferred air classification needs neither fresh noise nor a copy of the fields.
+    this->caveBiomeNoiseHeight = caveBiomeNoiseHeight;
+    this->caveBiomeNoise.resize(2 * caveBiomeNoiseSize);
+    float* caveTemperatureNoise = this->caveBiomeNoise.data();
+    float* caveHumidityNoise = caveTemperatureNoise + caveBiomeNoiseSize;
+    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS,
+                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS,
+                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
     const float* caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
     const float* caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
     const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
@@ -693,6 +657,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+            this->caveBiomeSurfaceBias[columnIdx] = {
+                .temperature = caveBiomeSurfaceTemperatureOffset,
+                .humidity = caveBiomeSurfaceHumidityOffset,
+            };
 
             CaveNoiseColumn caveTemperatureColumn(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
             CaveNoiseColumn caveHumidityColumn(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
@@ -764,21 +732,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        const float caveTemperature = caveTemperatureColumn.sample(y);
-                        const float caveHumidity = caveHumidityColumn.sample(y);
-                        const CaveBiomeNoise caveBiomeNoise = {
-                            .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
-                            .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
-                        };
-                        const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
-                        voxelCaveBiome = caveBiome;
                         if (isCave)
                         {
-                            const uint caveBiomeIdx = y + caveMaxY * columnIdx;
-                            this->caveBiomes[caveBiomeIdx] = static_cast<uint8_t>(caveBiome);
+                            const uint caveAirIdx = y + caveMaxY * columnIdx;
+                            this->caveAirMask[caveAirIdx / 64] |= uint64_t(1) << (caveAirIdx % 64);
                         }
                         else
                         {
+                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome({
+                                .temperature = caveTemperatureColumn.sample(y) + caveBiomeSurfaceTemperatureOffset,
+                                .humidity = caveHumidityColumn.sample(y) + caveBiomeSurfaceHumidityOffset,
+                            });
+                            voxelCaveBiome = caveBiome;
                             const float caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;

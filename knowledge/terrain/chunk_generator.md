@@ -47,11 +47,14 @@ Two mechanisms suppress caves near the surface:
 Two additional 3D fields (temperature, humidity) drive cave biome theming — see
 [cave_biome_system.md](cave_biome_system.md). They are generated coarsely
 (downsampled) over `[0, caveNoiseMaxY]` and trilinearly interpolated, then
-biased by the column's 2D surface noise. Classification picks the block that
+biased by the column's 2D surface noise. Solid-voxel classification picks the block that
 replaces `STONE` in the `STONE`/`LAMP` choice, for every solid voxel in the cave
 band. Three more coarse fields (skin thickness, skin patch, secondary rock) drive
 the optional per-biome surface skin and rock choice; the skin uses the carve noise
 itself as its distance proxy — see [cave_biome_system.md](cave_biome_system.md).
+For carved air, generation records only a cave-air bit and retains the two biome
+fields plus surface biases. Classification waits until decoration finds an air
+cell bordering terrain support; cave interiors never need a biome lookup.
 
 ## Heightfield Design
 
