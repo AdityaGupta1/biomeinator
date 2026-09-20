@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include <dxgi1_5.h>
 
 #include "fence.h"
@@ -226,6 +228,10 @@ void serializeAndCreateRootSignature(const D3D12_ROOT_PARAMETER1* params,
 // Internal function declarations
 // =============================================
 
+// Logs how long a startup step takes so slow launches can be attributed to a step
+void timedInitStep(const char* name, const std::function<void()>& step);
+
+void prepareNvapi();
 void initStreamline();
 void initDevice();
 void initDescriptorHeaps();
@@ -243,7 +249,7 @@ void setFrameGenerationActive(bool active);
 void initRtTargets();
 void initCommand();
 void initConstantParams();
-void initRootSignature();
+void startRtPipelineCreation();
 void initPipeline();
 void initImgui();
 void imguiBeginFrame();
@@ -375,7 +381,7 @@ struct RendererState
     HANDLE frameLatencyWaitable{ nullptr };
     std::chrono::high_resolution_clock::time_point lastTimePoint{ std::chrono::high_resolution_clock::now() };
     double animTime{ 0.0 }; // world animation time in seconds; advances unless paused, or at 50x while scrubbing
-    float prevAnimTime{ 0.f }; // previous frame's RenderParams::animTime, for water motion vectors
+    double prevAnimTime{ 0.0 }; // previous frame's animTime, for water and cloud motion vectors
     bool stopAccumulating{ false };
 
     // -- Device and infrastructure --

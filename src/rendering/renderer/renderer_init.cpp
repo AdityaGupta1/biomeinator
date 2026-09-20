@@ -3,7 +3,9 @@
 
 #include "renderer_internal.h"
 
+#include <chrono>
 #include <cstdlib>
+#include <future>
 #include <random>
 
 #include "gpu_requirements.h"
@@ -25,6 +27,45 @@ using WindowManager::hwnd;
 
 namespace Renderer
 {
+
+void timedInitStep(const char* name, const std::function<void()>& step)
+{
+    const auto start = std::chrono::steady_clock::now();
+    step();
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    Logger::log("init: %s took %.1f ms", name, ms);
+}
+
+// Joined by initDevice; see knowledge/rendering/startup.md for why slInit runs on a thread
+static std::future<sl::Result> slInitResult;
+
+// NVIDIA's SER integration sequence initializes and immediately unloads NVAPI before using
+// the D3D12 extension entry points. Do it before the asynchronous Streamline initialization so
+// the process-global NVAPI lifetime calls cannot overlap Streamline's own capability discovery.
+static bool nvapiPrepared = false;
+
+// DLSS-G cannot run without Reflex, and Reflex in turn requires PCL for its latency markers.
+// File scope because the slInit thread reads this after initStreamline has returned.
+static constexpr sl::Feature slFeatures[] = { sl::kFeatureDLSS_RR, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeaturePCL };
+
+void prepareNvapi()
+{
+    const NvAPI_Status initStatus = NvAPI_Initialize();
+    if (initStatus != NVAPI_OK)
+    {
+        Logger::logWarning("NVAPI initialization failed: %d", static_cast<int>(initStatus));
+        return;
+    }
+
+    const NvAPI_Status unloadStatus = NvAPI_Unload();
+    if (unloadStatus != NVAPI_OK)
+    {
+        Logger::logWarning("NVAPI unload after initialization failed: %d", static_cast<int>(unloadStatus));
+        return;
+    }
+
+    nvapiPrepared = true;
+}
 
 void initStreamline()
 {
@@ -49,17 +90,24 @@ void initStreamline()
         prefs.logLevel = sl::LogLevel::eVerbose;
     }
 
-    // DLSS-G cannot run without Reflex, and Reflex in turn requires PCL for its latency markers
-    const sl::Feature features[] = { sl::kFeatureDLSS_RR, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeaturePCL };
-    prefs.featuresToLoad = features;
-    prefs.numFeaturesToLoad = _countof(features);
+    prefs.featuresToLoad = slFeatures;
+    prefs.numFeaturesToLoad = _countof(slFeatures);
 
     prefs.applicationId = 1738; // TODO: not sure what to put here lol
 
     prefs.flags |= sl::PreferenceFlags::eUseFrameBasedResourceTagging;
     prefs.flags |= sl::PreferenceFlags::eUseManualHooking;
+    // The over-the-air update check is a network round trip inside slInit
+    prefs.flags &= ~(sl::PreferenceFlags::eAllowOTA | sl::PreferenceFlags::eLoadDownloadedPlugins);
 
-    CHECK_SL_RESULT(slInit(prefs));
+    slInitResult = std::async(std::launch::async, [prefs]()
+    {
+        const auto start = std::chrono::steady_clock::now();
+        const sl::Result result = slInit(prefs);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        Logger::log("init: slInit took %.1f ms", ms);
+        return result;
+    });
 }
 
 namespace
@@ -135,35 +183,47 @@ std::string shaderModelName(D3D_SHADER_MODEL model)
     const unsigned int value = static_cast<unsigned int>(model);
     return std::to_string(value >> 4) + "." + std::to_string(value & 0xf);
 }
+
+// slUpgradeInterface hands back an owned reference to a new proxy, or leaves the pointer
+// untouched (and adds no reference) when the interposer is disabled
+template <typename T>
+void upgradeToSlProxy(const ComPtr<T>& native, ComPtr<T>& proxy)
+{
+    T* upgraded = native.Get();
+    CHECK_SL_RESULT(slUpgradeInterface(reinterpret_cast<void**>(&upgraded)));
+    if (upgraded == native.Get())
+    {
+        proxy = native;
+    }
+    else
+    {
+        proxy.Attach(upgraded);
+    }
+}
 } // namespace
 
 void initDevice()
 {
-    const std::string slInterposerDllPath = std::string(TARGET_FILE_DIR) + "/sl.interposer.dll";
-    const auto slMod = LoadLibrary(slInterposerDllPath.c_str());
-
-    //typedef HRESULT(WINAPI * PFunCreateDXGIFactory)(REFIID, void**);
-    //typedef HRESULT(WINAPI * PFunCreateDXGIFactory1)(REFIID, void**);
+    // sl.interposer exports the same entry points and is linked first, so the native ones are
+    // fetched from the system DLLs by hand
+    typedef HRESULT(WINAPI * PFunD3D12GetDebugInterface)(REFIID, void**);
     typedef HRESULT(WINAPI * PFunCreateDXGIFactory2)(UINT, REFIID, void**);
-    //typedef HRESULT(WINAPI * PFunDXGIGetDebugInterface1)(UINT, REFIID, void**);
     typedef HRESULT(WINAPI * PFunD3D12CreateDevice)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
-
-    // const auto slCreateDXGIFactory = reinterpret_cast<PFunCreateDXGIFactory>(GetProcAddress(slMod,
-    // "CreateDXGIFactory")); const auto slCreateDXGIFactory1 =
-    // reinterpret_cast<PFunCreateDXGIFactory1>(GetProcAddress(slMod, "CreateDXGIFactory1"));
-    const auto slCreateDXGIFactory2 =
-        reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(slMod, "CreateDXGIFactory2"));
-    // const auto slDXGIGetDebugInterface1 = reinterpret_cast<PFunDXGIGetDebugInterface1>(GetProcAddress(slMod,
-    // "DXGIGetDebugInterface1"));
-    const auto slD3D12CreateDevice =
-        reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(slMod, "D3D12CreateDevice"));
+    const HMODULE d3d12Mod = LoadLibrary("d3d12.dll");
+    const HMODULE dxgiMod = LoadLibrary("dxgi.dll");
+    const auto d3d12GetDebugInterface =
+        reinterpret_cast<PFunD3D12GetDebugInterface>(GetProcAddress(d3d12Mod, "D3D12GetDebugInterface"));
+    const auto createDxgiFactory2 =
+        reinterpret_cast<PFunCreateDXGIFactory2>(GetProcAddress(dxgiMod, "CreateDXGIFactory2"));
+    const auto d3d12CreateDevice =
+        reinterpret_cast<PFunD3D12CreateDevice>(GetProcAddress(d3d12Mod, "D3D12CreateDevice"));
 
     UINT dxgiFactoryFlags = 0;
 
     if (SettingsManager::getAsBool("gpuValidation"))
     {
         ComPtr<ID3D12Debug> debug;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
+        if (SUCCEEDED(d3d12GetDebugInterface(IID_PPV_ARGS(&debug))))
         {
             Logger::log("Enabled debug layer");
             debug->EnableDebugLayer();
@@ -183,57 +243,39 @@ void initDevice()
         }
     }
 
-    ComPtr<IDXGIFactory2> proxyFactory2;
-    CHECK_HRESULT(slCreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&proxyFactory2)));
-    CHECK_HRESULT(proxyFactory2.As(&renderState.proxyFactory));
-    CHECK_SL_RESULT(slGetNativeInterface(renderState.proxyFactory.Get(),
-                                         reinterpret_cast<void**>(renderState.factory.GetAddressOf())));
+    CHECK_HRESULT(createDxgiFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&renderState.factory)));
 
+    DXGI_ADAPTER_DESC1 adapterDesc;
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; renderState.factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
-        DXGI_ADAPTER_DESC1 desc;
-        CHECK_HRESULT(adapter->GetDesc1(&desc));
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+        CHECK_HRESULT(adapter->GetDesc1(&adapterDesc));
+        if (adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
         {
             adapter.Reset();
             continue;
         }
 
-        if (SUCCEEDED(slD3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&renderState.proxyDevice))))
+        if (SUCCEEDED(d3d12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&renderState.device))))
         {
-            CHECK_SL_RESULT(slGetNativeInterface(renderState.proxyDevice.Get(),
-                                                 reinterpret_cast<void**>(renderState.device.GetAddressOf())));
-            // Query the native device before Streamline setup or shader pipeline creation.
             constexpr auto requiredShaderModel = static_cast<D3D_SHADER_MODEL>(BIOMEINATOR_REQUIRED_SHADER_MODEL);
             D3D12_FEATURE_DATA_SHADER_MODEL shaderModel{ requiredShaderModel };
             const HRESULT shaderModelResult = renderState.device->CheckFeatureSupport(
                 D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
-            const std::string adapterName = Util::to_string(desc.Description);
+            renderState.adapterName = Util::to_string(adapterDesc.Description);
             if (FAILED(shaderModelResult))
             {
-                failGpuCompatibility("GPU '" + adapterName + "': unable to query required Shader Model " +
+                failGpuCompatibility("GPU '" + renderState.adapterName + "': unable to query required Shader Model " +
                                      shaderModelName(requiredShaderModel) + " support.");
             }
             if (shaderModel.HighestShaderModel < requiredShaderModel)
             {
-                failGpuCompatibility("GPU '" + adapterName + "' reports Shader Model " +
+                failGpuCompatibility("GPU '" + renderState.adapterName + "' reports Shader Model " +
                                      shaderModelName(shaderModel.HighestShaderModel) + "; this build requires Shader Model " +
                                      shaderModelName(requiredShaderModel) + ".");
             }
             Logger::log("Shader Model %s requirement satisfied", shaderModelName(requiredShaderModel).c_str());
-            CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get()));
-
-            sl::AdapterInfo adapterInfo{};
-            adapterInfo.deviceLUID = (uint8_t*)&desc.AdapterLuid;
-            adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
-
-            CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
-
-            initFrameGenSupport(adapterInfo);
-
-            Logger::log("Selected adapter: %ls", desc.Description);
-            renderState.adapterName = Util::to_string(desc.Description);
+            Logger::log("Selected adapter: %ls", adapterDesc.Description);
             break;
         }
 
@@ -268,6 +310,24 @@ void initDevice()
         }
     }
 
+    // Only needs the native device, so it overlaps with the Streamline setup below
+    startRtPipelineCreation();
+
+    timedInitStep("slInit (join)", []() { CHECK_SL_RESULT(slInitResult.get()); });
+
+    upgradeToSlProxy(renderState.device, renderState.proxyDevice);
+    upgradeToSlProxy(renderState.factory, renderState.proxyFactory);
+
+    timedInitStep("slSetD3DDevice", []() { CHECK_SL_RESULT(slSetD3DDevice(renderState.device.Get())); });
+
+    sl::AdapterInfo adapterInfo{};
+    adapterInfo.deviceLUID = (uint8_t*)&adapterDesc.AdapterLuid;
+    adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
+
+    CHECK_SL_RESULT(slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo));
+
+    initFrameGenSupport(adapterInfo);
+
     D3D12_COMMAND_QUEUE_DESC graphicsCmdQueueDesc = {
         .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
@@ -298,22 +358,37 @@ void initDescriptorHeaps()
 
 void initNvapi()
 {
-    NvAPI_Initialize();
-    NvAPI_Unload();
+    renderState.useSer = false;
+    if (!nvapiPrepared)
+    {
+        Logger::logWarning("SER API unavailable because NVAPI preparation failed");
+        return;
+    }
 
     bool serSupported = false;
-    NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(renderState.device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
-    if (serSupported)
+    const NvAPI_Status supportStatus = NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(
+        renderState.device.Get(), NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD, &serSupported);
+    if (supportStatus != NVAPI_OK)
     {
-        Logger::log("SER API supported");
-        renderState.useSer = true;
-        NvAPI_D3D12_SetNvShaderExtnSlotSpace(renderState.device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+        Logger::logWarning("Failed to query SER API support: %d", static_cast<int>(supportStatus));
+        return;
     }
-    else
+    if (!serSupported)
     {
         Logger::logWarning("SER API not supported");
-        renderState.useSer = false;
+        return;
     }
+
+    const NvAPI_Status slotStatus = NvAPI_D3D12_SetNvShaderExtnSlotSpace(
+        renderState.device.Get(), NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+    if (slotStatus != NVAPI_OK)
+    {
+        Logger::logWarning("Failed to configure the SER extension slot: %d", static_cast<int>(slotStatus));
+        return;
+    }
+
+    Logger::log("SER API supported");
+    renderState.useSer = true;
 }
 
 void initSwapChain()

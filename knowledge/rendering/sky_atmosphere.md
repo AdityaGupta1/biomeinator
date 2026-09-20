@@ -1,11 +1,11 @@
-_Last edited: 2026-07-24_
+_Last edited: 2026-09-17_
 
 # Sky Atmosphere (PBR sky)
 
 Physically based sky per Hillaire's EGSR 2020 technique (see `plans/pbr-sky.md` for the full
 plan and paper references). `src/rendering/sky_atmosphere.cpp` owns three LUT textures and
 their compute passes; `shaders/sky/atmosphere.hlsli` holds the shared constants and
-parameterizations; `shaders/light/dome_light.hlsli` consumes the transmittance and sky-view
+parameterizations; `shaders/sky/sky_lighting.hlsli` consumes the transmittance and sky-view
 LUTs (the multi-scattering LUT is only read during sky-view generation).
 
 ## Ordering invariants
@@ -24,7 +24,7 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
 
 ## Units and calibration
 
-- The sky-view LUT stores luminance for **unit sun illuminance**; `dome_light.hlsli` multiplies
+- The sky-view LUT stores luminance for **unit sun illuminance**; `sky_lighting.hlsli` multiplies
   by `sunIlluminance` at the lookup. This keeps calibration, and later a moon (a second
   directional light reusing the same LUT machinery), out of the LUT.
 - `sunIlluminance` (~10 lux) is calibrated to match the *total power* of the old hand-tuned sun:
@@ -38,7 +38,7 @@ LUTs (the multi-scattering LUT is only read during sky-view generation).
 ## Gotchas
 
 - The Bruneton-Neyret transmittance parameterization only covers rays that miss the ground
-  sphere. Two consequences handled in `dome_light.hlsli`: the sun disk must be explicitly
+  sphere. Two consequences handled in `sky_lighting.hlsli` / `dome_light.hlsli`: the sun disk must be explicitly
   zeroed when the ray toward it intersects the virtual planet (`isSunOccluded`), and occluded
   disk directions fall through to the sky-view LUT (which contains the virtual planet's ground
   below the horizon) instead of returning black — otherwise a half-black disk straddles the

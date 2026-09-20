@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-17_
 
 # DLSS
 
@@ -43,6 +43,18 @@ When DLSS is active, `renderWidth/Height` is smaller than `viewportWidth/Height`
 Streamline's `slDLSSDGetOptimalSettings` determines the optimal render resolution for the
 selected quality mode. All ray tracing and G-buffer work happens at render resolution; DLSS
 upscales to viewport resolution. When DLSS is off, render = viewport.
+
+## Cloud Albedo
+
+Block-cloud sky albedo reuses analytic occupied-cell transmittance to blend unshadowed
+cloud color with sky color, including first perfect-specular sky reflections. It must
+not use sampled lighting or cloud self-shadowing; guide noise is reproduced as detail
+by reconstruction. Opacity is independent of the lighting sample count and RNG, so no
+separate guide march is needed. See [clouds.md](clouds.md#dlss-albedo).
+
+Primary cloud hits override depth and motion with the first occupied boundary, without
+an opacity threshold. Wind displacement is reversed using the actual animation-time
+delta to project that point into the previous frame. Geometry in front still wins.
 
 ## Resource Tagging
 

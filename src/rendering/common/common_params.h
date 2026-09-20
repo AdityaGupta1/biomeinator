@@ -51,6 +51,11 @@ struct HeapIndices
         uint transmittanceLutIdx;
         uint skyViewLutIdx;
         uint biomeMapIdx;
+
+        uint cloudOccupancyIdx;
+        uint pad0;
+        uint pad1;
+        uint pad2;
     } srv;
 };
 
@@ -119,6 +124,32 @@ struct SceneParams
     uint pad3;
 };
 
+struct CloudSettings
+{
+    float coverage;
+    float extinction;
+    float baseHeight;
+    float thickness;
+
+    float cellSize;
+    float patternScale;
+    float drawDistance;
+    float shadowDistance;
+
+    float ambient;
+    float phaseG;
+    float2 windDelta; // blocks moved since the previous frame, for motion vectors
+
+    float multiScatterStrength;
+    uint samples;
+    uint seed;
+    uint enableClouds;
+
+    // Wind translation in blocks, split like the camera position so it stays exact as animTime grows
+    int2 windOffsetInt;
+    float2 windOffsetFrac;
+};
+
 struct RenderParams
 {
     uint frameNumber;
@@ -136,14 +167,21 @@ struct RenderParams
     float mipBias;
 
     float animTime; // can be frozen by animTimePaused setting
-    float prevAnimTime;
+    float waveTime; // animTime wrapped to WATER_WAVE_PERIOD_SECONDS, for the sine wave model
+    float prevWaveTime;
     float fogSigmaS;
-    float fogScaleHeight;
 
+    float fogScaleHeight;
     float fogG;
     uint fogMarchSteps;
     float fogAmbientStrength;
+
+    float skyStrength;
     uint pad0;
+    uint pad1;
+    uint pad2;
+
+    CloudSettings cloudSettings;
 };
 
 struct SharcParams

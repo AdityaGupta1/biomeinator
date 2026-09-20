@@ -9,6 +9,7 @@
 #include "common/path_tracing_common.hlsli"
 #include "common/payload.hlsli"
 #include "materials/materials.hlsli"
+#include "sky/cloud_traversal.hlsli"
 #include "util/color.hlsli"
 #include "util/rng.hlsli"
 
@@ -56,7 +57,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevAnimTime) - waveHeight(posXZ_WS, renderParams.animTime);
+            prevMotionHitPos_WS.y += waveHeight(posXZ_WS, renderParams.prevWaveTime) - waveHeight(posXZ_WS, renderParams.waveTime);
         }
 
         if (payload.materialIdx != MATERIAL_IDX_INVALID)
@@ -85,6 +86,18 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         motionHitPos_WS = evalRayPos(ray, distToFarPlane);
         prevMotionHitPos_WS = motionHitPos_WS;
         hitShadingNor_WS = normalize(-ray.Direction);
+    }
+
+    // A cloud boundary in front of the endpoint takes over depth and motion regardless of its
+    // opacity, so DLSS tracks the clouds rather than the sky or terrain behind them.
+    const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
+        ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
+    float cloudDistance;
+    if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
+    {
+        motionHitPos_WS = evalRayPos(ray, cloudDistance);
+        prevMotionHitPos_WS = motionHitPos_WS;
+        prevMotionHitPos_WS.xz -= renderParams.cloudSettings.windDelta;
     }
 
     const float3 currNdc = calculateNdc(cameraParams.worldToClipMat, motionHitPos_WS);

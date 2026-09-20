@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-17_
 
 # Rendering Knowledgebase
 
@@ -11,6 +11,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [frame_contexts.md](frame_contexts.md) | Triple buffering, per-frame resources, CPU-GPU pipelining |
 | [render_passes.md](render_passes.md) | G-buffer → path trace → collect → present |
 | [pipeline.md](pipeline.md) | DXR pipeline state object, PipelineBuilder, shader tables |
+| [startup.md](startup.md) | Renderer init ordering: what makes launch slow, Streamline manual hooking, threaded RT pipeline creation |
 | [param_blocks.md](param_blocks.md) | ParamBlockManager, constant buffer layout and upload |
 | [rt_targets.md](rt_targets.md) | RtTarget, UAV/SRV descriptor pairs, G-buffer output textures |
 | [camera.md](camera.md) | Spherical coordinate camera, Halton TAA jitter, motion vectors |
@@ -18,6 +19,7 @@ For D3D12 resource management (buffers, descriptors, AS) see [gpu/](../gpu/index
 | [nvapi_ser.md](nvapi_ser.md) | NVAPI, Shader Execution Reordering (SER) optimization |
 | [gpu_radix_sort.md](gpu_radix_sort.md) | Wraps the GPUSorting submodule; tuning preset and in-place ping-pong invariant |
 | [light_tree.md](light_tree.md) | RTSL Stage 2 GPU light tree build: sparse/dense buffers, sentinels, atomic float min/max, fused internal-levels |
+| [clouds.md](clouds.md) | Block clouds: why boxes, occupancy map window, DDA intervals, asymmetric shadow limit, deterministic DLSS guides |
 | [sky_atmosphere.md](sky_atmosphere.md) | PBR sky LUT passes: ordering invariants, unit calibration, horizon/occlusion gotchas |
 | [gpu_profiler.md](gpu_profiler.md) | Timestamp-query scopes with PIX markers: what is gated on perf mode, placement rules, readback lag |
 | [biome_map.md](biome_map.md) | World-XZ grass tint texture: noise-refill rationale, refill triggers, luminance-replace tinting |

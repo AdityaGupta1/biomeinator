@@ -1,4 +1,4 @@
-_Last edited: 2026-08-30_
+_Last edited: 2026-09-17_
 
 # Scene
 
@@ -51,7 +51,8 @@ whole-buffer UAV transitions around the dispatch also cover terrain verts, so th
 not overlap other passes reading verts.
 
 `water_displacer.cpp` also holds a CPU mirror of the shader's `waveHeight()` (constants and
-math must be kept in sync) used by `sampleMeshWaveOffsetY()`, which reproduces the
+math must be kept in sync; both take the wrapped `waveTime`, never raw `animTime`, see
+`WATER_WAVE_PERIOD_SECONDS`) used by `sampleMeshWaveOffsetY()`, which reproduces the
 **rendered** surface at a point: corner wave heights interpolated across the two top-face
 triangles (diagonal from local (0, 0) to (1, 1), matching `cubeFaceVertPositions` in
 `chunk.cpp`) rather than evaluating the wave function directly at that point. The

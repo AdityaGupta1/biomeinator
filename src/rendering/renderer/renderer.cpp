@@ -48,17 +48,18 @@ static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a br
 
 void init()
 {
+    const auto initStart = std::chrono::steady_clock::now();
+
     renderState.testMode = SettingsManager::isTestMode();
     renderState.headless = SettingsManager::isHeadless();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
+    prepareNvapi();
     initStreamline();
 
     initDevice();
     initDescriptorHeaps();
-
-    initNvapi();
 
     for (uint32_t frameIdx = 0; frameIdx < NUM_FRAMES_IN_FLIGHT; ++frameIdx)
     {
@@ -77,6 +78,7 @@ void init()
     {
         frame.paramBlockManager.heapIndices->srv.transmittanceLutIdx = SkyAtmosphere::getTransmittanceLutSrvIdx();
         frame.paramBlockManager.heapIndices->srv.skyViewLutIdx = SkyAtmosphere::getSkyViewLutSrvIdx();
+        frame.paramBlockManager.heapIndices->srv.cloudOccupancyIdx = SkyAtmosphere::getCloudOccupancySrvIdx();
     }
     initRtTargets();
     initCommand();
@@ -91,8 +93,7 @@ void init()
 
     renderState.scene.init();
 
-    initRootSignature();
-    initPipeline();
+    timedInitStep("initPipeline (join)", initPipeline);
 
     WaterDisplacer::init();
 
@@ -105,13 +106,13 @@ void init()
     if (renderState.voxelMode)
     {
         Terrain::init(&renderState.scene);
-        Terrain::importWorld();
+        timedInitStep("Terrain::importWorld", Terrain::importWorld);
     }
     else
     {
         if (!defaultScene.empty())
         {
-            loadScene(defaultScene);
+            timedInitStep("loadScene", [&]() { loadScene(defaultScene); });
         }
     }
 
@@ -119,6 +120,9 @@ void init()
     {
         SetForegroundWindow(hwnd);
     }
+
+    const double totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - initStart).count();
+    Logger::log("init: total %.1f ms", totalMs);
 }
 
 void loadScene(const std::string& filePathStr)
@@ -432,6 +436,12 @@ static constexpr float fogPeakSigmaS = 0.004f;
 static constexpr float fogFullStrengthSeconds = 30.f;
 static constexpr float fogFadeEndSeconds = 120.f;
 
+// Wrapped in double: the float result stays precise no matter how large animTime has grown.
+static float computeWaveTime(const double animTime)
+{
+    return static_cast<float>(std::fmod(animTime, WATER_WAVE_PERIOD_SECONDS));
+}
+
 static float computeFogSigmaS(const float animTime)
 {
     float dayTime = std::fmod(animTime, SUN_PERIOD_SECONDS);
@@ -475,6 +485,7 @@ void render()
     // TODO: float precision of elapsed seconds degrades after hours (~1 ms resolution at ~4.6 h);
     // wave phase gets steppy in long sessions. Wrap time periodically if it matters.
     const float animTimeFloat = static_cast<float>(renderState.animTime);
+    const float waveTimeFloat = computeWaveTime(renderState.animTime);
 
     const AntialiasingMode antialiasingMode =
         static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
@@ -588,7 +599,7 @@ void render()
     bool didSceneChange;
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "scene update");
-        didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, animTimeFloat);
+        didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, waveTimeFloat);
     }
 
     const bool didCameraChange = renderState.camera.update();
@@ -614,8 +625,10 @@ void render()
     auto& renderParams = paramBlockManager.renderParams;
     renderParams->frameNumber = renderState.frameNumber;
     renderParams->animTime = animTimeFloat;
-    renderParams->prevAnimTime = renderState.prevAnimTime;
-    renderState.prevAnimTime = animTimeFloat;
+    renderParams->waveTime = waveTimeFloat;
+    renderParams->prevWaveTime = computeWaveTime(renderState.prevAnimTime);
+    const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
+    renderState.prevAnimTime = renderState.animTime;
 
     const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessImport();
 
@@ -655,6 +668,29 @@ void render()
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
+    renderParams->skyStrength = SettingsManager::getAsFloat("skyStrength");
+    renderParams->cloudSettings.enableClouds = SettingsManager::getAsBool("clouds") ? 1 : 0;
+    renderParams->cloudSettings.coverage = SettingsManager::getAsFloat("cloudCoverage");
+    renderParams->cloudSettings.extinction = SettingsManager::getAsFloat("cloudExtinction");
+    renderParams->cloudSettings.baseHeight = SettingsManager::getAsFloat("cloudBaseHeight");
+    renderParams->cloudSettings.thickness = SettingsManager::getAsFloat("cloudThickness");
+    renderParams->cloudSettings.cellSize = SettingsManager::getAsFloat("cloudCellSize");
+    renderParams->cloudSettings.patternScale = SettingsManager::getAsFloat("cloudPatternScale");
+    renderParams->cloudSettings.drawDistance = SettingsManager::getAsFloat("cloudDrawDistance");
+    renderParams->cloudSettings.shadowDistance = SettingsManager::getAsFloat("cloudShadowDistance");
+    renderParams->cloudSettings.ambient = SettingsManager::getAsFloat("cloudAmbient");
+    renderParams->cloudSettings.phaseG = SettingsManager::getAsFloat("cloudPhaseG");
+    renderParams->cloudSettings.multiScatterStrength = SettingsManager::getAsFloat("cloudMultiScatterStrength");
+    renderParams->cloudSettings.samples = SettingsManager::getAsUint("cloudSamples");
+    renderParams->cloudSettings.seed = SettingsManager::getAsUint("cloudSeed");
+    const glm::dvec2 wind(SettingsManager::getAsFloat("cloudWindX"), SettingsManager::getAsFloat("cloudWindZ"));
+    const glm::dvec2 windOffset = wind * renderState.animTime;
+    const glm::dvec2 windOffsetInt = glm::floor(windOffset);
+    const glm::dvec2 windOffsetFrac = windOffset - windOffsetInt;
+    const glm::dvec2 windDelta = wind * animTimeDelta;
+    renderParams->cloudSettings.windOffsetInt = { static_cast<int>(windOffsetInt.x), static_cast<int>(windOffsetInt.y) };
+    renderParams->cloudSettings.windOffsetFrac = { static_cast<float>(windOffsetFrac.x), static_cast<float>(windOffsetFrac.y) };
+    renderParams->cloudSettings.windDelta = { static_cast<float>(windDelta.x), static_cast<float>(windDelta.y) };
 
     RtTarget* debugOutputTarget = nullptr;
     const std::string& debugViewSettingStr = SettingsManager::getAsString("debugView");
@@ -768,7 +804,8 @@ void render()
             GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "sky luts");
             const float cameraY = paramBlockManager.cameraParams->pos_WS.y +
                 static_cast<float>(paramBlockManager.cameraParams->globalInstanceOffset.y);
-            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY);
+            SkyAtmosphere::dispatch(renderState.cmdList.Get(), animTimeFloat, cameraY,
+                renderParams->cloudSettings.enableClouds != 0, paramBlockManager.getParamBufferGpuAddress());
         }
 
         // ===================================
@@ -1229,9 +1266,9 @@ void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, f
     renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
-float getAnimTime()
+float getWaveTime()
 {
-    return static_cast<float>(renderState.animTime);
+    return computeWaveTime(renderState.animTime);
 }
 
 const Scene& getScene()
