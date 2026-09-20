@@ -6,6 +6,7 @@
 #include "rendering/biome_map.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/area_light_compactor.h"
 #include "rendering/camera.h"
 #include "rendering/common/common_enums.h"
 #include "rendering/common/common_settings.h"
@@ -97,6 +98,7 @@ void init()
     timedInitStep("initPipeline (join)", initPipeline);
 
     WaterDisplacer::init();
+    AreaLightCompactor::init();
 
     renderState.lightTreeManager.init();
     renderState.gpuRadixSort.init();
@@ -1208,6 +1210,7 @@ void destroy()
     renderState.lightTreeManager.destroy();
     GpuProfiler::destroy();
     WaterDisplacer::destroy();
+    AreaLightCompactor::destroy();
     SkyAtmosphere::destroy();
     BiomeMap::destroy();
 

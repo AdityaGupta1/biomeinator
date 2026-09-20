@@ -15,6 +15,7 @@
 // =============================================
 
 #define WATER_DISPLACE_WORKGROUP_SIZE 64
+#define AREA_LIGHT_COMPACT_WORKGROUP_SIZE 64
 
 // Displacement wave parameters shared between water_waves.hlsli and the CPU mirror of
 // waveHeight() in water_displacer.cpp. See water_waves.hlsli for the wave model description

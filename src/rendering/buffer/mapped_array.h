@@ -221,6 +221,32 @@ public:
         this->insertDirtyRange(0, newSize);
     }
 
+    // For arrays whose device buffer is the source of truth (filled incrementally or by the
+    // GPU): the old device contents are copied over on the GPU and nothing is marked dirty, so
+    // the stale staging slots are never uploaded. Only valid for device-backed arrays.
+    void resizeOnDevice(ID3D12GraphicsCommandList* cmdList, ToFreeList& toFreeList, uint32_t newSize)
+    {
+        ASSERT(!this->options.uploadOnly);
+        ASSERT(this->dirtyRanges.empty(), "resizeOnDevice with staged writes pending");
+        const uint32_t oldSize = this->size;
+        ID3D12Resource* const dev_oldBuffer = toFreeList.pushResource(this->dev_buffer);
+        for (const ComPtr<ID3D12Resource>& upload_buffer : this->upload_buffers)
+        {
+            toFreeList.pushResource(upload_buffer);
+        }
+
+        this->init(newSize, &toFreeList);
+
+        BufferHelper::copyBufferRegion(cmdList,
+                                       this->dev_buffer.Get(),
+                                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                       0,
+                                       dev_oldBuffer,
+                                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                       0,
+                                       sizeof(T) * std::min(oldSize, newSize));
+    }
+
     inline void reset()
     {
         for (ComPtr<ID3D12Resource>& upload_buffer : this->upload_buffers)

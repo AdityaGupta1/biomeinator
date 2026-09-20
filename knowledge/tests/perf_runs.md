@@ -89,6 +89,13 @@ frames (1.65 ms CPU, dominated by rewriting the 2M-entry area light array), ligh
 The steady cost while moving is the water refit recording at ~1.5 ms CPU per frame for the
 ~1,000 animated chunks.
 
+After the proportional BLAS cap, the single water dispatch and the GPU compaction of the
+sampling structure (same day): build frames are three times as many at a third of the cost
+each (0.3 ms CPU, GPU p95 0.65 ms), compaction is 0.23 ms, and the refit recording is
+1.3 ms, which is now the per-BLAS `BuildRaytracingAccelerationStructure` call itself. What is
+left of the p95 (+1 ms over the median) is GPU: path tracing varying with the view and the
+occasional light tree rebuild.
+
 ## Streaming
 
 Everything before the measured window is also recorded as the *streaming* window: from the

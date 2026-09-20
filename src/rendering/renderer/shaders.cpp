@@ -15,6 +15,7 @@
 #include "light_tree/light_buffer_clear.cs.fxh"
 #include "light_tree/light_tree_bbox_reduce.cs.fxh"
 #include "light_tree/light_tree_internal_levels.cs.fxh"
+#include "light_tree/area_light_compact.cs.fxh"
 #include "light_tree/light_tree_leaf_populate.cs.fxh"
 #include "light_tree/light_tree_morton_emit.cs.fxh"
 #include "light_tree/light_tree_scene_bbox_reset.cs.fxh"
@@ -52,6 +53,7 @@ static const std::unordered_map<std::string_view, std::span<const unsigned char>
     REGISTER_SHADER(gpu_sort_upsweep_cs),
     REGISTER_SHADER(light_buffer_clear_cs),
     REGISTER_SHADER(light_tree_bbox_reduce_cs),
+    REGISTER_SHADER(area_light_compact_cs),
     REGISTER_SHADER(light_tree_internal_levels_cs),
     REGISTER_SHADER(light_tree_leaf_populate_cs),
     REGISTER_SHADER(light_tree_morton_emit_cs),

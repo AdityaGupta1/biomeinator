@@ -189,18 +189,17 @@ private:
         Instance* instance; // null once removed, until the next compaction
         uint32_t areaLightSparseOffset;
         uint32_t numAreaLights;
+        uint32_t areaLightDenseOffset; // where its block sits in the sampling structure
     };
     std::vector<TlasInstanceEntry> tlasInstanceEntries;
     bool tlasEntriesNeedCompaction{ false };
     // Instances whose visibility flipped on outside of update(), added once a ToFreeList is at hand
     std::vector<Instance*> pendingTlasEntryAdds;
-    // CPU master copy of areaLightSamplingStructure: the mapped array only stages the ranges
-    // written into the current frame's slot, so appends and compactions are staged from here
-    std::vector<uint32_t> areaLightDenseIdxs;
-    void addTlasEntry(Instance* instance, ToFreeList& toFreeList);
+    void addTlasEntry(Instance* instance, ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     void removeTlasEntry(Instance* instance);
-    void compactTlasEntries();
-    void stageAreaLightSamplingRange(ToFreeList& toFreeList, uint32_t start, uint32_t count);
+    void compactTlasEntries(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    // Appends [sparseOffset, sparseOffset + count) to the sampling structure on the device
+    void appendAreaLightSamplingRange(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, uint32_t sparseOffset, uint32_t count);
     // Global radiance changes, distinct from streamed instance/TLAS updates.
     bool radianceHistoryInvalidated{ false };
 

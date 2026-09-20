@@ -52,7 +52,8 @@ the entries into the frame's instance desc array with the global offset applied.
 - Removals (`setVisible(false)`, `freeInstance`) only null the entry's instance pointer and
   set `tlasEntriesNeedCompaction`; `makeTlas` compacts once, so a frame that unloads many
   chunks pays one pass, not one per chunk. Each `Instance` carries its entry index so both
-  operations are O(1).
+  operations are O(1). The entries themselves compact on the CPU (13k of them is nothing);
+  the area light sampling structure compacts on the GPU, see below.
 - Transform setters update the entry in place; they also mark `isTlasDirty` so the change
   resets accumulation like any other scene change.
 
@@ -88,6 +89,11 @@ instances leaving the set get one displacement dispatch with `waveScale` 0 plus 
 `sampleMeshWaveOffsetY` needs no fade term because it is only sampled at the camera, where
 the fade is 1.
 
+The displacement is one dispatch over the concatenated vertex ranges of every animated
+instance, with a per-frame instance table found by binary search, and the refits share one
+scratch allocation per frame; recording a thousand dispatches and a thousand scratch
+allocations per frame was 1.5 ms of main thread while moving.
+
 The cost of animated water is mostly not the refit itself: refit BLASes trace slower than
 built ones, and path tracing over the visible water grows with the animated radius, roughly
 0.3 ms of path tracing plus 0.15 ms of refit per 4 chunks of radius at render distance 40
@@ -114,12 +120,17 @@ actually hit.
 Indirection array mapping dense sampling indices `[0, numAreaLights)` to sparse area light
 buffer indices. Needed because area lights live in a managed buffer where freed/reordered
 instances leave gaps, but uniform sampling needs a contiguous range. It is maintained with
-the TLAS entries: an add appends the instance's range, a compaction rewrites it. The CPU
-master copy `areaLightDenseIdxs` exists because the mapped array's staging slots are
-per-frame, so an incremental append written into one slot is not present in the others; the
-device buffer is the source of truth and each change is staged from the master copy and
-marked dirty. It is pre-sized to 2M entries, since a resize during streaming (four new
-buffers plus freeing the old ones) showed up as a 30-50 ms frame.
+the TLAS entries and its **device buffer is the source of truth**: an add writes the
+instance's range into the current staging slot and marks it dirty (the mapped array's slots
+are per-frame, so nothing else in a slot can be trusted), and a compaction is a GPU gather
+(`AreaLightCompactor`): the CPU only computes the surviving blocks' old and new offsets, from
+the first moved block onwards, and one dispatch plus a copy-back rewrites that tail. Rewriting
+the 2M entries on the CPU instead was a 1.65 ms spike on every chunk-unload frame. Two
+ordering rules follow: staged appends must be uploaded before a compaction or a device-side
+resize reads the buffer (both call `copyFromUploadBufferIfDirty` first), and growth uses
+`MappedArray::resizeOnDevice`, which copies the old device contents and marks nothing dirty,
+since the ordinary `resize` would upload a stale staging slot. It is pre-sized to 2M entries,
+since a resize during streaming showed up as a 30-50 ms frame.
 
 ## Reset
 

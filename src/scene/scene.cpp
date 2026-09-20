@@ -4,6 +4,7 @@
 #include "scene.h"
 
 #include "debug.h"
+#include "rendering/area_light_compactor.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
@@ -264,7 +265,6 @@ void Scene::reset()
     this->tlasInstanceEntries.clear();
     this->tlasEntriesNeedCompaction = false;
     this->pendingTlasEntryAdds.clear();
-    this->areaLightDenseIdxs.clear();
     this->availableInstanceIds = {};
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
@@ -454,7 +454,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     {
         if (instance->isVisible && !instance->isScheduledForDeletion && instance->geoWrapper.blasBufferSection.isValid())
         {
-            this->addTlasEntry(instance, toFreeList);
+            this->addTlasEntry(instance, cmdList, toFreeList);
         }
     }
     this->pendingTlasEntryAdds.clear();
@@ -551,7 +551,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
         WaterDisplacer::dispatch(
-            cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
+            cmdList, toFreeList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
@@ -574,8 +574,16 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     }
 
     std::vector<Instance*> instancesToBuildThisFrame;
-    const uint32_t maxInstancesThisFrame = std::min(SettingsManager::getAsUint("maxBlasBuildsPerFrame"),
-                                                    static_cast<uint32_t>(this->instancesReadyForBlasBuild.size()));
+    // Proportional to the backlog: a load drains at the setting's cap, a row of chunks becoming
+    // eligible while moving lands over several frames instead of one, and there is no step
+    // between the two
+    constexpr uint32_t minBlasBuildsPerFrame = 8;
+    constexpr uint32_t queueFractionPerFrame = 8;
+    const uint32_t numQueued = static_cast<uint32_t>(this->instancesReadyForBlasBuild.size());
+    const uint32_t cap = std::clamp(numQueued / queueFractionPerFrame,
+                                    minBlasBuildsPerFrame,
+                                    std::max(minBlasBuildsPerFrame, SettingsManager::getAsUint("maxBlasBuildsPerFrame")));
+    const uint32_t maxInstancesThisFrame = std::min(cap, numQueued);
     instancesToBuildThisFrame.reserve(maxInstancesThisFrame);
     for (Instance* const instance : this->instancesReadyForBlasBuild)
     {
@@ -704,7 +712,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         if (instance->isVisible)
         {
-            this->addTlasEntry(instance, toFreeList);
+            this->addTlasEntry(instance, cmdList, toFreeList);
         }
     }
 
@@ -712,22 +720,33 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     this->managedAreaLightsBuffer.endBatchCopy(cmdList);
 }
 
-void Scene::stageAreaLightSamplingRange(ToFreeList& toFreeList, const uint32_t start, const uint32_t count)
+void Scene::appendAreaLightSamplingRange(ID3D12GraphicsCommandList4* const cmdList,
+                                         ToFreeList& toFreeList,
+                                         const uint32_t sparseOffset,
+                                         const uint32_t count)
 {
     if (count == 0)
     {
         return;
     }
+    const uint32_t start = this->numAreaLights;
     if (this->areaLightSamplingStructure.getSize() < start + count)
     {
-        this->areaLightSamplingStructure.resize(toFreeList, Util::nextPow2AtLeast(1u, start + count));
+        // Earlier appends this frame are still staged; they must land before the device copy
+        this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+        this->areaLightSamplingStructure.resizeOnDevice(cmdList, toFreeList, Util::nextPow2AtLeast(1u, start + count));
     }
-    memcpy(&this->areaLightSamplingStructure[start], &this->areaLightDenseIdxs[start], count * sizeof(uint32_t));
+    for (uint32_t idx = 0; idx < count; ++idx)
+    {
+        this->areaLightSamplingStructure[start + idx] = sparseOffset + idx;
+    }
     this->areaLightSamplingStructure.markDirtyRange(start, start + count);
+    this->numAreaLights = start + count;
+    this->areaLightSparseCount = std::max(this->areaLightSparseCount, sparseOffset + count);
     this->areaLightTopologyChanged = true;
 }
 
-void Scene::addTlasEntry(Instance* const instance, ToFreeList& toFreeList)
+void Scene::addTlasEntry(Instance* const instance, ID3D12GraphicsCommandList4* const cmdList, ToFreeList& toFreeList)
 {
     ASSERT(instance->tlasEntryIdx == UINT32_MAX);
     instance->tlasEntryIdx = static_cast<uint32_t>(this->tlasInstanceEntries.size());
@@ -741,16 +760,10 @@ void Scene::addTlasEntry(Instance* const instance, ToFreeList& toFreeList)
     entry.instance = instance;
     entry.areaLightSparseOffset = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
     entry.numAreaLights = instance->areaLightsBufferSection.sizeBytes / sizeof(AreaLight);
+    entry.areaLightDenseOffset = this->numAreaLights;
     this->tlasInstanceEntries.push_back(entry);
 
-    const uint32_t denseStart = static_cast<uint32_t>(this->areaLightDenseIdxs.size());
-    for (uint32_t idx = 0; idx < entry.numAreaLights; ++idx)
-    {
-        this->areaLightDenseIdxs.push_back(entry.areaLightSparseOffset + idx);
-    }
-    this->numAreaLights = static_cast<uint32_t>(this->areaLightDenseIdxs.size());
-    this->areaLightSparseCount = std::max(this->areaLightSparseCount, entry.areaLightSparseOffset + entry.numAreaLights);
-    this->stageAreaLightSamplingRange(toFreeList, denseStart, entry.numAreaLights);
+    this->appendAreaLightSamplingRange(cmdList, toFreeList, entry.areaLightSparseOffset, entry.numAreaLights);
 
     this->isTlasDirty = true;
 }
@@ -767,28 +780,72 @@ void Scene::removeTlasEntry(Instance* const instance)
     this->isTlasDirty = true;
 }
 
-// Removals only mark entries dead, so a frame with any number of them pays one pass here
-void Scene::compactTlasEntries()
+// Removals only mark entries dead, so a frame with any number of them pays one pass here. The
+// entries are compacted on the CPU; the sampling structure, which holds millions of entries in
+// a large world, is compacted on the GPU from the surviving blocks' old and new offsets.
+void Scene::compactTlasEntries(ID3D12GraphicsCommandList4* const cmdList, ToFreeList& toFreeList)
 {
+    // Appends recorded earlier this frame are still staged; the gather below reads the device
+    // copy, so they must land first
+    this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+
+    std::vector<AreaLightCompactRange> ranges;
     uint32_t numKept = 0;
-    this->areaLightDenseIdxs.clear();
+    uint32_t numAreaLightsKept = 0;
     this->areaLightSparseCount = 0;
-    for (const TlasInstanceEntry& entry : this->tlasInstanceEntries)
+    for (TlasInstanceEntry& entry : this->tlasInstanceEntries)
     {
         if (entry.instance == nullptr)
         {
             continue;
         }
         entry.instance->tlasEntryIdx = numKept;
-        this->tlasInstanceEntries[numKept++] = entry;
-        for (uint32_t idx = 0; idx < entry.numAreaLights; ++idx)
+        if (entry.numAreaLights > 0)
         {
-            this->areaLightDenseIdxs.push_back(entry.areaLightSparseOffset + idx);
+            if (entry.areaLightDenseOffset != numAreaLightsKept)
+            {
+                ranges.push_back({ .newOffset = numAreaLightsKept, .oldOffset = entry.areaLightDenseOffset, .count = entry.numAreaLights });
+            }
+            entry.areaLightDenseOffset = numAreaLightsKept;
+            numAreaLightsKept += entry.numAreaLights;
         }
         this->areaLightSparseCount = std::max(this->areaLightSparseCount, entry.areaLightSparseOffset + entry.numAreaLights);
+        this->tlasInstanceEntries[numKept++] = entry;
     }
     this->tlasInstanceEntries.resize(numKept);
-    this->numAreaLights = static_cast<uint32_t>(this->areaLightDenseIdxs.size());
+
+    // Blocks before the first moved one are already in place; only the tail from there on is
+    // rewritten, and consecutive moved blocks merge into one range
+    if (!ranges.empty())
+    {
+        std::vector<AreaLightCompactRange> merged;
+        for (const AreaLightCompactRange& range : ranges)
+        {
+            if (!merged.empty() && merged.back().oldOffset + merged.back().count == range.oldOffset)
+            {
+                merged.back().count += range.count;
+            }
+            else
+            {
+                merged.push_back(range);
+            }
+        }
+        const uint32_t tailStart = merged.front().newOffset;
+        for (AreaLightCompactRange& range : merged)
+        {
+            range.newOffset -= tailStart;
+            range.oldOffset -= tailStart;
+        }
+        AreaLightCompactor::dispatch(cmdList,
+                                     toFreeList,
+                                     this->areaLightSamplingStructure.getBuffer(),
+                                     tailStart,
+                                     numAreaLightsKept - tailStart,
+                                     merged);
+    }
+
+    this->numAreaLights = numAreaLightsKept;
+    this->areaLightTopologyChanged = true;
     this->tlasEntriesNeedCompaction = false;
 }
 
@@ -805,8 +862,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     if (this->tlasEntriesNeedCompaction)
     {
         CPU_PROFILE_SCOPE("tlas compaction");
-        this->compactTlasEntries();
-        this->stageAreaLightSamplingRange(toFreeList, 0, this->numAreaLights);
+        this->compactTlasEntries(cmdList, toFreeList);
     }
 
     const uint32_t numInstances = static_cast<uint32_t>(this->tlasInstanceEntries.size());

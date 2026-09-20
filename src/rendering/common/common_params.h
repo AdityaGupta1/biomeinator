@@ -173,6 +173,28 @@ struct WaveFadeParams
     WaveFadeFrustumNormal frustumNormals_WS[4];
 };
 
+// One animated water instance in the single displacement dispatch: threads cover the
+// concatenated vertex ranges and find their instance by binary search on firstVert
+struct WaterDisplaceInstance
+{
+    uint firstVert;
+    uint vertsBufferOffset;
+    uint vertCount;
+    float waveScale; // 0 flattens a chunk that just left the animated set
+    int3 transformOffset;
+    uint pad0;
+};
+
+// One surviving block of the area light sampling structure during GPU compaction, in
+// ascending newOffset order
+struct AreaLightCompactRange
+{
+    uint newOffset;
+    uint oldOffset;
+    uint count;
+    uint pad0;
+};
+
 struct RenderParams
 {
     uint frameNumber;

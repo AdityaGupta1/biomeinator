@@ -13,6 +13,8 @@
 
 // Compute pass that displaces WATER_TOP verts in place with the analytic wave function
 // (see shaders/common/water_waves.hlsli).
+class ToFreeList;
+
 namespace WaterDisplacer
 {
 
@@ -29,6 +31,7 @@ void init();
 // The verts buffer must be in UNORDERED_ACCESS state; the caller owns the state
 // transitions and the UAV barrier after the dispatches.
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
+              ToFreeList& toFreeList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
               float waveTime,
               const WaveFadeParams& waveFade,

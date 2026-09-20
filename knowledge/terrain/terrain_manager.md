@@ -31,7 +31,7 @@ Terrain generation tasks (`maxNumGenerateTerrainTasksPerFrame = 32`) are throttl
 
 The caps used to be 12 and 48, which held a backlog of ~470 tasks with the workers 18% busy on an initial render-distance-40 load. With the larger caps the workers sit at ~90% and generation is bound by terrain generation CPU time itself. The pool is FIFO, so with a deep queue the order tasks are pushed matters: `createInstances` tasks go in ahead of new `generateTerrain` tasks, otherwise chunks one step from visible starve behind hundreds of heavy terrain tasks and the scene can go dozens of frames without a chunk landing.
 
-`maxBlasBuildsPerFrame` (default 32) is the matching cap on the render side; at 8 it was the binding limit on generation time. Beyond 32 the workers are the limit, and a very high cap makes the frame that receives a burst correspondingly longer.
+`maxBlasBuildsPerFrame` (default 32) is the matching cap on the render side; at 8 it was the binding limit on generation time. Beyond 32 the workers are the limit. The per-frame cap is proportional to the queue, an eighth of it clamped to [8, setting], so a load drains at the setting while a row of chunks becoming eligible while moving lands over several frames; 32 of them landing in one frame was the most frequent frame spike, and a hard threshold between the two rates would make a draining load visibly change speed.
 
 ## Water Animation Distance
 

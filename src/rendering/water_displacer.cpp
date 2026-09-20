@@ -5,6 +5,8 @@
 
 #include "common/common_registers.h"
 #include "common/common_settings.h"
+#include "buffer/committed_managed_buffer.h"
+#include "buffer/to_free_list.h"
 #include "renderer/pipeline_builder.h"
 #include "renderer/renderer_internal.h"
 #include "renderer/shaders.h"
@@ -25,6 +27,8 @@ enum class WaterDisplaceParam
 {
     CONSTANTS,
 
+    INSTANCES,
+
     VERTS_OUT,
 
     COUNT
@@ -34,17 +38,24 @@ enum class WaterDisplaceParam
 
 struct WaterDisplaceConstants
 {
-    uint32_t vertsBufferOffset;
-    uint32_t vertCount;
+    uint32_t numInstances;
+    uint32_t numVerts;
     float waveTime;
-    float waveScale;
-    DirectX::XMINT3 transformOffset;
     uint32_t pad0;
     WaveFadeParams waveFade;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
 ComPtr<ID3D12PipelineState> pso{ nullptr };
+
+CommittedManagedBuffer instancesUploadBuffer{
+    &UPLOAD_HEAP,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    {
+        .isResizable = true,
+        .isMapped = true,
+    },
+};
 
 // CPU mirror of waveHeight() in shaders/common/water_waves.hlsli (displacement only, no
 // shading-normal noise); constants are shared via common_settings.h, but the math must
@@ -94,6 +105,7 @@ void init()
             .Num32BitValues = sizeof(WaterDisplaceConstants) / 4,
         },
     };
+    params[WATER_DISPLACE_PARAM_IDX(INSTANCES)] = MAKE_PARAM(SRV, WATER_DISPLACE, INSTANCES);
     params[WATER_DISPLACE_PARAM_IDX(VERTS_OUT)] = MAKE_PARAM(UAV, WATER_DISPLACE, VERTS_OUT);
 
     Renderer::serializeAndCreateRootSignature(params.data(), static_cast<uint32_t>(params.size()),
@@ -105,41 +117,61 @@ void init()
     psoDesc.CS = makeShaderBytecode(getShader("water_displace_cs"));
     CHECK_HRESULT(Renderer::getDevice()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&pso)));
     pso->SetName(L"waterDisplacePso");
+
+    instancesUploadBuffer.setName(L"waterDisplaceInstancesUploadBuffer");
+    instancesUploadBuffer.init(1 << 16 /*bytes*/);
 }
 
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
+              ToFreeList& toFreeList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
               float waveTime,
               const WaveFadeParams& waveFade,
               const std::vector<DispatchInputs>& allInputs)
 {
+    if (allInputs.empty())
+    {
+        return;
+    }
+
+    std::vector<WaterDisplaceInstance> instances;
+    instances.reserve(allInputs.size());
+    uint32_t numVerts = 0;
+    for (const DispatchInputs& inputs : allInputs)
+    {
+        instances.push_back({
+            .firstVert = numVerts,
+            .vertsBufferOffset = inputs.vertsBufferOffset,
+            .vertCount = inputs.vertCount,
+            .waveScale = inputs.waveScale,
+            .transformOffset = { inputs.transformOffset.x, inputs.transformOffset.y, inputs.transformOffset.z },
+        });
+        numVerts += inputs.vertCount;
+    }
+
+    const ManagedBufferSection instancesSection = instancesUploadBuffer.copyFromHostVector(cmdList, toFreeList, instances);
+    toFreeList.pushManagedBufferSection(instancesSection);
+
     cmdList->SetPipelineState(pso.Get());
     cmdList->SetComputeRootSignature(rootSig.Get());
 
+    const WaterDisplaceConstants constants = {
+        .numInstances = static_cast<uint32_t>(instances.size()),
+        .numVerts = numVerts,
+        .waveTime = waveTime,
+        .waveFade = waveFade,
+    };
+    cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
+                                          sizeof(WaterDisplaceConstants) / 4, &constants, 0);
+    cmdList->SetComputeRootShaderResourceView(WATER_DISPLACE_PARAM_IDX(INSTANCES), instancesSection.getGpuVirtualAddress());
     cmdList->SetComputeRootUnorderedAccessView(WATER_DISPLACE_PARAM_IDX(VERTS_OUT), dev_vertsAddress);
 
-    // TODO: batch into a single dispatch with an instance table if per-instance dispatch
-    // overhead shows up in profiling
-    for (const DispatchInputs& inputs : allInputs)
-    {
-        const WaterDisplaceConstants constants = {
-            .vertsBufferOffset = inputs.vertsBufferOffset,
-            .vertCount = inputs.vertCount,
-            .waveTime = waveTime,
-            .waveScale = inputs.waveScale,
-            .transformOffset = { inputs.transformOffset.x, inputs.transformOffset.y, inputs.transformOffset.z },
-            .waveFade = waveFade,
-        };
-        cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
-                                              sizeof(WaterDisplaceConstants) / 4, &constants, 0);
-
-        const uint32_t dispatchSize = Util::calculateDispatchSize(inputs.vertCount, WATER_DISPLACE_WORKGROUP_SIZE);
-        cmdList->Dispatch(dispatchSize, 1, 1);
-    }
+    cmdList->Dispatch(Util::calculateDispatchSize(numVerts, WATER_DISPLACE_WORKGROUP_SIZE), 1, 1);
 }
 
 void destroy()
 {
+    instancesUploadBuffer.reset();
     pso.Reset();
     rootSig.Reset();
 }
