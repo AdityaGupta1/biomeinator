@@ -199,9 +199,11 @@ void update(ToFreeList& toFreeList)
     // they leave the set. That set is chosen from the camera's chunk center so it only changes
     // when the camera changes chunk, with enough slack for the camera's position within the
     // chunk and for the chunk offset being its corner rather than its farthest vertex.
+    constexpr float waterAnimationChunks = 24.f;
+    constexpr float waterFadeChunks = 8.f;
     const float chunkSize = static_cast<float>(chunkSizeXZ);
-    const float waveFadeEnd = SettingsManager::getAsInt("waterAnimationDistance") * chunkSize;
-    const float waveFadeStart = waveFadeEnd - 8.f * chunkSize;
+    const float waveFadeEnd = waterAnimationChunks * chunkSize;
+    const float waveFadeStart = waveFadeEnd - waterFadeChunks * chunkSize;
     const glm::vec2 cameraChunkCenterXZ_WS =
         glm::floor(glm::vec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / chunkSize) * chunkSize + 0.5f * chunkSize;
     scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);

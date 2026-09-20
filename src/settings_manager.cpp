@@ -93,8 +93,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudWindX", "Cloud wind X in blocks/s", float, "10");
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
     ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
-    ADD_OPTION("maxBlasBuildsPerFrame", "Max BLAS builds recorded per frame", uint32_t, "64");
-    ADD_OPTION("waterAnimationDistance", "Radius in chunks at which water surfaces stop animating", int, "24");
     ADD_OPTION("world", "World to import", std::string, "");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
@@ -213,8 +211,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("cloudWindX", float);
     COPY_SETTING("cloudWindZ", float);
     COPY_SETTING("renderDistance", int);
-    COPY_SETTING("maxBlasBuildsPerFrame", uint32_t);
-    COPY_SETTING("waterAnimationDistance", int);
     COPY_SETTING("world", std::string);
 
     COPY_SETTING("debugView", std::string);

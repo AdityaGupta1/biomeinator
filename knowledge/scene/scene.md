@@ -62,7 +62,7 @@ the entries into the frame's instance desc array with the global offset applied.
 `Instance::isDeformable` (set by chunk meshing for water) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
 dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset within the circular
-animation radius that `Terrain::update` sets from the `waterAnimationDistance` setting *and*
+animation radius that `Terrain::update` sets (24 chunks, a constant there) *and*
 inside the padded view frustum: at render distance 40 a world has ~3,500 water chunks, and
 refitting all of them was most of a 7 ms main thread and 3.6 ms of GPU per frame. The subset
 is cached in `animatedDeformables` and rebuilt when the radius, its chunk-quantized center,
@@ -98,8 +98,8 @@ The cost of animated water is mostly not the refit itself: refit BLASes trace sl
 built ones, and path tracing over the visible water grows with the animated radius, roughly
 0.3 ms of path tracing plus 0.15 ms of refit per 4 chunks of radius at render distance 40
 (3.1 ms path tracing at 16 chunks, 3.4 at 20, 3.8 at 24, measured with a four-chunk band).
-The frustum limit removes about a third of the refits at a given radius. `waterAnimationDistance`
-(default 24, fading from 16) is the knob.
+The frustum limit removes about a third of the refits at a given radius. The radius (24 chunks,
+fading from 16) is `waterAnimationChunks` in `terrain.cpp`.
 
 Displacement rewrites verts **in place** in the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The

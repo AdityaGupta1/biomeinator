@@ -15,7 +15,6 @@
 #include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
-#include "settings_manager.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -578,11 +577,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     // eligible while moving lands over several frames instead of one, and there is no step
     // between the two
     constexpr uint32_t minBlasBuildsPerFrame = 8;
+    constexpr uint32_t maxBlasBuildsPerFrame = 64;
     constexpr uint32_t queueFractionPerFrame = 8;
     const uint32_t numQueued = static_cast<uint32_t>(this->instancesReadyForBlasBuild.size());
-    const uint32_t cap = std::clamp(numQueued / queueFractionPerFrame,
-                                    minBlasBuildsPerFrame,
-                                    std::max(minBlasBuildsPerFrame, SettingsManager::getAsUint("maxBlasBuildsPerFrame")));
+    const uint32_t cap = std::clamp(numQueued / queueFractionPerFrame, minBlasBuildsPerFrame, maxBlasBuildsPerFrame);
     const uint32_t maxInstancesThisFrame = std::min(cap, numQueued);
     instancesToBuildThisFrame.reserve(maxInstancesThisFrame);
     for (Instance* const instance : this->instancesReadyForBlasBuild)

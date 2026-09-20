@@ -123,7 +123,7 @@ Initial load of that scene, fullscreen 1440p, 2026-09-20, before and after the s
 the main thread going from 7.3 ms to 1.6 ms (water refits and the TLAS walk were most of it).
 Generation is now bound by the BLAS cap again at 30 builds per frame, and each build frame
 costs ~3 ms more than a steady one. The spikes that remain (75-90 ms max, in both states) are
-sporadic stalls inside driver calls; a lower `maxBlasBuildsPerFrame` lowers p95 at the cost of
+sporadic stalls inside driver calls; a lower BLAS build cap lowers p95 at the cost of
 generation time.
 
 **Absolute numbers drift with machine state.** Earlier in the same session the pre-fix state
