@@ -24,8 +24,18 @@ do not shift unrelated results. Candidates retain the original column and bottom
 order. The retained cave fields, biases, and cave-air mask are released immediately after
 this pass; neighboring chunks never read them.
 
-The surface-biome column pass skips cave-marked cells and otherwise still uses
-`terrainTopY`. Tree canopies therefore do not confuse surface classification.
+The surface-biome column pass skips empty decorators and starts immediately above
+`terrainTopY`, with the terrain-top block as its initial support. Lower cells cannot
+place a surface decorator or consume its random stream. It still scans the rest of
+the column above that point so structures can provide higher supports. Cave-marked
+cells remain excluded, and tree canopies do not change the terrain-top classification.
+
+The cave word filter retains all six directional support masks for its per-face
+tests, avoiding another world-to-chunk lookup for each face. A face normal points
+from the support toward the candidate, so the support lies in the opposite
+direction. Vertical masks include carries from adjacent words, including terrain
+above the cave-height cap. Face enumeration order remains unchanged because it
+determines the position-hashed face choice.
 
 ## Ordering Guarantees
 

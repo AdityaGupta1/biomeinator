@@ -49,8 +49,9 @@ multiple of `chunkSizeXZ` (16) and therefore of the downsample factor. Adjacent
 chunks thus sample identical world positions on their shared border, so biomes
 stay seamless across chunks. The buffer carries `+1` cell on each XZ axis (the
 far-edge interpolation margin overlapping the next chunk's first cell) and `+2`
-in y. If the downsample factor ever stops dividing `chunkSizeXZ`, the coarse
-origin must be explicitly snapped or borders will mismatch.
+in y. `CaveDecorationData` statically requires the downsample factor to divide
+`chunkSizeXZ`. Supporting other spacings would require explicitly snapping the
+coarse origin first; simply changing the spacing would otherwise break borders.
 
 ## Column interpolation reuse
 
@@ -88,7 +89,9 @@ evaluation. The three material fields remain scratch-only. Every chunk reads onl
 retained fields and releases them, the surface biases, and cave-air mask after decoration;
 neighbors still use only the existing immutable terrain masks. At the maximum cave height,
 this data takes about 28 KiB instead of the old 80 KiB biome-ID array, with smaller fields in
-shorter terrain. Imported chunks skip these generation/decoration steps as before.
+shorter terrain. `CaveDecorationData` owns the marker, fields, biases, dimensions, and
+release operation together, so generation and decoration share the packed layout and
+interpolation margins. Imported chunks skip these generation/decoration steps as before.
 
 ## Secondary rock
 

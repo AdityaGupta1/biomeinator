@@ -6,6 +6,7 @@
 #include "biome.h"
 #include "block.h"
 #include "cave_biome.h"
+#include "cave_biome_noise.h"
 #include "scene/scene.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
@@ -92,6 +93,61 @@ inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmen
 class Region;
 class ThreadMemoryAllocator;
 
+// Chunk-owned inputs for deferred cave decoration. Neighboring chunks read only
+// the immutable terrain masks; these fields live until this chunk finishes decoration.
+struct CaveDecorationData
+{
+    static_assert(chunkSizeXZ % CaveBiomeFields::downsample == 0,
+                  "cave biome samples must align at chunk boundaries");
+    static_assert(caveMaxY % 64 == 0);
+    static constexpr uint32_t noiseSizeXZ = chunkSizeXZ / CaveBiomeFields::downsample + 1;
+    static constexpr uint32_t wordsPerColumn = caveMaxY / 64;
+
+    std::vector<uint64_t> airMask{};
+    std::vector<float> noise{}; // temperature followed by humidity
+    std::vector<CaveBiomeNoise> surfaceBias{};
+    uint32_t noiseHeight = 0;
+
+    void prepare()
+    {
+        airMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+        surfaceBias.resize(chunkSizeXZSquare);
+    }
+
+    void allocateNoise(uint32_t maxY)
+    {
+        // The extra Y planes enclose the last interpolation interval.
+        noiseHeight = maxY / CaveBiomeFields::downsample + 2;
+        noise.resize(2 * fieldSize());
+    }
+
+    uint32_t fieldSize() const { return noiseSizeXZ * noiseSizeXZ * noiseHeight; }
+    float* temperatureNoise() { return noise.data(); }
+    float* humidityNoise() { return noise.data() + fieldSize(); }
+
+    CaveBiomeFields::Column temperatureColumn(uint32_t x, uint32_t z) const
+    {
+        return { noise.data(), noiseSizeXZ, noiseHeight, x, z };
+    }
+
+    CaveBiomeFields::Column humidityColumn(uint32_t x, uint32_t z) const
+    {
+        return { noise.data() + fieldSize(), noiseSizeXZ, noiseHeight, x, z };
+    }
+
+    void markCaveAir(uint32_t column, uint32_t y)
+    {
+        airMask[column * wordsPerColumn + y / 64] |= uint64_t(1) << (y % 64);
+    }
+
+    bool isCaveAir(uint32_t column, uint32_t y) const
+    {
+        return y < caveMaxY && ((airMask[column * wordsPerColumn + y / 64] >> (y % 64)) & 1);
+    }
+
+    void release() { *this = CaveDecorationData{}; }
+};
+
 class Chunk
 {
 private:
@@ -106,14 +162,7 @@ private:
     // One immutable bit per block identifying terrain full cubes. This permits race-free
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
-    // Original cave air is distinct from ordinary surface air, even after structures fill it.
-    // Its biome is classified only when decoration finds adjacent terrain support.
-    std::vector<uint64_t> caveAirMask{};
-    // Two coarse fields (temperature followed by humidity) and the column's surface bias.
-    // Owned by this chunk until its decorator pass ends; never read by neighboring chunks.
-    std::vector<float> caveBiomeNoise{};
-    std::vector<CaveBiomeNoise> caveBiomeSurfaceBias{};
-    uint32_t caveBiomeNoiseHeight = 0;
+    CaveDecorationData caveDecoration{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
     // if stateful blocks become common.
     std::unordered_map<uint32_t, uint8_t> blockStates{};

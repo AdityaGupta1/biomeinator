@@ -491,9 +491,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
     // top of the band to interpolate against the next coarse cell.
-    const uint caveBiomeNoiseSizeXZ = chunkSizeXZ / caveBiomeNoiseDownsample + 1;
-    const uint caveBiomeNoiseHeight = caveNoiseMaxY / caveBiomeNoiseDownsample + 2;
-    const uint caveBiomeNoiseSize = caveBiomeNoiseSizeXZ * caveBiomeNoiseSizeXZ * caveBiomeNoiseHeight;
+    this->caveDecoration.allocateNoise(caveNoiseMaxY);
+    constexpr uint caveBiomeNoiseSizeXZ = CaveDecorationData::noiseSizeXZ;
+    const uint caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
+    const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
     const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
     {
         float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
@@ -502,10 +503,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     };
     // Keep only the two biome axes until decoration. Generate directly into owned storage
     // so deferred air classification needs neither fresh noise nor a copy of the fields.
-    this->caveBiomeNoiseHeight = caveBiomeNoiseHeight;
-    this->caveBiomeNoise.resize(2 * caveBiomeNoiseSize);
-    float* caveTemperatureNoise = this->caveBiomeNoise.data();
-    float* caveHumidityNoise = caveTemperatureNoise + caveBiomeNoiseSize;
+    float* caveTemperatureNoise = this->caveDecoration.temperatureNoise();
+    float* caveHumidityNoise = this->caveDecoration.humidityNoise();
     fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS,
                            caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
     fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS,
@@ -657,13 +656,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
-            this->caveBiomeSurfaceBias[columnIdx] = {
+            this->caveDecoration.surfaceBias[columnIdx] = {
                 .temperature = caveBiomeSurfaceTemperatureOffset,
                 .humidity = caveBiomeSurfaceHumidityOffset,
             };
 
-            CaveNoiseColumn caveTemperatureColumn(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
-            CaveNoiseColumn caveHumidityColumn(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            auto caveTemperatureColumn = this->caveDecoration.temperatureColumn(blockX, blockZ);
+            auto caveHumidityColumn = this->caveDecoration.humidityColumn(blockX, blockZ);
             CaveNoiseColumn caveRockColumn(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
             CaveNoiseColumn caveSkinThicknessColumn(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
             CaveNoiseColumn caveSkinPatchColumn(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
@@ -734,8 +733,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         isCave = caveNoiseVal < caveSurfaceVal;
                         if (isCave)
                         {
-                            const uint caveAirIdx = y + caveMaxY * columnIdx;
-                            this->caveAirMask[caveAirIdx / 64] |= uint64_t(1) << (caveAirIdx % 64);
+                            this->caveDecoration.markCaveAir(columnIdx, y);
                         }
                         else
                         {
