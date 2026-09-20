@@ -544,7 +544,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
         WaterDisplacer::dispatch(
-            cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->getWaveFade(), allDispatchInputs);
+            cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
@@ -838,22 +838,6 @@ void Scene::setDeformableAnimation(const glm::vec2 centerXZ_WS, const float anim
     this->waveFade.fadeEnd = fadeEnd;
 }
 
-void Scene::setDeformableLimitsEnabled(const bool enabled)
-{
-    if (enabled != this->deformableLimitsEnabled)
-    {
-        this->animatedDeformablesDirty = true;
-    }
-    this->deformableLimitsEnabled = enabled;
-}
-
-const WaveFadeParams& Scene::getWaveFade() const
-{
-    // Huge radii and zero normals: fade 1 everywhere
-    static const WaveFadeParams unlimited{ { 0.f, 0.f, 0.f }, 1e9f, 2e9f, 0.f, 0.f, 0.f, {} };
-    return this->deformableLimitsEnabled ? this->waveFade : unlimited;
-}
-
 void Scene::setWaveFrustum(const glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS)
 {
     this->waveFade.cameraPos_WS = { cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z };
@@ -874,10 +858,6 @@ void Scene::setWaveFrustum(const glm::vec3 cameraPos_WS, const std::array<glm::v
 // sphere is added on top, so anything the shaders could still animate is in the set
 bool Scene::isDeformableAnimated(const Instance* const instance) const
 {
-    if (!this->deformableLimitsEnabled)
-    {
-        return true;
-    }
     const glm::vec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
     if (glm::distance(offsetXZ, this->deformableAnimCenterXZ_WS) > this->deformableAnimRadius)
     {

@@ -164,8 +164,6 @@ private:
     float deformableAnimRadius{ FLT_MAX };
     WaveFadeParams waveFade{ { 0.f, 0.f, 0.f }, 1e9f, 2e9f, 0.f, 0.f, 0.f, {} };
     bool waveFrustumSet{ false };
-    // Debug comparison hook: off animates every deformable at full amplitude, as before the limits
-    bool deformableLimitsEnabled{ true };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -274,8 +272,10 @@ public:
     void setDeformableAnimation(glm::vec2 centerXZ_WS, float animRadius, float fadeStart, float fadeEnd);
     void setWaveFrustum(glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS);
     bool isDeformableAnimated(const Instance* instance) const;
-    void setDeformableLimitsEnabled(bool enabled);
-    const WaveFadeParams& getWaveFade() const;
+    const WaveFadeParams& getWaveFade() const
+    {
+        return this->waveFade;
+    }
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);
