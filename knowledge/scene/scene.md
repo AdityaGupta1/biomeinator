@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-20_
 
 # Scene
 
@@ -32,19 +32,41 @@ things stay gated on `isTlasDirty` so per-frame deformation doesn't trigger them
 light sampling structure rewrite (which would rebuild the light tree and reset accumulation
 every frame, hanging test-mode screenshots) and the `didChange` return value.
 
-**INVARIANT:** the TLAS instance set must only change on dirty rebuilds, which also rebuild
-the area light structures — non-dirty per-frame rebuilds just refresh AABBs. This holds
-because `makeQueuedBlases` dirties the TLAS on any frame that builds a visible BLAS, and
-`setVisible` dirties it when toggling an instance with a valid BLAS. If a freshly built
-emissive instance entered the TLAS before the sampling structure / light tree knew about it,
-the path tracer's light tree lookups for its hits read garbage and can hang the GPU (observed
-as intermittent TDR during world import in `cave_lights`).
+**INVARIANT:** an instance enters or leaves the TLAS only through `addTlasEntry` /
+`removeTlasEntry`, which update the area light sampling structure in the same step. If a
+freshly built emissive instance entered the TLAS before the sampling structure / light tree
+knew about it, the path tracer's light tree lookups for its hits read garbage and can hang the
+GPU (observed as intermittent TDR during world import in `cave_lights`).
+
+## TLAS Instance Entries
+
+`tlasInstanceEntries` is the contiguous list of instances currently in the TLAS, maintained
+incrementally rather than rebuilt by walking `instances` every frame: at ten thousand chunks
+that walk (plus re-emitting two million area light indices) cost several milliseconds per
+frame during streaming, when every frame changes topology. The per-frame rebuild only copies
+the entries into the frame's instance desc array with the global offset applied.
+
+- Adds happen where a `ToFreeList` is at hand: `makeQueuedBlases` adds a visible instance as
+  its BLAS is built, and `update()` drains `pendingTlasEntryAdds`, which `setVisible(true)`
+  fills because it has no list to pass to a possible sampling structure resize.
+- Removals (`setVisible(false)`, `freeInstance`) only null the entry's instance pointer and
+  set `tlasEntriesNeedCompaction`; `makeTlas` compacts once, so a frame that unloads many
+  chunks pays one pass, not one per chunk. Each `Instance` carries its entry index so both
+  operations are O(1).
+- Transform setters update the entry in place; they also mark `isTlasDirty` so the change
+  resets accumulation like any other scene change.
 
 ## Deformable Instances
 
 `Instance::isDeformable` (set by chunk meshing for water) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
-dispatches (`WaterDisplacer`) and BLAS refits. Displacement rewrites verts **in place** in
+dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset inside the animation
+bounds that `Terrain::update` sets from the `waterAnimationDistance` setting: at render
+distance 40 a world has ~3,500 water chunks, and refitting all of them cost 10-13 ms of CPU
+and 3.6 ms of GPU per frame, which was the whole reason the game was CPU-bound at that
+distance. Far water simply keeps its last displacement, which is sub-pixel at that range. The
+subset is cached in `animatedDeformables` and rebuilt only when the bounds or the set change,
+since even iterating the full set is measurable. Displacement rewrites verts **in place** in
 the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
 whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must
@@ -63,8 +85,13 @@ actually hit.
 
 Indirection array mapping dense sampling indices `[0, numAreaLights)` to sparse area light
 buffer indices. Needed because area lights live in a managed buffer where freed/reordered
-instances leave gaps, but uniform sampling needs a contiguous range. Rebuilt every TLAS
-rebuild.
+instances leave gaps, but uniform sampling needs a contiguous range. It is maintained with
+the TLAS entries: an add appends the instance's range, a compaction rewrites it. The CPU
+master copy `areaLightDenseIdxs` exists because the mapped array's staging slots are
+per-frame, so an incremental append written into one slot is not present in the others; the
+device buffer is the source of truth and each change is staged from the master copy and
+marked dirty. It is pre-sized to 2M entries, since a resize during streaming (four new
+buffers plus freeing the old ones) showed up as a 30-50 ms frame.
 
 ## Reset
 

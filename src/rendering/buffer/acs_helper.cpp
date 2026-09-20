@@ -81,13 +81,13 @@ void init()
     sharedAcsBuffer.init();
 
     sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
-    sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
+    sharedVertsUploadBuffer.init(128ull << 20 /*bytes*/);
 
     sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
-    sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+    sharedIdxsUploadBuffer.init(32ull << 20 /*bytes*/);
 
     sharedAcsScratchBuffer.setName(L"sharedAcsScratchBuffer");
-    sharedAcsScratchBuffer.init(1 << 14 /*bytes*/);
+    sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
 }
 
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,

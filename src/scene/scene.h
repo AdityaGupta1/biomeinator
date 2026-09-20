@@ -64,6 +64,7 @@ private:
     glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
+    uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
 
 public:
     std::vector<Vertex> host_verts{};
@@ -143,9 +144,15 @@ private:
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
+    uint32_t numBlasBuilds{ 0 }; // lifetime total, for streaming measurements
     // finalized, BLAS-built deformable instances; drives the displacement dispatches and
     // BLAS refits (every deformable instance is water for now)
     std::unordered_set<Instance*> deformableInstances{};
+    // The subset inside the animation bounds, rebuilt when the bounds or the set change
+    std::vector<Instance*> animatedDeformables{};
+    bool animatedDeformablesDirty{ true };
+    glm::ivec2 deformableAnimBoundsMin_WS{ INT_MIN, INT_MIN };
+    glm::ivec2 deformableAnimBoundsMax_WS{ INT_MAX, INT_MAX };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -161,6 +168,28 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
+    // The instances currently in the TLAS (visible, not scheduled for deletion, BLAS built),
+    // maintained incrementally so the per-frame TLAS rebuild only re-applies the global offset
+    // to a contiguous array instead of walking every instance; see knowledge/scene/scene.md
+    struct TlasInstanceEntry
+    {
+        D3D12_RAYTRACING_INSTANCE_DESC desc; // translation excludes transformOffset
+        glm::ivec3 transformOffset;
+        Instance* instance; // null once removed, until the next compaction
+        uint32_t areaLightSparseOffset;
+        uint32_t numAreaLights;
+    };
+    std::vector<TlasInstanceEntry> tlasInstanceEntries;
+    bool tlasEntriesNeedCompaction{ false };
+    // Instances whose visibility flipped on outside of update(), added once a ToFreeList is at hand
+    std::vector<Instance*> pendingTlasEntryAdds;
+    // CPU master copy of areaLightSamplingStructure: the mapped array only stages the ranges
+    // written into the current frame's slot, so appends and compactions are staged from here
+    std::vector<uint32_t> areaLightDenseIdxs;
+    void addTlasEntry(Instance* instance, ToFreeList& toFreeList);
+    void removeTlasEntry(Instance* instance);
+    void compactTlasEntries();
+    void stageAreaLightSamplingRange(ToFreeList& toFreeList, uint32_t start, uint32_t count);
     // Global radiance changes, distinct from streamed instance/TLAS updates.
     bool radianceHistoryInvalidated{ false };
 
@@ -204,11 +233,11 @@ private:
     void freeInstance(Instance* instance);
 
     // returns true if TLAS is now dirty
-    bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    void makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
 
-    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights);
+    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
@@ -220,6 +249,15 @@ public:
     bool consumeRadianceHistoryInvalidation();
 
     bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
+
+    uint32_t getNumBlasBuilds() const
+    {
+        return this->numBlasBuilds;
+    }
+
+    // Deformable instances whose transform offset lies outside these XZ bounds keep their last
+    // displacement instead of being refit every frame
+    void setDeformableAnimationBounds(glm::ivec2 min_WS, glm::ivec2 max_WS);
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

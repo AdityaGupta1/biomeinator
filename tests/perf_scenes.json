@@ -42,6 +42,19 @@
                 "--maxPathDepth=6",
                 "--animTime=585"
             ]
+        },
+        {
+            "name": "worldgen",
+            "args": [
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
+                "--antialiasingMode=2",
+                "--voxelMode=true",
+                "--worldSeed=100",
+                "--renderDistance=40",
+                "--perfTimeoutSeconds=300"
+            ]
         }
     ]
 }

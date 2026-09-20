@@ -1,4 +1,4 @@
-_Last edited: 2026-05-03_
+_Last edited: 2026-09-20_
 
 # Terrain Manager
 
@@ -27,7 +27,15 @@ The scan iterates the union of the previous and current distance bounds. Chunks 
 
 ## Task Throttling
 
-Terrain generation tasks (`maxNumGenerateTerrainTasksPerFrame = 12`) are throttled separately from other tasks (`maxTasksPerFrame = 48`) because they're the heaviest (3D noise sampling). Other task types share the 48-task budget via a single deque, processed FIFO.
+Terrain generation tasks (`maxNumGenerateTerrainTasksPerFrame = 32`) are throttled separately from other tasks (`maxTasksPerFrame = 256`) because they're the heaviest (3D noise sampling). Other task types share the budget via a single deque, processed FIFO.
+
+The caps used to be 12 and 48, which held a backlog of ~470 tasks with the workers 18% busy on an initial render-distance-40 load. With the larger caps the workers sit at ~90% and generation is bound by terrain generation CPU time itself. The pool is FIFO, so with a deep queue the order tasks are pushed matters: `createInstances` tasks go in ahead of new `generateTerrain` tasks, otherwise chunks one step from visible starve behind hundreds of heavy terrain tasks and the scene can go dozens of frames without a chunk landing.
+
+`maxBlasBuildsPerFrame` (default 32) is the matching cap on the render side; at 8 it was the binding limit on generation time. Beyond 32 the workers are the limit, and a very high cap makes the frame that receives a burst correspondingly longer.
+
+## Water Animation Distance
+
+`Terrain::update` hands the scene the XZ bounds within which water instances animate (`waterAnimationDistance`, in chunks), see [scene → scene.md](../scene/scene.md#deformable-instances) for why that matters.
 
 ## Dirty Flag
 

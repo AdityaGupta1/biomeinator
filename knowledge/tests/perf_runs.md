@@ -70,6 +70,29 @@ the game shows). The headless defaults (`lockCamera`,
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.
 
+## Streaming
+
+Everything before the measured window is also recorded as the *streaming* window: from the
+first frame with terrain work or a scene change to the last one before warmup goes quiet. The
+report's `streaming` block has the wall-clock frame period (what the player feels, waits
+included) and CPU frame time with the same stats as the steady state, plus the seconds it
+took, the BLAS builds it produced, worker utilization and the mean task backlog held back by
+the per-frame caps. `run`/`show` print it and `compare` prints the seconds side by side. The
+`worldgen` scene generates seed 100 at render distance 40 from scratch for exactly this.
+
+Quiet, for the warmup streak, means no scene change *and* no terrain task queued or running:
+with a deep task queue the scene can go thirty frames without a chunk landing while
+generation is nowhere near done, which would start measuring mid-stream.
+
+Initial load of that scene, fullscreen 1440p, 2026-09-20: 21.9 s with a 16.6 ms median and
+24 ms p95 frame period before this round of work; 10.8-12.7 s with ~13 ms median and 28-42 ms
+p95 after it. Generation time halved because the caps stopped binding, and the steady-state
+frame period at that render distance went from 16.8 ms to 10.6 ms (water refits and the TLAS
+walk were the CPU bottleneck). The remaining p95 is dominated by sporadic 25-50 ms stalls
+inside driver calls (`BuildRaytracingAccelerationStructure` recording, resource releases) that
+vary run to run; a lower `maxBlasBuildsPerFrame` (16) trades a little generation time for a
+lower p95.
+
 ## Gap and period
 
 `gpu.frameMs` is the command list's own duration and hides everything outside it. The report

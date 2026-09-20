@@ -117,6 +117,16 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
+StreamingStats getStreamingStats()
+{
+    return {
+        .numWorkers = threadPool.getNumWorkers(),
+        .workerBusyNanos = threadPool.getBusyNanos(),
+        .taskBacklog = static_cast<uint32_t>(tasksToEnqueue.size()),
+        .tasksPending = threadPool.getNumPendingTasks(),
+    };
+}
+
 // Test-mode-only import-completion gate. See knowledge/terrain/world_export_import.md
 // for timing/atomic-ordering rationale.
 static std::atomic<uint32_t> expectedImportedChunks{ 0 };
@@ -153,8 +163,8 @@ static bool cameraBiomeValid = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
-inline constexpr uint32_t maxTasksPerFrame = 48;
-inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
+inline constexpr uint32_t maxTasksPerFrame = 256;
+inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 32;
 
 void update(ToFreeList& toFreeList)
 {
@@ -181,6 +191,12 @@ void update(ToFreeList& toFreeList)
         static_cast<int>(chunkSizeY),
         (maxRenderChunkPos.y + 1) * static_cast<int>(chunkSizeXZ),
     };
+
+    // Wave displacement is sub-pixel beyond this, so far water keeps a static surface rather
+    // than paying a BLAS refit per chunk per frame
+    const int waterAnimationDistance = SettingsManager::getAsInt("waterAnimationDistance");
+    scene->setDeformableAnimationBounds((currentChunkPos - waterAnimationDistance) * static_cast<int>(chunkSizeXZ),
+                                        (currentChunkPos + waterAnimationDistance) * static_cast<int>(chunkSizeXZ));
 
     cameraUnderwater = false;
     cameraBiomeValid = false;
@@ -397,16 +413,8 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    const uint32_t numGenerateTerrainTasksThisFrame =
-        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
-    for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
-    {
-        Chunk* chunk = chunksToGenerateTerrain.front();
-        chunksToGenerateTerrain.pop_front();
-
-        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
-    }
-
+    // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
+    // generateTerrain tasks would otherwise starve the chunks that are one step from visible
     while (!chunksToGenerateGeometry.empty())
     {
         Chunk* chunk = chunksToGenerateGeometry.front();
@@ -416,6 +424,16 @@ void update(ToFreeList& toFreeList)
         Instance* waterInstance = scene->requestNewInstance(toFreeList);
         chunk->setInstances(terrainInstance, waterInstance);
         tasksToEnqueue.push_back({ task_createInstances, chunk });
+    }
+
+    const uint32_t numGenerateTerrainTasksThisFrame =
+        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
+    for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
+    {
+        Chunk* chunk = chunksToGenerateTerrain.front();
+        chunksToGenerateTerrain.pop_front();
+
+        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
     }
 
     if (!tasksToEnqueue.empty())
