@@ -29,6 +29,11 @@ namespace ChunkGenerator
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 
+// Sample the shape fields on a world-aligned lattice, then reconstruct the voxel grids.
+// Cave noise needs finer spacing to retain narrow passages and the surface gradients.
+inline constexpr int terrainNoiseDownsample = 4;
+inline constexpr int caveShapeNoiseDownsample = 2;
+
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
 // caves are fully suppressed by altitude squash well before this height
@@ -236,19 +241,72 @@ void init()
     }
 }
 
-static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint sizeXZ, uint height, int yOffset = 0)
+template<int downsample>
+static void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ,
+                             uint sizeXZ, uint height, ThreadMemoryAllocator& threadMemoryAlloc, int yOffset = 0)
 {
-    fn->GenUniformGrid3D(data,
-                         yOffset /*y*/,
-                         posXZ.x + noiseOffsetXZ.x /*x*/,
-                         posXZ.y + noiseOffsetXZ.y /*z*/,
-                         height,
-                         sizeXZ,
-                         sizeXZ,
-                         1.f,
-                         1.f,
-                         1.f,
+    static_assert(downsample > 0);
+    if constexpr (downsample == 1)
+    {
+        fn->GenUniformGrid3D(data, yOffset, posXZ.x + noiseOffsetXZ.x, posXZ.y + noiseOffsetXZ.y,
+                             height, sizeXZ, sizeXZ, 1.f, 1.f, 1.f, worldSeed ^ hash(391023545));
+        return;
+    }
+
+    // FastNoise's x axis is world y (contiguous), followed by world x and world z.
+    // Snap before adding the seed offset. Both the cave margin and the variable Y band
+    // can start between lattice points, including at negative world coordinates.
+    const ivec3 start(yOffset, posXZ.x, posXZ.y);
+    const ivec3 origin(MathUtil::floorDiv(start.x, downsample) * downsample,
+                       MathUtil::floorDiv(start.y, downsample) * downsample,
+                       MathUtil::floorDiv(start.z, downsample) * downsample);
+    const uvec3 offset(start - origin);
+    const uvec3 size = (offset + uvec3(height, sizeXZ, sizeXZ) - 1u + uint(downsample - 1)) /
+                          uint(downsample) + 1u;
+    float* coarse = threadMemoryAlloc.request<float>(size.x * size.y * size.z);
+    fn->GenUniformGrid3D(coarse, origin.x, origin.y + noiseOffsetXZ.x, origin.z + noiseOffsetXZ.y,
+                         size.x, size.y, size.z, downsample, downsample, downsample,
                          worldSeed ^ hash(391023545));
+
+    constexpr float invDownsample = 1.f / downsample;
+    for (uint z = 0; z < sizeXZ; ++z)
+    {
+        const uint gridZ = (offset.z + z) / downsample;
+        const uint nextZ = std::min(gridZ + 1, size.z - 1);
+        const float tz = ((offset.z + z) % downsample) * invDownsample;
+        for (uint x = 0; x < sizeXZ; ++x)
+        {
+            const uint gridX = (offset.y + x) / downsample;
+            const uint nextX = std::min(gridX + 1, size.y - 1);
+            const float tx = ((offset.y + x) % downsample) * invDownsample;
+            const float* c00 = coarse + (gridZ * size.y + gridX) * size.x;
+            const float* c10 = coarse + (gridZ * size.y + nextX) * size.x;
+            const float* c01 = coarse + (nextZ * size.y + gridX) * size.x;
+            const float* c11 = coarse + (nextZ * size.y + nextX) * size.x;
+            const auto samplePlane = [&](uint y)
+            {
+                return glm::mix(glm::mix(c00[y], c10[y], tx), glm::mix(c01[y], c11[y], tx), tz);
+            };
+
+            float* column = data + (z * sizeXZ + x) * height;
+            uint y = 0;
+            uint gridY = offset.x / downsample;
+            float low = samplePlane(gridY);
+            while (y < height)
+            {
+                const float high = samplePlane(std::min(gridY + 1, size.x - 1));
+                const uint endY = std::min(height, (gridY + 1) * downsample - offset.x);
+                // XZ interpolation is shared by all voxels in this coarse Y interval.
+                for (; y < endY; ++y)
+                {
+                    const float ty = ((offset.x + y) % downsample) * invDownsample;
+                    column[y] = glm::mix(low, high, ty);
+                }
+                low = high;
+                ++gridY;
+            }
+        }
+    }
 }
 
 // Fills a coarse grid stepping caveBiomeNoiseDownsample blocks per axis, starting at world y=0.
@@ -453,9 +511,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
     float* caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
     const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ, terrainNoiseHeight, terrainNoiseMinY);
-    fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveWorleyNoiseHeight);
-    fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
+    fillNoiseArray3D<terrainNoiseDownsample>(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ,
+                                             terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
+    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                               caveWorleyNoiseHeight, threadMemoryAlloc);
+    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                               caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
 
     // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
     // top of the band to interpolate against the next coarse cell.
