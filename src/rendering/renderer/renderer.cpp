@@ -593,6 +593,8 @@ void render()
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "terrain");
         TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
+        // Debug bool 0 off compares against refitting every water chunk at full amplitude
+        renderState.scene.setDeformableLimitsEnabled(SettingsManager::getAsBool("debugBool0"));
         renderState.scene.setWaveFrustum(renderState.camera.getPos_WS(), renderState.camera.getFrustumSideNormals_WS());
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);

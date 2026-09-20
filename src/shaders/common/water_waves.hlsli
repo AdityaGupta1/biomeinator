@@ -140,9 +140,9 @@ float waveHeight(float2 posXZ_WS, float waveTime)
 
 // Displacement fades to rest height with distance from the camera and outside the padded view
 // frustum, so the chunks that keep a static surface meet the animated ones without a seam.
-// Every consumer of the wave height or gradient applies this; the shading noise perturbation
-// does not, since it never moves geometry. Nearby water is exempt from the frustum limit so
-// a turn never reveals a frozen surface at the player's feet.
+// The displacement and the motion vectors apply this; the shading normal does not, see
+// waveShadingNormal. Nearby water is exempt from the frustum limit so a turn never reveals a
+// frozen surface at the player's feet.
 float waveFade(float3 pos_WS, WaveFadeParams params)
 {
     const float3 toPos_WS = pos_WS - params.cameraPos_WS;
@@ -191,9 +191,12 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 // flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
 // surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
 // view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
-float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit, float fade)
+// Deliberately unfaded: the shading normal keeps the full wave gradient over water whose
+// geometry the distance fade has flattened, so far water still reads as waves and the fade
+// boundary shows no change in shading, only in silhouette
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit)
 {
-    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz * fade;
+    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz;
     const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
     const float flip = backfaceHit ? -1.f : 1.f;
     const float3 baseNor_WS = flip * normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));
