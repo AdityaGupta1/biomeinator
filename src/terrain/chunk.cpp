@@ -7,6 +7,7 @@
 #include "block_model.h"
 #include "block_orientation.h"
 #include "cave_biome.h"
+#include "cave_biome_noise.h"
 #include "terrain.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
@@ -19,6 +20,7 @@
 
 #include <DirectXMath.h>
 
+#include <bit>
 #include <numbers>
 #include <vector>
 
@@ -112,7 +114,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
         this->terrainTopY.resize(chunkSizeXZSquare);
-        this->caveBiomes.assign(chunkSizeXZSquare * caveMaxY, noCaveBiome);
+        this->caveDecoration.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
@@ -256,11 +258,14 @@ void Chunk::runStructuresAndDecoratorPass()
 
             const Biome biome = this->biomes[columnIdx];
             const Decorator& decorator = Biomes::getBiomeData(biome).decorator;
+            if (decorator.isEmpty()) continue;
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const uint terrainTopY = this->terrainTopY[columnIdx];
-            Block bottomBlock = Block::BEDROCK;
-            for (uint blockY = 0; blockY < chunkSizeY; ++blockY)
+            // Lower cells cannot place surface decorators or consume their RNG. Keep
+            // scanning above the terrain top because structures can supply higher supports.
+            Block bottomBlock = this->blocks[baseBlockIdx + terrainTopY];
+            for (uint blockY = terrainTopY + 1; blockY < chunkSizeY; ++blockY)
             {
                 Block& thisBlock = this->blocks[baseBlockIdx + blockY];
 
@@ -268,14 +273,10 @@ void Chunk::runStructuresAndDecoratorPass()
                 if (thisBlock == Block::AIR && bottomBlock != Block::AIR &&
                     Blocks::getBlockData(bottomBlock).shape == BlockShape::CUBE)
                 {
-                    const uint groundY = blockY - 1;
                     Block decoratorBlock = Block::AIR;
                     // Cave-air cells are handled by the all-face pass below. Everything else at or
                     // above terrain top is the ordinary surface-biome floor pass.
-                    const bool isCaveAir = blockY < caveMaxY &&
-                                           this->caveBiomes[blockY + caveMaxY * columnIdx] != noCaveBiome;
-                    if (!isCaveAir &&
-                        groundY >= terrainTopY && !decorator.isEmpty())
+                    if (!this->caveDecoration.isCaveAir(columnIdx, blockY))
                     {
                         decoratorBlock = decorator.getBlock(
                             decoratorRng.nextFloat(), bottomBlock, DECORATOR_SURFACE_FLOOR);
@@ -310,58 +311,103 @@ void Chunk::runStructuresAndDecoratorPass()
         return neighbor->blocks[Chunk::blockPosToIdx(uvec3(neighborPos_CS))];
     };
 
+    constexpr uint terrainWordsPerColumn = chunkSizeY / 64;
+    constexpr uint caveWordsPerColumn = CaveDecorationData::wordsPerColumn;
+    static_assert(chunkSizeY % 64 == 0);
+    // A column's neighboring terrain is immutable, including across chunk borders.
+    // Filtering 64 cave-air cells at once avoids probing six faces in empty interiors.
+    const auto solidColumnAt = [&](int x, int z) -> const uint64_t*
+    {
+        const Chunk* source = this;
+        if (x < 0) { source = this->neighbors[static_cast<size_t>(NeighborDirection::X_NEG)]; x += chunkSizeXZ; }
+        else if (x >= chunkSizeXZ) { source = this->neighbors[static_cast<size_t>(NeighborDirection::X_POS)]; x -= chunkSizeXZ; }
+        else if (z < 0) { source = this->neighbors[static_cast<size_t>(NeighborDirection::Z_NEG)]; z += chunkSizeXZ; }
+        else if (z >= chunkSizeXZ) { source = this->neighbors[static_cast<size_t>(NeighborDirection::Z_POS)]; z -= chunkSizeXZ; }
+        ASSERT(source != nullptr);
+        return source->terrainSolidCubeMask.data() + (x + chunkSizeXZ * z) * terrainWordsPerColumn;
+    };
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
         for (uint blockX = 0; blockX < chunkSizeXZ; ++blockX)
         {
             const uint columnIdx = blockX + chunkSizeXZ * blockZ;
             const uint baseBlockIdx = Chunk::blockPosXZToIdx(uvec2(blockX, blockZ));
-            for (uint blockY = 1; blockY < caveMaxY; ++blockY)
+            auto temperatureColumn = this->caveDecoration.temperatureColumn(blockX, blockZ);
+            auto humidityColumn = this->caveDecoration.humidityColumn(blockX, blockZ);
+            const CaveBiomeNoise surfaceBias = this->caveDecoration.surfaceBias[columnIdx];
+            const uint64_t* solid = solidColumnAt(blockX, blockZ);
+            const uint64_t* solidXNeg = solidColumnAt(static_cast<int>(blockX) - 1, blockZ);
+            const uint64_t* solidXPos = solidColumnAt(blockX + 1, blockZ);
+            const uint64_t* solidZNeg = solidColumnAt(blockX, static_cast<int>(blockZ) - 1);
+            const uint64_t* solidZPos = solidColumnAt(blockX, blockZ + 1);
+            for (uint word = 0; word < caveWordsPerColumn; ++word)
             {
-                const uint blockIdx = baseBlockIdx + blockY;
-                const uint8_t caveBiomeValue = this->caveBiomes[blockY + caveMaxY * columnIdx];
-                if (caveBiomeValue == noCaveBiome || this->blocks[blockIdx] != Block::AIR) continue;
-
-                const CaveBiome caveBiome = static_cast<CaveBiome>(caveBiomeValue);
-                ASSERT(caveBiome < CaveBiome::COUNT);
-                const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(caveBiome).decorator;
-                if (caveDecorator.isEmpty()) continue;
-
-                const ivec3 blockPos_CS(blockX, blockY, blockZ);
-                const ivec3 blockPos_WS(chunkOriginXZ_WS.x + blockX, blockY, chunkOriginXZ_WS.y + blockZ);
-                uint8_t candidateFaces[blockFaceCount];
-                uint8_t numCandidateFaces = 0;
-                for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
+                uint64_t solidBelow = solid[word] << 1;
+                uint64_t solidAbove = solid[word] >> 1;
+                if (word > 0) solidBelow |= solid[word - 1] >> 63;
+                if (word + 1 < terrainWordsPerColumn) solidAbove |= solid[word + 1] << 63;
+                // A face normal points from the support toward the candidate voxel.
+                // Keep each direction so the face checks reuse the same immutable bits.
+                std::array<uint64_t, blockFaceCount> supportByFace;
+                supportByFace[blockFaceIndex(BlockFace::X_POS)] = solidXNeg[word];
+                supportByFace[blockFaceIndex(BlockFace::Z_POS)] = solidZNeg[word];
+                supportByFace[blockFaceIndex(BlockFace::X_NEG)] = solidXPos[word];
+                supportByFace[blockFaceIndex(BlockFace::Z_NEG)] = solidZPos[word];
+                supportByFace[blockFaceIndex(BlockFace::Y_POS)] = solidBelow;
+                supportByFace[blockFaceIndex(BlockFace::Y_NEG)] = solidAbove;
+                const uint64_t adjacentSolid = solidBelow | solidAbove |
+                    solidXNeg[word] | solidXPos[word] | solidZNeg[word] | solidZPos[word];
+                uint64_t candidates = this->caveDecoration.airMask[columnIdx * caveWordsPerColumn + word] & adjacentSolid;
+                if (word == 0) candidates &= ~uint64_t(1); // generation/decorators exclude bedrock Y=0
+                while (candidates != 0)
                 {
-                    const BlockFace face = static_cast<BlockFace>(faceIdx);
-                    const ivec3 faceNormal = blockFaceBasis(face).normal;
-                    const uint8_t surface = surfaceForFace(face);
-                    const ivec3 supportPos_CS = blockPos_CS - faceNormal;
-                    const ivec3 supportPos_WS = blockPos_WS - faceNormal;
-                    // Validate through immutable terrain state before reading a neighbor block that
-                    // may be filling concurrently. Solid terrain cubes are never structure targets.
-                    if (!this->isTerrainSolidCube_WS(supportPos_WS)) continue;
-                    const Block supportBlock = getBlock(supportPos_CS);
-                    if (caveDecorator.supportsSurface(surface, supportBlock))
+                    const uint candidateShift = std::countr_zero(candidates);
+                    const uint64_t candidateBit = uint64_t(1) << candidateShift;
+                    const uint blockY = word * 64 + candidateShift;
+                    candidates &= candidates - 1;
+                    const uint blockIdx = baseBlockIdx + blockY;
+                    if (this->blocks[blockIdx] != Block::AIR) continue;
+                    const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome({
+                        .temperature = temperatureColumn.sample(blockY) + surfaceBias.temperature,
+                        .humidity = humidityColumn.sample(blockY) + surfaceBias.humidity,
+                    });
+                    const Decorator& caveDecorator = CaveBiomes::getCaveBiomeData(caveBiome).decorator;
+                    if (caveDecorator.isEmpty()) continue;
+
+                    const ivec3 blockPos_CS(blockX, blockY, blockZ);
+                    const ivec3 blockPos_WS(chunkOriginXZ_WS.x + blockX, blockY, chunkOriginXZ_WS.y + blockZ);
+                    uint8_t candidateFaces[blockFaceCount];
+                    uint8_t numCandidateFaces = 0;
+                    for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                     {
-                        candidateFaces[numCandidateFaces++] = faceIdx;
+                        // Only read supports whose immutable terrain bit permits it.
+                        if (!(supportByFace[faceIdx] & candidateBit)) continue;
+                        const BlockFace face = static_cast<BlockFace>(faceIdx);
+                        const ivec3 faceNormal = blockFaceBasis(face).normal;
+                        const uint8_t surface = surfaceForFace(face);
+                        const ivec3 supportPos_CS = blockPos_CS - faceNormal;
+                        const Block supportBlock = getBlock(supportPos_CS);
+                        if (caveDecorator.supportsSurface(surface, supportBlock))
+                        {
+                            candidateFaces[numCandidateFaces++] = faceIdx;
+                        }
                     }
-                }
-                if (numCandidateFaces == 0) continue;
+                    if (numCandidateFaces == 0) continue;
 
-                auto faceRng = initRng(worldSeed ^ hash(0x7A11FACEu), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                const uint8_t faceIdx = candidateFaces[faceRng.nextUint() % numCandidateFaces];
-                const BlockFace face = static_cast<BlockFace>(faceIdx);
-                const Block supportBlock = getBlock(blockPos_CS - blockFaceBasis(face).normal);
-                auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                const Block decoratorBlock = caveDecorator.getBlock(
-                    blockRng.nextFloat(), supportBlock, surfaceForFace(face));
-                if (decoratorBlock == Block::AIR) continue;
+                    auto faceRng = initRng(worldSeed ^ hash(0x7A11FACEu), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                    const uint8_t faceIdx = candidateFaces[faceRng.nextUint() % numCandidateFaces];
+                    const BlockFace face = static_cast<BlockFace>(faceIdx);
+                    const Block supportBlock = getBlock(blockPos_CS - blockFaceBasis(face).normal);
+                    auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
+                    const Block decoratorBlock = caveDecorator.getBlock(
+                        blockRng.nextFloat(), supportBlock, surfaceForFace(face));
+                    if (decoratorBlock == Block::AIR) continue;
 
-                this->blocks[blockIdx] = decoratorBlock;
-                if (Blocks::getBlockData(decoratorBlock).stateKind == BlockStateKind::SURFACE_MOUNT)
-                {
-                    this->blockStates.insert_or_assign(blockIdx, faceIdx);
+                    this->blocks[blockIdx] = decoratorBlock;
+                    if (Blocks::getBlockData(decoratorBlock).stateKind == BlockStateKind::SURFACE_MOUNT)
+                    {
+                        this->blockStates.insert_or_assign(blockIdx, faceIdx);
+                    }
                 }
             }
         }
@@ -373,7 +419,7 @@ void Chunk::fillStructuresAndDecorators()
     if (!this->wasImported)
     {
         this->runStructuresAndDecoratorPass();
-        std::vector<uint8_t>().swap(this->caveBiomes);
+        this->caveDecoration.release();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);

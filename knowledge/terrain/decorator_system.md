@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-20_
 
 # Decorator System
 
@@ -12,18 +12,30 @@ Support-block filtering lets entries restrict placement to particular blocks. A 
 
 ## Cave surface decorator
 
-Terrain generation retains one byte per voxel below `caveMaxY` identifying the biome
-of carved cave air; `0xff` means non-cave. The decorator pass runs after structures,
-requires the target still to be AIR, and uses the immutable terrain-solid-cube mask
-to accept only supports that existed as full cubes before structures. This exact
-post-structure neighbor test works
-across chunk boundaries and avoids wall seams. Cave placement decisions use separate
+Terrain generation retains a bit mask of original cave air and the coarse temperature/
+humidity fields with their column biases. The decorator pass runs after structures and
+requires the target still to be AIR. Before classifying its biome, it intersects the
+cave-air mask with cells adjacent to immutable terrain full cubes, using word shifts for
+vertical faces and the neighboring column masks for horizontal faces. This excludes cave
+interiors cheaply and works across chunk boundaries. The ordinary per-face tests still
+validate the biome's support rules. Cave placement decisions use separate
 position-hashed streams for face choice and weighted sampling, so traversal changes
-do not shift unrelated results. The cave-biome array is released immediately after
-this pass.
+do not shift unrelated results. Candidates retain the original column and bottom-up
+order. The retained cave fields, biases, and cave-air mask are released immediately after
+this pass; neighboring chunks never read them.
 
-The surface-biome column pass skips cave-marked cells and otherwise still uses
-`terrainTopY`. Tree canopies therefore do not confuse surface classification.
+The surface-biome column pass skips empty decorators and starts immediately above
+`terrainTopY`, with the terrain-top block as its initial support. Lower cells cannot
+place a surface decorator or consume its random stream. It still scans the rest of
+the column above that point so structures can provide higher supports. Cave-marked
+cells remain excluded, and tree canopies do not change the terrain-top classification.
+
+The cave word filter retains all six directional support masks for its per-face
+tests, avoiding another world-to-chunk lookup for each face. A face normal points
+from the support toward the candidate, so the support lies in the opposite
+direction. Vertical masks include carries from adjacent words, including terrain
+above the cave-height cap. Face enumeration order remains unchanged because it
+determines the position-hashed face choice.
 
 ## Ordering Guarantees
 

@@ -6,6 +6,7 @@
 #include "biome.h"
 #include "biome_noise.h"
 #include "cave_biome.h"
+#include "cave_biome_noise.h"
 #include "chunk.h"
 #include "swamp_shaping.h"
 #include "rendering/common/common_settings.h"
@@ -29,6 +30,11 @@ namespace ChunkGenerator
 
 static FN::SmartNode<FN::Generator> fnTerrainBase;
 
+// Sample the shape fields on a world-aligned lattice, then reconstruct the voxel grids.
+// Cave noise needs finer spacing to retain narrow passages and the surface gradients.
+inline constexpr int terrainNoiseDownsample = 4;
+inline constexpr int caveShapeNoiseDownsample = 2;
+
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
 // caves are fully suppressed by altitude squash well before this height
@@ -40,7 +46,7 @@ static FN::SmartNode<FN::Generator> fnCavesSimplex;
 // regions are far larger than a block, so this costs ~1/64 of a full-resolution
 // 3D field with no visible difference. caveBiomeSurfaceNoiseBias mixes in the column's
 // 2D temperature/humidity so cave biomes loosely track the surface above them.
-inline constexpr int caveBiomeNoiseDownsample = 4;
+inline constexpr int caveBiomeNoiseDownsample = CaveBiomeFields::downsample;
 inline constexpr float caveBiomeSurfaceNoiseBias = 0.3f;
 
 static FN::SmartNode<FN::Generator> fnCaveTemperature;
@@ -236,19 +242,72 @@ void init()
     }
 }
 
-static inline void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ, uint sizeXZ, uint height, int yOffset = 0)
+template<int downsample>
+static void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn, glm::ivec2 posXZ,
+                             uint sizeXZ, uint height, ThreadMemoryAllocator& threadMemoryAlloc, int yOffset = 0)
 {
-    fn->GenUniformGrid3D(data,
-                         yOffset /*y*/,
-                         posXZ.x + noiseOffsetXZ.x /*x*/,
-                         posXZ.y + noiseOffsetXZ.y /*z*/,
-                         height,
-                         sizeXZ,
-                         sizeXZ,
-                         1.f,
-                         1.f,
-                         1.f,
+    static_assert(downsample > 0);
+    if constexpr (downsample == 1)
+    {
+        fn->GenUniformGrid3D(data, yOffset, posXZ.x + noiseOffsetXZ.x, posXZ.y + noiseOffsetXZ.y,
+                             height, sizeXZ, sizeXZ, 1.f, 1.f, 1.f, worldSeed ^ hash(391023545));
+        return;
+    }
+
+    // FastNoise's x axis is world y (contiguous), followed by world x and world z.
+    // Snap before adding the seed offset. Both the cave margin and the variable Y band
+    // can start between lattice points, including at negative world coordinates.
+    const ivec3 start(yOffset, posXZ.x, posXZ.y);
+    const ivec3 origin(MathUtil::floorDiv(start.x, downsample) * downsample,
+                       MathUtil::floorDiv(start.y, downsample) * downsample,
+                       MathUtil::floorDiv(start.z, downsample) * downsample);
+    const uvec3 offset(start - origin);
+    const uvec3 size = (offset + uvec3(height, sizeXZ, sizeXZ) - 1u + uint(downsample - 1)) /
+                          uint(downsample) + 1u;
+    float* coarse = threadMemoryAlloc.request<float>(size.x * size.y * size.z);
+    fn->GenUniformGrid3D(coarse, origin.x, origin.y + noiseOffsetXZ.x, origin.z + noiseOffsetXZ.y,
+                         size.x, size.y, size.z, downsample, downsample, downsample,
                          worldSeed ^ hash(391023545));
+
+    constexpr float invDownsample = 1.f / downsample;
+    for (uint z = 0; z < sizeXZ; ++z)
+    {
+        const uint gridZ = (offset.z + z) / downsample;
+        const uint nextZ = std::min(gridZ + 1, size.z - 1);
+        const float tz = ((offset.z + z) % downsample) * invDownsample;
+        for (uint x = 0; x < sizeXZ; ++x)
+        {
+            const uint gridX = (offset.y + x) / downsample;
+            const uint nextX = std::min(gridX + 1, size.y - 1);
+            const float tx = ((offset.y + x) % downsample) * invDownsample;
+            const float* c00 = coarse + (gridZ * size.y + gridX) * size.x;
+            const float* c10 = coarse + (gridZ * size.y + nextX) * size.x;
+            const float* c01 = coarse + (nextZ * size.y + gridX) * size.x;
+            const float* c11 = coarse + (nextZ * size.y + nextX) * size.x;
+            const auto samplePlane = [&](uint y)
+            {
+                return glm::mix(glm::mix(c00[y], c10[y], tx), glm::mix(c01[y], c11[y], tx), tz);
+            };
+
+            float* column = data + (z * sizeXZ + x) * height;
+            uint y = 0;
+            uint gridY = offset.x / downsample;
+            float low = samplePlane(gridY);
+            while (y < height)
+            {
+                const float high = samplePlane(std::min(gridY + 1, size.x - 1));
+                const uint endY = std::min(height, (gridY + 1) * downsample - offset.x);
+                // XZ interpolation is shared by all voxels in this coarse Y interval.
+                for (; y < endY; ++y)
+                {
+                    const float ty = ((offset.x + y) % downsample) * invDownsample;
+                    column[y] = glm::mix(low, high, ty);
+                }
+                low = high;
+                ++gridY;
+            }
+        }
+    }
 }
 
 // Fills a coarse grid stepping caveBiomeNoiseDownsample blocks per axis, starting at world y=0.
@@ -269,37 +328,7 @@ static inline void fillCaveBiomeNoiseArray(float* data, const FN::SmartNode<FN::
                          worldSeed ^ hash(391023545));
 }
 
-// Trilinearly samples a coarse cave biome field at a chunk-local block position. The coarse layout
-// mirrors fillNoiseArray3D: world y is contiguous (grid x-axis), then world x, then world z.
-static inline float sampleCaveBiomeNoise(const float* coarseNoise, uint coarseSizeXZ, uint coarseHeight, uint blockX, uint y, uint blockZ)
-{
-    constexpr float invDownsample = 1.f / caveBiomeNoiseDownsample;
-    const float gridX = blockX * invDownsample;
-    const float gridY = y * invDownsample;
-    const float gridZ = blockZ * invDownsample;
-
-    const uint x0 = static_cast<uint>(gridX);
-    const uint y0 = static_cast<uint>(gridY);
-    const uint z0 = static_cast<uint>(gridZ);
-    const float tx = gridX - x0;
-    const float ty = gridY - y0;
-    const float tz = gridZ - z0;
-
-    const auto sample = [&](uint cellX, uint cellY, uint cellZ) -> float {
-        const uint idx = (cellZ * coarseSizeXZ + cellX) * coarseHeight + cellY;
-        return coarseNoise[idx];
-    };
-
-    const float c00 = glm::mix(sample(x0, y0, z0), sample(x0 + 1, y0, z0), tx);
-    const float c10 = glm::mix(sample(x0, y0 + 1, z0), sample(x0 + 1, y0 + 1, z0), tx);
-    const float c01 = glm::mix(sample(x0, y0, z0 + 1), sample(x0 + 1, y0, z0 + 1), tx);
-    const float c11 = glm::mix(sample(x0, y0 + 1, z0 + 1), sample(x0 + 1, y0 + 1, z0 + 1), tx);
-
-    const float c0 = glm::mix(c00, c10, ty);
-    const float c1 = glm::mix(c01, c11, ty);
-
-    return glm::mix(c0, c1, tz);
-}
+using CaveNoiseColumn = CaveBiomeFields::Column;
 
 // Finds the grid cell containing posXZ_WS (accounting for the staggered odd-row x shift) and
 // returns its corner. Shared by surface and cave placement so both lay grids over the same cells.
@@ -453,23 +482,33 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
     float* caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
     const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
-    fillNoiseArray3D(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ, terrainNoiseHeight, terrainNoiseMinY);
-    fillNoiseArray3D(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveWorleyNoiseHeight);
-    fillNoiseArray3D(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ, caveSimplexNoiseHeight, caveSimplexNoiseMinY);
+    fillNoiseArray3D<terrainNoiseDownsample>(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ,
+                                             terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
+    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                               caveWorleyNoiseHeight, threadMemoryAlloc);
+    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                               caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
 
     // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
     // top of the band to interpolate against the next coarse cell.
-    const uint caveBiomeNoiseSizeXZ = chunkSizeXZ / caveBiomeNoiseDownsample + 1;
-    const uint caveBiomeNoiseHeight = caveNoiseMaxY / caveBiomeNoiseDownsample + 2;
-    const uint caveBiomeNoiseSize = caveBiomeNoiseSizeXZ * caveBiomeNoiseSizeXZ * caveBiomeNoiseHeight;
+    this->caveDecoration.allocateNoise(caveNoiseMaxY);
+    constexpr uint caveBiomeNoiseSizeXZ = CaveDecorationData::noiseSizeXZ;
+    const uint caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
+    const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
     const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
     {
         float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
         fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
         return static_cast<const float*>(data);
     };
-    const float* caveTemperatureNoise = requestCaveBiomeField(fnCaveTemperature);
-    const float* caveHumidityNoise = requestCaveBiomeField(fnCaveHumidity);
+    // Keep only the two biome axes until decoration. Generate directly into owned storage
+    // so deferred air classification needs neither fresh noise nor a copy of the fields.
+    float* caveTemperatureNoise = this->caveDecoration.temperatureNoise();
+    float* caveHumidityNoise = this->caveDecoration.humidityNoise();
+    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS,
+                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS,
+                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
     const float* caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
     const float* caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
     const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
@@ -617,6 +656,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+            this->caveDecoration.surfaceBias[columnIdx] = {
+                .temperature = caveBiomeSurfaceTemperatureOffset,
+                .humidity = caveBiomeSurfaceHumidityOffset,
+            };
+
+            auto caveTemperatureColumn = this->caveDecoration.temperatureColumn(blockX, blockZ);
+            auto caveHumidityColumn = this->caveDecoration.humidityColumn(blockX, blockZ);
+            CaveNoiseColumn caveRockColumn(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveSkinThicknessColumn(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveSkinPatchColumn(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
 
             columnLayers.clear();
             bool layerOpen = false;
@@ -682,30 +731,24 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        const float caveTemperature =
-                            sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                        const float caveHumidity =
-                            sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                        const CaveBiomeNoise caveBiomeNoise = {
-                            .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
-                            .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
-                        };
-                        const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome(caveBiomeNoise);
-                        voxelCaveBiome = caveBiome;
                         if (isCave)
                         {
-                            const uint caveBiomeIdx = y + caveMaxY * columnIdx;
-                            this->caveBiomes[caveBiomeIdx] = static_cast<uint8_t>(caveBiome);
+                            this->caveDecoration.markCaveAir(columnIdx, y);
                         }
                         else
                         {
+                            const CaveBiome caveBiome = CaveBiomes::getClosestCaveBiome({
+                                .temperature = caveTemperatureColumn.sample(y) + caveBiomeSurfaceTemperatureOffset,
+                                .humidity = caveHumidityColumn.sample(y) + caveBiomeSurfaceHumidityOffset,
+                            });
+                            voxelCaveBiome = caveBiome;
                             const float caveSurfaceDist = caveNoiseVal - caveSurfaceVal;
                             const CaveBiomeData& caveBiomeData = CaveBiomes::getCaveBiomeData(caveBiome);
                             baseBlock = caveBiomeData.baseBlock;
                             Block flatSurfaceBlock = caveBiomeData.flatSurfaceBlock;
                             Block skinFringeBlock = caveBiomeData.skinFringeBlock;
                             if (caveBiomeData.secondaryBaseBlock != Block::AIR &&
-                                sampleCaveBiomeNoise(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                caveRockColumn.sample(y) >
                                     caveSecondaryRockThreshold)
                             {
                                 baseBlock = caveBiomeData.secondaryBaseBlock;
@@ -750,11 +793,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 const float skinThickness = glm::mix(
                                     caveSkinThicknessMin,
                                     caveSkinThicknessMax,
-                                    sampleCaveBiomeNoise(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ));
+                                    caveSkinThicknessColumn.sample(y));
                                 if (caveSurfaceDist < skinThickness)
                                 {
                                     const bool isPatch = caveBiomeData.skinPatchBlock != Block::AIR &&
-                                        sampleCaveBiomeNoise(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                        caveSkinPatchColumn.sample(y) >
                                             caveSkinPatchThreshold;
                                     baseBlock = isPatch ? caveBiomeData.skinPatchBlock : caveBiomeData.skinBlock;
                                 }

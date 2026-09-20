@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-20_
 
 # Cave Biome System
 
@@ -49,21 +49,49 @@ multiple of `chunkSizeXZ` (16) and therefore of the downsample factor. Adjacent
 chunks thus sample identical world positions on their shared border, so biomes
 stay seamless across chunks. The buffer carries `+1` cell on each XZ axis (the
 far-edge interpolation margin overlapping the next chunk's first cell) and `+2`
-in y. If the downsample factor ever stops dividing `chunkSizeXZ`, the coarse
-origin must be explicitly snapped or borders will mismatch.
+in y. `CaveDecorationData` statically requires the downsample factor to divide
+`chunkSizeXZ`. Supporting other spacings would require explicitly snapping the
+coarse origin first; simply changing the spacing would otherwise break borders.
 
-## Per-voxel cave-air ownership
+## Column interpolation reuse
+
+Each of the five cave biome/material fields has an independent `CaveBiomeFields::Column`
+sampler during the column scan. It interpolates XZ at the coarse Y planes once and reuses those
+values while walking through the four voxels in an interval. Advancing one interval reuses
+the previous upper plane; skipping intervals refreshes both planes. Material fields stay
+lazy so air, unrelated biomes, and rock outside the skin shell do not trigger unused work.
+
+This changes interpolation order from X/Y/Z to X/Z/Y, which is algebraically equivalent
+but can round slightly differently. It does not change the underlying noise samples,
+spacing, or independent temperature/humidity axes. Biome classification still runs against
+the complete biome table, so additional biome targets need no sampler changes.
+
+## Deferred cave-air classification
 
 The biome's block effects (base block and skin) are classified on the fly inside
 the fill loop and baked straight into the block choice. The base block covers
 **all** solid stone with `y < caveNoiseMaxY` (not just cave walls), so exposed
 faces anywhere in the band read as the biome. Cave structures read the biome once
-per captured layer at fill time. Separately, chunks retain one byte per voxel below
-`caveMaxY` for carved cave air (`0xff` means non-cave); this lets the post-structure
-decorator pass identify exact floor, wall, and ceiling cells across chunk boundaries
-without retaining the generation noise fields. The compact 320-layer array is released
-as soon as that pass finishes, so it costs 80 KiB only during generation rather than
-128 KiB for the chunk's lifetime.
+per captured layer at fill time. Air needs no material or structure classification.
+Instead, generation records a one-bit cave-air marker and retains the coarse temperature
+and humidity fields plus each column's surface bias. The marker distinguishes original
+cave air from ordinary surface air independently of later structure placement.
+
+The decorator pass classifies only marked cells that are still AIR and border an immutable
+terrain full cube. It builds this candidate set 64 cells at a time from the existing solid
+masks, including the adjacent chunk's mask at XZ edges. Y shifts carry across mask words;
+the last cave word must also see terrain above `caveMaxY` for ceiling support. Set bits are
+visited in the original bottom-up order so face selection and placement stay deterministic.
+
+`cave_biome_noise.h` shares the same lazy column sampler between generation and decoration.
+The two axes are generated directly into owned storage, avoiding a copy or a second noise
+evaluation. The three material fields remain scratch-only. Every chunk reads only its own
+retained fields and releases them, the surface biases, and cave-air mask after decoration;
+neighbors still use only the existing immutable terrain masks. At the maximum cave height,
+this data takes about 28 KiB instead of the old 80 KiB biome-ID array, with smaller fields in
+shorter terrain. `CaveDecorationData` owns the marker, fields, biases, dimensions, and
+release operation together, so generation and decoration share the packed layout and
+interpolation margins. Imported chunks skip these generation/decoration steps as before.
 
 ## Secondary rock
 

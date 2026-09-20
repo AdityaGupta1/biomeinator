@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-20_
 
 # Swamp Generation
 
@@ -22,6 +22,13 @@ per-column shaping happens in `SwampShaping::computeShaping` (`swamp_shaping.cpp
 - Cells whose neighbors share a level merge into larger marshes by skipping the dam between them.
 
 ## Height shaping
+
+Cell metadata checks flooding at the site before computing a pond level; dry cells never
+use their `pondLevel`. For wet cells the eight surrounding height samples are evaluated
+as one position batch requesting only peak and inland noise. The site still supplies the
+ninth sample, and second-lowest selection retains the original sample order. This avoids
+unused temperature/humidity work and lets FastNoise evaluate different positions across
+its SIMD lanes without changing the pond-height rule.
 
 Shaping is height-domain: natural terrain up to `swampPullDownStart` above the pond level is
 pulled down to the marsh flat, then blends back to fully natural over `swampPullDownBlendRange`.

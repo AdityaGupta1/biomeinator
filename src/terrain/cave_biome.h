@@ -28,7 +28,7 @@ enum class CaveBiome : uint8_t
 };
 
 // One air pocket in a single column, captured during the terrain block-fill scan. Scratch
-// only; cave-air biome ownership is persisted separately for the decorator pass.
+// only; cave-air marking and coarse biome fields are retained separately for decoration.
 // start = floor solid y (first air is start + 1); end = top air y (ceiling solid is end + 1);
 // layerHeight = end - start = number of air blocks. closed is false when the pocket opens
 // upward into non-cave air (no ceiling solid), so ceiling gens are skipped.

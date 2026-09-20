@@ -9,6 +9,9 @@ for agents doing performance work. `tests/run_perf.py` drives it over the entrie
 `tests/perf_scenes.json`; `run` produces a directory of reports, `compare` diffs two such directories
 by median, `show` prints one.
 
+For CPU terrain generation, use the [ad hoc terrain experiment workflow](cpu_terrain_benchmarks.md).
+These frame runs start after world import and do not measure terrain generation cost.
+
 ```
 python tests/run_perf.py run -o build/perf_output/baseline
 # make the change, rebuild RelWithDebInfo
