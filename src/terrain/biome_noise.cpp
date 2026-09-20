@@ -124,6 +124,22 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
     fill(grids.inland, fnInland);
 }
 
+void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples)
+{
+    const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
+    {
+        if (data != nullptr)
+        {
+            fn->GenPositionArray2D(data, numSamples, xPositions, zPositions,
+                                  noiseOffsetXZ.x, noiseOffsetXZ.y, noiseFieldSeed);
+        }
+    };
+    fill(grids.temperature, fnTemperature);
+    fill(grids.humidity, fnHumidity);
+    fill(grids.peak, fnPeak);
+    fill(grids.inland, fnInland);
+}
+
 BiomeNoise sampleAt(vec2 posXZ_WS)
 {
     const float x = posXZ_WS.x + noiseOffsetXZ.x;

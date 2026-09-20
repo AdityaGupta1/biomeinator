@@ -327,37 +327,52 @@ static inline void fillCaveBiomeNoiseArray(float* data, const FN::SmartNode<FN::
                          worldSeed ^ hash(391023545));
 }
 
-// Trilinearly samples a coarse cave biome field at a chunk-local block position. The coarse layout
-// mirrors fillNoiseArray3D: world y is contiguous (grid x-axis), then world x, then world z.
-static inline float sampleCaveBiomeNoise(const float* coarseNoise, uint coarseSizeXZ, uint coarseHeight, uint blockX, uint y, uint blockZ)
+// Reuses a column's XZ interpolation across each coarse Y interval. Material fields are
+// sampled lazily: skipped air/biomes/skin regions do not pay for unused planes.
+class CaveNoiseColumn
 {
-    constexpr float invDownsample = 1.f / caveBiomeNoiseDownsample;
-    const float gridX = blockX * invDownsample;
-    const float gridY = y * invDownsample;
-    const float gridZ = blockZ * invDownsample;
+    const float* c00;
+    const float* c10;
+    const float* c01;
+    const float* c11;
+    float tx;
+    float tz;
+    uint cachedY = std::numeric_limits<uint>::max();
+    float low = 0.f;
+    float high = 0.f;
 
-    const uint x0 = static_cast<uint>(gridX);
-    const uint y0 = static_cast<uint>(gridY);
-    const uint z0 = static_cast<uint>(gridZ);
-    const float tx = gridX - x0;
-    const float ty = gridY - y0;
-    const float tz = gridZ - z0;
+    float samplePlane(uint y) const
+    {
+        return glm::mix(glm::mix(c00[y], c10[y], tx), glm::mix(c01[y], c11[y], tx), tz);
+    }
 
-    const auto sample = [&](uint cellX, uint cellY, uint cellZ) -> float {
-        const uint idx = (cellZ * coarseSizeXZ + cellX) * coarseHeight + cellY;
-        return coarseNoise[idx];
-    };
+public:
+    CaveNoiseColumn(const float* coarseNoise, uint coarseSizeXZ, uint coarseHeight, uint blockX, uint blockZ)
+    {
+        const uint x = blockX / caveBiomeNoiseDownsample;
+        const uint z = blockZ / caveBiomeNoiseDownsample;
+        tx = (blockX % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
+        tz = (blockZ % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
+        c00 = coarseNoise + (z * coarseSizeXZ + x) * coarseHeight;
+        c10 = c00 + coarseHeight;
+        c01 = c00 + coarseSizeXZ * coarseHeight;
+        c11 = c01 + coarseHeight;
+    }
 
-    const float c00 = glm::mix(sample(x0, y0, z0), sample(x0 + 1, y0, z0), tx);
-    const float c10 = glm::mix(sample(x0, y0 + 1, z0), sample(x0 + 1, y0 + 1, z0), tx);
-    const float c01 = glm::mix(sample(x0, y0, z0 + 1), sample(x0 + 1, y0, z0 + 1), tx);
-    const float c11 = glm::mix(sample(x0, y0 + 1, z0 + 1), sample(x0 + 1, y0 + 1, z0 + 1), tx);
-
-    const float c0 = glm::mix(c00, c10, ty);
-    const float c1 = glm::mix(c01, c11, ty);
-
-    return glm::mix(c0, c1, tz);
-}
+    float sample(uint y)
+    {
+        const uint gridY = y / caveBiomeNoiseDownsample;
+        if (gridY != cachedY)
+        {
+            low = cachedY != std::numeric_limits<uint>::max() && gridY == cachedY + 1
+                ? high : samplePlane(gridY);
+            high = samplePlane(gridY + 1);
+            cachedY = gridY;
+        }
+        const float ty = (y % caveBiomeNoiseDownsample) * (1.f / caveBiomeNoiseDownsample);
+        return glm::mix(low, high, ty);
+    }
+};
 
 // Finds the grid cell containing posXZ_WS (accounting for the staggered odd-row x shift) and
 // returns its corner. Shared by surface and cave placement so both lay grids over the same cells.
@@ -679,6 +694,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
             const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
 
+            CaveNoiseColumn caveTemperatureColumn(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveHumidityColumn(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveRockColumn(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveSkinThicknessColumn(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+            CaveNoiseColumn caveSkinPatchColumn(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, blockZ);
+
             columnLayers.clear();
             bool layerOpen = false;
             int layerStart = 0;
@@ -743,10 +764,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                         caveSurfaceVal -= swampSealSub;
                         isCave = caveNoiseVal < caveSurfaceVal;
-                        const float caveTemperature =
-                            sampleCaveBiomeNoise(caveTemperatureNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
-                        const float caveHumidity =
-                            sampleCaveBiomeNoise(caveHumidityNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ);
+                        const float caveTemperature = caveTemperatureColumn.sample(y);
+                        const float caveHumidity = caveHumidityColumn.sample(y);
                         const CaveBiomeNoise caveBiomeNoise = {
                             .temperature = caveTemperature + caveBiomeSurfaceTemperatureOffset,
                             .humidity = caveHumidity + caveBiomeSurfaceHumidityOffset,
@@ -766,7 +785,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             Block flatSurfaceBlock = caveBiomeData.flatSurfaceBlock;
                             Block skinFringeBlock = caveBiomeData.skinFringeBlock;
                             if (caveBiomeData.secondaryBaseBlock != Block::AIR &&
-                                sampleCaveBiomeNoise(caveRockNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                caveRockColumn.sample(y) >
                                     caveSecondaryRockThreshold)
                             {
                                 baseBlock = caveBiomeData.secondaryBaseBlock;
@@ -811,11 +830,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                 const float skinThickness = glm::mix(
                                     caveSkinThicknessMin,
                                     caveSkinThicknessMax,
-                                    sampleCaveBiomeNoise(caveSkinThicknessNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ));
+                                    caveSkinThicknessColumn.sample(y));
                                 if (caveSurfaceDist < skinThickness)
                                 {
                                     const bool isPatch = caveBiomeData.skinPatchBlock != Block::AIR &&
-                                        sampleCaveBiomeNoise(caveSkinPatchNoise, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight, blockX, y, blockZ) >
+                                        caveSkinPatchColumn.sample(y) >
                                             caveSkinPatchThreshold;
                                     baseBlock = isPatch ? caveBiomeData.skinPatchBlock : caveBiomeData.skinBlock;
                                 }

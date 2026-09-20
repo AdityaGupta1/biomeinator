@@ -24,7 +24,7 @@ inline constexpr float swampWarpFineAmplitude = 6.f;
 struct CellInfo
 {
     bool swampy;
-    int pondLevel;
+    int pondLevel; // meaningful only for swampy cells
 };
 
 // One nearby pond whose waterline the column must keep caves away from; strength fades with the

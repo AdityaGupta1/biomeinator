@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-20_
 
 # Cave Biome System
 
@@ -51,6 +51,19 @@ stay seamless across chunks. The buffer carries `+1` cell on each XZ axis (the
 far-edge interpolation margin overlapping the next chunk's first cell) and `+2`
 in y. If the downsample factor ever stops dividing `chunkSizeXZ`, the coarse
 origin must be explicitly snapped or borders will mismatch.
+
+## Column interpolation reuse
+
+Each of the five cave biome/material fields has an independent `CaveNoiseColumn` sampler
+during the column scan. It interpolates XZ at the coarse Y planes once and reuses those
+values while walking through the four voxels in an interval. Advancing one interval reuses
+the previous upper plane; skipping intervals refreshes both planes. Material fields stay
+lazy so air, unrelated biomes, and rock outside the skin shell do not trigger unused work.
+
+This changes interpolation order from X/Y/Z to X/Z/Y, which is algebraically equivalent
+but can round slightly differently. It does not change the underlying noise samples,
+spacing, or independent temperature/humidity axes. Biome classification still runs against
+the complete biome table, so additional biome targets need no sampler changes.
 
 ## Per-voxel cave-air ownership
 
