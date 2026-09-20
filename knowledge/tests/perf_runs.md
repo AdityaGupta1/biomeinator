@@ -9,8 +9,12 @@ for agents doing performance work. `tests/run_perf.py` drives it over the entrie
 `tests/perf_scenes.json`; `run` produces a directory of reports, `compare` diffs two such directories
 by median, `show` prints one.
 
-For CPU terrain generation, use the [ad hoc terrain experiment workflow](cpu_terrain_benchmarks.md).
-These frame runs start after world import and do not measure terrain generation cost.
+Two kinds of terrain measurement live in different places. The `streaming` block of a report
+(see below) measures generation *as the game experiences it*: wall time to load a world, the
+frame period while it streams, worker utilization. Comparing generation *algorithms* on fixed
+chunks, without workers or a renderer, is the [ad hoc terrain experiment
+workflow](cpu_terrain_benchmarks.md); `CpuProfiler` deliberately has no scopes inside chunk
+generation, and per-chunk timing belongs in that disposable harness, not in production.
 
 ```
 python tests/run_perf.py run -o build/perf_output/baseline
