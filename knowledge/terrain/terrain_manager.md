@@ -35,7 +35,7 @@ The caps used to be 12 and 48, which held a backlog of ~470 tasks with the worke
 
 ## Water Animation Distance
 
-`Terrain::update` hands the scene the circle within which water instances animate (`waterAnimationDistance`, in chunks) together with the wave fade radii, which end a chunk inside it; see [scene → scene.md](../scene/scene.md#deformable-instances) for why the fade exists and how the slack in the radius is chosen.
+`Terrain::update` hands the scene the circle within which water instances animate together with the wave fade radii: the fade ends at `waterAnimationDistance` (chunks) and starts eight chunks before it, and the set's radius extends a further two and a half chunks past the end so chunks leave it flat. The frustum side of the limit is set by the renderer, not here. See [scene → scene.md](../scene/scene.md#deformable-instances) for why the fade exists and what animated water costs.
 
 ## Dirty Flag
 

@@ -11,6 +11,7 @@
 #include "rendering/buffer/reserved_managed_buffer.h"
 #include "rendering/buffer/mapped_array.h"
 #include "rendering/common/common_registers.h"
+#include "rendering/common/common_params.h"
 #include "rendering/common/common_structs.h"
 
 #include <array>
@@ -22,6 +23,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <cfloat>
 
 class ToFreeList;
@@ -66,6 +68,8 @@ private:
     glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
+    glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of host_verts, set by finalizeGeometry
+    glm::vec3 boundsMax_OS{ 0.f, 0.f, 0.f };
     uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
 
 public:
@@ -153,13 +157,13 @@ private:
     // The subset inside the animation bounds, rebuilt when the bounds or the set change
     std::vector<Instance*> animatedDeformables{};
     bool animatedDeformablesDirty{ true };
-    // Instances whose transform offset lies within this radius of the center are animated; the
-    // fade radii are what the shaders use, and the defaults keep everything animated at full
-    // amplitude for scenes that never set them (glTF)
+    // Instances within this radius of the center and inside the padded frustum are animated.
+    // waveFade is what the shaders use; its defaults (huge radii, zero normals) keep everything
+    // animated at full amplitude for scenes that never set them (glTF)
     glm::vec2 deformableAnimCenterXZ_WS{ 0.f, 0.f };
     float deformableAnimRadius{ FLT_MAX };
-    float waveFadeStart{ 1e9f };
-    float waveFadeEnd{ 2e9f };
+    WaveFadeParams waveFade{ { 0.f, 0.f, 0.f }, 1e9f, 2e9f, 0.f, 0.f, 0.f, {} };
+    bool waveFrustumSet{ false };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -262,16 +266,15 @@ public:
         return this->numBlasBuilds;
     }
 
-    // Deformable instances outside animRadius of the center are left static; the shaders fade
-    // the waves to rest height between fadeStart and fadeEnd so the two regions meet flat
+    // Deformable instances outside animRadius of the center or outside the padded frustum are
+    // left static; the shaders fade the waves to rest height towards both limits so the two
+    // regions meet flat
     void setDeformableAnimation(glm::vec2 centerXZ_WS, float animRadius, float fadeStart, float fadeEnd);
-    float getWaveFadeStart() const
+    void setWaveFrustum(glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS);
+    bool isDeformableAnimated(const Instance* instance) const;
+    const WaveFadeParams& getWaveFade() const
     {
-        return this->waveFadeStart;
-    }
-    float getWaveFadeEnd() const
-    {
-        return this->waveFadeEnd;
+        return this->waveFade;
     }
 
     Instance* requestNewInstance(ToFreeList& toFreeList);

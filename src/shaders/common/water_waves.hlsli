@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../rendering/common/common_params.h"
 #include "../rendering/common/common_settings.h"
 
 #include "util/FastNoiseLite.hlsli"
@@ -137,13 +138,27 @@ float waveHeight(float2 posXZ_WS, float waveTime)
     return waveHeightAndGradient(posXZ_WS, waveTime).x;
 }
 
-// Displacement fades to rest height with distance from the camera, so the chunks beyond the
-// animation distance (which keep a static surface) meet the animated ones without a seam.
+// Displacement fades to rest height with distance from the camera and outside the padded view
+// frustum, so the chunks that keep a static surface meet the animated ones without a seam.
 // Every consumer of the wave height or gradient applies this; the shading noise perturbation
-// does not, since it never moves geometry.
-float waveFade(float2 posXZ_WS, float2 cameraXZ_WS, float fadeStart, float fadeEnd)
+// does not, since it never moves geometry. Nearby water is exempt from the frustum limit so
+// a turn never reveals a frozen surface at the player's feet.
+float waveFade(float3 pos_WS, WaveFadeParams params)
 {
-    return 1.f - smoothstep(fadeStart, fadeEnd, distance(posXZ_WS, cameraXZ_WS));
+    const float3 toPos_WS = pos_WS - params.cameraPos_WS;
+    const float dist = length(toPos_WS);
+    const float radial = 1.f - smoothstep(params.fadeStart, params.fadeEnd, dist);
+
+    float angular = 1.f;
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        const float sinPastEdge = -dot(params.frustumNormals_WS[i].normal_WS, toPos_WS) / max(dist, 1e-3f);
+        angular = min(angular, 1.f - smoothstep(WATER_FOV_PAD_INNER_SIN, WATER_FOV_PAD_OUTER_SIN, sinPastEdge));
+    }
+    angular = lerp(1.f, angular, smoothstep(WATER_FOV_EXEMPT_NEAR, WATER_FOV_EXEMPT_FAR, dist));
+
+    return radial * angular;
 }
 
 // medium-scale OpenSimplex2 choppiness envelope in [0, 1]

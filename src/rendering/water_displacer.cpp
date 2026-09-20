@@ -36,14 +36,11 @@ struct WaterDisplaceConstants
 {
     uint32_t vertsBufferOffset;
     uint32_t vertCount;
-    int32_t transformOffsetX;
-    int32_t transformOffsetZ;
     float waveTime;
-    float cameraX_WS;
-    float cameraZ_WS;
-    float fadeStart;
-    float fadeEnd;
     float waveScale;
+    DirectX::XMINT3 transformOffset;
+    uint32_t pad0;
+    WaveFadeParams waveFade;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
@@ -113,7 +110,7 @@ void init()
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
               float waveTime,
-              const WaveFade& waveFade,
+              const WaveFadeParams& waveFade,
               const std::vector<DispatchInputs>& allInputs)
 {
     cmdList->SetPipelineState(pso.Get());
@@ -128,14 +125,10 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
         const WaterDisplaceConstants constants = {
             .vertsBufferOffset = inputs.vertsBufferOffset,
             .vertCount = inputs.vertCount,
-            .transformOffsetX = inputs.transformOffsetX,
-            .transformOffsetZ = inputs.transformOffsetZ,
             .waveTime = waveTime,
-            .cameraX_WS = waveFade.cameraXZ_WS.x,
-            .cameraZ_WS = waveFade.cameraXZ_WS.y,
-            .fadeStart = waveFade.start,
-            .fadeEnd = waveFade.end,
             .waveScale = inputs.waveScale,
+            .transformOffset = { inputs.transformOffset.x, inputs.transformOffset.y, inputs.transformOffset.z },
+            .waveFade = waveFade,
         };
         cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
                                               sizeof(WaterDisplaceConstants) / 4, &constants, 0);

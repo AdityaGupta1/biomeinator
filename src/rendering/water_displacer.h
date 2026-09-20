@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#include "common/common_params.h"
+
 #include <glm/glm.hpp>
 
 // Compute pass that displaces WATER_TOP verts in place with the analytic wave function
@@ -18,16 +20,8 @@ struct DispatchInputs
 {
     uint32_t vertsBufferOffset{ 0 }; // in verts
     uint32_t vertCount{ 0 };
-    int32_t transformOffsetX{ 0 };
-    int32_t transformOffsetZ{ 0 };
+    glm::ivec3 transformOffset{ 0, 0, 0 };
     float waveScale{ 1.f }; // 0 flattens a chunk leaving the animated set
-};
-
-struct WaveFade
-{
-    glm::vec2 cameraXZ_WS;
-    float start;
-    float end;
 };
 
 void init();
@@ -37,7 +31,7 @@ void init();
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
               float waveTime,
-              const WaveFade& waveFade,
+              const WaveFadeParams& waveFade,
               const std::vector<DispatchInputs>& allInputs);
 
 void destroy();

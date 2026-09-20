@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
+#include "../rendering/common/common_params.h"
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_settings.h"
 #include "../rendering/common/common_structs.h"
@@ -11,12 +12,11 @@ cbuffer WaterDisplaceConstants : REGISTER_B(WATER_DISPLACE, CONSTANTS)
 {
     uint vertsBufferOffset; // in verts
     uint vertCount;
-    int2 transformOffsetXZ;
     float waveTime;
-    float2 cameraXZ_WS;
-    float fadeStart;
-    float fadeEnd;
     float waveScale; // 0 flattens a chunk that just left the animated set
+    int3 transformOffset;
+    uint pad0;
+    WaveFadeParams waveFadeParams;
 };
 
 RWStructuredBuffer<Vertex> vertsOut : REGISTER_U(WATER_DISPLACE, VERTS_OUT);
@@ -39,8 +39,8 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const float2 posXZ_WS = vert.pos_OS.xz + float2(transformOffsetXZ);
-    const float fade = waveFade(posXZ_WS, cameraXZ_WS, fadeStart, fadeEnd) * waveScale;
-    vert.pos_OS.y = restY + waveHeight(posXZ_WS, waveTime) * fade;
+    const float3 restPos_WS = float3(vert.pos_OS.x, restY, vert.pos_OS.z) + float3(transformOffset);
+    const float fade = waveFade(restPos_WS, waveFadeParams) * waveScale;
+    vert.pos_OS.y = restY + waveHeight(restPos_WS.xz, waveTime) * fade;
     vertsOut[vertIdx] = vert;
 }

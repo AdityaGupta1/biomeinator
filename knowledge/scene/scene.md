@@ -61,24 +61,39 @@ the entries into the frame's instance desc array with the global offset applied.
 `Instance::isDeformable` (set by chunk meshing for water) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
 dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset within the circular
-animation radius that `Terrain::update` sets from the `waterAnimationDistance` setting: at
-render distance 40 a world has ~3,500 water chunks, and refitting all of them was most of a
-7 ms main thread and 3.6 ms of GPU per frame. The subset is cached in `animatedDeformables`
-and rebuilt only when the radius, its center or the set change; the center is the camera's
-chunk center with slack in the radius, so it changes only when the camera changes chunk.
+animation radius that `Terrain::update` sets from the `waterAnimationDistance` setting *and*
+inside the padded view frustum: at render distance 40 a world has ~3,500 water chunks, and
+refitting all of them was most of a 7 ms main thread and 3.6 ms of GPU per frame. The subset
+is cached in `animatedDeformables` and rebuilt when the radius, its chunk-quantized center,
+the frustum normals or the set change, so a locked camera never rebuilds and a turning one
+rebuilds every frame (a few thousand cheap tests).
 
-Static far water and animated near water meet without a seam because the wave *amplitude*
-fades to zero with distance from the camera (`waveFade` in `water_waves.hlsli`), reaching
-rest height one chunk inside the animation radius: a chunk is flat by the time it leaves the
-set and starts flat when it enters. The fade radii travel in `RenderParams` and in the
-displacement constants, and every consumer of the wave height or gradient applies them: the
-displacement pass, the motion vector delta in the G-buffer, and the shading normal's analytic
-gradient. The noise perturbation of the shading normal is deliberately not faded, since it
-never moves geometry. Only a camera jump of more than a chunk per frame can take a chunk out
-mid-wave, so instances leaving the set get one displacement dispatch with `waveScale` 0 plus
-a refit, and `freeInstance` erases from the cached subset so that comparison never sees a
-freed pointer. `sampleMeshWaveOffsetY` needs no fade term because it is only sampled at the
-camera, where the fade is 1. Displacement rewrites verts **in place** in
+Static and animated water meet without a seam because the wave *amplitude* fades to zero
+towards both limits (`waveFade` in `water_waves.hlsli`, driven by `WaveFadeParams`): radially
+over the eight chunks before the animation distance, and angularly over a band past the frustum
+edge, measured as the sine of the angle so it is a plane-distance test. A chunk is therefore
+flat by the time it leaves the set and starts flat when it enters. Water within
+`WATER_FOV_EXEMPT_FAR` of the camera ignores the frustum so a turn never reveals a frozen
+surface at the player's feet. The same params travel in `RenderParams` and in the displacement
+constants, and every consumer of the wave height or gradient applies them: the displacement
+pass, the motion vector delta in the G-buffer, and the shading normal's analytic gradient. The
+noise perturbation of the shading normal is deliberately not faded, since it never moves
+geometry. The frustum normals come from `Camera::getFrustumSideNormals_WS` at the current
+field of view, so the zoom key narrows the animated region with the view; the membership
+test pads wider than the shader's outer band and adds the chunk's bounding sphere (from the
+instance bounds `finalizeGeometry` records), so anything the shaders could still animate is
+always in the set. A camera jump or a fast turn can still take a chunk out mid-wave, so
+instances leaving the set get one displacement dispatch with `waveScale` 0 plus a refit, and
+`freeInstance` erases from the cached subset so that comparison never sees a freed pointer.
+`sampleMeshWaveOffsetY` needs no fade term because it is only sampled at the camera, where
+the fade is 1.
+
+The cost of animated water is mostly not the refit itself: refit BLASes trace slower than
+built ones, and path tracing over the visible water grows with the animated radius, roughly
+0.3 ms of path tracing plus 0.15 ms of refit per 4 chunks of radius at render distance 40
+(3.1 ms path tracing at 16 chunks, 3.4 at 20, 3.8 at 24, measured with a four-chunk band).
+The frustum limit removes about a third of the refits at a given radius. `waterAnimationDistance`
+(default 24, fading from 16) is the knob. Displacement rewrites verts **in place** in
 the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
 whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must

@@ -8,6 +8,7 @@
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "rendering/common/common_settings.h"
 #include "rendering/dxr_common.h"
 #include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
@@ -92,6 +93,15 @@ void Instance::finalizeGeometry()
 
     const uint32_t triCount = this->getTriCount();
     ASSERT(this->host_perTriDatas.size() == triCount);
+
+    this->boundsMin_OS = glm::vec3(FLT_MAX);
+    this->boundsMax_OS = glm::vec3(-FLT_MAX);
+    for (const Vertex& vert : this->host_verts)
+    {
+        const glm::vec3 pos(vert.pos_OS.x, vert.pos_OS.y, vert.pos_OS.z);
+        this->boundsMin_OS = glm::min(this->boundsMin_OS, pos);
+        this->boundsMax_OS = glm::max(this->boundsMax_OS, pos);
+    }
 
     this->isGeometryFinalized = true;
 }
@@ -479,8 +489,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
         dispatchInputs.vertsBufferOffset =
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         dispatchInputs.vertCount = Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.sizeBytes);
-        dispatchInputs.transformOffsetX = instance->transformOffset.x;
-        dispatchInputs.transformOffsetZ = instance->transformOffset.z;
+        dispatchInputs.transformOffset = instance->transformOffset;
         dispatchInputs.waveScale = waveScale;
         allDispatchInputs.push_back(dispatchInputs);
 
@@ -493,17 +502,16 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
         this->animatedDeformables.clear();
         for (Instance* const instance : this->deformableInstances)
         {
-            const glm::vec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
-            if (glm::distance(offsetXZ, this->deformableAnimCenterXZ_WS) <= this->deformableAnimRadius)
+            if (this->isDeformableAnimated(instance))
             {
                 this->animatedDeformables.push_back(instance);
             }
         }
         this->animatedDeformablesDirty = false;
 
-        // A chunk normally leaves the set already at rest height because the fade ends inside
-        // the animation radius, but a camera jump can take one out mid-wave; one flattening
-        // pass makes what it keeps for good match its static neighbours
+        // A chunk normally leaves the set already at rest height because the fades end inside
+        // the set's limits, but a camera jump or a fast turn can take one out mid-wave; one
+        // flattening pass makes what it keeps for good match its static neighbours
         std::sort(this->animatedDeformables.begin(), this->animatedDeformables.end());
         for (Instance* const instance : previouslyAnimated)
         {
@@ -535,13 +543,8 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
-        const glm::vec3 cameraPos_WS = Renderer::getCamera().getPos_WS();
-        const WaterDisplacer::WaveFade waveFade = {
-            .cameraXZ_WS = { cameraPos_WS.x, cameraPos_WS.z },
-            .start = this->waveFadeStart,
-            .end = this->waveFadeEnd,
-        };
-        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, waveFade, allDispatchInputs);
+        WaterDisplacer::dispatch(
+            cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
@@ -831,8 +834,63 @@ void Scene::setDeformableAnimation(const glm::vec2 centerXZ_WS, const float anim
     }
     this->deformableAnimCenterXZ_WS = centerXZ_WS;
     this->deformableAnimRadius = animRadius;
-    this->waveFadeStart = fadeStart;
-    this->waveFadeEnd = fadeEnd;
+    this->waveFade.fadeStart = fadeStart;
+    this->waveFade.fadeEnd = fadeEnd;
+}
+
+void Scene::setWaveFrustum(const glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS)
+{
+    this->waveFade.cameraPos_WS = { cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z };
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        const glm::vec3& normal = sideNormals_WS[i];
+        DirectX::XMFLOAT3& dest = this->waveFade.frustumNormals_WS[i].normal_WS;
+        if (dest.x != normal.x || dest.y != normal.y || dest.z != normal.z)
+        {
+            this->animatedDeformablesDirty = true;
+        }
+        dest = { normal.x, normal.y, normal.z };
+    }
+    this->waveFrustumSet = true;
+}
+
+// Conservative: the padding is wider than the shader's outer band, and the chunk's bounding
+// sphere is added on top, so anything the shaders could still animate is in the set
+bool Scene::isDeformableAnimated(const Instance* const instance) const
+{
+    const glm::vec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
+    if (glm::distance(offsetXZ, this->deformableAnimCenterXZ_WS) > this->deformableAnimRadius)
+    {
+        return false;
+    }
+    if (!this->waveFrustumSet)
+    {
+        return true;
+    }
+
+    const glm::vec3 cameraPos_WS(this->waveFade.cameraPos_WS.x, this->waveFade.cameraPos_WS.y, this->waveFade.cameraPos_WS.z);
+    const glm::vec3 center_WS = glm::vec3(instance->transformOffset) + 0.5f * (instance->boundsMin_OS + instance->boundsMax_OS);
+    const float radius = 0.5f * glm::length(instance->boundsMax_OS - instance->boundsMin_OS);
+    const glm::vec3 toCenter_WS = center_WS - cameraPos_WS;
+    const float dist = glm::length(toCenter_WS);
+    if (dist - radius < WATER_FOV_EXEMPT_FAR)
+    {
+        return true;
+    }
+
+    // Padding past the shader's outer band covers the camera moving within its chunk between
+    // rebuilds (the radial center is chunk-quantized, this test is not)
+    constexpr float membershipPadSin = WATER_FOV_PAD_OUTER_SIN + 0.25f;
+    for (const WaveFadeFrustumNormal& plane : this->waveFade.frustumNormals_WS)
+    {
+        const glm::vec3 normal(plane.normal_WS.x, plane.normal_WS.y, plane.normal_WS.z);
+        const float signedDist = glm::dot(normal, toCenter_WS);
+        if (signedDist < -(membershipPadSin * dist + radius))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 const glm::ivec3& Scene::getGlobalInstanceOffset() const

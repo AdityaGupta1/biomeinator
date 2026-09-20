@@ -21,6 +21,13 @@
 // and the meaning of each strength/freq/speed triple; the shading-normal noise parameters
 // live only there since the CPU never evaluates them.
 
+// Waves outside the view frustum fade out over this band past the frustum edge (sines of the
+// angle), except within the near radius, where they always animate
+#define WATER_FOV_PAD_INNER_SIN 0.17365f // sin(10 deg)
+#define WATER_FOV_PAD_OUTER_SIN 0.42262f // sin(25 deg)
+#define WATER_FOV_EXEMPT_NEAR 32.f
+#define WATER_FOV_EXEMPT_FAR 64.f
+
 #define WATER_SWELL_WAVE_COUNT 2
 #define WATER_SWELL_STRENGTHS { 0.03f, 0.025f }
 #define WATER_SWELL_FREQS { { 0.08f, 0.06f }, { -0.05f, 0.11f } }

@@ -150,6 +150,29 @@ struct CloudSettings
     float2 windOffsetFrac;
 };
 
+// One frustum side plane through the camera; padded to the 16 bytes an array element takes in a
+// constant buffer
+struct WaveFadeFrustumNormal
+{
+    float3 normal_WS; // inward
+    float pad0;
+};
+
+// Where water waves animate: the amplitude fades to rest height with distance from the camera
+// and outside the padded view frustum; see waveFade in water_waves.hlsli
+struct WaveFadeParams
+{
+    float3 cameraPos_WS; // absolute, not relative to globalInstanceOffset
+    float fadeStart;
+
+    float fadeEnd;
+    float pad0;
+    float pad1;
+    float pad2;
+
+    WaveFadeFrustumNormal frustumNormals_WS[4];
+};
+
 struct RenderParams
 {
     uint frameNumber;
@@ -177,12 +200,13 @@ struct RenderParams
     float fogAmbientStrength;
 
     float skyStrength;
-    // Radii of the water wave fade around the camera; see waveFade in water_waves.hlsli
-    float waveFadeStart;
-    float waveFadeEnd;
     uint pad0;
+    uint pad1;
+    uint pad2;
 
     CloudSettings cloudSettings;
+
+    WaveFadeParams waveFade;
 };
 
 struct SharcParams

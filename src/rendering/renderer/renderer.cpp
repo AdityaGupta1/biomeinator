@@ -593,6 +593,7 @@ void render()
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "terrain");
         TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
+        renderState.scene.setWaveFrustum(renderState.camera.getPos_WS(), renderState.camera.getFrustumSideNormals_WS());
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
@@ -628,8 +629,7 @@ void render()
     renderParams->animTime = animTimeFloat;
     renderParams->waveTime = waveTimeFloat;
     renderParams->prevWaveTime = computeWaveTime(renderState.prevAnimTime);
-    renderParams->waveFadeStart = renderState.scene.getWaveFadeStart();
-    renderParams->waveFadeEnd = renderState.scene.getWaveFadeEnd();
+    renderParams->waveFade = renderState.scene.getWaveFade();
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
