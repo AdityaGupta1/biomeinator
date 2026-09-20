@@ -18,6 +18,7 @@
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
 #include "settings_manager.h"
+#include "rendering/cpu_profiler.h"
 #include "logger.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
@@ -205,6 +206,7 @@ void update(ToFreeList& toFreeList)
         glm::floor(glm::vec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / chunkSize) * chunkSize + 0.5f * chunkSize;
     scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);
 
+    CpuProfiler::beginScope("chunk scan");
     cameraUnderwater = false;
     cameraBiomeValid = false;
     {
@@ -420,6 +422,8 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
+    CpuProfiler::endScope(); // chunk scan
+    CpuProfiler::beginScope("enqueue");
     // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
     // generateTerrain tasks would otherwise starve the chunks that are one step from visible
     while (!chunksToGenerateGeometry.empty())
@@ -467,6 +471,8 @@ void update(ToFreeList& toFreeList)
         thisFrameTasks.clear();
     }
 
+    CpuProfiler::endScope(); // enqueue
+    CPU_PROFILE_SCOPE("blas mark, destroy");
     std::vector<Chunk*> chunksToCreateBlasNow;
     {
         std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);

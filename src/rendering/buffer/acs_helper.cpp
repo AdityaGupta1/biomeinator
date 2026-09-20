@@ -10,6 +10,7 @@
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
+#include "rendering/cpu_profiler.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -271,6 +272,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
+    CpuProfiler::beginScope("upload");
     dev_verts->beginBatchCopy(cmdList);
     dev_idxs->beginBatchCopy(cmdList);
 
@@ -318,6 +320,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     dev_verts->endBatchCopy(cmdList);
     dev_idxs->endBatchCopy(cmdList);
 
+    CpuProfiler::endScope(); // upload
+    CPU_PROFILE_SCOPE("record builds");
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
 

@@ -70,6 +70,25 @@ the game shows). The headless defaults (`lockCamera`,
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.
 
+## CPU scopes and moving measurements
+
+`CpuProfiler` (`src/rendering/cpu_profiler.h`) is the main-thread counterpart of the GPU
+profiler: `CPU_PROFILE_SCOPE` blocks nest and report per frame alongside the GPU scopes as
+`cpu.scopes`, so a frame spike can be attributed to the thread it came from. It only records
+in perf mode. The frame bracket starts before the fence wait and ends after Present, so the
+waits are scopes too; `present` is where the pacer absorbs GPU variance, so a large `present`
+p95 is a symptom, not a cause.
+
+`--perfMoveSpeed=<blocks/s>` moves the camera forward during the measuring phase only, after
+the world has loaded, which is how streaming through a loaded world is measured; the
+`worldgen_move` scene does this at 20 blocks/s for 1500 frames. Moving at that speed on
+seed 100 (2026-09-20), the spikes above the 12.3 ms floor came from: BLAS build frames (about
+one in thirteen; ~1 ms CPU upload+record and up to 1.7 ms GPU), TLAS compaction on chunk-unload
+frames (1.65 ms CPU, dominated by rewriting the 2M-entry area light array), light tree rebuilds
+(1.8 ms GPU, a few percent of frames) and path tracing varying with the view (p95 +0.75 ms).
+The steady cost while moving is the water refit recording at ~1.5 ms CPU per frame for the
+~1,000 animated chunks.
+
 ## Streaming
 
 Everything before the measured window is also recorded as the *streaming* window: from the

@@ -58,6 +58,8 @@ def scope_rows(report):
     yield "frame", report["gpu"]["frameMs"]
     for scope in report["gpu"]["scopes"]:
         yield "  " * (scope["depth"] + 1) + scope["name"], scope["ms"]
+    for scope in report["cpu"].get("scopes", []):
+        yield "cpu " + "  " * scope["depth"] + scope["name"], scope["ms"]
     # Older reports predate these
     yield "gap before frame", report["gpu"].get("gapMs")
     yield "frame period", report["gpu"].get("periodMs")
@@ -84,7 +86,7 @@ def print_report(name, report):
         print(f"  streaming: {streaming['blasBuilds']} BLAS builds over {streaming['frames']} frames in "
               f"{streaming['seconds']:.2f} s, workers {streaming['workerUtilization'] * 100:.0f}% busy, "
               f"task backlog mean {streaming['taskBacklog']['mean']:.1f}")
-    print(f"  {'gpu scope':<28}{'median':>10}{'mean':>10}{'p95':>10}{'max':>10}{'count':>8}")
+    print(f"  {'scope':<28}{'median':>10}{'mean':>10}{'p95':>10}{'max':>10}{'count':>8}")
     for label, stats in scope_rows(report):
         if stats is None:
             continue
@@ -139,7 +141,7 @@ def cmd_compare(args):
             print(f"  streaming: {base_streaming['seconds']:.2f} s -> {cand_streaming['seconds']:.2f} s "
                   f"({base_streaming['blasBuilds']} -> {cand_streaming['blasBuilds']} BLAS builds, workers "
                   f"{base_streaming['workerUtilization'] * 100:.0f}% -> {cand_streaming['workerUtilization'] * 100:.0f}% busy)")
-        print(f"  {'gpu scope':<28}{'baseline':>10}{'candidate':>10}{'delta':>10}")
+        print(f"  {'scope':<28}{'baseline':>10}{'candidate':>10}{'delta':>10}")
         for label in base_rows:
             base = base_rows[label]
             cand = cand_rows.get(label)

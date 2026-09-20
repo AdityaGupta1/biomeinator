@@ -34,6 +34,7 @@
 
 #include "rendering/camera.h"
 #include "rendering/gpu_profiler.h"
+#include "rendering/cpu_profiler.h"
 #include "rendering/gpu_sort/gpu_radix_sort.h"
 #include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
@@ -267,6 +268,10 @@ void perfRunBeginCpuFrame();
 void perfRunEndCpuFrame();
 void perfRunCollectTimings(uint32_t slotIdx);
 bool perfRunIsDone();
+// Non-empty while a perf run wants the camera moved (perfMoveSpeed, measuring phase only)
+PlayerInput perfRunPlayerInput();
+// After Present, so the frame's CPU scopes include it
+void perfRunCollectCpuScopes();
 void perfRunFinish();
 
 // =============================================
@@ -329,6 +334,7 @@ struct PerfRunState
     bool stablePowerState{ false };
     std::vector<GpuProfiler::FrameTimings> gpuSamples;
     std::vector<double> cpuFrameMs;
+    std::vector<std::vector<CpuProfiler::ScopeTiming>> cpuScopeSamples;
 
     // World streaming before the measured window: from the first frame with terrain work or a
     // scene change until the last scene change before warmup goes quiet. Samples keep

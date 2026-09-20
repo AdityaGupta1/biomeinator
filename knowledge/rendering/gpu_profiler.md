@@ -14,6 +14,9 @@ scopes serve two purposes with different gating:
   Perf runs (see [tests → perf_runs.md](../tests/perf_runs.md)) are the only consumer today;
   anything else wanting the data enables it the same way.
 
+`CpuProfiler` mirrors this on the main thread for perf runs; see
+[tests → perf_runs.md](../tests/perf_runs.md#cpu-scopes-and-moving-measurements).
+
 ## Scope placement
 
 `GPU_PROFILE_SCOPE(cmdList, "name")` brackets a block; `beginScope`/`endScope` exist for the

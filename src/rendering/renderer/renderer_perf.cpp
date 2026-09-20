@@ -237,6 +237,31 @@ void perfRunCollectTimings(const uint32_t slotIdx)
     }
 }
 
+// Forward at the requested speed regardless of the movementSpeed setting, and only once the
+// world has finished loading, so the measured window is streaming through a loaded world
+PlayerInput perfRunPlayerInput()
+{
+    PlayerInput input;
+    const PerfRunState& perfRun = renderState.perfRun;
+    const float moveSpeed = SettingsManager::getAsFloat("perfMoveSpeed");
+    if (perfRun.active && perfRun.phase == PerfPhase::MEASURING && moveSpeed > 0.f)
+    {
+        input.linearInput = { 0.f, 0.f, 1.f };
+        input.linearSpeedMultiplier = moveSpeed / SettingsManager::getAsFloat("movementSpeed");
+    }
+    return input;
+}
+
+void perfRunCollectCpuScopes()
+{
+    PerfRunState& perfRun = renderState.perfRun;
+    const std::vector<CpuProfiler::ScopeTiming>& scopes = CpuProfiler::endFrame();
+    if (perfRun.phase == PerfPhase::MEASURING)
+    {
+        perfRun.cpuScopeSamples.push_back(scopes);
+    }
+}
+
 bool perfRunIsDone()
 {
     return renderState.perfRun.active && renderState.perfRun.phase == PerfPhase::DONE;
@@ -269,6 +294,46 @@ static nlohmann::json statsJson(std::vector<double> samples)
     };
 }
 
+// Scopes are keyed by depth and name in order of first appearance, since not every scope runs
+// every frame (e.g. BLAS builds)
+struct ScopeAggregator
+{
+    struct Samples
+    {
+        const char* name;
+        uint32_t depth;
+        std::vector<double> ms;
+    };
+    std::vector<Samples> samples;
+    std::map<std::pair<uint32_t, std::string>, size_t> idxByKey;
+
+    void add(const char* const name, const uint32_t depth, const double ms)
+    {
+        const auto key = std::make_pair(depth, std::string(name));
+        auto it = idxByKey.find(key);
+        if (it == idxByKey.end())
+        {
+            it = idxByKey.emplace(key, samples.size()).first;
+            samples.push_back({ .name = name, .depth = depth, .ms = {} });
+        }
+        samples[it->second].ms.push_back(ms);
+    }
+
+    nlohmann::json toJson() const
+    {
+        nlohmann::json json = nlohmann::json::array();
+        for (const Samples& scope : samples)
+        {
+            json.push_back({
+                { "name", scope.name },
+                { "depth", scope.depth },
+                { "ms", statsJson(scope.ms) },
+            });
+        }
+        return json;
+    }
+};
+
 static nlohmann::json settingsJson()
 {
     nlohmann::json json;
@@ -299,16 +364,7 @@ static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
 
-    // Scopes are keyed by depth and name in order of first appearance, since not every scope
-    // runs every frame (e.g. BLAS builds)
-    struct ScopeSamples
-    {
-        const char* name;
-        uint32_t depth;
-        std::vector<double> ms;
-    };
-    std::vector<ScopeSamples> scopeSamples;
-    std::map<std::pair<uint32_t, std::string>, size_t> scopeIdxByKey;
+    ScopeAggregator gpuScopes;
     std::vector<double> gpuFrameMs;
     // Consecutive frames also give the idle time between them on the graphics queue (gap) and the
     // rendered frame period (begin to begin); frameMs alone hides both
@@ -327,25 +383,17 @@ static nlohmann::json buildResultsJson()
         prevFrame = &frame;
         for (const GpuProfiler::ScopeTiming& scope : frame.scopes)
         {
-            const auto key = std::make_pair(scope.depth, std::string(scope.name));
-            auto it = scopeIdxByKey.find(key);
-            if (it == scopeIdxByKey.end())
-            {
-                it = scopeIdxByKey.emplace(key, scopeSamples.size()).first;
-                scopeSamples.push_back({ .name = scope.name, .depth = scope.depth, .ms = {} });
-            }
-            scopeSamples[it->second].ms.push_back(scope.ms);
+            gpuScopes.add(scope.name, scope.depth, scope.ms);
         }
     }
 
-    nlohmann::json scopesJson = nlohmann::json::array();
-    for (const ScopeSamples& scope : scopeSamples)
+    ScopeAggregator cpuScopes;
+    for (const std::vector<CpuProfiler::ScopeTiming>& frame : perfRun.cpuScopeSamples)
     {
-        scopesJson.push_back({
-            { "name", scope.name },
-            { "depth", scope.depth },
-            { "ms", statsJson(scope.ms) },
-        });
+        for (const CpuProfiler::ScopeTiming& scope : frame)
+        {
+            cpuScopes.add(scope.name, scope.depth, scope.ms);
+        }
     }
 
     const std::string sceneName =
@@ -360,6 +408,7 @@ static nlohmann::json buildResultsJson()
               { "renderWidth", renderState.renderWidth },
               { "renderHeight", renderState.renderHeight },
               { "frameGenActive", renderState.frameGen.active },
+              { "moveSpeed", SettingsManager::getAsFloat("perfMoveSpeed") },
               { "measuredFrames", perfRun.gpuSamples.size() },
               { "measureStartFrame", perfRun.measureStartFrame },
               { "stablePowerState", perfRun.stablePowerState },
@@ -367,13 +416,13 @@ static nlohmann::json buildResultsJson()
               { "timestamp", FileUtil::getTimestampString() },
           } },
         { "settings", settingsJson() },
-        { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) } } },
+        { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) }, { "scopes", cpuScopes.toJson() } } },
         { "streaming", streamingJson() },
         { "gpu",
           { { "frameMs", statsJson(gpuFrameMs) },
             { "gapMs", statsJson(gpuGapMs) },
             { "periodMs", statsJson(gpuPeriodMs) },
-            { "scopes", scopesJson } } },
+            { "scopes", gpuScopes.toJson() } } },
     };
 }
 

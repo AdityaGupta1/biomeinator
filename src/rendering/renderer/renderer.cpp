@@ -85,6 +85,7 @@ void init()
     initConstantParams();
 
     GpuProfiler::init(SettingsManager::isPerfMode() /*enableTimestamps*/);
+    CpuProfiler::init(SettingsManager::isPerfMode());
     perfRunInit();
 
     renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
@@ -505,6 +506,7 @@ void render()
 
     if (useReflex)
     {
+        CPU_PROFILE_SCOPE("reflex sleep");
         CHECK_SL_RESULT(slReflexSleep(*frameToken));
         if (renderState.frameGen.pclPingPending)
         {
@@ -587,6 +589,10 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
+    else if (renderState.perfRun.active)
+    {
+        playerInput = perfRunPlayerInput();
+    }
     renderState.camera.processInput(deltaTime, playerInput);
 
     if (renderState.voxelMode)
@@ -594,6 +600,7 @@ void render()
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "terrain");
         TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.scene.setWaveFrustum(renderState.camera.getPos_WS(), renderState.camera.getFrustumSideNormals_WS());
+        CPU_PROFILE_SCOPE("terrain");
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
@@ -601,9 +608,11 @@ void render()
     bool didSceneChange;
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "scene update");
+        CPU_PROFILE_SCOPE("scene update");
         didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, waveTimeFloat);
     }
 
+    CpuProfiler::beginScope("record passes");
     const bool didCameraChange = renderState.camera.update();
 
     if (useDlss)
@@ -779,6 +788,7 @@ void render()
     if (renderState.scene.hasTlas())
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "light tree");
+        CPU_PROFILE_SCOPE("light tree");
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
@@ -1042,9 +1052,13 @@ void render()
         batch.submit(renderState.cmdList.Get());
     }
 
+    CpuProfiler::endScope(); // record passes
     GpuProfiler::endFrame(renderState.cmdList.Get());
 
-    submitCmd();
+    {
+        CPU_PROFILE_SCOPE("submit");
+        submitCmd();
+    }
 
     if (useReflex)
     {
@@ -1075,7 +1089,10 @@ void render()
         CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePresentStart, *frameToken));
     }
 
-    CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
+    {
+        CPU_PROFILE_SCOPE("present");
+        CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
+    }
 
     if (useReflex)
     {
@@ -1086,6 +1103,8 @@ void render()
     {
         updateFrameGenState();
     }
+
+    perfRunCollectCpuScopes();
 
     ++renderState.frameNumber;
     renderState.frameCtxIdx = (renderState.frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -1113,15 +1132,24 @@ static void beginFrame()
 {
     FrameContext& frame = renderState.frameCtxs[renderState.frameCtxIdx];
 
+    CpuProfiler::beginFrame();
+
     if (isWaitableSwapChainActive())
     {
+        CPU_PROFILE_SCOPE("swap chain wait");
         WaitForSingleObjectEx(renderState.frameLatencyWaitable, 1000 /*ms*/, true);
     }
-    renderState.fence.waitFor(frame.fenceValue);
+    {
+        CPU_PROFILE_SCOPE("fence wait");
+        renderState.fence.waitFor(frame.fenceValue);
+    }
 
     perfRunBeginCpuFrame();
 
-    frame.toFreeList.freeAll();
+    {
+        CPU_PROFILE_SCOPE("free all");
+        frame.toFreeList.freeAll();
+    }
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
 

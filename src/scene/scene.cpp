@@ -8,6 +8,7 @@
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "rendering/cpu_profiler.h"
 #include "rendering/common/common_settings.h"
 #include "rendering/dxr_common.h"
 #include "rendering/gpu_profiler.h"
@@ -423,10 +424,14 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 
     {
         GPU_PROFILE_SCOPE(cmdList, "blas build");
+        CPU_PROFILE_SCOPE("blas builds");
         this->makeQueuedBlases(cmdList, toFreeList);
     }
 
-    this->updateDeformableInstances(cmdList, toFreeList, waveTime);
+    {
+        CPU_PROFILE_SCOPE("deformables");
+        this->updateDeformableInstances(cmdList, toFreeList, waveTime);
+    }
 
     bool didChange = false;
 
@@ -440,6 +445,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 
     if (!this->pendingTextures.empty())
     {
+        CPU_PROFILE_SCOPE("textures");
         this->uploadPendingTextures(cmdList, toFreeList);
         didChange = true;
     }
@@ -467,6 +473,7 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         // The entries and the area light sampling structure were kept up to date as instances
         // came and went, so this only re-applies the global offset
         GPU_PROFILE_SCOPE(cmdList, "tlas build");
+        CPU_PROFILE_SCOPE("tlas");
         this->makeTlas(cmdList, toFreeList);
     }
 
@@ -797,6 +804,7 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
 
     if (this->tlasEntriesNeedCompaction)
     {
+        CPU_PROFILE_SCOPE("tlas compaction");
         this->compactTlasEntries();
         this->stageAreaLightSamplingRange(toFreeList, 0, this->numAreaLights);
     }

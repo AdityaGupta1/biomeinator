@@ -55,6 +55,21 @@
                 "--renderDistance=40",
                 "--perfTimeoutSeconds=300"
             ]
+        },
+        {
+            "name": "worldgen_move",
+            "args": [
+                "--width=2560",
+                "--height=1440",
+                "--fullscreen=true",
+                "--antialiasingMode=2",
+                "--voxelMode=true",
+                "--worldSeed=100",
+                "--renderDistance=40",
+                "--perfTimeoutSeconds=300",
+                "--perfMoveSpeed=20",
+                "--perfFrames=1500"
+            ]
         }
     ]
 }
