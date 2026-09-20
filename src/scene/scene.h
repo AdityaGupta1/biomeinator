@@ -22,6 +22,8 @@
 
 #include <glm/glm.hpp>
 
+#include <cfloat>
+
 class ToFreeList;
 
 class Scene;
@@ -151,8 +153,13 @@ private:
     // The subset inside the animation bounds, rebuilt when the bounds or the set change
     std::vector<Instance*> animatedDeformables{};
     bool animatedDeformablesDirty{ true };
-    glm::ivec2 deformableAnimBoundsMin_WS{ INT_MIN, INT_MIN };
-    glm::ivec2 deformableAnimBoundsMax_WS{ INT_MAX, INT_MAX };
+    // Instances whose transform offset lies within this radius of the center are animated; the
+    // fade radii are what the shaders use, and the defaults keep everything animated at full
+    // amplitude for scenes that never set them (glTF)
+    glm::vec2 deformableAnimCenterXZ_WS{ 0.f, 0.f };
+    float deformableAnimRadius{ FLT_MAX };
+    float waveFadeStart{ 1e9f };
+    float waveFadeEnd{ 2e9f };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -255,9 +262,17 @@ public:
         return this->numBlasBuilds;
     }
 
-    // Deformable instances whose transform offset lies outside these XZ bounds keep their last
-    // displacement instead of being refit every frame
-    void setDeformableAnimationBounds(glm::ivec2 min_WS, glm::ivec2 max_WS);
+    // Deformable instances outside animRadius of the center are left static; the shaders fade
+    // the waves to rest height between fadeStart and fadeEnd so the two regions meet flat
+    void setDeformableAnimation(glm::vec2 centerXZ_WS, float animRadius, float fadeStart, float fadeEnd);
+    float getWaveFadeStart() const
+    {
+        return this->waveFadeStart;
+    }
+    float getWaveFadeEnd() const
+    {
+        return this->waveFadeEnd;
+    }
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

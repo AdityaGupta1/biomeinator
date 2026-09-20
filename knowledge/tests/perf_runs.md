@@ -84,14 +84,20 @@ Quiet, for the warmup streak, means no scene change *and* no terrain task queued
 with a deep task queue the scene can go thirty frames without a chunk landing while
 generation is nowhere near done, which would start measuring mid-stream.
 
-Initial load of that scene, fullscreen 1440p, 2026-09-20: 21.9 s with a 16.6 ms median and
-24 ms p95 frame period before this round of work; 10.8-12.7 s with ~13 ms median and 28-42 ms
-p95 after it. Generation time halved because the caps stopped binding, and the steady-state
-frame period at that render distance went from 16.8 ms to 10.6 ms (water refits and the TLAS
-walk were the CPU bottleneck). The remaining p95 is dominated by sporadic 25-50 ms stalls
-inside driver calls (`BuildRaytracingAccelerationStructure` recording, resource releases) that
-vary run to run; a lower `maxBlasBuildsPerFrame` (16) trades a little generation time for a
-lower p95.
+Initial load of that scene, fullscreen 1440p, 2026-09-20, before and after the streaming work
+(same hour, same machine state): generation 15.9 s → 4.2 s, streaming frame period median
+12.0 → 12.1 ms and p95 14.4 → 17 ms, steady-state frame period afterwards 12.0 → 9.4 ms with
+the main thread going from 7.3 ms to 1.6 ms (water refits and the TLAS walk were most of it).
+Generation is now bound by the BLAS cap again at 30 builds per frame, and each build frame
+costs ~3 ms more than a steady one. The spikes that remain (75-90 ms max, in both states) are
+sporadic stalls inside driver calls; a lower `maxBlasBuildsPerFrame` lowers p95 at the cost of
+generation time.
+
+**Absolute numbers drift with machine state.** Earlier in the same session the pre-fix state
+measured 21.9 s and a 16.5 ms main thread, and the post-fix state 11.8 s, with every run
+internally consistent; the machine was simply ~2x slower on the CPU for a while. Always
+measure the two sides of a comparison back to back, and re-measure the baseline if the
+candidate looks too good.
 
 ## Gap and period
 

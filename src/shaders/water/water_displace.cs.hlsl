@@ -13,6 +13,10 @@ cbuffer WaterDisplaceConstants : REGISTER_B(WATER_DISPLACE, CONSTANTS)
     uint vertCount;
     int2 transformOffsetXZ;
     float waveTime;
+    float2 cameraXZ_WS;
+    float fadeStart;
+    float fadeEnd;
+    float waveScale; // 0 flattens a chunk that just left the animated set
 };
 
 RWStructuredBuffer<Vertex> vertsOut : REGISTER_U(WATER_DISPLACE, VERTS_OUT);
@@ -36,6 +40,7 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float2 posXZ_WS = vert.pos_OS.xz + float2(transformOffsetXZ);
-    vert.pos_OS.y = restY + waveHeight(posXZ_WS, waveTime);
+    const float fade = waveFade(posXZ_WS, cameraXZ_WS, fadeStart, fadeEnd) * waveScale;
+    vert.pos_OS.y = restY + waveHeight(posXZ_WS, waveTime) * fade;
     vertsOut[vertIdx] = vert;
 }

@@ -331,6 +331,8 @@ void Scene::freeInstance(Instance* instance)
     this->instancesReadyForBlasBuild.erase(instance);
     if (this->deformableInstances.erase(instance) > 0)
     {
+        // Also drop it from the cached subset, which is compared against on the next rebuild
+        std::erase(this->animatedDeformables, instance);
         this->animatedDeformablesDirty = true;
     }
 
@@ -471,24 +473,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     }
     std::vector<WaterDisplacer::DispatchInputs> allDispatchInputs;
     std::vector<AcsHelper::GeometryWrapper*> geoWrappers;
-    if (this->animatedDeformablesDirty)
-    {
-        this->animatedDeformables.clear();
-        for (Instance* const instance : this->deformableInstances)
-        {
-            const glm::ivec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
-            if (glm::all(glm::greaterThanEqual(offsetXZ, this->deformableAnimBoundsMin_WS)) &&
-                glm::all(glm::lessThanEqual(offsetXZ, this->deformableAnimBoundsMax_WS)))
-            {
-                this->animatedDeformables.push_back(instance);
-            }
-        }
-        this->animatedDeformablesDirty = false;
-    }
-
-    allDispatchInputs.reserve(this->animatedDeformables.size());
-    geoWrappers.reserve(this->animatedDeformables.size());
-    for (Instance* const instance : this->animatedDeformables)
+    const auto addDispatch = [&](Instance* const instance, const float waveScale)
     {
         WaterDisplacer::DispatchInputs dispatchInputs;
         dispatchInputs.vertsBufferOffset =
@@ -496,9 +481,42 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
         dispatchInputs.vertCount = Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.sizeBytes);
         dispatchInputs.transformOffsetX = instance->transformOffset.x;
         dispatchInputs.transformOffsetZ = instance->transformOffset.z;
+        dispatchInputs.waveScale = waveScale;
         allDispatchInputs.push_back(dispatchInputs);
 
         geoWrappers.push_back(&instance->geoWrapper);
+    };
+
+    if (this->animatedDeformablesDirty)
+    {
+        std::vector<Instance*> previouslyAnimated = std::move(this->animatedDeformables);
+        this->animatedDeformables.clear();
+        for (Instance* const instance : this->deformableInstances)
+        {
+            const glm::vec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
+            if (glm::distance(offsetXZ, this->deformableAnimCenterXZ_WS) <= this->deformableAnimRadius)
+            {
+                this->animatedDeformables.push_back(instance);
+            }
+        }
+        this->animatedDeformablesDirty = false;
+
+        // A chunk normally leaves the set already at rest height because the fade ends inside
+        // the animation radius, but a camera jump can take one out mid-wave; one flattening
+        // pass makes what it keeps for good match its static neighbours
+        std::sort(this->animatedDeformables.begin(), this->animatedDeformables.end());
+        for (Instance* const instance : previouslyAnimated)
+        {
+            if (!std::binary_search(this->animatedDeformables.begin(), this->animatedDeformables.end(), instance))
+            {
+                addDispatch(instance, 0.f /*waveScale*/);
+            }
+        }
+    }
+
+    for (Instance* const instance : this->animatedDeformables)
+    {
+        addDispatch(instance, 1.f /*waveScale*/);
     }
 
     if (geoWrappers.empty())
@@ -517,7 +535,13 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
-        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, allDispatchInputs);
+        const glm::vec3 cameraPos_WS = Renderer::getCamera().getPos_WS();
+        const WaterDisplacer::WaveFade waveFade = {
+            .cameraXZ_WS = { cameraPos_WS.x, cameraPos_WS.z },
+            .start = this->waveFadeStart,
+            .end = this->waveFadeEnd,
+        };
+        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, waveFade, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
@@ -799,14 +823,16 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
 }
 
-void Scene::setDeformableAnimationBounds(const glm::ivec2 min_WS, const glm::ivec2 max_WS)
+void Scene::setDeformableAnimation(const glm::vec2 centerXZ_WS, const float animRadius, const float fadeStart, const float fadeEnd)
 {
-    if (min_WS != this->deformableAnimBoundsMin_WS || max_WS != this->deformableAnimBoundsMax_WS)
+    if (centerXZ_WS != this->deformableAnimCenterXZ_WS || animRadius != this->deformableAnimRadius)
     {
         this->animatedDeformablesDirty = true;
     }
-    this->deformableAnimBoundsMin_WS = min_WS;
-    this->deformableAnimBoundsMax_WS = max_WS;
+    this->deformableAnimCenterXZ_WS = centerXZ_WS;
+    this->deformableAnimRadius = animRadius;
+    this->waveFadeStart = fadeStart;
+    this->waveFadeEnd = fadeEnd;
 }
 
 const glm::ivec3& Scene::getGlobalInstanceOffset() const

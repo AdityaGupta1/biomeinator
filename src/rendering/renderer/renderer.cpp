@@ -628,6 +628,8 @@ void render()
     renderParams->animTime = animTimeFloat;
     renderParams->waveTime = waveTimeFloat;
     renderParams->prevWaveTime = computeWaveTime(renderState.prevAnimTime);
+    renderParams->waveFadeStart = renderState.scene.getWaveFadeStart();
+    renderParams->waveFadeEnd = renderState.scene.getWaveFadeEnd();
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 

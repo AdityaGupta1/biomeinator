@@ -137,6 +137,15 @@ float waveHeight(float2 posXZ_WS, float waveTime)
     return waveHeightAndGradient(posXZ_WS, waveTime).x;
 }
 
+// Displacement fades to rest height with distance from the camera, so the chunks beyond the
+// animation distance (which keep a static surface) meet the animated ones without a seam.
+// Every consumer of the wave height or gradient applies this; the shading noise perturbation
+// does not, since it never moves geometry.
+float waveFade(float2 posXZ_WS, float2 cameraXZ_WS, float fadeStart, float fadeEnd)
+{
+    return 1.f - smoothstep(fadeStart, fadeEnd, distance(posXZ_WS, cameraXZ_WS));
+}
+
 // medium-scale OpenSimplex2 choppiness envelope in [0, 1]
 float medChop01(float2 posXZ_WS, float noiseTime)
 {
@@ -167,9 +176,9 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 // flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
 // surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
 // view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
-float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit)
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit, float fade)
 {
-    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz;
+    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz * fade;
     const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
     const float flip = backfaceHit ? -1.f : 1.f;
     const float3 baseNor_WS = flip * normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));

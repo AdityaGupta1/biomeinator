@@ -35,7 +35,7 @@ The caps used to be 12 and 48, which held a backlog of ~470 tasks with the worke
 
 ## Water Animation Distance
 
-`Terrain::update` hands the scene the XZ bounds within which water instances animate (`waterAnimationDistance`, in chunks), see [scene → scene.md](../scene/scene.md#deformable-instances) for why that matters.
+`Terrain::update` hands the scene the circle within which water instances animate (`waterAnimationDistance`, in chunks) together with the wave fade radii, which end a chunk inside it; see [scene → scene.md](../scene/scene.md#deformable-instances) for why the fade exists and how the slack in the radius is chosen.
 
 ## Dirty Flag
 

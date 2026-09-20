@@ -60,13 +60,25 @@ the entries into the frame's instance desc array with the global offset applied.
 
 `Instance::isDeformable` (set by chunk meshing for water) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
-dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset inside the animation
-bounds that `Terrain::update` sets from the `waterAnimationDistance` setting: at render
-distance 40 a world has ~3,500 water chunks, and refitting all of them cost 10-13 ms of CPU
-and 3.6 ms of GPU per frame, which was the whole reason the game was CPU-bound at that
-distance. Far water simply keeps its last displacement, which is sub-pixel at that range. The
-subset is cached in `animatedDeformables` and rebuilt only when the bounds or the set change,
-since even iterating the full set is measurable. Displacement rewrites verts **in place** in
+dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset within the circular
+animation radius that `Terrain::update` sets from the `waterAnimationDistance` setting: at
+render distance 40 a world has ~3,500 water chunks, and refitting all of them was most of a
+7 ms main thread and 3.6 ms of GPU per frame. The subset is cached in `animatedDeformables`
+and rebuilt only when the radius, its center or the set change; the center is the camera's
+chunk center with slack in the radius, so it changes only when the camera changes chunk.
+
+Static far water and animated near water meet without a seam because the wave *amplitude*
+fades to zero with distance from the camera (`waveFade` in `water_waves.hlsli`), reaching
+rest height one chunk inside the animation radius: a chunk is flat by the time it leaves the
+set and starts flat when it enters. The fade radii travel in `RenderParams` and in the
+displacement constants, and every consumer of the wave height or gradient applies them: the
+displacement pass, the motion vector delta in the G-buffer, and the shading normal's analytic
+gradient. The noise perturbation of the shading normal is deliberately not faded, since it
+never moves geometry. Only a camera jump of more than a chunk per frame can take a chunk out
+mid-wave, so instances leaving the set get one displacement dispatch with `waveScale` 0 plus
+a refit, and `freeInstance` erases from the cached subset so that comparison never sees a
+freed pointer. `sampleMeshWaveOffsetY` needs no fade term because it is only sampled at the
+camera, where the fade is 1. Displacement rewrites verts **in place** in
 the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
 whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must

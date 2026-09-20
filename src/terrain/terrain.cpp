@@ -193,10 +193,17 @@ void update(ToFreeList& toFreeList)
     };
 
     // Wave displacement is sub-pixel beyond this, so far water keeps a static surface rather
-    // than paying a BLAS refit per chunk per frame
-    const int waterAnimationDistance = SettingsManager::getAsInt("waterAnimationDistance");
-    scene->setDeformableAnimationBounds((currentChunkPos - waterAnimationDistance) * static_cast<int>(chunkSizeXZ),
-                                        (currentChunkPos + waterAnimationDistance) * static_cast<int>(chunkSizeXZ));
+    // than paying a BLAS refit per chunk per frame. The fade reaches rest height a chunk
+    // inside the animation distance, so chunks are flat by the time they leave the animated
+    // set. That set is chosen from the camera's chunk center so it only changes when the
+    // camera changes chunk, with enough slack for the camera's position within the chunk and
+    // for the chunk offset being its corner rather than its farthest vertex.
+    const float chunkSize = static_cast<float>(chunkSizeXZ);
+    const float waveFadeEnd = (SettingsManager::getAsInt("waterAnimationDistance") - 1) * chunkSize;
+    const float waveFadeStart = waveFadeEnd - 3.f * chunkSize;
+    const glm::vec2 cameraChunkCenterXZ_WS =
+        glm::floor(glm::vec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / chunkSize) * chunkSize + 0.5f * chunkSize;
+    scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);
 
     cameraUnderwater = false;
     cameraBiomeValid = false;

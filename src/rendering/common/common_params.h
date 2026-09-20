@@ -177,9 +177,10 @@ struct RenderParams
     float fogAmbientStrength;
 
     float skyStrength;
+    // Radii of the water wave fade around the camera; see waveFade in water_waves.hlsli
+    float waveFadeStart;
+    float waveFadeEnd;
     uint pad0;
-    uint pad1;
-    uint pad2;
 
     CloudSettings cloudSettings;
 };

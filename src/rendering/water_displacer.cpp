@@ -39,6 +39,11 @@ struct WaterDisplaceConstants
     int32_t transformOffsetX;
     int32_t transformOffsetZ;
     float waveTime;
+    float cameraX_WS;
+    float cameraZ_WS;
+    float fadeStart;
+    float fadeEnd;
+    float waveScale;
 };
 
 ComPtr<ID3D12RootSignature> rootSig{ nullptr };
@@ -108,6 +113,7 @@ void init()
 void dispatch(ID3D12GraphicsCommandList4* cmdList,
               D3D12_GPU_VIRTUAL_ADDRESS dev_vertsAddress,
               float waveTime,
+              const WaveFade& waveFade,
               const std::vector<DispatchInputs>& allInputs)
 {
     cmdList->SetPipelineState(pso.Get());
@@ -125,6 +131,11 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
             .transformOffsetX = inputs.transformOffsetX,
             .transformOffsetZ = inputs.transformOffsetZ,
             .waveTime = waveTime,
+            .cameraX_WS = waveFade.cameraXZ_WS.x,
+            .cameraZ_WS = waveFade.cameraXZ_WS.y,
+            .fadeStart = waveFade.start,
+            .fadeEnd = waveFade.end,
+            .waveScale = inputs.waveScale,
         };
         cmdList->SetComputeRoot32BitConstants(WATER_DISPLACE_PARAM_IDX(CONSTANTS),
                                               sizeof(WaterDisplaceConstants) / 4, &constants, 0);
@@ -140,6 +151,7 @@ void destroy()
     rootSig.Reset();
 }
 
+// Sampled at the camera, where the distance fade is 1, so it has no fade term
 float sampleMeshWaveOffsetY(const glm::ivec2 blockXZ_WS, const glm::vec2 blockFraction, const float waveTime)
 {
     const float h00 = waveHeight(glm::vec2(blockXZ_WS), waveTime);
