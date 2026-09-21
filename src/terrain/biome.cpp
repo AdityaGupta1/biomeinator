@@ -304,7 +304,7 @@ void init()
         BIOME_INIT(TIANZI_MOUNTAINS, "tianzi mountains");
         data.grassTint = glmUtil::colorFromHex("#659749");
         data.structureGens = {
-            { { { StructureType::PINE_TREE, 3.f }, { StructureType::PINE_SHRUB, 1.f } }, 12, 3 },
+            { { { StructureType::PINE_TREE, 3.f }, { StructureType::PINE_SHRUB, 2.f } }, 9, 2 },
         };
         data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });

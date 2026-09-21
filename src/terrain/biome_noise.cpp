@@ -270,8 +270,9 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     float uplift = 0.f;
     if (tianzi > 0.f)
     {
-        constexpr TerrainFormations::Profile towers{ 70.f, 26.f, 52.f, 100.f, 20.f, 0.4f };
-        uplift = tianzi * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x75423u, towers);
+        constexpr TerrainFormations::Profile shoulders{ 70.f, 28.f, 52.f, 64.f, 12.f, 0.72f, 0.85f };
+        constexpr TerrainFormations::Profile crowns{ 50.f, 16.f, 29.f, 48.f, 4.f, 0.62f, 0.85f };
+        uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, shoulders, crowns);
     }
     // Quartz is an explicit formation in dry, non-terraced terrain. It reuses the same
     // finite-support sampler with a narrow summit and a broad foot, not a new noise field.

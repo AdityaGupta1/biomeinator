@@ -105,4 +105,14 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
     return result;
 }
 
+// A smaller independent field sits on the shoulders of the broad field. Gate its
+// contribution by support height, so secondary crowns cannot rise out of valleys.
+// This stays a pure height query for distant terrain and other stacked karst profiles.
+inline float sampleStacked(glm::vec2 pos, uint32_t seed, const Profile& lower, const Profile& upper)
+{
+    const float base = sample(pos, seed, lower);
+    const float support = glm::smoothstep(lower.height * 0.18f, lower.height * 0.6f, base);
+    return base + support * sample(pos, seed ^ 0xA271u, upper);
+}
+
 } // namespace TerrainFormations

@@ -52,6 +52,19 @@ so this becomes a sequence of lower formations, not a single steep row at the ed
 mountain ground continues underneath as pillars shrink into foothills. Correlated sandstone patches also thin out across that band, rather
 than letting a tall pale pillar meet a dark mountain along a sharp material boundary.
 
+Tianzi stacks two independently seeded site fields: broad lower shoulders and smaller crowns
+at 1.4 times the frequency. This follows mega-minecraft's two-scale Worley idea while retaining
+the reusable finite-support sampler. Crown strength fades with the supporting field's height;
+otherwise small towers would appear independently on valley floors. Wide summit profiles leave
+plantable shoulders between tiers. Faceted footprints supply angled rock faces without putting
+every pillar on the same rectangular grid. Both tiers use the same continuous biome weight and
+shared ground, so stacking does not add a new transition regime.
+
+Steep Tianzi faces receive a little more bounded 3D displacement for shallow recesses and
+overhangs. Positive displacement is separately capped near crowns: lifting the full cliff
+slope boost above a summit produced thin tips and detached rubble. Recesses retain the larger
+bound, and the existing conservative noise-sampling range encloses both sides.
+
 Quartz uses the sampler's angular profile: a rotated, faceted footprint and an exponential
 rise toward a narrow crystal core. Removing the exponential's linear term joins the outer
 foot to the desert with zero slope, then accelerates inward instead of rounding into a dome.
@@ -88,9 +101,15 @@ red sand/sandstone and quartz textures were copied from the user's GoodVibes blo
 (`C:/Users/SDOAJ/code/textures/GoodVibes/minecraft/textures/block`). Smooth sandstone reuses
 the existing sandstone-top tile. Tianzi's trees/shrubs use the existing pine log and leaf
 assets; their generators obey the same clipping-independent RNG contract as other trees.
-Steep Tianzi slopes retain exposed rock; topsoil and pine anchors are limited to gentler
-ground and summits. Boundary slope samples use the same world-space natural terrain query
-as interior cached columns, avoiding a special edge treatment at chunk borders.
+Steep Tianzi slopes retain exposed rock. Gentler shoulders and summits receive a thin soil
+cap, with a correlated patch mask allowing vegetation onto some steeper steps. Exposed
+sandstone shelves under overhangs can also acquire soil when there is enough open headroom;
+this scan stays above the shared ground and does not repaint stone/marble outcrops or caves.
+Pines and shrubs share a denser candidate grid, anchor only on actual grass, and require
+vertical clearance. The column scan can find lower shelves as well as the highest surface;
+variants are seeded by world XYZ and vertically separated to avoid stacked overlapping trees.
+Boundary slope samples use the same world-space natural terrain query as interior cached
+columns, avoiding a special edge treatment at chunk borders.
 
 ## Pond oases
 

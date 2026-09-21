@@ -25,6 +25,9 @@ span roughly four to sixteen blocks horizontally, with longer vertical features 
 fragments, breaking up otherwise extruded cliff walls. The displacement
 is scaled by the natural surface gradient so it remains visible on steep faces, with a cap to
 preserve narrow formation cores. The same world-space slope query serves Tianzi's topsoil mask.
+Tianzi's steep faces allow a larger inward displacement for shallow undercuts; a separate
+upward limit keeps that slope boost from making thin spikes above planted crowns. This limit
+does not enlarge the conservative displacement bound used for allocating the noise grids.
 Mesa additionally tapers detail on gentle ground and plateau tops, retaining some bumps while
 leaving steep slopes at full strength. This uses the slope before fine displacement, so bumps
 do not amplify themselves; apply the taper before computing the sampled Y bounds.
@@ -103,3 +106,8 @@ a 30-block band; for mountains it's larger. This avoids sampling trivially solid
 ## Structure Creation Happens Here
 
 After blocks are filled, structure candidates are generated using the heightfield (which is in scratch memory and would be lost after this task) and biome data. See [structure_system.md](structure_system.md) for the placement algorithm.
+
+Tianzi also scans actual planted surfaces for side shelves below the highest voxel. Soil there
+is limited to exposed sandstone above the shared formation ground; grass support and vertical
+headroom gate tree placement. Both scans are column-local, so they need no neighbor-generation
+dependency and do not produce special behavior at chunk edges.

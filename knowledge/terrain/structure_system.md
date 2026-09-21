@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-20_
 
 # Structure System
 
@@ -15,6 +15,13 @@ The padding is one-sided rather than centred purely for spacing resolution: one-
 Because the candidate is a pure function of the (global) cell corner, any chunk overlapping a cell computes the identical candidate, and exactly one chunk — the one whose bounds contain the candidate XZ — emplaces it. The high-edge inset also means no neighbouring cell's candidate can ever land inside this chunk, so only cells overlapping the chunk are iterated (no padded neighbour ring).
 
 Additional rejection: must be in this chunk's bounds, on valid ground (heightfield > 0), matching biome, not underwater (unless flagged).
+
+Tianzi's tiered formations also support trees on side shoulders. Its candidates scan exposed
+grass surfaces in the owning column, including lower shelves above the formation ground.
+Vertical clearance selects between pines and shrubs; vertical spacing prevents planting
+several overlapping trees under one crown. This is a surface-only exception, not general cave
+tree placement. The same global XZ grid still owns the column, with world Y added to the variant
+seed so selecting one shelf cannot shift another shelf's random stream.
 
 **Weighted variants:** a `StructureGen` holds a weighted list of structure types sharing one grid; the type is rolled per accepted candidate (seeded by candidate position). This is how mixed forests keep different tree types spaced from each other — all variants inherit the grid's spacing guarantee, so cross-type spacing needs no distance checks. The candidate grid is salted by a fold-hash of the variant list (`gridSalt`), which is what keeps multiple gens in the same biome on distinct grids.
 

@@ -11,6 +11,7 @@
 #include "swamp_shaping.h"
 #include "oasis_shaping.h"
 #include "surface_material.h"
+#include "terrain_formation.h"
 #include "rendering/common/common_settings.h"
 #include "settings_manager.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -537,11 +538,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // Convert a small displacement normal to the surface into height units. Without
             // the slope factor, vertical jitter barely moves the sides of a steep pillar.
             // Cap it to preserve narrow cores, and use the bound below as well as in filling.
-            detailAmplitude *= min(10.f, 2.f * sqrt(1.f + slope * slope));
+            const BiomeNoise noise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
+            const float cliffDetail = BiomeNoiseFields::tianziWeight(noise) * smoothstep(1.f, 4.f, slope);
+            detailAmplitude *= min(mix(10.f, 20.f, cliffDetail),
+                mix(2.f, 2.75f, cliffDetail) * sqrt(1.f + slope * slope));
             // Leave some fine variation on Mesa floors and plateau tops, with full detail
             // on escarpments. The unjittered mask and pre-detail slope keep this continuous
             // across biome/chunk borders and avoid having bumps amplify their own noise.
-            const BiomeNoise noise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const float mesa = BiomeNoiseFields::terraceWeight(noise) * BiomeNoiseFields::dryClimateWeight(noise);
             const float flatDetail = mix(0.35f, 1.f, smoothstep(0.1f, 0.8f, slope));
             detailAmplitude *= mix(1.f, flatDetail, mesa);
@@ -705,8 +708,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const BiomeNoise columnBiomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const bool tianziSandstone = biome == Biome::TIANZI_MOUNTAINS && SurfaceMaterials::tianziSandstone(
                 columnBiomeNoise, vec2(blockPosXZ_WS), worldSeed);
-            const bool hasTianziFormation = BiomeNoiseFields::tianziWeight(columnBiomeNoise) > 0.f &&
-                                            naturalTerrain.formationHeight > 0.f;
+            const float tianziWeight = BiomeNoiseFields::tianziWeight(columnBiomeNoise);
+            const bool hasTianziFormation = tianziWeight > 0.f && naturalTerrain.formationHeight > 0.f;
+            const float detailUpwardLimit = mix(terrainDetailAmplitudeArray[columnIdx], 3.f, tianziWeight);
             const float pillarRootSeal = hasTianziFormation ? smoothstep(0.f, 8.f, naturalTerrain.formationHeight) : 0.f;
             const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
                                          1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
@@ -811,8 +815,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                     // Detail depends on Y too: cliff faces acquire outcrops and recesses,
                     // rather than extruding one wavy outline unchanged from foot to summit.
-                    const float detail = terrainDetailNoise ? terrainDetailAmplitudeArray[columnIdx] *
+                    float detail = terrainDetailNoise ? terrainDetailAmplitudeArray[columnIdx] *
                         clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f) : 0.f;
+                    // A steep side needs more displacement than its crown. Keep recesses
+                    // and small overhangs, but don't lift the cliff's slope boost into thin
+                    // towers of rubble above the otherwise broad, planted summit.
+                    detail = min(detail, detailUpwardLimit);
                     const float detailedHeight = terrainBaseHeight + detail;
                     float surfaceVal = (detailedHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
                     if (y < detailedHeight)
@@ -1020,7 +1028,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             if (topBlockY != 0)
             {
-                const bool bareFormationCliff = biome == Biome::TIANZI_MOUNTAINS && naturalSlopeArray[columnIdx] > 1.25f;
+                const float ledgeVegetation = biome == Biome::TIANZI_MOUNTAINS ?
+                    TerrainFormations::valueNoise(vec2(blockPosXZ_WS) / 19.f, worldSeed ^ 0x61EDu) : 0.f;
+                const bool bareFormationCliff = biome == Biome::TIANZI_MOUNTAINS &&
+                    naturalSlopeArray[columnIdx] > mix(1.25f, 2.6f, smoothstep(-0.3f, 0.5f, ledgeVegetation));
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
 
@@ -1032,7 +1043,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
                 }
 
-                for (uint y = topBlockY; y > topBlockY - 5; --y)
+                const uint soilDepth = biome == Biome::TIANZI_MOUNTAINS ? 2 : 5;
+                for (uint y = topBlockY; y > topBlockY - soilDepth; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
                     Block& block = this->blocks[blockIdx];
@@ -1055,6 +1067,27 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                     }
                     block = newBlock;
+                }
+
+                // Surface displacement can expose lower shelves beneath an overhang. Coat
+                // only upward-facing sandstone with open headroom, above the shared ground;
+                // underground cave floors and the existing stone/marble outcrops stay intact.
+                if (biome == Biome::TIANZI_MOUNTAINS && ledgeVegetation > -0.25f)
+                {
+                    uint headroom = 0;
+                    const uint ledgeMinY = static_cast<uint>(max(2.f, ceil(naturalTerrain.formationBaseHeight + 4.f)));
+                    for (uint y = topBlockY; y > ledgeMinY; --y)
+                    {
+                        Block& block = this->blocks[baseBlockIdx + y];
+                        if (block == Block::AIR) { ++headroom; continue; }
+                        if (headroom >= 6 && block == Block::SMOOTH_SANDSTONE &&
+                            this->blocks[baseBlockIdx + y - 1] == Block::SMOOTH_SANDSTONE)
+                        {
+                            block = Block::GRASS_BLOCK;
+                            this->blocks[baseBlockIdx + y - 1] = Block::DIRT;
+                        }
+                        headroom = 0;
+                    }
                 }
             }
 
@@ -1128,6 +1161,37 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     const uint columnIdx = candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/;
+                    const Biome columnBiome = this->biomes[columnIdx];
+                    if (columnBiome != biome) continue;
+
+                    if (biome == Biome::TIANZI_MOUNTAINS)
+                    {
+                        // A column may have a planted shoulder under a crown. Scan actual
+                        // exposed grass instead of anchoring every tree at its highest voxel.
+                        // World XYZ seeding and column-local headroom keep chunk ownership
+                        // and tree variants independent of generation order.
+                        const uint baseBlockIdx = chunkSizeY * columnIdx;
+                        uint headroom = 0;
+                        int lastPlantY = static_cast<int>(chunkSizeY) + 24;
+                        const int lowestShelf = min(static_cast<int>(this->terrainTopY[columnIdx]),
+                            static_cast<int>(ceil(naturalTerrainArray[columnIdx].formationBaseHeight + 4.f)));
+                        for (int y = static_cast<int>(chunkSizeY) - 1; y >= max(1, lowestShelf); --y)
+                        {
+                            const Block block = this->blocks[baseBlockIdx + y];
+                            if (block == Block::AIR) { ++headroom; continue; }
+                            if (block == Block::GRASS_BLOCK && headroom >= 7 && lastPlantY - y >= 24)
+                            {
+                                RandomNumberGenerator variantRng = initRng(worldSeed ^ hash(1946793319) ^ gridSalt,
+                                    candidatePosXZ_WS.x, y, candidatePosXZ_WS.y);
+                                StructureType type = structureGen.pickVariant(variantRng);
+                                if (type == StructureType::PINE_TREE && headroom < 19) type = StructureType::PINE_SHRUB;
+                                this->structures.emplace_back(type, ivec3(candidatePosXZ_WS.x, y + 1, candidatePosXZ_WS.y));
+                                lastPlantY = y;
+                            }
+                            headroom = 0;
+                        }
+                        continue;
+                    }
 
                     const uint candidateGroundHeight = this->terrainTopY[columnIdx];
                     if (candidateGroundHeight == 0)
@@ -1144,14 +1208,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                     }
 
-                    const Biome columnBiome = this->biomes[columnIdx];
-                    if (columnBiome != biome)
-                    {
-                        continue;
-                    }
                     if (this->blocks[candidateGroundHeight + chunkSizeY * columnIdx] == Block::QUARTZ) continue;
-                    if (biome == Biome::TIANZI_MOUNTAINS &&
-                        this->blocks[candidateGroundHeight + chunkSizeY * columnIdx] != Block::GRASS_BLOCK) continue;
 
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     RandomNumberGenerator variantRng =
