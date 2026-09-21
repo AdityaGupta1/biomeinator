@@ -276,6 +276,7 @@ void initDevice()
             }
             Logger::log("Shader Model %s requirement satisfied", shaderModelName(requiredShaderModel).c_str());
             Logger::log("Selected adapter: %ls", adapterDesc.Description);
+            CHECK_HRESULT(adapter.As(&renderState.adapter));
             break;
         }
 

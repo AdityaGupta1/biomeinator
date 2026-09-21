@@ -151,6 +151,16 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
     uint32_t numBlasBuilds{ 0 }; // lifetime total, for streaming measurements
+    // One batch of compaction queries per frame context: the batch recorded on frame index i is
+    // compacted when index i comes around again, once its fence has passed; see
+    // knowledge/gpu/acceleration_structures.md
+    struct PendingBlasCompaction
+    {
+        AcsHelper::BlasCompactionQuery query;
+        std::vector<Instance*> instances; // parallel to query.entries
+    };
+    std::array<PendingBlasCompaction, Renderer::NUM_FRAMES_IN_FLIGHT> pendingBlasCompactions{};
+    void compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     // finalized, BLAS-built deformable instances; drives the displacement dispatches and
     // BLAS refits (every deformable instance is water for now)
     std::unordered_set<Instance*> deformableInstances{};
@@ -265,6 +275,20 @@ public:
     {
         return this->numBlasBuilds;
     }
+
+    struct InstanceGpuMemory
+    {
+        uint32_t numInstances{ 0 };
+        size_t blasBytes{ 0 };
+        size_t vertsBytes{ 0 };
+        size_t idxsBytes{ 0 };
+        size_t ommIdxsBytes{ 0 };
+        size_t perTriDatasBytes{ 0 };
+        size_t tangentsBytes{ 0 };
+        size_t areaLightsBytes{ 0 };
+    };
+    // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
+    InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
 
     // Deformable instances outside animRadius of the center or outside the padded frustum are
     // left static; the shaders fade the waves to rest height towards both limits so the two

@@ -1,4 +1,4 @@
-_Last edited: 2026-08-22_
+_Last edited: 2026-09-20_
 
 # Acceleration Structures
 
@@ -56,6 +56,36 @@ traffic was measurable on the main thread. It issues a UAV barrier on `sharedAcs
 `DispatchRays` read these BLASes and the in-place refit writes the same memory (the buffer
 lives permanently in the AS state, so ordering is UAV-barrier-only). Fresh-section BLAS
 builds never need this because they write virgin memory.
+
+## BLAS Compaction
+
+Static BLASes (everything but water) are built with `ALLOW_COMPACTION` and copied into a
+section of their compacted size a few frames later; on the RTX 4070 SUPER this took terrain
+BLASes from ~77 to ~21 bytes per triangle (1.9 GB to 0.5 GB at render distance 30), and it
+is what the `blasCompaction` setting toggles. The compacted size is only known after the
+build has run, so the round trip is spread across the frame contexts:
+
+- The build itself writes a `COMPACTED_SIZE` postbuild info entry (passed to
+  `BuildRaytracingAccelerationStructure` directly, so no barrier sits between build and
+  query), and the batch copies the entries to a readback buffer. Both buffers belong to a
+  `BlasCompactionQuery` owned by the frame context, sized for the per-frame build cap and
+  grown only by the glTF load path, which builds everything in one batch.
+- When that frame context comes around again its fence has passed, so `Scene::update` reads
+  the sizes and records `CopyRaytracingAccelerationStructure(COMPACT)` into a fresh section
+  *before* this frame's builds. The old section goes to `ToFreeList` because in-flight frames
+  still trace through it; `makeTlas`'s UAV barrier already orders the copies before the TLAS
+  build.
+
+Instances are recycled, so an `Instance*` captured at build time can hold a different chunk
+three frames later. `GeometryWrapper::blasBuildId` is stamped per build and the compaction is
+dropped when it no longer matches (or the section was freed, or the instance is scheduled for
+deletion). Water BLASes are never compacted: refit BLASes compact poorly and they are under
+100 MB in total.
+
+The `ALLOW_COMPACTION` flag itself showed no build- or trace-time difference back to back,
+and the copies cost well under 0.1 ms per frame while streaming. Compacted sections are
+smaller than the holes they leave, so the AS buffer's `allocated - used` gap in the memory
+report is the fragmentation to watch.
 
 ## TLAS UAV Barrier
 

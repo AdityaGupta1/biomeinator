@@ -364,6 +364,50 @@ static nlohmann::json streamingJson()
     };
 }
 
+static nlohmann::json instanceMemoryJson(const Scene::InstanceGpuMemory& memory)
+{
+    return {
+        { "count", memory.numInstances },
+        { "blasBytes", memory.blasBytes },
+        { "vertsBytes", memory.vertsBytes },
+        { "idxsBytes", memory.idxsBytes },
+        { "ommIdxsBytes", memory.ommIdxsBytes },
+        { "perTriDatasBytes", memory.perTriDatasBytes },
+        { "tangentsBytes", memory.tangentsBytes },
+        { "areaLightsBytes", memory.areaLightsBytes },
+    };
+}
+
+// Snapshot at the end of the run: the DXGI budget Streamline warns against, every registered
+// buffer, and the per-instance sections summed by kind so the shared buffers can be attributed
+static nlohmann::json memoryJson()
+{
+    DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo{};
+    CHECK_HRESULT(renderState.adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo));
+
+    std::vector<GpuMemoryEntry> entries = GpuMemoryReporter::collectAll();
+    std::sort(entries.begin(), entries.end(), [](const GpuMemoryEntry& a, const GpuMemoryEntry& b) {
+        return a.allocatedBytes > b.allocatedBytes;
+    });
+    nlohmann::json buffers = nlohmann::json::array();
+    for (const GpuMemoryEntry& entry : entries)
+    {
+        buffers.push_back({
+            { "name", entry.name },
+            { "allocatedBytes", entry.allocatedBytes },
+            { "usedBytes", entry.usedBytes },
+        });
+    }
+
+    return {
+        { "budgetBytes", videoMemoryInfo.Budget },
+        { "usageBytes", videoMemoryInfo.CurrentUsage },
+        { "buffers", buffers },
+        { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
+        { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },
+    };
+}
+
 static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
@@ -422,6 +466,7 @@ static nlohmann::json buildResultsJson()
         { "settings", settingsJson() },
         { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) }, { "scopes", cpuScopes.toJson() } } },
         { "streaming", streamingJson() },
+        { "memory", memoryJson() },
         { "gpu",
           { { "frameMs", statsJson(gpuFrameMs) },
             { "gapMs", statsJson(gpuGapMs) },

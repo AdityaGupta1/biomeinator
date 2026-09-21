@@ -6,7 +6,9 @@
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/gpu_memory_reporter.h"
 #include "rendering/buffer/to_free_list.h"
+#include "util/util.h"
 
 #include "debug.h"
 
@@ -24,7 +26,7 @@ struct MappedArrayOptions
     bool perFrameUpload{ false };
 };
 
-template<typename T> class MappedArray
+template<typename T> class MappedArray : public GpuMemoryReporter
 {
 private:
     std::wstring name{ L"MappedArray" };
@@ -147,6 +149,17 @@ public:
     {
         this->options = options;
         this->init(size, nullptr);
+    }
+
+    GpuMemoryEntry reportGpuMemory() const override
+    {
+        const size_t numBuffers = this->upload_buffers.size() + (this->dev_buffer != nullptr ? 1 : 0);
+        const size_t allocatedBytes = sizeof(T) * this->size * numBuffers;
+        return {
+            .name = Util::to_string(this->name.c_str()),
+            .allocatedBytes = allocatedBytes,
+            .usedBytes = allocatedBytes,
+        };
     }
 
     T& operator[](uint32_t idx)

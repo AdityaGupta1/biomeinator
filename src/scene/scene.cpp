@@ -15,6 +15,7 @@
 #include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
+#include "settings_manager.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -244,6 +245,28 @@ void Scene::init()
     this->areaLightSamplingStructure.init(1 << 21 /*elements*/, { .perFrameUpload = true });
 }
 
+Scene::InstanceGpuMemory Scene::getInstanceGpuMemory(const bool deformable) const
+{
+    InstanceGpuMemory memory;
+    for (const auto& [_, instance] : this->instances)
+    {
+        if (instance->isDeformable != deformable)
+        {
+            continue;
+        }
+
+        ++memory.numInstances;
+        memory.blasBytes += instance->geoWrapper.blasBufferSection.sizeBytes;
+        memory.vertsBytes += instance->geoWrapper.vertsBufferSection.sizeBytes;
+        memory.idxsBytes += instance->geoWrapper.idxsBufferSection.sizeBytes;
+        memory.ommIdxsBytes += instance->geoWrapper.ommIdxsBufferSection.sizeBytes;
+        memory.perTriDatasBytes += instance->perTriDatasBufferSection.sizeBytes;
+        memory.tangentsBytes += instance->tangentsBufferSection.sizeBytes;
+        memory.areaLightsBytes += instance->areaLightsBufferSection.sizeBytes;
+    }
+    return memory;
+}
+
 void Scene::reset()
 {
     this->invalidateRadianceHistory();
@@ -259,6 +282,11 @@ void Scene::reset()
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
+    for (PendingBlasCompaction& pending : this->pendingBlasCompactions)
+    {
+        pending.query.entries.clear();
+        pending.instances.clear();
+    }
     this->deformableInstances.clear();
     this->animatedDeformablesDirty = true;
     this->tlasInstanceEntries.clear();
@@ -422,6 +450,12 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     this->areaLightTopologyChanged = false;
 
     {
+        GPU_PROFILE_SCOPE(cmdList, "blas compact");
+        CPU_PROFILE_SCOPE("blas compact");
+        this->compactBuiltBlases(cmdList, toFreeList);
+    }
+
+    {
         GPU_PROFILE_SCOPE(cmdList, "blas build");
         CPU_PROFILE_SCOPE("blas builds");
         this->makeQueuedBlases(cmdList, toFreeList);
@@ -479,6 +513,47 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
 
     return didChange;
+}
+
+void Scene::compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+{
+    PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
+    if (pending.instances.empty())
+    {
+        return;
+    }
+
+    const std::vector<uint64_t> compactedSizes = AcsHelper::readCompactedSizes(pending.query);
+    for (size_t i = 0; i < pending.instances.size(); ++i)
+    {
+        Instance* const instance = pending.instances[i];
+        const AcsHelper::BlasCompactionQuery::Entry& entry = pending.query.entries[i];
+        ASSERT(entry.geoWrapper == &instance->geoWrapper);
+
+        // The instance may have been unloaded and its wrapper reused for a later build since
+        const bool stillThisBuild =
+            instance->geoWrapper.blasBufferSection.isValid() && instance->geoWrapper.blasBuildId == entry.blasBuildId;
+        if (!stillThisBuild || instance->isScheduledForDeletion)
+        {
+            continue;
+        }
+        if (compactedSizes[i] >= instance->geoWrapper.blasBufferSection.sizeBytes)
+        {
+            continue;
+        }
+
+        AcsHelper::compactBlas(cmdList, toFreeList, &instance->geoWrapper, compactedSizes[i]);
+
+        if (instance->tlasEntryIdx != UINT32_MAX)
+        {
+            this->tlasInstanceEntries[instance->tlasEntryIdx].desc.AccelerationStructure =
+                instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
+            this->isTlasDirty = true;
+        }
+    }
+
+    pending.query.entries.clear();
+    pending.instances.clear();
 }
 
 void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime)
@@ -611,6 +686,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
     allBlasInputs.reserve(instancesToBuildThisFrame.size());
 
+    const bool compactBlases = SettingsManager::getAsBool("blasCompaction");
+    PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
+    ASSERT(pending.instances.empty()); // consumed by compactBuiltBlases earlier this frame
+
     uint32_t numPerTriDatas = 0;
     uint32_t numAreaLights = 0;
 
@@ -633,10 +712,15 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
 
         blasInputs.allowUpdate = instance->isDeformable;
+        blasInputs.allowCompaction = compactBlases && !instance->isDeformable;
         blasInputs.isOpaque = instance->isOpaque;
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
+        if (blasInputs.allowCompaction)
+        {
+            pending.instances.push_back(instance);
+        }
 
         assert(instance->host_perTriDatas.size() > 0);
         numPerTriDatas += instance->host_perTriDatas.size();
@@ -644,7 +728,13 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         numAreaLights += instance->host_areaLights.size();
     }
 
-    AcsHelper::makeBlases(cmdList, toFreeList, &this->managedVertsBuffer, &this->managedIdxsBuffer, allBlasInputs);
+    AcsHelper::makeBlases(cmdList,
+                          toFreeList,
+                          &this->managedVertsBuffer,
+                          &this->managedIdxsBuffer,
+                          allBlasInputs,
+                          compactBlases ? &pending.query : nullptr);
+    ASSERT(pending.query.entries.size() == pending.instances.size());
     this->numBlasBuilds += static_cast<uint32_t>(allBlasInputs.size());
 
     this->managedPerTriDatasBuffer.beginBatchCopy(cmdList);

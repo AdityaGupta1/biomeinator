@@ -56,6 +56,9 @@ the entries into the frame's instance desc array with the global offset applied.
   the area light sampling structure compacts on the GPU, see below.
 - Transform setters update the entry in place; they also mark `isTlasDirty` so the change
   resets accumulation like any other scene change.
+- BLAS compaction moves a BLAS to a new GPU VA, so `compactBuiltBlases` rewrites the entry's
+  `AccelerationStructure` in place the same way; see
+  [gpu → acceleration_structures.md](../gpu/acceleration_structures.md#blas-compaction).
 
 ## Deformable Instances
 

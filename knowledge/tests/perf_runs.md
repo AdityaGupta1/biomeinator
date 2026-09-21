@@ -134,6 +134,26 @@ internally consistent; the machine was simply ~2x slower on the CPU for a while.
 measure the two sides of a comparison back to back, and re-measure the baseline if the
 candidate looks too good.
 
+## Memory
+
+The report's `memory` block is a snapshot taken when the run finishes: the DXGI local budget
+and current usage (what Streamline's out-of-VRAM warning is measured against, not physical
+VRAM), every live `ManagedBuffer` and `MappedArray` with its allocated and used bytes, and the
+buffer sections held by static and by deformable instances summed by section kind. Buffers
+enumerate themselves through `GpuMemoryReporter`, so a new buffer type shows up by inheriting
+it rather than by being plumbed into the report; `usedBytes` is allocated minus free-list space,
+so the gap between the two is fragmentation plus growth headroom. The instance sums cover every
+live instance, not just the ones in the TLAS. `show` prints the block.
+
+Seed 100 at render distance 30, fullscreen 1440p, 2026-09-20, before BLAS compaction: 5.9 GB
+in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB of
+per-triangle data and 300 MB of indices; water instances were under 160 MB all told. BLAS came
+to ~77 bytes per triangle uncompacted, geometry to ~156 bytes per quad. With compaction the
+terrain BLAS is 530 MB and the total 4.6 GB. The ~1.2 GB not attributed to any buffer is
+textures, render targets, DLSS and SHARC, and the light tree. The budget moved between 7.3 GB
+and 11.2 GB across runs the same afternoon depending on what else held VRAM, so compare usage,
+not headroom.
+
 ## Gap and period
 
 `gpu.frameMs` is the command list's own duration and hides everything outside it. The report
