@@ -41,6 +41,15 @@ and is stored per face rather than per triangle; see
 [scene → instance.md](../scene/instance.md#per-face-data). `HitInfo` and `GbufferData` are
 self-explanatory from the source.
 
+Terrain instances keep their vertices resident as the 12-byte `PackedTerrainVertex` instead: a
+BLAS does not reference its input buffer after the build, so the build reads fp32 positions from
+the staging upload and the resident copy only has to satisfy the shaders. Positions are fixed
+point with power-of-two scales (1/1024 block in XZ, 1/64 in Y, biased so the ranges cover model
+overhang and the world height), which decodes block corners, liquid tops and the models' 1/16
+authoring grid exactly; the normal keeps the oct16x2 encoding and UVs are unorm8x2 (exact corners,
+1/16 texel on model atlases). `InstanceData::vertexFormat` selects the view, and water stays on
+`Vertex` because its refits and displacement rewrite the resident positions every frame.
+
 `Vertex` has a 24-byte stride, with no stored tangents. Normal-mapped glTF meshes use a
 separate 8-byte `VertexTangent` record (oct-encoded tangent plus handedness). Its per-instance
 offset reuses padding in `InstanceData`; an invalid offset selects the triangle-derived

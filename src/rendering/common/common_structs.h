@@ -55,6 +55,25 @@ struct VertexTangent
     float handedness; // glTF tangent.w
 };
 
+// Fixed-point position encoding of PackedTerrainVertex: (pos + bias) * scale stored as u16. The
+// scales are powers of two so block corners, 1/8 liquid tops and the 1/16 model grid decode exactly
+#define PACKED_TERRAIN_POS_XZ_SCALE 1024.f
+#define PACKED_TERRAIN_POS_XZ_BIAS 8.f
+#define PACKED_TERRAIN_POS_Y_SCALE 64.f
+#define PACKED_TERRAIN_POS_Y_BIAS 1.f
+
+// Resident form of terrain vertices, read only by shaders: the BLAS is built from the fp32 Vertex
+// staging upload, so this layout is free of DXR's vertex format rules
+struct PackedTerrainVertex
+{
+    uint packedPosXY; // x in the low half, y in the high half
+    uint packedPosZUv; // z in the low half, uv as unorm8x2 in the high half
+    uint packedNor; // as Vertex::packedNor
+};
+
+#define VERTEX_FORMAT_FULL 0
+#define VERTEX_FORMAT_PACKED_TERRAIN 1
+
 #define TANGENT_BUFFER_OFFSET_INVALID ~0u
 
 struct InstanceData
@@ -70,7 +89,7 @@ struct InstanceData
     uint materialIdx;
     uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
     uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads
-    uint pad0;
+    uint vertexFormat; // VERTEX_FORMAT_*, selects which typed view of the verts buffer to read
 };
 
 #define MATERIAL_IDX_INVALID ~0u

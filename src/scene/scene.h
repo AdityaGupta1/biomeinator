@@ -76,6 +76,9 @@ private:
 
 public:
     std::vector<Vertex> host_verts{};
+    // Optional resident form of host_verts (same count); host_verts then only feeds the BLAS
+    // build and area lights, see knowledge/scene/instance.md
+    std::vector<PackedTerrainVertex> host_packedTerrainVerts{};
     std::vector<VertexTangent> host_tangents{}; // optional, indexed like host_verts
     std::vector<uint32_t> host_idxs{};
     std::vector<PerFaceData> host_perFaceDatas{};

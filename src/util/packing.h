@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include "rendering/common/common_structs.h"
+
+#include "debug.h"
+
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
 
@@ -42,6 +46,30 @@ inline uint32_t octEncode(const DirectX::XMFLOAT3& nor)
         ny = wrappedY;
     }
     return packSnorm2ToUint(nx, ny);
+}
+
+inline uint32_t packTerrainPosComponent(const float value, const float bias, const float scale)
+{
+    const long quantized = std::lround((value + bias) * scale);
+    ASSERT(quantized >= 0 && quantized <= 0xFFFF);
+    return static_cast<uint32_t>(quantized);
+}
+
+inline uint32_t packUnorm8(const float value)
+{
+    return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255.f));
+}
+
+inline PackedTerrainVertex packTerrainVertex(const Vertex& vert)
+{
+    const uint32_t x = packTerrainPosComponent(vert.pos_OS.x, PACKED_TERRAIN_POS_XZ_BIAS, PACKED_TERRAIN_POS_XZ_SCALE);
+    const uint32_t y = packTerrainPosComponent(vert.pos_OS.y, PACKED_TERRAIN_POS_Y_BIAS, PACKED_TERRAIN_POS_Y_SCALE);
+    const uint32_t z = packTerrainPosComponent(vert.pos_OS.z, PACKED_TERRAIN_POS_XZ_BIAS, PACKED_TERRAIN_POS_XZ_SCALE);
+    return {
+        .packedPosXY = x | (y << 16),
+        .packedPosZUv = z | (packUnorm8(vert.uv.x) << 16) | (packUnorm8(vert.uv.y) << 24),
+        .packedNor = vert.packedNor,
+    };
 }
 
 } // namespace Util

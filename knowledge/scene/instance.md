@@ -8,7 +8,10 @@ _Last edited: 2026-09-20_
 
 1. `Scene::requestNewInstance()` allocates on main thread (or reuses a freed instance's vectors).
 2. Worker thread fills `host_verts`, `host_idxs`, `host_perFaceDatas` directly (public vectors),
-   and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle.
+   and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle. Terrain
+   also fills `host_packedTerrainVerts`, in which case `host_verts` only feeds the BLAS build
+   (from its staging upload) and the area lights, and the packed form is what goes resident; see
+   [shaders → common_structs.md](../shaders/common_structs.md).
 3. Worker calls `finalizeGeometry()` to mark data as ready.
 4. Main thread calls `Scene::markInstanceReadyForBlasBuild()`.
 5. `Scene::makeQueuedBlases()` uploads geometry to GPU, builds BLAS, writes `InstanceData`.

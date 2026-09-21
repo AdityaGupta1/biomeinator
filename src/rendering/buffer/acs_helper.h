@@ -53,6 +53,9 @@ struct BlasCompactionQuery
 struct BlasBuildInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
+    // When set, this is what stays resident in the verts buffer; the BLAS is built from the
+    // host_verts staging upload, which the build does not need afterwards
+    const std::vector<PackedTerrainVertex>* host_packedTerrainVerts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
     // Per-triangle OMM Array indices (or special indices); requires a built OMM Array
     const std::vector<uint16_t>* host_ommIdxs{ nullptr };

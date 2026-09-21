@@ -24,6 +24,7 @@
 #define RT_REGISTER_AREA_LIGHTS 6
 #define RT_REGISTER_AREA_LIGHT_SAMPLING_STRUCTURE 7
 #define RT_REGISTER_TANGENTS 8
+#define RT_REGISTER_PACKED_TERRAIN_VERTS 9 // the verts buffer again, as PackedTerrainVertex
 
 // s#
 #define RT_REGISTER_TEX_SAMPLER 0

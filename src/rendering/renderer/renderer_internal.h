@@ -136,6 +136,7 @@ enum class GbufferParam
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     TANGENTS,
+    PACKED_TERRAIN_VERTS,
 
     GBUFFER_OUT,
 
@@ -156,6 +157,7 @@ enum class PtParam
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     TANGENTS,
+    PACKED_TERRAIN_VERTS,
 
     GBUFFER_IN,
 

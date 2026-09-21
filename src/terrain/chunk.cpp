@@ -1014,6 +1014,10 @@ void Chunk::createInstances()
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
+    std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->host_packedTerrainVerts;
+    terrainPackedVerts.resize(terrainVerts.size());
+    std::transform(terrainVerts.begin(), terrainVerts.end(), terrainPackedVerts.begin(), Util::packTerrainVertex);
+
     terrainInstance->setTransformOffset(transformOffset);
     terrainInstance->setTrisPerFaceLog2(1);
     terrainInstance->finalizeGeometry();

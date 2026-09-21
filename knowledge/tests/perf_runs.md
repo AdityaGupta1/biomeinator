@@ -150,7 +150,10 @@ in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB
 per-triangle data and 300 MB of indices; water instances were under 160 MB all told. BLAS came
 to ~77 bytes per triangle uncompacted, geometry to ~156 bytes per quad. With compaction the
 terrain BLAS is 530 MB and the total 4.6 GB; per-face data packed to 8 bytes and stored per
-quad takes it from 400 MB to 100 MB and the total to 4.3 GB. The ~1.2 GB not attributed to any buffer is
+quad takes it from 400 MB to 100 MB and the total to 4.3 GB; the 12-byte resident terrain vertex
+halves terrain verts to 600 MB and the total to 3.7 GB, with frame time unchanged back to back.
+Seed 4 at render distance 50 then rests at 6.2 GB and stays under 8.3 GB while moving, where
+before the vertex buffer overran its 4 GB reservation. The ~1.2 GB not attributed to any buffer is
 textures, render targets, DLSS and SHARC, and the light tree. The budget moved between 7.3 GB
 and 11.2 GB across runs the same afternoon depending on what else held VRAM, so compare usage,
 not headroom.

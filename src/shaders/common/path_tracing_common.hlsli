@@ -27,6 +27,7 @@ PerFaceData loadPerFaceData(const InstanceData instanceData, const uint triIdx)
 }
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
+StructuredBuffer<PackedTerrainVertex> packedTerrainVerts : REGISTER_T(RT, PACKED_TERRAIN_VERTS);
 StructuredBuffer<VertexTangent> tangents : REGISTER_T(RT, TANGENTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
@@ -82,12 +83,33 @@ uint3 getTriangleVertexIndices(const InstanceData instanceData, const uint triId
     return uint3(i0, i1, i2);
 }
 
+Vertex unpackTerrainVertex(const PackedTerrainVertex packed)
+{
+    Vertex vert;
+    vert.pos_OS = float3(float(packed.packedPosXY & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+                         float(packed.packedPosXY >> 16) / PACKED_TERRAIN_POS_Y_SCALE - PACKED_TERRAIN_POS_Y_BIAS,
+                         float(packed.packedPosZUv & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS);
+    vert.packedNor = packed.packedNor;
+    vert.uv = float2((packed.packedPosZUv >> 16) & 0xFF, packed.packedPosZUv >> 24) / 255.f;
+    return vert;
+}
+
+Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
+{
+    const uint idx = instanceData.vertsBufferOffset + vertIdx;
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_TERRAIN)
+    {
+        return unpackTerrainVertex(packedTerrainVerts[idx]);
+    }
+    return verts[idx];
+}
+
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
-    v0 = verts[instanceData.vertsBufferOffset + indices.x];
-    v1 = verts[instanceData.vertsBufferOffset + indices.y];
-    v2 = verts[instanceData.vertsBufferOffset + indices.z];
+    v0 = loadVert(instanceData, indices.x);
+    v1 = loadVert(instanceData, indices.y);
+    v2 = loadVert(instanceData, indices.z);
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
@@ -233,9 +255,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const uint materialIdx = instanceData.materialIdx;
 
     const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
-    const Vertex v0 = verts[instanceData.vertsBufferOffset + vertexIndices.x];
-    const Vertex v1 = verts[instanceData.vertsBufferOffset + vertexIndices.y];
-    const Vertex v2 = verts[instanceData.vertsBufferOffset + vertexIndices.z];
+    const Vertex v0 = loadVert(instanceData, vertexIndices.x);
+    const Vertex v1 = loadVert(instanceData, vertexIndices.y);
+    const Vertex v2 = loadVert(instanceData, vertexIndices.z);
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);

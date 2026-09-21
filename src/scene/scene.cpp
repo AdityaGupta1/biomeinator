@@ -30,6 +30,7 @@ Instance::Instance(Scene* scene, uint32_t id)
 void Instance::stealVectors(Instance* other)
 {
     ASSERT(other->host_verts.empty());
+    ASSERT(other->host_packedTerrainVerts.empty());
     ASSERT(other->host_tangents.empty());
     ASSERT(other->host_idxs.empty());
     ASSERT(other->host_perFaceDatas.empty());
@@ -37,6 +38,7 @@ void Instance::stealVectors(Instance* other)
     ASSERT(other->host_areaLights.empty());
 
     this->host_verts = std::move(other->host_verts);
+    this->host_packedTerrainVerts = std::move(other->host_packedTerrainVerts);
     this->host_tangents = std::move(other->host_tangents);
     this->host_idxs = std::move(other->host_idxs);
     this->host_perFaceDatas = std::move(other->host_perFaceDatas);
@@ -55,6 +57,7 @@ void Instance::reset(bool alsoFreeFromScene)
     this->areaLightsBufferSection.free();
 
     this->host_verts.clear();
+    this->host_packedTerrainVerts.clear();
     this->host_tangents.clear();
     this->host_idxs.clear();
     this->host_perFaceDatas.clear();
@@ -93,6 +96,8 @@ void Instance::setTransformOffset(glm::ivec3 offset)
 void Instance::finalizeGeometry()
 {
     ASSERT(this->host_verts.size() > 0);
+
+    ASSERT(this->host_packedTerrainVerts.empty() || this->host_packedTerrainVerts.size() == this->host_verts.size());
 
     const uint32_t triCount = this->getTriCount();
     const uint32_t trisPerFace = 1u << this->trisPerFaceLog2;
@@ -714,6 +719,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         ASSERT(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
+        if (!instance->host_packedTerrainVerts.empty())
+        {
+            blasInputs.host_packedTerrainVerts = &instance->host_packedTerrainVerts;
+        }
 
         if (instance->host_idxs.size() > 0)
         {
@@ -758,8 +767,11 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     for (Instance* const instance : instancesToBuildThisFrame)
     {
         InstanceData instanceData{};
-        instanceData.vertsBufferOffset =
-            Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
+        const bool packedVerts = !instance->host_packedTerrainVerts.empty();
+        instanceData.vertexFormat = packedVerts ? VERTEX_FORMAT_PACKED_TERRAIN : VERTEX_FORMAT_FULL;
+        instanceData.vertsBufferOffset = packedVerts
+            ? Util::convertByteSizeToCount<PackedTerrainVertex>(instance->geoWrapper.vertsBufferSection.offsetBytes)
+            : Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         instanceData.materialIdx = instance->materialIdx;
