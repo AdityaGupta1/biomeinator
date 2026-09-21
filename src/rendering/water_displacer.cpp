@@ -166,7 +166,8 @@ void dispatch(ID3D12GraphicsCommandList4* cmdList,
     cmdList->SetComputeRootShaderResourceView(WATER_DISPLACE_PARAM_IDX(INSTANCES), instancesSection.getGpuVirtualAddress());
     cmdList->SetComputeRootUnorderedAccessView(WATER_DISPLACE_PARAM_IDX(VERTS_OUT), dev_vertsAddress);
 
-    cmdList->Dispatch(Util::calculateDispatchSize(numVerts, WATER_DISPLACE_WORKGROUP_SIZE), 1, 1);
+    const Util::DispatchSize2D dispatchSize = Util::calculateDispatchSize2D(numVerts, WATER_DISPLACE_WORKGROUP_SIZE);
+    cmdList->Dispatch(dispatchSize.x, dispatchSize.y, 1);
 }
 
 void destroy()

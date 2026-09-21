@@ -462,6 +462,9 @@ static float computeFogSigmaS(const float animTime)
 
 void render()
 {
+    // From here so the Reflex sleep is a scope of this frame rather than of none
+    CpuProfiler::beginFrame();
+
     // Rebuilds the swap chain when it changes, so it has to settle before any of this frame's work
     setFrameGenerationActive(isFrameGenerationRequested());
 
@@ -595,7 +598,9 @@ void render()
     {
         playerInput = perfRunPlayerInput();
     }
-    renderState.camera.processInput(deltaTime, playerInput);
+    // A moving perf run advances a fixed distance per frame so the path depends only on the
+    // frame count, not on how fast the frames were
+    renderState.camera.processInput(perfRunIsMovingCamera() ? PERF_MOVE_FRAME_SECONDS : deltaTime, playerInput);
 
     if (renderState.voxelMode)
     {
@@ -1133,8 +1138,6 @@ void render()
 static void beginFrame()
 {
     FrameContext& frame = renderState.frameCtxs[renderState.frameCtxIdx];
-
-    CpuProfiler::beginFrame();
 
     if (isWaitableSwapChainActive())
     {

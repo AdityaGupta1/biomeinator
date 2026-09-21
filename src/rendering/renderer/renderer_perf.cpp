@@ -239,15 +239,19 @@ void perfRunCollectTimings(const uint32_t slotIdx)
 
 // Forward at the requested speed regardless of the movementSpeed setting, and only once the
 // world has finished loading, so the measured window is streaming through a loaded world
+bool perfRunIsMovingCamera()
+{
+    const PerfRunState& perfRun = renderState.perfRun;
+    return perfRun.active && perfRun.phase == PerfPhase::MEASURING && SettingsManager::getAsFloat("perfMoveSpeed") > 0.f;
+}
+
 PlayerInput perfRunPlayerInput()
 {
     PlayerInput input;
-    const PerfRunState& perfRun = renderState.perfRun;
-    const float moveSpeed = SettingsManager::getAsFloat("perfMoveSpeed");
-    if (perfRun.active && perfRun.phase == PerfPhase::MEASURING && moveSpeed > 0.f)
+    if (perfRunIsMovingCamera())
     {
         input.linearInput = { 0.f, 0.f, 1.f };
-        input.linearSpeedMultiplier = moveSpeed / SettingsManager::getAsFloat("movementSpeed");
+        input.linearSpeedMultiplier = SettingsManager::getAsFloat("perfMoveSpeed") / SettingsManager::getAsFloat("movementSpeed");
     }
     return input;
 }

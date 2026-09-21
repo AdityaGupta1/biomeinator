@@ -6,6 +6,7 @@
 #include "../rendering/common/common_settings.h"
 #include "../rendering/common/common_structs.h"
 
+#include "common/dispatch.hlsli"
 #include "common/water_waves.hlsli"
 
 // One dispatch covers every animated instance: thread i is vertex i of the concatenated
@@ -26,7 +27,7 @@ RWStructuredBuffer<Vertex> vertsOut : REGISTER_U(WATER_DISPLACE, VERTS_OUT);
 [numthreads(WATER_DISPLACE_WORKGROUP_SIZE, 1, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint threadIdx = dispatchThreadId.x;
+    const uint threadIdx = flatDispatchThreadIdx(dispatchThreadId, WATER_DISPLACE_WORKGROUP_SIZE);
     if (threadIdx >= numVerts)
     {
         return;

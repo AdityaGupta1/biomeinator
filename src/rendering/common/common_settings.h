@@ -14,6 +14,9 @@
 // WATER DISPLACE
 // =============================================
 
+// D3D12 caps each dispatch dimension at 65535 groups; large 1D workloads flatten into 2D
+#define DISPATCH_MAX_GROUPS_PER_DIM 65535
+
 #define WATER_DISPLACE_WORKGROUP_SIZE 64
 #define AREA_LIGHT_COMPACT_WORKGROUP_SIZE 64
 

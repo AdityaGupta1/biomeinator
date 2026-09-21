@@ -164,6 +164,7 @@ private:
     float deformableAnimRadius{ FLT_MAX };
     WaveFadeParams waveFade{ { 0.f, 0.f, 0.f }, 1e9f, 2e9f, 0.f, 0.f, 0.f, {} };
     bool waveFrustumSet{ false };
+    float waveFrustumHeightBand{ FLT_MAX };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 

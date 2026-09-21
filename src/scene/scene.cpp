@@ -842,8 +842,13 @@ void Scene::compactTlasEntries(ID3D12GraphicsCommandList4* const cmdList, ToFree
                                      merged);
     }
 
+    // Removing non-emissive instances leaves the sampling structure untouched, and the light
+    // tree does not need rebuilding for them
+    if (numAreaLightsKept != this->numAreaLights || !ranges.empty())
+    {
+        this->areaLightTopologyChanged = true;
+    }
     this->numAreaLights = numAreaLightsKept;
-    this->areaLightTopologyChanged = true;
     this->tlasEntriesNeedCompaction = false;
 }
 
@@ -902,6 +907,15 @@ void Scene::setDeformableAnimation(const glm::vec2 centerXZ_WS, const float anim
 
 void Scene::setWaveFrustum(const glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS)
 {
+    // Membership also depends on camera height (the top and bottom planes); the radial center
+    // only tracks XZ, so height is tracked here in steps the membership padding covers
+    constexpr float heightStep = 16.f;
+    const float heightBand = std::floor(cameraPos_WS.y / heightStep);
+    if (heightBand != this->waveFrustumHeightBand)
+    {
+        this->animatedDeformablesDirty = true;
+    }
+    this->waveFrustumHeightBand = heightBand;
     this->waveFade.cameraPos_WS = { cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z };
     for (uint32_t i = 0; i < 4; ++i)
     {

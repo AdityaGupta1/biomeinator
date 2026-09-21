@@ -99,8 +99,11 @@ void init()
     rangesUploadBuffer.setName(L"areaLightCompactRangesUploadBuffer");
     rangesUploadBuffer.init(1 << 16 /*bytes*/);
 
+    // Room for a full rewrite of the sampling structure at its pre-sized capacity in each
+    // frame in flight, since a section stays reserved until its frame retires; growing here
+    // would be a copy and a release in the middle of a chunk-unload frame
     scratchBuffer.setName(L"areaLightCompactScratchBuffer");
-    scratchBuffer.init(1 << 20 /*bytes*/);
+    scratchBuffer.init((1ull << 21) * sizeof(uint32_t) * Renderer::NUM_FRAMES_IN_FLIGHT);
 }
 
 void dispatch(ID3D12GraphicsCommandList4* const cmdList,
@@ -138,7 +141,8 @@ void dispatch(ID3D12GraphicsCommandList4* const cmdList,
     cmdList->SetComputeRootShaderResourceView(AREA_LIGHT_COMPACT_PARAM_IDX(SRC), samplingStructure->GetGPUVirtualAddress() + firstByte);
     cmdList->SetComputeRootUnorderedAccessView(AREA_LIGHT_COMPACT_PARAM_IDX(DST), scratchSection.getGpuVirtualAddress());
 
-    cmdList->Dispatch(Util::calculateDispatchSize(numElements, AREA_LIGHT_COMPACT_WORKGROUP_SIZE), 1, 1);
+    const Util::DispatchSize2D dispatchSize = Util::calculateDispatchSize2D(numElements, AREA_LIGHT_COMPACT_WORKGROUP_SIZE);
+    cmdList->Dispatch(dispatchSize.x, dispatchSize.y, 1);
 
     BufferHelper::uavBarrier(cmdList, scratch);
     BufferHelper::copyBufferRegion(cmdList,

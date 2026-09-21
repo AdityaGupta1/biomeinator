@@ -88,7 +88,9 @@ p95 is a symptom, not a cause.
 
 `--perfMoveSpeed=<blocks/s>` moves the camera forward during the measuring phase only, after
 the world has loaded, which is how streaming through a loaded world is measured; the
-`worldgen_move` scene does this at 20 blocks/s for 1500 frames. Moving at that speed on
+`worldgen_move` scene does this at 20 blocks/s for 1500 frames. The movement uses a fixed
+1/60 s step per frame rather than real elapsed time, so two runs cover the same path and hit
+the same chunk boundaries on the same frames however fast their frames were. Moving at that speed on
 seed 100 (2026-09-20), the spikes above the 12.3 ms floor came from: BLAS build frames (about
 one in thirteen; ~1 ms CPU upload+record and up to 1.7 ms GPU), TLAS compaction on chunk-unload
 frames (1.65 ms CPU, dominated by rewriting the 2M-entry area light array), light tree rebuilds

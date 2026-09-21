@@ -5,6 +5,8 @@
 #include "../rendering/common/common_registers.h"
 #include "../rendering/common/common_settings.h"
 
+#include "common/dispatch.hlsli"
+
 // Compacts the area light sampling structure after instances left the TLAS: thread i writes
 // element i of the compacted array, finding the surviving block it belongs to by binary
 // search on newOffset and copying from that block's old position
@@ -22,7 +24,7 @@ RWStructuredBuffer<uint> dst : REGISTER_U(AREA_LIGHT_COMPACT, DST);
 [numthreads(AREA_LIGHT_COMPACT_WORKGROUP_SIZE, 1, 1)]
 void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint elementIdx = dispatchThreadId.x;
+    const uint elementIdx = flatDispatchThreadIdx(dispatchThreadId, AREA_LIGHT_COMPACT_WORKGROUP_SIZE);
     if (elementIdx >= numElements)
     {
         return;

@@ -66,7 +66,7 @@ animation radius that `Terrain::update` sets (24 chunks, a constant there) *and*
 inside the padded view frustum: at render distance 40 a world has ~3,500 water chunks, and
 refitting all of them was most of a 7 ms main thread and 3.6 ms of GPU per frame. The subset
 is cached in `animatedDeformables` and rebuilt when the radius, its chunk-quantized center,
-the frustum normals or the set change, so a locked camera never rebuilds and a turning one
+the frustum normals, the camera's 16-block height band or the set change, so a locked camera never rebuilds and a turning one
 rebuilds every frame (a few thousand cheap tests).
 
 Static and animated water meet without a seam because the wave *amplitude* fades to zero
@@ -125,7 +125,10 @@ instance's range into the current staging slot and marks it dirty (the mapped ar
 are per-frame, so nothing else in a slot can be trusted), and a compaction is a GPU gather
 (`AreaLightCompactor`): the CPU only computes the surviving blocks' old and new offsets, from
 the first moved block onwards, and one dispatch plus a copy-back rewrites that tail. Rewriting
-the 2M entries on the CPU instead was a 1.65 ms spike on every chunk-unload frame. Two
+the 2M entries on the CPU instead was a 1.65 ms spike on every chunk-unload frame. The
+compactor's scratch is pre-sized for a full rewrite per frame in flight, and a compaction that
+moved no light and changed no count (only water or other non-emissive instances left) does not
+mark the light tree stale. Two
 ordering rules follow: staged appends must be uploaded before a compaction or a device-side
 resize reads the buffer (both call `copyFromUploadBufferIfDirty` first), and growth uses
 `MappedArray::resizeOnDevice`, which copies the old device contents and marks nothing dirty,

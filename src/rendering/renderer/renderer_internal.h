@@ -270,6 +270,9 @@ void perfRunCollectTimings(uint32_t slotIdx);
 bool perfRunIsDone();
 // Non-empty while a perf run wants the camera moved (perfMoveSpeed, measuring phase only)
 PlayerInput perfRunPlayerInput();
+bool perfRunIsMovingCamera();
+// The frame time a moving perf run pretends to have, so perfMoveSpeed is blocks per nominal second
+inline constexpr double PERF_MOVE_FRAME_SECONDS = 1.0 / 60.0;
 // After Present, so the frame's CPU scopes include it
 void perfRunCollectCpuScopes();
 void perfRunFinish();
