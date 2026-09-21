@@ -25,6 +25,9 @@ span roughly four to sixteen blocks horizontally, with longer vertical features 
 fragments, breaking up otherwise extruded cliff walls. The displacement
 is scaled by the natural surface gradient so it remains visible on steep faces, with a cap to
 preserve narrow formation cores. The same world-space slope query serves Tianzi's topsoil mask.
+Mesa additionally tapers detail on gentle ground and plateau tops, retaining some bumps while
+leaving steep slopes at full strength. This uses the slope before fine displacement, so bumps
+do not amplify themselves; apply the taper before computing the sampled Y bounds.
 Pond and dam footprints suppress detail continuously to preserve water containment.
 
 Reconstruction keeps world Y contiguous and shares each XZ interpolation across a coarse Y
@@ -53,6 +56,11 @@ Two mechanisms suppress caves near the surface:
 
 Quartz formation material is determined before this carve pass and bypasses it entirely. This
 keeps the crystal solid and prevents cave-air metadata from placing decorations inside it.
+Tianzi instead suppresses carving in the formation volume above its original ground height,
+with a short seal fading into the roots. Rock and skin classification still run separately:
+the user wants the exposed stone/marble patches at the transition, so suppressing the entire
+cave-material pass would incorrectly repaint those areas. No cave-air markers or cave layers
+may originate inside the solid pillar, while deeper cave systems remain available.
 
 ## Cave Biome Noise
 

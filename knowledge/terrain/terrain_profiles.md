@@ -34,6 +34,10 @@ detail move the sides of cliffs as well as their tops. Its strength combines ero
 so it is confined to Mesa and Tianzi and fades out before reaching red desert or ordinary biomes.
 Applying it to every low-erosion region made desert and savanna unnecessarily blobby. The capped
 slope boost preserves small bumps without creating tall points along summit edges.
+Mesa's detail also follows a smooth slope taper: gentle floors and plateau tops retain 35%
+of its full strength, increasing toward full detail on escarpments. The existing natural
+gradient supplies the taper, keeping it independent of chunk boundaries and the noise being
+modulated. This changes fine surface texture without moving the broad plateaus or their strata.
 
 ## Shared formation pattern
 
@@ -69,6 +73,11 @@ a slow world-position offset bends them slightly. Quartz stays exposed through t
 pass, and trees/cacti cannot anchor on it. Its material is determined before carving, so quartz
 is excluded from cave air, cave skins and cave-decoration support. Deep rock beneath formations
 remains available to cave biomes.
+
+Tianzi pillars also exclude cave carving above their shared ground, with the seal fading
+into the roots below that height. This follows formation geometry independently of the
+sandstone coverage mask. Preserve the existing underground rock and skin selection: stone
+and marble outcrops in the lower transition are intentional, even where no cave opens there.
 
 Mesa's palette follows the user's mega-minecraft project, with brown replacing the original
 purple at the user's request. Strata average three blocks thick, with irregular widths and no

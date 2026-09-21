@@ -538,6 +538,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // the slope factor, vertical jitter barely moves the sides of a steep pillar.
             // Cap it to preserve narrow cores, and use the bound below as well as in filling.
             detailAmplitude *= min(10.f, 2.f * sqrt(1.f + slope * slope));
+            // Leave some fine variation on Mesa floors and plateau tops, with full detail
+            // on escarpments. The unjittered mask and pre-detail slope keep this continuous
+            // across biome/chunk borders and avoid having bumps amplify their own noise.
+            const BiomeNoise noise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
+            const float mesa = BiomeNoiseFields::terraceWeight(noise) * BiomeNoiseFields::dryClimateWeight(noise);
+            const float flatDetail = mix(0.35f, 1.f, smoothstep(0.1f, 0.8f, slope));
+            detailAmplitude *= mix(1.f, flatDetail, mesa);
             hasTerrainDetail |= detailAmplitude > 0.f;
             const float terrainBaseHeight = terrainBaseHeightArray[columnIdx];
             const float terrainSurfaceMultiplier = terrainSurfaceMultiplierArray[columnIdx];
@@ -695,8 +702,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float terrainSurfaceMultiplier = terrainSurfaceMultiplierArray[columnIdx];
             const int waterLevel = waterLevelArray[columnIdx];
             const auto& naturalTerrain = naturalTerrainArray[columnIdx];
+            const BiomeNoise columnBiomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const bool tianziSandstone = biome == Biome::TIANZI_MOUNTAINS && SurfaceMaterials::tianziSandstone(
-                BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx), vec2(blockPosXZ_WS), worldSeed);
+                columnBiomeNoise, vec2(blockPosXZ_WS), worldSeed);
+            const bool hasTianziFormation = BiomeNoiseFields::tianziWeight(columnBiomeNoise) > 0.f &&
+                                            naturalTerrain.formationHeight > 0.f;
+            const float pillarRootSeal = hasTianziFormation ? smoothstep(0.f, 8.f, naturalTerrain.formationHeight) : 0.f;
             const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
                                          1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
 
@@ -838,7 +849,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             swampSealSub = glm::max(swampSealSub, band * seal.strength * 1.5f);
                         }
                         caveSurfaceVal -= swampSealSub;
-                        isCave = caveNoiseVal < caveSurfaceVal;
+                        // Pillars are solid above the shared ground; taper the seal into their
+                        // roots so underground caves close naturally below them. Keep this
+                        // separate from rock/skin classification to retain exposed stone and
+                        // marble patches wherever the surface sandstone mask thins out.
+                        const bool inPillar = hasTianziFormation && y >= naturalTerrain.formationBaseHeight;
+                        const float rootSeal = 1.5f * pillarRootSeal * smoothstep(
+                            naturalTerrain.formationBaseHeight - 12.f, naturalTerrain.formationBaseHeight, static_cast<float>(y));
+                        isCave = !inPillar && caveNoiseVal < caveSurfaceVal - rootSeal;
                         if (isCave)
                         {
                             this->caveDecoration.markCaveAir(columnIdx, y);
