@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 
-// The surface biome noise fields (temperature/humidity/peak/inland) and biome classification from
+// The surface biome noise fields (temperature/humidity/peak/inland/erosion) and biome classification from
 // them. Independent of chunk generation, rendering, and settings so tools (e.g. BiomeScanner) can
 // evaluate the biome field for a seed without linking the engine.
 namespace BiomeNoiseFields
@@ -19,6 +19,7 @@ struct BiomeNoiseGrids
     float* humidity;
     float* peak;
     float* inland;
+    float* erosion{ nullptr };
 };
 
 // A cell floods when the flood factor at its site exceeds floodCellThreshold; columns are painted
@@ -33,13 +34,13 @@ void init(uint32_t worldSeed);
 // origin; derived from the seed during init and shared with the rest of chunk generation.
 glm::ivec2 getNoiseOffsetXZ();
 
-// Batch-evaluates the four surface biome noise fields on a uniform XZ grid, x-innermost.
+// Batch-evaluates the surface biome noise fields on a uniform XZ grid, x-innermost.
 // startXZ already includes any sample offset (texel centers for the biome map, block corners
 // for chunk generation).
 void fillGrids(const BiomeNoiseGrids& grids, glm::vec2 startXZ, glm::uvec2 numSamples, float stepBlocks);
 
 // Batch counterpart of sampleAt for arbitrary positions. Null output fields are skipped,
-// allowing pond-height samples to request only peak/inland without temperature/humidity.
+// allowing callers to request a subset of fields.
 void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples);
 
 // Single-point counterpart of fillGrids for arbitrary positions (swamp cell sites).
@@ -47,15 +48,27 @@ BiomeNoise sampleAt(glm::vec2 posXZ_WS);
 
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
 
-// Natural (pre-swamp-shaping) terrain profile of a column, derived purely from its smooth biome
-// noise.
+// Natural terrain before local water shaping. Uses smooth biome noise and world-space
+// formations; independent of chunk resolution, biome labels, and generation order.
 struct NaturalTerrain
 {
     float baseHeight;
     float surfaceMultiplier;
+    // Ground before formations and their contribution, used to expose rock/quartz without
+    // painting isolated structures or extending surface materials through deep cave biomes.
+    float formationBaseHeight;
+    float formationHeight;
 };
 
-NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise);
+NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
+
+// Smooth terrain regimes, shared by shape evaluation and biome suitability.
+float terraceWeight(const BiomeNoise& noise);
+float pillarWeight(const BiomeNoise& noise);
+float dryClimateWeight(const BiomeNoise& noise);
+// Formation strength falls almost to zero before its material/vegetation label ends.
+float tianziWeight(const BiomeNoise& noise);
+float surfaceDetailWeight(const BiomeNoise& noise);
 
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
 // give balanced water/land; values toward 1 give mostly-water terrain. Computed from smooth

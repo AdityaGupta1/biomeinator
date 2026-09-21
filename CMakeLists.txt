@@ -426,6 +426,7 @@ set(BIOME_SCANNER_SRC
     "${SRC_DIR}/logger.cpp"
     "${SRC_DIR}/terrain/biome.cpp"
     "${SRC_DIR}/terrain/biome_noise.cpp"
+    "${SRC_DIR}/terrain/oasis_shaping.cpp"
     "${SRC_DIR}/terrain/structure/decorator.cpp"
     "${SRC_DIR}/terrain/structure/structure_gen.cpp"
 )

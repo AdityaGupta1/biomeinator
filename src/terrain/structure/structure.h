@@ -20,6 +20,9 @@ enum class StructureType : uint8_t
     BIRCH_TREE,
     CYPRESS_TREE,
 
+    PINE_TREE,
+    PINE_SHRUB,
+
     COUNT
 };
 

@@ -556,6 +556,35 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     }
 }
 
+fillStructureBlocksHeader(PINE_TREE)
+{
+    const int height = rng.nextInt(9, 16);
+    const float radius = rng.nextFloat(3.f, 4.5f);
+    fillLine(blocks, structurePos_CS, structurePos_CS + ivec3(0, height, 0), Block::PINE_LOG);
+    for (int y = 3; y <= height + 2; ++y)
+    {
+        const float t = static_cast<float>(y - 3) / (height - 1);
+        const float layerRadius = mix(radius, 0.5f, t) * ((y % 3 == 0) ? 0.72f : 1.f);
+        for (int z = -5; z <= 5; ++z)
+        {
+            for (int x = -5; x <= 5; ++x)
+            {
+                if (x * x + z * z > layerRadius * layerRadius) continue;
+                const ivec3 pos = structurePos_CS + ivec3(x, y, z);
+                if (Chunk::isInChunk(pos))
+                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos)), Block::PINE_LEAVES, false);
+            }
+        }
+    }
+}
+
+fillStructureBlocksHeader(PINE_SHRUB)
+{
+    const int height = rng.nextInt(2, 4);
+    fillLine(blocks, structurePos_CS, structurePos_CS + ivec3(0, height, 0), Block::PINE_LOG);
+    placeBlobCanopy(blocks, structurePos_CS + ivec3(0, height, 0), rng, Block::PINE_LEAVES);
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
 {}
@@ -599,6 +628,11 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(CYPRESS_TREE);
     STRUCTURE_BOUNDS_BY_NAME(CYPRESS_TREE) = 11;
+
+    SET_FILL_STRUCTURE_FUNC(PINE_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(PINE_TREE) = 5;
+    SET_FILL_STRUCTURE_FUNC(PINE_SHRUB);
+    STRUCTURE_BOUNDS_BY_NAME(PINE_SHRUB) = 2;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {

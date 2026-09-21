@@ -1,4 +1,4 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-20_
 
 # BiomeScanner
 
@@ -7,7 +7,7 @@ plus JSON/binary APIs for biome grids and seed search.
 
 ## Why the biome noise lives in its own module
 
-The surface biome field (temperature/humidity/peak/inland nodes, flood factor, swamp override,
+The surface biome field (climate, peak, inlandness, erosion, flood factor, swamp override,
 `fillBiomeRect`) was extracted from `chunk_generator.cpp` into `src/terrain/biome_noise.{h,cpp}`
 (`BiomeNoiseFields` namespace) so the scanner evaluates *exactly* the generation's biome logic by
 compiling the same translation unit — no reimplementation to drift. The scanner links only the
@@ -22,3 +22,7 @@ terrain/cave/swamp noises.
 
 - The map shows the macro biome field (`fillBiomeRect` skips per-column jitter), so biome borders
   in-game fuzz a few blocks past what the map shows.
+- Pond oases use the shared spatial footprint sampler, included in this target as well as the
+  renderer. Climate-only queries cannot reproduce their small green patches.
+- Decorator registration references block shape/state validation. The scanner supplies a lazy
+  metadata-only JSON reader for that validation, avoiding the rendering-dependent block loader.

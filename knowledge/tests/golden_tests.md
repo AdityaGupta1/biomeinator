@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-20_
 
 # Golden Image Tests
 
@@ -8,6 +8,10 @@ GUI hidden, animation paused), and compares the screenshot against the entry's g
 RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name. Every run writes
 `<name>_GENERATED.png`, `<name>_GOLDEN.png` and `<name>_DIFF.png` to `build/test_output/`,
 which is the place to look when a test fails.
+
+For procedural biome previews, pass a fixed `worldSeed`, `cameraX/Y/Z`, and `cameraYaw/Pitch`
+with `voxelMode=true` and `testOutput`. Headless capture waits for the complete geometry ring
+before accumulating. Camera angles use degrees; imported worlds continue using their saved camera.
 
 ## Three kinds of golden image
 

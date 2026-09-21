@@ -2,6 +2,7 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "biome.h"
+#include "biome_noise.h"
 
 #include "util/glm_util.h"
 #include "util/rng.h"
@@ -27,6 +28,7 @@ BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerato
         .humidity = base.humidity + rng.nextFloatAbs(0.008f),
         .peak = base.peak + rng.nextFloatAbs(0.005f),
         .inland = base.inland + rng.nextFloatAbs(0.012f),
+        .erosion = base.erosion + rng.nextFloatAbs(0.006f),
     };
 }
 
@@ -48,6 +50,11 @@ static std::vector<Biome> highlandBiomes;
 
 void init()
 {
+    oceanBiomes.clear();
+    beachBiomes.clear();
+    lowlandBiomes.clear();
+    highlandBiomes.clear();
+    biomeDatas = {};
     // ==================================================
     // OCEAN
     // ==================================================
@@ -284,6 +291,45 @@ void init()
             .mid = Block::STONE,
         };
     }
+
+    {
+        BIOME_INIT(MESA, "mesa");
+        data.grassTint = glmUtil::colorFromHex("#bba357");
+        // AIR means retain the height-dependent strata in the surface pass.
+        data.topBlocks = { .top = Block::AIR, .mid = Block::AIR };
+        data.decorator.addEntry(Block::DEAD_BUSH, 1.f, { Block::TERRACOTTA, Block::ORANGE_TERRACOTTA });
+        data.decorator.addEntry(Block::AIR, 80.f);
+    }
+    {
+        BIOME_INIT(TIANZI_MOUNTAINS, "tianzi mountains");
+        data.grassTint = glmUtil::colorFromHex("#659749");
+        data.structureGens = {
+            { { { StructureType::PINE_TREE, 3.f }, { StructureType::PINE_SHRUB, 1.f } }, 12, 3 },
+        };
+        data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 22.f);
+    }
+    {
+        BIOME_INIT(RED_DESERT, "red desert");
+        data.grassTint = glmUtil::colorFromHex("#bd9a47");
+        data.topBlocks = { .top = Block::RED_SAND, .mid = Block::RED_SANDSTONE };
+        data.structureGens = { { StructureType::SAGUARO_CACTUS, 30, 6 }, { StructureType::PALM_TREE, 80, 16 } };
+        data.decorator.addEntry(Block::DEAD_BUSH, 2.f, { Block::RED_SAND });
+        data.decorator.addEntry(Block::TINY_CACTUS, 1.f, { Block::RED_SAND });
+        data.decorator.addEntry(Block::AIR, 65.f);
+    }
+    {
+        BIOME_INIT(OASIS, "oasis");
+        data.grassTint = glmUtil::colorFromHex("#72b84c");
+        data.topBlocks = { .underwaterTop = Block::SAND, .shoreTop = Block::SAND };
+        data.structureGens = { { StructureType::PALM_TREE, 18, 6 } };
+        data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 9.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::BLUE_ORCHID, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::PINK_DAFFODIL, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 18.f);
+    }
 }
 
 const BiomeData& getBiomeData(Biome biome)
@@ -309,7 +355,16 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     {
         closestBiomeCandidates = &beachBiomes;
     }
-    else if (biomeNoise.inland < 0.85f)
+    else if (BiomeNoiseFields::pillarWeight(biomeNoise) > 0.4f && BiomeNoiseFields::dryClimateWeight(biomeNoise) < 0.35f)
+    {
+        return Biome::TIANZI_MOUNTAINS;
+    }
+    else if (BiomeNoiseFields::dryClimateWeight(biomeNoise) > 0.35f)
+    {
+        if (BiomeNoiseFields::terraceWeight(biomeNoise) > 0.4f) return Biome::MESA;
+        return biomeNoise.erosion < 0.35f ? Biome::RED_DESERT : Biome::DESERT;
+    }
+    else if (biomeNoise.inland < 0.85f && !(biomeNoise.peak > 0.0f && biomeNoise.erosion < 0.0f))
     {
         closestBiomeCandidates = &lowlandBiomes;
     }

@@ -82,8 +82,8 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         return { .swampy = false, .pondLevel = seaLevel };
     }
 
-    // The site already supplies the center sample. Batch the other eight positions and
-    // request only the two fields that contribute to natural terrain height.
+    // The site already supplies the center sample. All five fields now contribute to
+    // natural terrain, including formations at climate boundaries.
     float sampleX[8];
     float sampleZ[8];
     int numSamples = 0;
@@ -99,18 +99,22 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         sampleZ[numSamples] = static_cast<float>(sampleXZ_WS.y);
         ++numSamples;
     }
+    float temperature[8];
+    float humidity[8];
     float peak[8];
     float inland[8];
-    BiomeNoiseFields::fillPositions({ .temperature = nullptr, .humidity = nullptr, .peak = peak, .inland = inland },
-                                   sampleX, sampleZ, numSamples);
+    float erosion[8];
+    const BiomeNoiseFields::BiomeNoiseGrids grids{ temperature, humidity, peak, inland, erosion };
+    BiomeNoiseFields::fillPositions(grids, sampleX, sampleZ, numSamples);
 
     // Keep the same second-lowest height and sample ordering as the scalar path.
-    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise).baseHeight;
+    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise, vec2(siteXZ_WS)).baseHeight;
     float secondMinNaturalBase = std::numeric_limits<float>::max();
     for (int sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
     {
         const float sampleBase = BiomeNoiseFields::computeNaturalTerrain(
-            { .peak = peak[sampleIdx], .inland = inland[sampleIdx] }).baseHeight;
+            BiomeNoiseFields::noiseAt(grids, sampleIdx),
+            vec2(sampleX[sampleIdx], sampleZ[sampleIdx])).baseHeight;
         if (sampleBase < minNaturalBase)
         {
             secondMinNaturalBase = minNaturalBase;

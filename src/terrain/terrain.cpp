@@ -1276,10 +1276,28 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 }
 
-bool pollHeadlessImport()
+bool pollHeadlessTerrain()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {
+        // Imported worlds retain their bounded import gate. Fresh procedural worlds
+        // must finish the geometry ring before screenshot accumulation can start.
+        if (SettingsManager::getAsString("world").empty())
+        {
+            if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX)) return false;
+            const int distance = SettingsManager::getAsInt("renderDistance") + 1;
+            for (int z = -distance; z <= distance; ++z)
+            {
+                for (int x = -distance; x <= distance; ++x)
+                {
+                    const glm::ivec2 pos = lastChunkPos + glm::ivec2(x, z);
+                    const auto region = regions.find(glmUtil::floorDiv(pos, glm::ivec2(regionSideLength)));
+                    if (region == regions.end()) return false;
+                    const Chunk* chunk = region->second->getChunk(pos);
+                    if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY) return false;
+                }
+            }
+        }
         return true;
     }
     const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);

@@ -1,0 +1,7 @@
+{
+  "textures": {
+    "side": "quartz_block_side",
+    "top": "quartz_block_top",
+    "bottom": "quartz_block_bottom"
+  }
+}

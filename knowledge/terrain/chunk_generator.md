@@ -6,17 +6,26 @@ _Last edited: 2026-09-20_
 
 ## Noise Architecture
 
-FastNoise2 node graphs provide the four 2D surface biome axes, swamp warps and shore variation,
-three 3D shape fields (terrain surface and two cave sources), and five coarse cave biome/material
+FastNoise2 node graphs provide the five 2D surface biome axes, swamp warps and shore variation,
+four 3D shape fields (broad terrain, fine terrain detail and two cave sources), and five coarse cave biome/material
 fields. A random `noiseOffsetXZ` derived from the world seed shifts all sample positions so
 different seeds produce different terrain even though node seed offsets are hardcoded.
 
 ## Shape Noise Sampling
 
-The terrain shape is sampled every four blocks and both cave shapes every two blocks, then
+The broad terrain shape is sampled every four blocks; fine terrain detail and both cave shapes every two blocks, then
 trilinearly reconstructed into the existing voxel grids before thresholding. Noise feature
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
+
+Fine detail is generated only in chunks touched by Mesa or Tianzi suitability, using smooth
+climate/erosion masks rather than jittered labels. Red desert and ordinary biomes receive none.
+Its three octaves
+span roughly four to sixteen blocks horizontally, with longer vertical features to limit detached
+fragments, breaking up otherwise extruded cliff walls. The displacement
+is scaled by the natural surface gradient so it remains visible on steep faces, with a cap to
+preserve narrow formation cores. The same world-space slope query serves Tianzi's topsoil mask.
+Pond and dam footprints suppress detail continuously to preserve water containment.
 
 Reconstruction keeps world Y contiguous and shares each XZ interpolation across a coarse Y
 interval. Keeping dense output grids lets carving, cave blending, and central differences use
@@ -42,6 +51,9 @@ Two mechanisms suppress caves near the surface:
 - **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
 - **Altitude squash**: above y=240 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
 
+Quartz formation material is determined before this carve pass and bypasses it entirely. This
+keeps the crystal solid and prevents cave-air metadata from placing decorations inside it.
+
 ## Cave Biome Noise
 
 Two additional 3D fields (temperature, humidity) drive cave biome theming — see
@@ -62,11 +74,23 @@ The terrain isn't a simple heightmap — it uses a 3D surface threshold (`terrai
 
 - **Below base height**: the surface multiplier is doubled (`terrainBelowHeightfieldSurfaceMultiplier = 2`), which makes underground much more uniformly solid and flattens the base. Without this, you'd get as many air pockets below as above.
 - **Near coast** (`inland` near 0): base height is pulled toward `seaLevel + 8` via smoothstep, creating gentle shorelines rather than cliffs.
-- **Mountains**: `peak^4 * inland` adds up to ~135 blocks of additional height, but only when both peak ridgeline and inland values are high.
+- **Relief and formations**: peak and erosion jointly control broad relief; smooth terrace
+  shaping and a shared finite-support formation sampler supply plateaus, pillars and spires.
+  These modify the same base height and surface amplitude before voxel thresholding, so
+  transitions remain continuous across biome labels. See [terrain_profiles.md](terrain_profiles.md).
+
+Natural terrain is independent of local water shaping. Swamp pond-height probes must evaluate
+all five natural-terrain inputs and their world positions, including climate-dependent
+formations. Oasis bowls then blend into this natural terrain, override local water levels,
+and reuse the bounded cave-waterline seals.
 
 ## 3D Noise Bounds Optimization
 
-The 3D terrain noise is only sampled in the Y range that could possibly contain the surface (derived from `surfaceValBound / multiplier`). For flat biomes this might be a 30-block band; for mountains it's larger. This avoids sampling noise for blocks that are trivially underground or trivially air.
+The 3D terrain noise is only sampled in the Y range that could possibly contain the surface
+(derived from `surfaceValBound / multiplier`, widened on both sides by the maximum fine detail
+displacement). Fine noise is explicitly clamped to its assumed bound. Leaving out that extra
+displacement would truncate outcrops at chunk-dependent heights. For flat biomes this might be
+a 30-block band; for mountains it's larger. This avoids sampling trivially solid or empty voxels.
 
 ## Structure Creation Happens Here
 

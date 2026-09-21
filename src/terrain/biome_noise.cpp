@@ -2,6 +2,8 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "biome_noise.h"
+#include "oasis_shaping.h"
+#include "terrain_formation.h"
 
 #include "rendering/common/common_settings.h"
 #include "util/rng.h"
@@ -20,6 +22,7 @@ static FN::SmartNode<FN::Generator> fnTemperature;
 static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
 static FN::SmartNode<FN::Generator> fnInland;
+static FN::SmartNode<FN::Generator> fnErosion;
 inline constexpr float biomeNoiseScale = 1000.f;
 
 // Shared by fillGrids and sampleAt so single-point samples match the grids
@@ -31,6 +34,17 @@ void init(uint32_t worldSeed)
     noiseFieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
     noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
+
+    {
+        auto source = FN::New<FN::Simplex>();
+        source->SetSeedOffset(186729341);
+        source->SetScale(1500.f);
+        auto fractal = FN::New<FN::FractalFBm>();
+        fractal->SetSource(source);
+        fractal->SetOctaveCount(3);
+        fnErosion = fractal;
+    }
+    OasisShaping::init(worldSeed);
 
     {
         auto fnSimplex = FN::New<FN::Simplex>();
@@ -109,6 +123,7 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
 {
     const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
     {
+        if (!data) return;
         fn->GenUniformGrid2D(data,
                              startXZ.x + noiseOffsetXZ.x,
                              startXZ.y + noiseOffsetXZ.y /*z*/,
@@ -122,6 +137,7 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
     fill(grids.humidity, fnHumidity);
     fill(grids.peak, fnPeak);
     fill(grids.inland, fnInland);
+    fill(grids.erosion, fnErosion);
 }
 
 void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples)
@@ -138,6 +154,7 @@ void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const 
     fill(grids.humidity, fnHumidity);
     fill(grids.peak, fnPeak);
     fill(grids.inland, fnInland);
+    fill(grids.erosion, fnErosion);
 }
 
 BiomeNoise sampleAt(vec2 posXZ_WS)
@@ -149,6 +166,7 @@ BiomeNoise sampleAt(vec2 posXZ_WS)
         .humidity = fnHumidity->GenSingle2D(x, z, noiseFieldSeed),
         .peak = fnPeak->GenSingle2D(x, z, noiseFieldSeed),
         .inland = fnInland->GenSingle2D(x, z, noiseFieldSeed),
+        .erosion = fnErosion->GenSingle2D(x, z, noiseFieldSeed),
     };
 }
 
@@ -159,32 +177,127 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
         .humidity = grids.humidity[idx],
         .peak = grids.peak[idx],
         .inland = grids.inland[idx],
+        .erosion = grids.erosion ? grids.erosion[idx] : 0.f,
     };
 }
 
-NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise)
+float terraceWeight(const BiomeNoise& n)
 {
-    const float scaledPeak = (biomeNoise.peak + 1.f) * 0.5f;
+    return smoothstep(-0.18f, 0.02f, n.erosion) * (1.f - smoothstep(0.27f, 0.48f, n.erosion)) *
+           smoothstep(0.1f, 0.3f, n.inland);
+}
 
-    float baseHeight = 140.f;
-    baseHeight += pow(scaledPeak * max(biomeNoise.inland, 0.1f), 4.f) * 135.f;
-    const float inlandHeightModifier = 1.f / (1.f + expf(-10.f * biomeNoise.inland + 0.1f)) + 0.03f * biomeNoise.inland - 0.7f;
-    baseHeight += inlandHeightModifier * 90.f;
-    const float seaLevelPullFactor = smoothstep(0.2f, 0.0f, abs(biomeNoise.inland)) * 0.9f;
-    baseHeight = glm::mix(baseHeight, static_cast<float>(SEA_LEVEL + 8), seaLevelPullFactor);
+float pillarWeight(const BiomeNoise& n)
+{
+    return (1.f - smoothstep(-0.46f, -0.16f, n.erosion)) * smoothstep(0.1f, 0.3f, n.inland);
+}
 
-    float surfaceMultiplier = 0.02f;
-    surfaceMultiplier -= scaledPeak * 0.008f;
-    surfaceMultiplier *= 3.f * smoothstep(0.4f, -0.1f, abs(biomeNoise.inland)) + 1.f;
+float dryClimateWeight(const BiomeNoise& n)
+{
+    return smoothstep(0.12f, 0.38f, n.temperature) * (1.f - smoothstep(-0.25f, 0.02f, n.humidity));
+}
 
-    return { baseHeight, surfaceMultiplier };
+float tianziWeight(const BiomeNoise& n)
+{
+    // Low foothills at both the erosion and dry-climate edges, full towers well inside.
+    // The biome label's thresholds (.4 pillars, .35 dryness) must not cut through tall cores.
+    return (1.f - smoothstep(-0.8f, -0.22f, n.erosion)) * smoothstep(0.1f, 0.3f, n.inland) *
+           (1.f - smoothstep(0.08f, 0.35f, dryClimateWeight(n)));
+}
+
+float surfaceDetailWeight(const BiomeNoise& n)
+{
+    const float dry = dryClimateWeight(n);
+    const float mesa = smoothstep(0.4f, 0.75f, terraceWeight(n)) * smoothstep(0.35f, 0.65f, dry);
+    const float tianzi = smoothstep(0.4f, 0.9f, pillarWeight(n)) *
+                         (1.f - smoothstep(0.08f, 0.35f, dry));
+    return max(mesa, tianzi);
+}
+
+static float terraceHeight(float height, const BiomeNoise& n)
+{
+    // Irregular elevation intervals avoid repeating identical shelves up the hillside.
+    // Shared anchors keep the remap continuous when either the interval or biome changes.
+    constexpr float spacing = 42.f;
+    const float offset = 10.f * n.humidity + 6.f * n.temperature;
+    const float localHeight = height - offset;
+    int band = static_cast<int>(floor((localHeight - SEA_LEVEL) / spacing));
+    const auto anchor = [](int index)
+    {
+        RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x7E22ACEu, index);
+        return SEA_LEVEL + spacing * (index + rng.nextFloat(-0.32f, 0.32f));
+    };
+    if (anchor(band) > localHeight) --band;
+    else if (anchor(band + 1) < localHeight) ++band;
+    const float low = anchor(band), high = anchor(band + 1);
+    const float t = clamp((localHeight - low) / (high - low), 0.f, 1.f);
+    RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x51E1Fu, band);
+    const float rampStart = rng.nextFloat(0.15f, 0.4f);
+    const float rampEnd = rng.nextFloat(0.75f, 0.95f);
+    // Retain a slope across the shelf instead of flattening each tread completely.
+    return offset + mix(low, high, mix(t, smoothstep(rampStart, rampEnd, t), 0.8f));
+}
+
+NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
+{
+    const float peak = clamp((n.peak + 1.f) * 0.5f, 0.f, 1.f);
+    const float land = smoothstep(0.f, 0.35f, n.inland);
+    const float rugged = 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
+    const float dry = dryClimateWeight(n);
+    const float terraces = terraceWeight(n) * dry;
+    const float tianzi = tianziWeight(n);
+    const vec2 pos = posXZ_WS + vec2(noiseOffsetXZ);
+
+    const float inlandHeight = 1.f / (1.f + expf(-10.f * n.inland + 0.1f)) + 0.03f * n.inland - 0.7f;
+    const float foundation = 140.f + inlandHeight * 90.f;
+    // Keep one connected ground profile beneath mountains and local formations. Suppressing
+    // mountains with independent terrace/pillar masks carved troughs between the regimes,
+    // including a thin terrace-shaped trench in humid mountains that were not Mesa at all.
+    const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f) * (1.f - dry * 0.75f);
+    float height = foundation + land * mountainRelief;
+    if (terraces > 0.f)
+    {
+        // Blend complete profiles with complementary weights. The same weight replaces
+        // ordinary relief and introduces the plateau, so neither can disappear first.
+        float mesaHeight = foundation + land * (6.f + 42.f * TerrainFormations::plateauRelief(pos, noiseFieldSeed ^ 0xBA01u));
+        mesaHeight = mix(mesaHeight, terraceHeight(mesaHeight, n), 0.45f);
+        height = mix(height, mesaHeight, terraces);
+    }
+    const float coastPull = smoothstep(0.2f, 0.f, abs(n.inland)) * 0.9f;
+    height = mix(height, static_cast<float>(SEA_LEVEL + 8), coastPull);
+    const float formationBase = height;
+
+    float uplift = 0.f;
+    if (tianzi > 0.f)
+    {
+        constexpr TerrainFormations::Profile towers{ 70.f, 26.f, 52.f, 100.f, 20.f, 0.4f };
+        uplift = tianzi * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x75423u, towers);
+    }
+    // Quartz is an explicit formation in dry, non-terraced terrain. It reuses the same
+    // finite-support sampler with a narrow summit and a broad foot, not a new noise field.
+    const float quartzWeight = dry * land * (1.f - smoothstep(0.f, 0.4f, terraceWeight(n))) * rugged;
+    if (quartzWeight > 0.f)
+    {
+        constexpr TerrainFormations::Profile spires{ 116.f, 6.5f, 34.f, 42.f, 24.f, 0.04f, 1.f };
+        uplift += quartzWeight * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x91337u, spires);
+    }
+    height += uplift;
+
+    float amplitude = mix(38.f, 12.f, smoothstep(-0.1f, 0.5f, n.erosion));
+    amplitude = mix(amplitude, 10.f, terraces);
+    amplitude = mix(amplitude, 7.f, tianzi);
+    amplitude = mix(amplitude, 12.f, dry * (1.f - terraces));
+    amplitude = mix(amplitude, 4.f, smoothstep(5.f, 30.f, uplift));
+    amplitude /= 1.f + 3.f * smoothstep(0.4f, -0.1f, abs(n.inland));
+    return { height, 1.f / amplitude, formationBase, uplift };
 }
 
 float computeFloodFactor(const BiomeNoise& biomeNoise)
 {
     const float temperatureFactor = smoothstep(-0.1f, 0.35f, biomeNoise.temperature);
     const float humidityFactor = smoothstep(0.0f, 0.45f, biomeNoise.humidity);
-    const float flatFactor = smoothstep(-0.1f, -0.55f, biomeNoise.peak);
+    const float flatFactor = min(smoothstep(-0.1f, -0.55f, biomeNoise.peak),
+                                smoothstep(0.25f, 0.55f, biomeNoise.erosion));
     const float inlandFactor =
         min(smoothstep(0.2f, 0.3f, biomeNoise.inland), smoothstep(0.85f, 0.75f, biomeNoise.inland));
 
@@ -209,19 +322,24 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
     std::vector<float> humidityNoise(numSamples);
     std::vector<float> peakNoise(numSamples);
     std::vector<float> inlandNoise(numSamples);
+    std::vector<float> erosionNoise(numSamples);
     const BiomeNoiseGrids grids = {
         .temperature = temperatureNoise.data(),
         .humidity = humidityNoise.data(),
         .peak = peakNoise.data(),
         .inland = inlandNoise.data(),
+        .erosion = erosionNoise.data(),
     };
 
     const vec2 texelCentersStartXZ = vec2(originBlocksXZ_WS) + texelSizeBlocks * 0.5f;
     fillGrids(grids, texelCentersStartXZ, numTexels, static_cast<float>(texelSizeBlocks));
+    const auto oases = OasisShaping::makeContext(originBlocksXZ_WS, glm::ivec2(numTexels * texelSizeBlocks));
 
     for (uint32_t idx = 0; idx < numSamples; ++idx)
     {
         outBiomes[idx] = biomeFromNoise(noiseAt(grids, idx));
+        const vec2 pos = texelCentersStartXZ + vec2(idx % numTexels.x, idx / numTexels.x) * static_cast<float>(texelSizeBlocks);
+        if (OasisShaping::sample(pos, oases).vegetation) outBiomes[idx] = Biome::OASIS;
     }
 }
 

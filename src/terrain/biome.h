@@ -17,6 +17,7 @@ struct BiomeNoise
     float humidity{ 0.f };
     float peak{ 0.f };
     float inland{ 0.f };
+    float erosion{ 0.f };
 
     float distance2(const BiomeNoise& other) const;
 
@@ -42,6 +43,11 @@ enum class Biome : uint8_t
     MOUNTAINS,
 
     SWAMP,
+
+    MESA,
+    TIANZI_MOUNTAINS,
+    RED_DESERT,
+    OASIS,
 
     COUNT
 };
