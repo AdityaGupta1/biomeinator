@@ -149,7 +149,8 @@ Seed 100 at render distance 30, fullscreen 1440p, 2026-09-20, before BLAS compac
 in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB of
 per-triangle data and 300 MB of indices; water instances were under 160 MB all told. BLAS came
 to ~77 bytes per triangle uncompacted, geometry to ~156 bytes per quad. With compaction the
-terrain BLAS is 530 MB and the total 4.6 GB. The ~1.2 GB not attributed to any buffer is
+terrain BLAS is 530 MB and the total 4.6 GB; per-face data packed to 8 bytes and stored per
+quad takes it from 400 MB to 100 MB and the total to 4.3 GB. The ~1.2 GB not attributed to any buffer is
 textures, render targets, DLSS and SHARC, and the light tree. The budget moved between 7.3 GB
 and 11.2 GB across runs the same afternoon depending on what else held VRAM, so compare usage,
 not headroom.

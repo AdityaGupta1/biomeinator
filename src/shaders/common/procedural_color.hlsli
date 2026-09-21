@@ -9,7 +9,7 @@
 #include "util/color.hlsli"
 #include "util/math.hlsli"
 
-// Faces flagged TRIANGLE_FLAG_PROCEDURAL_COLOR multiply their emission by a world-space ramp;
+// Faces flagged FACE_FLAG_PROCEDURAL_COLOR multiply their emission by a world-space ramp;
 // diffuse and transmission keep their texture color: the hue sweeps green -> magenta -> green along the (1, 1, 1) diagonal and drifts
 // with time. Evaluating it from the shading point rather than baking it per triangle is what keeps
 // it smooth within a single block and lets it animate, and it makes the ramp independent of the
@@ -34,7 +34,7 @@ static const float proceduralColorLuminance = 1.8f;
 
 float3 getProceduralColor(const uint triangleFlags, const float3 pos_WS)
 {
-    if (!bool(triangleFlags & TRIANGLE_FLAG_PROCEDURAL_COLOR))
+    if (!bool(triangleFlags & FACE_FLAG_PROCEDURAL_COLOR))
     {
         return float3(1.f, 1.f, 1.f);
     }

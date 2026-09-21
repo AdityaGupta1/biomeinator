@@ -11,7 +11,7 @@ class ToFreeList;
 
 // World-XZ grass tint map: a low-res sRGB texture of per-biome colors covering the render
 // distance around the camera, refilled from biome noise whenever the camera crosses a texel
-// boundary. Sampled by shaders for faces flagged TRIANGLE_FLAG_BIOME_TINT.
+// boundary. Sampled by shaders for faces flagged FACE_FLAG_BIOME_TINT.
 namespace BiomeMap
 {
 

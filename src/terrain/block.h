@@ -44,8 +44,8 @@ enum class BlockStateKind : uint8_t
     SURFACE_MOUNT,
 };
 
-// Slice value for untextured blocks (air, water); never sampled
-inline constexpr uint32_t TEX_SLICE_INVALID = ~0u;
+// Slice value for untextured blocks (air, water); never sampled. Fits PerFaceData's 16-bit slice field
+inline constexpr uint32_t TEX_SLICE_INVALID = 0xFFFFu;
 
 struct BlockTexSlices
 {

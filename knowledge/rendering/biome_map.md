@@ -4,7 +4,7 @@ _Last edited: 2026-08-23_
 
 `src/rendering/biome_map.cpp` — low-res world-XZ texture of per-biome grass tints
 (`BIOME_MAP_BLOCKS_PER_TEXEL` blocks per texel), covering the render distance around the
-camera. Shaders sample it for triangles flagged `TRIANGLE_FLAG_BIOME_TINT`
+camera. Shaders sample it for triangles flagged `FACE_FLAG_BIOME_TINT`
 (see `biome_map.hlsli` and the tint application in `getMaterialBaseColor`).
 
 ## Filled From Noise, Not From Chunks

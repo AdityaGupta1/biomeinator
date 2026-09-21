@@ -372,7 +372,7 @@ static nlohmann::json instanceMemoryJson(const Scene::InstanceGpuMemory& memory)
         { "vertsBytes", memory.vertsBytes },
         { "idxsBytes", memory.idxsBytes },
         { "ommIdxsBytes", memory.ommIdxsBytes },
-        { "perTriDatasBytes", memory.perTriDatasBytes },
+        { "perFaceDatasBytes", memory.perFaceDatasBytes },
         { "tangentsBytes", memory.tangentsBytes },
         { "areaLightsBytes", memory.areaLightsBytes },
     };

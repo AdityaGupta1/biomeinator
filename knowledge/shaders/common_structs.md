@@ -1,4 +1,4 @@
-_Last edited: 2026-09-10_
+_Last edited: 2026-09-20_
 
 # Common CPU/GPU Structs
 
@@ -35,7 +35,11 @@ displacement. UVs use float32 pairs: half precision can shift a sample by a texe
 2K normal/roughness textures. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary
 normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
 
-The remaining structs (`HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
+`PerFaceData` packs its flags and texture array slice into one word (16 bits each; the slice
+is far below that but the flags are expected to grow) with the area light index in the other,
+and is stored per face rather than per triangle; see
+[scene → instance.md](../scene/instance.md#per-face-data). `HitInfo` and `GbufferData` are
+self-explanatory from the source.
 
 `Vertex` has a 24-byte stride, with no stored tangents. Normal-mapped glTF meshes use a
 separate 8-byte `VertexTangent` record (oct-encoded tangent plus handedness). Its per-instance

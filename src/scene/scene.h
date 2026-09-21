@@ -41,7 +41,7 @@ private:
     uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
-    ManagedBufferSection perTriDatasBufferSection{};
+    ManagedBufferSection perFaceDatasBufferSection{};
     ManagedBufferSection tangentsBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
@@ -53,6 +53,8 @@ private:
     bool isDeformable{ false };
     // If true, the BLAS geometry is flagged opaque so traversal never invokes anyhit for it
     bool isOpaque{ false };
+    // host_perFaceDatas holds one entry per 1 << trisPerFaceLog2 triangles
+    uint32_t trisPerFaceLog2{ 0 };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -76,7 +78,7 @@ public:
     std::vector<Vertex> host_verts{};
     std::vector<VertexTangent> host_tangents{}; // optional, indexed like host_verts
     std::vector<uint32_t> host_idxs{};
-    std::vector<PerTriangleData> host_perTriDatas{};
+    std::vector<PerFaceData> host_perFaceDatas{};
     // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
     std::vector<uint16_t> host_ommIdxs{};
 
@@ -100,6 +102,9 @@ public:
     void setIsDeformable(bool deformable);
 
     void setIsOpaque(bool opaque);
+
+    // Must be set before finalizeGeometry(); the triangle count must be a multiple of the face size
+    void setTrisPerFaceLog2(uint32_t log2);
 };
 
 class Scene
@@ -127,12 +132,12 @@ private:
             .alignmentBytes = sizeof(uint32_t),
         },
     };
-    ReservedManagedBuffer managedPerTriDatasBuffer{
+    ReservedManagedBuffer managedPerFaceDatasBuffer{
         1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .alignmentBytes = sizeof(PerTriangleData),
+            .alignmentBytes = sizeof(PerFaceData),
         },
     };
 
@@ -283,7 +288,7 @@ public:
         size_t vertsBytes{ 0 };
         size_t idxsBytes{ 0 };
         size_t ommIdxsBytes{ 0 };
-        size_t perTriDatasBytes{ 0 };
+        size_t perFaceDatasBytes{ 0 };
         size_t tangentsBytes{ 0 };
         size_t areaLightsBytes{ 0 };
     };
@@ -328,7 +333,7 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTangentsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevPerFaceDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
     uint32_t getAreaLightSparseCount() const;

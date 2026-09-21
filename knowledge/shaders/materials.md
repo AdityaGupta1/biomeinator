@@ -67,7 +67,7 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
 ## Glass as a per-triangle override
 
 Voxel terrain shares a single diffuse material across every block, so the glass look
-(`TRIANGLE_FLAG_IS_GLASS`, `applyGlassMaterial`) is applied per triangle at shading time instead of
+(`FACE_FLAG_IS_GLASS`, `applyGlassMaterial`) is applied per triangle at shading time instead of
 being its own material: a second material would need a second instance and BLAS per chunk, while the
 override costs one flag test and one aux texture sample on hits that were already sampling that
 texture. The block's base color texture becomes the transmission tint, reflection stays untinted as
@@ -85,7 +85,7 @@ paths only — NEE towards it is always shadowed.
 
 ## Procedural color
 
-`TRIANGLE_FLAG_PROCEDURAL_COLOR` multiplies emission by a world-space ramp
+`FACE_FLAG_PROCEDURAL_COLOR` multiplies emission by a world-space ramp
 (`common/procedural_color.hlsli`): hue sweeping green to magenta and back along the (1, 1, 1)
 diagonal, drifting with `animTime`. It only affects `getMaterialEmissiveColor`; diffuse and
 transmission retain their texture color. This lets crystal ore use an emissive aux-R mask over
