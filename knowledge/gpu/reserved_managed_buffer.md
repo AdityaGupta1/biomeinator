@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-20_
 
 # ReservedManagedBuffer
 
@@ -11,6 +11,15 @@ Growth requires no data copy — just mapping a new heap into the existing virtu
 space via `UpdateTileMappings`. This matters for the large geometry buffers (verts, idxs,
 per-tri data, acceleration structures) where copying gigabytes on resize would stall the
 pipeline.
+
+## Growth Cost
+
+`CreateHeap` for a growth chunk took 15-40 ms on the main thread, which during world streaming
+(a new 64 MB heap every few frames for the BLAS buffer) was the largest single source of frame
+spikes. Two things address it: heaps are created `CREATE_NOT_ZEROED`, which took the call to
+well under a millisecond, and the heap after the one just mapped is created on a background
+thread (`std::async`) so that even a slow creation is off the frame. `init` does not prefetch,
+so buffers that never grow cost nothing extra.
 
 ## Constraints
 

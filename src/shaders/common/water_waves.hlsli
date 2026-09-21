@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../rendering/common/common_params.h"
 #include "../rendering/common/common_settings.h"
 
 #include "util/FastNoiseLite.hlsli"
@@ -137,6 +138,29 @@ float waveHeight(float2 posXZ_WS, float waveTime)
     return waveHeightAndGradient(posXZ_WS, waveTime).x;
 }
 
+// Displacement fades to rest height with distance from the camera and outside the padded view
+// frustum, so the chunks that keep a static surface meet the animated ones without a seam.
+// The displacement and the motion vectors apply this; the shading normal does not, see
+// waveShadingNormal. Nearby water is exempt from the frustum limit so a turn never reveals a
+// frozen surface at the player's feet.
+float waveFade(float3 pos_WS, WaveFadeParams params)
+{
+    const float3 toPos_WS = pos_WS - params.cameraPos_WS;
+    const float dist = length(toPos_WS);
+    const float radial = 1.f - smoothstep(params.fadeStart, params.fadeEnd, dist);
+
+    float angular = 1.f;
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        const float sinPastEdge = -dot(params.frustumNormals_WS[i].normal_WS, toPos_WS) / max(dist, 1e-3f);
+        angular = min(angular, 1.f - smoothstep(WATER_FOV_PAD_INNER_SIN, WATER_FOV_PAD_OUTER_SIN, sinPastEdge));
+    }
+    angular = lerp(1.f, angular, smoothstep(WATER_FOV_EXEMPT_NEAR, WATER_FOV_EXEMPT_FAR, dist));
+
+    return radial * angular;
+}
+
 // medium-scale OpenSimplex2 choppiness envelope in [0, 1]
 float medChop01(float2 posXZ_WS, float noiseTime)
 {
@@ -167,6 +191,9 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 // flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
 // surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
 // view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
+// Deliberately unfaded: the shading normal keeps the full wave gradient over water whose
+// geometry the distance fade has flattened, so far water still reads as waves and the fade
+// boundary shows no change in shading, only in silhouette
 float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit)
 {
     const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz;

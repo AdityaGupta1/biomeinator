@@ -49,7 +49,10 @@ change — only vertex Y moves. Gotchas: `ALLOW_UPDATE` must also be passed to t
 info query or `UpdateScratchDataSizeInBytes` comes back 0, and refit flags must match the
 original build's flags aside from `PERFORM_UPDATE`.
 
-`updateBlases` issues a UAV barrier on `sharedAcsBuffer` **before** the refits: last frame's
+`updateBlases` takes one scratch allocation for the whole batch (sub-allocated at 256-byte
+steps) rather than one per BLAS; with a thousand water refits a frame the per-refit free-list
+traffic was measurable on the main thread. It issues a UAV barrier on `sharedAcsBuffer`
+**before** the refits: last frame's
 `DispatchRays` read these BLASes and the in-place refit writes the same memory (the buffer
 lives permanently in the AS state, so ordering is UAV-barrier-only). Fresh-section BLAS
 builds never need this because they write virgin memory.

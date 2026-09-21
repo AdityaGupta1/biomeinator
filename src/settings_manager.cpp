@@ -49,6 +49,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
     ADD_OPTION("perfFrames", "Perf run: number of frames to measure", uint32_t, "300");
     ADD_OPTION("perfTimeoutSeconds", "Perf run: give up and write whatever was measured after this long", float, "120");
+    ADD_OPTION("perfMoveSpeed", "Perf run: move the camera forward at this many blocks per nominal 60 Hz second while measuring", float, "0");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL)", uint32_t, "2");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
     ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
@@ -166,6 +167,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("perfWarmupSeconds", float);
     COPY_SETTING("perfFrames", uint32_t);
     COPY_SETTING("perfTimeoutSeconds", float);
+    COPY_SETTING("perfMoveSpeed", float);
     COPY_SETTING("samplingMode", uint32_t);
     COPY_SETTING("tonemapping", uint32_t);
     COPY_SETTING("antialiasingMode", uint32_t);

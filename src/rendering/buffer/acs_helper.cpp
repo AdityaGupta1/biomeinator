@@ -10,6 +10,7 @@
 #include "managed_buffer.h"
 #include "to_free_list.h"
 #include "rendering/renderer.h"
+#include "rendering/cpu_profiler.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -81,13 +82,13 @@ void init()
     sharedAcsBuffer.init();
 
     sharedVertsUploadBuffer.setName(L"sharedVertsUploadBuffer");
-    sharedVertsUploadBuffer.init(1 << 14 /*bytes*/);
+    sharedVertsUploadBuffer.init(128ull << 20 /*bytes*/);
 
     sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
-    sharedIdxsUploadBuffer.init(1 << 12 /*bytes*/);
+    sharedIdxsUploadBuffer.init(32ull << 20 /*bytes*/);
 
     sharedAcsScratchBuffer.setName(L"sharedAcsScratchBuffer");
-    sharedAcsScratchBuffer.init(1 << 14 /*bytes*/);
+    sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
 }
 
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
@@ -271,6 +272,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
 
+    CpuProfiler::beginScope("upload");
     dev_verts->beginBatchCopy(cmdList);
     dev_idxs->beginBatchCopy(cmdList);
 
@@ -318,6 +320,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     dev_verts->endBatchCopy(cmdList);
     dev_idxs->endBatchCopy(cmdList);
 
+    CpuProfiler::endScope(); // upload
+    CPU_PROFILE_SCOPE("record builds");
     makeAccelerationStructures(cmdList, toFreeList, buildInfos);
 }
 
@@ -336,6 +340,17 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
     // last frame's read -> this frame's write.
     BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer());
 
+    // One scratch allocation for the batch: a thousand refits a frame made the per-refit
+    // free-list traffic a measurable share of the main thread
+    size_t scratchSizeBytes = 0;
+    for (const GeometryWrapper* const geoWrapper : geoWrappers)
+    {
+        scratchSizeBytes += MathUtil::roundUp(geoWrapper->updateScratchSizeBytes, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+    }
+    const ManagedBufferSection scratchSection = sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, scratchSizeBytes);
+    toFreeList.pushManagedBufferSection(scratchSection);
+    D3D12_GPU_VIRTUAL_ADDRESS scratchAddress = scratchSection.getGpuVirtualAddress();
+
     for (GeometryWrapper* const geoWrapper : geoWrappers)
     {
         AcsBuildInfo buildInfo;
@@ -344,17 +359,13 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
         // ALLOW_UPDATE must stay set or no further updates are allowed
         buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
 
-        const ManagedBufferSection scratchSection =
-            sharedAcsScratchBuffer.findFreeSection(cmdList, &toFreeList, geoWrapper->updateScratchSizeBytes);
-
         const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
             .DestAccelerationStructureData = geoWrapper->blasBufferSection.getGpuVirtualAddress(),
             .Inputs = buildInfo.inputs,
             .SourceAccelerationStructureData = geoWrapper->blasBufferSection.getGpuVirtualAddress(),
-            .ScratchAccelerationStructureData = scratchSection.getGpuVirtualAddress(),
+            .ScratchAccelerationStructureData = scratchAddress,
         };
-
-        toFreeList.pushManagedBufferSection(scratchSection);
+        scratchAddress += MathUtil::roundUp(geoWrapper->updateScratchSizeBytes, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
 
         cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
     }

@@ -9,6 +9,7 @@
 #include "rendering/common/common_structs.h"
 #include "util/halton.h"
 
+#include <array>
 #include <numbers>
 
 #include <glm/glm.hpp>
@@ -70,6 +71,9 @@ public:
     void copyParamsTo(CameraParams* dest) const;
 
     glm::vec3 getPos_WS() const;
+    // Inward normals of the left, right, bottom and top frustum planes (which pass through the
+    // camera), at the current field of view, so zoom narrows them
+    std::array<glm::vec3, 4> getFrustumSideNormals_WS() const;
     const glm::ivec3& getPosInt_WS() const;
     const glm::vec3& getPosFloat_WS() const;
 

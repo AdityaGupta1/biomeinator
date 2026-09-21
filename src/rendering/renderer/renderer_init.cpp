@@ -115,9 +115,9 @@ namespace
 // Frame generation is optional, so a missing feature only disables it rather than failing startup
 void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
 {
-    // Generated frames would corrupt golden screenshots, and Reflex pacing the frame start would
-    // skew perf measurements, so a headless run stays on the pre-frame-generation code path
-    if (renderState.headless)
+    // Generated frames would corrupt golden screenshots, so a test run stays on the
+    // pre-frame-generation code path. Perf runs keep it so they measure what the game does.
+    if (renderState.testMode)
     {
         return;
     }

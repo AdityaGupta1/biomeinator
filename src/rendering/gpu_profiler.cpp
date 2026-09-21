@@ -100,6 +100,8 @@ bool collect(const uint32_t slotIdx, FrameTimings& outTimings)
 
     outTimings.frameNumber = slot.frameNumber;
     outTimings.totalMs = static_cast<double>(ticks[slot.numQueries - 1] - ticks[0]) * msPerTick;
+    outTimings.beginMs = static_cast<double>(ticks[0]) * msPerTick;
+    outTimings.endMs = static_cast<double>(ticks[slot.numQueries - 1]) * msPerTick;
     outTimings.scopes.clear();
     outTimings.scopes.reserve(slot.scopes.size());
     for (const ScopeRecord& scope : slot.scopes)

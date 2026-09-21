@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-20_
 
 # G-Buffer Shader
 
@@ -18,7 +18,7 @@ Primary rays are separated from the main path tracer so that:
 between frames, so no manual offset correction is needed in this shader. Water-top hits
 additionally reconstruct the previous frame's surface position analytically — displacement
 is vertical at fixed XZ, so re-evaluating `waveHeight` at `renderParams.prevWaveTime` gives the
-previous Y. Both wave times are wrapped on the CPU in double (see `water_waves.hlsli`); the
+previous Y, scaled by the same distance fade the displacement pass applied (see [scene → scene.md](../scene/scene.md#deformable-instances)), so far water reports no motion it does not have. Both wave times are wrapped on the CPU in double (see `water_waves.hlsli`); the
 difference of two raw float `animTime`s would quantise to a large fraction of a frame after
 a day of animation. Refracted geometry seen through water keeps camera-only motion. The
 noise-based normal perturbation is shading-only and intentionally ignored. Cloud boundaries

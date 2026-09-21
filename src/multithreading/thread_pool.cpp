@@ -7,6 +7,8 @@
 
 #include "thread_memory_allocator.h"
 
+#include <chrono>
+
 #define MAX_NUM_LOCAL_TASKS 8
 
 ThreadPool::ThreadPool()
@@ -50,11 +52,16 @@ void ThreadPool::worker()
             }
         }
 
+        const auto batchStart = std::chrono::steady_clock::now();
         for (int i = 0; i < numLocalTasks; ++i)
         {
             localTasks[i].func(localTasks[i].chunkPtr, threadMemoryAlloc);
             threadMemoryAlloc.clear();
+            this->numPendingTasks.fetch_sub(1, std::memory_order_relaxed);
         }
+        this->busyNanos.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - batchStart).count(),
+            std::memory_order_relaxed);
     }
 }
 
@@ -66,6 +73,7 @@ void ThreadPool::enqueue(Task task)
         ASSERT(!stop);
 
         queue.push(task);
+        this->numPendingTasks.fetch_add(1, std::memory_order_relaxed);
     }
 
     cv.notify_one();
@@ -79,6 +87,7 @@ void ThreadPool::shutdown()
         while (!this->queue.empty())
         {
             this->queue.pop();
+            this->numPendingTasks.fetch_sub(1, std::memory_order_relaxed);
         }
     }
 

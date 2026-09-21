@@ -1,4 +1,4 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-20_
 
 # GPU Profiler
 
@@ -13,6 +13,9 @@ scopes serve two purposes with different gating:
   profiler call reduces to a flag check, so an interactive run pays nothing beyond the markers.
   Perf runs (see [tests → perf_runs.md](../tests/perf_runs.md)) are the only consumer today;
   anything else wanting the data enables it the same way.
+
+`CpuProfiler` mirrors this on the main thread for perf runs; see
+[tests → perf_runs.md](../tests/perf_runs.md#cpu-scopes-and-moving-measurements).
 
 ## Scope placement
 
@@ -40,7 +43,9 @@ the assert in `beginFrame` guards that. Draining the last in-flight slots needs 
 first, which the perf run does before writing its report.
 
 Timings carry the frame number they were recorded on, so a consumer that only wants a window
-of frames filters by number rather than by when the readback happened.
+of frames filters by number rather than by when the readback happened. They also carry the
+frame's absolute begin and end on the queue's timeline, which is how the perf report measures
+the idle gap between frames; see [tests → perf_runs.md](../tests/perf_runs.md#gap-and-period).
 
 ## Gotchas
 

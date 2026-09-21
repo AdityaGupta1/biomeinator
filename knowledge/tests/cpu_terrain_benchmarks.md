@@ -13,7 +13,10 @@ source of the September 2026 experiment. Like the
 tree; do not `git apply` it or run the archived scripts unchanged.** It is an investigation
 snapshot, not a maintained benchmark target or a patch to keep synchronized with production.
 Put a new experiment under an ignored `build/<experiment>/` directory. Production does not
-need permanent timers, benchmark switches, or a new CMake target for this workflow.
+need permanent timers, benchmark switches, or a new CMake target for this workflow. The
+permanent `CpuProfiler` in perf runs is the main thread's frame view and stays out of the
+worker-side generation code; the two answer different questions (see
+[perf_runs.md](perf_runs.md)).
 
 ## What is worth reusing
 

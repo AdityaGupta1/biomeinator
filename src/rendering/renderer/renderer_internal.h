@@ -34,6 +34,7 @@
 
 #include "rendering/camera.h"
 #include "rendering/gpu_profiler.h"
+#include "rendering/cpu_profiler.h"
 #include "rendering/gpu_sort/gpu_radix_sort.h"
 #include "rendering/light_tree_manager.h"
 #include "scene/scene.h"
@@ -267,6 +268,13 @@ void perfRunBeginCpuFrame();
 void perfRunEndCpuFrame();
 void perfRunCollectTimings(uint32_t slotIdx);
 bool perfRunIsDone();
+// Non-empty while a perf run wants the camera moved (perfMoveSpeed, measuring phase only)
+PlayerInput perfRunPlayerInput();
+bool perfRunIsMovingCamera();
+// The frame time a moving perf run pretends to have, so perfMoveSpeed is blocks per nominal second
+inline constexpr double PERF_MOVE_FRAME_SECONDS = 1.0 / 60.0;
+// After Present, so the frame's CPU scopes include it
+void perfRunCollectCpuScopes();
 void perfRunFinish();
 
 // =============================================
@@ -329,6 +337,23 @@ struct PerfRunState
     bool stablePowerState{ false };
     std::vector<GpuProfiler::FrameTimings> gpuSamples;
     std::vector<double> cpuFrameMs;
+    std::vector<std::vector<CpuProfiler::ScopeTiming>> cpuScopeSamples;
+
+    // World streaming before the measured window: from the first frame with terrain work or a
+    // scene change until the last scene change before warmup goes quiet. Samples keep
+    // accumulating past the last change, so the counts at that point trim them afterwards.
+    bool streamingStarted{ false };
+    std::chrono::steady_clock::time_point streamingStart{};
+    std::chrono::steady_clock::time_point prevFrameStart{};
+    std::vector<double> streamingPeriodMs; // wall time between consecutive frame starts
+    std::vector<double> streamingCpuFrameMs;
+    std::vector<double> streamingTaskBacklog;
+    size_t streamingPeriodsAtLastChange{ 0 };
+    size_t streamingCpuFramesAtLastChange{ 0 };
+    double streamingSeconds{ 0.0 };
+    uint32_t streamingBlasBuilds{ 0 };
+    uint64_t workerBusyNanosAtStart{ 0 };
+    double streamingWorkerUtilization{ 0.0 };
 };
 
 struct ScreenshotRequest

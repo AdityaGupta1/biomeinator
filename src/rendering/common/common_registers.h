@@ -91,6 +91,9 @@
 // b#
 #define WATER_DISPLACE_REGISTER_CONSTANTS 0
 
+// t#
+#define WATER_DISPLACE_REGISTER_INSTANCES 0
+
 // u#
 #define WATER_DISPLACE_REGISTER_VERTS_OUT 0
 
@@ -116,6 +119,20 @@
 // =============================================
 // fake UAV slot for SER
 // =============================================
+
+// =============================================
+#define AREA_LIGHT_COMPACT_REGISTER_SPACE 8
+// =============================================
+
+// b#
+#define AREA_LIGHT_COMPACT_REGISTER_CONSTANTS 0
+
+// t#
+#define AREA_LIGHT_COMPACT_REGISTER_RANGES 0
+#define AREA_LIGHT_COMPACT_REGISTER_SRC 1
+
+// u#
+#define AREA_LIGHT_COMPACT_REGISTER_DST 0
 
 #ifndef __cplusplus
 #define NV_SHADER_EXTN_REGISTER_SPACE space1738

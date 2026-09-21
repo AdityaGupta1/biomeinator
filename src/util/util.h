@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "rendering/common/common_settings.h"
+
 #include <cstring>
 #include <string>
 #include <vector>
@@ -41,6 +43,24 @@ inline std::string to_string(const wchar_t* str)
 inline uint32_t calculateDispatchSize(const uint32_t size, const uint32_t threadGroupSize)
 {
     return (size + threadGroupSize - 1) / threadGroupSize;
+}
+
+// For 1D workloads that can exceed the per-dimension group limit: the shader recovers the
+// flat index as (y * DISPATCH_MAX_GROUPS_PER_DIM + x) * threadGroupSize + thread, see
+// flatDispatchThreadIdx in dispatch.hlsli
+struct DispatchSize2D
+{
+    uint32_t x;
+    uint32_t y;
+};
+
+inline DispatchSize2D calculateDispatchSize2D(const uint32_t size, const uint32_t threadGroupSize)
+{
+    const uint32_t numGroups = calculateDispatchSize(size, threadGroupSize);
+    return {
+        .x = numGroups < DISPATCH_MAX_GROUPS_PER_DIM ? numGroups : DISPATCH_MAX_GROUPS_PER_DIM,
+        .y = calculateDispatchSize(numGroups, DISPATCH_MAX_GROUPS_PER_DIM),
+    };
 }
 
 // Smallest power of two >= max(floor, target), with both inputs treated as

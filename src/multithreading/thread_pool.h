@@ -7,6 +7,7 @@
 
 #include "debug.h"
 
+#include <atomic>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -30,6 +31,8 @@ private:
     std::queue<Task> queue;
     void worker();
     bool stop{ false };
+    std::atomic<uint64_t> busyNanos{ 0 }; // summed over workers, for utilization measurements
+    std::atomic<uint32_t> numPendingTasks{ 0 }; // queued or executing
 
 public:
     ThreadPool();
@@ -41,6 +44,21 @@ public:
     void bulkEnqueue(Iter first, Iter last);
 
     void shutdown();
+
+    uint32_t getNumWorkers() const
+    {
+        return static_cast<uint32_t>(this->workers.size());
+    }
+
+    uint64_t getBusyNanos() const
+    {
+        return this->busyNanos.load(std::memory_order_relaxed);
+    }
+
+    uint32_t getNumPendingTasks() const
+    {
+        return this->numPendingTasks.load(std::memory_order_relaxed);
+    }
 
     ThreadPool(ThreadPool&) = delete;
     ThreadPool(const ThreadPool&) = delete;
@@ -62,6 +80,7 @@ void ThreadPool::bulkEnqueue(Iter first, Iter last)
             queue.push(*first);
             ++numTasksEnqueued;
         }
+        this->numPendingTasks.fetch_add(numTasksEnqueued, std::memory_order_relaxed);
     }
 
     if (numTasksEnqueued == 1)

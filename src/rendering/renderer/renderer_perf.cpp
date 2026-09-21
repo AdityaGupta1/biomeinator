@@ -5,6 +5,7 @@
 
 #include "logger.h"
 #include "settings_manager.h"
+#include "terrain/terrain.h"
 #include "util/file_util.h"
 
 #include <json.hpp>
@@ -90,6 +91,39 @@ void perfRunInit()
     }
 }
 
+// Called every frame until measuring starts, so the streaming window can span both the
+// waiting and warmup phases
+static void perfRunUpdateStreaming(const bool didSceneChange)
+{
+    PerfRunState& perfRun = renderState.perfRun;
+    const Terrain::StreamingStats terrain = Terrain::getStreamingStats();
+    const bool hasWork = didSceneChange || terrain.taskBacklog > 0 || terrain.tasksPending > 0;
+    if (!perfRun.streamingStarted)
+    {
+        if (!hasWork)
+        {
+            return;
+        }
+        perfRun.streamingStarted = true;
+        perfRun.streamingStart = std::chrono::steady_clock::now();
+        perfRun.workerBusyNanosAtStart = terrain.workerBusyNanos;
+    }
+
+    perfRun.streamingTaskBacklog.push_back(static_cast<double>(terrain.taskBacklog));
+
+    if (hasWork)
+    {
+        perfRun.streamingSeconds = secondsSince(perfRun.streamingStart);
+        perfRun.streamingPeriodsAtLastChange = perfRun.streamingPeriodMs.size();
+        perfRun.streamingCpuFramesAtLastChange = perfRun.streamingCpuFrameMs.size();
+        perfRun.streamingBlasBuilds = renderState.scene.getNumBlasBuilds();
+        const double busySeconds =
+            static_cast<double>(terrain.workerBusyNanos - perfRun.workerBusyNanosAtStart) * 1e-9;
+        perfRun.streamingWorkerUtilization =
+            busySeconds / (perfRun.streamingSeconds * std::max(1u, terrain.numWorkers));
+    }
+}
+
 void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
 {
     PerfRunState& perfRun = renderState.perfRun;
@@ -98,7 +132,15 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
         return;
     }
 
-    perfRun.quietStreak = didSceneChange ? 0 : perfRun.quietStreak + 1;
+    // Terrain work in flight counts as unquiet too: a deep task queue can go many frames
+    // without a chunk landing in the scene
+    const bool quiet = !didSceneChange && Terrain::getStreamingStats().tasksPending == 0;
+    perfRun.quietStreak = quiet ? perfRun.quietStreak + 1 : 0;
+
+    if (perfRun.phase != PerfPhase::MEASURING)
+    {
+        perfRunUpdateStreaming(didSceneChange);
+    }
 
     if (secondsSince(perfRun.startTime) > SettingsManager::getAsFloat("perfTimeoutSeconds"))
     {
@@ -127,6 +169,9 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
             {
                 Logger::log("perf run: measuring from frame %u", renderState.frameNumber);
                 perfRun.measureStartFrame = renderState.frameNumber;
+                perfRun.streamingPeriodMs.resize(perfRun.streamingPeriodsAtLastChange);
+                perfRun.streamingCpuFrameMs.resize(perfRun.streamingCpuFramesAtLastChange);
+                perfRun.streamingTaskBacklog.resize(perfRun.streamingPeriodsAtLastChange);
                 enterPhase(PerfPhase::MEASURING);
             }
             break;
@@ -146,10 +191,19 @@ void perfRunUpdate(const bool sceneReady, const bool didSceneChange)
 
 void perfRunBeginCpuFrame()
 {
-    if (renderState.perfRun.active)
+    PerfRunState& perfRun = renderState.perfRun;
+    if (!perfRun.active)
     {
-        renderState.perfRun.cpuFrameStart = std::chrono::steady_clock::now();
+        return;
     }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (perfRun.streamingStarted && perfRun.phase != PerfPhase::MEASURING && perfRun.phase != PerfPhase::DONE)
+    {
+        perfRun.streamingPeriodMs.push_back(std::chrono::duration<double, std::milli>(now - perfRun.prevFrameStart).count());
+    }
+    perfRun.prevFrameStart = now;
+    perfRun.cpuFrameStart = now;
 }
 
 void perfRunEndCpuFrame()
@@ -160,6 +214,10 @@ void perfRunEndCpuFrame()
     if (perfRun.phase == PerfPhase::MEASURING)
     {
         perfRun.cpuFrameMs.push_back(secondsSince(perfRun.cpuFrameStart) * 1000.0);
+    }
+    else if (perfRun.streamingStarted && perfRun.phase != PerfPhase::DONE)
+    {
+        perfRun.streamingCpuFrameMs.push_back(secondsSince(perfRun.cpuFrameStart) * 1000.0);
     }
 }
 
@@ -176,6 +234,35 @@ void perfRunCollectTimings(const uint32_t slotIdx)
         timings.frameNumber < perfRun.measureEndFrame)
     {
         perfRun.gpuSamples.push_back(std::move(timings));
+    }
+}
+
+// Forward at the requested speed regardless of the movementSpeed setting, and only once the
+// world has finished loading, so the measured window is streaming through a loaded world
+bool perfRunIsMovingCamera()
+{
+    const PerfRunState& perfRun = renderState.perfRun;
+    return perfRun.active && perfRun.phase == PerfPhase::MEASURING && SettingsManager::getAsFloat("perfMoveSpeed") > 0.f;
+}
+
+PlayerInput perfRunPlayerInput()
+{
+    PlayerInput input;
+    if (perfRunIsMovingCamera())
+    {
+        input.linearInput = { 0.f, 0.f, 1.f };
+        input.linearSpeedMultiplier = SettingsManager::getAsFloat("perfMoveSpeed") / SettingsManager::getAsFloat("movementSpeed");
+    }
+    return input;
+}
+
+void perfRunCollectCpuScopes()
+{
+    PerfRunState& perfRun = renderState.perfRun;
+    const std::vector<CpuProfiler::ScopeTiming>& scopes = CpuProfiler::endFrame();
+    if (perfRun.phase == PerfPhase::MEASURING)
+    {
+        perfRun.cpuScopeSamples.push_back(scopes);
     }
 }
 
@@ -211,6 +298,46 @@ static nlohmann::json statsJson(std::vector<double> samples)
     };
 }
 
+// Scopes are keyed by depth and name in order of first appearance, since not every scope runs
+// every frame (e.g. BLAS builds)
+struct ScopeAggregator
+{
+    struct Samples
+    {
+        const char* name;
+        uint32_t depth;
+        std::vector<double> ms;
+    };
+    std::vector<Samples> samples;
+    std::map<std::pair<uint32_t, std::string>, size_t> idxByKey;
+
+    void add(const char* const name, const uint32_t depth, const double ms)
+    {
+        const auto key = std::make_pair(depth, std::string(name));
+        auto it = idxByKey.find(key);
+        if (it == idxByKey.end())
+        {
+            it = idxByKey.emplace(key, samples.size()).first;
+            samples.push_back({ .name = name, .depth = depth, .ms = {} });
+        }
+        samples[it->second].ms.push_back(ms);
+    }
+
+    nlohmann::json toJson() const
+    {
+        nlohmann::json json = nlohmann::json::array();
+        for (const Samples& scope : samples)
+        {
+            json.push_back({
+                { "name", scope.name },
+                { "depth", scope.depth },
+                { "ms", statsJson(scope.ms) },
+            });
+        }
+        return json;
+    }
+};
+
 static nlohmann::json settingsJson()
 {
     nlohmann::json json;
@@ -219,46 +346,58 @@ static nlohmann::json settingsJson()
     return json;
 }
 
+static nlohmann::json streamingJson()
+{
+    const PerfRunState& perfRun = renderState.perfRun;
+    if (perfRun.streamingPeriodMs.empty())
+    {
+        return nullptr;
+    }
+    return {
+        { "frames", perfRun.streamingPeriodMs.size() },
+        { "seconds", perfRun.streamingSeconds },
+        { "blasBuilds", perfRun.streamingBlasBuilds },
+        { "workerUtilization", perfRun.streamingWorkerUtilization },
+        { "taskBacklog", statsJson(perfRun.streamingTaskBacklog) },
+        { "periodMs", statsJson(perfRun.streamingPeriodMs) },
+        { "cpuFrameMs", statsJson(perfRun.streamingCpuFrameMs) },
+    };
+}
+
 static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
 
-    // Scopes are keyed by depth and name in order of first appearance, since not every scope
-    // runs every frame (e.g. BLAS builds)
-    struct ScopeSamples
-    {
-        const char* name;
-        uint32_t depth;
-        std::vector<double> ms;
-    };
-    std::vector<ScopeSamples> scopeSamples;
-    std::map<std::pair<uint32_t, std::string>, size_t> scopeIdxByKey;
+    ScopeAggregator gpuScopes;
     std::vector<double> gpuFrameMs;
+    // Consecutive frames also give the idle time between them on the graphics queue (gap) and the
+    // rendered frame period (begin to begin); frameMs alone hides both
+    std::vector<double> gpuGapMs;
+    std::vector<double> gpuPeriodMs;
     gpuFrameMs.reserve(perfRun.gpuSamples.size());
+    const GpuProfiler::FrameTimings* prevFrame = nullptr;
     for (const GpuProfiler::FrameTimings& frame : perfRun.gpuSamples)
     {
         gpuFrameMs.push_back(frame.totalMs);
+        if (prevFrame != nullptr && prevFrame->frameNumber + 1 == frame.frameNumber)
+        {
+            gpuGapMs.push_back(frame.beginMs - prevFrame->endMs);
+            gpuPeriodMs.push_back(frame.beginMs - prevFrame->beginMs);
+        }
+        prevFrame = &frame;
         for (const GpuProfiler::ScopeTiming& scope : frame.scopes)
         {
-            const auto key = std::make_pair(scope.depth, std::string(scope.name));
-            auto it = scopeIdxByKey.find(key);
-            if (it == scopeIdxByKey.end())
-            {
-                it = scopeIdxByKey.emplace(key, scopeSamples.size()).first;
-                scopeSamples.push_back({ .name = scope.name, .depth = scope.depth, .ms = {} });
-            }
-            scopeSamples[it->second].ms.push_back(scope.ms);
+            gpuScopes.add(scope.name, scope.depth, scope.ms);
         }
     }
 
-    nlohmann::json scopesJson = nlohmann::json::array();
-    for (const ScopeSamples& scope : scopeSamples)
+    ScopeAggregator cpuScopes;
+    for (const std::vector<CpuProfiler::ScopeTiming>& frame : perfRun.cpuScopeSamples)
     {
-        scopesJson.push_back({
-            { "name", scope.name },
-            { "depth", scope.depth },
-            { "ms", statsJson(scope.ms) },
-        });
+        for (const CpuProfiler::ScopeTiming& scope : frame)
+        {
+            cpuScopes.add(scope.name, scope.depth, scope.ms);
+        }
     }
 
     const std::string sceneName =
@@ -268,10 +407,12 @@ static nlohmann::json buildResultsJson()
           {
               { "scene", sceneName },
               { "adapter", renderState.adapterName },
-              { "width", SettingsManager::getAsUint("width") },
-              { "height", SettingsManager::getAsUint("height") },
+              { "width", static_cast<uint32_t>(renderState.viewport.Width) },
+              { "height", static_cast<uint32_t>(renderState.viewport.Height) },
               { "renderWidth", renderState.renderWidth },
               { "renderHeight", renderState.renderHeight },
+              { "frameGenActive", renderState.frameGen.active },
+              { "moveSpeed", SettingsManager::getAsFloat("perfMoveSpeed") },
               { "measuredFrames", perfRun.gpuSamples.size() },
               { "measureStartFrame", perfRun.measureStartFrame },
               { "stablePowerState", perfRun.stablePowerState },
@@ -279,8 +420,13 @@ static nlohmann::json buildResultsJson()
               { "timestamp", FileUtil::getTimestampString() },
           } },
         { "settings", settingsJson() },
-        { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) } } },
-        { "gpu", { { "frameMs", statsJson(gpuFrameMs) }, { "scopes", scopesJson } } },
+        { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) }, { "scopes", cpuScopes.toJson() } } },
+        { "streaming", streamingJson() },
+        { "gpu",
+          { { "frameMs", statsJson(gpuFrameMs) },
+            { "gapMs", statsJson(gpuGapMs) },
+            { "periodMs", statsJson(gpuPeriodMs) },
+            { "scopes", gpuScopes.toJson() } } },
     };
 }
 
