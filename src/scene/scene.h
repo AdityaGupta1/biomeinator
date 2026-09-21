@@ -113,6 +113,9 @@ class Scene
     friend class ToFreeList;
 
 private:
+    // Shaders index the typed scene buffers with 32-bit element indices, so a buffer read as a
+    // StructuredBuffer cannot usefully exceed 4 GB: sections past that mark trace fine (the BLAS
+    // takes a 64-bit VA) but shade from wrapped-around garbage
     ReservedManagedBuffer managedVertsBuffer{
         4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -125,7 +128,7 @@ private:
         },
     };
     ReservedManagedBuffer managedIdxsBuffer{
-        1ull * 1024 * 1024 * 1024, // 1 GB
+        4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
