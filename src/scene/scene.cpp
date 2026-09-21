@@ -576,9 +576,9 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     // Proportional to the backlog: a load drains at the setting's cap, a row of chunks becoming
     // eligible while moving lands over several frames instead of one, and there is no step
     // between the two
-    constexpr uint32_t minBlasBuildsPerFrame = 8;
-    constexpr uint32_t maxBlasBuildsPerFrame = 64;
-    constexpr uint32_t queueFractionPerFrame = 8;
+    constexpr uint32_t minBlasBuildsPerFrame = 4;
+    constexpr uint32_t maxBlasBuildsPerFrame = 48;
+    constexpr uint32_t queueFractionPerFrame = 16;
     const uint32_t numQueued = static_cast<uint32_t>(this->instancesReadyForBlasBuild.size());
     const uint32_t cap = std::clamp(numQueued / queueFractionPerFrame, minBlasBuildsPerFrame, maxBlasBuildsPerFrame);
     const uint32_t maxInstancesThisFrame = std::min(cap, numQueued);
