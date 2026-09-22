@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-20_
 
 # Thread Pool
 
@@ -15,6 +15,13 @@ Each worker dequeues up to `MAX_NUM_LOCAL_TASKS` (8) tasks while holding the loc
 ## Notify Strategy
 
 `bulkEnqueue` uses `notify_all()` when enqueuing multiple tasks but `notify_one()` for a single task. This avoids thundering-herd wakeups for single-task enqueues while still waking all workers for batch submissions.
+
+## Counters
+
+The pool keeps two relaxed atomics for measurement rather than scheduling: summed busy
+nanoseconds across workers (perf runs report worker utilization from it) and the number of
+tasks queued or executing, which `Terrain::getStreamingStats` exposes so a perf run can tell
+"nothing landed in the scene this frame" from "generation is finished".
 
 ## Lifetime
 

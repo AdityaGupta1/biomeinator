@@ -6,6 +6,7 @@
 #include "rendering/biome_map.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/area_light_compactor.h"
 #include "rendering/camera.h"
 #include "rendering/common/common_enums.h"
 #include "rendering/common/common_settings.h"
@@ -85,6 +86,7 @@ void init()
     initConstantParams();
 
     GpuProfiler::init(SettingsManager::isPerfMode() /*enableTimestamps*/);
+    CpuProfiler::init(SettingsManager::isPerfMode());
     perfRunInit();
 
     renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
@@ -96,6 +98,7 @@ void init()
     timedInitStep("initPipeline (join)", initPipeline);
 
     WaterDisplacer::init();
+    AreaLightCompactor::init();
 
     renderState.lightTreeManager.init();
     renderState.gpuRadixSort.init();
@@ -116,7 +119,8 @@ void init()
         }
     }
 
-    if (!renderState.headless)
+    // Perf runs come to the front too: fullscreen presentation needs an unoccluded window
+    if (!renderState.testMode)
     {
         SetForegroundWindow(hwnd);
     }
@@ -458,6 +462,9 @@ static float computeFogSigmaS(const float animTime)
 
 void render()
 {
+    // From here so the Reflex sleep is a scope of this frame rather than of none
+    CpuProfiler::beginFrame();
+
     // Rebuilds the swap chain when it changes, so it has to settle before any of this frame's work
     setFrameGenerationActive(isFrameGenerationRequested());
 
@@ -504,6 +511,7 @@ void render()
 
     if (useReflex)
     {
+        CPU_PROFILE_SCOPE("reflex sleep");
         CHECK_SL_RESULT(slReflexSleep(*frameToken));
         if (renderState.frameGen.pclPingPending)
         {
@@ -586,12 +594,20 @@ void render()
     {
         playerInput = WindowManager::getPlayerInput();
     }
-    renderState.camera.processInput(deltaTime, playerInput);
+    else if (renderState.perfRun.active)
+    {
+        playerInput = perfRunPlayerInput();
+    }
+    // A moving perf run advances a fixed distance per frame so the path depends only on the
+    // frame count, not on how fast the frames were
+    renderState.camera.processInput(perfRunIsMovingCamera() ? PERF_MOVE_FRAME_SECONDS : deltaTime, playerInput);
 
     if (renderState.voxelMode)
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "terrain");
         TerrainOmm::buildArrayIfPending(renderState.cmdList.Get(), frameCtx.toFreeList);
+        renderState.scene.setWaveFrustum(renderState.camera.getPos_WS(), renderState.camera.getFrustumSideNormals_WS());
+        CPU_PROFILE_SCOPE("terrain");
         Terrain::update(frameCtx.toFreeList);
         BiomeMap::update(renderState.cmdList.Get(), frameCtx.toFreeList);
     }
@@ -599,9 +615,11 @@ void render()
     bool didSceneChange;
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "scene update");
+        CPU_PROFILE_SCOPE("scene update");
         didSceneChange = renderState.scene.update(renderState.cmdList.Get(), frameCtx.toFreeList, waveTimeFloat);
     }
 
+    CpuProfiler::beginScope("record passes");
     const bool didCameraChange = renderState.camera.update();
 
     if (useDlss)
@@ -627,6 +645,7 @@ void render()
     renderParams->animTime = animTimeFloat;
     renderParams->waveTime = waveTimeFloat;
     renderParams->prevWaveTime = computeWaveTime(renderState.prevAnimTime);
+    renderParams->waveFade = renderState.scene.getWaveFade();
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
@@ -776,6 +795,7 @@ void render()
     if (renderState.scene.hasTlas())
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "light tree");
+        CPU_PROFILE_SCOPE("light tree");
         renderState.cmdList->SetDescriptorHeaps(std::size(descHeaps), descHeaps);
         renderState.lightTreeManager.update(renderState.cmdList.Get(), frameCtx.toFreeList);
         renderState.lightTreeManager.transitionForPathTracingRead(renderState.cmdList.Get());
@@ -1039,9 +1059,13 @@ void render()
         batch.submit(renderState.cmdList.Get());
     }
 
+    CpuProfiler::endScope(); // record passes
     GpuProfiler::endFrame(renderState.cmdList.Get());
 
-    submitCmd();
+    {
+        CPU_PROFILE_SCOPE("submit");
+        submitCmd();
+    }
 
     if (useReflex)
     {
@@ -1072,7 +1096,10 @@ void render()
         CHECK_SL_RESULT(slPCLSetMarker(sl::PCLMarker::ePresentStart, *frameToken));
     }
 
-    CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
+    {
+        CPU_PROFILE_SCOPE("present");
+        CHECK_HRESULT(renderState.proxySwapChain->Present(syncInterval, presentFlags));
+    }
 
     if (useReflex)
     {
@@ -1083,6 +1110,8 @@ void render()
     {
         updateFrameGenState();
     }
+
+    perfRunCollectCpuScopes();
 
     ++renderState.frameNumber;
     renderState.frameCtxIdx = (renderState.frameCtxIdx + 1) % NUM_FRAMES_IN_FLIGHT;
@@ -1112,13 +1141,20 @@ static void beginFrame()
 
     if (isWaitableSwapChainActive())
     {
+        CPU_PROFILE_SCOPE("swap chain wait");
         WaitForSingleObjectEx(renderState.frameLatencyWaitable, 1000 /*ms*/, true);
     }
-    renderState.fence.waitFor(frame.fenceValue);
+    {
+        CPU_PROFILE_SCOPE("fence wait");
+        renderState.fence.waitFor(frame.fenceValue);
+    }
 
     perfRunBeginCpuFrame();
 
-    frame.toFreeList.freeAll();
+    {
+        CPU_PROFILE_SCOPE("free all");
+        frame.toFreeList.freeAll();
+    }
     CHECK_HRESULT(frame.cmdAlloc->Reset());
     CHECK_HRESULT(renderState.cmdList->Reset(frame.cmdAlloc.Get(), nullptr));
 
@@ -1177,6 +1213,7 @@ void destroy()
     renderState.lightTreeManager.destroy();
     GpuProfiler::destroy();
     WaterDisplacer::destroy();
+    AreaLightCompactor::destroy();
     SkyAtmosphere::destroy();
     BiomeMap::destroy();
 

@@ -11,6 +11,7 @@
 #include "rendering/buffer/reserved_managed_buffer.h"
 #include "rendering/buffer/mapped_array.h"
 #include "rendering/common/common_registers.h"
+#include "rendering/common/common_params.h"
 #include "rendering/common/common_structs.h"
 
 #include <array>
@@ -21,6 +22,9 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+
+#include <array>
+#include <cfloat>
 
 class ToFreeList;
 
@@ -64,6 +68,9 @@ private:
     glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
+    glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of host_verts, set by finalizeGeometry
+    glm::vec3 boundsMax_OS{ 0.f, 0.f, 0.f };
+    uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
 
 public:
     std::vector<Vertex> host_verts{};
@@ -143,9 +150,21 @@ private:
     std::queue<uint32_t> availableInstanceIds{};
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
+    uint32_t numBlasBuilds{ 0 }; // lifetime total, for streaming measurements
     // finalized, BLAS-built deformable instances; drives the displacement dispatches and
     // BLAS refits (every deformable instance is water for now)
     std::unordered_set<Instance*> deformableInstances{};
+    // The subset inside the animation bounds, rebuilt when the bounds or the set change
+    std::vector<Instance*> animatedDeformables{};
+    bool animatedDeformablesDirty{ true };
+    // Instances within this radius of the center and inside the padded frustum are animated.
+    // waveFade is what the shaders use; its defaults (huge radii, zero normals) keep everything
+    // animated at full amplitude for scenes that never set them (glTF)
+    glm::vec2 deformableAnimCenterXZ_WS{ 0.f, 0.f };
+    float deformableAnimRadius{ FLT_MAX };
+    WaveFadeParams waveFade{ { 0.f, 0.f, 0.f }, 1e9f, 2e9f, 0.f, 0.f, 0.f, {} };
+    bool waveFrustumSet{ false };
+    float waveFrustumHeightBand{ FLT_MAX };
 
     std::queue<std::unique_ptr<Instance>> instancesToReuse{};
 
@@ -161,6 +180,27 @@ private:
 
     ManagedBufferSection tlasBufferSection;
     bool isTlasDirty{ false };
+    // The instances currently in the TLAS (visible, not scheduled for deletion, BLAS built),
+    // maintained incrementally so the per-frame TLAS rebuild only re-applies the global offset
+    // to a contiguous array instead of walking every instance; see knowledge/scene/scene.md
+    struct TlasInstanceEntry
+    {
+        D3D12_RAYTRACING_INSTANCE_DESC desc; // translation excludes transformOffset
+        glm::ivec3 transformOffset;
+        Instance* instance; // null once removed, until the next compaction
+        uint32_t areaLightSparseOffset;
+        uint32_t numAreaLights;
+        uint32_t areaLightDenseOffset; // where its block sits in the sampling structure
+    };
+    std::vector<TlasInstanceEntry> tlasInstanceEntries;
+    bool tlasEntriesNeedCompaction{ false };
+    // Instances whose visibility flipped on outside of update(), added once a ToFreeList is at hand
+    std::vector<Instance*> pendingTlasEntryAdds;
+    void addTlasEntry(Instance* instance, ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    void removeTlasEntry(Instance* instance);
+    void compactTlasEntries(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    // Appends [sparseOffset, sparseOffset + count) to the sampling structure on the device
+    void appendAreaLightSamplingRange(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, uint32_t sparseOffset, uint32_t count);
     // Global radiance changes, distinct from streamed instance/TLAS updates.
     bool radianceHistoryInvalidated{ false };
 
@@ -204,11 +244,11 @@ private:
     void freeInstance(Instance* instance);
 
     // returns true if TLAS is now dirty
-    bool makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
+    void makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
 
-    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights);
+    void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
     void uploadPendingTextures(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
 
@@ -220,6 +260,22 @@ public:
     bool consumeRadianceHistoryInvalidation();
 
     bool update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime);
+
+    uint32_t getNumBlasBuilds() const
+    {
+        return this->numBlasBuilds;
+    }
+
+    // Deformable instances outside animRadius of the center or outside the padded frustum are
+    // left static; the shaders fade the waves to rest height towards both limits so the two
+    // regions meet flat
+    void setDeformableAnimation(glm::vec2 centerXZ_WS, float animRadius, float fadeStart, float fadeEnd);
+    void setWaveFrustum(glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS);
+    bool isDeformableAnimated(const Instance* instance) const;
+    const WaveFadeParams& getWaveFade() const
+    {
+        return this->waveFade;
+    }
 
     Instance* requestNewInstance(ToFreeList& toFreeList);
     void markInstanceReadyForBlasBuild(Instance* instance);

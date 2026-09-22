@@ -1,4 +1,4 @@
-_Last edited: 2026-08-22_
+_Last edited: 2026-09-20_
 
 # ManagedBuffer
 
@@ -29,6 +29,16 @@ Three copy paths, chosen based on whether the source is on CPU or GPU:
 - **`copyFromHostBuffer` / `copyFromHostVector`** — `memcpy` into a mapped buffer. Only valid when `isMapped` is true.
 - **`copyFromDeviceBuffer` / `copyFromManagedBuffer`** — `CopyBufferRegion` on the command list. Transitions the buffer to `COPY_DEST` and back automatically, unless a batch copy is active.
 - **Batch copy** (`beginBatchCopy` / `endBatchCopy`) — holds the buffer in `COPY_DEST` state across multiple `copyFromDeviceBuffer` calls, avoiding redundant barriers. Must be balanced and only valid for unmapped buffers.
+
+## Initial Sizes
+
+The upload and scratch buffers that world streaming fills (`sharedVertsUploadBuffer`,
+`sharedBlasUploadBuffer`, the AS scratch buffers) are created at tens of megabytes rather than
+grown from a few kilobytes. Every committed-buffer doubling is a `CreateCommittedResource`,
+a copy of the old contents and, three frames later, a release of the old buffer; measured on
+an initial render-distance-40 load these were 100 ms and 80 ms stalls respectively, and
+even a 1-2 MB release cost ~10 ms. Doubling still works as the fallback, it is just meant not
+to happen during play.
 
 ## The Two Implementations
 

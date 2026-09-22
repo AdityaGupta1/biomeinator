@@ -294,6 +294,21 @@ void Camera::setPos_WS(glm::vec3 newPos)
     this->posFloat_WS = newPos; // will be updated properly on next call to processInput()
 }
 
+std::array<glm::vec3, 4> Camera::getFrustumSideNormals_WS() const
+{
+    const glm::vec3 forward(this->params.forward_WS.x, this->params.forward_WS.y, this->params.forward_WS.z);
+    const glm::vec3 right(this->params.right_WS.x, this->params.right_WS.y, this->params.right_WS.z);
+    const glm::vec3 up(this->params.up_WS.x, this->params.up_WS.y, this->params.up_WS.z);
+    const float tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
+    const float tanHalfFovX = tanHalfFovY * this->aspectRatio;
+    return {
+        glm::normalize(right + forward * tanHalfFovX),
+        glm::normalize(-right + forward * tanHalfFovX),
+        glm::normalize(up + forward * tanHalfFovY),
+        glm::normalize(-up + forward * tanHalfFovY),
+    };
+}
+
 glm::vec3 Camera::getPos_WS() const
 {
     return glm::vec3(this->posInt_WS) + this->posFloat_WS;

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-20_
 
 # Scene
 
@@ -32,20 +32,76 @@ things stay gated on `isTlasDirty` so per-frame deformation doesn't trigger them
 light sampling structure rewrite (which would rebuild the light tree and reset accumulation
 every frame, hanging test-mode screenshots) and the `didChange` return value.
 
-**INVARIANT:** the TLAS instance set must only change on dirty rebuilds, which also rebuild
-the area light structures — non-dirty per-frame rebuilds just refresh AABBs. This holds
-because `makeQueuedBlases` dirties the TLAS on any frame that builds a visible BLAS, and
-`setVisible` dirties it when toggling an instance with a valid BLAS. If a freshly built
-emissive instance entered the TLAS before the sampling structure / light tree knew about it,
-the path tracer's light tree lookups for its hits read garbage and can hang the GPU (observed
-as intermittent TDR during world import in `cave_lights`).
+**INVARIANT:** an instance enters or leaves the TLAS only through `addTlasEntry` /
+`removeTlasEntry`, which update the area light sampling structure in the same step. If a
+freshly built emissive instance entered the TLAS before the sampling structure / light tree
+knew about it, the path tracer's light tree lookups for its hits read garbage and can hang the
+GPU (observed as intermittent TDR during world import in `cave_lights`).
+
+## TLAS Instance Entries
+
+`tlasInstanceEntries` is the contiguous list of instances currently in the TLAS, maintained
+incrementally rather than rebuilt by walking `instances` every frame: at ten thousand chunks
+that walk (plus re-emitting two million area light indices) cost several milliseconds per
+frame during streaming, when every frame changes topology. The per-frame rebuild only copies
+the entries into the frame's instance desc array with the global offset applied.
+
+- Adds happen where a `ToFreeList` is at hand: `makeQueuedBlases` adds a visible instance as
+  its BLAS is built, and `update()` drains `pendingTlasEntryAdds`, which `setVisible(true)`
+  fills because it has no list to pass to a possible sampling structure resize.
+- Removals (`setVisible(false)`, `freeInstance`) only null the entry's instance pointer and
+  set `tlasEntriesNeedCompaction`; `makeTlas` compacts once, so a frame that unloads many
+  chunks pays one pass, not one per chunk. Each `Instance` carries its entry index so both
+  operations are O(1). The entries themselves compact on the CPU (13k of them is nothing);
+  the area light sampling structure compacts on the GPU, see below.
+- Transform setters update the entry in place; they also mark `isTlasDirty` so the change
+  resets accumulation like any other scene change.
 
 ## Deformable Instances
 
 `Instance::isDeformable` (set by chunk meshing for water) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
-dispatches (`WaterDisplacer`) and BLAS refits. Displacement rewrites verts **in place** in
-the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
+dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset within the circular
+animation radius that `Terrain::update` sets (24 chunks, a constant there) *and*
+inside the padded view frustum: at render distance 40 a world has ~3,500 water chunks, and
+refitting all of them was most of a 7 ms main thread and 3.6 ms of GPU per frame. The subset
+is cached in `animatedDeformables` and rebuilt when the radius, its chunk-quantized center,
+the frustum normals, the camera's 16-block height band or the set change, so a locked camera never rebuilds and a turning one
+rebuilds every frame (a few thousand cheap tests).
+
+Static and animated water meet without a seam because the wave *amplitude* fades to zero
+towards both limits (`waveFade` in `water_waves.hlsli`, driven by `WaveFadeParams`): radially
+over the eight chunks before the animation distance, and angularly over a band past the frustum
+edge, measured as the sine of the angle so it is a plane-distance test. A chunk is therefore
+flat by the time it leaves the set and starts flat when it enters. Water within
+`WATER_FOV_EXEMPT_FAR` of the camera ignores the frustum so a turn never reveals a frozen
+surface at the player's feet. The same params travel in `RenderParams` and in the displacement
+constants and are applied by the displacement pass and the motion vector delta in the
+G-buffer. The shading normal is deliberately *not* faded, neither its analytic wave gradient
+nor its noise perturbation: far water whose geometry is flat still shades as waves, so the
+fade boundary shows no change in lighting, only in silhouette. The frustum normals come from `Camera::getFrustumSideNormals_WS` at the current
+field of view, so the zoom key narrows the animated region with the view; the membership
+test pads wider than the shader's outer band and adds the chunk's bounding sphere (from the
+instance bounds `finalizeGeometry` records), so anything the shaders could still animate is
+always in the set. A camera jump or a fast turn can still take a chunk out mid-wave, so
+instances leaving the set get one displacement dispatch with `waveScale` 0 plus a refit, and
+`freeInstance` erases from the cached subset so that comparison never sees a freed pointer.
+`sampleMeshWaveOffsetY` needs no fade term because it is only sampled at the camera, where
+the fade is 1.
+
+The displacement is one dispatch over the concatenated vertex ranges of every animated
+instance, with a per-frame instance table found by binary search, and the refits share one
+scratch allocation per frame; recording a thousand dispatches and a thousand scratch
+allocations per frame was 1.5 ms of main thread while moving.
+
+The cost of animated water is mostly not the refit itself: refit BLASes trace slower than
+built ones, and path tracing over the visible water grows with the animated radius, roughly
+0.3 ms of path tracing plus 0.15 ms of refit per 4 chunks of radius at render distance 40
+(3.1 ms path tracing at 16 chunks, 3.4 at 20, 3.8 at 24, measured with a four-chunk band).
+The frustum limit removes about a third of the refits at a given radius. The radius (24 chunks,
+fading from 16) is `waterAnimationChunks` in `terrain.cpp`.
+
+Displacement rewrites verts **in place** in the shared verts buffer — no rest-position copy — relying on top verts sitting at k + 7/8
 and the wave amplitude staying < 0.125 (see `shaders/common/water_waves.hlsli`). The
 whole-buffer UAV transitions around the dispatch also cover terrain verts, so the pass must
 not overlap other passes reading verts.
@@ -63,8 +119,21 @@ actually hit.
 
 Indirection array mapping dense sampling indices `[0, numAreaLights)` to sparse area light
 buffer indices. Needed because area lights live in a managed buffer where freed/reordered
-instances leave gaps, but uniform sampling needs a contiguous range. Rebuilt every TLAS
-rebuild.
+instances leave gaps, but uniform sampling needs a contiguous range. It is maintained with
+the TLAS entries and its **device buffer is the source of truth**: an add writes the
+instance's range into the current staging slot and marks it dirty (the mapped array's slots
+are per-frame, so nothing else in a slot can be trusted), and a compaction is a GPU gather
+(`AreaLightCompactor`): the CPU only computes the surviving blocks' old and new offsets, from
+the first moved block onwards, and one dispatch plus a copy-back rewrites that tail. Rewriting
+the 2M entries on the CPU instead was a 1.65 ms spike on every chunk-unload frame. The
+compactor's scratch is pre-sized for a full rewrite per frame in flight, and a compaction that
+moved no light and changed no count (only water or other non-emissive instances left) does not
+mark the light tree stale. Two
+ordering rules follow: staged appends must be uploaded before a compaction or a device-side
+resize reads the buffer (both call `copyFromUploadBufferIfDirty` first), and growth uses
+`MappedArray::resizeOnDevice`, which copies the old device contents and marks nothing dirty,
+since the ordinary `resize` would upload a stale staging slot. It is pre-sized to 2M entries,
+since a resize during streaming showed up as a 30-50 ms frame.
 
 ## Reset
 

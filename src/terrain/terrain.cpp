@@ -18,6 +18,7 @@
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
 #include "settings_manager.h"
+#include "rendering/cpu_profiler.h"
 #include "logger.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
@@ -117,6 +118,16 @@ static std::mutex chunksToDestroyMutex;
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
 
+StreamingStats getStreamingStats()
+{
+    return {
+        .numWorkers = threadPool.getNumWorkers(),
+        .workerBusyNanos = threadPool.getBusyNanos(),
+        .taskBacklog = static_cast<uint32_t>(tasksToEnqueue.size()),
+        .tasksPending = threadPool.getNumPendingTasks(),
+    };
+}
+
 // Test-mode-only import-completion gate. See knowledge/terrain/world_export_import.md
 // for timing/atomic-ordering rationale.
 static std::atomic<uint32_t> expectedImportedChunks{ 0 };
@@ -153,8 +164,8 @@ static bool cameraBiomeValid = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
-inline constexpr uint32_t maxTasksPerFrame = 48;
-inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 12;
+inline constexpr uint32_t maxTasksPerFrame = 512;
+inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
 
 void update(ToFreeList& toFreeList)
 {
@@ -182,6 +193,22 @@ void update(ToFreeList& toFreeList)
         (maxRenderChunkPos.y + 1) * static_cast<int>(chunkSizeXZ),
     };
 
+    // Wave displacement is sub-pixel beyond this, so far water keeps a static surface rather
+    // than paying a BLAS refit per chunk per frame. The fade reaches rest height at the
+    // animation distance and the animated set extends past it, so chunks are flat by the time
+    // they leave the set. That set is chosen from the camera's chunk center so it only changes
+    // when the camera changes chunk, with enough slack for the camera's position within the
+    // chunk and for the chunk offset being its corner rather than its farthest vertex.
+    constexpr float waterAnimationChunks = 24.f;
+    constexpr float waterFadeChunks = 8.f;
+    const float chunkSize = static_cast<float>(chunkSizeXZ);
+    const float waveFadeEnd = waterAnimationChunks * chunkSize;
+    const float waveFadeStart = waveFadeEnd - waterFadeChunks * chunkSize;
+    const glm::vec2 cameraChunkCenterXZ_WS =
+        glm::floor(glm::vec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / chunkSize) * chunkSize + 0.5f * chunkSize;
+    scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);
+
+    CpuProfiler::beginScope("chunk scan");
     cameraUnderwater = false;
     cameraBiomeValid = false;
     {
@@ -397,16 +424,10 @@ void update(ToFreeList& toFreeList)
         lastChunkPos = currentChunkPos;
     }
 
-    const uint32_t numGenerateTerrainTasksThisFrame =
-        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
-    for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
-    {
-        Chunk* chunk = chunksToGenerateTerrain.front();
-        chunksToGenerateTerrain.pop_front();
-
-        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
-    }
-
+    CpuProfiler::endScope(); // chunk scan
+    CpuProfiler::beginScope("enqueue");
+    // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
+    // generateTerrain tasks would otherwise starve the chunks that are one step from visible
     while (!chunksToGenerateGeometry.empty())
     {
         Chunk* chunk = chunksToGenerateGeometry.front();
@@ -416,6 +437,16 @@ void update(ToFreeList& toFreeList)
         Instance* waterInstance = scene->requestNewInstance(toFreeList);
         chunk->setInstances(terrainInstance, waterInstance);
         tasksToEnqueue.push_back({ task_createInstances, chunk });
+    }
+
+    const uint32_t numGenerateTerrainTasksThisFrame =
+        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
+    for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
+    {
+        Chunk* chunk = chunksToGenerateTerrain.front();
+        chunksToGenerateTerrain.pop_front();
+
+        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
     }
 
     if (!tasksToEnqueue.empty())
@@ -442,6 +473,8 @@ void update(ToFreeList& toFreeList)
         thisFrameTasks.clear();
     }
 
+    CpuProfiler::endScope(); // enqueue
+    CPU_PROFILE_SCOPE("blas mark, destroy");
     std::vector<Chunk*> chunksToCreateBlasNow;
     {
         std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);

@@ -38,8 +38,7 @@ def entry_args(entry):
         args.append(f"--scene={(TESTS_DIR / entry['scene']).as_posix()}")
     elif "world" in entry:
         args.append(f"--world={(TESTS_DIR / entry['world']).as_posix()}")
-    else:
-        sys.exit(f"perf entry '{entry['name']}' must have 'scene' or 'world'")
+    # Entries with neither generate a world from the seed in their args
     return args
 
 
@@ -59,12 +58,22 @@ def scope_rows(report):
     yield "frame", report["gpu"]["frameMs"]
     for scope in report["gpu"]["scopes"]:
         yield "  " * (scope["depth"] + 1) + scope["name"], scope["ms"]
+    for scope in report["cpu"].get("scopes", []):
+        yield "cpu " + "  " * scope["depth"] + scope["name"], scope["ms"]
+    # Older reports predate these
+    yield "gap before frame", report["gpu"].get("gapMs")
+    yield "frame period", report["gpu"].get("periodMs")
+    streaming = report.get("streaming")
+    if streaming:
+        yield "streaming frame period", streaming["periodMs"]
+        yield "streaming cpu frame", streaming["cpuFrameMs"]
 
 
 def print_report(name, report):
     meta = report["meta"]
     print(f"\n{name}: {meta['measuredFrames']} frames at {meta['renderWidth']}x{meta['renderHeight']} "
-          f"-> {meta['width']}x{meta['height']} on {meta['adapter']}")
+          f"-> {meta['width']}x{meta['height']} on {meta['adapter']}"
+          f"{', frame generation on' if meta.get('frameGenActive') else ''}")
     if not meta["stablePowerState"]:
         print("  (stable power state unavailable; timings will be noisier)")
     if meta["timedOut"]:
@@ -72,7 +81,12 @@ def print_report(name, report):
     cpu = report["cpu"]["frameMs"]
     if cpu:
         print(f"  cpu frame: median {cpu['median']:.3f} ms, p95 {cpu['p95']:.3f} ms")
-    print(f"  {'gpu scope':<28}{'median':>10}{'mean':>10}{'p95':>10}{'max':>10}{'count':>8}")
+    streaming = report.get("streaming")
+    if streaming:
+        print(f"  streaming: {streaming['blasBuilds']} BLAS builds over {streaming['frames']} frames in "
+              f"{streaming['seconds']:.2f} s, workers {streaming['workerUtilization'] * 100:.0f}% busy, "
+              f"task backlog mean {streaming['taskBacklog']['mean']:.1f}")
+    print(f"  {'scope':<28}{'median':>10}{'mean':>10}{'p95':>10}{'max':>10}{'count':>8}")
     for label, stats in scope_rows(report):
         if stats is None:
             continue
@@ -121,7 +135,13 @@ def cmd_compare(args):
         base_rows = dict(scope_rows(baseline[name]))
         cand_rows = dict(scope_rows(candidate[name]))
         print(f"\n{name}")
-        print(f"  {'gpu scope':<28}{'baseline':>10}{'candidate':>10}{'delta':>10}")
+        base_streaming = baseline[name].get("streaming")
+        cand_streaming = candidate[name].get("streaming")
+        if base_streaming and cand_streaming:
+            print(f"  streaming: {base_streaming['seconds']:.2f} s -> {cand_streaming['seconds']:.2f} s "
+                  f"({base_streaming['blasBuilds']} -> {cand_streaming['blasBuilds']} BLAS builds, workers "
+                  f"{base_streaming['workerUtilization'] * 100:.0f}% -> {cand_streaming['workerUtilization'] * 100:.0f}% busy)")
+        print(f"  {'scope':<28}{'baseline':>10}{'candidate':>10}{'delta':>10}")
         for label in base_rows:
             base = base_rows[label]
             cand = cand_rows.get(label)

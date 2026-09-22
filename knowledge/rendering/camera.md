@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-20_
 
 # Camera
 
@@ -24,3 +24,9 @@ about whether Streamline actually needs it.
 
 Halton sequence jitter is used for accumulation mode and DLSS. Sequence length is set
 externally via `setJitterHaltonSequenceLength()` — DLSS determines the optimal length.
+
+## Frustum Side Normals
+
+`getFrustumSideNormals_WS` gives the inward normals of the four side planes through the camera
+at the *current* field of view, which is what makes the water animation region follow the zoom
+key; see [scene → scene.md](../scene/scene.md#deformable-instances).

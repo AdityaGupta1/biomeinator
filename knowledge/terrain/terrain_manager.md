@@ -1,4 +1,4 @@
-_Last edited: 2026-05-03_
+_Last edited: 2026-09-20_
 
 # Terrain Manager
 
@@ -27,7 +27,15 @@ The scan iterates the union of the previous and current distance bounds. Chunks 
 
 ## Task Throttling
 
-Terrain generation tasks (`maxNumGenerateTerrainTasksPerFrame = 12`) are throttled separately from other tasks (`maxTasksPerFrame = 48`) because they're the heaviest (3D noise sampling). Other task types share the 48-task budget via a single deque, processed FIFO.
+Terrain generation tasks (`maxNumGenerateTerrainTasksPerFrame = 96`) are throttled separately from other tasks (`maxTasksPerFrame = 512`) because they're the heaviest (3D noise sampling). Other task types share the budget via a single deque, processed FIFO.
+
+The caps used to be 12 and 48, which held a backlog of ~470 tasks with the workers 18% busy on an initial render-distance-40 load. After the September 2026 generator speedup the limits moved again: at 32/256 with a BLAS cap of 32 the load took 5.1 s with the workers 23% busy; 96/512 with a BLAS cap of 64 takes 3.2 s at 56% busy, with the per-frame period during the load about 2 ms worse at p95 (denser frames) and nothing binding but the pipeline itself. The caps only matter while a backlog exists, so they do not change streaming while moving. The pool is FIFO, so with a deep queue the order tasks are pushed matters: `createInstances` tasks go in ahead of new `generateTerrain` tasks, otherwise chunks one step from visible starve behind hundreds of heavy terrain tasks and the scene can go dozens of frames without a chunk landing.
+
+The BLAS build cap in `Scene::makeQueuedBlases` is the matching limit on the render side; at 8 it was the binding limit on generation time, and after the generator speedup 32 was again. The per-frame cap is proportional to the queue, an eighth of it clamped to [8, 64], so a load drains at the setting while a row of chunks becoming eligible while moving lands over several frames; 32 of them landing in one frame was the most frequent frame spike, and a hard threshold between the two rates would make a draining load visibly change speed.
+
+## Water Animation Distance
+
+`Terrain::update` hands the scene the circle within which water instances animate together with the wave fade radii: the fade ends at `waterAnimationChunks` (24) and starts eight chunks before it, and the set's radius extends a further two and a half chunks past the end so chunks leave it flat. The frustum side of the limit is set by the renderer, not here. See [scene → scene.md](../scene/scene.md#deformable-instances) for why the fade exists and what animated water costs.
 
 ## Dirty Flag
 

@@ -4,10 +4,13 @@
 #include "scene.h"
 
 #include "debug.h"
+#include "rendering/area_light_compactor.h"
 #include "rendering/buffer/acs_helper.h"
 #include "rendering/buffer/buffer_helper.h"
 #include "rendering/buffer/to_free_list.h"
 #include "rendering/camera.h"
+#include "rendering/cpu_profiler.h"
+#include "rendering/common/common_settings.h"
 #include "rendering/dxr_common.h"
 #include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
@@ -68,11 +71,21 @@ void Instance::reset(bool alsoFreeFromScene)
 void Instance::setTransform(const DirectX::XMFLOAT3X4& transform)
 {
     this->transform = transform;
+    if (this->tlasEntryIdx != UINT32_MAX)
+    {
+        memcpy(this->scene->tlasInstanceEntries[this->tlasEntryIdx].desc.Transform, &transform, sizeof(XMFLOAT3X4));
+        this->scene->isTlasDirty = true;
+    }
 }
 
 void Instance::setTransformOffset(glm::ivec3 offset)
 {
     this->transformOffset = offset;
+    if (this->tlasEntryIdx != UINT32_MAX)
+    {
+        this->scene->tlasInstanceEntries[this->tlasEntryIdx].transformOffset = offset;
+        this->scene->isTlasDirty = true;
+    }
 }
 
 void Instance::finalizeGeometry()
@@ -81,6 +94,15 @@ void Instance::finalizeGeometry()
 
     const uint32_t triCount = this->getTriCount();
     ASSERT(this->host_perTriDatas.size() == triCount);
+
+    this->boundsMin_OS = glm::vec3(FLT_MAX);
+    this->boundsMax_OS = glm::vec3(-FLT_MAX);
+    for (const Vertex& vert : this->host_verts)
+    {
+        const glm::vec3 pos(vert.pos_OS.x, vert.pos_OS.y, vert.pos_OS.z);
+        this->boundsMin_OS = glm::min(this->boundsMin_OS, pos);
+        this->boundsMax_OS = glm::max(this->boundsMax_OS, pos);
+    }
 
     this->isGeometryFinalized = true;
 }
@@ -147,12 +169,23 @@ bool Instance::getIsGeometryFinalized() const
 
 void Instance::setVisible(bool visible)
 {
-    // TODO: may need to revisit this and check for correctness
-    if (this->isVisible != visible && this->geoWrapper.blasBufferSection.isValid())
+    if (this->isVisible == visible)
     {
-        this->scene->isTlasDirty = true;
+        return;
     }
     this->isVisible = visible;
+    if (!this->geoWrapper.blasBufferSection.isValid())
+    {
+        return;
+    }
+    if (visible)
+    {
+        this->scene->pendingTlasEntryAdds.push_back(this);
+    }
+    else
+    {
+        this->scene->removeTlasEntry(this);
+    }
 }
 
 void Instance::setMaterialIdx(uint32_t id)
@@ -181,7 +214,8 @@ void Scene::init()
     this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
     this->managedPerTriDatasBuffer.init();
 
-    this->maxNumInstances = 1 << 8;
+    this->maxNumInstances = 1 << 15;
+    this->instances.reserve(this->maxNumInstances);
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
         this->mappedInstanceDescsArrays[i].setName(L"scene instanceDescs frame " + std::to_wstring(i));
@@ -195,7 +229,7 @@ void Scene::init()
     }
 
     this->sharedBlasUploadBuffer.setName(L"scene sharedBlasUpload");
-    this->sharedBlasUploadBuffer.init(1 << 16 /*bytes*/);
+    this->sharedBlasUploadBuffer.init(128ull << 20 /*bytes*/);
 
     this->mappedMaterialsArray.setName(L"scene materials");
     this->mappedMaterialsArray.init(8 /*elements*/);
@@ -207,7 +241,7 @@ void Scene::init()
     // staging is safe here. It is required: the light tree's emitter_collect indexes its
     // UAVs with values read straight out of this buffer, so a torn upload becomes a wild
     // GPU write rather than a wrong-looking frame.
-    this->areaLightSamplingStructure.init(1 << 8 /*elements*/, { .perFrameUpload = true });
+    this->areaLightSamplingStructure.init(1 << 21 /*elements*/, { .perFrameUpload = true });
 }
 
 void Scene::reset()
@@ -226,6 +260,10 @@ void Scene::reset()
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
     this->deformableInstances.clear();
+    this->animatedDeformablesDirty = true;
+    this->tlasInstanceEntries.clear();
+    this->tlasEntriesNeedCompaction = false;
+    this->pendingTlasEntryAdds.clear();
     this->availableInstanceIds = {};
     for (uint32_t i = 0; i < Renderer::NUM_FRAMES_IN_FLIGHT; ++i)
     {
@@ -301,14 +339,19 @@ void Scene::freeInstance(Instance* instance)
 {
     this->availableInstanceIds.push(instance->id);
     this->instancesReadyForBlasBuild.erase(instance);
-    this->deformableInstances.erase(instance);
+    if (this->deformableInstances.erase(instance) > 0)
+    {
+        // Also drop it from the cached subset, which is compared against on the next rebuild
+        std::erase(this->animatedDeformables, instance);
+        this->animatedDeformablesDirty = true;
+    }
 
     auto instanceIter = this->instances.find(instance->id);
     ASSERT(instanceIter != this->instances.end());
     this->instancesToReuse.push(std::move(instanceIter->second));
     this->instances.erase(instanceIter);
 
-    this->isTlasDirty |= instance->isVisible; // TODO: check if the instance even had a valid BLAS (be careful about order of operations in Instance::reset())
+    this->removeTlasEntry(instance);
 }
 
 uint32_t Scene::addMaterial(ToFreeList& toFreeList, const Material* material)
@@ -380,10 +423,14 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 
     {
         GPU_PROFILE_SCOPE(cmdList, "blas build");
-        this->isTlasDirty |= this->makeQueuedBlases(cmdList, toFreeList);
+        CPU_PROFILE_SCOPE("blas builds");
+        this->makeQueuedBlases(cmdList, toFreeList);
     }
 
-    this->updateDeformableInstances(cmdList, toFreeList, waveTime);
+    {
+        CPU_PROFILE_SCOPE("deformables");
+        this->updateDeformableInstances(cmdList, toFreeList, waveTime);
+    }
 
     bool didChange = false;
 
@@ -397,9 +444,19 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 
     if (!this->pendingTextures.empty())
     {
+        CPU_PROFILE_SCOPE("textures");
         this->uploadPendingTextures(cmdList, toFreeList);
         didChange = true;
     }
+
+    for (Instance* const instance : this->pendingTlasEntryAdds)
+    {
+        if (instance->isVisible && !instance->isScheduledForDeletion && instance->geoWrapper.blasBufferSection.isValid())
+        {
+            this->addTlasEntry(instance, cmdList, toFreeList);
+        }
+    }
+    this->pendingTlasEntryAdds.clear();
 
     this->prevGlobalInstanceOffset = this->globalInstanceOffset;
     // Intentionally rebuild the TLAS every frame once one exists, even on frames with no
@@ -412,10 +469,11 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         didChange |= this->isTlasDirty;
         const glm::ivec3 cameraPosInt_WS = Renderer::getCamera().getPosInt_WS();
         this->globalInstanceOffset = glm::ivec3(cameraPosInt_WS.x, 0, cameraPosInt_WS.z); // y = 0 to optimize for voxel mode
-        // Rewrite the area light sampling structure only on topology changes so light tree
-        // rebuilds and accumulation resets aren't triggered every frame
+        // The entries and the area light sampling structure were kept up to date as instances
+        // came and went, so this only re-applies the global offset
         GPU_PROFILE_SCOPE(cmdList, "tlas build");
-        this->makeTlas(cmdList, toFreeList, this->isTlasDirty /*updateAreaLights*/);
+        CPU_PROFILE_SCOPE("tlas");
+        this->makeTlas(cmdList, toFreeList);
     }
 
     didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
@@ -429,23 +487,57 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     {
         return;
     }
-    GPU_PROFILE_SCOPE(cmdList, "deformables");
     std::vector<WaterDisplacer::DispatchInputs> allDispatchInputs;
     std::vector<AcsHelper::GeometryWrapper*> geoWrappers;
-    allDispatchInputs.reserve(this->deformableInstances.size());
-    geoWrappers.reserve(this->deformableInstances.size());
-    for (Instance* const instance : this->deformableInstances)
+    const auto addDispatch = [&](Instance* const instance, const float waveScale)
     {
         WaterDisplacer::DispatchInputs dispatchInputs;
         dispatchInputs.vertsBufferOffset =
             Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         dispatchInputs.vertCount = Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.sizeBytes);
-        dispatchInputs.transformOffsetX = instance->transformOffset.x;
-        dispatchInputs.transformOffsetZ = instance->transformOffset.z;
+        dispatchInputs.transformOffset = instance->transformOffset;
+        dispatchInputs.waveScale = waveScale;
         allDispatchInputs.push_back(dispatchInputs);
 
         geoWrappers.push_back(&instance->geoWrapper);
+    };
+
+    if (this->animatedDeformablesDirty)
+    {
+        std::vector<Instance*> previouslyAnimated = std::move(this->animatedDeformables);
+        this->animatedDeformables.clear();
+        for (Instance* const instance : this->deformableInstances)
+        {
+            if (this->isDeformableAnimated(instance))
+            {
+                this->animatedDeformables.push_back(instance);
+            }
+        }
+        this->animatedDeformablesDirty = false;
+
+        // A chunk normally leaves the set already at rest height because the fades end inside
+        // the set's limits, but a camera jump or a fast turn can take one out mid-wave; one
+        // flattening pass makes what it keeps for good match its static neighbours
+        std::sort(this->animatedDeformables.begin(), this->animatedDeformables.end());
+        for (Instance* const instance : previouslyAnimated)
+        {
+            if (!std::binary_search(this->animatedDeformables.begin(), this->animatedDeformables.end(), instance))
+            {
+                addDispatch(instance, 0.f /*waveScale*/);
+            }
+        }
     }
+
+    for (Instance* const instance : this->animatedDeformables)
+    {
+        addDispatch(instance, 1.f /*waveScale*/);
+    }
+
+    if (geoWrappers.empty())
+    {
+        return;
+    }
+    GPU_PROFILE_SCOPE(cmdList, "deformables");
 
     // whole-resource transitions also cover terrain verts, so the displacement pass must not
     // overlap other passes reading verts (BLAS build/refit reads them in NON_PIXEL_SHADER_RESOURCE)
@@ -457,7 +549,8 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
-        WaterDisplacer::dispatch(cmdList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, allDispatchInputs);
+        WaterDisplacer::dispatch(
+            cmdList, toFreeList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
     }
 
     BufferHelper::uavBarrier(cmdList, dev_vertsResource);
@@ -472,18 +565,23 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
     }
 }
 
-static constexpr uint32_t maxBlasBuildsPerFrame = 8;
-
-bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     if (this->instancesReadyForBlasBuild.empty())
     {
-        return false;
+        return;
     }
 
     std::vector<Instance*> instancesToBuildThisFrame;
-    const uint32_t maxInstancesThisFrame =
-        std::min(maxBlasBuildsPerFrame, static_cast<uint32_t>(this->instancesReadyForBlasBuild.size()));
+    // Proportional to the backlog: a load drains at the setting's cap, a row of chunks becoming
+    // eligible while moving lands over several frames instead of one, and there is no step
+    // between the two
+    constexpr uint32_t minBlasBuildsPerFrame = 4;
+    constexpr uint32_t maxBlasBuildsPerFrame = 48;
+    constexpr uint32_t queueFractionPerFrame = 16;
+    const uint32_t numQueued = static_cast<uint32_t>(this->instancesReadyForBlasBuild.size());
+    const uint32_t cap = std::clamp(numQueued / queueFractionPerFrame, minBlasBuildsPerFrame, maxBlasBuildsPerFrame);
+    const uint32_t maxInstancesThisFrame = std::min(cap, numQueued);
     instancesToBuildThisFrame.reserve(maxInstancesThisFrame);
     for (Instance* const instance : this->instancesReadyForBlasBuild)
     {
@@ -502,7 +600,7 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     if (instancesToBuildThisFrame.empty())
     {
-        return false;
+        return;
     }
 
     for (Instance* const instance : instancesToBuildThisFrame)
@@ -547,11 +645,11 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     }
 
     AcsHelper::makeBlases(cmdList, toFreeList, &this->managedVertsBuffer, &this->managedIdxsBuffer, allBlasInputs);
+    this->numBlasBuilds += static_cast<uint32_t>(allBlasInputs.size());
 
     this->managedPerTriDatasBuffer.beginBatchCopy(cmdList);
     this->managedAreaLightsBuffer.beginBatchCopy(cmdList);
 
-    bool hadVisibleInstance = false;
     for (Instance* const instance : instancesToBuildThisFrame)
     {
         InstanceData instanceData{};
@@ -607,18 +705,154 @@ bool Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         if (instance->isDeformable)
         {
             this->deformableInstances.insert(instance);
+            this->animatedDeformablesDirty = true;
         }
 
-        hadVisibleInstance |= instance->isVisible;
+        if (instance->isVisible)
+        {
+            this->addTlasEntry(instance, cmdList, toFreeList);
+        }
     }
 
     this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
     this->managedAreaLightsBuffer.endBatchCopy(cmdList);
-
-    return hadVisibleInstance;
 }
 
-void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, bool updateAreaLights)
+void Scene::appendAreaLightSamplingRange(ID3D12GraphicsCommandList4* const cmdList,
+                                         ToFreeList& toFreeList,
+                                         const uint32_t sparseOffset,
+                                         const uint32_t count)
+{
+    if (count == 0)
+    {
+        return;
+    }
+    const uint32_t start = this->numAreaLights;
+    if (this->areaLightSamplingStructure.getSize() < start + count)
+    {
+        // Earlier appends this frame are still staged; they must land before the device copy
+        this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+        this->areaLightSamplingStructure.resizeOnDevice(cmdList, toFreeList, Util::nextPow2AtLeast(1u, start + count));
+    }
+    for (uint32_t idx = 0; idx < count; ++idx)
+    {
+        this->areaLightSamplingStructure[start + idx] = sparseOffset + idx;
+    }
+    this->areaLightSamplingStructure.markDirtyRange(start, start + count);
+    this->numAreaLights = start + count;
+    this->areaLightSparseCount = std::max(this->areaLightSparseCount, sparseOffset + count);
+    this->areaLightTopologyChanged = true;
+}
+
+void Scene::addTlasEntry(Instance* const instance, ID3D12GraphicsCommandList4* const cmdList, ToFreeList& toFreeList)
+{
+    ASSERT(instance->tlasEntryIdx == UINT32_MAX);
+    instance->tlasEntryIdx = static_cast<uint32_t>(this->tlasInstanceEntries.size());
+
+    TlasInstanceEntry entry = {};
+    memcpy(entry.desc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
+    entry.desc.InstanceID = instance->id;
+    entry.desc.InstanceMask = 1;
+    entry.desc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
+    entry.transformOffset = instance->transformOffset;
+    entry.instance = instance;
+    entry.areaLightSparseOffset = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
+    entry.numAreaLights = instance->areaLightsBufferSection.sizeBytes / sizeof(AreaLight);
+    entry.areaLightDenseOffset = this->numAreaLights;
+    this->tlasInstanceEntries.push_back(entry);
+
+    this->appendAreaLightSamplingRange(cmdList, toFreeList, entry.areaLightSparseOffset, entry.numAreaLights);
+
+    this->isTlasDirty = true;
+}
+
+void Scene::removeTlasEntry(Instance* const instance)
+{
+    if (instance->tlasEntryIdx == UINT32_MAX)
+    {
+        return;
+    }
+    this->tlasInstanceEntries[instance->tlasEntryIdx].instance = nullptr;
+    instance->tlasEntryIdx = UINT32_MAX;
+    this->tlasEntriesNeedCompaction = true;
+    this->isTlasDirty = true;
+}
+
+// Removals only mark entries dead, so a frame with any number of them pays one pass here. The
+// entries are compacted on the CPU; the sampling structure, which holds millions of entries in
+// a large world, is compacted on the GPU from the surviving blocks' old and new offsets.
+void Scene::compactTlasEntries(ID3D12GraphicsCommandList4* const cmdList, ToFreeList& toFreeList)
+{
+    // Appends recorded earlier this frame are still staged; the gather below reads the device
+    // copy, so they must land first
+    this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
+
+    std::vector<AreaLightCompactRange> ranges;
+    uint32_t numKept = 0;
+    uint32_t numAreaLightsKept = 0;
+    this->areaLightSparseCount = 0;
+    for (TlasInstanceEntry& entry : this->tlasInstanceEntries)
+    {
+        if (entry.instance == nullptr)
+        {
+            continue;
+        }
+        entry.instance->tlasEntryIdx = numKept;
+        if (entry.numAreaLights > 0)
+        {
+            if (entry.areaLightDenseOffset != numAreaLightsKept)
+            {
+                ranges.push_back({ .newOffset = numAreaLightsKept, .oldOffset = entry.areaLightDenseOffset, .count = entry.numAreaLights });
+            }
+            entry.areaLightDenseOffset = numAreaLightsKept;
+            numAreaLightsKept += entry.numAreaLights;
+        }
+        this->areaLightSparseCount = std::max(this->areaLightSparseCount, entry.areaLightSparseOffset + entry.numAreaLights);
+        this->tlasInstanceEntries[numKept++] = entry;
+    }
+    this->tlasInstanceEntries.resize(numKept);
+
+    // Blocks before the first moved one are already in place; only the tail from there on is
+    // rewritten, and consecutive moved blocks merge into one range
+    if (!ranges.empty())
+    {
+        std::vector<AreaLightCompactRange> merged;
+        for (const AreaLightCompactRange& range : ranges)
+        {
+            if (!merged.empty() && merged.back().oldOffset + merged.back().count == range.oldOffset)
+            {
+                merged.back().count += range.count;
+            }
+            else
+            {
+                merged.push_back(range);
+            }
+        }
+        const uint32_t tailStart = merged.front().newOffset;
+        for (AreaLightCompactRange& range : merged)
+        {
+            range.newOffset -= tailStart;
+            range.oldOffset -= tailStart;
+        }
+        AreaLightCompactor::dispatch(cmdList,
+                                     toFreeList,
+                                     this->areaLightSamplingStructure.getBuffer(),
+                                     tailStart,
+                                     numAreaLightsKept - tailStart,
+                                     merged);
+    }
+
+    // Removing non-emissive instances leaves the sampling structure untouched, and the light
+    // tree does not need rebuilding for them
+    if (numAreaLightsKept != this->numAreaLights || !ranges.empty())
+    {
+        this->areaLightTopologyChanged = true;
+    }
+    this->numAreaLights = numAreaLightsKept;
+    this->tlasEntriesNeedCompaction = false;
+}
+
+void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     if (this->hasTlas())
     {
@@ -628,58 +862,28 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     const uint32_t frameIdx = Renderer::getFrameIndex();
     MappedArray<D3D12_RAYTRACING_INSTANCE_DESC>& currentFrameInstanceDescs = this->mappedInstanceDescsArrays[frameIdx];
 
-    uint32_t nextInstanceDescIdx = 0;
-    uint32_t nextAreaLightSamplingIdx = 0;
-    uint32_t maxSparseAreaLightIdx = 0;
-    for (const auto& [instanceId, instance] : this->instances)
+    if (this->tlasEntriesNeedCompaction)
     {
-        if (!instance->isVisible || instance->isScheduledForDeletion ||
-            !instance->geoWrapper.blasBufferSection.isValid())
-        {
-            continue;
-        }
-
-        D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-        memcpy(instanceDesc.Transform, &instance->transform, sizeof(XMFLOAT3X4));
-        const glm::ivec3 totalOffset = instance->transformOffset - this->globalInstanceOffset;
-        for (int i = 0; i < 3; ++i)
-        {
-            instanceDesc.Transform[i][3] += totalOffset[i];
-        }
-        instanceDesc.InstanceID = instanceId;
-        instanceDesc.InstanceMask = 1;
-        instanceDesc.AccelerationStructure = instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
-        currentFrameInstanceDescs[nextInstanceDescIdx++] = instanceDesc;
-
-        if (updateAreaLights && instance->areaLightsBufferSection.sizeBytes > 0)
-        {
-            const uint32_t instanceNumAreaLights = instance->areaLightsBufferSection.sizeBytes / sizeof(AreaLight);
-            uint32_t instanceAreaLightIdx = instance->areaLightsBufferSection.offsetBytes / sizeof(AreaLight);
-            for (uint32_t idx = 0; idx < instanceNumAreaLights; ++idx)
-            {
-                if (nextAreaLightSamplingIdx >= this->areaLightSamplingStructure.getSize())
-                {
-                    this->areaLightSamplingStructure.resize(toFreeList, this->areaLightSamplingStructure.getSize() * 2);
-                }
-
-                const uint32_t sparseAreaLightIdx = instanceAreaLightIdx++;
-                this->areaLightSamplingStructure[nextAreaLightSamplingIdx++] = sparseAreaLightIdx;
-                maxSparseAreaLightIdx = std::max(maxSparseAreaLightIdx, sparseAreaLightIdx + 1);
-            }
-        }
+        CPU_PROFILE_SCOPE("tlas compaction");
+        this->compactTlasEntries(cmdList, toFreeList);
     }
 
-    if (updateAreaLights)
+    const uint32_t numInstances = static_cast<uint32_t>(this->tlasInstanceEntries.size());
+    for (uint32_t i = 0; i < numInstances; ++i)
     {
-        this->numAreaLights = nextAreaLightSamplingIdx;
-        this->areaLightSparseCount = maxSparseAreaLightIdx;
-        this->areaLightTopologyChanged = true;
-        this->areaLightSamplingStructure.markDirtyRange(0, nextAreaLightSamplingIdx);
+        const TlasInstanceEntry& entry = this->tlasInstanceEntries[i];
+        D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = entry.desc;
+        const glm::ivec3 totalOffset = entry.transformOffset - this->globalInstanceOffset;
+        for (int k = 0; k < 3; ++k)
+        {
+            instanceDesc.Transform[k][3] += totalOffset[k];
+        }
+        currentFrameInstanceDescs[i] = instanceDesc;
     }
 
     AcsHelper::TlasBuildInputs inputs;
     inputs.dev_instanceDescs = currentFrameInstanceDescs.getUploadBuffer();
-    inputs.numInstances = nextInstanceDescIdx;
+    inputs.numInstances = numInstances;
     inputs.updateScratchSizePtr = nullptr;
     inputs.outTlas = &this->tlasBufferSection;
 
@@ -687,6 +891,82 @@ void Scene::makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList
     this->isTlasDirty = false;
 
     BufferHelper::uavBarrier(cmdList, this->tlasBufferSection.getBuffer()->getBuffer());
+}
+
+void Scene::setDeformableAnimation(const glm::vec2 centerXZ_WS, const float animRadius, const float fadeStart, const float fadeEnd)
+{
+    if (centerXZ_WS != this->deformableAnimCenterXZ_WS || animRadius != this->deformableAnimRadius)
+    {
+        this->animatedDeformablesDirty = true;
+    }
+    this->deformableAnimCenterXZ_WS = centerXZ_WS;
+    this->deformableAnimRadius = animRadius;
+    this->waveFade.fadeStart = fadeStart;
+    this->waveFade.fadeEnd = fadeEnd;
+}
+
+void Scene::setWaveFrustum(const glm::vec3 cameraPos_WS, const std::array<glm::vec3, 4>& sideNormals_WS)
+{
+    // Membership also depends on camera height (the top and bottom planes); the radial center
+    // only tracks XZ, so height is tracked here in steps the membership padding covers
+    constexpr float heightStep = 16.f;
+    const float heightBand = std::floor(cameraPos_WS.y / heightStep);
+    if (heightBand != this->waveFrustumHeightBand)
+    {
+        this->animatedDeformablesDirty = true;
+    }
+    this->waveFrustumHeightBand = heightBand;
+    this->waveFade.cameraPos_WS = { cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z };
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        const glm::vec3& normal = sideNormals_WS[i];
+        DirectX::XMFLOAT3& dest = this->waveFade.frustumNormals_WS[i].normal_WS;
+        if (dest.x != normal.x || dest.y != normal.y || dest.z != normal.z)
+        {
+            this->animatedDeformablesDirty = true;
+        }
+        dest = { normal.x, normal.y, normal.z };
+    }
+    this->waveFrustumSet = true;
+}
+
+// Conservative: the padding is wider than the shader's outer band, and the chunk's bounding
+// sphere is added on top, so anything the shaders could still animate is in the set
+bool Scene::isDeformableAnimated(const Instance* const instance) const
+{
+    const glm::vec2 offsetXZ = { instance->transformOffset.x, instance->transformOffset.z };
+    if (glm::distance(offsetXZ, this->deformableAnimCenterXZ_WS) > this->deformableAnimRadius)
+    {
+        return false;
+    }
+    if (!this->waveFrustumSet)
+    {
+        return true;
+    }
+
+    const glm::vec3 cameraPos_WS(this->waveFade.cameraPos_WS.x, this->waveFade.cameraPos_WS.y, this->waveFade.cameraPos_WS.z);
+    const glm::vec3 center_WS = glm::vec3(instance->transformOffset) + 0.5f * (instance->boundsMin_OS + instance->boundsMax_OS);
+    const float radius = 0.5f * glm::length(instance->boundsMax_OS - instance->boundsMin_OS);
+    const glm::vec3 toCenter_WS = center_WS - cameraPos_WS;
+    const float dist = glm::length(toCenter_WS);
+    if (dist - radius < WATER_FOV_EXEMPT_FAR)
+    {
+        return true;
+    }
+
+    // Padding past the shader's outer band covers the camera moving within its chunk between
+    // rebuilds (the radial center is chunk-quantized, this test is not)
+    constexpr float membershipPadSin = WATER_FOV_PAD_OUTER_SIN + 0.25f;
+    for (const WaveFadeFrustumNormal& plane : this->waveFade.frustumNormals_WS)
+    {
+        const glm::vec3 normal(plane.normal_WS.x, plane.normal_WS.y, plane.normal_WS.z);
+        const float signedDist = glm::dot(normal, toCenter_WS);
+        if (signedDist < -(membershipPadSin * dist + radius))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 const glm::ivec3& Scene::getGlobalInstanceOffset() const

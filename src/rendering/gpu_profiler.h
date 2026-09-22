@@ -25,6 +25,9 @@ struct FrameTimings
 {
     uint32_t frameNumber;
     double totalMs; // first to last timestamp of the frame's command list
+    // Absolute positions on the queue's timestamp timeline, for measuring between frames
+    double beginMs;
+    double endMs;
     std::vector<ScopeTiming> scopes;
 };
 

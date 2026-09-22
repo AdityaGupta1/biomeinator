@@ -150,6 +150,51 @@ struct CloudSettings
     float2 windOffsetFrac;
 };
 
+// One frustum side plane through the camera; padded to the 16 bytes an array element takes in a
+// constant buffer
+struct WaveFadeFrustumNormal
+{
+    float3 normal_WS; // inward
+    float pad0;
+};
+
+// Where water waves animate: the amplitude fades to rest height with distance from the camera
+// and outside the padded view frustum; see waveFade in water_waves.hlsli
+struct WaveFadeParams
+{
+    float3 cameraPos_WS; // absolute, not relative to globalInstanceOffset
+    float fadeStart;
+
+    float fadeEnd;
+    float pad0;
+    float pad1;
+    float pad2;
+
+    WaveFadeFrustumNormal frustumNormals_WS[4];
+};
+
+// One animated water instance in the single displacement dispatch: threads cover the
+// concatenated vertex ranges and find their instance by binary search on firstVert
+struct WaterDisplaceInstance
+{
+    uint firstVert;
+    uint vertsBufferOffset;
+    uint vertCount;
+    float waveScale; // 0 flattens a chunk that just left the animated set
+    int3 transformOffset;
+    uint pad0;
+};
+
+// One surviving block of the area light sampling structure during GPU compaction, in
+// ascending newOffset order
+struct AreaLightCompactRange
+{
+    uint newOffset;
+    uint oldOffset;
+    uint count;
+    uint pad0;
+};
+
 struct RenderParams
 {
     uint frameNumber;
@@ -182,6 +227,8 @@ struct RenderParams
     uint pad2;
 
     CloudSettings cloudSettings;
+
+    WaveFadeParams waveFade;
 };
 
 struct SharcParams

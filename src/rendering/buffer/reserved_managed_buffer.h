@@ -7,6 +7,7 @@
 
 #include "debug.h"
 
+#include <future>
 #include <vector>
 
 class ReservedManagedBuffer final : public ManagedBuffer
@@ -31,5 +32,10 @@ private:
 
     std::vector<ComPtr<ID3D12Heap>> heaps;
 
-    size_t mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes);
+    // The heap after the one just mapped is created on a background thread, since CreateHeap
+    // takes tens of milliseconds and would otherwise land inside a streaming frame
+    std::future<ComPtr<ID3D12Heap>> prefetchedHeap;
+    size_t prefetchedHeapSizeBytes{ 0 };
+
+    size_t mapNewHeap(size_t virtualStartTile, size_t minAdditionalBytes, bool prefetchNext);
 };

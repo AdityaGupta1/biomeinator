@@ -9,8 +9,12 @@ for agents doing performance work. `tests/run_perf.py` drives it over the entrie
 `tests/perf_scenes.json`; `run` produces a directory of reports, `compare` diffs two such directories
 by median, `show` prints one.
 
-For CPU terrain generation, use the [ad hoc terrain experiment workflow](cpu_terrain_benchmarks.md).
-These frame runs start after world import and do not measure terrain generation cost.
+Two kinds of terrain measurement live in different places. The `streaming` block of a report
+(see below) measures generation *as the game experiences it*: wall time to load a world, the
+frame period while it streams, worker utilization. Comparing generation *algorithms* on fixed
+chunks, without workers or a renderer, is the [ad hoc terrain experiment
+workflow](cpu_terrain_benchmarks.md); `CpuProfiler` deliberately has no scopes inside chunk
+generation, and per-chunk timing belongs in that disposable harness, not in production.
 
 ```
 python tests/run_perf.py run -o build/perf_output/baseline
@@ -63,12 +67,94 @@ loose for the delta being checked; warmup rarely needs touching.
   it. The partial report is for diagnosing the timeout, not for comparison.
 
 Perf mode is a *headless* run, sharing that flag with `--testOutput`: camera locked, GUI
-hidden, animation paused, vsync off, no foreground window, Streamline logging off, voxel
-import awaited. `SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays
-specific to the golden screenshot-and-exit path. The headless defaults (`lockCamera`,
+hidden, animation paused, vsync off, Streamline logging off, voxel import awaited.
+`SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays specific to the
+golden screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
+generation with Reflex, and bringing the window to the foreground (fullscreen presentation
+needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
+the game shows). The headless defaults (`lockCamera`,
 `showGui`, `animTimePaused`, `useVsync`) live in `parseArgs` and are only applied when the
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.
+
+## CPU scopes and moving measurements
+
+`CpuProfiler` (`src/rendering/cpu_profiler.h`) is the main-thread counterpart of the GPU
+profiler: `CPU_PROFILE_SCOPE` blocks nest and report per frame alongside the GPU scopes as
+`cpu.scopes`, so a frame spike can be attributed to the thread it came from. It only records
+in perf mode. The frame bracket starts before the fence wait and ends after Present, so the
+waits are scopes too; `present` is where the pacer absorbs GPU variance, so a large `present`
+p95 is a symptom, not a cause.
+
+`--perfMoveSpeed=<blocks/s>` moves the camera forward during the measuring phase only, after
+the world has loaded, which is how streaming through a loaded world is measured; the
+`worldgen_move` scene does this at 20 blocks/s for 1500 frames. The movement uses a fixed
+1/60 s step per frame rather than real elapsed time, so two runs cover the same path and hit
+the same chunk boundaries on the same frames however fast their frames were. Moving at that speed on
+seed 100 (2026-09-20), the spikes above the 12.3 ms floor came from: BLAS build frames (about
+one in thirteen; ~1 ms CPU upload+record and up to 1.7 ms GPU), TLAS compaction on chunk-unload
+frames (1.65 ms CPU, dominated by rewriting the 2M-entry area light array), light tree rebuilds
+(1.8 ms GPU, a few percent of frames) and path tracing varying with the view (p95 +0.75 ms).
+The steady cost while moving is the water refit recording at ~1.5 ms CPU per frame for the
+~1,000 animated chunks.
+
+After the proportional BLAS cap, the single water dispatch and the GPU compaction of the
+sampling structure (same day): build frames are three times as many at a third of the cost
+each (0.3 ms CPU, GPU p95 0.65 ms), compaction is 0.23 ms, and the refit recording is
+1.3 ms, which is now the per-BLAS `BuildRaytracingAccelerationStructure` call itself. What is
+left of the p95 (+1 ms over the median) is GPU: path tracing varying with the view and the
+occasional light tree rebuild.
+
+## Streaming
+
+Everything before the measured window is also recorded as the *streaming* window: from the
+first frame with terrain work or a scene change to the last one before warmup goes quiet. The
+report's `streaming` block has the wall-clock frame period (what the player feels, waits
+included) and CPU frame time with the same stats as the steady state, plus the seconds it
+took, the BLAS builds it produced, worker utilization and the mean task backlog held back by
+the per-frame caps. `run`/`show` print it and `compare` prints the seconds side by side. The
+`worldgen` scene generates seed 100 at render distance 40 from scratch for exactly this.
+
+Quiet, for the warmup streak, means no scene change *and* no terrain task queued or running:
+with a deep task queue the scene can go thirty frames without a chunk landing while
+generation is nowhere near done, which would start measuring mid-stream.
+
+Initial load of that scene, fullscreen 1440p, 2026-09-20, before and after the streaming work
+(same hour, same machine state): generation 15.9 s → 4.2 s, streaming frame period median
+12.0 → 12.1 ms and p95 14.4 → 17 ms, steady-state frame period afterwards 12.0 → 9.4 ms with
+the main thread going from 7.3 ms to 1.6 ms (water refits and the TLAS walk were most of it).
+Generation is now bound by the BLAS cap again at 30 builds per frame, and each build frame
+costs ~3 ms more than a steady one. The spikes that remain (75-90 ms max, in both states) are
+sporadic stalls inside driver calls; a lower BLAS build cap lowers p95 at the cost of
+generation time.
+
+**Absolute numbers drift with machine state.** Earlier in the same session the pre-fix state
+measured 21.9 s and a 16.5 ms main thread, and the post-fix state 11.8 s, with every run
+internally consistent; the machine was simply ~2x slower on the CPU for a while. Always
+measure the two sides of a comparison back to back, and re-measure the baseline if the
+candidate looks too good.
+
+## Gap and period
+
+`gpu.frameMs` is the command list's own duration and hides everything outside it. The report
+therefore also gives, from consecutive frames' absolute timestamps, `gapMs` (idle on the
+graphics queue between one frame's last timestamp and the next frame's first) and `periodMs`
+(begin to begin, the true rendered frame period). A gap that is not near zero means the queue
+is waiting on something other than its own work.
+
+### What frame generation costs
+
+Measured 2026-09-20, fullscreen 1440p on an RTX 4070 SUPER under stable power state: DLSS-G
+adds 0.7 ms (cave_lights) to 3.5 ms (fog_god_rays) per rendered frame period. Almost none of it
+is gap (~0.4 ms median): the cost is in-frame slowdown of path tracing and ray reconstruction
+while the TLAS build does not move, i.e. contention with DLSS-G's own work, not clocks, and it
+scales with how heavy the frame already is. D3D12 DLSS-G only offers
+`eBlockPresentingClientQueue`, but in practice the interpolation overlaps the next frame rather
+than stalling the queue in front of it.
+
+The same measurement windowed at 1080p with the window in the background instead showed a
+constant 2.2 ms gap and a smaller in-frame slowdown, so a non-fullscreen run mismeasures where
+frame generation's cost lands. This is why the scenes run fullscreen.
 
 ## Why DLSS mode, not accumulate mode
 
@@ -112,5 +198,6 @@ If a future change to the profiler breaks attribution, this is the quickest way 
 
 Entries in `tests/perf_scenes.json` have the same shape as `tests/tests.json` minus the golden:
 `name`, one of `scene`/`world`, and `args`. Pin `width` and `height` in `args` (and `dlssMode`
-if the default balanced preset is not wanted); DLSS render resolution derives from them and
-the report records the resolved values in `meta`.
+if the default balanced preset is not wanted) and pass `--fullscreen=true`; DLSS render
+resolution derives from them and the report records the actual viewport and render sizes in
+`meta`, along with whether frame generation was active.

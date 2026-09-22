@@ -14,12 +14,23 @@
 // WATER DISPLACE
 // =============================================
 
+// D3D12 caps each dispatch dimension at 65535 groups; large 1D workloads flatten into 2D
+#define DISPATCH_MAX_GROUPS_PER_DIM 65535
+
 #define WATER_DISPLACE_WORKGROUP_SIZE 64
+#define AREA_LIGHT_COMPACT_WORKGROUP_SIZE 64
 
 // Displacement wave parameters shared between water_waves.hlsli and the CPU mirror of
 // waveHeight() in water_displacer.cpp. See water_waves.hlsli for the wave model description
 // and the meaning of each strength/freq/speed triple; the shading-normal noise parameters
 // live only there since the CPU never evaluates them.
+
+// Waves outside the view frustum fade out over this band past the frustum edge (sines of the
+// angle), except within the near radius, where they always animate
+#define WATER_FOV_PAD_INNER_SIN 0.17365f // sin(10 deg)
+#define WATER_FOV_PAD_OUTER_SIN 0.42262f // sin(25 deg)
+#define WATER_FOV_EXEMPT_NEAR 32.f
+#define WATER_FOV_EXEMPT_FAR 64.f
 
 #define WATER_SWELL_WAVE_COUNT 2
 #define WATER_SWELL_STRENGTHS { 0.03f, 0.025f }

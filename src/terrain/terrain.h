@@ -24,6 +24,16 @@ void setDirty();
 
 void update(ToFreeList& toFreeList);
 
+// For perf runs measuring world streaming; see knowledge/tests/perf_runs.md
+struct StreamingStats
+{
+    uint32_t numWorkers;
+    uint64_t workerBusyNanos;
+    uint32_t taskBacklog; // tasks the per-frame cap held back from the pool this frame
+    uint32_t tasksPending; // in the pool, queued or executing
+};
+StreamingStats getStreamingStats();
+
 bool isCameraUnderwater();
 
 // Biome of the camera's column from the loaded chunk's per-column biomes (jittered, exactly what
