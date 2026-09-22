@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Scene
 
@@ -8,8 +8,8 @@ point of contact between gameplay/loading code and GPU scene representation.
 
 ## Shared Geometry Buffers
 
-Instances don't own their own device buffers. All vertex, index, and per-triangle data lives
-in three shared `ReservedManagedBuffer`s. `makeQueuedBlases` copies host vectors into
+Instances don't own their own device buffers. All vertex, index, and per-face data lives
+in shared `ReservedManagedBuffer`s (tangents in a committed one). `makeQueuedBlases` copies host vectors into
 sections of these and records offsets in `InstanceData`. This avoids per-instance resource
 creation overhead in a world with thousands of terrain chunks.
 
@@ -57,7 +57,9 @@ the entries into the frame's instance desc array with the global offset applied.
 - Transform setters update the entry in place; they also mark `isTlasDirty` so the change
   resets accumulation like any other scene change.
 - BLAS compaction moves a BLAS to a new GPU VA, so `compactBuiltBlases` rewrites the entry's
-  `AccelerationStructure` in place the same way; see
+  `AccelerationStructure` in place. Unlike the transform setters it does not mark `isTlasDirty`:
+  the per-frame rebuild already copies the entry, and the flag would reset accumulation for a
+  change nothing can see. See
   [gpu → acceleration_structures.md](../gpu/acceleration_structures.md#blas-compaction).
 
 ## Deformable Instances

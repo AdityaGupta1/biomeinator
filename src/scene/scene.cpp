@@ -570,18 +570,23 @@ void Scene::compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& 
         {
             continue;
         }
-        if (compactedSizes[i] >= instance->geoWrapper.blasBufferSection.sizeBytes)
+        // Sections are allocated at the AS alignment, so a size that rounds to the same section
+        // would be copied for nothing
+        const size_t compactedSectionBytes =
+            MathUtil::roundUp(compactedSizes[i], D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+        if (compactedSectionBytes >= instance->geoWrapper.blasBufferSection.sizeBytes)
         {
             continue;
         }
 
         AcsHelper::compactBlas(cmdList, toFreeList, &instance->geoWrapper, compactedSizes[i]);
 
+        // The per-frame TLAS rebuild copies the entry, so the new address needs no dirty flag,
+        // and setting one would reset accumulation for a change nothing can see
         if (instance->tlasEntryIdx != UINT32_MAX)
         {
             this->tlasInstanceEntries[instance->tlasEntryIdx].desc.AccelerationStructure =
                 instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
-            this->isTlasDirty = true;
         }
     }
 

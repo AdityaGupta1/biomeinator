@@ -1,4 +1,4 @@
-_Last edited: 2026-09-08_
+_Last edited: 2026-09-21_
 
 # Material Model and BSDFs
 

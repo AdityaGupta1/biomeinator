@@ -47,6 +47,7 @@ struct AcsBuildInfo
 };
 
 static uint32_t nextBlasBuildId = 1;
+static constexpr uint32_t minCompactionQueryCapacity = 64;
 
 // The single OMM Array shared by all OMM-linked BLASes; see buildOmmArray()
 static D3D12_GPU_VIRTUAL_ADDRESS ommArrayGpuVa = 0;
@@ -95,12 +96,14 @@ void init()
     sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
 }
 
-static void ensureCompactionQueryCapacity(ToFreeList& toFreeList, BlasCompactionQuery* query, const uint32_t numEntries)
+static void ensureCompactionQueryCapacity(ToFreeList& toFreeList, BlasCompactionQuery* query, uint32_t numEntries)
 {
     if (numEntries <= query->capacity)
     {
         return;
     }
+    // Allocate for a whole per-frame batch at once rather than growing with each larger batch
+    numEntries = std::max(numEntries, minCompactionQueryCapacity);
 
     if (query->sizesBuffer != nullptr)
     {
@@ -120,7 +123,7 @@ static void ensureCompactionQueryCapacity(ToFreeList& toFreeList, BlasCompaction
     query->capacity = numEntries;
 }
 
-// query may be null when no build info has a compaction entry
+// Query may be null when no build info has a compaction entry
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
                                        ToFreeList& toFreeList,
                                        const std::vector<AcsBuildInfo>& buildInfos,
@@ -240,7 +243,7 @@ void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     toFreeList.pushResource(inputBuffer);
 }
 
-// fp32 positions a BLAS build reads; the resident verts section unless the build sources them elsewhere
+// Fp32 positions a BLAS build reads; the resident verts section unless the build sources them elsewhere
 struct BlasVertsSource
 {
     D3D12_GPU_VIRTUAL_ADDRESS gpuVa{ 0 };

@@ -33,7 +33,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("height", "Window height", uint32_t, "1080");
     ADD_OPTION("rngSeed", "Fixed sampling seed (0=random)", uint32_t, "0");
     ADD_OPTION("sharc", "Enable spatial hash radiance cache", bool, "true");
-    ADD_OPTION("blasCompaction", "Compact static BLASes after build", bool, "true");
     ADD_OPTION("sharcCapacityLog2", "SHARC cache capacity exponent (16-24)", uint32_t, "20");
     ADD_OPTION("sharcDownscale", "SHARC update pixel stride (1-16)", uint32_t, "5");
     ADD_OPTION("sharcSceneScale", "SHARC world-space grid scale", float, "50");
@@ -42,6 +41,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcStaleFrames", "SHARC eviction age", uint32_t, "64");
     ADD_OPTION("sharcWarmupFrames", "Cache warmup before screenshot accumulation", uint32_t, "64");
     ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance", uint32_t, "0");
+    ADD_OPTION("blasCompaction", "Compact static BLASes after build", bool, "true");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
@@ -153,7 +153,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("height", uint32_t);
     COPY_SETTING("rngSeed", uint32_t);
     COPY_SETTING("sharc", bool);
-    COPY_SETTING("blasCompaction", bool);
     COPY_SETTING("sharcCapacityLog2", uint32_t);
     COPY_SETTING("sharcDownscale", uint32_t);
     COPY_SETTING("sharcSceneScale", float);
@@ -162,6 +161,7 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("sharcStaleFrames", uint32_t);
     COPY_SETTING("sharcWarmupFrames", uint32_t);
     COPY_SETTING("sharcDebug", uint32_t);
+    COPY_SETTING("blasCompaction", bool);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);

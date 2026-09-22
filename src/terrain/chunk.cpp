@@ -754,14 +754,26 @@ void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
 static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uint32_t extraFlags = 0)
 {
     uint32_t flags = extraFlags;
-    if (TerrainMaterials::sliceHasBiomeTint(slice)) flags |= FACE_FLAG_BIOME_TINT;
+    if (TerrainMaterials::sliceHasBiomeTint(slice))
+    {
+        flags |= FACE_FLAG_BIOME_TINT;
+    }
     if (TerrainMaterials::sliceHasNormalMap(slice))
     {
         flags |= FACE_FLAG_NORMAL_MAP;
     }
-    if (block.translucent) flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;
-    if (block.proceduralColor) flags |= FACE_FLAG_PROCEDURAL_COLOR;
-    if (block.type == BlockType::GLASS) flags |= FACE_FLAG_IS_GLASS;
+    if (block.translucent)
+    {
+        flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;
+    }
+    if (block.proceduralColor)
+    {
+        flags |= FACE_FLAG_PROCEDURAL_COLOR;
+    }
+    if (block.type == BlockType::GLASS)
+    {
+        flags |= FACE_FLAG_IS_GLASS;
+    }
 
     PerFaceData data{};
     data.setFlags(flags);

@@ -12,13 +12,13 @@ The headers use preprocessor macros to alias HLSL types to DirectX math types wh
 ```
 If a new `#define` macro of this kind is added, the corresponding `#undef` macro must be added at the end of the file.
 
-All structs must be 16-byte aligned (pad manually with `uint padN`). Padding members are named `pad0`, `pad1`, etc. and must always be renumbered from 0 — if a pad is replaced by a real field, the remaining pads must be renamed to keep them zero-indexed.
+Constant-buffer param structs must be 16-byte aligned (pad manually with `uint padN`); the structured-buffer element types below only need their C++ and HLSL sizes to agree, which the `static_assert`s at the bottom of the header pin. Padding members are named `pad0`, `pad1`, etc. and must always be renumbered from 0 — if a pad is replaced by a real field, the remaining pads must be renamed to keep them zero-indexed.
 
 ---
 
 ## common_structs.h — Geometry and Material Data
 
-POD structs that need to be accessible on both CPU and GPU. These live in GPU buffers and are indexed at ray hit time.
+POD structs that need to be accessible on both CPU and GPU. These live in GPU buffers and are indexed at ray hit time. `InstanceData` carries the instance's offsets into the shared buffers plus the two per-instance layout selectors, `trisPerFaceLog2` and `vertexFormat`.
 
 **`InstanceData`** — per-instance GPU record: offsets into the shared vertex/index/per-tri/area-light buffers, a `transformOffset` (integer world-space offset to avoid float precision loss), and a `materialIdx`.
 

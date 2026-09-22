@@ -52,7 +52,8 @@ inline uint32_t packTerrainPosComponent(const float value, const float bias, con
 {
     const long quantized = std::lround((value + bias) * scale);
     ASSERT(quantized >= 0 && quantized <= 0xFFFF);
-    return static_cast<uint32_t>(quantized);
+    // Clamped as well, so an out-of-range vertex cannot spill into the neighbouring component
+    return static_cast<uint32_t>(std::clamp(quantized, 0l, 0xFFFFl));
 }
 
 inline uint32_t packUnorm8(const float value)
