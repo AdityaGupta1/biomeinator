@@ -34,16 +34,13 @@ struct GeometryWrapper
     uint32_t blasBuildId{ 0 };
 };
 
-// The compacted sizes of one makeBlases batch, written by the builds themselves. Readable once the
-// frame that recorded the batch has completed on the GPU.
+// The compacted sizes of one makeBlases batch, one per input with allowCompaction in input order,
+// written by the builds themselves. Readable once the frame that recorded the batch has completed
+// on the GPU. Which BLAS each size belongs to is the caller's to remember, by something that
+// survives the instance being destroyed in the meantime.
 struct BlasCompactionQuery
 {
-    struct Entry
-    {
-        GeometryWrapper* geoWrapper;
-        uint32_t blasBuildId;
-    };
-    std::vector<Entry> entries;
+    uint32_t numEntries{ 0 };
 
     uint32_t capacity{ 0 }; // entries the buffers below can hold
     ComPtr<ID3D12Resource> sizesBuffer; // postbuild info destination, one COMPACTED_SIZE desc per entry

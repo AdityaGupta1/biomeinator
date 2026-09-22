@@ -116,6 +116,9 @@ class Scene
     friend class ToFreeList;
 
 private:
+    // Both vertex layouts share one buffer whose sections are aligned to the larger stride, so the
+    // smaller one must divide it or its element offsets would not be whole
+    static_assert(sizeof(Vertex) % sizeof(PackedTerrainVertex) == 0);
     // Shaders index the typed scene buffers with 32-bit element indices, so a buffer read as a
     // StructuredBuffer cannot usefully exceed 4 GB: sections past that mark trace fine (the BLAS
     // takes a 64-bit VA) but shade from wrapped-around garbage
@@ -168,7 +171,14 @@ private:
     struct PendingBlasCompaction
     {
         AcsHelper::BlasCompactionQuery query;
-        std::vector<Instance*> instances; // parallel to query.entries
+        // The builds behind the query's entries, in order. Instances can be destroyed before
+        // the slot is consumed, so they are resolved by id when it is
+        struct Build
+        {
+            uint32_t instanceId;
+            uint32_t blasBuildId;
+        };
+        std::vector<Build> builds;
     };
     std::array<PendingBlasCompaction, Renderer::NUM_FRAMES_IN_FLIGHT> pendingBlasCompactions{};
     void compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);

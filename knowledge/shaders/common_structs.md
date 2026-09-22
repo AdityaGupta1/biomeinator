@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Common CPU/GPU Structs
 
@@ -45,10 +45,17 @@ Terrain instances keep their vertices resident as the 12-byte `PackedTerrainVert
 BLAS does not reference its input buffer after the build, so the build reads fp32 positions from
 the staging upload and the resident copy only has to satisfy the shaders. Positions are fixed
 point with power-of-two scales (1/1024 block in XZ, 1/64 in Y, biased so the ranges cover model
-overhang and the world height), which decodes block corners, liquid tops and the models' 1/16
-authoring grid exactly; the normal keeps the oct16x2 encoding and UVs are unorm8x2 (exact corners,
-1/16 texel on model atlases). `InstanceData::vertexFormat` selects the view, and water stays on
-`Vertex` because its refits and displacement rewrite the resident positions every frame.
+overhang and the world height): block corners and liquid tops are exact, while tilted custom
+models and jitter round to the grid (at most 1/2048 block in XZ, 1/128 in Y). The normal keeps
+the oct16x2 encoding and UVs are unorm8x2 (exact corners, 1/16 texel on model atlases).
+`InstanceData::vertexFormat` selects the view, and water stays on `Vertex` because its refits and
+displacement rewrite the resident positions every frame.
+
+The packing is lossy at the source, not a mismatch between two representations: chunk meshing
+packs, then decodes the fp32 vertices back from the packed form before they build the BLAS and
+the area lights. The ray-origin offset is only 1e-4 blocks near the camera, far below the
+rounding, so a BLAS built from the unrounded positions would let secondary and shadow rays
+leaving the reconstructed surface re-hit the true triangle on any off-grid geometry.
 
 `Vertex` has a 24-byte stride, with no stored tangents. Normal-mapped glTF meshes use a
 separate 8-byte `VertexTangent` record (oct-encoded tangent plus handedness). Its per-instance

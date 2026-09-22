@@ -56,7 +56,9 @@ struct VertexTangent
 };
 
 // Fixed-point position encoding of PackedTerrainVertex: (pos + bias) * scale stored as u16. The
-// scales are powers of two so block corners, 1/8 liquid tops and the 1/16 model grid decode exactly
+// scales are powers of two so block corners and 1/8 liquid tops decode exactly; model geometry
+// and jitter round to the grid, and the fp32 copy the BLAS is built from is decoded from the
+// packed form so the traced and shaded surfaces agree
 #define PACKED_TERRAIN_POS_XZ_SCALE 1024.f
 #define PACKED_TERRAIN_POS_XZ_BIAS 8.f
 #define PACKED_TERRAIN_POS_Y_SCALE 64.f
@@ -283,6 +285,8 @@ struct LightTreeNode
 #ifdef __cplusplus
 static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with the HLSL StructuredBuffer<LightAux> layout");
 static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
+static_assert(sizeof(Vertex) == 24, "Vertex must be 24 bytes for parity with the HLSL StructuredBuffer<Vertex> layout");
+static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12 bytes for parity with the HLSL layout");
 #endif
 
 #define FACE_FLAG_IS_WATER (1 << 0)
@@ -332,6 +336,10 @@ public:
         return packedFlagsAndSlice >> FACE_FLAGS_BITS;
     }
 };
+
+#ifdef __cplusplus
+static_assert(sizeof(PerFaceData) == 8, "PerFaceData must be 8 bytes for parity with the HLSL layout");
+#endif
 
 #ifdef __cplusplus
 #undef int3

@@ -158,11 +158,20 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         light.materialIdx = this->materialIdx;
 
         // Every triangle of an emissive face is an area light and the face's lights are
-        // consecutive, so the face stores its first triangle's light index
+        // consecutive, so the face stores its first triangle's light index. The face's first
+        // triangle must therefore come first; the one exception is the non-emissive degenerate
+        // padding triangle of an odd custom model, which is never listed at all
         const uint32_t triIdxInFace = triangleIdx & ((1u << this->trisPerFaceLog2) - 1u);
         const uint32_t faceLightIdx = localAreaLightIdx - triIdxInFace;
         PerFaceData& faceData = this->host_perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
-        ASSERT(faceData.localAreaLightIdx == LIGHT_IDX_INVALID || faceData.localAreaLightIdx == faceLightIdx);
+        if (faceData.localAreaLightIdx == LIGHT_IDX_INVALID)
+        {
+            ASSERT(triIdxInFace == 0);
+        }
+        else
+        {
+            ASSERT(faceData.localAreaLightIdx == faceLightIdx);
+        }
         faceData.localAreaLightIdx = faceLightIdx;
     }
 }
@@ -221,6 +230,7 @@ void Instance::setIsOpaque(bool opaque)
 void Instance::setTrisPerFaceLog2(const uint32_t log2)
 {
     ASSERT(!this->isGeometryFinalized);
+    ASSERT(log2 <= 1); // triangles or quads; nothing else emits faces
     this->trisPerFaceLog2 = log2;
 }
 
@@ -304,8 +314,7 @@ void Scene::reset()
     this->instancesReadyForBlasBuild.clear();
     for (PendingBlasCompaction& pending : this->pendingBlasCompactions)
     {
-        pending.query.entries.clear();
-        pending.instances.clear();
+        pending.builds.clear();
     }
     this->deformableInstances.clear();
     this->animatedDeformablesDirty = true;
@@ -538,21 +547,25 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 void Scene::compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
 {
     PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
-    if (pending.instances.empty())
+    if (pending.builds.empty())
     {
         return;
     }
 
     const std::vector<uint64_t> compactedSizes = AcsHelper::readCompactedSizes(pending.query);
-    for (size_t i = 0; i < pending.instances.size(); ++i)
+    ASSERT(compactedSizes.size() == pending.builds.size());
+    for (size_t i = 0; i < pending.builds.size(); ++i)
     {
-        Instance* const instance = pending.instances[i];
-        const AcsHelper::BlasCompactionQuery::Entry& entry = pending.query.entries[i];
-        ASSERT(entry.geoWrapper == &instance->geoWrapper);
-
-        // The instance may have been unloaded and its wrapper reused for a later build since
+        const PendingBlasCompaction::Build& build = pending.builds[i];
+        // The instance may have been destroyed, or its id reused by a chunk with a later build
+        const auto instanceIter = this->instances.find(build.instanceId);
+        if (instanceIter == this->instances.end())
+        {
+            continue;
+        }
+        Instance* const instance = instanceIter->second.get();
         const bool stillThisBuild =
-            instance->geoWrapper.blasBufferSection.isValid() && instance->geoWrapper.blasBuildId == entry.blasBuildId;
+            instance->geoWrapper.blasBufferSection.isValid() && instance->geoWrapper.blasBuildId == build.blasBuildId;
         if (!stillThisBuild || instance->isScheduledForDeletion)
         {
             continue;
@@ -572,8 +585,7 @@ void Scene::compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& 
         }
     }
 
-    pending.query.entries.clear();
-    pending.instances.clear();
+    pending.builds.clear();
 }
 
 void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime)
@@ -708,10 +720,8 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
     const bool compactBlases = SettingsManager::getAsBool("blasCompaction");
     PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
-    ASSERT(pending.instances.empty()); // consumed by compactBuiltBlases earlier this frame
-
-    uint32_t numPerFaceDatas = 0;
-    uint32_t numAreaLights = 0;
+    ASSERT(pending.builds.empty()); // consumed by compactBuiltBlases earlier this frame
+    std::vector<Instance*> compactableInstances;
 
     for (Instance* const instance : instancesToBuildThisFrame)
     {
@@ -743,13 +753,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         allBlasInputs.push_back(blasInputs);
         if (blasInputs.allowCompaction)
         {
-            pending.instances.push_back(instance);
+            compactableInstances.push_back(instance);
         }
 
-        assert(instance->host_perFaceDatas.size() > 0);
-        numPerFaceDatas += instance->host_perFaceDatas.size();
-
-        numAreaLights += instance->host_areaLights.size();
+        ASSERT(instance->host_perFaceDatas.size() > 0);
     }
 
     AcsHelper::makeBlases(cmdList,
@@ -758,7 +765,11 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
                           &this->managedIdxsBuffer,
                           allBlasInputs,
                           compactBlases ? &pending.query : nullptr);
-    ASSERT(pending.query.entries.size() == pending.instances.size());
+    ASSERT(pending.query.numEntries == compactableInstances.size());
+    for (const Instance* const instance : compactableInstances)
+    {
+        pending.builds.push_back({ instance->id, instance->geoWrapper.blasBuildId });
+    }
     this->numBlasBuilds += static_cast<uint32_t>(allBlasInputs.size());
 
     this->managedPerFaceDatasBuffer.beginBatchCopy(cmdList);

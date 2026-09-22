@@ -167,7 +167,7 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
         return;
     }
 
-    ASSERT(numCompactionQueries == query->entries.size());
+    ASSERT(numCompactionQueries == query->numEntries);
     const uint64_t sizesBytes =
         numCompactionQueries * sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC);
     BufferHelper::stateTransitionResourceBarrier(
@@ -371,8 +371,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     }
     if (outQuery != nullptr)
     {
-        outQuery->entries.clear();
-        outQuery->entries.reserve(numCompactable);
+        outQuery->numEntries = 0;
         ensureCompactionQueryCapacity(toFreeList, outQuery, numCompactable);
     }
     else
@@ -447,7 +446,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, vertsSource, inputs.allowUpdate, inputs.allowCompaction);
         if (inputs.allowCompaction)
         {
-            outQuery->entries.push_back({ inputs.outGeoWrapper, inputs.outGeoWrapper->blasBuildId });
+            ++outQuery->numEntries;
             buildInfos.back().queryCompactedSize = true;
         }
     }
@@ -462,7 +461,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
 std::vector<uint64_t> readCompactedSizes(const BlasCompactionQuery& query)
 {
-    std::vector<uint64_t> sizes(query.entries.size());
+    std::vector<uint64_t> sizes(query.numEntries);
     if (sizes.empty())
     {
         return sizes;
@@ -487,7 +486,7 @@ void compactBlas(ID3D12GraphicsCommandList4* cmdList,
                  const uint64_t compactedSizeBytes)
 {
     ASSERT(geoWrapper->blasBufferSection.isValid());
-    ASSERT(compactedSizeBytes <= geoWrapper->blasBufferSection.sizeBytes);
+    ASSERT(compactedSizeBytes > 0 && compactedSizeBytes <= geoWrapper->blasBufferSection.sizeBytes);
 
     const ManagedBufferSection compactedSection =
         sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, compactedSizeBytes);

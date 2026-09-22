@@ -1014,9 +1014,12 @@ void Chunk::createInstances()
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
+    // The packed form is the geometry: the fp32 copy that builds the BLAS and the area lights is
+    // decoded from it so every consumer sees the same quantized positions and UVs
     std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->host_packedTerrainVerts;
     terrainPackedVerts.resize(terrainVerts.size());
     std::transform(terrainVerts.begin(), terrainVerts.end(), terrainPackedVerts.begin(), Util::packTerrainVertex);
+    std::transform(terrainPackedVerts.begin(), terrainPackedVerts.end(), terrainVerts.begin(), Util::unpackTerrainVertex);
 
     terrainInstance->setTransformOffset(transformOffset);
     terrainInstance->setTrisPerFaceLog2(1);

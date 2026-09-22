@@ -60,6 +60,23 @@ inline uint32_t packUnorm8(const float value)
     return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255.f));
 }
 
+// Mirrors unpackTerrainVertex in path_tracing_common.hlsli
+inline Vertex unpackTerrainVertex(const PackedTerrainVertex& packed)
+{
+    Vertex vert;
+    vert.pos_OS = {
+        static_cast<float>(packed.packedPosXY & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+        static_cast<float>(packed.packedPosXY >> 16) / PACKED_TERRAIN_POS_Y_SCALE - PACKED_TERRAIN_POS_Y_BIAS,
+        static_cast<float>(packed.packedPosZUv & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+    };
+    vert.packedNor = packed.packedNor;
+    vert.uv = {
+        static_cast<float>((packed.packedPosZUv >> 16) & 0xFF) / 255.f,
+        static_cast<float>(packed.packedPosZUv >> 24) / 255.f,
+    };
+    return vert;
+}
+
 inline PackedTerrainVertex packTerrainVertex(const Vertex& vert)
 {
     const uint32_t x = packTerrainPosComponent(vert.pos_OS.x, PACKED_TERRAIN_POS_XZ_BIAS, PACKED_TERRAIN_POS_XZ_SCALE);
