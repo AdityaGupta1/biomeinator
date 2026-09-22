@@ -303,8 +303,18 @@ void init()
     {
         BIOME_INIT(TIANZI_MOUNTAINS, "tianzi mountains");
         data.grassTint = glmUtil::colorFromHex("#659749");
+        // Cliff trees can root on a narrow step with rock behind their foliage.
+        // Require a clear trunk, rather than a full ring of air at ground level.
         data.structureGens = {
-            { { { StructureType::PINE_TREE, 3.f }, { StructureType::PINE_SHRUB, 2.f } }, 8, 2 },
+            { { { StructureType::PINE_TREE, 5.f,
+                    { .height = 10, .clearanceRadius = 0, .supportRadius = 1, .minSupportBlocks = 5,
+                      .spacingXZ = 4.5f, .spacingY = 12.f } },
+                { StructureType::PINE_SHRUB, 2.f,
+                    { .height = 7, .clearanceRadius = 0, .supportRadius = 1, .minSupportBlocks = 3,
+                      .spacingXZ = 3.f, .spacingY = 7.f } } }, 8, 2 },
+        };
+        data.structureGens.back().surfacePlacement = StructureSurfacePlacement{
+            { Block::GRASS_BLOCK, Block::STONE }
         };
         data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });

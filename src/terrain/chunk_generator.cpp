@@ -1041,7 +1041,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                             smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
                 const bool bareFormationCliff = hasTianziFormation &&
                     naturalSlopeArray[columnIdx] > mix(5.f,
-                        mix(1.25f, 2.6f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
+                        mix(2.f, 4.f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
 
@@ -1135,6 +1135,39 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         const BiomeData& biomeData = Biomes::getBiomeData(biome);
         for (const StructureGen& structureGen : biomeData.structureGens)
         {
+            if (structureGen.surfacePlacement)
+            {
+                // Enumerate surfaces first instead of hoping an XZ grid point hits
+                // a narrow shelf. Footprint/clearance checks and 3D spacing wait for
+                // the immutable terrain masks of our neighbors.
+                const auto& groundBlocks = structureGen.surfacePlacement->groundBlocks;
+                uint minHeadroom = chunkSizeY;
+                for (const auto& variant : structureGen.variants)
+                    minHeadroom = min(minHeadroom, variant.surfaceFit.height);
+                const uint salt = structureGen.gridSalt();
+                for (uint columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
+                {
+                    if (this->biomes[columnIdx] != biome) continue;
+                    const ivec2 posXZ = chunkPosBlocksXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
+                    uint headroom = 0;
+                    for (int y = chunkSizeY - 1; y > 0; --y)
+                    {
+                        const Block block = this->blocks[columnIdx * chunkSizeY + y];
+                        if (block == Block::AIR) { ++headroom; continue; }
+                        if (headroom >= minHeadroom &&
+                            std::find(groundBlocks.begin(), groundBlocks.end(), block) != groundBlocks.end() &&
+                            !this->caveDecoration.isCaveAir(columnIdx, y + 1))
+                        {
+                            auto rng = initRng(worldSeed ^ hash(1946793319) ^ salt, posXZ.x, y + 1, posXZ.y);
+                            this->surfaceStructureCandidates.push_back({ ivec3(posXZ.x, y + 1, posXZ.y),
+                                &structureGen, rng.nextUint(), headroom });
+                        }
+                        headroom = 0;
+                    }
+                }
+                continue;
+            }
+
             const int gridCellSideLength = static_cast<int>(structureGen.gridCellSideLength);
             const int padding = static_cast<int>(structureGen.gridCellPadding);
 
@@ -1173,35 +1206,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const uint columnIdx = candidatePosXZ_CS.x + chunkSizeXZ * candidatePosXZ_CS.y /*z*/;
                     const Biome columnBiome = this->biomes[columnIdx];
                     if (columnBiome != biome) continue;
-
-                    if (biome == Biome::TIANZI_MOUNTAINS)
-                    {
-                        // A column may have a planted shoulder under a crown. Scan actual
-                        // exposed grass instead of anchoring every tree at its highest voxel.
-                        // World XYZ seeding and column-local headroom keep chunk ownership
-                        // and tree variants independent of generation order.
-                        const uint baseBlockIdx = chunkSizeY * columnIdx;
-                        uint headroom = 0;
-                        int lastPlantY = static_cast<int>(chunkSizeY) + 24;
-                        const int lowestShelf = min(static_cast<int>(this->terrainTopY[columnIdx]),
-                            static_cast<int>(ceil(naturalTerrainArray[columnIdx].formationBaseHeight + 4.f)));
-                        for (int y = static_cast<int>(chunkSizeY) - 1; y >= max(1, lowestShelf); --y)
-                        {
-                            const Block block = this->blocks[baseBlockIdx + y];
-                            if (block == Block::AIR) { ++headroom; continue; }
-                            if (block == Block::GRASS_BLOCK && headroom >= 7 && lastPlantY - y >= 24)
-                            {
-                                RandomNumberGenerator variantRng = initRng(worldSeed ^ hash(1946793319) ^ gridSalt,
-                                    candidatePosXZ_WS.x, y, candidatePosXZ_WS.y);
-                                StructureType type = structureGen.pickVariant(variantRng);
-                                if (type == StructureType::PINE_TREE && headroom < 19) type = StructureType::PINE_SHRUB;
-                                this->structures.emplace_back(type, ivec3(candidatePosXZ_WS.x, y + 1, candidatePosXZ_WS.y));
-                                lastPlantY = y;
-                            }
-                            headroom = 0;
-                        }
-                        continue;
-                    }
 
                     const uint candidateGroundHeight = this->terrainTopY[columnIdx];
                     if (candidateGroundHeight == 0)

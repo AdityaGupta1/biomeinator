@@ -280,9 +280,9 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
         // Split the previous 112-block core budget across three independently sited
         // tiers. Broad summits and narrow rises leave plantable shelves between crowns.
         constexpr std::array<TerrainFormations::Profile, 3> tiers{{
-            { 70.f, 34.f, 52.f, 42.f, 8.f, 0.84f, 0.85f },
-            { 46.f, 24.f, 30.f, 38.f, 4.f, 0.80f, 0.85f },
-            { 31.f, 16.2f, 19.f, 32.f, 2.f, 0.78f, 0.85f },
+            { 92.f, 34.f, 52.f, 42.f, 8.f, 0.84f, 0.85f },
+            { 54.f, 24.f, 30.f, 38.f, 4.f, 0.80f, 0.85f },
+            { 37.f, 16.2f, 19.f, 32.f, 2.f, 0.78f, 0.85f },
         }};
         uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, tiers);
     }

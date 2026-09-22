@@ -66,6 +66,9 @@ share one continuous biome weight, so stacking does not add another transition r
 Core footprints are widened independently of site spacing and root extent to avoid thin
 needle-like towers while keeping distinct gaps and the same vertical tier budget. Check the
 finite-support bound when widening: footprint warping grows with the core radius too.
+Main sites are now farther apart, with smaller spacing increases in the upper tiers. This
+opens valleys between formations without shrinking their cores or eliminating most stacked
+crowns. Increasing every tier's spacing equally would make higher shoulders much rarer.
 
 Steep Tianzi faces receive a little more bounded 3D displacement for shallow recesses and
 overhangs. Positive displacement is separately capped near crowns: lifting the full cliff
@@ -111,13 +114,19 @@ red sand/sandstone and quartz textures were copied from the user's GoodVibes blo
 stone pending a dedicated weathered rock texture; yellow smooth sandstone made the towers
 read as desert terrain. Tianzi's trees/shrubs use the existing pine log and leaf
 assets; their generators obey the same clipping-independent RNG contract as other trees.
-Steep Tianzi slopes retain exposed rock. Gentler shoulders and summits receive a thin soil
-cap, with a correlated patch mask allowing vegetation onto some steeper steps. Exposed
-stone shelves under overhangs can also acquire soil when there is enough open headroom;
-this scan stays above the shared ground and does not repaint stone/marble outcrops or caves.
-Pines and shrubs share a denser candidate grid, anchor only on actual grass, and require
-vertical clearance. The column scan can find lower shelves as well as the highest surface;
-variants are seeded by world XYZ and vertically separated to avoid stacked overlapping trees.
+Tianzi's broad ledges, summits and valley floors receive soil, while steep faces retain
+exposed rock. Lower shelves beneath an overhang can also acquire a grass cap when there is
+enough open headroom above the shared ground. Do not scatter soil over tiny steps on the
+steep faces merely to permit trees: the grass/dirt sides stood out as colored speckles.
+Tianzi's structure rule instead accepts exposed stone as well as grass, independently of
+the soil pass. Keep the cave-air exclusion so accepting stone does not plant cave floors.
+Pines and shrubs use the reusable [exposed-surface placement](structure_system.md)
+rule: enumerate eligible ledges first, then select fitting plants with actual support, clearance
+and 3D spacing. This replaces both the sparse XZ sampling and blanket vertical gap; narrow
+shelves can carry shrubs and larger shoulders can support pines. Tianzi checks a clear
+trunk column with solid root support while allowing foliage to meet the backing cliff;
+requiring a full ring of air at root level rejected most narrow steps. Soil creation remains in
+terrain generation, rather than having a plant-placement rule repaint its own supports.
 Boundary slope samples use the same world-space natural terrain query as interior cached
 columns, avoiding a special edge treatment at chunk borders.
 

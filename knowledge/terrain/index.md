@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Terrain Knowledgebase
 
@@ -17,7 +17,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [cave_biome_system.md](cave_biome_system.md) | 3D cave biome noise, downsampled classification, surface bias, carve-noise skin/fringe, secondary rock |
 | [block_system.md](block_system.md) | JSON block definitions, generated Block enum, BlockData, emissive blocks |
 | [custom_models.md](custom_models.md) | Cached GLB decorator geometry, placement, rotation, opaque-atlas contract |
-| [structure_system.md](structure_system.md) | StructureGen grid placement, structure types, StructureBounds |
+| [structure_system.md](structure_system.md) | Ground grids, reusable ledge placement, clearance/spacing and cross-chunk filling |
 | [cave_structure_system.md](cave_structure_system.md) | Underground floor/ceiling structures, column-centric placement, CaveLayer capture, terrain air mask, type-major fill order |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement, all-face cave decorators |
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |
