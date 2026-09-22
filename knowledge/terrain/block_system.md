@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-21_
 
 # Block System
 
@@ -49,7 +49,7 @@ anyhit handling, and shadow rays are blocked by it as they are by any rough tran
 ## Procedural color
 
 A block JSON's `proceduralColor` flag multiplies emission by a world-space ramp
-while leaving diffuse and transmission texture colors unchanged, by setting `TRIANGLE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
+while leaving diffuse and transmission texture colors unchanged, by setting `FACE_FLAG_PROCEDURAL_COLOR` at mesh time (CRYSTAL_CORE
 uses it). The ramp itself lives in the shaders — see
 [shaders → materials.md](../shaders/materials.md).
 

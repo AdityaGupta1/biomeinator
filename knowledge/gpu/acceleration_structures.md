@@ -1,4 +1,4 @@
-_Last edited: 2026-08-22_
+_Last edited: 2026-09-21_
 
 # Acceleration Structures
 
@@ -40,6 +40,16 @@ All acceleration structures (BLAS and TLAS) are sub-allocated from a single
 `CommittedManagedBuffer` and freed to `ToFreeList` after each build. Upload staging for
 vertex and index data uses two more committed buffers.
 
+## Build Inputs Need Not Stay Resident
+
+An acceleration structure holds its own copy of the geometry, so the vertex buffer a build reads
+is only needed until the build has run. Instances with `host_packedTerrainVerts` exploit this:
+the build reads fp32 positions straight from the section in `sharedVertsUploadBuffer` (an
+upload heap is permanently `GENERIC_READ`, which covers the required
+`NON_PIXEL_SHADER_RESOURCE` state, and the section lives on through the free list for the
+frames in flight), while only the packed copy is uploaded to the resident verts buffer. Refit
+BLASes cannot do this because `updateBlases` re-reads the resident vertices.
+
 ## BLAS Refit
 
 Deformable BLASes (`BlasBuildInputs::allowUpdate`, currently water) are built once with
@@ -56,6 +66,36 @@ traffic was measurable on the main thread. It issues a UAV barrier on `sharedAcs
 `DispatchRays` read these BLASes and the in-place refit writes the same memory (the buffer
 lives permanently in the AS state, so ordering is UAV-barrier-only). Fresh-section BLAS
 builds never need this because they write virgin memory.
+
+## BLAS Compaction
+
+Static BLASes (everything but water) are built with `ALLOW_COMPACTION` and copied into a
+section of their compacted size a few frames later; on the RTX 4070 SUPER this took terrain
+BLASes from ~77 to ~21 bytes per triangle (1.9 GB to 0.5 GB at render distance 30). The
+compacted size is only known after the
+build has run, so the round trip is spread across the frame contexts:
+
+- The build itself writes a `COMPACTED_SIZE` postbuild info entry (passed to
+  `BuildRaytracingAccelerationStructure` directly, so no barrier sits between build and
+  query), and the batch copies the entries to a readback buffer. Both buffers belong to a
+  `BlasCompactionQuery` owned by the frame context, sized to the largest batch seen so far.
+- When that frame context comes around again its fence has passed, so `Scene::update` reads
+  the sizes and records `CopyRaytracingAccelerationStructure(COMPACT)` into a fresh section
+  *before* this frame's builds. The old section goes to `ToFreeList` because in-flight frames
+  still trace through it; `makeTlas`'s UAV barrier already orders the copies before the TLAS
+  build.
+
+An instance can be destroyed before its slot comes around (unloading recycles the vectors but
+destroys the object, and its id is handed to the next chunk), so the pending records hold the
+instance id and `GeometryWrapper::blasBuildId`, resolve the id through the live instance map,
+and drop the compaction when either is gone or differs, or the instance is scheduled for
+deletion. Water BLASes are never compacted: refit BLASes compact poorly and they are under
+100 MB in total.
+
+The `ALLOW_COMPACTION` flag itself showed no build- or trace-time difference back to back,
+and the copies cost well under 0.1 ms per frame while streaming. Compacted sections are
+smaller than the holes they leave, so the AS buffer's `allocated - used` gap in the memory
+report is the fragmentation to watch.
 
 ## TLAS UAV Barrier
 

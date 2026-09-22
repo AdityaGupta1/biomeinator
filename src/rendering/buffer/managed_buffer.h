@@ -5,6 +5,7 @@
 
 #include "rendering/dxr_includes.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/gpu_memory_reporter.h"
 #include "util/util.h"
 
 #include <map>
@@ -44,7 +45,7 @@ struct ManagedBufferOptions
     BufferHelper::BufferCreationFlags bufferCreationFlags{};
 };
 
-class ManagedBuffer
+class ManagedBuffer : public GpuMemoryReporter
 {
     friend class ManagedBufferSection;
     friend class ToFreeList;
@@ -143,6 +144,9 @@ public:
     ID3D12Resource* getBuffer() const;
     D3D12_GPU_VIRTUAL_ADDRESS getGpuVirtualAddress() const;
     size_t getSizeBytes() const;
+    size_t getFreeBytes() const;
+
+    GpuMemoryEntry reportGpuMemory() const override;
 
     void setName(const std::wstring& name);
 };

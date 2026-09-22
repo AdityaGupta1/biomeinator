@@ -29,6 +29,7 @@ void Fence::waitFor(uint64_t waitFenceValue)
         if (waitResult == WAIT_TIMEOUT)
         {
             Logger::logError("GPU fence wait timed out (possible GPU hang), fence value: %llu", waitFenceValue);
+            Logger::logError("Device removed reason: 0x%08x", static_cast<uint32_t>(Renderer::getDevice()->GetDeviceRemovedReason()));
             __debugbreak();
         }
         else if (waitResult == WAIT_FAILED)

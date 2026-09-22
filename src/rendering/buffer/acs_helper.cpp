@@ -42,7 +42,12 @@ struct AcsBuildInfo
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
 
     ManagedBufferSection* outAcs;
+    // Emits a COMPACTED_SIZE postbuild query into the batch's BlasCompactionQuery; requires ALLOW_COMPACTION
+    bool queryCompactedSize{ false };
 };
+
+static uint32_t nextBlasBuildId = 1;
+static constexpr uint32_t minCompactionQueryCapacity = 64;
 
 // The single OMM Array shared by all OMM-linked BLASes; see buildOmmArray()
 static D3D12_GPU_VIRTUAL_ADDRESS ommArrayGpuVa = 0;
@@ -91,10 +96,40 @@ void init()
     sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
 }
 
+static void ensureCompactionQueryCapacity(ToFreeList& toFreeList, BlasCompactionQuery* query, uint32_t numEntries)
+{
+    if (numEntries <= query->capacity)
+    {
+        return;
+    }
+    // Allocate for a whole per-frame batch at once rather than growing with each larger batch
+    numEntries = std::max(numEntries, minCompactionQueryCapacity);
+
+    if (query->sizesBuffer != nullptr)
+    {
+        toFreeList.pushResource(query->sizesBuffer);
+        toFreeList.pushResource(query->readbackBuffer);
+    }
+
+    const uint64_t sizeBytes =
+        numEntries * sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC);
+    query->sizesBuffer = BufferHelper::createBasicBuffer(sizeBytes,
+                                                         &DEFAULT_HEAP,
+                                                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                         { .resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS });
+    query->sizesBuffer->SetName(L"blasCompactionSizes");
+    query->readbackBuffer = BufferHelper::createBasicBuffer(sizeBytes, &READBACK_HEAP, D3D12_RESOURCE_STATE_COPY_DEST);
+    query->readbackBuffer->SetName(L"blasCompactionSizesReadback");
+    query->capacity = numEntries;
+}
+
+// Query may be null when no build info has a compaction entry
 static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
                                        ToFreeList& toFreeList,
-                                       const std::vector<AcsBuildInfo>& buildInfos)
+                                       const std::vector<AcsBuildInfo>& buildInfos,
+                                       BlasCompactionQuery* query)
 {
+    uint32_t numCompactionQueries = 0;
     for (size_t i = 0; i < buildInfos.size(); ++i)
     {
         const auto& buildInfo = buildInfos[i];
@@ -113,8 +148,36 @@ static void makeAccelerationStructures(ID3D12GraphicsCommandList4* cmdList,
 
         toFreeList.pushManagedBufferSection(sharedAcsScratchSection);
 
-        cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+        if (!buildInfo.queryCompactedSize)
+        {
+            cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+            continue;
+        }
+
+        ASSERT(query != nullptr);
+        ASSERT(buildInfo.inputs.Flags & D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION);
+        const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC postbuildInfoDesc = {
+            .DestBuffer = query->sizesBuffer->GetGPUVirtualAddress()
+                + numCompactionQueries * sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC),
+            .InfoType = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE,
+        };
+        cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 1, &postbuildInfoDesc);
+        ++numCompactionQueries;
     }
+
+    if (numCompactionQueries == 0)
+    {
+        return;
+    }
+
+    ASSERT(numCompactionQueries == query->numEntries);
+    const uint64_t sizesBytes =
+        numCompactionQueries * sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, query->sizesBuffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    cmdList->CopyBufferRegion(query->readbackBuffer.Get(), 0, query->sizesBuffer.Get(), 0, sizesBytes);
+    BufferHelper::stateTransitionResourceBarrier(
+        cmdList, query->sizesBuffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const OmmArrayBuildInputs& inputs)
@@ -169,7 +232,7 @@ void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
 
     buildInfo.outAcs = inputs.outOmmArray;
 
-    makeAccelerationStructures(cmdList, toFreeList, { buildInfo });
+    makeAccelerationStructures(cmdList, toFreeList, { buildInfo }, nullptr);
 
     // Later BLAS builds dereference the OMM Array from the same buffer
     BufferHelper::uavBarrier(cmdList, sharedAcsBuffer.getBuffer());
@@ -180,9 +243,27 @@ void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     toFreeList.pushResource(inputBuffer);
 }
 
-static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* geoWrapper, bool allowUpdate)
+// Fp32 positions a BLAS build reads; the resident verts section unless the build sources them elsewhere
+struct BlasVertsSource
 {
-    const ManagedBufferSection vertsBufferSection = geoWrapper->vertsBufferSection;
+    D3D12_GPU_VIRTUAL_ADDRESS gpuVa{ 0 };
+    uint32_t count{ 0 };
+};
+
+static BlasVertsSource residentVertsSource(const GeometryWrapper* geoWrapper)
+{
+    return {
+        .gpuVa = geoWrapper->vertsBufferSection.getGpuVirtualAddress(),
+        .count = Util::convertByteSizeToCount<Vertex>(geoWrapper->vertsBufferSection.sizeBytes),
+    };
+}
+
+static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
+                                const GeometryWrapper* geoWrapper,
+                                const BlasVertsSource vertsSource,
+                                bool allowUpdate,
+                                bool allowCompaction)
+{
     const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
     const ManagedBufferSection ommIdxsBufferSection = geoWrapper->ommIdxsBufferSection;
     const bool hasIdxs = (idxsBufferSection.sizeBytes > 0);
@@ -193,10 +274,10 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* 
         .IndexFormat = hasIdxs ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
         .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
         .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes),
-        .VertexCount = Util::convertByteSizeToCount<Vertex>(vertsBufferSection.sizeBytes),
+        .VertexCount = vertsSource.count,
         .IndexBuffer = hasIdxs ? idxsBufferSection.getBuffer()->getGpuVirtualAddress() + idxsBufferSection.offsetBytes : 0,
         .VertexBuffer = {
-            .StartAddress = vertsBufferSection.getBuffer()->getGpuVirtualAddress() + vertsBufferSection.offsetBytes,
+            .StartAddress = vertsSource.gpuVa,
             .StrideInBytes = sizeof(Vertex),
         },
     };
@@ -242,6 +323,10 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* 
         // or UpdateScratchDataSizeInBytes comes back 0
         buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
     }
+    if (allowCompaction)
+    {
+        buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION;
+    }
 
     buildInfo->inputs = {
         .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
@@ -252,25 +337,50 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo, const GeometryWrapper* 
     };
 }
 
-static void makeBlasBuildInfo(AcsBuildInfo* buildInfo, GeometryWrapper* geoWrapper, bool allowUpdate)
+static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
+                              GeometryWrapper* geoWrapper,
+                              const BlasVertsSource vertsSource,
+                              bool allowUpdate,
+                              bool allowCompaction)
 {
-    makeBlasBuildInputs(buildInfo, geoWrapper, allowUpdate);
+    makeBlasBuildInputs(buildInfo, geoWrapper, vertsSource, allowUpdate, allowCompaction);
 
     Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
     geoWrapper->updateScratchSizeBytes = allowUpdate ? buildInfo->prebuildInfo.UpdateScratchDataSizeInBytes : 0;
 
     buildInfo->outAcs = &geoWrapper->blasBufferSection;
+    geoWrapper->blasBuildId = nextBlasBuildId++;
 }
 
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 ManagedBuffer* dev_verts,
                 ManagedBuffer* dev_idxs,
-                const std::vector<BlasBuildInputs>& allInputs)
+                const std::vector<BlasBuildInputs>& allInputs,
+                BlasCompactionQuery* outQuery)
 {
     std::vector<AcsBuildInfo> buildInfos;
     buildInfos.reserve(allInputs.size());
+
+    uint32_t numCompactable = 0;
+    for (const auto& inputs : allInputs)
+    {
+        if (inputs.allowCompaction)
+        {
+            ASSERT(!inputs.allowUpdate); // refit BLASes are never compacted
+            ++numCompactable;
+        }
+    }
+    if (outQuery != nullptr)
+    {
+        outQuery->numEntries = 0;
+        ensureCompactionQueryCapacity(toFreeList, outQuery, numCompactable);
+    }
+    else
+    {
+        ASSERT(numCompactable == 0);
+    }
 
     CpuProfiler::beginScope("upload");
     dev_verts->beginBatchCopy(cmdList);
@@ -293,8 +403,30 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         const ManagedBufferSection vertsUploadBufferSection =
             sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
-        inputs.outGeoWrapper->vertsBufferSection =
-            dev_verts->copyFromManagedBuffer(cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
+        BlasVertsSource vertsSource;
+        if (inputs.host_packedTerrainVerts != nullptr)
+        {
+            ASSERT(!inputs.allowUpdate); // refits re-read the resident verts, which would not be fp32
+            ASSERT(inputs.host_packedTerrainVerts->size() == inputs.host_verts->size());
+            const ManagedBufferSection packedUploadBufferSection =
+                sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_packedTerrainVerts);
+            inputs.outGeoWrapper->vertsBufferSection =
+                dev_verts->copyFromManagedBuffer(cmdList, toFreeList, sharedVertsUploadBuffer, packedUploadBufferSection);
+            toFreeList.pushManagedBufferSection(packedUploadBufferSection);
+
+            // The upload heap is GENERIC_READ, which satisfies the build's NON_PIXEL_SHADER_RESOURCE
+            // requirement, and the section outlives the build through the free list
+            vertsSource = {
+                .gpuVa = vertsUploadBufferSection.getGpuVirtualAddress(),
+                .count = static_cast<uint32_t>(inputs.host_verts->size()),
+            };
+        }
+        else
+        {
+            inputs.outGeoWrapper->vertsBufferSection =
+                dev_verts->copyFromManagedBuffer(cmdList, toFreeList, sharedVertsUploadBuffer, vertsUploadBufferSection);
+            vertsSource = residentVertsSource(inputs.outGeoWrapper);
+        }
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
@@ -314,7 +446,12 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
             : D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
 
         buildInfos.emplace_back();
-        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, inputs.allowUpdate);
+        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, vertsSource, inputs.allowUpdate, inputs.allowCompaction);
+        if (inputs.allowCompaction)
+        {
+            ++outQuery->numEntries;
+            buildInfos.back().queryCompactedSize = true;
+        }
     }
 
     dev_verts->endBatchCopy(cmdList);
@@ -322,7 +459,46 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
     CpuProfiler::endScope(); // upload
     CPU_PROFILE_SCOPE("record builds");
-    makeAccelerationStructures(cmdList, toFreeList, buildInfos);
+    makeAccelerationStructures(cmdList, toFreeList, buildInfos, outQuery);
+}
+
+std::vector<uint64_t> readCompactedSizes(const BlasCompactionQuery& query)
+{
+    std::vector<uint64_t> sizes(query.numEntries);
+    if (sizes.empty())
+    {
+        return sizes;
+    }
+
+    using CompactedSizeDesc = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC;
+    const D3D12_RANGE readRange = { 0, sizes.size() * sizeof(CompactedSizeDesc) };
+    CompactedSizeDesc* host_descs = nullptr;
+    CHECK_HRESULT(query.readbackBuffer->Map(0, &readRange, reinterpret_cast<void**>(&host_descs)));
+    for (size_t i = 0; i < sizes.size(); ++i)
+    {
+        sizes[i] = host_descs[i].CompactedSizeInBytes;
+    }
+    const D3D12_RANGE writtenRange = { 0, 0 };
+    query.readbackBuffer->Unmap(0, &writtenRange);
+    return sizes;
+}
+
+void compactBlas(ID3D12GraphicsCommandList4* cmdList,
+                 ToFreeList& toFreeList,
+                 GeometryWrapper* geoWrapper,
+                 const uint64_t compactedSizeBytes)
+{
+    ASSERT(geoWrapper->blasBufferSection.isValid());
+    ASSERT(compactedSizeBytes > 0 && compactedSizeBytes <= geoWrapper->blasBufferSection.sizeBytes);
+
+    const ManagedBufferSection compactedSection =
+        sharedAcsBuffer.findFreeSection(cmdList, &toFreeList, compactedSizeBytes);
+    cmdList->CopyRaytracingAccelerationStructure(compactedSection.getGpuVirtualAddress(),
+                                                 geoWrapper->blasBufferSection.getGpuVirtualAddress(),
+                                                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT);
+
+    toFreeList.pushManagedBufferSection(geoWrapper->blasBufferSection);
+    geoWrapper->blasBufferSection = compactedSection;
 }
 
 void updateBlases(ID3D12GraphicsCommandList4* cmdList,
@@ -354,7 +530,7 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
     for (GeometryWrapper* const geoWrapper : geoWrappers)
     {
         AcsBuildInfo buildInfo;
-        makeBlasBuildInputs(&buildInfo, geoWrapper, true /*allowUpdate*/);
+        makeBlasBuildInputs(&buildInfo, geoWrapper, residentVertsSource(geoWrapper), true /*allowUpdate*/, false /*allowCompaction*/);
         // update flags must match the original build's flags aside from PERFORM_UPDATE, and
         // ALLOW_UPDATE must stay set or no further updates are allowed
         buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
@@ -402,7 +578,7 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
 
     buildInfo.outAcs = inputs.outTlas;
 
-    makeAccelerationStructures(cmdList, toFreeList, { buildInfo });
+    makeAccelerationStructures(cmdList, toFreeList, { buildInfo }, nullptr);
 }
 
 void reset()

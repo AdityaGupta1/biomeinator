@@ -133,8 +133,8 @@ bool traceToLight(const float3 surfPos_WS,
     const Material material = materials[light.materialIdx];
     const float3 passthroughAbsorption = computePassthroughAbsorption(lightPayload, lightDistance);
     const InstanceData lightInstanceData = instanceDatas[light.instanceId];
-    const PerTriangleData lightPerTriData =
-        perTriDatas[lightInstanceData.perTriDatasBufferOffset + light.triangleIdx];
+    const PerFaceData lightPerFaceData =
+        loadPerFaceData(lightInstanceData, light.triangleIdx);
 
     Vertex v0, v1, v2;
     loadVertsFromInstance(lightInstanceData, light.triangleIdx, v0, v1, v2);
@@ -144,8 +144,8 @@ bool traceToLight(const float3 surfPos_WS,
     // Untinted because this ctx is only used for emission, which the biome map never tints. The
     // procedural ramp does reach emission, and has to be evaluated at the sampled point exactly as a
     // BSDF hit there would, or NEE and BSDF sampling disagree about this light's color.
-    TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerTriData.texArraySliceIdx);
-    texCtx.proceduralColor = getProceduralColor(lightPerTriData.flags, pointOnLight_WS);
+    TexSampleCtx texCtx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), lightPerFaceData.getTexArraySliceIdx());
+    texCtx.proceduralColor = getProceduralColor(lightPerFaceData.getFlags(), pointOnLight_WS);
     Le = getMaterialEmissiveColor(material, uv, texCtx) * lightPayload.pathWeight * passthroughAbsorption
         * cloudTransmittance(ray.Origin, wi_WS, lightDistance);
     return true;
@@ -194,12 +194,14 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 uint getAreaLightIdxFromHit(const HitInfo hitInfo)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + hitInfo.triangleIdx];
-    if (perTriData.localAreaLightIdx == LIGHT_IDX_INVALID)
+    const PerFaceData perFaceData = loadPerFaceData(instanceData, hitInfo.triangleIdx);
+    if (perFaceData.localAreaLightIdx == LIGHT_IDX_INVALID)
     {
         return LIGHT_IDX_INVALID;
     }
-    return instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx;
+    // A face's triangles are consecutive area lights starting at the stored one
+    const uint triIdxInFace = hitInfo.triangleIdx & ((1u << instanceData.trisPerFaceLog2) - 1u);
+    return instanceData.areaLightsBufferOffset + perFaceData.localAreaLightIdx + triIdxInFace;
 }
 
 float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)

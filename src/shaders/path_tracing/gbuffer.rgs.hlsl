@@ -53,8 +53,8 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
         // water displacement is vertical at fixed XZ, so the previous position of a water
         // surface point is the same column's wave height at the previous frame's time
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP))
+        const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
+        if (perFaceData.hasFlag(FACE_FLAG_IS_WATER_TOP))
         {
             const float2 posXZ_WS = motionHitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
             const float fade = waveFade(motionHitPos_WS + float3(cameraParams.globalInstanceOffset), renderParams.waveFade);

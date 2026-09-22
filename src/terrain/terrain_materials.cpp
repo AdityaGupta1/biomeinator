@@ -22,7 +22,7 @@ void init(Scene* scene)
 
 static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materialIdxs;
 
-// Aux map g channel is the biome tint mask; per-slice presence drives TRIANGLE_FLAG_BIOME_TINT
+// Aux map g channel is the biome tint mask; per-slice presence drives FACE_FLAG_BIOME_TINT
 static std::vector<bool> sliceBiomeTintMask;
 static std::vector<bool> sliceNormalMap;
 

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Perf Runs
 
@@ -88,7 +88,11 @@ p95 is a symptom, not a cause.
 
 `--perfMoveSpeed=<blocks/s>` moves the camera forward during the measuring phase only, after
 the world has loaded, which is how streaming through a loaded world is measured; the
-`worldgen_move` scene does this at 20 blocks/s for 1500 frames. The movement uses a fixed
+`worldgen_move` scene does this at 20 blocks/s for 1500 frames. `--perfMoveTurnFrames=<N>`
+turns that into a random walk, picking a new horizontal heading every N frames from a generator
+seeded by the world seed, so repeated runs take the same path. A walk revisits chunks and frees
+and allocates in a non-FIFO order, which is what fragmentation measurements need; a straight
+line is the friendlier case for any allocator. The movement uses a fixed
 1/60 s step per frame rather than real elapsed time, so two runs cover the same path and hit
 the same chunk boundaries on the same frames however fast their frames were. Moving at that speed on
 seed 100 (2026-09-20), the spikes above the 12.3 ms floor came from: BLAS build frames (about
@@ -133,6 +137,30 @@ measured 21.9 s and a 16.5 ms main thread, and the post-fix state 11.8 s, with e
 internally consistent; the machine was simply ~2x slower on the CPU for a while. Always
 measure the two sides of a comparison back to back, and re-measure the baseline if the
 candidate looks too good.
+
+## Memory
+
+The report's `memory` block is a snapshot taken when the run finishes: the DXGI local budget
+and current usage (what Streamline's out-of-VRAM warning is measured against, not physical
+VRAM), every live `ManagedBuffer` and `MappedArray` with its allocated and used bytes, and the
+buffer sections held by static and by deformable instances summed by section kind. Buffers
+enumerate themselves through `GpuMemoryReporter`, so a new buffer type shows up by inheriting
+it rather than by being plumbed into the report; `usedBytes` is allocated minus free-list space,
+so the gap between the two is fragmentation plus growth headroom. The instance sums cover every
+live instance, not just the ones in the TLAS. `show` prints the block.
+
+Seed 100 at render distance 30, fullscreen 1440p, 2026-09-20, before BLAS compaction: 5.9 GB
+in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB of
+per-triangle data and 300 MB of indices; water instances were under 160 MB all told. BLAS came
+to ~77 bytes per triangle uncompacted, geometry to ~156 bytes per quad. With compaction the
+terrain BLAS is 530 MB and the total 4.6 GB; per-face data packed to 8 bytes and stored per
+quad takes it from 400 MB to 100 MB and the total to 4.3 GB; the 12-byte resident terrain vertex
+halves terrain verts to 600 MB and the total to 3.7 GB, with frame time unchanged back to back.
+Seed 4 at render distance 50 then rests at 6.2 GB and stays under 8.3 GB while moving, where
+before the vertex buffer overran its 4 GB reservation. The ~1.2 GB not attributed to any buffer is
+textures, render targets, DLSS and SHARC, and the light tree. The budget moved between 7.3 GB
+and 11.2 GB across runs the same afternoon depending on what else held VRAM, so compare usage,
+not headroom.
 
 ## Gap and period
 

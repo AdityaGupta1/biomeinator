@@ -1,4 +1,4 @@
-_Last edited: 2026-09-10_
+_Last edited: 2026-09-21_
 
 # Materials and Textures
 
@@ -46,7 +46,7 @@ The same array/non-array invariant applies to the normal and separate roughness 
 
 Terrain tangent-space normal maps are optional `<name>.normal.png` companions (16x16,
 linear RGB, opaque alpha). They use a separate array aligned with the color/aux slices.
-Missing slices contain flat +Z normals and are skipped using `TRIANGLE_FLAG_NORMAL_MAP`.
+Missing slices contain flat +Z normals and are skipped using `FACE_FLAG_NORMAL_MAP`.
 Mips average encoded vectors linearly; the shader normalizes after sampling and derives
 the frame from triangle positions/UVs, without terrain tangent attributes. All surface ray
 offsets use the geometric normal. Base normals are oriented

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-07_
+_Last edited: 2026-09-20_
 
 # Light Tree Build
 
@@ -23,8 +23,8 @@ them out of the hot path's working set.
 
 `dev_lightAux` / `dev_lightToLeaf` size to the **sparse high-water mark**
 (`Scene::getAreaLightSparseCount()`) so the cheap math at Stage 4's MIS BSDF-hit
-recovery — `instanceData.areaLightsBufferOffset + perTriData.localAreaLightIdx`
-— indexes them directly. `dev_lightTree` and the Morton buffers size to
+recovery — `getAreaLightIdxFromHit`, the instance's light offset plus the face's first light
+plus the triangle's index within the face — indexes them directly. `dev_lightTree` and the Morton buffers size to
 `M = nextPow2(numAreaLights)` (dense). Two capacity fields, two
 `ensureCapacity` paths — do not conflate.
 

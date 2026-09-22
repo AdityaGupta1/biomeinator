@@ -51,8 +51,8 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
     }
 
     const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-    return bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+    const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
+    return perFaceData.hasFlag(FACE_FLAG_IS_WATER);
 }
 
 // Adds the segment's fog and cloud in-scatter to pathColor and folds both transmittances into
@@ -217,10 +217,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         }
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
-        const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-        const bool hitWasWater = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER);
+        const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
+        const bool hitWasWater = perFaceData.hasFlag(FACE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
-            makeTintedTexSampleCtx(perTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and
         // multiply by Fresnel reflectance
@@ -581,10 +581,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     float3 secondHitDiffuseAlbedo = 0.f;
                     if (bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
                     {
-                        const PerTriangleData secondHitPerTriData =
-                            perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+                        const PerFaceData secondHitPerFaceData =
+                            loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
                         const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
-                            secondHitPerTriData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+                            secondHitPerFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
                         if (surfMaterial.hasDiffuse())
                         {
                             secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
@@ -737,7 +737,7 @@ void RayGeneration()
         if (pathSplitIdx == 0 && bool(payload.flags & PAYLOAD_FLAG_DID_HIT) && payload.materialIdx != MATERIAL_IDX_INVALID)
         {
             const Material material = getHitMaterial(payload, payload.rayCone.width);
-            const PerTriangleData tri = perTriDatas[instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
+            const PerFaceData tri = loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
             const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo.hitPos_WS);
             SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);

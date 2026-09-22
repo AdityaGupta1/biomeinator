@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # ManagedBuffer
 
@@ -48,7 +48,7 @@ Uses D3D12 *reserved resources* (tiled resources). On init, a single `ID3D12Reso
 
 When more capacity is needed, a new heap is created and mapped immediately after the current physical end — no reallocation or data copy required. Growth is rounded up to 32 MB chunks.
 
-**Constraints**: cannot be mapped (no CPU access), must be resizable. Used for the large shared geometry buffers (vertices, indices, per-triangle data) whose total size is unknown upfront.
+**Constraints**: cannot be mapped (no CPU access), must be resizable. Used for the large shared geometry buffers (vertices, indices, per-face data) whose total size is unknown upfront.
 
 ### CommittedManagedBuffer
 

@@ -7,6 +7,7 @@
 #include "settings_manager.h"
 #include "terrain/terrain.h"
 #include "util/file_util.h"
+#include "util/rng.h"
 
 #include <json.hpp>
 
@@ -245,12 +246,29 @@ bool perfRunIsMovingCamera()
     return perfRun.active && perfRun.phase == PerfPhase::MEASURING && SettingsManager::getAsFloat("perfMoveSpeed") > 0.f;
 }
 
+// Camera-relative horizontal direction of the measured movement: straight ahead, or a random walk
+// whose heading is a pure function of the turn interval, seeded by the world seed, so two runs
+// cover the same path
+static DirectX::XMFLOAT3 perfRunMoveDirection()
+{
+    const uint32_t turnFrames = SettingsManager::getAsUint("perfMoveTurnFrames");
+    if (turnFrames == 0)
+    {
+        return { 0.f, 0.f, 1.f };
+    }
+
+    const uint32_t measuredFrame = renderState.frameNumber - renderState.perfRun.measureStartFrame;
+    RandomNumberGenerator rng{ hash(SettingsManager::getAsUint("worldSeed") ^ hash(measuredFrame / turnFrames)) };
+    const float heading = rng.nextFloat(2.f * DirectX::XM_PI);
+    return { std::sin(heading), 0.f, std::cos(heading) };
+}
+
 PlayerInput perfRunPlayerInput()
 {
     PlayerInput input;
     if (perfRunIsMovingCamera())
     {
-        input.linearInput = { 0.f, 0.f, 1.f };
+        input.linearInput = perfRunMoveDirection();
         input.linearSpeedMultiplier = SettingsManager::getAsFloat("perfMoveSpeed") / SettingsManager::getAsFloat("movementSpeed");
     }
     return input;
@@ -364,6 +382,50 @@ static nlohmann::json streamingJson()
     };
 }
 
+static nlohmann::json instanceMemoryJson(const Scene::InstanceGpuMemory& memory)
+{
+    return {
+        { "count", memory.numInstances },
+        { "blasBytes", memory.blasBytes },
+        { "vertsBytes", memory.vertsBytes },
+        { "idxsBytes", memory.idxsBytes },
+        { "ommIdxsBytes", memory.ommIdxsBytes },
+        { "perFaceDatasBytes", memory.perFaceDatasBytes },
+        { "tangentsBytes", memory.tangentsBytes },
+        { "areaLightsBytes", memory.areaLightsBytes },
+    };
+}
+
+// Snapshot at the end of the run: the DXGI budget Streamline warns against, every registered
+// buffer, and the per-instance sections summed by kind so the shared buffers can be attributed
+static nlohmann::json memoryJson()
+{
+    DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo{};
+    CHECK_HRESULT(renderState.adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo));
+
+    std::vector<GpuMemoryEntry> entries = GpuMemoryReporter::collectAll();
+    std::sort(entries.begin(), entries.end(), [](const GpuMemoryEntry& a, const GpuMemoryEntry& b) {
+        return a.allocatedBytes > b.allocatedBytes;
+    });
+    nlohmann::json buffers = nlohmann::json::array();
+    for (const GpuMemoryEntry& entry : entries)
+    {
+        buffers.push_back({
+            { "name", entry.name },
+            { "allocatedBytes", entry.allocatedBytes },
+            { "usedBytes", entry.usedBytes },
+        });
+    }
+
+    return {
+        { "budgetBytes", videoMemoryInfo.Budget },
+        { "usageBytes", videoMemoryInfo.CurrentUsage },
+        { "buffers", buffers },
+        { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
+        { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },
+    };
+}
+
 static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
@@ -413,6 +475,7 @@ static nlohmann::json buildResultsJson()
               { "renderHeight", renderState.renderHeight },
               { "frameGenActive", renderState.frameGen.active },
               { "moveSpeed", SettingsManager::getAsFloat("perfMoveSpeed") },
+              { "moveTurnFrames", SettingsManager::getAsUint("perfMoveTurnFrames") },
               { "measuredFrames", perfRun.gpuSamples.size() },
               { "measureStartFrame", perfRun.measureStartFrame },
               { "stablePowerState", perfRun.stablePowerState },
@@ -422,6 +485,7 @@ static nlohmann::json buildResultsJson()
         { "settings", settingsJson() },
         { "cpu", { { "frameMs", statsJson(perfRun.cpuFrameMs) }, { "scopes", cpuScopes.toJson() } } },
         { "streaming", streamingJson() },
+        { "memory", memoryJson() },
         { "gpu",
           { { "frameMs", statsJson(gpuFrameMs) },
             { "gapMs", statsJson(gpuGapMs) },

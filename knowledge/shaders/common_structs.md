@@ -1,4 +1,4 @@
-_Last edited: 2026-09-10_
+_Last edited: 2026-09-21_
 
 # Common CPU/GPU Structs
 
@@ -12,13 +12,13 @@ The headers use preprocessor macros to alias HLSL types to DirectX math types wh
 ```
 If a new `#define` macro of this kind is added, the corresponding `#undef` macro must be added at the end of the file.
 
-All structs must be 16-byte aligned (pad manually with `uint padN`). Padding members are named `pad0`, `pad1`, etc. and must always be renumbered from 0 — if a pad is replaced by a real field, the remaining pads must be renamed to keep them zero-indexed.
+Constant-buffer param structs must be 16-byte aligned (pad manually with `uint padN`); the structured-buffer element types below only need their C++ and HLSL sizes to agree, which the `static_assert`s at the bottom of the header pin. Padding members are named `pad0`, `pad1`, etc. and must always be renumbered from 0 — if a pad is replaced by a real field, the remaining pads must be renamed to keep them zero-indexed.
 
 ---
 
 ## common_structs.h — Geometry and Material Data
 
-POD structs that need to be accessible on both CPU and GPU. These live in GPU buffers and are indexed at ray hit time.
+POD structs that need to be accessible on both CPU and GPU. These live in GPU buffers and are indexed at ray hit time. `InstanceData` carries the instance's offsets into the shared buffers plus the two per-instance layout selectors, `trisPerFaceLog2` and `vertexFormat`.
 
 **`InstanceData`** — per-instance GPU record: offsets into the shared vertex/index/per-tri/area-light buffers, a `transformOffset` (integer world-space offset to avoid float precision loss), and a `materialIdx`.
 
@@ -35,7 +35,27 @@ displacement. UVs use float32 pairs: half precision can shift a sample by a texe
 2K normal/roughness textures. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary
 normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
 
-The remaining structs (`HitInfo`, `GbufferData`, `PerTriangleData`) are self-explanatory from the source.
+`PerFaceData` packs its flags and texture array slice into one word (16 bits each; the slice
+is far below that but the flags are expected to grow) with the area light index in the other,
+and is stored per face rather than per triangle; see
+[scene → instance.md](../scene/instance.md#per-face-data). `HitInfo` and `GbufferData` are
+self-explanatory from the source.
+
+Terrain instances keep their vertices resident as the 12-byte `PackedTerrainVertex` instead: a
+BLAS does not reference its input buffer after the build, so the build reads fp32 positions from
+the staging upload and the resident copy only has to satisfy the shaders. Positions are fixed
+point with power-of-two scales (1/1024 block in XZ, 1/64 in Y, biased so the ranges cover model
+overhang and the world height): block corners and liquid tops are exact, while tilted custom
+models and jitter round to the grid (at most 1/2048 block in XZ, 1/128 in Y). The normal keeps
+the oct16x2 encoding and UVs are unorm8x2 (exact corners, 1/16 texel on model atlases).
+`InstanceData::vertexFormat` selects the view, and water stays on `Vertex` because its refits and
+displacement rewrite the resident positions every frame.
+
+The packing is lossy at the source, not a mismatch between two representations: chunk meshing
+packs, then decodes the fp32 vertices back from the packed form before they build the BLAS and
+the area lights. The ray-origin offset is only 1e-4 blocks near the camera, far below the
+rounding, so a BLAS built from the unrounded positions would let secondary and shadow rays
+leaving the reconstructed surface re-hit the true triangle on any off-grid geometry.
 
 `Vertex` has a 24-byte stride, with no stored tangents. Normal-mapped glTF meshes use a
 separate 8-byte `VertexTangent` record (oct-encoded tangent plus handedness). Its per-instance

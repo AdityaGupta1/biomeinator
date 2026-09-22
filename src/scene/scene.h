@@ -41,7 +41,7 @@ private:
     uint32_t materialIdx{ MATERIAL_IDX_INVALID };
 
     AcsHelper::GeometryWrapper geoWrapper{};
-    ManagedBufferSection perTriDatasBufferSection{};
+    ManagedBufferSection perFaceDatasBufferSection{};
     ManagedBufferSection tangentsBufferSection{};
 
     std::vector<AreaLight> host_areaLights;
@@ -53,6 +53,8 @@ private:
     bool isDeformable{ false };
     // If true, the BLAS geometry is flagged opaque so traversal never invokes anyhit for it
     bool isOpaque{ false };
+    // host_perFaceDatas holds one entry per 1 << trisPerFaceLog2 triangles
+    uint32_t trisPerFaceLog2{ 0 };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -74,9 +76,12 @@ private:
 
 public:
     std::vector<Vertex> host_verts{};
+    // Optional resident form of host_verts (same count); host_verts then only feeds the BLAS
+    // build and area lights, see knowledge/scene/instance.md
+    std::vector<PackedTerrainVertex> host_packedTerrainVerts{};
     std::vector<VertexTangent> host_tangents{}; // optional, indexed like host_verts
     std::vector<uint32_t> host_idxs{};
-    std::vector<PerTriangleData> host_perTriDatas{};
+    std::vector<PerFaceData> host_perFaceDatas{};
     // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
     std::vector<uint16_t> host_ommIdxs{};
 
@@ -100,6 +105,9 @@ public:
     void setIsDeformable(bool deformable);
 
     void setIsOpaque(bool opaque);
+
+    // Must be set before finalizeGeometry(); the triangle count must be a multiple of the face size
+    void setTrisPerFaceLog2(uint32_t log2);
 };
 
 class Scene
@@ -108,6 +116,12 @@ class Scene
     friend class ToFreeList;
 
 private:
+    // Both vertex layouts share one buffer whose sections are aligned to the larger stride, so the
+    // smaller one must divide it or its element offsets would not be whole
+    static_assert(sizeof(Vertex) % sizeof(PackedTerrainVertex) == 0);
+    // Shaders index the typed scene buffers with 32-bit element indices, so a buffer read as a
+    // StructuredBuffer cannot usefully exceed 4 GB: sections past that mark trace fine (the BLAS
+    // takes a 64-bit VA) but shade from wrapped-around garbage
     ReservedManagedBuffer managedVertsBuffer{
         4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -120,19 +134,19 @@ private:
         },
     };
     ReservedManagedBuffer managedIdxsBuffer{
-        1ull * 1024 * 1024 * 1024, // 1 GB
+        4ull * 1024 * 1024 * 1024, // 4 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
             .alignmentBytes = sizeof(uint32_t),
         },
     };
-    ReservedManagedBuffer managedPerTriDatasBuffer{
+    ReservedManagedBuffer managedPerFaceDatasBuffer{
         1ull * 1024 * 1024 * 1024, // 1 GB
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
         {
             .isResizable = true,
-            .alignmentBytes = sizeof(PerTriangleData),
+            .alignmentBytes = sizeof(PerFaceData),
         },
     };
 
@@ -151,6 +165,23 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Instance>> instances{};
     std::unordered_set<Instance*> instancesReadyForBlasBuild{};
     uint32_t numBlasBuilds{ 0 }; // lifetime total, for streaming measurements
+    // One batch of compaction queries per frame context: the batch recorded on frame index i is
+    // compacted when index i comes around again, once its fence has passed; see
+    // knowledge/gpu/acceleration_structures.md
+    struct PendingBlasCompaction
+    {
+        AcsHelper::BlasCompactionQuery query;
+        // The builds behind the query's entries, in order. Instances can be destroyed before
+        // the slot is consumed, so they are resolved by id when it is
+        struct Build
+        {
+            uint32_t instanceId;
+            uint32_t blasBuildId;
+        };
+        std::vector<Build> builds;
+    };
+    std::array<PendingBlasCompaction, Renderer::NUM_FRAMES_IN_FLIGHT> pendingBlasCompactions{};
+    void compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
     // finalized, BLAS-built deformable instances; drives the displacement dispatches and
     // BLAS refits (every deformable instance is water for now)
     std::unordered_set<Instance*> deformableInstances{};
@@ -266,6 +297,20 @@ public:
         return this->numBlasBuilds;
     }
 
+    struct InstanceGpuMemory
+    {
+        uint32_t numInstances{ 0 };
+        size_t blasBytes{ 0 };
+        size_t vertsBytes{ 0 };
+        size_t idxsBytes{ 0 };
+        size_t ommIdxsBytes{ 0 };
+        size_t perFaceDatasBytes{ 0 };
+        size_t tangentsBytes{ 0 };
+        size_t areaLightsBytes{ 0 };
+    };
+    // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
+    InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
+
     // Deformable instances outside animRadius of the center or outside the padded frustum are
     // left static; the shaders fade the waves to rest height towards both limits so the two
     // regions meet flat
@@ -304,7 +349,7 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS getDevVertsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevTangentsBufferAddress() const;
     D3D12_GPU_VIRTUAL_ADDRESS getDevIdxsBufferAddress() const;
-    D3D12_GPU_VIRTUAL_ADDRESS getDevPerTriDatasBufferAddress() const;
+    D3D12_GPU_VIRTUAL_ADDRESS getDevPerFaceDatasBufferAddress() const;
 
     uint32_t getNumAreaLights() const;
     uint32_t getAreaLightSparseCount() const;

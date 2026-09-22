@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # DLSS
 
@@ -76,6 +76,10 @@ makes before/after image-quality comparisons possible. Changing it follows the e
 so Streamline receives the new preset while its temporal history and render targets are reset.
 
 ## Frame Generation
+
+Only 2x frame generation (`numFramesToGenerate = 1`) is supported. Multi-frame generation needs a
+Blackwell (RTX 50-series) card and there is none to test on, so it is deliberately not wired up,
+not just left at the default; see [startup.md](startup.md#supported-hardware).
 
 Frame generation is only offered when DLSS-G, Reflex and PCL all report support, which is checked
 once at startup (`initFrameGenSupport`). Streamline reports *why* a feature is unavailable (pre-Ada
