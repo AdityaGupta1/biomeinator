@@ -564,7 +564,10 @@ fillStructureBlocksHeader(PINE_TREE)
     for (int y = 3; y <= height + 2; ++y)
     {
         const float t = static_cast<float>(y - 3) / (height - 1);
-        const float layerRadius = mix(radius, 0.5f, t) * ((y % 3 == 0) ? 0.72f : 1.f);
+        float layerRadius = mix(radius, 0.5f, t) * ((y % 3 == 0) ? 0.72f : 1.f);
+        // A single-leaf layer would land inside the trunk. Radius one adds its four
+        // cardinal neighbors; use the trunk span so this also works across chunk edges.
+        if (y <= height) layerRadius = max(1.f, layerRadius);
         for (int z = -5; z <= 5; ++z)
         {
             for (int x = -5; x <= 5; ++x)

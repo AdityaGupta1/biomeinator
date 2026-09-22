@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Structure System
 
@@ -43,6 +43,13 @@ Only writes if the target is AIR/WATER/WATER_TOP. This means structures can't ca
 ## Helper Functions
 
 `structure_helpers.h` provides `fillLine` (3D Bresenham), `buildSpline` (de Casteljau Bezier), `placeLeafCap` (radial disc with tapering radius), and `placeLeafBlob` (y-squashed sphere). These handle chunk-bounds clipping internally so structure generators don't need to.
+
+Pine canopy layers keep a minimum radius of one wherever they overlap the trunk. Otherwise
+the taper can select only the center voxel, which leaf placement cannot replace because it is
+a log, leaving bare bark under the tip. The radius adds exactly four cardinal leaves in that
+case. Determine overlap from the generated trunk span, not a read of the local center block:
+neighboring chunks can own those leaves while the trunk lies outside their bounds. Leaf-only
+layers above the trunk retain their narrow tip.
 
 **Local-ground scanning:** fill functions get no heightfield, but `blocks` already contains
 generated terrain, so a fill function can scan a column downward to seat sub-features on local
