@@ -4,6 +4,7 @@
 #include "reserved_managed_buffer.h"
 
 #include "debug.h"
+#include "logger.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
 #include "util/math.h"
@@ -64,8 +65,13 @@ size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAddi
     ASSERT(minAdditionalBytes > 0);
     const size_t newHeapSize = MathUtil::roundUpToPow2(minAdditionalBytes, reservedGrowthChunkBytes);
 
-    ASSERT(virtualStartTile * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT + newHeapSize <= maxReservedSizeBytes,
-           "ReservedManagedBuffer ran out of virtual space");
+    const bool fitsVirtualSpace =
+        virtualStartTile * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT + newHeapSize <= maxReservedSizeBytes;
+    if (!fitsVirtualSpace)
+    {
+        Logger::logError("ReservedManagedBuffer %ls ran out of virtual space", this->name.c_str());
+    }
+    ASSERT(fitsVirtualSpace);
 
     ComPtr<ID3D12Heap> newHeap;
     if (this->prefetchedHeap.valid())

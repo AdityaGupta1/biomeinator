@@ -55,6 +55,27 @@ struct VertexTangent
     float handedness; // glTF tangent.w
 };
 
+// Fixed-point position encoding of PackedTerrainVertex: (pos + bias) * scale stored as u16. The
+// scales are powers of two so block corners and 1/8 liquid tops decode exactly; model geometry
+// and jitter round to the grid, and the fp32 copy the BLAS is built from is decoded from the
+// packed form so the traced and shaded surfaces agree
+#define PACKED_TERRAIN_POS_XZ_SCALE 1024.f
+#define PACKED_TERRAIN_POS_XZ_BIAS 8.f
+#define PACKED_TERRAIN_POS_Y_SCALE 64.f
+#define PACKED_TERRAIN_POS_Y_BIAS 1.f
+
+// Resident form of terrain vertices, read only by shaders: the BLAS is built from the fp32 Vertex
+// staging upload, so this layout is free of DXR's vertex format rules
+struct PackedTerrainVertex
+{
+    uint packedPosXY; // x in the low half, y in the high half
+    uint packedPosZUv; // z in the low half, uv as unorm8x2 in the high half
+    uint packedNor; // as Vertex::packedNor
+};
+
+#define VERTEX_FORMAT_FULL 0
+#define VERTEX_FORMAT_PACKED_TERRAIN 1
+
 #define TANGENT_BUFFER_OFFSET_INVALID ~0u
 
 struct InstanceData
@@ -62,15 +83,15 @@ struct InstanceData
     uint vertsBufferOffset;
     uint hasIdxs;
     uint idxsBufferByteOffset;
-    uint perTriDatasBufferOffset;
+    uint perFaceDatasBufferOffset;
 
     int3 transformOffset;
     uint areaLightsBufferOffset;
 
     uint materialIdx;
     uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
-    uint pad0;
-    uint pad1;
+    uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads
+    uint vertexFormat; // VERTEX_FORMAT_*, selects which typed view of the verts buffer to read
 };
 
 #define MATERIAL_IDX_INVALID ~0u
@@ -264,35 +285,61 @@ struct LightTreeNode
 #ifdef __cplusplus
 static_assert(sizeof(LightAux) == 32, "LightAux must be 32 bytes for parity with the HLSL StructuredBuffer<LightAux> layout");
 static_assert(sizeof(LightTreeNode) == 16, "LightTreeNode must be 16 bytes for parity with the HLSL StructuredBuffer<LightTreeNode> layout");
+static_assert(sizeof(Vertex) == 24, "Vertex must be 24 bytes for parity with the HLSL StructuredBuffer<Vertex> layout");
+static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12 bytes for parity with the HLSL layout");
 #endif
 
-#define TRIANGLE_FLAG_IS_WATER (1 << 0)
+#define FACE_FLAG_IS_WATER (1 << 0)
 // Faces that receive wave displacement and noise-based normals perturbation
-#define TRIANGLE_FLAG_IS_WATER_TOP (1 << 1)
+#define FACE_FLAG_IS_WATER_TOP (1 << 1)
 // Faces whose base color is replaced by luminance * biome map tint
-#define TRIANGLE_FLAG_BIOME_TINT (1 << 2)
+#define FACE_FLAG_BIOME_TINT (1 << 2)
 // Foliage faces with thin-wall diffuse transmission: diffuse splits into reflection and transmission
-#define TRIANGLE_FLAG_DIFFUSE_TRANSMISSION (1 << 3)
+#define FACE_FLAG_DIFFUSE_TRANSMISSION (1 << 3)
 // Faces shaded as glass: the terrain material's diffuse lobe is replaced by glossy reflection +
 // transmission, with per-texel roughness from the packed aux b channel (see applyGlassMaterial)
-#define TRIANGLE_FLAG_IS_GLASS (1 << 4)
+#define FACE_FLAG_IS_GLASS (1 << 4)
 // Faces whose base and emissive color come from a world-space ramp (see getProceduralColor)
-#define TRIANGLE_FLAG_PROCEDURAL_COLOR (1 << 5)
+#define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
-#define TRIANGLE_FLAG_NORMAL_MAP (1 << 6)
+#define FACE_FLAG_NORMAL_MAP (1 << 6)
 
-struct PerTriangleData
+#define FACE_FLAGS_BITS 16
+#define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)
+
+// One entry per mesh face: a triangle for glTF instances, a quad (triangle pair) for terrain.
+// See knowledge/scene/instance.md for the area light invariant this relies on.
+struct PerFaceData
 {
 #ifdef __cplusplus
 public:
-    PerTriangleData();
+    PerFaceData();
+    void setFlags(uint32_t flags);
+    void setTexArraySliceIdx(uint32_t sliceIdx);
 #endif
 
-    uint flags;
-    uint localAreaLightIdx;
-    uint texArraySliceIdx;
-    uint pad0;
+    uint packedFlagsAndSlice; // bits 0-15 FACE_FLAG_*, bits 16-31 texture array slice
+    uint localAreaLightIdx; // of the face's first triangle, or LIGHT_IDX_INVALID
+
+    uint getFlags()
+    {
+        return packedFlagsAndSlice & FACE_FLAGS_MASK;
+    }
+
+    bool hasFlag(uint flag)
+    {
+        return bool(packedFlagsAndSlice & flag);
+    }
+
+    uint getTexArraySliceIdx()
+    {
+        return packedFlagsAndSlice >> FACE_FLAGS_BITS;
+    }
 };
+
+#ifdef __cplusplus
+static_assert(sizeof(PerFaceData) == 8, "PerFaceData must be 8 bytes for parity with the HLSL layout");
+#endif
 
 #ifdef __cplusplus
 #undef int3

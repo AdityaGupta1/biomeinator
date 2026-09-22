@@ -320,6 +320,25 @@ size_t ManagedBuffer::getSizeBytes() const
     return this->bufferSizeBytes;
 }
 
+size_t ManagedBuffer::getFreeBytes() const
+{
+    size_t freeBytes = 0;
+    for (const auto& [_, node] : this->freeByOffset)
+    {
+        freeBytes += node.sizeBytes;
+    }
+    return freeBytes;
+}
+
+GpuMemoryEntry ManagedBuffer::reportGpuMemory() const
+{
+    return {
+        .name = Util::to_string(this->name.c_str()),
+        .allocatedBytes = this->bufferSizeBytes,
+        .usedBytes = this->bufferSizeBytes - this->getFreeBytes(),
+    };
+}
+
 void ManagedBuffer::setName(const std::wstring& name)
 {
     this->name = name;

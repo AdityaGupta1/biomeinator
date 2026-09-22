@@ -29,16 +29,37 @@ struct GeometryWrapper
 
     // Stored here so BLAS refits reuse the same flags as the original build
     D3D12_RAYTRACING_GEOMETRY_FLAGS geometryFlags{ D3D12_RAYTRACING_GEOMETRY_FLAG_NONE };
+
+    // Stamped by each build so a compaction queued for an earlier BLAS of a reused wrapper is dropped
+    uint32_t blasBuildId{ 0 };
+};
+
+// The compacted sizes of one makeBlases batch, one per input with allowCompaction in input order,
+// written by the builds themselves. Readable once the frame that recorded the batch has completed
+// on the GPU. Which BLAS each size belongs to is the caller's to remember, by something that
+// survives the instance being destroyed in the meantime.
+struct BlasCompactionQuery
+{
+    uint32_t numEntries{ 0 };
+
+    uint32_t capacity{ 0 }; // entries the buffers below can hold
+    ComPtr<ID3D12Resource> sizesBuffer; // postbuild info destination, one COMPACTED_SIZE desc per entry
+    ComPtr<ID3D12Resource> readbackBuffer;
 };
 
 struct BlasBuildInputs
 {
     const std::vector<Vertex>* host_verts{ nullptr };
+    // When set, this is what stays resident in the verts buffer; the BLAS is built from the
+    // host_verts staging upload, which the build does not need afterwards
+    const std::vector<PackedTerrainVertex>* host_packedTerrainVerts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
     // Per-triangle OMM Array indices (or special indices); requires a built OMM Array
     const std::vector<uint16_t>* host_ommIdxs{ nullptr };
 
     bool allowUpdate{ false };
+    // Queues the BLAS for compaction once its compacted size is known; requires makeBlases' outQuery
+    bool allowCompaction{ false };
     // Marks the whole geometry opaque so traversal never invokes anyhit for it
     bool isOpaque{ false };
 
@@ -62,11 +83,24 @@ struct OmmArrayBuildInputs
 // inputs with host_ommIdxs), which must therefore come after the single buildOmmArray call.
 void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const OmmArrayBuildInputs& inputs);
 
+// outQuery receives the compacted-size entries of the inputs with allowCompaction; its buffers are
+// reused across batches and must not be in use by the GPU (i.e. it belongs to the frame context)
 void makeBlases(ID3D12GraphicsCommandList4* cmdList,
                 ToFreeList& toFreeList,
                 ManagedBuffer* dev_verts,
                 ManagedBuffer* dev_idxs,
-                const std::vector<BlasBuildInputs>& allInputs);
+                const std::vector<BlasBuildInputs>& allInputs,
+                BlasCompactionQuery* outQuery);
+
+// One size per query entry; only valid once the query's batch has completed on the GPU
+std::vector<uint64_t> readCompactedSizes(const BlasCompactionQuery& query);
+
+// Copies the BLAS into a new section of the compacted size and frees the old one via toFreeList.
+// Callers holding the old GPU VA (TLAS instance descs) must refresh it.
+void compactBlas(ID3D12GraphicsCommandList4* cmdList,
+                 ToFreeList& toFreeList,
+                 GeometryWrapper* geoWrapper,
+                 uint64_t compactedSizeBytes);
 
 // In-place refit of BLASes originally built with allowUpdate, valid only if topology and vert count never change.
 void updateBlases(ID3D12GraphicsCommandList4* cmdList,

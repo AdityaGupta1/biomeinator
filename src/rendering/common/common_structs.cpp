@@ -3,6 +3,8 @@
 
 #include "common_structs.h"
 
+#include "debug.h"
+
 Material::Material()
     : flags(MATERIAL_FLAG_DIFFUSE),
       diffuseTransmission(0.f),
@@ -19,8 +21,19 @@ Material::Material()
       normalScale(1.f)
 {}
 
-PerTriangleData::PerTriangleData()
-    : flags(0),
-      localAreaLightIdx(LIGHT_IDX_INVALID),
-      texArraySliceIdx(0)
+PerFaceData::PerFaceData()
+    : packedFlagsAndSlice(0),
+      localAreaLightIdx(LIGHT_IDX_INVALID)
 {}
+
+void PerFaceData::setFlags(const uint32_t flags)
+{
+    ASSERT((flags & ~FACE_FLAGS_MASK) == 0);
+    this->packedFlagsAndSlice = (this->packedFlagsAndSlice & ~FACE_FLAGS_MASK) | flags;
+}
+
+void PerFaceData::setTexArraySliceIdx(const uint32_t sliceIdx)
+{
+    ASSERT(sliceIdx < (1u << (32 - FACE_FLAGS_BITS)));
+    this->packedFlagsAndSlice = (this->packedFlagsAndSlice & FACE_FLAGS_MASK) | (sliceIdx << FACE_FLAGS_BITS);
+}

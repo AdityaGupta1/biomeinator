@@ -43,7 +43,7 @@ float3 sampleBiomeMapBicubic(const float2 uv)
 // alpha gates the luminance-replace tint in getMaterialBaseColor.
 float4 getBiomeTint(const uint triangleFlags, const float2 posXZ_WS)
 {
-    if (!bool(triangleFlags & TRIANGLE_FLAG_BIOME_TINT) || sceneParams.biomeMapTexelsPerSide == 0)
+    if (!bool(triangleFlags & FACE_FLAG_BIOME_TINT) || sceneParams.biomeMapTexelsPerSide == 0)
     {
         return float4(1.f, 1.f, 1.f, 0.f);
     }

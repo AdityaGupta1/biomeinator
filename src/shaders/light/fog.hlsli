@@ -58,11 +58,11 @@ bool isRayOccluded(const float3 pos_WS, const float3 dir)
 
         // Mip 0 and a fixed threshold: occlusion is a boolean, so no ray cone or stochastic
         // alpha handling needed here.
-        const PerTriangleData perTriData =
-            perTriDatas[instanceData.perTriDatasBufferOffset + query.CandidatePrimitiveIndex()];
+        const PerFaceData perFaceData =
+            loadPerFaceData(instanceData, query.CandidatePrimitiveIndex());
         const float4 baseColor = getMaterialBaseColorAtHit(material,
                                                            instanceData,
-                                                           perTriData,
+                                                           perFaceData,
                                                            query.CandidatePrimitiveIndex(),
                                                            query.CandidateTriangleBarycentrics(),
                                                            0.f);

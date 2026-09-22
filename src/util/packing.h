@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include "rendering/common/common_structs.h"
+
+#include "debug.h"
+
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
 
@@ -42,6 +46,48 @@ inline uint32_t octEncode(const DirectX::XMFLOAT3& nor)
         ny = wrappedY;
     }
     return packSnorm2ToUint(nx, ny);
+}
+
+inline uint32_t packTerrainPosComponent(const float value, const float bias, const float scale)
+{
+    const long quantized = std::lround((value + bias) * scale);
+    ASSERT(quantized >= 0 && quantized <= 0xFFFF);
+    // Clamped as well, so an out-of-range vertex cannot spill into the neighbouring component
+    return static_cast<uint32_t>(std::clamp(quantized, 0l, 0xFFFFl));
+}
+
+inline uint32_t packUnorm8(const float value)
+{
+    return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255.f));
+}
+
+// Mirrors unpackTerrainVertex in path_tracing_common.hlsli
+inline Vertex unpackTerrainVertex(const PackedTerrainVertex& packed)
+{
+    Vertex vert;
+    vert.pos_OS = {
+        static_cast<float>(packed.packedPosXY & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+        static_cast<float>(packed.packedPosXY >> 16) / PACKED_TERRAIN_POS_Y_SCALE - PACKED_TERRAIN_POS_Y_BIAS,
+        static_cast<float>(packed.packedPosZUv & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+    };
+    vert.packedNor = packed.packedNor;
+    vert.uv = {
+        static_cast<float>((packed.packedPosZUv >> 16) & 0xFF) / 255.f,
+        static_cast<float>(packed.packedPosZUv >> 24) / 255.f,
+    };
+    return vert;
+}
+
+inline PackedTerrainVertex packTerrainVertex(const Vertex& vert)
+{
+    const uint32_t x = packTerrainPosComponent(vert.pos_OS.x, PACKED_TERRAIN_POS_XZ_BIAS, PACKED_TERRAIN_POS_XZ_SCALE);
+    const uint32_t y = packTerrainPosComponent(vert.pos_OS.y, PACKED_TERRAIN_POS_Y_BIAS, PACKED_TERRAIN_POS_Y_SCALE);
+    const uint32_t z = packTerrainPosComponent(vert.pos_OS.z, PACKED_TERRAIN_POS_XZ_BIAS, PACKED_TERRAIN_POS_XZ_SCALE);
+    return {
+        .packedPosXY = x | (y << 16),
+        .packedPosZUv = z | (packUnorm8(vert.uv.x) << 16) | (packUnorm8(vert.uv.y) << 24),
+        .packedNor = vert.packedNor,
+    };
 }
 
 } // namespace Util

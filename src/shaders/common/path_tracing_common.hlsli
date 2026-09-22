@@ -19,9 +19,15 @@
 RaytracingAccelerationStructure raytracingAcs : REGISTER_T(RT, RAYTRACING_ACS);
 
 StructuredBuffer<InstanceData> instanceDatas : REGISTER_T(RT, INSTANCE_DATAS);
-StructuredBuffer<PerTriangleData> perTriDatas : REGISTER_T(RT, PER_TRI_DATAS);
+StructuredBuffer<PerFaceData> perFaceDatas : REGISTER_T(RT, PER_FACE_DATAS);
+
+PerFaceData loadPerFaceData(const InstanceData instanceData, const uint triIdx)
+{
+    return perFaceDatas[instanceData.perFaceDatasBufferOffset + (triIdx >> instanceData.trisPerFaceLog2)];
+}
 
 StructuredBuffer<Vertex> verts : REGISTER_T(RT, VERTS);
+StructuredBuffer<PackedTerrainVertex> packedTerrainVerts : REGISTER_T(RT, PACKED_TERRAIN_VERTS);
 StructuredBuffer<VertexTangent> tangents : REGISTER_T(RT, TANGENTS);
 ByteAddressBuffer idxs : REGISTER_T(RT, IDXS);
 
@@ -77,23 +83,44 @@ uint3 getTriangleVertexIndices(const InstanceData instanceData, const uint triId
     return uint3(i0, i1, i2);
 }
 
+Vertex unpackTerrainVertex(const PackedTerrainVertex packed)
+{
+    Vertex vert;
+    vert.pos_OS = float3(float(packed.packedPosXY & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS,
+                         float(packed.packedPosXY >> 16) / PACKED_TERRAIN_POS_Y_SCALE - PACKED_TERRAIN_POS_Y_BIAS,
+                         float(packed.packedPosZUv & 0xFFFF) / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS);
+    vert.packedNor = packed.packedNor;
+    vert.uv = float2((packed.packedPosZUv >> 16) & 0xFF, packed.packedPosZUv >> 24) / 255.f;
+    return vert;
+}
+
+Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
+{
+    const uint idx = instanceData.vertsBufferOffset + vertIdx;
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_TERRAIN)
+    {
+        return unpackTerrainVertex(packedTerrainVerts[idx]);
+    }
+    return verts[idx];
+}
+
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
-    v0 = verts[instanceData.vertsBufferOffset + indices.x];
-    v1 = verts[instanceData.vertsBufferOffset + indices.y];
-    v2 = verts[instanceData.vertsBufferOffset + indices.z];
+    v0 = loadVert(instanceData, indices.x);
+    v1 = loadVert(instanceData, indices.y);
+    v2 = loadVert(instanceData, indices.z);
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
 // so all color reads for the hit share them (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const float rayConeWidth, const float3 pos_WS)
+TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float rayConeWidth, const float3 pos_WS)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
-    texCtx.arraySliceIdx = perTriData.texArraySliceIdx;
-    texCtx.biomeTint = getBiomeTint(perTriData.flags, pos_WS.xz);
-    texCtx.proceduralColor = getProceduralColor(perTriData.flags, pos_WS);
+    texCtx.arraySliceIdx = perFaceData.getTexArraySliceIdx();
+    texCtx.biomeTint = getBiomeTint(perFaceData.getFlags(), pos_WS.xz);
+    texCtx.proceduralColor = getProceduralColor(perFaceData.getFlags(), pos_WS);
     return texCtx;
 }
 
@@ -101,10 +128,9 @@ TexSampleCtx makeTintedTexSampleCtx(const PerTriangleData perTriData, const floa
 // Roughness needs the footprint at the hit; biome/procedural color is sampled separately.
 Material getHitMaterial(const Payload payload, const float coneWidth)
 {
-    const PerTriangleData data = perTriDatas[
-        instanceDatas[payload.hitInfo.instanceId].perTriDatasBufferOffset + payload.hitInfo.triangleIdx];
-    return getMaterialFromPayload(payload, data.flags,
-        makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.texArraySliceIdx));
+    const PerFaceData data = loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
+    return getMaterialFromPayload(payload, data.getFlags(),
+        makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.getTexArraySliceIdx()));
 }
 
 float2 getUvAtHit(const InstanceData instanceData, const uint triIdx, const float2 bary2)
@@ -117,13 +143,13 @@ float2 getUvAtHit(const InstanceData instanceData, const uint triIdx, const floa
 }
 
 float4 getMaterialBaseColorAtHit(const Material material, const InstanceData instanceData,
-    const PerTriangleData perTriData, const uint triIdx, const float2 bary2, const float mipLevel)
+    const PerFaceData perFaceData, const uint triIdx, const float2 bary2, const float mipLevel)
 {
     const float2 uv = getUvAtHit(instanceData, triIdx, bary2);
 
     // Cutout alpha and passthrough absorption don't care about biome tint or the packed aux
     // adjustments, so skip the map sample and the aux texture sample
-    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(mipLevel, perTriData.texArraySliceIdx);
+    const TexSampleCtx texCtx = makeUntintedTexSampleCtx(mipLevel, perFaceData.getTexArraySliceIdx());
     return getMaterialBaseColorNoAux(material, uv, texCtx);
 }
 
@@ -152,9 +178,9 @@ bool acceptHitCandidate(inout Payload payload,
         // A roughness map can contain perfectly specular texels. Shadow passthrough must
         // classify the same resolved surface as the path tracer, not just its scalar factor.
         const float width = getRayConeWidthAtDistance(payload.rayCone, rayT);
-        const PerTriangleData data = perTriDatas[instanceData.perTriDatasBufferOffset + primitiveIdx];
+        const PerFaceData data = loadPerFaceData(instanceData, primitiveIdx);
         material.roughness = getMaterialRoughness(material, getUvAtHit(instanceData, primitiveIdx, barycentrics),
-            makeUntintedTexSampleCtx(computeMipLevel(width), data.texArraySliceIdx));
+            makeUntintedTexSampleCtx(computeMipLevel(width), data.getTexArraySliceIdx()));
     }
     // Only specular transmission can be passed through without scattering; rough glass is a real bounce
     const bool testRefractionPassthrough =
@@ -168,15 +194,15 @@ bool acceptHitCandidate(inout Payload payload,
     }
 
     const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, rayT);
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + primitiveIdx];
+    const PerFaceData perFaceData = loadPerFaceData(instanceData, primitiveIdx);
     const float4 baseColor = getMaterialBaseColorAtHit(
-        material, instanceData, perTriData, primitiveIdx, barycentrics, computeMipLevel(coneWidth));
+        material, instanceData, perFaceData, primitiveIdx, barycentrics, computeMipLevel(coneWidth));
 
     if (testRefractionPassthrough)
     {
         payload.pathWeight *= baseColor.rgb;
 
-        if (bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER))
+        if (perFaceData.hasFlag(FACE_FLAG_IS_WATER))
         {
             // Track the first water entry/exit T for absorption in computePassthroughAbsorption.
             // NOTE: tracks only one entry/exit; breaks down for multiple water bodies along the ray.
@@ -229,9 +255,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const uint materialIdx = instanceData.materialIdx;
 
     const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
-    const Vertex v0 = verts[instanceData.vertsBufferOffset + vertexIndices.x];
-    const Vertex v1 = verts[instanceData.vertsBufferOffset + vertexIndices.y];
-    const Vertex v2 = verts[instanceData.vertsBufferOffset + vertexIndices.z];
+    const Vertex v0 = loadVert(instanceData, vertexIndices.x);
+    const Vertex v1 = loadVert(instanceData, vertexIndices.y);
+    const Vertex v2 = loadVert(instanceData, vertexIndices.z);
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
@@ -276,11 +302,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
 
     const Material material = materials[materialIdx];
-    const PerTriangleData perTriData = perTriDatas[instanceData.perTriDatasBufferOffset + PrimitiveIndex()];
+    const PerFaceData perFaceData = loadPerFaceData(instanceData, PrimitiveIndex());
     const bool hasNormalMap = material.normalTextureId != TEXTURE_ID_INVALID &&
-                              (!material.hasPackedAux() || bool(perTriData.flags & TRIANGLE_FLAG_NORMAL_MAP));
-    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && bool(perTriData.flags & TRIANGLE_FLAG_IS_GLASS));
-    const bool isWaterTop = bool(perTriData.flags & TRIANGLE_FLAG_IS_WATER_TOP);
+                              (!material.hasPackedAux() || perFaceData.hasFlag(FACE_FLAG_NORMAL_MAP));
+    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && perFaceData.hasFlag(FACE_FLAG_IS_GLASS));
+    const bool isWaterTop = perFaceData.hasFlag(FACE_FLAG_IS_WATER_TOP);
 
     if (hasNormalMap)
     {
@@ -316,7 +342,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
             tangent_WS = normalize(tangent_WS);
             const float3 bitangent_WS = tangentSign * cross(frameShadingNor_WS, tangent_WS);
             const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent());
-            const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perTriData.texArraySliceIdx);
+            const TexSampleCtx ctx = makeUntintedTexSampleCtx(computeMipLevel(coneWidth), perFaceData.getTexArraySliceIdx());
             float3 n = 2.f * sampleTexture(material.hasArrayTexture(), material.normalTextureId, payload.hitInfo.uv, ctx).xyz - 1.f;
             n.xy *= material.normalScale;
             if (dot(n, n) > 1e-12f)

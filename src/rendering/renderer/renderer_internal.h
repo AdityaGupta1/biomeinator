@@ -131,11 +131,12 @@ enum class GbufferParam
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
-    PER_TRI_DATAS,
+    PER_FACE_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     TANGENTS,
+    PACKED_TERRAIN_VERTS,
 
     GBUFFER_OUT,
 
@@ -151,11 +152,12 @@ enum class PtParam
     IDXS,
     INSTANCE_DATAS,
     MATERIALS,
-    PER_TRI_DATAS,
+    PER_FACE_DATAS,
     AREA_LIGHTS,
     AREA_LIGHT_SAMPLING_STRUCTURE,
 
     TANGENTS,
+    PACKED_TERRAIN_VERTS,
 
     GBUFFER_IN,
 
@@ -412,6 +414,7 @@ struct RendererState
     // -- Device and infrastructure --
     ComPtr<IDXGIFactory5> factory;
     ComPtr<IDXGIFactory5> proxyFactory;
+    ComPtr<IDXGIAdapter3> adapter;
     ComPtr<ID3D12Device5> device;
     ComPtr<ID3D12Device5> proxyDevice;
     ComPtr<ID3D12CommandQueue> graphicsCmdQueue;

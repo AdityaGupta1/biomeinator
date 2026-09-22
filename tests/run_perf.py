@@ -69,6 +69,22 @@ def scope_rows(report):
         yield "streaming cpu frame", streaming["cpuFrameMs"]
 
 
+def mib(num_bytes):
+    return num_bytes / (1024 * 1024)
+
+
+def print_memory(memory):
+    print(f"  vram: {mib(memory['usageBytes']):.0f} MiB in use of a {mib(memory['budgetBytes']):.0f} MiB budget")
+    print(f"  {'buffer':<44}{'alloc MiB':>10}{'used MiB':>10}")
+    for entry in memory["buffers"]:
+        print(f"  {entry['name']:<44}{mib(entry['allocatedBytes']):>10.1f}{mib(entry['usedBytes']):>10.1f}")
+    for kind in ("staticInstances", "deformableInstances"):
+        instances = memory[kind]
+        sections = ", ".join(f"{key[:-5]} {mib(value):.1f}" for key, value in instances.items()
+                             if key != "count" and value > 0)
+        print(f"  {kind} ({instances['count']}): {sections} MiB")
+
+
 def print_report(name, report):
     meta = report["meta"]
     print(f"\n{name}: {meta['measuredFrames']} frames at {meta['renderWidth']}x{meta['renderHeight']} "
@@ -92,6 +108,9 @@ def print_report(name, report):
             continue
         print(f"  {label:<28}{stats['median']:>10.3f}{stats['mean']:>10.3f}{stats['p95']:>10.3f}"
               f"{stats['max']:>10.3f}{stats['count']:>8}")
+    memory = report.get("memory")
+    if memory:
+        print_memory(memory)
 
 
 def cmd_run(args, passthrough):

@@ -29,16 +29,18 @@ Instance::Instance(Scene* scene, uint32_t id)
 void Instance::stealVectors(Instance* other)
 {
     ASSERT(other->host_verts.empty());
+    ASSERT(other->host_packedTerrainVerts.empty());
     ASSERT(other->host_tangents.empty());
     ASSERT(other->host_idxs.empty());
-    ASSERT(other->host_perTriDatas.empty());
+    ASSERT(other->host_perFaceDatas.empty());
     ASSERT(other->host_ommIdxs.empty());
     ASSERT(other->host_areaLights.empty());
 
     this->host_verts = std::move(other->host_verts);
+    this->host_packedTerrainVerts = std::move(other->host_packedTerrainVerts);
     this->host_tangents = std::move(other->host_tangents);
     this->host_idxs = std::move(other->host_idxs);
-    this->host_perTriDatas = std::move(other->host_perTriDatas);
+    this->host_perFaceDatas = std::move(other->host_perFaceDatas);
     this->host_ommIdxs = std::move(other->host_ommIdxs);
     this->host_areaLights = std::move(other->host_areaLights);
 }
@@ -49,15 +51,17 @@ void Instance::reset(bool alsoFreeFromScene)
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
     this->geoWrapper.ommIdxsBufferSection.free();
-    this->perTriDatasBufferSection.free();
+    this->perFaceDatasBufferSection.free();
     this->tangentsBufferSection.free();
     this->areaLightsBufferSection.free();
 
     this->host_verts.clear();
+    this->host_packedTerrainVerts.clear();
     this->host_tangents.clear();
     this->host_idxs.clear();
-    this->host_perTriDatas.clear();
+    this->host_perFaceDatas.clear();
     this->host_ommIdxs.clear();
+    this->trisPerFaceLog2 = 0;
     this->host_areaLights.clear();
     this->isGeometryFinalized = false;
     this->isOpaque = false;
@@ -92,8 +96,12 @@ void Instance::finalizeGeometry()
 {
     ASSERT(this->host_verts.size() > 0);
 
+    ASSERT(this->host_packedTerrainVerts.empty() || this->host_packedTerrainVerts.size() == this->host_verts.size());
+
     const uint32_t triCount = this->getTriCount();
-    ASSERT(this->host_perTriDatas.size() == triCount);
+    const uint32_t trisPerFace = 1u << this->trisPerFaceLog2;
+    ASSERT(triCount % trisPerFace == 0);
+    ASSERT(this->host_perFaceDatas.size() == triCount / trisPerFace);
 
     this->boundsMin_OS = glm::vec3(FLT_MAX);
     this->boundsMax_OS = glm::vec3(-FLT_MAX);
@@ -148,7 +156,22 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 
         light.materialIdx = this->materialIdx;
 
-        this->host_perTriDatas[triangleIdx].localAreaLightIdx = localAreaLightIdx;
+        // Every triangle of an emissive face is an area light and the face's lights are
+        // consecutive, so the face stores its first triangle's light index. The face's first
+        // triangle must therefore come first; the one exception is the non-emissive degenerate
+        // padding triangle of an odd custom model, which is never listed at all
+        const uint32_t triIdxInFace = triangleIdx & ((1u << this->trisPerFaceLog2) - 1u);
+        const uint32_t faceLightIdx = localAreaLightIdx - triIdxInFace;
+        PerFaceData& faceData = this->host_perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
+        if (faceData.localAreaLightIdx == LIGHT_IDX_INVALID)
+        {
+            ASSERT(triIdxInFace == 0);
+        }
+        else
+        {
+            ASSERT(faceData.localAreaLightIdx == faceLightIdx);
+        }
+        faceData.localAreaLightIdx = faceLightIdx;
     }
 }
 
@@ -203,6 +226,13 @@ void Instance::setIsOpaque(bool opaque)
     this->isOpaque = opaque;
 }
 
+void Instance::setTrisPerFaceLog2(const uint32_t log2)
+{
+    ASSERT(!this->isGeometryFinalized);
+    ASSERT(log2 <= 1); // triangles or quads; nothing else emits faces
+    this->trisPerFaceLog2 = log2;
+}
+
 void Scene::init()
 {
     this->managedVertsBuffer.setName(L"scene verts");
@@ -211,8 +241,8 @@ void Scene::init()
     this->managedTangentsBuffer.init(sizeof(VertexTangent));
     this->managedIdxsBuffer.setName(L"scene idxs");
     this->managedIdxsBuffer.init();
-    this->managedPerTriDatasBuffer.setName(L"scene perTriDatas");
-    this->managedPerTriDatasBuffer.init();
+    this->managedPerFaceDatasBuffer.setName(L"scene perFaceDatas");
+    this->managedPerFaceDatasBuffer.init();
 
     this->maxNumInstances = 1 << 15;
     this->instances.reserve(this->maxNumInstances);
@@ -244,6 +274,28 @@ void Scene::init()
     this->areaLightSamplingStructure.init(1 << 21 /*elements*/, { .perFrameUpload = true });
 }
 
+Scene::InstanceGpuMemory Scene::getInstanceGpuMemory(const bool deformable) const
+{
+    InstanceGpuMemory memory;
+    for (const auto& [_, instance] : this->instances)
+    {
+        if (instance->isDeformable != deformable)
+        {
+            continue;
+        }
+
+        ++memory.numInstances;
+        memory.blasBytes += instance->geoWrapper.blasBufferSection.sizeBytes;
+        memory.vertsBytes += instance->geoWrapper.vertsBufferSection.sizeBytes;
+        memory.idxsBytes += instance->geoWrapper.idxsBufferSection.sizeBytes;
+        memory.ommIdxsBytes += instance->geoWrapper.ommIdxsBufferSection.sizeBytes;
+        memory.perFaceDatasBytes += instance->perFaceDatasBufferSection.sizeBytes;
+        memory.tangentsBytes += instance->tangentsBufferSection.sizeBytes;
+        memory.areaLightsBytes += instance->areaLightsBufferSection.sizeBytes;
+    }
+    return memory;
+}
+
 void Scene::reset()
 {
     this->invalidateRadianceHistory();
@@ -255,10 +307,14 @@ void Scene::reset()
     this->managedVertsBuffer.reset();
     this->managedTangentsBuffer.reset();
     this->managedIdxsBuffer.reset();
-    this->managedPerTriDatasBuffer.reset();
+    this->managedPerFaceDatasBuffer.reset();
 
     this->instances.clear();
     this->instancesReadyForBlasBuild.clear();
+    for (PendingBlasCompaction& pending : this->pendingBlasCompactions)
+    {
+        pending.builds.clear();
+    }
     this->deformableInstances.clear();
     this->animatedDeformablesDirty = true;
     this->tlasInstanceEntries.clear();
@@ -422,6 +478,12 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     this->areaLightTopologyChanged = false;
 
     {
+        GPU_PROFILE_SCOPE(cmdList, "blas compact");
+        CPU_PROFILE_SCOPE("blas compact");
+        this->compactBuiltBlases(cmdList, toFreeList);
+    }
+
+    {
         GPU_PROFILE_SCOPE(cmdList, "blas build");
         CPU_PROFILE_SCOPE("blas builds");
         this->makeQueuedBlases(cmdList, toFreeList);
@@ -479,6 +541,55 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     didChange |= this->areaLightSamplingStructure.copyFromUploadBufferIfDirty(cmdList);
 
     return didChange;
+}
+
+void Scene::compactBuiltBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList)
+{
+    PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
+    if (pending.builds.empty())
+    {
+        return;
+    }
+
+    const std::vector<uint64_t> compactedSizes = AcsHelper::readCompactedSizes(pending.query);
+    ASSERT(compactedSizes.size() == pending.builds.size());
+    for (size_t i = 0; i < pending.builds.size(); ++i)
+    {
+        const PendingBlasCompaction::Build& build = pending.builds[i];
+        // The instance may have been destroyed, or its id reused by a chunk with a later build
+        const auto instanceIter = this->instances.find(build.instanceId);
+        if (instanceIter == this->instances.end())
+        {
+            continue;
+        }
+        Instance* const instance = instanceIter->second.get();
+        const bool stillThisBuild =
+            instance->geoWrapper.blasBufferSection.isValid() && instance->geoWrapper.blasBuildId == build.blasBuildId;
+        if (!stillThisBuild || instance->isScheduledForDeletion)
+        {
+            continue;
+        }
+        // Sections are allocated at the AS alignment, so a size that rounds to the same section
+        // would be copied for nothing
+        const size_t compactedSectionBytes =
+            MathUtil::roundUp(compactedSizes[i], D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+        if (compactedSectionBytes >= instance->geoWrapper.blasBufferSection.sizeBytes)
+        {
+            continue;
+        }
+
+        AcsHelper::compactBlas(cmdList, toFreeList, &instance->geoWrapper, compactedSizes[i]);
+
+        // The per-frame TLAS rebuild copies the entry, so the new address needs no dirty flag,
+        // and setting one would reset accumulation for a change nothing can see
+        if (instance->tlasEntryIdx != UINT32_MAX)
+        {
+            this->tlasInstanceEntries[instance->tlasEntryIdx].desc.AccelerationStructure =
+                instance->geoWrapper.blasBufferSection.getGpuVirtualAddress();
+        }
+    }
+
+    pending.builds.clear();
 }
 
 void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, float waveTime)
@@ -611,8 +722,9 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
     allBlasInputs.reserve(instancesToBuildThisFrame.size());
 
-    uint32_t numPerTriDatas = 0;
-    uint32_t numAreaLights = 0;
+    PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
+    ASSERT(pending.builds.empty()); // consumed by compactBuiltBlases earlier this frame
+    std::vector<Instance*> compactableInstances;
 
     for (Instance* const instance : instancesToBuildThisFrame)
     {
@@ -620,6 +732,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         ASSERT(instance->host_verts.size() > 0);
         blasInputs.host_verts = &instance->host_verts;
+        if (!instance->host_packedTerrainVerts.empty())
+        {
+            blasInputs.host_packedTerrainVerts = &instance->host_packedTerrainVerts;
+        }
 
         if (instance->host_idxs.size() > 0)
         {
@@ -633,31 +749,47 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
 
         blasInputs.allowUpdate = instance->isDeformable;
+        blasInputs.allowCompaction = !instance->isDeformable;
         blasInputs.isOpaque = instance->isOpaque;
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
         allBlasInputs.push_back(blasInputs);
+        if (blasInputs.allowCompaction)
+        {
+            compactableInstances.push_back(instance);
+        }
 
-        assert(instance->host_perTriDatas.size() > 0);
-        numPerTriDatas += instance->host_perTriDatas.size();
-
-        numAreaLights += instance->host_areaLights.size();
+        ASSERT(instance->host_perFaceDatas.size() > 0);
     }
 
-    AcsHelper::makeBlases(cmdList, toFreeList, &this->managedVertsBuffer, &this->managedIdxsBuffer, allBlasInputs);
+    AcsHelper::makeBlases(cmdList,
+                          toFreeList,
+                          &this->managedVertsBuffer,
+                          &this->managedIdxsBuffer,
+                          allBlasInputs,
+                          &pending.query);
+    ASSERT(pending.query.numEntries == compactableInstances.size());
+    for (const Instance* const instance : compactableInstances)
+    {
+        pending.builds.push_back({ instance->id, instance->geoWrapper.blasBuildId });
+    }
     this->numBlasBuilds += static_cast<uint32_t>(allBlasInputs.size());
 
-    this->managedPerTriDatasBuffer.beginBatchCopy(cmdList);
+    this->managedPerFaceDatasBuffer.beginBatchCopy(cmdList);
     this->managedAreaLightsBuffer.beginBatchCopy(cmdList);
 
     for (Instance* const instance : instancesToBuildThisFrame)
     {
         InstanceData instanceData{};
-        instanceData.vertsBufferOffset =
-            Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
+        const bool packedVerts = !instance->host_packedTerrainVerts.empty();
+        instanceData.vertexFormat = packedVerts ? VERTEX_FORMAT_PACKED_TERRAIN : VERTEX_FORMAT_FULL;
+        instanceData.vertsBufferOffset = packedVerts
+            ? Util::convertByteSizeToCount<PackedTerrainVertex>(instance->geoWrapper.vertsBufferSection.offsetBytes)
+            : Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
         instanceData.hasIdxs = instance->geoWrapper.idxsBufferSection.sizeBytes > 0;
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         instanceData.materialIdx = instance->materialIdx;
+        instanceData.trisPerFaceLog2 = instance->trisPerFaceLog2;
         instanceData.tangentsBufferOffset = TANGENT_BUFFER_OFFSET_INVALID;
         if (!instance->host_tangents.empty())
         {
@@ -672,14 +804,14 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             toFreeList.pushManagedBufferSection(upload);
         }
 
-        const ManagedBufferSection perTriDatasUploadBufferSection =
-            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perTriDatas);
-        instance->perTriDatasBufferSection = this->managedPerTriDatasBuffer.copyFromManagedBuffer(
-            cmdList, toFreeList, sharedBlasUploadBuffer, perTriDatasUploadBufferSection);
-        instanceData.perTriDatasBufferOffset =
-            Util::convertByteSizeToCount<PerTriangleData>(instance->perTriDatasBufferSection.offsetBytes);
+        const ManagedBufferSection perFaceDatasUploadBufferSection =
+            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perFaceDatas);
+        instance->perFaceDatasBufferSection = this->managedPerFaceDatasBuffer.copyFromManagedBuffer(
+            cmdList, toFreeList, sharedBlasUploadBuffer, perFaceDatasUploadBufferSection);
+        instanceData.perFaceDatasBufferOffset =
+            Util::convertByteSizeToCount<PerFaceData>(instance->perFaceDatasBufferSection.offsetBytes);
 
-        toFreeList.pushManagedBufferSection(perTriDatasUploadBufferSection);
+        toFreeList.pushManagedBufferSection(perFaceDatasUploadBufferSection);
 
         if (!instance->host_areaLights.empty())
         {
@@ -714,7 +846,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
     }
 
-    this->managedPerTriDatasBuffer.endBatchCopy(cmdList);
+    this->managedPerFaceDatasBuffer.endBatchCopy(cmdList);
     this->managedAreaLightsBuffer.endBatchCopy(cmdList);
 }
 
@@ -1157,9 +1289,9 @@ D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevIdxsBufferAddress() const
     return this->managedIdxsBuffer.getGpuVirtualAddress();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerTriDatasBufferAddress() const
+D3D12_GPU_VIRTUAL_ADDRESS Scene::getDevPerFaceDatasBufferAddress() const
 {
-    return this->managedPerTriDatasBuffer.getGpuVirtualAddress();
+    return this->managedPerFaceDatasBuffer.getGpuVirtualAddress();
 }
 
 uint32_t Scene::getNumAreaLights() const

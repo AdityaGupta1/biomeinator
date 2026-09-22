@@ -128,7 +128,7 @@ float getMaterialRoughness(const Material material, const float2 uv, const TexSa
         : material.roughness;
 }
 
-// Turns the hit's material into glass, for faces flagged TRIANGLE_FLAG_IS_GLASS. Terrain shares
+// Turns the hit's material into glass, for faces flagged FACE_FLAG_IS_GLASS. Terrain shares
 // one diffuse material across every block, so glass is a per-triangle override rather than its own
 // material and instance; the base color texture becomes the transmission tint and the packed aux
 // b channel carries per-texel roughness. Reflection is untinted, as for any dielectric.
@@ -581,17 +581,17 @@ void scatterRayCone(inout RayCone cone, const Material material, const BsdfSampl
     cone.angle = min(sqrt(cone.angle * cone.angle + spread * spread), 16.f);
 }
 
-// Thin diffuse transmission fraction applied to TRIANGLE_FLAG_DIFFUSE_TRANSMISSION hits
+// Thin diffuse transmission fraction applied to FACE_FLAG_DIFFUSE_TRANSMISSION hits
 static const float foliageDiffuseTransmission = 0.4f;
 
 Material getMaterialFromPayload(const Payload payload, const uint triangleFlags, const TexSampleCtx texCtx)
 {
     Material material = materials[payload.materialIdx];
     // Resolve surface overrides before orienting IOR for this particular hit.
-    if (bool(triangleFlags & TRIANGLE_FLAG_IS_GLASS))
+    if (bool(triangleFlags & FACE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
     material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
-    if (bool(triangleFlags & TRIANGLE_FLAG_DIFFUSE_TRANSMISSION))
+    if (bool(triangleFlags & FACE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-21_
 
 # Startup
 
@@ -12,6 +12,15 @@ to overlap them rather than shrink them (measured 2026-09 on an RTX 4070 SUPER):
 - **First `CreateStateObject`** (~1.1 s): a one-off DXR initialization inside the driver, paid
   by whichever RT pipeline is created first. With a cold driver shader cache each pipeline
   additionally costs ~1 s of compile.
+
+## Supported hardware
+
+NVIDIA only, RTX 40-series class and up. AMD and Intel GPUs are explicitly unsupported rather
+than merely untested: there is no such hardware to test on, so nothing guards the paths that
+assume NVIDIA behaviour (NVAPI, Streamline, SER, OMMs, and the tuning of things like BLAS
+builds reading their inputs from the upload heap, which was measured free on an RTX 4070 SUPER
+and nowhere else). Do not add vendor fallbacks or "should work on AMD" notes; a change that
+happens to break another vendor is not a regression here.
 
 ## Manual hooking rationale
 

@@ -753,18 +753,33 @@ void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
     this->setInstancesVisible(this->areInstancesVisible);
 }
 
-static PerTriangleData makeBlockTriangleData(const BlockData& block, uint32_t slice)
+static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uint32_t extraFlags = 0)
 {
-    PerTriangleData data{};
-    data.texArraySliceIdx = slice;
-    if (TerrainMaterials::sliceHasBiomeTint(slice)) data.flags |= TRIANGLE_FLAG_BIOME_TINT;
+    uint32_t flags = extraFlags;
+    if (TerrainMaterials::sliceHasBiomeTint(slice))
+    {
+        flags |= FACE_FLAG_BIOME_TINT;
+    }
     if (TerrainMaterials::sliceHasNormalMap(slice))
     {
-        data.flags |= TRIANGLE_FLAG_NORMAL_MAP;
+        flags |= FACE_FLAG_NORMAL_MAP;
     }
-    if (block.translucent) data.flags |= TRIANGLE_FLAG_DIFFUSE_TRANSMISSION;
-    if (block.proceduralColor) data.flags |= TRIANGLE_FLAG_PROCEDURAL_COLOR;
-    if (block.type == BlockType::GLASS) data.flags |= TRIANGLE_FLAG_IS_GLASS;
+    if (block.translucent)
+    {
+        flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;
+    }
+    if (block.proceduralColor)
+    {
+        flags |= FACE_FLAG_PROCEDURAL_COLOR;
+    }
+    if (block.type == BlockType::GLASS)
+    {
+        flags |= FACE_FLAG_IS_GLASS;
+    }
+
+    PerFaceData data{};
+    data.setFlags(flags);
+    data.setTexArraySliceIdx(slice);
     return data;
 }
 
@@ -772,22 +787,22 @@ void Chunk::createInstances()
 {
     std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
     std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
-    std::vector<PerTriangleData>& terrainPerTriDatas = this->terrainInstance->host_perTriDatas;
+    std::vector<PerFaceData>& terrainPerFaceDatas = this->terrainInstance->host_perFaceDatas;
     std::vector<uint16_t>& terrainOmmIdxs = this->terrainInstance->host_ommIdxs;
     std::vector<uint32_t> terrainEmissiveTriangleIdxs;
     std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
-    std::vector<PerTriangleData>& waterPerTriDatas = this->waterInstance->host_perTriDatas;
+    std::vector<PerFaceData>& waterPerFaceDatas = this->waterInstance->host_perFaceDatas;
 
     constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
     terrainIdxs.reserve(numTerrainVertsToReserve * 6 / 4);
-    terrainPerTriDatas.reserve(numTerrainVertsToReserve / 2);
+    terrainPerFaceDatas.reserve(numTerrainVertsToReserve / 4);
 
     constexpr size_t numWaterVertsToReserve = 1 << 8;
     waterVerts.reserve(numWaterVertsToReserve);
     waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
-    waterPerTriDatas.reserve(numWaterVertsToReserve / 2);
+    waterPerFaceDatas.reserve(numWaterVertsToReserve / 4);
 
     terrainEmissiveTriangleIdxs.reserve(512);
 
@@ -870,13 +885,20 @@ void Chunk::createInstances()
                         const size_t baseIndex = terrainIdxs.size();
                         terrainIdxs.insert(terrainIdxs.end(), model.indices.begin(), model.indices.end());
                         for (size_t i = baseIndex; i < terrainIdxs.size(); ++i) terrainIdxs[i] += baseVertex;
-                        const auto data = makeBlockTriangleData(blockData, blockData.texSlices[0]);
+                        const auto data = makeBlockFaceData(blockData, blockData.texSlices[0]);
                         const auto triangleCount = static_cast<uint32_t>(model.indices.size() / 3);
-                        terrainPerTriDatas.insert(terrainPerTriDatas.end(), triangleCount, data);
-                        // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
-                        if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), triangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
                         if (blockData.markAsEmitter)
                             for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
+                        // Faces are triangle pairs, so an odd model gets a degenerate triangle that keeps
+                        // the next face aligned; it is never hit and not emissive
+                        const uint32_t paddedTriangleCount = (triangleCount + 1u) & ~1u;
+                        if (paddedTriangleCount != triangleCount)
+                        {
+                            terrainIdxs.insert(terrainIdxs.end(), 3, baseVertex);
+                        }
+                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), paddedTriangleCount / 2, data);
+                        // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
+                        if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), paddedTriangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
                     }
                     else if (blockData.shape == BlockShape::X_SHAPED)
                     {
@@ -913,8 +935,8 @@ void Chunk::createInstances()
                             terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
                         }
 
-                        terrainPerTriDatas.insert(terrainPerTriDatas.end(), 4,
-                                                  makeBlockTriangleData(blockData, texArraySliceIdx));
+                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), 2,
+                                                   makeBlockFaceData(blockData, texArraySliceIdx));
 
                         if (useOmms)
                         {
@@ -926,7 +948,7 @@ void Chunk::createInstances()
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
-                        std::vector<PerTriangleData>& perTriDatas = isWater ? waterPerTriDatas : terrainPerTriDatas;
+                        std::vector<PerFaceData>& perFaceDatas = isWater ? waterPerFaceDatas : terrainPerFaceDatas;
                         const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
 
                         for (uint faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
@@ -963,12 +985,16 @@ void Chunk::createInstances()
                             idxs.emplace_back(baseVertIdx + 2u);
                             idxs.emplace_back(baseVertIdx + 3u);
 
-                            auto faceData = makeBlockTriangleData(blockData, texArraySliceIdx);
-                            if (isWater) faceData.flags |= TRIANGLE_FLAG_IS_WATER;
-                            if (isWater && faceIdx == blockFaceIndex(BlockFace::Y_POS))
-                                faceData.flags |= TRIANGLE_FLAG_IS_WATER_TOP;
-                            perTriDatas.emplace_back(faceData);
-                            perTriDatas.emplace_back(faceData);
+                            uint32_t waterFlags = 0;
+                            if (isWater)
+                            {
+                                waterFlags |= FACE_FLAG_IS_WATER;
+                                if (faceIdx == blockFaceIndex(BlockFace::Y_POS))
+                                {
+                                    waterFlags |= FACE_FLAG_IS_WATER_TOP;
+                                }
+                            }
+                            perFaceDatas.emplace_back(makeBlockFaceData(blockData, texArraySliceIdx, waterFlags));
 
                             if (useOmms && !isWater)
                             {
@@ -1002,7 +1028,15 @@ void Chunk::createInstances()
     const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
 
+    // The packed form is the geometry: the fp32 copy that builds the BLAS and the area lights is
+    // decoded from it so every consumer sees the same quantized positions and UVs
+    std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->host_packedTerrainVerts;
+    terrainPackedVerts.resize(terrainVerts.size());
+    std::transform(terrainVerts.begin(), terrainVerts.end(), terrainPackedVerts.begin(), Util::packTerrainVertex);
+    std::transform(terrainPackedVerts.begin(), terrainPackedVerts.end(), terrainVerts.begin(), Util::unpackTerrainVertex);
+
     terrainInstance->setTransformOffset(transformOffset);
+    terrainInstance->setTrisPerFaceLog2(1);
     terrainInstance->finalizeGeometry();
     terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
     terrainInstance->addAreaLights(terrainEmissiveTriangleIdxs);
@@ -1010,6 +1044,7 @@ void Chunk::createInstances()
     if (!waterVerts.empty())
     {
         waterInstance->setTransformOffset(transformOffset);
+        waterInstance->setTrisPerFaceLog2(1);
         waterInstance->finalizeGeometry();
         waterInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::WATER));
         waterInstance->setIsDeformable(true);

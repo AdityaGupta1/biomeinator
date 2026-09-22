@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-21_
 
 # Mesh Generation
 
@@ -6,7 +6,7 @@ _Last edited: 2026-09-09_
 
 ## Two Instances Per Chunk
 
-Terrain and water are separate `Instance` objects with independent BLAS. Water gets `TRIANGLE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`.
+Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`.
 
 ## Crack Prevention
 
@@ -21,7 +21,7 @@ attachment face, keeping wall and ceiling models seated on their supports.
 
 ## Texture Slice Indexing
 
-Terrain textures are a `Texture2DArray` of 16×16 tiles (see [scene → materials_textures.md](../scene/materials_textures.md)). Per-vertex UVs are the corner offsets `{0,1}×{0,1}` directly — there is no atlas multiplier. The slice index lives in `PerTriangleData.texArraySliceIdx`, written once per face during mesh gen.
+Terrain textures are a `Texture2DArray` of 16×16 tiles (see [scene → materials_textures.md](../scene/materials_textures.md)). Per-vertex UVs are the corner offsets `{0,1}×{0,1}` directly — there is no atlas multiplier. The slice index lives in `PerFaceData.texArraySliceIdx`, written once per face during mesh gen.
 
 **Slice ordering invariant:** slice indices are assigned by `Blocks::init()` in first-reference order over the block JSONs, stored pre-resolved in `BlockData::texSlices`, and `TerrainMaterials::init()` loads the arrays in that same order via `Blocks::getTextureNames()` — which is why `Blocks::init()` must run first. Untextured blocks (air, water) carry `TEX_SLICE_INVALID`; out-of-range lookups (biome tint, OMM cutout) return false, and water's material has no textures so the slice is never sampled.
 

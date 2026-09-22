@@ -14,8 +14,7 @@ StructuredBuffer<AreaLight> areaLights : REGISTER_T(RT, AREA_LIGHTS);
 StructuredBuffer<uint> areaLightSamplingStructure : REGISTER_T(RT, AREA_LIGHT_SAMPLING_STRUCTURE);
 
 // Both UAVs are keyed by the SPARSE areaLights[] index (matches what Stage 4's
-// BSDF-hit recovery computes from instanceDatas[...].areaLightsBufferOffset +
-// perTriDatas[...].localAreaLightIdx).
+// BSDF-hit recovery computes in getAreaLightIdxFromHit).
 RWStructuredBuffer<LightAux> lightAuxOut : REGISTER_U(LIGHT_TREE, LIGHT_AUX_OUT);
 RWStructuredBuffer<uint> lightToLeafOut : REGISTER_U(LIGHT_TREE, LIGHT_TO_LEAF_OUT);
 
