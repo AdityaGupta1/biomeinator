@@ -39,6 +39,13 @@ the palette consistent at every distance without shader work or altering the sou
 Unlisted textures, alpha, normal maps and aux data are untouched. The red sand/sandstone family
 shares an earthier palette so exposed sandstone does not turn salmon-colored below the sand;
 red terracotta is desaturated separately to soften its contrast with the other strata.
+Plain terracotta is graded from the source's yellow ochre toward a muted reddish brown so it
+can provide the bulk of Mesa's bedding alongside orange terracotta. Keep the source pixels
+intact; the color adjustment applies consistently to all faces and mip levels.
+Red sandstone copies the existing sandstone side grain and its shared top/bottom grain,
+with its own color multipliers retaining the warm red-desert palette. This removes the old
+masonry pattern without repainting or changing ordinary sandstone. Keep both the copied
+grain and its tint settings together when replacing these assets.
 
 ## Texture2D vs Texture2DArray
 

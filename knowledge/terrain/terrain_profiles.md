@@ -125,8 +125,13 @@ order never affects the result. The material fields do not displace terrain.
 
 Mesa's palette follows the user's mega-minecraft project, with brown replacing the original
 purple at the user's request. Strata average three blocks thick, with irregular widths and no
-fixed repeating color sequence; plain terracotta has extra weight and white and brown are thin
-accents. Two scales of seeded XZ noise displace the whole stack by up to four extra blocks,
+fixed repeating color sequence. Plain and orange terracotta form the bedding, with plain
+favored. Other colors appear only as 1–2-block seams at either edge of occasional strata.
+Neighboring seams may touch or have base material between them; there is no enforced gap.
+Full-height accent strata had dominated exposed slopes despite their modest selection
+probability. Each seam is capped at its containing layer's width so short strata do not
+overwrite their neighbors. Adjacent accents of the same color can still merge visually.
+Two scales of seeded XZ noise displace the whole stack by up to four extra blocks,
 preserving layer thickness and the deep-rock boundary. Keep the material frequency
 independent of terrace spacing: many strata should cross a single escarpment. Irregular seeded terrace intervals, differing ramp
 widths and residual shelf slope avoid a stack of identical, flat treads. Terracotta,

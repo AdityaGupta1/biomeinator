@@ -25,14 +25,20 @@ inline Block terracotta(int y, float offset)
     if (boundary(layer) > height) --layer;
     else if (boundary(layer + 1) < height) ++layer;
     RandomNumberGenerator rng = initRng(0xC1A7u, layer);
-    const float color = rng.nextFloat();
-    if (color < 0.40f) return Block::TERRACOTTA;
-    if (color < 0.59f) return Block::ORANGE_TERRACOTTA;
-    if (color < 0.76f) return Block::RED_TERRACOTTA;
-    if (color < 0.85f) return Block::YELLOW_TERRACOTTA;
-    // White and brown are thin accents, not broad repeated stripes.
-    if (height - boundary(layer) > 1.5f) return Block::TERRACOTTA;
-    return color < 0.93f ? Block::BROWN_TERRACOTTA : Block::WHITE_TERRACOTTA;
+    const Block base = rng.nextFloat() < 0.7f ? Block::TERRACOTTA : Block::ORANGE_TERRACOTTA;
+    // Colored seams are 1-2 blocks thick within the earth-toned bedding. Either
+    // edge can carry a seam, allowing adjacent accents as well as separated ones.
+    auto accentRng = initRng(0xACC31u, layer);
+    if (accentRng.nextFloat() >= 0.32f) return base;
+    const float low = boundary(layer), high = boundary(layer + 1);
+    const float width = glm::min(static_cast<float>(accentRng.nextInt(1, 3)), high - low);
+    const float depth = accentRng.chance(0.5f) ? high - height : height - low;
+    if (depth >= width) return base;
+    const float color = accentRng.nextFloat();
+    if (color < 0.25f) return Block::RED_TERRACOTTA;
+    if (color < 0.40f) return Block::YELLOW_TERRACOTTA;
+    if (color < 0.70f) return Block::BROWN_TERRACOTTA;
+    return Block::WHITE_TERRACOTTA;
 }
 
 inline bool isQuartz(Block block)
