@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Chunk Generator
 
@@ -64,6 +64,13 @@ with a short seal fading into the roots. Rock and skin classification still run 
 the user wants the exposed stone/marble patches at the transition, so suppressing the entire
 cave-material pass would incorrectly repaint those areas. No cave-air markers or cave layers
 may originate inside the solid pillar, while deeper cave systems remain available.
+
+Lamp scatter is separate from that broad rock/skin classification and defaults off. It is
+eligible only below both the local base height and the shared pre-formation ground by the
+surface fade depth, outside the pillar, and near the final carve threshold including the
+root seal. This preserves underground cave lighting without treating exposed mountain rock
+or sealed formations as places to scatter lights. These tests use existing column and voxel
+fields, so placement remains independent of chunk generation order.
 
 ## Cave Biome Noise
 

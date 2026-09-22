@@ -65,7 +65,7 @@ struct CaveBiomeData
     Block skinBlock{ Block::AIR };
     Block skinPatchBlock{ Block::AIR };
     Block skinFringeBlock{ Block::AIR };
-    // Random LAMP blocks scattered through the biome's rock
+    // Random LAMP blocks in the eligible underground cave-wall band, excluding formations.
     bool scatterLamps{ true };
     std::vector<CaveStructureGen> caveStructureGens{};
     // Applied to permitted floor, wall, and ceiling surfaces bordering this biome's cave air.

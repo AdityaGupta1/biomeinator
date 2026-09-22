@@ -835,7 +835,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const Block surfaceRock = isInTerrain ?
                     SurfaceMaterials::rock(biome, y, naturalTerrain, strataVariation, tianziSandstone) : Block::AIR;
                 Block baseBlock = Block::STONE;
-                bool scatterLamps = true;
+                bool scatterLamps = false;
                 if (isInTerrain)
                 {
                     // Quartz belongs to the solid landform. Decide its material before
@@ -941,7 +941,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                                     fringeBlock = skinFringeBlock;
                                 }
                             }
-                            scatterLamps = caveBiomeData.scatterLamps;
+                            // Rock theming also reaches exposed cliffs and sealed pillars;
+                            // lighting must not inherit that broader material coverage. Only
+                            // scatter below the shared ground, near the actual sealed carve
+                            // threshold, never through the above-ground formation itself.
+                            const float sealedCaveSurfaceDist = caveSurfaceDist + rootSeal;
+                            scatterLamps = caveBiomeData.scatterLamps && !inPillar &&
+                                y < min(terrainBaseHeight, naturalTerrain.formationBaseHeight) - caveSurfaceFadeStartDepth &&
+                                sealedCaveSurfaceDist < caveSkinThicknessMax;
                         }
                     }
 

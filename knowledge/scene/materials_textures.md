@@ -1,4 +1,4 @@
-_Last edited: 2026-09-10_
+_Last edited: 2026-09-21_
 
 # Materials and Textures
 
@@ -31,6 +31,14 @@ Texture upload requires a command list (for `CopyTextureRegion`), but textures m
 `PendingTexture` stores `sliceMipData[slice][mip]` + `arraySize`. Subresource index is computed via `D3D12CalcSubresource(mip, slice, ...)`. Row pitch is aligned to `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` per row; each mip start in the upload buffer is aligned to `D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT`.
 
 The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) loads one 16×16 PNG per texture array slice from `assets/blocks/textures/` (slice order from `Blocks::getTextureNames()`) and generates each slice's mip chain CPU-side.
+
+Terrain palette adjustments live in the optional `assets/blocks/textures/color_adjustments.json`,
+keyed by texture name. Saturation blends toward linear luminance before an RGB multiplier;
+both operate in linear light. Baking this into the color slice **before** mip generation keeps
+the palette consistent at every distance without shader work or altering the source PNGs.
+Unlisted textures, alpha, normal maps and aux data are untouched. The red sand/sandstone family
+shares an earthier palette so exposed sandstone does not turn salmon-colored below the sand;
+red terracotta is desaturated separately to soften its contrast with the other strata.
 
 ## Texture2D vs Texture2DArray
 
