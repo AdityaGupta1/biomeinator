@@ -58,6 +58,11 @@ struct NaturalTerrain
     // painting isolated structures or extending surface materials through deep cave biomes.
     float formationBaseHeight;
     float formationHeight;
+    // The supporting Worley site's identity lets materials vary by pillar without
+    // deriving their layers from the per-column surface height.
+    glm::ivec2 formationSite{};
+    // Distance from the dominant quartz spike's axis / its core footprint radius.
+    float quartzRadiusFraction{ 1.f };
 };
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);

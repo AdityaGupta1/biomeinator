@@ -53,7 +53,8 @@ struct Profile
     float angularity{ 0.f }; // round hills at 0, faceted cores with accelerating roots at 1
 };
 
-inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
+inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::ivec2* dominantSite = nullptr,
+                    float* radiusFraction = nullptr)
 {
     using namespace glm;
     // An omitted site is at least 1.25 cells away. Keep even stretched/warped support
@@ -65,6 +66,8 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
     const float facetBound = mix(1.f, 1.083f, profile.angularity);
     ASSERT(max(profile.footRadius, profile.radius * 1.2f) * facetBound / 0.8f + warpBound < 1.25f * profile.spacing);
     const ivec2 cell = ivec2(floor(pos / profile.spacing));
+    if (dominantSite) *dominantSite = cell;
+    if (radiusFraction) *radiusFraction = 1.f;
     const vec2 warped = pos + profile.radius * 0.3f * vec2(
         valueNoise(pos / profile.radius, seed ^ 0x541u), valueNoise(pos / profile.radius, seed ^ 0x901u));
     const float summitRoughness = valueNoise(pos / (profile.radius * 0.8f), seed ^ 0x339u) *
@@ -100,7 +103,15 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
             const float foot = mix(1.f - smoothstep(0.f, profile.footRadius, distance), risingFoot, profile.angularity);
             const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
                 clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
-            result = max(result, profile.footHeight * foot + (height + summitRoughness) * core);
+            const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
+            if (contribution > result)
+            {
+                if (dominantSite) *dominantSite = key;
+                // Material shells must follow the same warped, stretched, faceted
+                // footprint as the height field, including the winning site's radius.
+                if (radiusFraction) *radiusFraction = distance / radius;
+            }
+            result = max(result, contribution);
         }
     }
     return result;
@@ -110,10 +121,11 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
 // immediate support, so upper crowns cannot rise out of valleys or skip a tier.
 // This stays a pure height query for distant terrain and other stacked karst profiles.
 template<size_t N>
-inline float sampleStacked(glm::vec2 pos, uint32_t seed, const std::array<Profile, N>& tiers)
+inline float sampleStacked(glm::vec2 pos, uint32_t seed, const std::array<Profile, N>& tiers,
+                          glm::ivec2* foundationSite = nullptr)
 {
     static_assert(N > 0);
-    float previous = sample(pos, seed, tiers[0]);
+    float previous = sample(pos, seed, tiers[0], foundationSite);
     float height = previous;
     float support = 1.f;
     for (size_t i = 1; i < N; ++i)

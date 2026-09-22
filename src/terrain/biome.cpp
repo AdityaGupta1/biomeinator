@@ -314,7 +314,8 @@ void init()
                       .spacingXZ = 3.f, .spacingY = 7.f } } }, 8, 2 },
         };
         data.structureGens.back().surfacePlacement = StructureSurfacePlacement{
-            { Block::GRASS_BLOCK, Block::STONE }
+            { Block::GRASS_BLOCK, Block::STONE, Block::GRAY_SANDSTONE, Block::BUFF_SANDSTONE,
+              Block::WEATHERED_SANDSTONE, Block::DARK_SANDSTONE }
         };
         data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });

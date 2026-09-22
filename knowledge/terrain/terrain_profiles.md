@@ -52,9 +52,9 @@ the surrounding ground rise into each feature. A future island/karst profile can
 pattern with a different base elevation and water treatment. Tianzi's climate, erosion and
 inland suitability is combined before applying the formation-strength ramp. This makes the
 strength vanish at every label boundary, including coastal edges, while ordinary mountain
-relief returns with the complementary weight. Formation-rock coverage and cliff soil use
-that same strength independently of the jittered label. Correlated coverage still leaves
-some existing stone/marble patches around roots and foothills.
+relief returns with the complementary weight. Cliff soil follows that continuous strength.
+Tianzi's material shell covers its labeled columns and its actual formations completely;
+the old correlated coverage mask let unrelated cave stone and marble show through its sides.
 
 Tianzi divides the former two-tier core-height budget across three independently seeded site
 fields, each with a finer footprint. The reusable sampler accepts an array of profiles; each
@@ -82,7 +82,12 @@ rise toward a narrow crystal core. Removing the exponential's linear term joins 
 foot to the desert with zero slope, then accelerates inward instead of rounding into a dome.
 Its crystal and root dimensions are deliberately smaller than Tianzi's. The surrounding red
 rock rises farther up the core before quartz begins; broad circular feet previously made
-every crystal look planted on a separate mound.
+every crystal look planted on a separate mound. Within the crystal, ivory quartz surrounds
+a smooth quartz core outside roughly 60% of the footprint radius, with coherent XZ noise
+varying that contact. The sampler returns distance in the same warped, stretched, faceted
+space that shapes the winning spike, so the materials follow its actual axis and footprint.
+This radial contact is independent of elevation: tapering naturally exposes smooth quartz
+toward the tip, while ivory quartz encroaches around the wider lower sides.
 
 Support must fit inside the 3x3 site scan even after footprint stretch and warp. The sampler
 asserts that bound; exceeding it would create seams when the search window moves. Enlarging
@@ -95,31 +100,50 @@ density multiplier; interpolate that reciprocal when blending local shaping.
 `surface_material.h` supplies elevation-based terracotta bands and formation rock, before
 the ordinary topsoil pass. Absolute elevation keeps bands connected across adjacent columns;
 a slow world-position offset bends them slightly. Quartz stays exposed through the topsoil
-pass, and trees/cacti cannot anchor on it. Its material is determined before carving, so quartz
-is excluded from cave air, cave skins and cave-decoration support. Deep rock beneath formations
-remains available to cave biomes.
+pass, and trees/cacti cannot anchor on it. Both quartz types are recognized together before
+carving and topsoil/structure placement, so neither can acquire caves, skins, soil or plants.
+Deep rock beneath formations remains available to cave biomes.
 
 Tianzi pillars also exclude cave carving above their shared ground, with the seal fading
-into the roots below that height. This follows formation geometry independently of the
-formation-rock coverage mask. Preserve the existing underground rock and skin selection: stone
-and marble outcrops in the lower transition are intentional, even where no cave opens there.
+into the roots below that height. Material replacement extends beneath the conservative
+lowest possible surface, so exposed recesses and roots keep the Tianzi palette. Underground
+cave rock and skins below that shell retain their normal classification.
+
+Tianzi's broad strata are seeded by the dominant supporting Worley site, whose identity is
+returned with the natural-terrain query without changing its height. Stacked shoulders share
+that foundation's geology, while neighboring pillars get different phases and layer sequences.
+Each stratum is 20–40 blocks thick; adjacent materials always differ so two layers cannot
+merge into an unintended double-width band. Warped, jittered fracture cells offset whole
+pieces of the bedding, giving contacts abrupt height jumps within a pillar rather than only
+gentle waves. Throws are amplified independently of the fine noise, preserving quiet interiors
+between the larger jumps. Smaller-scale warp makes the fracture outlines jagged; mild dipping and chipped
+edges break up the remaining horizontal runs. The same displacement applies to every boundary
+in a column, preserving the 20–40-block thickness and preventing layer crossings. The field is
+world-based, so fracture edges do not follow chunk boundaries. Darker, world-space 3D mineral patches
+cross these bands. Their XZ-interpolated noise planes are cached within each column; sampling
+order never affects the result. The material fields do not displace terrain.
 
 Mesa's palette follows the user's mega-minecraft project, with brown replacing the original
 purple at the user's request. Strata average three blocks thick, with irregular widths and no
-fixed repeating color sequence; white and brown are thin accents. Keep the material frequency
+fixed repeating color sequence; plain terracotta has extra weight and white and brown are thin
+accents. Two scales of seeded XZ noise displace the whole stack by up to four extra blocks,
+preserving layer thickness and the deep-rock boundary. Keep the material frequency
 independent of terrace spacing: many strata should cross a single escarpment. Irregular seeded terrace intervals, differing ramp
 widths and residual shelf slope avoid a stack of identical, flat treads. Terracotta,
-red sand/sandstone and quartz textures were copied from the user's GoodVibes block directory
-(`C:/Users/SDOAJ/code/textures/GoodVibes/minecraft/textures/block`). Tianzi currently uses regular
-stone pending a dedicated weathered rock texture; yellow smooth sandstone made the towers
-read as desert terrain. Tianzi's trees/shrubs use the existing pine log and leaf
-assets; their generators obey the same clipping-independent RNG contract as other trees.
+red sand/sandstone textures were copied from the user's GoodVibes block directory
+(`C:/Users/SDOAJ/code/textures/GoodVibes/minecraft/textures/block`). Tianzi's selected T03/T05/T07
+textures provide the strata and T06 supplies darker patches. Quartz uses Q03 around the outer
+core and Q01 inside, replacing the bordered GoodVibes quartz faces. Source mappings are kept in the texture
+folder's `formation_sources.md`; Yuushya Q01/T07 remain under `textures/yuushya/` with that
+folder's separate attribution and license. Tianzi's trees/shrubs use the existing pine log
+and leaf assets; their generators obey the clipping-independent RNG contract.
 Tianzi's broad ledges, summits and valley floors receive soil, while steep faces retain
 exposed rock. Lower shelves beneath an overhang can also acquire a grass cap when there is
 enough open headroom above the shared ground. Do not scatter soil over tiny steps on the
 steep faces merely to permit trees: the grass/dirt sides stood out as colored speckles.
-Tianzi's structure rule instead accepts exposed stone as well as grass, independently of
-the soil pass. Keep the cave-air exclusion so accepting stone does not plant cave floors.
+Tianzi's structure rule instead accepts all its dedicated rock types, ordinary stone and
+grass independently of the soil pass. Lower-shelf soil also recognizes the complete rock
+family. Keep the cave-air exclusion so accepting rock does not plant cave floors.
 Pines and shrubs use the reusable [exposed-surface placement](structure_system.md)
 rule: enumerate eligible ledges first, then select fitting plants with actual support, clearance
 and 3D spacing. This replaces both the sparse XZ sampling and blanket vertical gap; narrow

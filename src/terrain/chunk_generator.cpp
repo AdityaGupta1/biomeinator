@@ -706,14 +706,19 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const int waterLevel = waterLevelArray[columnIdx];
             const auto& naturalTerrain = naturalTerrainArray[columnIdx];
             const BiomeNoise columnBiomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
-            const bool tianziRock = SurfaceMaterials::tianziRock(
-                columnBiomeNoise, vec2(blockPosXZ_WS), worldSeed);
             const float tianziWeight = BiomeNoiseFields::tianziWeight(columnBiomeNoise);
             const bool hasTianziFormation = tianziWeight > 0.f && naturalTerrain.formationHeight > 0.f;
             const float detailUpwardLimit = mix(terrainDetailAmplitudeArray[columnIdx], 3.f, tianziWeight);
             const float pillarRootSeal = hasTianziFormation ? smoothstep(0.f, 8.f, naturalTerrain.formationHeight) : 0.f;
             const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
                                          1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
+            // Cover every potentially exposed Tianzi surface, including low recesses
+            // at its biome boundary. Deep cave rock keeps its underground palette.
+            const float lowestSurface = terrainBaseHeight - terrainDetailAmplitudeArray[columnIdx] -
+                surfaceValBound / (terrainSurfaceMultiplier * terrainBelowHeightfieldSurfaceMultiplier);
+            const float tianziMaterialFloor = min(naturalTerrain.formationBaseHeight - 22.f, lowestSurface - 4.f);
+            SurfaceMaterials::Column surfaceMaterials(biome, naturalTerrain, vec2(blockPosXZ_WS), worldSeed,
+                strataVariation, biome == Biome::TIANZI_MOUNTAINS || hasTianziFormation, tianziMaterialFloor);
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
@@ -833,14 +838,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                 bool isCave = false;
                 const Block surfaceRock = isInTerrain ?
-                    SurfaceMaterials::rock(biome, y, naturalTerrain, strataVariation, tianziRock) : Block::AIR;
+                    surfaceMaterials.rock(y) : Block::AIR;
                 Block baseBlock = Block::STONE;
                 bool scatterLamps = false;
                 if (isInTerrain)
                 {
                     // Quartz belongs to the solid landform. Decide its material before
                     // carving so it cannot acquire cave air, cave skins or cave decorators.
-                    if (y < static_cast<uint>(caveNoiseMaxY) && surfaceRock != Block::QUARTZ)
+                    if (y < static_cast<uint>(caveNoiseMaxY) && !SurfaceMaterials::isQuartz(surfaceRock))
                     {
                         const float caveNoiseVal = sampleCaveNoise(caveColumnIdx, y);
                         float caveSurfaceVal = caveSurfaceValAt(static_cast<float>(y));
@@ -859,8 +864,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         caveSurfaceVal -= swampSealSub;
                         // Pillars are solid above the shared ground; taper the seal into their
                         // roots so underground caves close naturally below them. Keep this
-                        // separate from rock/skin classification to retain exposed stone and
-                        // marble patches wherever the formation-rock coverage thins out.
+                        // separate from rock/skin classification: the formation material
+                        // pass replaces exposed cave palettes without changing the carve mask.
                         const bool inPillar = hasTianziFormation && y >= naturalTerrain.formationBaseHeight;
                         const float rootSeal = 1.5f * pillarRootSeal * smoothstep(
                             naturalTerrain.formationBaseHeight - 12.f, naturalTerrain.formationBaseHeight, static_cast<float>(y));
@@ -1064,7 +1069,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     Block newBlock = (y == topBlockY) ? topBlocks.top : topBlocks.mid;
-                    if (newBlock == Block::AIR || block == Block::QUARTZ || bareFormationCliff) continue;
+                    if (newBlock == Block::AIR || SurfaceMaterials::isQuartz(block) || bareFormationCliff) continue;
                     if (newBlock == Block::GRASS_BLOCK)
                     {
                         if (topBlockUnderwater)
@@ -1090,8 +1095,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         Block& block = this->blocks[baseBlockIdx + y];
                         if (block == Block::AIR) { ++headroom; continue; }
-                        if (headroom >= 6 && block == Block::STONE &&
-                            this->blocks[baseBlockIdx + y - 1] == Block::STONE)
+                        if (headroom >= 6 && SurfaceMaterials::isLedgeRock(block) &&
+                            SurfaceMaterials::isLedgeRock(this->blocks[baseBlockIdx + y - 1]))
                         {
                             block = Block::GRASS_BLOCK;
                             this->blocks[baseBlockIdx + y - 1] = Block::DIRT;
@@ -1222,7 +1227,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         }
                     }
 
-                    if (this->blocks[candidateGroundHeight + chunkSizeY * columnIdx] == Block::QUARTZ) continue;
+                    if (SurfaceMaterials::isQuartz(this->blocks[candidateGroundHeight + chunkSizeY * columnIdx])) continue;
 
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     RandomNumberGenerator variantRng =

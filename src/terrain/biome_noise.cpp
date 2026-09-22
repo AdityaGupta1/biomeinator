@@ -275,6 +275,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     const float formationBase = height;
 
     float uplift = 0.f;
+    ivec2 formationSite{};
     if (tianzi > 0.f)
     {
         // Split the previous 112-block core budget across three independently sited
@@ -284,15 +285,17 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
             { 54.f, 24.f, 30.f, 38.f, 4.f, 0.80f, 0.85f },
             { 37.f, 16.2f, 19.f, 32.f, 2.f, 0.78f, 0.85f },
         }};
-        uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, tiers);
+        uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, tiers, &formationSite);
     }
     // Quartz is an explicit formation in dry, non-terraced terrain. It reuses the same
     // finite-support sampler with a narrow summit and a broad foot, not a new noise field.
     const float quartzWeight = dry * land * (1.f - smoothstep(0.f, 0.4f, terraceWeight(n))) * rugged;
+    float quartzRadiusFraction = 1.f;
     if (quartzWeight > 0.f)
     {
         constexpr TerrainFormations::Profile spires{ 116.f, 6.5f, 34.f, 42.f, 24.f, 0.04f, 1.f };
-        uplift += quartzWeight * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x91337u, spires);
+        uplift += quartzWeight * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x91337u, spires,
+                                                          nullptr, &quartzRadiusFraction);
     }
     height += uplift;
 
@@ -303,7 +306,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     amplitude = mix(amplitude, 12.f, dry * (1.f - terraces));
     amplitude = mix(amplitude, 4.f, smoothstep(5.f, 30.f, uplift));
     amplitude /= 1.f + 3.f * smoothstep(0.4f, -0.1f, abs(n.inland));
-    return { height, 1.f / amplitude, formationBase, uplift };
+    return { height, 1.f / amplitude, formationBase, uplift, formationSite, quartzRadiusFraction };
 }
 
 float computeFloodFactor(const BiomeNoise& biomeNoise)
