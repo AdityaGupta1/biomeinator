@@ -540,8 +540,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // Cap it to preserve narrow cores, and use the bound below as well as in filling.
             const BiomeNoise noise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const float cliffDetail = BiomeNoiseFields::tianziWeight(noise) * smoothstep(1.f, 4.f, slope);
-            detailAmplitude *= min(mix(10.f, 20.f, cliffDetail),
-                mix(2.f, 2.75f, cliffDetail) * sqrt(1.f + slope * slope));
+            detailAmplitude *= min(mix(10.f, 14.f, cliffDetail),
+                mix(2.f, 2.25f, cliffDetail) * sqrt(1.f + slope * slope));
             // Leave some fine variation on Mesa floors and plateau tops, with full detail
             // on escarpments. The unjittered mask and pre-detail slope keep this continuous
             // across biome/chunk borders and avoid having bumps amplify their own noise.
@@ -706,7 +706,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const int waterLevel = waterLevelArray[columnIdx];
             const auto& naturalTerrain = naturalTerrainArray[columnIdx];
             const BiomeNoise columnBiomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
-            const bool tianziSandstone = biome == Biome::TIANZI_MOUNTAINS && SurfaceMaterials::tianziSandstone(
+            const bool tianziRock = SurfaceMaterials::tianziRock(
                 columnBiomeNoise, vec2(blockPosXZ_WS), worldSeed);
             const float tianziWeight = BiomeNoiseFields::tianziWeight(columnBiomeNoise);
             const bool hasTianziFormation = tianziWeight > 0.f && naturalTerrain.formationHeight > 0.f;
@@ -833,7 +833,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                 bool isCave = false;
                 const Block surfaceRock = isInTerrain ?
-                    SurfaceMaterials::rock(biome, y, naturalTerrain, strataVariation, tianziSandstone) : Block::AIR;
+                    SurfaceMaterials::rock(biome, y, naturalTerrain, strataVariation, tianziRock) : Block::AIR;
                 Block baseBlock = Block::STONE;
                 bool scatterLamps = false;
                 if (isInTerrain)
@@ -860,7 +860,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         // Pillars are solid above the shared ground; taper the seal into their
                         // roots so underground caves close naturally below them. Keep this
                         // separate from rock/skin classification to retain exposed stone and
-                        // marble patches wherever the surface sandstone mask thins out.
+                        // marble patches wherever the formation-rock coverage thins out.
                         const bool inPillar = hasTianziFormation && y >= naturalTerrain.formationBaseHeight;
                         const float rootSeal = 1.5f * pillarRootSeal * smoothstep(
                             naturalTerrain.formationBaseHeight - 12.f, naturalTerrain.formationBaseHeight, static_cast<float>(y));
@@ -1035,10 +1035,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             if (topBlockY != 0)
             {
-                const float ledgeVegetation = biome == Biome::TIANZI_MOUNTAINS ?
+                const float ledgeVegetation = hasTianziFormation ?
                     TerrainFormations::valueNoise(vec2(blockPosXZ_WS) / 19.f, worldSeed ^ 0x61EDu) : 0.f;
-                const bool bareFormationCliff = biome == Biome::TIANZI_MOUNTAINS &&
-                    naturalSlopeArray[columnIdx] > mix(1.25f, 2.6f, smoothstep(-0.3f, 0.5f, ledgeVegetation));
+                const float formationSoil = smoothstep(0.f, 0.25f, tianziWeight) *
+                                            smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
+                const bool bareFormationCliff = hasTianziFormation &&
+                    naturalSlopeArray[columnIdx] > mix(5.f,
+                        mix(1.25f, 2.6f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
 
@@ -1050,7 +1053,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
                 }
 
-                const uint soilDepth = biome == Biome::TIANZI_MOUNTAINS ? 2 : 5;
+                const uint soilDepth = static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
                 for (uint y = topBlockY; y > topBlockY - soilDepth; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -1077,9 +1080,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
 
                 // Surface displacement can expose lower shelves beneath an overhang. Coat
-                // only upward-facing sandstone with open headroom, above the shared ground;
-                // underground cave floors and the existing stone/marble outcrops stay intact.
-                if (biome == Biome::TIANZI_MOUNTAINS && ledgeVegetation > -0.25f)
+                // only upward-facing formation stone with open headroom, above the shared
+                // ground; underground cave floors and lower stone/marble outcrops stay intact.
+                if (hasTianziFormation && ledgeVegetation > mix(1.f, -0.4f, formationSoil))
                 {
                     uint headroom = 0;
                     const uint ledgeMinY = static_cast<uint>(max(2.f, ceil(naturalTerrain.formationBaseHeight + 4.f)));
@@ -1087,8 +1090,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         Block& block = this->blocks[baseBlockIdx + y];
                         if (block == Block::AIR) { ++headroom; continue; }
-                        if (headroom >= 6 && block == Block::SMOOTH_SANDSTONE &&
-                            this->blocks[baseBlockIdx + y - 1] == Block::SMOOTH_SANDSTONE)
+                        if (headroom >= 6 && block == Block::STONE &&
+                            this->blocks[baseBlockIdx + y - 1] == Block::STONE)
                         {
                             block = Block::GRASS_BLOCK;
                             this->blocks[baseBlockIdx + y - 1] = Block::DIRT;

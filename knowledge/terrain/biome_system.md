@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Biome System
 
@@ -12,11 +12,19 @@ the 3D [cave_biome_system.md](cave_biome_system.md).
 ## Selection Logic
 
 Ocean and beach are partitioned by inlandness first, keeping climate from turning coastlines
-into inland biomes. Inland terrain with strong pillar suitability becomes Tianzi in humid
-climates. Hot, dry terrain becomes Mesa where terraces dominate, Red Desert where ruggedness
+into inland biomes. Tianzi suitability combines humidity, a temperate-to-warm temperature
+window, preserved relief and inlandness. Its label and terrain strength derive from the same
+combined value; checking erosion first used to claim cold/dry mountain regions as Tianzi.
+Hot, dry terrain becomes Mesa where terraces dominate, Red Desert where ruggedness
 dominates, and ordinary desert in the eroded regime. Remaining terrain uses the original
 nearest climate/peak target among lowland or highland candidates; low erosion can enable
 highlands without requiring extreme inlandness.
+
+The strength ramp starts at the biome threshold and reaches full pillars farther inside.
+Apply it **after** combining every suitability axis: separately fading inlandness let coastal
+columns keep tall pillars after the label had already switched to tundra. Shape, formation
+rock and cliff soil use the unjittered strength; biome jitter can affect the negligible outer
+foothills but cannot cut through a tower's core.
 
 Erosion controls suitability, not nearest-target distance. Its thresholds belong to shared
 terrain regimes rather than individual biome height overrides. The swamp flood factor also

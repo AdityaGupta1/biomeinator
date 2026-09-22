@@ -115,6 +115,6 @@ a 30-block band; for mountains it's larger. This avoids sampling trivially solid
 After blocks are filled, structure candidates are generated using the heightfield (which is in scratch memory and would be lost after this task) and biome data. See [structure_system.md](structure_system.md) for the placement algorithm.
 
 Tianzi also scans actual planted surfaces for side shelves below the highest voxel. Soil there
-is limited to exposed sandstone above the shared formation ground; grass support and vertical
+is limited to exposed formation stone above the shared ground; grass support and vertical
 headroom gate tree placement. Both scans are column-local, so they need no neighbor-generation
 dependency and do not produce special behavior at chunk edges.

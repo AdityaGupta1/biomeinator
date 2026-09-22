@@ -33,9 +33,9 @@ inline Block terracotta(int y, float offset)
     return color < 0.91f ? Block::BROWN_TERRACOTTA : Block::WHITE_TERRACOTTA;
 }
 
-// Correlated rock patches blend the lower Tianzi foothills into neighboring mountains.
-// At the biome boundary the strength is already too low to place sandstone at all.
-inline bool tianziSandstone(const BiomeNoise& noise, glm::vec2 pos, uint32_t seed)
+// Correlated formation-rock coverage leaves existing stone/marble outcrops at the
+// roots. It follows the same continuous influence as geometry, not a jittered label.
+inline bool tianziRock(const BiomeNoise& noise, glm::vec2 pos, uint32_t seed)
 {
     const float coverage = glm::smoothstep(0.10f, 0.65f, BiomeNoiseFields::tianziWeight(noise));
     const float patch = 0.5f + 0.49f * TerrainFormations::valueNoise(pos / 28.f, seed ^ 0x5A7D57u);
@@ -43,12 +43,12 @@ inline bool tianziSandstone(const BiomeNoise& noise, glm::vec2 pos, uint32_t see
 }
 
 inline Block rock(Biome biome, int y, const BiomeNoiseFields::NaturalTerrain& terrain, float variation,
-                  bool sandstone)
+                  bool formationRock)
 {
     if (biome == Biome::MESA && y > SEA_LEVEL - 14 + variation)
         return terracotta(y, variation);
-    if (biome == Biome::TIANZI_MOUNTAINS && sandstone && y > terrain.formationBaseHeight - 22.f)
-        return Block::SMOOTH_SANDSTONE;
+    if (formationRock && y > terrain.formationBaseHeight - 22.f)
+        return Block::STONE;
     if (biome == Biome::RED_DESERT && y > terrain.formationBaseHeight - 20.f)
     {
         if (terrain.formationHeight > 20.f && y > terrain.formationBaseHeight + 13.f + variation)

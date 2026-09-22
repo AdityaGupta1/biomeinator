@@ -64,9 +64,11 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 pos
 
 // Smooth terrain regimes, shared by shape evaluation and biome suitability.
 float terraceWeight(const BiomeNoise& noise);
-float pillarWeight(const BiomeNoise& noise);
 float dryClimateWeight(const BiomeNoise& noise);
-// Formation strength falls almost to zero before its material/vegetation label ends.
+// One complete climate/erosion/inland suitability drives both the label and formation.
+inline constexpr float tianziBiomeThreshold = 0.35f;
+float tianziSuitability(const BiomeNoise& noise);
+// Apply the strength ramp after combining all axes: no tall cores outside the label.
 float tianziWeight(const BiomeNoise& noise);
 float surfaceDetailWeight(const BiomeNoise& noise);
 

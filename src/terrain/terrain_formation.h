@@ -5,6 +5,7 @@
 
 #include "util/rng.h"
 #include "debug.h"
+#include <array>
 #include <glm/glm.hpp>
 
 namespace TerrainFormations
@@ -105,14 +106,24 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile)
     return result;
 }
 
-// A smaller independent field sits on the shoulders of the broad field. Gate its
-// contribution by support height, so secondary crowns cannot rise out of valleys.
+// Smaller independent fields sit on the shoulders below. Gate each tier by its
+// immediate support, so upper crowns cannot rise out of valleys or skip a tier.
 // This stays a pure height query for distant terrain and other stacked karst profiles.
-inline float sampleStacked(glm::vec2 pos, uint32_t seed, const Profile& lower, const Profile& upper)
+template<size_t N>
+inline float sampleStacked(glm::vec2 pos, uint32_t seed, const std::array<Profile, N>& tiers)
 {
-    const float base = sample(pos, seed, lower);
-    const float support = glm::smoothstep(lower.height * 0.18f, lower.height * 0.6f, base);
-    return base + support * sample(pos, seed ^ 0xA271u, upper);
+    static_assert(N > 0);
+    float previous = sample(pos, seed, tiers[0]);
+    float height = previous;
+    float support = 1.f;
+    for (size_t i = 1; i < N; ++i)
+    {
+        support *= glm::smoothstep(tiers[i - 1].height * 0.35f, tiers[i - 1].height * 0.7f, previous);
+        if (support <= 0.f) break;
+        previous = sample(pos, seed ^ (0xA271u * static_cast<uint32_t>(i)), tiers[i]);
+        height += support * previous;
+    }
+    return height;
 }
 
 } // namespace TerrainFormations

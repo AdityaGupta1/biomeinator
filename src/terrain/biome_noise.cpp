@@ -187,31 +187,34 @@ float terraceWeight(const BiomeNoise& n)
            smoothstep(0.1f, 0.3f, n.inland);
 }
 
-float pillarWeight(const BiomeNoise& n)
-{
-    return (1.f - smoothstep(-0.46f, -0.16f, n.erosion)) * smoothstep(0.1f, 0.3f, n.inland);
-}
-
 float dryClimateWeight(const BiomeNoise& n)
 {
     return smoothstep(0.12f, 0.38f, n.temperature) * (1.f - smoothstep(-0.25f, 0.02f, n.humidity));
 }
 
+float tianziSuitability(const BiomeNoise& n)
+{
+    // Karst occupies humid, temperate-to-warm rugged regions. Cold or dry mountain
+    // climates retain ordinary peaks instead of being intercepted by erosion alone.
+    const float temperate = smoothstep(-0.55f, -0.05f, n.temperature) *
+                            (1.f - smoothstep(0.65f, 1.05f, n.temperature));
+    const float humid = smoothstep(-0.1f, 0.3f, n.humidity);
+    const float preserved = 1.f - smoothstep(-0.65f, -0.1f, n.erosion);
+    return temperate * humid * preserved * smoothstep(0.08f, 0.32f, n.inland);
+}
+
 float tianziWeight(const BiomeNoise& n)
 {
-    // Low foothills at both the erosion and dry-climate edges, full towers well inside.
-    // The biome label's thresholds (.4 pillars, .35 dryness) must not cut through tall cores.
-    return (1.f - smoothstep(-0.8f, -0.22f, n.erosion)) * smoothstep(0.1f, 0.3f, n.inland) *
-           (1.f - smoothstep(0.08f, 0.35f, dryClimateWeight(n)));
+    // Ramping the complete suitability (rather than separately fading each axis)
+    // keeps the coastal and climate boundaries from cutting through full-height towers.
+    return smoothstep(tianziBiomeThreshold, 0.85f, tianziSuitability(n));
 }
 
 float surfaceDetailWeight(const BiomeNoise& n)
 {
     const float dry = dryClimateWeight(n);
     const float mesa = smoothstep(0.4f, 0.75f, terraceWeight(n)) * smoothstep(0.35f, 0.65f, dry);
-    const float tianzi = smoothstep(0.4f, 0.9f, pillarWeight(n)) *
-                         (1.f - smoothstep(0.08f, 0.35f, dry));
-    return max(mesa, tianzi);
+    return max(mesa, tianziWeight(n));
 }
 
 static float terraceHeight(float height, const BiomeNoise& n)
@@ -250,11 +253,15 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
 
     const float inlandHeight = 1.f / (1.f + expf(-10.f * n.inland + 0.1f)) + 0.03f * n.inland - 0.7f;
     const float foundation = 140.f + inlandHeight * 90.f;
-    // Keep one connected ground profile beneath mountains and local formations. Suppressing
-    // mountains with independent terrace/pillar masks carved troughs between the regimes,
-    // including a thin terrace-shaped trench in humid mountains that were not Mesa at all.
+    // The modest shared ground still connects all profiles. Restore strong peaks only
+    // in preserved highlands, without lifting dry plateaus or roughening flat lowlands.
     const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f) * (1.f - dry * 0.75f);
-    float height = foundation + land * mountainRelief;
+    const float mountainClimate = 1.f - smoothstep(0.05f, 0.35f, dry);
+    const float highland = rugged * smoothstep(0.25f, 1.05f, n.inland) * mountainClimate;
+    const float peakRelief = 160.f * highland * pow(peak, 4.f);
+    // Complementary weights blend complete ordinary/Tianzi profiles: as the additional
+    // mountain relief recedes, the same weight supplies the stacked formations below.
+    float height = foundation + land * (mountainRelief + (1.f - tianzi) * peakRelief);
     if (terraces > 0.f)
     {
         // Blend complete profiles with complementary weights. The same weight replaces
@@ -270,9 +277,14 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     float uplift = 0.f;
     if (tianzi > 0.f)
     {
-        constexpr TerrainFormations::Profile shoulders{ 70.f, 28.f, 52.f, 64.f, 12.f, 0.72f, 0.85f };
-        constexpr TerrainFormations::Profile crowns{ 50.f, 16.f, 29.f, 48.f, 4.f, 0.62f, 0.85f };
-        uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, shoulders, crowns);
+        // Split the previous 112-block core budget across three independently sited
+        // tiers. Broad summits and narrow rises leave plantable shelves between crowns.
+        constexpr std::array<TerrainFormations::Profile, 3> tiers{{
+            { 70.f, 34.f, 52.f, 42.f, 8.f, 0.84f, 0.85f },
+            { 46.f, 24.f, 30.f, 38.f, 4.f, 0.80f, 0.85f },
+            { 31.f, 16.2f, 19.f, 32.f, 2.f, 0.78f, 0.85f },
+        }};
+        uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, tiers);
     }
     // Quartz is an explicit formation in dry, non-terraced terrain. It reuses the same
     // finite-support sampler with a narrow summit and a broad foot, not a new noise field.
@@ -285,6 +297,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     height += uplift;
 
     float amplitude = mix(38.f, 12.f, smoothstep(-0.1f, 0.5f, n.erosion));
+    amplitude += 40.f * highland * smoothstep(0.1f, 0.65f, n.peak);
     amplitude = mix(amplitude, 10.f, terraces);
     amplitude = mix(amplitude, 7.f, tianzi);
     amplitude = mix(amplitude, 12.f, dry * (1.f - terraces));
