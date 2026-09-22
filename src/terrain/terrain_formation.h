@@ -53,8 +53,7 @@ struct Profile
     float angularity{ 0.f }; // round hills at 0, faceted cores with accelerating roots at 1
 };
 
-inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::ivec2* dominantSite = nullptr,
-                    float* radiusFraction = nullptr)
+inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::ivec2* dominantSite = nullptr)
 {
     using namespace glm;
     // An omitted site is at least 1.25 cells away. Keep even stretched/warped support
@@ -67,7 +66,6 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
     ASSERT(max(profile.footRadius, profile.radius * 1.2f) * facetBound / 0.8f + warpBound < 1.25f * profile.spacing);
     const ivec2 cell = ivec2(floor(pos / profile.spacing));
     if (dominantSite) *dominantSite = cell;
-    if (radiusFraction) *radiusFraction = 1.f;
     const vec2 warped = pos + profile.radius * 0.3f * vec2(
         valueNoise(pos / profile.radius, seed ^ 0x541u), valueNoise(pos / profile.radius, seed ^ 0x901u));
     const float summitRoughness = valueNoise(pos / (profile.radius * 0.8f), seed ^ 0x339u) *
@@ -104,13 +102,7 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
             const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
                 clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
             const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
-            if (contribution > result)
-            {
-                if (dominantSite) *dominantSite = key;
-                // Material shells must follow the same warped, stretched, faceted
-                // footprint as the height field, including the winning site's radius.
-                if (radiusFraction) *radiusFraction = distance / radius;
-            }
+            if (dominantSite && contribution > result) *dominantSite = key;
             result = max(result, contribution);
         }
     }

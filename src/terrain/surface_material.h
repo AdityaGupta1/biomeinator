@@ -43,7 +43,7 @@ inline Block terracotta(int y, float offset)
 
 inline bool isQuartz(Block block)
 {
-    return block == Block::SMOOTH_QUARTZ || block == Block::IVORY_QUARTZ;
+    return block == Block::SMOOTH_QUARTZ;
 }
 
 inline bool isTianziStone(Block block)
@@ -161,7 +161,6 @@ class Column
     float variation;
     float mesaOffset;
     float tianziFloor;
-    Block quartzMaterial = Block::SMOOTH_QUARTZ;
     std::optional<TianziColumn> tianzi;
 
 public:
@@ -177,15 +176,6 @@ public:
                           1.f * TerrainFormations::valueNoise(pos / 8.f, seed ^ 0xAB71u);
         }
         if (formationRock) tianzi.emplace(pos, terrain.formationSite, seed);
-        if (biome == Biome::RED_DESERT && terrain.formationHeight > 20.f)
-        {
-            // Ivory encroaches radially on a smooth core; the taper of the spike
-            // exposes the core at its tip without any elevation-based color cutoff.
-            const float coreRadius = 0.6f +
-                0.12f * TerrainFormations::valueNoise(pos / 7.f, seed ^ 0xC7A2u) +
-                0.05f * TerrainFormations::valueNoise(pos / 2.5f, seed ^ 0xB451u);
-            quartzMaterial = terrain.quartzRadiusFraction > coreRadius ? Block::IVORY_QUARTZ : Block::SMOOTH_QUARTZ;
-        }
     }
 
     Block rock(int y)
@@ -197,7 +187,7 @@ public:
         if (biome == Biome::RED_DESERT && y > terrain.formationBaseHeight - 20.f)
         {
             if (terrain.formationHeight > 20.f && y > terrain.formationBaseHeight + 13.f + variation)
-                return quartzMaterial;
+                return Block::SMOOTH_QUARTZ;
             return Block::RED_SANDSTONE;
         }
         return Block::AIR; // retain deep rock / cave biomes

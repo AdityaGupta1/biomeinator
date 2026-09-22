@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Block System
 
@@ -17,7 +17,8 @@ storage assumes it, enforced by a `static_assert` in `block.h`.
 
 Formation blocks use descriptive material names rather than biome-specific IDs. Their former
 IDs remain lookup aliases for imported palettes, so renaming quartz and the Tianzi rocks does
-not turn blocks in existing exports into missing-block placeholders. New exports use the new IDs.
+not turn blocks in existing exports into missing-block placeholders. Retired ivory quartz
+(including its earlier `quartz_base` ID) resolves to smooth quartz. New exports use the current IDs.
 
 Texture names in the JSONs refer to 16×16 PNGs in `assets/blocks/textures/` (shared freely
 between blocks, e.g. `dirt` is also grass/snowy-grass bottom); `Blocks::init()` resolves them
