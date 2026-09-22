@@ -71,8 +71,10 @@ animation radius that `Terrain::update` sets (24 chunks, a constant there) *and*
 inside the padded view frustum: at render distance 40 a world has ~3,500 water chunks, and
 refitting all of them was most of a 7 ms main thread and 3.6 ms of GPU per frame. The subset
 is cached in `animatedDeformables` and rebuilt when the radius, its chunk-quantized center,
-the frustum normals, the camera's 16-block height band or the set change, so a locked camera never rebuilds and a turning one
-rebuilds every frame (a few thousand cheap tests).
+the frustum normals or the camera's 16-block height band change, so a locked camera never rebuilds and a turning one
+rebuilds every frame (a few thousand cheap tests). A water instance whose BLAS was just built
+is tested and inserted on its own, and a destroyed one is erased, since neither changes the
+membership of the rest and builds land on most frames while streaming.
 
 Static and animated water meet without a seam because the wave *amplitude* fades to zero
 towards both limits (`waveFade` in `water_waves.hlsli`, driven by `WaveFadeParams`): radially

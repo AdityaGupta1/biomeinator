@@ -114,6 +114,8 @@ static std::vector<Chunk*> chunksToCreateBlas;
 static std::mutex chunksToCreateBlasMutex;
 static std::vector<Chunk*> chunksToDestroy;
 static std::mutex chunksToDestroyMutex;
+static std::vector<Chunk*> chunksToRevisit;
+static std::mutex chunksToRevisitMutex;
 
 static std::deque<Task> tasksToEnqueue;
 std::vector<Task> thisFrameTasks;
@@ -150,6 +152,12 @@ void addChunkToDestroy(Chunk* chunk)
     chunksToDestroy.push_back(chunk);
 }
 
+void addChunkToRevisit(Chunk* chunk)
+{
+    std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
+    chunksToRevisit.push_back(chunk);
+}
+
 static std::atomic_bool dirty{ true };
 
 void setDirty()
@@ -166,6 +174,94 @@ static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
+
+struct ChunkScanDistances
+{
+    int renderDistance;
+    int createBlasDistance;
+    int fillStructuresDistance;
+    int generateTerrainDistance;
+};
+
+// The per-chunk half of the scan: queues whatever stage the chunk's state and distance call
+// for, and handles it entering or leaving the BLAS distance. A chunk is revisited on its own,
+// with lastChunkPos equal to currentChunkPos, when a worker advanced its state; the full scan
+// over every chunk in range is only for the camera changing chunk.
+static void scheduleChunkWork(Chunk* chunk,
+                              const glm::ivec2 currentChunkPos,
+                              const glm::ivec2 lastChunkPos,
+                              const ChunkScanDistances& distances)
+{
+    const int distToCurrentChunk = glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos);
+    const bool inCurrentRenderDistance = distToCurrentChunk <= distances.renderDistance;
+    const bool inCurrentCreateBlasDistance = distToCurrentChunk <= distances.createBlasDistance;
+    const bool inCurrentFillStructuresDistance = distToCurrentChunk <= distances.fillStructuresDistance;
+    const bool inCurrentGenerateTerrainDistance = distToCurrentChunk <= distances.generateTerrainDistance;
+    const bool inLastCreateBlasDistance =
+        glmUtil::chebyshevDistance(chunk->getChunkPos(), lastChunkPos) <= distances.createBlasDistance;
+
+    if (chunk->getNumNeighborsSet() < 4)
+    {
+        chunk->setNeighbors(true /*createNeighbors*/);
+    }
+
+    const ChunkState chunkState = chunk->getState();
+
+    if (inCurrentGenerateTerrainDistance)
+    {
+        if (chunkState == ChunkState::NEEDS_TERRAIN)
+        {
+            chunk->advanceState(ChunkState::GENERATING_TERRAIN);
+            chunksToGenerateTerrain.push_back(chunk);
+        }
+    }
+
+    if (inCurrentFillStructuresDistance)
+    {
+        if (chunkState == ChunkState::HAS_TERRAIN)
+        {
+            chunk->advanceState(ChunkState::AWAITING_STRUCTURE_NEIGHBORS);
+            tasksToEnqueue.push_back({ task_checkStructureNeighbors, chunk });
+        }
+        else if (chunkState == ChunkState::NEEDS_FILL_STRUCTURES)
+        {
+            chunk->advanceState(ChunkState::FILLING_STRUCTURES);
+            tasksToEnqueue.push_back({ task_fillStructures, chunk });
+        }
+        else if (chunkState == ChunkState::NEEDS_SEGMENTS)
+        {
+            chunk->advanceState(ChunkState::GENERATING_SEGMENTS);
+            tasksToEnqueue.push_back({ task_generateSegments, chunk });
+        }
+    }
+
+    if (inCurrentCreateBlasDistance)
+    {
+        chunk->setIsMarkedForDestruction(false);
+        chunk->setInstancesVisible(inCurrentRenderDistance);
+
+        if (chunkState == ChunkState::NEEDS_GEOMETRY)
+        {
+            chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
+            chunksToGenerateGeometry.push_back(chunk);
+        }
+    }
+    else if (inLastCreateBlasDistance)
+    {
+        chunk->setInstancesVisible(false);
+
+        if (chunkState == ChunkState::GENERATING_GEOMETRY)
+        {
+            // Set this chunk to be destroyed once its geometry is generated
+            chunk->setIsMarkedForDestruction();
+        }
+        else if (chunkState == ChunkState::HAS_GEOMETRY)
+        {
+            // Destroy this chunk immediately (later in this function)
+            addChunkToDestroy(chunk);
+        }
+    }
+}
 
 void update(ToFreeList& toFreeList)
 {
@@ -264,6 +360,13 @@ void update(ToFreeList& toFreeList)
         }
     }
 
+    const ChunkScanDistances distances = {
+        .renderDistance = renderDistance,
+        .createBlasDistance = createBlasDistance,
+        .fillStructuresDistance = fillStructuresDistance,
+        .generateTerrainDistance = generateTerrainDistance,
+    };
+
     bool updateTerrain = currentChunkPos != lastChunkPos;
     if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
     {
@@ -274,6 +377,14 @@ void update(ToFreeList& toFreeList)
     {
         dirty.store(false, std::memory_order_release);
         updateTerrain = true;
+    }
+
+    // Taken before the scan so a chunk a worker advances during it is still revisited next frame
+    std::vector<Chunk*> chunksToRevisitNow;
+    {
+        std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
+        chunksToRevisitNow = std::move(chunksToRevisit);
+        chunksToRevisit.clear();
     }
 
     if (updateTerrain)
@@ -340,88 +451,30 @@ void update(ToFreeList& toFreeList)
                     {
                         const glm::ivec2 chunkPos = glm::ivec2(chunkX, chunkZ);
 
-                        const int distToCurrentChunk = glmUtil::chebyshevDistance(chunkPos, currentChunkPos);
-                        const bool inCurrentRenderDistance = distToCurrentChunk <= renderDistance;
-                        const bool inCurrentCreateBlasDistance = distToCurrentChunk <= createBlasDistance;
-                        const bool inCurrentFillStructuresDistance = distToCurrentChunk <= fillStructuresDistance;
-                        const bool inCurrentGenerateTerrainDistance = distToCurrentChunk <= generateTerrainDistance;
-
-                        const int distToLastChunk = glmUtil::chebyshevDistance(chunkPos, lastChunkPos);
-                        const bool inLastCreateBlasDistance = distToLastChunk <= createBlasDistance;
-
+                        const bool inCurrentGenerateTerrainDistance =
+                            glmUtil::chebyshevDistance(chunkPos, currentChunkPos) <= generateTerrainDistance;
+                        const bool inLastCreateBlasDistance =
+                            glmUtil::chebyshevDistance(chunkPos, lastChunkPos) <= createBlasDistance;
                         if (!inCurrentGenerateTerrainDistance && !inLastCreateBlasDistance)
                         {
                             continue;
                         }
 
                         Chunk* chunk = region.getOrCreateChunk(chunkPos);
-                        if (chunk->getNumNeighborsSet() < 4)
-                        {
-                            chunk->setNeighbors(true /*createNeighbors*/);
-                        }
-
-                        const ChunkState chunkState = chunk->getState();
-
-                        if (inCurrentGenerateTerrainDistance)
-                        {
-                            if (chunkState == ChunkState::NEEDS_TERRAIN)
-                            {
-                                chunk->advanceState(ChunkState::GENERATING_TERRAIN);
-                                chunksToGenerateTerrain.push_back(chunk);
-                            }
-                        }
-
-                        if (inCurrentFillStructuresDistance)
-                        {
-                            if (chunkState == ChunkState::HAS_TERRAIN)
-                            {
-                                chunk->advanceState(ChunkState::AWAITING_STRUCTURE_NEIGHBORS);
-                                tasksToEnqueue.push_back({ task_checkStructureNeighbors, chunk });
-                            }
-                            else if (chunkState == ChunkState::NEEDS_FILL_STRUCTURES)
-                            {
-                                chunk->advanceState(ChunkState::FILLING_STRUCTURES);
-                                tasksToEnqueue.push_back({ task_fillStructures, chunk });
-                            }
-                            else if (chunkState == ChunkState::NEEDS_SEGMENTS)
-                            {
-                                chunk->advanceState(ChunkState::GENERATING_SEGMENTS);
-                                tasksToEnqueue.push_back({ task_generateSegments, chunk });
-                            }
-                        }
-
-                        if (inCurrentCreateBlasDistance)
-                        {
-                            chunk->setIsMarkedForDestruction(false);
-                            chunk->setInstancesVisible(inCurrentRenderDistance);
-
-                            if (chunkState == ChunkState::NEEDS_GEOMETRY)
-                            {
-                                chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
-                                chunksToGenerateGeometry.push_back(chunk);
-                            }
-                        }
-                        else if (inLastCreateBlasDistance)
-                        {
-                            chunk->setInstancesVisible(false);
-
-                            if (chunkState == ChunkState::GENERATING_GEOMETRY)
-                            {
-                                // set this chunk to be destroyed once its geometry is generated
-                                chunk->setIsMarkedForDestruction();
-                            }
-                            else if (chunkState == ChunkState::HAS_GEOMETRY)
-                            {
-                                // destroy this chunk immediately (later in this function)
-                                addChunkToDestroy(chunk);
-                            }
-                        }
+                        scheduleChunkWork(chunk, currentChunkPos, lastChunkPos, distances);
                     }
                 }
             }
         }
 
         lastChunkPos = currentChunkPos;
+    }
+    else
+    {
+        for (Chunk* chunk : chunksToRevisitNow)
+        {
+            scheduleChunkWork(chunk, currentChunkPos, currentChunkPos, distances);
+        }
     }
 
     CpuProfiler::endScope(); // chunk scan
@@ -467,7 +520,10 @@ void update(ToFreeList& toFreeList)
             threadMemoryAlloc.clear();
         }
 #else
-        threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+        {
+            CPU_PROFILE_SCOPE("pool enqueue");
+            threadPool.bulkEnqueue(thisFrameTasks.begin(), thisFrameTasks.end());
+        }
 #endif
 
         thisFrameTasks.clear();
@@ -1283,6 +1339,10 @@ static void resetTerrainState()
     {
         std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
         chunksToDestroy.clear();
+    }
+    {
+        std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
+        chunksToRevisit.clear();
     }
     tasksToEnqueue.clear();
     thisFrameTasks.clear();

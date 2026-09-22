@@ -109,6 +109,45 @@ each (0.3 ms CPU, GPU p95 0.65 ms), compaction is 0.23 ms, and the refit recordi
 left of the p95 (+1 ms over the median) is GPU: path tracing varying with the view and the
 occasional light tree rebuild.
 
+## Per-frame timeline and chunk crossings
+
+The stats hide *when* a spike happened, so the report also carries `frames`: one entry per
+measured frame with its wall period (begin to begin, waits included), CPU time, camera
+position, and every CPU and GPU scope of that frame. `run_perf.py spikes <report>` walks it,
+prints the frames whose wall period exceeds a threshold with the scopes furthest above their
+own median, and tags frames that follow a chunk crossing (it derives the camera's chunk from
+the recorded position). Two cautions when reading it: the wall period is a poor spike detector
+when the GPU is the bottleneck, because Reflex's sleep absorbs CPU variance up to the slack it
+leaves, so compare `cpuMs` and the GPU period (consecutive `gpuBeginMs`) instead; and a spike
+that lands *outside* every sub-scope is the main thread losing its core, not code (see below).
+
+Straight line at 20 blocks/s, seed 100, render distance 50, fullscreen 1440p (2026-09-21): the
+main thread takes ~2.2 ms on a steady frame and 8 to 15 ms on the frame the camera enters a new
+chunk, and because Reflex sleeps the CPU until just before the GPU needs it, every millisecond
+of that lands as GPU idle: GPU frame periods of 20 to 27 ms against a 13 ms median, which is
+the hitch a player feels at chunk boundaries. Where the crossing frame went, in order of size:
+
+- **Worker wake-up preempting the main thread.** The pool is one thread per core but one, and
+  a crossing enqueues ~200 tasks at once with `notify_all`. With workers at normal priority the
+  main thread lost 3 to 10 ms in whatever it was doing at the time (`enqueue` up to 3 ms, TLAS
+  compaction up to 5.7 ms, unattributed holes inside `deformables`). Workers now run at
+  `THREAD_PRIORITY_BELOW_NORMAL`, which took the worst non-resize crossing frame from 11.6 ms
+  to 6.5 ms and `pool enqueue` to 0.2 ms.
+- **Area light sampling structure growth**: 11 ms in `tlas entry adds` when the ring of chunks
+  becoming visible pushed `numAreaLights` past the array's power-of-two capacity. That is a
+  `MappedArray::resizeOnDevice`, four committed resources of 64 MB created and mapped on the
+  main thread. Rare (once per doubling) but the largest single hitch.
+- **Chunk scan**, 1.2 ms per scan at this distance. It used to run ~4 times per crossing
+  because worker state transitions raised the same `dirty` flag as a camera chunk change;
+  workers now hand the main thread the specific chunks to revisit, so the full scan is once
+  per crossing (124 scans over 32 crossings became 31).
+- **Animated water set rebuild**, 0.2 to 0.8 ms on two thirds of moving frames, because every
+  water BLAS build marked the set dirty and the rebuild re-tested all ~4,000 water instances.
+  New instances are now inserted on their own, so the rebuild is once per crossing (964
+  rebuilds became 32) and the steady `deformables` cost dropped from 1.43 to 1.27 ms.
+- Sporadic 2 to 3 ms `blas refit` recordings (~1% of frames, not tied to crossings) that look
+  like driver-side allocation and were not chased.
+
 ## Streaming
 
 Everything before the measured window is also recorded as the *streaming* window: from the

@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <unordered_map>
 
 namespace Renderer
 {
@@ -204,6 +205,7 @@ void perfRunBeginCpuFrame()
         perfRun.streamingPeriodMs.push_back(std::chrono::duration<double, std::milli>(now - perfRun.prevFrameStart).count());
     }
     perfRun.prevFrameStart = now;
+    perfRun.prevCpuFrameStart = perfRun.cpuFrameStart;
     perfRun.cpuFrameStart = now;
 }
 
@@ -215,6 +217,9 @@ void perfRunEndCpuFrame()
     if (perfRun.phase == PerfPhase::MEASURING)
     {
         perfRun.cpuFrameMs.push_back(secondsSince(perfRun.cpuFrameStart) * 1000.0);
+        perfRun.wallPeriodMs.push_back(
+            std::chrono::duration<double, std::milli>(perfRun.cpuFrameStart - perfRun.prevCpuFrameStart).count());
+        perfRun.cameraPos_WS.push_back(renderState.camera.getPos_WS());
     }
     else if (perfRun.streamingStarted && perfRun.phase != PerfPhase::DONE)
     {
@@ -426,6 +431,58 @@ static nlohmann::json memoryJson()
     };
 }
 
+template<typename ScopeTiming>
+static nlohmann::json scopeTimelineJson(const std::vector<ScopeTiming>& scopes)
+{
+    nlohmann::json json = nlohmann::json::array();
+    for (const ScopeTiming& scope : scopes)
+    {
+        json.push_back({ scope.name, scope.depth, scope.ms });
+    }
+    return json;
+}
+
+// One entry per measured frame with everything that frame recorded, so a spike in the stats
+// can be traced to the frame and the scope it came from
+static nlohmann::json framesJson()
+{
+    const PerfRunState& perfRun = renderState.perfRun;
+    std::unordered_map<uint32_t, const GpuProfiler::FrameTimings*> gpuByFrame;
+    for (const GpuProfiler::FrameTimings& frame : perfRun.gpuSamples)
+    {
+        gpuByFrame.emplace(frame.frameNumber, &frame);
+    }
+
+    // The per-frame vectors are pushed together under the same phase test, so they pair by index
+    const size_t numFrames = std::min({ perfRun.cpuFrameMs.size(),
+                                        perfRun.wallPeriodMs.size(),
+                                        perfRun.cameraPos_WS.size(),
+                                        perfRun.cpuScopeSamples.size() });
+    ASSERT(numFrames == perfRun.cpuFrameMs.size());
+    nlohmann::json json = nlohmann::json::array();
+    for (size_t i = 0; i < numFrames; ++i)
+    {
+        const uint32_t frameNumber = perfRun.measureStartFrame + static_cast<uint32_t>(i);
+        const glm::vec3& cameraPos = perfRun.cameraPos_WS[i];
+        nlohmann::json frame = {
+            { "frame", frameNumber },
+            { "wallPeriodMs", perfRun.wallPeriodMs[i] },
+            { "cpuMs", perfRun.cpuFrameMs[i] },
+            { "cameraPos", { cameraPos.x, cameraPos.y, cameraPos.z } },
+            { "cpuScopes", scopeTimelineJson(perfRun.cpuScopeSamples[i]) },
+        };
+        const auto gpuIt = gpuByFrame.find(frameNumber);
+        if (gpuIt != gpuByFrame.end())
+        {
+            frame["gpuMs"] = gpuIt->second->totalMs;
+            frame["gpuBeginMs"] = gpuIt->second->beginMs;
+            frame["gpuScopes"] = scopeTimelineJson(gpuIt->second->scopes);
+        }
+        json.push_back(std::move(frame));
+    }
+    return json;
+}
+
 static nlohmann::json buildResultsJson()
 {
     const PerfRunState& perfRun = renderState.perfRun;
@@ -491,6 +548,7 @@ static nlohmann::json buildResultsJson()
             { "gapMs", statsJson(gpuGapMs) },
             { "periodMs", statsJson(gpuPeriodMs) },
             { "scopes", gpuScopes.toJson() } } },
+        { "frames", framesJson() },
     };
 }
 

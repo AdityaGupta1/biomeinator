@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-21_
 
 # Chunk State Machine
 
@@ -8,7 +8,7 @@ Each chunk has an `atomic<ChunkState>` that progresses strictly forward from `NE
 
 **Main-thread**: the terrain manager's scan checks state and enqueues the next task (e.g. `NEEDS_TERRAIN` → `GENERATING_TERRAIN`).
 
-**Worker-thread**: a completed task advances to the "done" state (e.g. `GENERATING_TERRAIN` → `HAS_TERRAIN`) and calls `setDirty()` to trigger a re-scan.
+**Worker-thread**: a completed task advances to the "done" state (e.g. `GENERATING_TERRAIN` → `HAS_TERRAIN`) and calls `Terrain::addChunkToRevisit()` so the main thread schedules that chunk's next stage without a full re-scan.
 
 **Dependency-driven** (the non-obvious ones):
 - `AWAITING_STRUCTURE_NEIGHBORS` → `NEEDS_FILL_STRUCTURES`: the last structure neighbor's `checkStructureNeighbors()` increments an atomic counter to the threshold. This can fire on any worker thread.

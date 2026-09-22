@@ -4,15 +4,19 @@
     python tests/run_perf.py run [-f REGEX] [-o OUTDIR] [--exe EXE] [extra Biomeinator args...]
     python tests/run_perf.py show OUTDIR_OR_JSON
     python tests/run_perf.py compare BASELINE_DIR CANDIDATE_DIR
+    python tests/run_perf.py spikes JSON [--above MS] [--top N]
 
 `run` launches Biomeinator.exe once per entry with `--perfOutput=<OUTDIR>/<name>.json` and
 prints each report. `compare` prints per-scope median deltas between two output directories
-produced by `run`. Extra arguments after `run`'s own options are passed through to every
-launch (e.g. `--perfFrames=600`).
+produced by `run`. `spikes` walks a report's per-frame timeline and prints every frame whose
+wall period exceeds a threshold, with the scopes that were furthest above their own median
+and whether the camera crossed a chunk boundary. Extra arguments after `run`'s own options are
+passed through to every launch (e.g. `--perfFrames=600`).
 """
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -174,6 +178,65 @@ def cmd_compare(args):
         print(f"\n{name}: only in {'baseline' if name in baseline else 'candidate'}")
 
 
+CHUNK_SIZE_XZ = 16
+
+
+def chunk_pos(camera_pos):
+    """The engine's camera chunk: truncating division of the integer position (Terrain::update)."""
+    return (math.trunc(math.floor(camera_pos[0]) / CHUNK_SIZE_XZ),
+            math.trunc(math.floor(camera_pos[2]) / CHUNK_SIZE_XZ))
+
+
+def scope_medians(frames, key):
+    """Median ms per (name, depth) over the frames that recorded that scope."""
+    samples = {}
+    for frame in frames:
+        for name, depth, ms in frame.get(key, []):
+            samples.setdefault((name, depth), []).append(ms)
+    return {scope: sorted(values)[len(values) // 2] for scope, values in samples.items()}
+
+
+def scope_excess(frame, key, medians, top):
+    """The frame's scopes furthest above their median, as 'name +x.xx' strings."""
+    excess = [(ms - medians[(name, depth)], name, ms) for name, depth, ms in frame.get(key, [])]
+    excess.sort(reverse=True)
+    return [f"{name} {ms:.2f} (+{delta:.2f})" for delta, name, ms in excess[:top] if delta > 0.05]
+
+
+def cmd_spikes(args):
+    reports = load_reports(args.path)
+    for name, report in reports.items():
+        frames = report.get("frames")
+        if not frames:
+            print(f"{name}: no per-frame timeline in this report")
+            continue
+        periods = sorted(frame["wallPeriodMs"] for frame in frames)
+        median = periods[len(periods) // 2]
+        threshold = args.above if args.above is not None else median * 1.5
+        cpu_medians = scope_medians(frames, "cpuScopes")
+        gpu_medians = scope_medians(frames, "gpuScopes")
+
+        crossing_frames = set()
+        for prev, frame in zip(frames, frames[1:]):
+            if chunk_pos(prev["cameraPos"]) != chunk_pos(frame["cameraPos"]):
+                crossing_frames.add(frame["frame"])
+
+        spikes = [frame for frame in frames if frame["wallPeriodMs"] > threshold]
+        print(f"\n{name}: wall period median {median:.2f} ms, {len(spikes)} of {len(frames)} frames above "
+              f"{threshold:.2f} ms, {len(crossing_frames)} chunk crossings")
+        # A crossing's cost lands on the frames right after it too
+        near_crossing = sum(1 for frame in spikes
+                            if any(frame["frame"] - k in crossing_frames for k in range(0, args.window + 1)))
+        print(f"  {near_crossing} spikes within {args.window} frames after a crossing")
+        for frame in spikes:
+            since = min((frame["frame"] - c for c in crossing_frames if c <= frame["frame"]), default=None)
+            tag = f"crossing+{since}" if since is not None and since <= args.window else ""
+            gpu = f"{frame['gpuMs']:.2f}" if "gpuMs" in frame else "-"
+            print(f"  frame {frame['frame']:>6} wall {frame['wallPeriodMs']:>7.2f} cpu {frame['cpuMs']:>6.2f} "
+                  f"gpu {gpu:>6} {tag:<12} cpu: {', '.join(scope_excess(frame, 'cpuScopes', cpu_medians, args.top))}"
+                  f" | gpu: {', '.join(scope_excess(frame, 'gpuScopes', gpu_medians, args.top))}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -190,6 +253,12 @@ def main():
     compare.add_argument("baseline")
     compare.add_argument("candidate")
 
+    spikes = subparsers.add_parser("spikes")
+    spikes.add_argument("path")
+    spikes.add_argument("--above", type=float, help="wall period threshold in ms (default 1.5x median)")
+    spikes.add_argument("--top", type=int, default=3, help="scopes to list per spike")
+    spikes.add_argument("--window", type=int, default=3, help="frames after a chunk crossing to attribute to it")
+
     args, passthrough = parser.parse_known_args()
     if passthrough and args.command != "run":
         parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -197,6 +266,8 @@ def main():
         cmd_run(args, passthrough)
     elif args.command == "show":
         cmd_show(args)
+    elif args.command == "spikes":
+        cmd_spikes(args)
     else:
         cmd_compare(args)
 

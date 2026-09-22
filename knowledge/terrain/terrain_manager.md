@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Terrain Manager
 
@@ -37,6 +37,20 @@ The BLAS build cap in `Scene::makeQueuedBlases` is the matching limit on the ren
 
 `Terrain::update` hands the scene the circle within which water instances animate together with the wave fade radii: the fade ends at `waterAnimationChunks` (24) and starts eight chunks before it, and the set's radius extends a further two and a half chunks past the end so chunks leave it flat. The frustum side of the limit is set by the renderer, not here. See [scene → scene.md](../scene/scene.md#deformable-instances) for why the fade exists and what animated water costs.
 
-## Dirty Flag
+## Revisit List and Dirty Flag
 
-Worker threads call `Terrain::setDirty()` when they complete a stage that may unblock other chunks. Without this, the update loop would only re-scan when the camera moves, leaving unblocked chunks stuck until the player walks.
+The full scan over every chunk within generate distance costs about a millisecond per
+thousand chunks squared of range (1.2 ms at render distance 50), so it only runs when the
+camera changes chunk. Worker threads that advance a chunk's state, their own or a
+neighbour's whose dependency counter they completed, push it through
+`Terrain::addChunkToRevisit`; the next update runs the same per-chunk scheduling
+(`scheduleChunkWork`) on just those chunks, with the "last" camera chunk equal to the current
+one so the enter/leave logic is a no-op. The list is taken before a full scan and discarded
+by it, since the scan covers everything in range and a chunk out of range has nothing to
+schedule. `Terrain::setDirty()` remains for the cases that need the full scan without a camera
+move: world import and reset.
+
+`renderDistance` is read every update but is not meant to change at runtime (for the time
+being): the zones above are only re-evaluated for every chunk on a camera chunk change, so a
+live edit would take effect on the next crossing rather than immediately, and nothing resizes
+the per-distance buffers or the light structures for it.

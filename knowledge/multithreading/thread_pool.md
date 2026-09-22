@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Thread Pool
 
@@ -22,6 +22,15 @@ The pool keeps two relaxed atomics for measurement rather than scheduling: summe
 nanoseconds across workers (perf runs report worker utilization from it) and the number of
 tasks queued or executing, which `Terrain::getStreamingStats` exposes so a perf run can tell
 "nothing landed in the scene this frame" from "generation is finished".
+
+## Priority
+
+Workers run at `THREAD_PRIORITY_BELOW_NORMAL`. With one worker per core but one, a chunk
+crossing that bulk-enqueues ~200 tasks wakes all of them at once, and at normal priority the
+main thread lost its core for a scheduler quantum somewhere in that frame (measured as 3 to
+10 ms holes in whatever scope was running, on top of the real work). Lower priority keeps the
+render thread scheduled first; the workers still saturate the machine between frames. See
+[tests → perf_runs.md](../tests/perf_runs.md#per-frame-timeline-and-chunk-crossings).
 
 ## Lifetime
 

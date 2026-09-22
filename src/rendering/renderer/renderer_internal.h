@@ -338,8 +338,13 @@ struct PerfRunState
     bool timedOut{ false };
     bool stablePowerState{ false };
     std::vector<GpuProfiler::FrameTimings> gpuSamples;
+    // Per measured frame, in frame order, so the report can also give a timeline for finding
+    // what a particular spike was
     std::vector<double> cpuFrameMs;
+    std::vector<double> wallPeriodMs; // begin to begin, waits included
+    std::vector<glm::vec3> cameraPos_WS;
     std::vector<std::vector<CpuProfiler::ScopeTiming>> cpuScopeSamples;
+    std::chrono::steady_clock::time_point prevCpuFrameStart{};
 
     // World streaming before the measured window: from the first frame with terrain work or a
     // scene change until the last scene change before warmup goes quiet. Samples keep

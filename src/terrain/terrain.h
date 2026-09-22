@@ -19,7 +19,11 @@ void init(Scene* scene);
 
 void addChunkToCreateBlas(Chunk* chunk);
 void addChunkToDestroy(Chunk* chunk);
+// For workers that advanced a chunk's state: the main thread schedules its next stage without
+// rescanning every chunk in range
+void addChunkToRevisit(Chunk* chunk);
 
+// Forces a full scan of every chunk in range on the next update
 void setDirty();
 
 void update(ToFreeList& toFreeList);
