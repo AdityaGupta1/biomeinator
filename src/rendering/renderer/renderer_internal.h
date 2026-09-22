@@ -356,6 +356,8 @@ struct PerfRunState
     uint32_t streamingBlasBuilds{ 0 };
     uint64_t workerBusyNanosAtStart{ 0 };
     double streamingWorkerUtilization{ 0.0 };
+
+    DirectX::XMFLOAT3 moveDirection{ 0.f, 0.f, 1.f }; // current random-walk heading, camera relative
 };
 
 struct ScreenshotRequest

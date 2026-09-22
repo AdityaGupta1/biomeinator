@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-21_
 
 # Perf Runs
 
@@ -88,7 +88,11 @@ p95 is a symptom, not a cause.
 
 `--perfMoveSpeed=<blocks/s>` moves the camera forward during the measuring phase only, after
 the world has loaded, which is how streaming through a loaded world is measured; the
-`worldgen_move` scene does this at 20 blocks/s for 1500 frames. The movement uses a fixed
+`worldgen_move` scene does this at 20 blocks/s for 1500 frames. `--perfMoveTurnFrames=<N>`
+turns that into a random walk, picking a new horizontal heading every N frames from a generator
+seeded by the world seed, so repeated runs take the same path. A walk revisits chunks and frees
+and allocates in a non-FIFO order, which is what fragmentation measurements need; a straight
+line is the friendlier case for any allocator. The movement uses a fixed
 1/60 s step per frame rather than real elapsed time, so two runs cover the same path and hit
 the same chunk boundaries on the same frames however fast their frames were. Moving at that speed on
 seed 100 (2026-09-20), the spikes above the 12.3 ms floor came from: BLAS build frames (about

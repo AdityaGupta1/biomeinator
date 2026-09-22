@@ -7,6 +7,7 @@
 #include "settings_manager.h"
 #include "terrain/terrain.h"
 #include "util/file_util.h"
+#include "util/rng.h"
 
 #include <json.hpp>
 
@@ -245,12 +246,33 @@ bool perfRunIsMovingCamera()
     return perfRun.active && perfRun.phase == PerfPhase::MEASURING && SettingsManager::getAsFloat("perfMoveSpeed") > 0.f;
 }
 
+// Camera-relative horizontal direction of the measured movement: straight ahead, or a random walk
+// whose headings come from a seeded generator so two runs cover the same path
+static DirectX::XMFLOAT3 perfRunMoveDirection()
+{
+    const uint32_t turnFrames = SettingsManager::getAsUint("perfMoveTurnFrames");
+    if (turnFrames == 0)
+    {
+        return { 0.f, 0.f, 1.f };
+    }
+
+    PerfRunState& perfRun = renderState.perfRun;
+    const uint32_t measuredFrame = renderState.frameNumber - perfRun.measureStartFrame;
+    if (measuredFrame % turnFrames == 0)
+    {
+        RandomNumberGenerator rng{ hash(SettingsManager::getAsUint("worldSeed") ^ hash(measuredFrame / turnFrames)) };
+        const float heading = rng.nextFloat(2.f * DirectX::XM_PI);
+        perfRun.moveDirection = { std::sin(heading), 0.f, std::cos(heading) };
+    }
+    return perfRun.moveDirection;
+}
+
 PlayerInput perfRunPlayerInput()
 {
     PlayerInput input;
     if (perfRunIsMovingCamera())
     {
-        input.linearInput = { 0.f, 0.f, 1.f };
+        input.linearInput = perfRunMoveDirection();
         input.linearSpeedMultiplier = SettingsManager::getAsFloat("perfMoveSpeed") / SettingsManager::getAsFloat("movementSpeed");
     }
     return input;
@@ -457,6 +479,7 @@ static nlohmann::json buildResultsJson()
               { "renderHeight", renderState.renderHeight },
               { "frameGenActive", renderState.frameGen.active },
               { "moveSpeed", SettingsManager::getAsFloat("perfMoveSpeed") },
+              { "moveTurnFrames", SettingsManager::getAsUint("perfMoveTurnFrames") },
               { "measuredFrames", perfRun.gpuSamples.size() },
               { "measureStartFrame", perfRun.measureStartFrame },
               { "stablePowerState", perfRun.stablePowerState },
