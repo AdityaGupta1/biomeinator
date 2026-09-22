@@ -7,6 +7,8 @@
 
 #include "thread_memory_allocator.h"
 
+#include "rendering/dxr_includes.h"
+
 #include <chrono>
 
 #define MAX_NUM_LOCAL_TASKS 8
@@ -29,6 +31,9 @@ void ThreadPool::init(uint32_t numWorkers)
 
 void ThreadPool::worker()
 {
+    // See knowledge/multithreading/thread_pool.md for why workers yield to the render thread
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+
     ThreadMemoryAllocator threadMemoryAlloc{};
     Task localTasks[MAX_NUM_LOCAL_TASKS];
 

@@ -120,9 +120,10 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
     }
     this->buildTerrainAirMask();
 
-    this->advanceState(ChunkState::HAS_TERRAIN);
-
-    Terrain::setDirty();
+    if (this->advanceState(ChunkState::HAS_TERRAIN))
+    {
+        Terrain::addChunkToRevisit(this);
+    }
 }
 
 void Chunk::buildTerrainAirMask()
@@ -192,7 +193,6 @@ void Chunk::checkStructureNeighbors()
         ASSERT(corner != nullptr);
     }
 
-    bool setTerrainDirty = false;
     Chunk* rowStart = corner;
     for (uint32_t z = 0; z < sideLength; ++z)
     {
@@ -202,10 +202,10 @@ void Chunk::checkStructureNeighbors()
             this->structureNeighbors.push_back(current);
 
             const uint32_t neighborNumReady = current->numReadyStructureNeighbors.fetch_add(1, std::memory_order_acq_rel) + 1;
-            if (neighborNumReady == totalNumStructureNeighbors && current->getState() >= ChunkState::HAS_TERRAIN)
+            if (neighborNumReady == totalNumStructureNeighbors && current->getState() >= ChunkState::HAS_TERRAIN &&
+                current->advanceState(ChunkState::NEEDS_FILL_STRUCTURES))
             {
-                current->advanceState(ChunkState::NEEDS_FILL_STRUCTURES);
-                setTerrainDirty = true;
+                Terrain::addChunkToRevisit(current);
             }
 
             if (x < sideLength - 1)
@@ -220,11 +220,6 @@ void Chunk::checkStructureNeighbors()
             rowStart = rowStart->neighbors[static_cast<size_t>(NeighborDirection::Z_POS)];
             ASSERT(rowStart != nullptr);
         }
-    }
-
-    if (setTerrainDirty)
-    {
-        Terrain::setDirty();
     }
 }
 
@@ -426,8 +421,6 @@ void Chunk::fillStructuresAndDecorators()
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
 
-    bool setTerrainDirty = false;
-
     for (Chunk* neighborChunk : this->neighbors)
     {
         if (neighborChunk == nullptr)
@@ -437,22 +430,17 @@ void Chunk::fillStructuresAndDecorators()
 
         const uint neighborNumNeighborsWithBlocks =
             neighborChunk->numNeighborsWithBlocks.fetch_add(1, std::memory_order_acq_rel) + 1;
-        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
+        if (neighborNumNeighborsWithBlocks == 4 && neighborChunk->getState() >= ChunkState::HAS_ALL_BLOCKS &&
+            neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS))
         {
-            neighborChunk->advanceState(ChunkState::NEEDS_SEGMENTS);
-            setTerrainDirty = true;
+            Terrain::addChunkToRevisit(neighborChunk);
         }
     }
 
-    if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4)
+    if (this->numNeighborsWithBlocks.load(std::memory_order_acquire) == 4 &&
+        this->advanceState(ChunkState::NEEDS_SEGMENTS))
     {
-        this->advanceState(ChunkState::NEEDS_SEGMENTS);
-        setTerrainDirty = true;
-    }
-
-    if (setTerrainDirty)
-    {
-        Terrain::setDirty();
+        Terrain::addChunkToRevisit(this);
     }
 }
 
@@ -672,8 +660,10 @@ void Chunk::generateSegments(ThreadMemoryAllocator& threadMemoryAlloc)
         }
     }
 
-    this->advanceState(ChunkState::NEEDS_GEOMETRY);
-    Terrain::setDirty();
+    if (this->advanceState(ChunkState::NEEDS_GEOMETRY))
+    {
+        Terrain::addChunkToRevisit(this);
+    }
 }
 
 static inline DirectX::XMFLOAT3 vec3ToDirectX(const glm::vec3& v)

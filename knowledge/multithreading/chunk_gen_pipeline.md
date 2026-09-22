@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-21_
 
 # Chunk Generation Pipeline
 
@@ -14,7 +14,7 @@ The terrain system uses five task types, all dispatched through the same thread 
 
 ## Ordering Enforcement
 
-No explicit barriers or dependency graphs exist. Ordering is emergent from the state machine: each task advances the chunk's state upon completion, and the terrain manager only enqueues the next task type when the required state is reached. Worker threads never directly enqueue follow-up tasks for the same chunk — they signal `setDirty()` and the main thread picks it up next frame.
+No explicit barriers or dependency graphs exist. Ordering is emergent from the state machine: each task advances the chunk's state upon completion, and the terrain manager only enqueues the next task type when the required state is reached. Worker threads never directly enqueue follow-up tasks for the same chunk — they hand it to the main thread's revisit list (`Terrain::addChunkToRevisit`) and it is scheduled next frame.
 
 ## Why Main-Thread Gating Matters
 

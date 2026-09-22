@@ -316,6 +316,7 @@ void Scene::reset()
         pending.builds.clear();
     }
     this->deformableInstances.clear();
+    this->animatedDeformables.clear();
     this->animatedDeformablesDirty = true;
     this->tlasInstanceEntries.clear();
     this->tlasEntriesNeedCompaction = false;
@@ -397,9 +398,7 @@ void Scene::freeInstance(Instance* instance)
     this->instancesReadyForBlasBuild.erase(instance);
     if (this->deformableInstances.erase(instance) > 0)
     {
-        // Also drop it from the cached subset, which is compared against on the next rebuild
         std::erase(this->animatedDeformables, instance);
-        this->animatedDeformablesDirty = true;
     }
 
     auto instanceIter = this->instances.find(instance->id);
@@ -511,14 +510,17 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         didChange = true;
     }
 
-    for (Instance* const instance : this->pendingTlasEntryAdds)
     {
-        if (instance->isVisible && !instance->isScheduledForDeletion && instance->geoWrapper.blasBufferSection.isValid())
+        CPU_PROFILE_SCOPE("tlas entry adds");
+        for (Instance* const instance : this->pendingTlasEntryAdds)
         {
-            this->addTlasEntry(instance, cmdList, toFreeList);
+            if (instance->isVisible && !instance->isScheduledForDeletion && instance->geoWrapper.blasBufferSection.isValid())
+            {
+                this->addTlasEntry(instance, cmdList, toFreeList);
+            }
         }
+        this->pendingTlasEntryAdds.clear();
     }
-    this->pendingTlasEntryAdds.clear();
 
     this->prevGlobalInstanceOffset = this->globalInstanceOffset;
     // Intentionally rebuild the TLAS every frame once one exists, even on frames with no
@@ -615,6 +617,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     if (this->animatedDeformablesDirty)
     {
+        CPU_PROFILE_SCOPE("animated set");
         std::vector<Instance*> previouslyAnimated = std::move(this->animatedDeformables);
         this->animatedDeformables.clear();
         for (Instance* const instance : this->deformableInstances)
@@ -660,6 +663,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "water displace");
+        CPU_PROFILE_SCOPE("water displace");
         WaterDisplacer::dispatch(
             cmdList, toFreeList, this->managedVertsBuffer.getGpuVirtualAddress(), waveTime, this->waveFade, allDispatchInputs);
     }
@@ -672,6 +676,7 @@ void Scene::updateDeformableInstances(ID3D12GraphicsCommandList4* cmdList, ToFre
 
     {
         GPU_PROFILE_SCOPE(cmdList, "blas refit");
+        CPU_PROFILE_SCOPE("blas refit");
         AcsHelper::updateBlases(cmdList, toFreeList, geoWrappers);
     }
 }
@@ -837,7 +842,11 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         if (instance->isDeformable)
         {
             this->deformableInstances.insert(instance);
-            this->animatedDeformablesDirty = true;
+            // Membership of the others is unchanged, so only the new one is tested
+            if (this->isDeformableAnimated(instance))
+            {
+                this->animatedDeformables.push_back(instance);
+            }
         }
 
         if (instance->isVisible)
