@@ -71,8 +71,8 @@ builds never need this because they write virgin memory.
 
 Static BLASes (everything but water) are built with `ALLOW_COMPACTION` and copied into a
 section of their compacted size a few frames later; on the RTX 4070 SUPER this took terrain
-BLASes from ~77 to ~21 bytes per triangle (1.9 GB to 0.5 GB at render distance 30), and it
-is what the `blasCompaction` setting toggles. The compacted size is only known after the
+BLASes from ~77 to ~21 bytes per triangle (1.9 GB to 0.5 GB at render distance 30). The
+compacted size is only known after the
 build has run, so the round trip is spread across the frame contexts:
 
 - The build itself writes a `COMPACTED_SIZE` postbuild info entry (passed to

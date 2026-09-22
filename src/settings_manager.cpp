@@ -41,7 +41,6 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcStaleFrames", "SHARC eviction age", uint32_t, "64");
     ADD_OPTION("sharcWarmupFrames", "Cache warmup before screenshot accumulation", uint32_t, "64");
     ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance", uint32_t, "0");
-    ADD_OPTION("blasCompaction", "Compact static BLASes after build", bool, "true");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
@@ -161,7 +160,6 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("sharcStaleFrames", uint32_t);
     COPY_SETTING("sharcWarmupFrames", uint32_t);
     COPY_SETTING("sharcDebug", uint32_t);
-    COPY_SETTING("blasCompaction", bool);
     COPY_SETTING("maxPathDepth", uint32_t);
     COPY_SETTING("scene", std::string);
     COPY_SETTING("testOutput", std::string);

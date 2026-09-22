@@ -15,7 +15,6 @@
 #include "rendering/gpu_profiler.h"
 #include "rendering/renderer.h"
 #include "rendering/water_displacer.h"
-#include "settings_manager.h"
 #include "util/math.h"
 #include "util/util.h"
 
@@ -723,7 +722,6 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     std::vector<AcsHelper::BlasBuildInputs> allBlasInputs;
     allBlasInputs.reserve(instancesToBuildThisFrame.size());
 
-    const bool compactBlases = SettingsManager::getAsBool("blasCompaction");
     PendingBlasCompaction& pending = this->pendingBlasCompactions[Renderer::getFrameIndex()];
     ASSERT(pending.builds.empty()); // consumed by compactBuiltBlases earlier this frame
     std::vector<Instance*> compactableInstances;
@@ -751,7 +749,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
 
         blasInputs.allowUpdate = instance->isDeformable;
-        blasInputs.allowCompaction = compactBlases && !instance->isDeformable;
+        blasInputs.allowCompaction = !instance->isDeformable;
         blasInputs.isOpaque = instance->isOpaque;
         blasInputs.outGeoWrapper = &instance->geoWrapper;
 
@@ -769,7 +767,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
                           &this->managedVertsBuffer,
                           &this->managedIdxsBuffer,
                           allBlasInputs,
-                          compactBlases ? &pending.query : nullptr);
+                          &pending.query);
     ASSERT(pending.query.numEntries == compactableInstances.size());
     for (const Instance* const instance : compactableInstances)
     {
