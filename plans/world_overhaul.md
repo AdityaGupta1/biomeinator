@@ -50,6 +50,25 @@ Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianz
 
 Remaining lowland issue: lowland climate targets all have negative peak, and `distance2` weighs peak like climate, so high-peak lowland (eroded high ground, or high ground near the coast) picks whichever low-peak target is least wrong (e.g. forest on hot, dry ground at peak ~0.96, seed 100 x≈3863). Since relief already decides lowland vs highland, the simplest fix is for the lowland search to ignore peak; decide alongside `plans/biome_balancing.md`.
 
+### Coverage today and what it implies (2026-09-22)
+
+Measured over seeds 1–20, 32k×32k blocks each, macro biome field (`build/probe/coverage.cpp`; the scanner coverage report in `plans/biome_balancing.md` should replace it):
+
+| share of land | biomes |
+|---|---|
+| 32% | forest |
+| 14% | mountains |
+| 5–7% | tianzi, beach, savanna, red desert, gravel beach, ice fields |
+| 3–4% | desert, plains, tundra, mesa |
+| ≤2.4% | black sand beach, swamp, oasis |
+
+- **Forest is far too prevalent.** Its climate target sits near where temperature/humidity values cluster, so it wins most mild ground. Break it up with many **mild biomes**, especially forest variants that share the climate band but differ in trees and ground cover. Candidates: birch forest, old-growth / dark forest, autumn / maple forest, cherry grove, mixed conifer forest, flower meadow, and the Atlantic forest from the roster. Several mild targets close together also make equalization (below) more effective, since the dense middle of climate space gets divided among more biomes.
+- **Mountains shrink once the highland biomes land** (cloud forest, taiga, moor/alpine meadow, high desert steppe above): today every high-relief column is mountains.
+- **Biomes are too small and chaotic.** Borders change too often and produce tiny slivers. Two separate fixes:
+  - *Scale:* raise the climate noise scales (`biomeNoiseScale` and the per-field `SetScale`/warp settings in `biome_noise.cpp`) so regions are larger overall. Terrain relief fields (peak, erosion, inland) can stay at their own scales; landform regimes that multiply several fields will grow with them.
+  - *Slivers:* after scaling, measure connected-patch sizes (scanner report) and remove what remains with the balancing plan's tools: axis equalization plus relaxation for even shares, and a minimum patch size for multi-axis regimes (Tianzi etc.), whose products produce stringy regions.
+- Order: add biomes first (more mild and highland targets), then scale, then balance, since every added biome reshuffles shares.
+
 ### Seaside cliffs (Big Sur)
 
 A coastal landform, with the label derived from it:
