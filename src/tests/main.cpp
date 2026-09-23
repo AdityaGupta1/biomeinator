@@ -142,6 +142,8 @@ int main(int argc, char** argv)
             command += " " + arg;
         }
         std::cout << command << std::endl << std::endl;
+        // Run outside the sandbox: denied NVIDIA telemetry pipe access can leave the child
+        // waiting in slShutdown() after saving its screenshot. See knowledge/tests/golden_tests.md.
         const int ret = std::system(command.c_str());
         TEST_ASSERT(ret == 0);
         if (ret != 0)
