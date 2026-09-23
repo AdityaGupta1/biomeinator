@@ -366,19 +366,7 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     {
         closestBiomeCandidates = &beachBiomes;
     }
-    else if (BiomeNoiseFields::tianziSuitability(biomeNoise) > BiomeNoiseFields::tianziBiomeThreshold)
-    {
-        return Biome::TIANZI_MOUNTAINS;
-    }
-    else if (BiomeNoiseFields::dryClimateWeight(biomeNoise) > 0.35f)
-    {
-        if (BiomeNoiseFields::terraceWeight(biomeNoise) > 0.4f)
-        {
-            return Biome::MESA;
-        }
-        return biomeNoise.erosion < 0.35f ? Biome::RED_DESERT : Biome::DESERT;
-    }
-    else if (biomeNoise.inland < 0.85f && !(biomeNoise.peak > 0.0f && biomeNoise.erosion < 0.0f))
+    else if (biomeNoise.inland < 0.85f && BiomeNoiseFields::highlandReliefWeight(biomeNoise) < 0.35f)
     {
         closestBiomeCandidates = &lowlandBiomes;
     }

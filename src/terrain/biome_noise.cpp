@@ -8,6 +8,7 @@
 #include "rendering/common/common_settings.h"
 #include "util/rng.h"
 
+#include <array>
 #include <vector>
 
 #include <FastNoise/FastNoise.h>
@@ -177,7 +178,22 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
     };
 }
 
-float terraceWeight(const BiomeNoise& n)
+static float landWeight(const BiomeNoise& n)
+{
+    return smoothstep(0.f, 0.35f, n.inland);
+}
+
+static float ruggedWeight(const BiomeNoise& n)
+{
+    return 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
+}
+
+float highlandReliefWeight(const BiomeNoise& n)
+{
+    return ruggedWeight(n) * smoothstep(0.25f, 1.05f, n.inland);
+}
+
+static float terraceWeight(const BiomeNoise& n)
 {
     return smoothstep(-0.18f, 0.02f, n.erosion) * (1.f - smoothstep(0.27f, 0.48f, n.erosion)) *
            smoothstep(0.1f, 0.3f, n.inland);
@@ -188,7 +204,7 @@ float dryClimateWeight(const BiomeNoise& n)
     return smoothstep(0.12f, 0.38f, n.temperature) * (1.f - smoothstep(-0.25f, 0.02f, n.humidity));
 }
 
-float tianziSuitability(const BiomeNoise& n)
+static float tianziSuitability(const BiomeNoise& n)
 {
     // Karst occupies humid, temperate-to-warm rugged regions. Cold or dry mountain
     // climates retain ordinary peaks instead of being intercepted by erosion alone.
@@ -199,18 +215,55 @@ float tianziSuitability(const BiomeNoise& n)
     return temperate * humid * preserved * smoothstep(0.08f, 0.32f, n.inland);
 }
 
-float tianziWeight(const BiomeNoise& n)
+static float mesaSuitability(const BiomeNoise& n)
 {
-    // Ramping the complete suitability (rather than separately fading each axis)
-    // keeps the coastal and climate boundaries from cutting through full-height towers.
-    return smoothstep(tianziBiomeThreshold, 0.85f, tianziSuitability(n));
+    return terraceWeight(n) * dryClimateWeight(n);
+}
+
+static float redDesertSuitability(const BiomeNoise& n)
+{
+    return dryClimateWeight(n) * landWeight(n) * ruggedWeight(n);
+}
+
+struct TerrainRegimeData
+{
+    Biome biome;
+    float (*suitability)(const BiomeNoise&);
+    // Label boundary.
+    float threshold;
+    // Suitability at full terrain weight. The same ramp width, mirrored below the threshold,
+    // fades lower-priority regimes out before this regime's label begins.
+    float fullStrength;
+};
+
+// Swamp terrain comes from flood cells (see swamp_shaping), not from its regime weight; its
+// ramp only sets how lower-priority regimes fade out next to wetlands.
+static const std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
+    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f },
+    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f },
+    { Biome::MESA, mesaSuitability, 0.15f, 0.5f },
+    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f },
+}};
+
+float regimeWeight(TerrainRegime regime, const BiomeNoise& n)
+{
+    // Ramping the complete suitability (rather than separately fading each axis) keeps
+    // coastal and climate boundaries from cutting through full-strength landforms.
+    const size_t regimeIdx = static_cast<size_t>(regime);
+    const TerrainRegimeData& data = regimes[regimeIdx];
+    float weight = smoothstep(data.threshold, data.fullStrength, data.suitability(n));
+    for (size_t claimantIdx = 0; claimantIdx < regimeIdx && weight > 0.f; ++claimantIdx)
+    {
+        const TerrainRegimeData& claimant = regimes[claimantIdx];
+        const float rampWidth = claimant.fullStrength - claimant.threshold;
+        weight *= 1.f - smoothstep(claimant.threshold - rampWidth, claimant.threshold, claimant.suitability(n));
+    }
+    return weight;
 }
 
 float surfaceDetailWeight(const BiomeNoise& n)
 {
-    const float dry = dryClimateWeight(n);
-    const float mesa = smoothstep(0.4f, 0.75f, terraceWeight(n)) * smoothstep(0.35f, 0.65f, dry);
-    return max(mesa, tianziWeight(n));
+    return max(regimeWeight(TerrainRegime::MESA, n), regimeWeight(TerrainRegime::TIANZI, n));
 }
 
 static float terraceHeight(float height, const BiomeNoise& n)
@@ -239,11 +292,11 @@ static float terraceHeight(float height, const BiomeNoise& n)
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
 {
     const float peak = clamp((n.peak + 1.f) * 0.5f, 0.f, 1.f);
-    const float land = smoothstep(0.f, 0.35f, n.inland);
-    const float rugged = 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
+    const float land = landWeight(n);
+    const float rugged = ruggedWeight(n);
     const float dry = dryClimateWeight(n);
-    const float terraces = terraceWeight(n) * dry;
-    const float tianzi = tianziWeight(n);
+    const float terraces = regimeWeight(TerrainRegime::MESA, n);
+    const float tianzi = regimeWeight(TerrainRegime::TIANZI, n);
     const vec2 pos = posXZ_WS + vec2(noiseOffsetXZ);
 
     const float inlandHeight = 1.f / (1.f + expf(-10.f * n.inland + 0.1f)) + 0.03f * n.inland - 0.7f;
@@ -252,7 +305,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     // in preserved highlands, without lifting dry plateaus or roughening flat lowlands.
     const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f) * (1.f - dry * 0.75f);
     const float mountainClimate = 1.f - smoothstep(0.05f, 0.35f, dry);
-    const float highland = rugged * smoothstep(0.25f, 1.05f, n.inland) * mountainClimate;
+    const float highland = highlandReliefWeight(n) * mountainClimate;
     const float peakRelief = 160.f * highland * pow(peak, 4.f);
     // Complementary weights blend complete profiles: as Tianzi weight removes the extra
     // peak relief, the same weight supplies the stacked formations below.
@@ -282,13 +335,13 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
         }};
         uplift = tianzi * TerrainFormations::sampleStacked(pos, noiseFieldSeed ^ 0x75423u, tiers, &formationSite);
     }
-    // Quartz is an explicit formation in dry, non-terraced terrain. It reuses the same
-    // finite-support sampler with a narrow summit and a broad foot, not a new noise field.
-    const float quartzWeight = dry * land * (1.f - smoothstep(0.f, 0.4f, terraceWeight(n))) * rugged;
-    if (quartzWeight > 0.f)
+    // Quartz spires are the red desert's formation. They reuse the same finite-support
+    // sampler with a narrow summit and a broad foot, not a new noise field.
+    const float spireWeight = regimeWeight(TerrainRegime::RED_DESERT, n);
+    if (spireWeight > 0.f)
     {
         constexpr TerrainFormations::Profile spires{ 116.f, 6.5f, 34.f, 42.f, 24.f, 0.04f, 1.f };
-        uplift += quartzWeight * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x91337u, spires);
+        uplift += spireWeight * TerrainFormations::sample(pos, noiseFieldSeed ^ 0x91337u, spires);
     }
     height += uplift;
 
@@ -318,9 +371,12 @@ float computeFloodFactor(const BiomeNoise& biomeNoise)
 
 Biome biomeFromNoise(const BiomeNoise& biomeNoise)
 {
-    if (computeFloodFactor(biomeNoise) > floodTintThreshold)
+    for (const TerrainRegimeData& regime : regimes)
     {
-        return Biome::SWAMP;
+        if (regime.suitability(biomeNoise) > regime.threshold)
+        {
+            return regime.biome;
+        }
     }
     return Biomes::getClosestBiome(biomeNoise);
 }

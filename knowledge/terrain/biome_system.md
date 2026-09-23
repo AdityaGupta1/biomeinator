@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Biome System
 
@@ -11,20 +11,33 @@ the 3D [cave_biome_system.md](cave_biome_system.md).
 
 ## Selection Logic
 
-Ocean and beach are partitioned by inlandness first, keeping climate from turning coastlines
-into inland biomes. Tianzi suitability combines humidity, a temperate-to-warm temperature
-window, preserved relief and inlandness. Its label and terrain strength derive from the same
-combined value; checking erosion first used to claim cold/dry mountain regions as Tianzi.
-Hot, dry terrain becomes Mesa where terraces dominate, Red Desert where ruggedness
-dominates, and ordinary desert in the eroded regime. Remaining terrain uses the original
-nearest climate/peak target among lowland or highland candidates; low erosion can enable
-highlands without requiring extreme inlandness.
+Biomes whose label must agree with a landform are **terrain regimes** (swamp, Tianzi, Mesa,
+red desert), defined in one priority-ordered table in `biome_noise.cpp`. Each regime combines
+its axes into a single suitability; `biomeFromNoise` returns the first regime whose suitability
+exceeds its threshold. Everything else uses the nearest climate/peak target: ocean and beach are
+partitioned by inlandness first, keeping climate from turning coastlines into inland biomes, then
+lowland or highland candidates. Highland means far inland (as originally) or strong
+`highlandReliefWeight`, the same preserved-relief factor that raises mountain terrain. Sharing it
+keeps low-erosion highland labels from reaching the shore ahead of the relief, which painted
+mountain stone directly behind beaches.
+Regime suitabilities are zero on the coast, so checking them before that partition is safe.
 
-The strength ramp starts at the biome threshold and reaches full pillars farther inside.
-Apply it **after** combining every suitability axis: separately fading inlandness let coastal
-columns keep tall pillars after the label had already switched to tundra. Shape, formation
-rock and cliff soil use the unjittered strength; biome jitter can affect the negligible outer
-foothills but cannot cut through a tower's core.
+A nearest-target search cannot express these regimes: Tianzi is a window across temperature,
+humidity, preserved relief and inlandness, and a Voronoi cell gives no terrain strength that
+vanishes at its border. Add a new landform biome as a regime row, not as another special case
+in the selection code.
+
+`regimeWeight` derives the terrain strength from the same suitability: 0 at the label threshold,
+1 at `fullStrength`. It is also multiplied down to 0 approaching the label of every
+higher-priority regime, over that regime's ramp width mirrored below its threshold. So a
+landform never extends past its label, and overlapping regimes (red desert spires under Mesa)
+need no special-case masks. Apply the ramp **after** combining every suitability axis:
+separately fading inlandness let coastal columns keep tall pillars after the label had already
+switched to tundra. Shape, formation rock and cliff soil use the unjittered strength; biome
+jitter can affect the negligible outer foothills but cannot cut through a tower's core.
+
+Swamp's row sets its label and how other regimes fade next to wetlands; its terrain comes from
+flood cells with their own threshold (see [swamp_generation.md](swamp_generation.md)).
 
 Erosion controls suitability, not nearest-target distance. Its thresholds belong to shared
 terrain regimes rather than individual biome height overrides. The swamp flood factor also

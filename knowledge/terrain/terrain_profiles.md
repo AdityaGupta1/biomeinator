@@ -45,8 +45,8 @@ modulated. This changes fine surface texture without moving the broad plateaus o
 ## Shared formation pattern
 
 `terrain_formation.h` generates deterministic, jittered sites with a broad foot and narrower
-core. Tianzi uses broad summits; quartz uses narrow summits. Warm/dry climate smoothly trades
-towers for spires, so these profiles do not abruptly change at the biome-label boundary.
+core. Tianzi uses broad summits; red desert quartz uses narrow summits. Both are scaled by their
+[regime weight](biome_system.md), so each fades out at its own label boundary.
 Sites are world-based rather than chunk-based and sampled before voxel filling, which makes
 the surrounding ground rise into each feature. A future island/karst profile can reuse this
 pattern with a different base elevation and water treatment. Tianzi's climate, erosion and

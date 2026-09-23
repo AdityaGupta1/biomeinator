@@ -64,14 +64,30 @@ struct NaturalTerrain
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
 
-// Smooth terrain regimes, shared by shape evaluation and biome suitability.
-float terraceWeight(const BiomeNoise& noise);
 float dryClimateWeight(const BiomeNoise& noise);
-// One complete climate/erosion/inland suitability drives both the label and formation.
-inline constexpr float tianziBiomeThreshold = 0.35f;
-float tianziSuitability(const BiomeNoise& noise);
-// Apply the strength ramp after combining all axes: no tall cores outside the label.
-float tianziWeight(const BiomeNoise& noise);
+// Preserved relief away from the coast, 0 near the shore. Terrain scales its mountain relief by
+// this (further limited to non-dry climates); the biome search uses it to choose highland
+// candidates, so highland labels only extend toward the coast where relief does.
+float highlandReliefWeight(const BiomeNoise& noise);
+
+// Biomes whose label must agree with a landform. Each regime combines its climate, erosion and
+// inland axes into one suitability; the regime claims the label where suitability exceeds its
+// threshold, checked in enum (priority) order before the nearest-climate search. Suitabilities
+// are zero on the coast (inland < 0), so regimes never claim ocean or beach.
+enum class TerrainRegime : uint8_t
+{
+    SWAMP,
+    TIANZI,
+    MESA,
+    RED_DESERT,
+
+    COUNT
+};
+
+// Terrain strength of a regime's landform: 0 at its label threshold, ramping to 1 at full
+// strength, and also 0 wherever a higher-priority regime claims the label. A landform therefore
+// never extends past its label (up to per-column jitter at the border).
+float regimeWeight(TerrainRegime regime, const BiomeNoise& noise);
 float surfaceDetailWeight(const BiomeNoise& noise);
 
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
@@ -82,8 +98,7 @@ float surfaceDetailWeight(const BiomeNoise& noise);
 // reach the ocean.
 float computeFloodFactor(const BiomeNoise& biomeNoise);
 
-// The swamp biome is not a Voronoi candidate; it overrides the closest biome wherever the flood
-// factor is high.
+// The first terrain regime that claims the column, otherwise the closest climate candidate.
 Biome biomeFromNoise(const BiomeNoise& biomeNoise);
 
 // Batch-evaluates the surface biome noise on a uniform XZ grid (one sample per texel center,

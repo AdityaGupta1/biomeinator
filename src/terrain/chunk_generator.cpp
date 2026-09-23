@@ -495,9 +495,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             // Smooth regimes control detail, never the jittered material/biome labels.
             // Protect pond floors and dams with the same continuous footprint as their seals.
-            tianziWeightArray[columnIdx] = BiomeNoiseFields::tianziWeight(biomeNoise);
-            mesaWeightArray[columnIdx] =
-                BiomeNoiseFields::terraceWeight(biomeNoise) * BiomeNoiseFields::dryClimateWeight(biomeNoise);
+            tianziWeightArray[columnIdx] = BiomeNoiseFields::regimeWeight(BiomeNoiseFields::TerrainRegime::TIANZI, biomeNoise);
+            mesaWeightArray[columnIdx] = BiomeNoiseFields::regimeWeight(BiomeNoiseFields::TerrainRegime::MESA, biomeNoise);
             const float detailWeight = BiomeNoiseFields::surfaceDetailWeight(biomeNoise);
             float waterShapingWeight = 0.f;
             for (int i = 0; i < numSeals; ++i)

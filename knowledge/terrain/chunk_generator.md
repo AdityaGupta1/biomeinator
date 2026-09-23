@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Chunk Generator
 
@@ -18,8 +18,8 @@ trilinearly reconstructed into the existing voxel grids before thresholding. Noi
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
 
-Fine detail is generated only in chunks touched by Mesa or Tianzi suitability, using smooth
-climate/erosion masks rather than jittered labels. Red desert and ordinary biomes receive none.
+Fine detail is generated only in chunks touched by the Mesa or Tianzi regime weight, using
+smooth climate/erosion masks rather than jittered labels. Red desert and ordinary biomes receive none.
 Its three octaves
 span roughly four to sixteen blocks horizontally, with longer vertical features to limit detached
 fragments, breaking up otherwise extruded cliff walls. The displacement
