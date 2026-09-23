@@ -30,7 +30,7 @@
 
 - Biome = enum entry + init block in `biome.cpp`. `uint8_t`, up to 255 fine.
 - Crowding: lowland band gets full. Need more inland bands or extra selection axis (weirdness) — varzea/igapo/terra firme all hot+humid+flat.
-- Terrain chooses the biome, not the other way around (see `knowledge/terrain/biome_system.md`). Don't add per-biome height offsets or swap profiles; a new landform is a bounded style on top of the shared height (like mesa terraces), and its label derives from the same factor. Landform biomes go in the terrain regime table; others are climate targets.
+- The noise chooses both the biome and the terrain, separately (see `knowledge/terrain/biome_system.md`). Don't add per-biome height offsets or swap profiles, and never have terrain read the label; a new landform is a bounded style on top of the shared height (like mesa terraces) driven by noise, with soft ramps for continuous styles such as roughness. Landform biomes go in the terrain regime table; others are climate targets.
 
 ### Highland and high-ground biomes
 

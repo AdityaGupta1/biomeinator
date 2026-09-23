@@ -6,13 +6,26 @@ _Last edited: 2026-09-22_
 suitability. The smooth fields also shape terrain independently of the selected biome; see
 [terrain_profiles.md](terrain_profiles.md).
 
-**Design rule: the terrain chooses the biome, not the other way around.** Elevation comes only
-from the relief fields (peak, erosion, inland). A biome or regime may select surface blocks,
-vegetation and bounded landform styles, and its label should derive from the same factors the
-terrain uses (as `isHighland` does from `mountainPeakWeight`). It must never multiply elevation
-by a climate or biome weight, or swap in a separate height profile: those produce steep pits and
-walls wherever the weight changes faster than the relief. Tianzi's relief swap is the one
-accepted exception, because its towers replace the relief they remove.
+**Design rule: the noise chooses both the biome and the terrain, separately.** Biome labels and
+terrain parameters (elevation, roughness, fine detail, landforms) are independent functions of
+the same noise fields. They line up because they read the same fields, not because one reads
+the other: red desert is smooth because the dry, rugged noise that makes it red desert also
+drives the smoothing, never because terrain reads the label. Vanilla Minecraft works the same
+way, with offset/factor/jaggedness splines over continentalness, erosion and peaks alongside a
+separate biome lookup.
+
+Two consequences:
+- Elevation comes only from the relief fields (peak, erosion, inland). Nothing multiplies
+  elevation by a climate or biome weight, or swaps in a separate height profile. Tianzi's relief
+  swap is the one accepted exception, because its towers replace the relief they remove.
+- Every terrain-parameter ramp is sized for spatial smoothness, not just smoothness on its field
+  axis. Labels are sharp by design; a parameter that switches at a label edge inherits that
+  sharpness. Fields can change quickly in blocks (the dryness ramp spans ~16 blocks in places),
+  so a ramp that looks gentle in field units can still be a cliff on the ground. Measure it: sweep
+  `computeNaturalTerrain` over several seeds and count large changes between nearby samples.
+
+Labels should derive from the same factors terrain uses (as `isHighland` does from
+`mountainPeakWeight`), and yes/no materials may follow labels: materials are biome identity.
 
 This entry covers **surface** biomes. Underground stone is themed separately by
 the 3D [cave_biome_system.md](cave_biome_system.md).
@@ -44,16 +57,20 @@ in the selection code.
 
 ## Regime weights
 
-`evaluateRegimes` derives two weights per regime from the same suitabilities in one pass, returned
-with the natural terrain so consumers never recompute them:
+`evaluateRegimes` derives three weights per regime in one pass, returned with the natural terrain
+so consumers never recompute them:
 
 - **Landform** weight: 0 at the label threshold, 1 at full strength. It drives geometry
-  (terraces, towers, spires, quartz, Tianzi soil and pillar seals).
-- **Coverage** weight: 1 across the whole label, fading out just outside it. It drives styles
-  that should cover the labelled area uniformly: roughness, Mesa detail, and yes/no rock materials
-  via `NaturalTerrain::isCoveredBy` (coverage at least 0.5).
+  (terraces, towers, spires, quartz, Tianzi soil and pillar seals), which only changes height
+  by bounded amounts.
+- **Coverage** weight: 1 across the whole label, fading out just outside it. It drives yes/no
+  rock materials via `NaturalTerrain::isCoveredBy` (coverage at least 0.5).
+- **Style** weight: the same suitability evaluated through **widened** ramps (every factor's
+  smoothstep stretched about its center by the row's `styleWiden`), ramped over the fade band
+  below the threshold. It is full by the label edge and fades out well beyond it. Continuous
+  styles (roughness, Mesa fine detail) use it, so they never change abruptly at a label edge.
 
-Both are multiplied down to 0 approaching the label of every higher-priority regime, over that
+Landform and coverage weights are multiplied down to 0 approaching the label of every higher-priority regime, over that
 regime's fade width just below its threshold. So a regime's landform never extends past its label,
 and overlapping regimes (red desert spires under Mesa) need no special-case masks. Apply the ramp
 **after** combining every suitability axis: separately fading inlandness let coastal columns keep
@@ -66,11 +83,20 @@ fade fraction must stay below 1, checked at compile time: suitabilities bottom o
 reaching below 0 suppresses lower regimes everywhere (this once capped red desert spires at 31%
 height far from any Mesa).
 
-Roughness uses coverage rather than the landform ramp because blending by the landform weight left
-the outer band of Mesa and red desert labels, where their landforms are still weak, with full
-mountain roughness, which carved ravine-like gashes into rugged dry ground. Elsewhere roughness
-follows relief alone. Roughness is not purely texture: terrain below the base height is denser, so
-a larger amplitude raises the effective ground slightly. It therefore must not follow raw climate.
+Roughness (density amplitude) follows relief, blended toward each regime's roughness by its style
+weight. It sets how far 3D noise pushes the surface, so a roughness contrast over a few blocks
+stands up as a wall. Two earlier versions failed this way:
+- blending by the landform weight left the outer band of Mesa and red desert labels with full
+  mountain roughness: ravine-like gashes into rugged dry ground;
+- blending by coverage fixed that but switched roughness within 4–8 blocks at the label edge:
+  walls of 40+ blocks where red desert (roughness 12) met rugged mountains (~60). Red desert is
+  worst because its suitability requires rugged ground, where relief roughness is highest.
+`styleWiden` per regime sets how soft each edge is: red desert softest (7.5), Mesa a little
+crisper (4.5), Tianzi crisper still (2, its four-factor product is already soft). All are several
+times softer than the label ramps; a sweep then finds no roughness change above 16 per 4 blocks at
+any regime edge. The widths depend on how fast the fields change in blocks, so re-measure after
+changing a noise scale.
+
 Yes/no materials use a 0.5 cutoff because coverage starts well below the label threshold; testing
 `> 0` spread terracotta over an extra area about a fifth the size of Mesa itself.
 

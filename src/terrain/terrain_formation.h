@@ -26,11 +26,20 @@ inline float valueNoise(glm::vec2 pos, uint32_t seed)
     return mix(mix(at(0, 0), at(1, 0), t.x), mix(at(0, 1), at(1, 1), t.x), t.y);
 }
 
-// Smooth window: rises from 0 to 1 over [riseStart, riseEnd], then falls back to 0 over
-// [fallStart, fallEnd].
-inline float smoothBand(float x, float riseStart, float riseEnd, float fallStart, float fallEnd)
+// smoothstep with its [edge0, edge1] window stretched about the midpoint by widen (1 = unchanged).
+// Softer versions of a ramp keep the same center, so they stay centered on the same boundary.
+inline float widenedSmoothstep(float edge0, float edge1, float x, float widen = 1.f)
 {
-    return glm::smoothstep(riseStart, riseEnd, x) * (1.f - glm::smoothstep(fallStart, fallEnd, x));
+    const float mid = 0.5f * (edge0 + edge1);
+    const float halfWidth = 0.5f * (edge1 - edge0) * widen;
+    return glm::smoothstep(mid - halfWidth, mid + halfWidth, x);
+}
+
+// Smooth window: rises from 0 to 1 over [riseStart, riseEnd], then falls back to 0 over
+// [fallStart, fallEnd], each ramp widened by widen.
+inline float smoothBand(float x, float riseStart, float riseEnd, float fallStart, float fallEnd, float widen = 1.f)
+{
+    return widenedSmoothstep(riseStart, riseEnd, x, widen) * (1.f - widenedSmoothstep(fallStart, fallEnd, x, widen));
 }
 
 // Two independent value noise channels at one position, e.g. for a 2D domain warp.

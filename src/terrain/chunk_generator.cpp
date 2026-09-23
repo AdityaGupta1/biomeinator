@@ -527,7 +527,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const BiomeNoiseFields::RegimeWeights& regimeWeights = naturalTerrain.regimeWeights;
             // Mesa detail is texture, so it covers the whole label like its roughness; Tianzi's
             // follows its formations.
-            const float detailWeight = max(naturalTerrain.regimeCoverage[TerrainRegime::MESA],
+            const float detailWeight = max(naturalTerrain.regimeStyle[TerrainRegime::MESA],
                                            regimeWeights[TerrainRegime::TIANZI]);
             float waterShapingWeight = 0.f;
             for (int i = 0; i < numSeals; ++i)
@@ -626,7 +626,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // on escarpments. The unjittered mask and pre-detail slope keep this continuous
             // across biome/chunk borders and avoid having bumps amplify their own noise.
             const float flatDetail = mix(0.35f, 1.f, smoothstep(0.1f, 0.8f, slope));
-            shape.detailAmplitude *= mix(1.f, flatDetail, shape.natural.regimeCoverage[TerrainRegime::MESA]);
+            shape.detailAmplitude *= mix(1.f, flatDetail, shape.natural.regimeStyle[TerrainRegime::MESA]);
             hasTerrainDetail |= shape.detailAmplitude > 0.f;
             terrainNoiseMinY = std::min(terrainNoiseMinY, static_cast<int>(std::floor(shape.lowestSurface())));
             terrainNoiseMaxY = std::max(terrainNoiseMaxY, static_cast<int>(std::ceil(shape.highestSurface())));

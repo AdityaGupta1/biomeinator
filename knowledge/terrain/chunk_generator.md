@@ -19,9 +19,9 @@ stretched vertically. All are then trilinearly reconstructed into the existing v
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
 
-Fine detail is generated only in chunks touched by Mesa coverage or the Tianzi landform weight,
-using smooth climate/erosion masks rather than jittered labels. Mesa detail is texture, so it
-covers the whole label like Mesa roughness; Tianzi's belongs to its formations. Red desert and ordinary biomes receive none.
+Fine detail is generated only in chunks touched by the Mesa style weight or the Tianzi landform
+weight, using smooth climate/erosion masks rather than jittered labels. Mesa detail is texture,
+so it follows the same soft style weight as Mesa roughness; Tianzi's belongs to its formations. Red desert and ordinary biomes receive none.
 Its three octaves
 span roughly four to sixteen blocks horizontally, with longer vertical features to limit detached
 fragments, breaking up otherwise extruded cliff walls. The displacement

@@ -8,9 +8,11 @@ reduce relief and permit wetlands. Peak still determines broad elevation and inl
 still determines land/coast placement. Existing biomes acquire gentler foothills without
 adding per-biome shaping fields; the terrace profile additionally requires dry climate.
 
-**Terrain chooses the biome, not the other way around.** Elevation comes only from peak,
-erosion and inland. Climate and regime weights select landform *styles* (terraces, towers,
-spires, surface roughness) but never raise or lower the shared ground. Gating relief by dryness
+**The noise chooses both the biome and the terrain, separately** (see
+[biome_system.md](biome_system.md)). Elevation comes only from peak, erosion and inland. Climate
+and regime weights select landform *styles* (terraces, towers, spires, surface roughness) but
+never raise or lower the shared ground, and continuous styles use ramps sized to change slowly
+across the ground. Gating relief by dryness
 flipped elevation by 100+ blocks wherever humidity crossed the dry threshold, cutting steep pits
 where mesa or red desert met mountains. Dry regions are therefore as tall as the relief fields
 make them: high peak in a hot, dry area gives tall terraced massifs or red desert mountains.

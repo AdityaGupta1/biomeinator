@@ -27,10 +27,11 @@ static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
 static FN::SmartNode<FN::Generator> fnInland;
 static FN::SmartNode<FN::Generator> fnErosion;
-// Climate (temperature, humidity) and relief (peak, inland, erosion) scale independently: enlarging
-// climate regions must not move coastlines or mountains.
-inline constexpr float climateNoiseScale = 1000.f;
-inline constexpr float reliefNoiseScale = 1000.f;
+inline constexpr float baseNoiseScale = 1000.f;
+// Climate (temperature, humidity) and relief (peak, inland, erosion) can scale independently:
+// enlarging climate regions alone doesn't move coastlines or mountains.
+inline constexpr float climateNoiseScale = baseNoiseScale * 1.5f;
+inline constexpr float reliefNoiseScale = baseNoiseScale * 1.f;
 
 // Shared by fillGrids and sampleAt so single-point samples match the grids
 static int noiseFieldSeed;
@@ -185,22 +186,28 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
     };
 }
 
+using TerrainFormations::widenedSmoothstep;
+
+// Factors below take a widen argument: 1 gives the ramps labels and landforms use; larger values
+// give softer versions of the same ramps for styles (roughness, detail) that must change slowly
+// across the ground. See knowledge/terrain/biome_system.md.
+
 // Relief of any kind ramps in from the shoreline, so hills can rise straight out of beaches.
-static float landWeight(const BiomeNoise& n)
+static float landWeight(const BiomeNoise& n, float widen = 1.f)
 {
-    return smoothstep(0.f, 0.35f, n.inland);
+    return widenedSmoothstep(0.f, 0.35f, n.inland, widen);
 }
 
 // Landforms that need solid ground behind the coast (terraces, karst) start farther inland and
 // finish sooner than general relief, so they never sit on the beach band.
-static float interiorWeight(const BiomeNoise& n)
+static float interiorWeight(const BiomeNoise& n, float widen = 1.f)
 {
-    return smoothstep(0.1f, 0.3f, n.inland);
+    return widenedSmoothstep(0.1f, 0.3f, n.inland, widen);
 }
 
-float ruggedWeight(const BiomeNoise& n)
+float ruggedWeight(const BiomeNoise& n, float widen)
 {
-    return 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
+    return 1.f - widenedSmoothstep(-0.1f, 0.5f, n.erosion, widen);
 }
 
 static float highlandReliefWeight(const BiomeNoise& n)
@@ -225,40 +232,46 @@ bool isHighland(const BiomeNoise& n)
     return mountainPeakWeight(n) >= highlandThreshold;
 }
 
-static float terraceWeight(const BiomeNoise& n)
+static float terraceWeight(const BiomeNoise& n, float widen)
 {
-    return TerrainFormations::smoothBand(n.erosion, -0.18f, 0.02f, 0.27f, 0.48f) * interiorWeight(n);
+    return TerrainFormations::smoothBand(n.erosion, -0.18f, 0.02f, 0.27f, 0.48f, widen) * interiorWeight(n, widen);
 }
 
-float dryClimateWeight(const BiomeNoise& n)
+float dryClimateWeight(const BiomeNoise& n, float widen)
 {
-    return smoothstep(0.12f, 0.38f, n.temperature) * (1.f - smoothstep(-0.25f, 0.02f, n.humidity));
+    return widenedSmoothstep(0.12f, 0.38f, n.temperature, widen) *
+           (1.f - widenedSmoothstep(-0.25f, 0.02f, n.humidity, widen));
 }
 
-static float tianziSuitability(const BiomeNoise& n)
+static float floodSuitability(const BiomeNoise& n, float)
+{
+    return computeFloodFactor(n);
+}
+
+static float tianziSuitability(const BiomeNoise& n, float widen)
 {
     // Karst occupies humid, temperate-to-warm rugged regions. Cold or dry mountain
     // climates retain ordinary peaks instead of being intercepted by erosion alone.
-    const float temperate = TerrainFormations::smoothBand(n.temperature, -0.55f, -0.05f, 0.65f, 1.05f);
-    const float humid = smoothstep(-0.1f, 0.3f, n.humidity);
-    const float preserved = 1.f - smoothstep(-0.65f, -0.1f, n.erosion);
-    return temperate * humid * preserved * interiorWeight(n);
+    const float temperate = TerrainFormations::smoothBand(n.temperature, -0.55f, -0.05f, 0.65f, 1.05f, widen);
+    const float humid = widenedSmoothstep(-0.1f, 0.3f, n.humidity, widen);
+    const float preserved = 1.f - widenedSmoothstep(-0.65f, -0.1f, n.erosion, widen);
+    return temperate * humid * preserved * interiorWeight(n, widen);
 }
 
-static float mesaSuitability(const BiomeNoise& n)
+static float mesaSuitability(const BiomeNoise& n, float widen)
 {
-    return terraceWeight(n) * dryClimateWeight(n);
+    return terraceWeight(n, widen) * dryClimateWeight(n, widen);
 }
 
-static float redDesertSuitability(const BiomeNoise& n)
+static float redDesertSuitability(const BiomeNoise& n, float widen)
 {
-    return dryClimateWeight(n) * landWeight(n) * ruggedWeight(n);
+    return dryClimateWeight(n, widen) * landWeight(n, widen) * ruggedWeight(n, widen);
 }
 
 struct TerrainRegimeData
 {
     Biome biome;
-    float (*suitability)(const BiomeNoise&);
+    float (*suitability)(const BiomeNoise&, float widen);
     // Label boundary.
     float threshold;
     // Stored relative to the threshold so recalibrating a threshold (e.g. from a target area
@@ -269,9 +282,13 @@ struct TerrainRegimeData
     // must stay below 1: suitabilities bottom out at 0, so a wider fade would suppress them
     // everywhere, even far from this regime.
     float fadeFraction;
-    // Density amplitude of the regime's landform, blended in by its coverage. Unset regimes keep
-    // the roughness their relief implies.
+    // Density amplitude (roughness) where this regime's terrain lies. Unset regimes keep the
+    // roughness their relief implies.
     std::optional<float> amplitude;
+    // Widening of the suitability ramps for the style weight that blends that roughness in. Wider
+    // gives softer edges; roughness contrasts of tens of blocks become walls when they change
+    // over only a few blocks.
+    float styleWiden;
 
     constexpr float fullStrength() const
     {
@@ -286,21 +303,23 @@ struct TerrainRegimeData
 // Swamp terrain comes from flood cells (see swamp_shaping); its row sets the label, the fade of
 // lower-priority regimes, and the flood strength at which pond floors reach full depth.
 static constexpr std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
-    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, floodFullStrength - floodTintThreshold, 0.4f, std::nullopt },
-    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.5f, 0.43f, 7.f },
-    { Biome::MESA, mesaSuitability, 0.15f, 0.35f, 0.67f, 10.f },
-    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.5f, 0.5f, 12.f },
+    { Biome::SWAMP, floodSuitability, floodTintThreshold, floodFullStrength - floodTintThreshold, 0.4f, std::nullopt, 1.f },
+    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.5f, 0.43f, 7.f, 2.0f },
+    { Biome::MESA, mesaSuitability, 0.15f, 0.35f, 0.67f, 10.f, 4.5f },
+    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.5f, 0.5f, 12.f, 7.5f },
 }};
 static_assert(std::ranges::all_of(regimes, [](const TerrainRegimeData& regime)
 {
-    return regime.threshold > 0.f && regime.strengthRange > 0.f && regime.fadeFraction > 0.f && regime.fadeFraction < 1.f;
+    return regime.threshold > 0.f && regime.strengthRange > 0.f && regime.fadeFraction > 0.f &&
+           regime.fadeFraction < 1.f && regime.styleWiden >= 1.f;
 }));
 
-// See NaturalTerrain::regimeWeights and regimeCoverage.
+// See NaturalTerrain::regimeWeights, regimeCoverage and regimeStyle.
 struct RegimeEvaluation
 {
     RegimeWeights landform;
     RegimeWeights coverage;
+    RegimeWeights style;
 };
 
 static RegimeEvaluation evaluateRegimes(const BiomeNoise& n)
@@ -312,11 +331,19 @@ static RegimeEvaluation evaluateRegimes(const BiomeNoise& n)
     for (size_t regimeIdx = 0; regimeIdx < regimes.size(); ++regimeIdx)
     {
         const TerrainRegimeData& regime = regimes[regimeIdx];
-        const float suitability = regime.suitability(n);
+        const float suitability = regime.suitability(n, 1.f);
         const float claim = smoothstep(regime.threshold - regime.fadeWidth(), regime.threshold, suitability);
         result.landform.weights[regimeIdx] = unclaimed * smoothstep(regime.threshold, regime.fullStrength(), suitability);
         result.coverage.weights[regimeIdx] = unclaimed * claim;
         unclaimed *= 1.f - claim;
+        // Styles read the noise through softer ramps, never the label: full by the label edge,
+        // fading out well beyond it. Regimes with styles sit in disjoint climates or share
+        // similar styles, so no priority suppression is needed.
+        if (regime.amplitude)
+        {
+            result.style.weights[regimeIdx] = smoothstep(regime.threshold - regime.fadeWidth(), regime.threshold,
+                                                         regime.suitability(n, regime.styleWiden));
+        }
     }
     return result;
 }
@@ -326,7 +353,7 @@ static const TerrainRegimeData* findClaimingRegime(const BiomeNoise& n)
 {
     for (const TerrainRegimeData& regime : regimes)
     {
-        if (regime.suitability(n) > regime.threshold)
+        if (regime.suitability(n, 1.f) > regime.threshold)
         {
             return &regime;
         }
@@ -420,21 +447,22 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     }
     height += uplift;
 
-    // Roughness follows relief; landform regimes override it across their whole label. Density
-    // amplitude also biases the effective surface slightly (terrain below the base height is
-    // denser), so it must not follow raw climate either.
+    // Roughness follows relief, blended toward each regime's roughness by its noise-driven style
+    // weight. It must change slowly across the ground: density amplitude sets how far 3D noise
+    // pushes the surface, so a contrast over a few blocks stands up as a wall.
     float amplitude = mix(12.f, 38.f, rugged);
     amplitude += 40.f * highland * smoothstep(0.1f, 0.65f, n.peak);
     for (size_t regimeIdx = 0; regimeIdx < regimes.size(); ++regimeIdx)
     {
         if (regimes[regimeIdx].amplitude)
         {
-            amplitude = mix(amplitude, *regimes[regimeIdx].amplitude, regimeEvaluation.coverage.weights[regimeIdx]);
+            amplitude = mix(amplitude, *regimes[regimeIdx].amplitude, regimeEvaluation.style.weights[regimeIdx]);
         }
     }
     amplitude = mix(amplitude, 4.f, smoothstep(5.f, 30.f, uplift));
     amplitude /= 1.f + 3.f * smoothstep(0.4f, -0.1f, abs(n.inland));
-    return { height, 1.f / amplitude, formationBase, uplift, formationSite, weights, regimeEvaluation.coverage };
+    return { height, 1.f / amplitude, formationBase, uplift, formationSite, weights, regimeEvaluation.coverage,
+             regimeEvaluation.style };
 }
 
 float computeFloodFactor(const BiomeNoise& biomeNoise)

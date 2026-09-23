@@ -109,10 +109,13 @@ struct NaturalTerrain
     glm::ivec2 formationSite{};
     // Landform strength: 0 at each regime's label threshold, ramping to 1 at full strength.
     RegimeWeights regimeWeights{};
-    // 1 across each regime's whole label, fading out just outside it. Styles that should cover
-    // the labelled area uniformly (roughness, rock) use this; the landform ramp would leave the
-    // outer band of the label with foreign styling.
+    // 1 across each regime's whole label, fading out just outside it. Yes/no materials use this;
+    // the landform ramp would leave the outer band of the label with foreign rock.
     RegimeWeights regimeCoverage{};
+    // Noise-driven style weight for regimes with their own roughness: the same factors as the
+    // label, through softer ramps, full by the label edge and fading well beyond it. Continuous
+    // styles (roughness, fine detail) use this so they never change abruptly at a label edge.
+    RegimeWeights regimeStyle{};
 
     // Whether a regime's yes/no styles (rock materials) apply here. Half coverage sits just
     // outside the label; a lower cutoff would spread them deep into neighboring biomes.
@@ -124,9 +127,10 @@ struct NaturalTerrain
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
 
-float dryClimateWeight(const BiomeNoise& noise);
+// widen stretches the ramps about their centers for softer style blends (1 = the label ramps).
+float dryClimateWeight(const BiomeNoise& noise, float widen = 1.f);
 // Preserved relief: 1 where erosion keeps dramatic landforms, 0 in eroded, flat terrain.
-float ruggedWeight(const BiomeNoise& noise);
+float ruggedWeight(const BiomeNoise& noise, float widen = 1.f);
 // Strength of the tall peak relief terrain raises in preserved highlands, 0-1: preserved relief
 // away from the coast, times a steep response to peak.
 float mountainPeakWeight(const BiomeNoise& noise);
