@@ -1185,7 +1185,8 @@ const std::vector<Biome>& Chunk::getBiomes() const
 
 std::vector<Structure> Chunk::getStructures() const
 {
-    // Export only accepted surface structures, using the existing on-disk format.
+    // Grid structures plus the accepted surface structures this chunk owns; transient
+    // surface candidates are never exported.
     std::vector<Structure> result = this->structures;
     result.insert(result.end(), this->placedSurfaceStructures.begin(), this->placedSurfaceStructures.end());
     return result;

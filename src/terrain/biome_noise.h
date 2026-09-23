@@ -19,7 +19,7 @@ struct BiomeNoiseGrids
     float* humidity;
     float* peak;
     float* inland;
-    float* erosion{ nullptr };
+    float* erosion;
 };
 
 // A cell floods when the flood factor at its site exceeds floodCellThreshold; columns are painted
@@ -39,8 +39,7 @@ glm::ivec2 getNoiseOffsetXZ();
 // for chunk generation).
 void fillGrids(const BiomeNoiseGrids& grids, glm::vec2 startXZ, glm::uvec2 numSamples, float stepBlocks);
 
-// Batch counterpart of sampleAt for arbitrary positions. Null output fields are skipped,
-// allowing callers to request a subset of fields.
+// Batch counterpart of sampleAt for arbitrary positions.
 void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples);
 
 // Single-point counterpart of fillGrids for arbitrary positions (swamp cell sites).

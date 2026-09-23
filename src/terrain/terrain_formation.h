@@ -25,6 +25,22 @@ inline float valueNoise(glm::vec2 pos, uint32_t seed)
     return mix(mix(at(0, 0), at(1, 0), t.x), mix(at(0, 1), at(1, 1), t.x), t.y);
 }
 
+// Corrects an unjittered band guess to the band whose jittered lower boundary lies at or below
+// value. One step suffices while each boundary(i) stays within half a band of its regular spot.
+template<typename Boundary>
+inline int jitteredBand(float value, int guess, const Boundary& boundary)
+{
+    if (boundary(guess) > value)
+    {
+        return guess - 1;
+    }
+    if (boundary(guess + 1) < value)
+    {
+        return guess + 1;
+    }
+    return guess;
+}
+
 // A connected plateau field with broken escarpments and short gullies. Unlike the
 // isolated-site profile below, its outlines come from warped, overlapping scales.
 inline float plateauRelief(glm::vec2 pos, uint32_t seed)
@@ -65,7 +81,10 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
     const float facetBound = mix(1.f, 1.083f, profile.angularity);
     ASSERT(max(profile.footRadius, profile.radius * 1.2f) * facetBound / 0.8f + warpBound < 1.25f * profile.spacing);
     const ivec2 cell = ivec2(floor(pos / profile.spacing));
-    if (dominantSite) *dominantSite = cell;
+    if (dominantSite)
+    {
+        *dominantSite = cell;
+    }
     const vec2 warped = pos + profile.radius * 0.3f * vec2(
         valueNoise(pos / profile.radius, seed ^ 0x541u), valueNoise(pos / profile.radius, seed ^ 0x901u));
     const float summitRoughness = valueNoise(pos / (profile.radius * 0.8f), seed ^ 0x339u) *
@@ -102,7 +121,10 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
             const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
                 clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
             const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
-            if (dominantSite && contribution > result) *dominantSite = key;
+            if (dominantSite && contribution > result)
+            {
+                *dominantSite = key;
+            }
             result = max(result, contribution);
         }
     }
@@ -123,7 +145,10 @@ inline float sampleStacked(glm::vec2 pos, uint32_t seed, const std::array<Profil
     for (size_t i = 1; i < N; ++i)
     {
         support *= glm::smoothstep(tiers[i - 1].height * 0.35f, tiers[i - 1].height * 0.7f, previous);
-        if (support <= 0.f) break;
+        if (support <= 0.f)
+        {
+            break;
+        }
         previous = sample(pos, seed ^ (0xA271u * static_cast<uint32_t>(i)), tiers[i]);
         height += support * previous;
     }

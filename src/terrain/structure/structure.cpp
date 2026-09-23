@@ -561,12 +561,21 @@ static void fillPineTrunk(std::vector<Block>& blocks, ivec3 rootPos_CS, int heig
     for (int y = 0; y <= height; ++y)
     {
         const ivec3 pos = rootPos_CS + ivec3(0, y, 0);
-        if (!Chunk::isInChunk(pos)) continue;
+        if (!Chunk::isInChunk(pos))
+        {
+            continue;
+        }
         const uint blockIdx = Chunk::blockPosToIdx(uvec3(pos));
         // Pines on different cliff ledges can have overlapping crowns. Their
         // leaves must not interrupt another pine's trunk; rock stays untouched.
-        if (blocks[blockIdx] == Block::PINE_LEAVES) blocks[blockIdx] = Block::PINE_LOG;
-        else tryPlaceStructureBlock(blocks, blockIdx, Block::PINE_LOG);
+        if (blocks[blockIdx] == Block::PINE_LEAVES)
+        {
+            blocks[blockIdx] = Block::PINE_LOG;
+        }
+        else
+        {
+            tryPlaceStructureBlock(blocks, blockIdx, Block::PINE_LOG);
+        }
     }
 }
 
@@ -576,8 +585,16 @@ fillStructureBlocksHeader(PINE_TREE)
     const float radius = rng.nextFloat(3.f, 4.5f);
     fillPineTrunk(blocks, structurePos_CS, height);
 
-    // Separate shallow boughs leave visible trunk between tiers. A continuous
-    // radius taper filled every Y layer and produced a solid cone/blocky crown.
+    const auto placeLeaf = [&](ivec3 pos_CS)
+    {
+        if (Chunk::isInChunk(pos_CS))
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::PINE_LEAVES, false /*canReplaceWater*/);
+        }
+    };
+
+    // Separate shallow boughs leave visible trunk between tiers, rather than filling
+    // every Y layer into a solid cone.
     for (int y = height; y >= 2; y -= rng.nextInt(2, 4))
     {
         const float t = static_cast<float>(y - 2) / (height - 2);
@@ -589,17 +606,23 @@ fillStructureBlocksHeader(PINE_TREE)
             for (int x = -5; x <= 5; ++x)
             {
                 const float distance = length((vec2(x, z) - offset) / stretch);
-                if (distance > layerRadius) continue;
+                if (distance > layerRadius)
+                {
+                    continue;
+                }
                 // These draws depend on the whole tree's shape, never local
                 // chunk clipping, so every destination produces the same fringe.
-                if (distance > layerRadius - 0.45f && rng.chance(0.22f)) continue;
+                if (distance > layerRadius - 0.45f && rng.chance(0.22f))
+                {
+                    continue;
+                }
                 const bool droop = x * x + z * z > 2 && distance > layerRadius - 0.8f && rng.chance(0.18f);
                 const ivec3 pos = structurePos_CS + ivec3(x, y, z);
-                if (Chunk::isInChunk(pos))
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos)), Block::PINE_LEAVES, false);
-                const ivec3 fringePos = pos - ivec3(0, 1, 0);
-                if (droop && Chunk::isInChunk(fringePos))
-                    tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(fringePos)), Block::PINE_LEAVES, false);
+                placeLeaf(pos);
+                if (droop)
+                {
+                    placeLeaf(pos - ivec3(0, 1, 0));
+                }
             }
         }
     }
@@ -610,10 +633,10 @@ fillStructureBlocksHeader(PINE_TREE)
     constexpr std::array<ivec2, 5> capOffsets{{ {0, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1} }};
     for (int i = 0; i < static_cast<int>(capOffsets.size()); ++i)
     {
-        if (i == missingArm + 1) continue;
-        const ivec3 pos = structurePos_CS + ivec3(capOffsets[i].x, height + 1, capOffsets[i].y);
-        if (Chunk::isInChunk(pos))
-            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos)), Block::PINE_LEAVES, false);
+        if (i != missingArm + 1)
+        {
+            placeLeaf(structurePos_CS + ivec3(capOffsets[i].x, height + 1, capOffsets[i].y));
+        }
     }
 }
 

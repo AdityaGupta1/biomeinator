@@ -193,14 +193,6 @@ void init()
         const fs::path jsonPath = blocksDir / (std::string(blockIdNames[i]) + ".json");
         blockDatas[i] = readBlockJson(jsonPath);
     }
-    // Older exported palettes keep resolving after formation blocks are renamed or retired.
-    blocksById.emplace("quartz", Block::SMOOTH_QUARTZ);
-    blocksById.emplace("quartz_base", Block::SMOOTH_QUARTZ);
-    blocksById.emplace("ivory_quartz", Block::SMOOTH_QUARTZ);
-    blocksById.emplace("tianzi_stone", Block::GRAY_SANDSTONE);
-    blocksById.emplace("tianzi_warm_stone", Block::BUFF_SANDSTONE);
-    blocksById.emplace("tianzi_dark_stone", Block::DARK_SANDSTONE);
-    blocksById.emplace("tianzi_weathered_stone", Block::WEATHERED_SANDSTONE);
 }
 
 const BlockData& getBlockData(Block block)

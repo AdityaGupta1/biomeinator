@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # BiomeScanner
 
@@ -23,6 +23,10 @@ terrain/cave/swamp noises.
 - The map shows the macro biome field (`fillBiomeRect` skips per-column jitter), so biome borders
   in-game fuzz a few blocks past what the map shows.
 - Pond oases use the shared spatial footprint sampler, included in this target as well as the
-  renderer. Climate-only queries cannot reproduce their small green patches.
-- Decorator registration references block shape/state validation. The scanner supplies a lazy
-  metadata-only JSON reader for that validation, avoiding the rendering-dependent block loader.
+  renderer. Climate-only queries cannot reproduce their small green patches. The map samples
+  the footprint at texel centers rather than block positions, so oasis rims on the map can differ
+  slightly from generated terrain.
+- The scanner shares biome registration but has no block metadata (the block loader depends on
+  the renderer). Anything in `biome.cpp` or its dependencies that needs `Blocks::getBlockData`
+  breaks the scanner link; wall/ceiling decorator validation therefore runs in `Terrain::init`,
+  not in `Decorator::addEntry`.

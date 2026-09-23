@@ -53,13 +53,17 @@ static void applyColorAdjustment(std::vector<uint8_t>& pixels, const nlohmann::j
     const float saturation = adjustment.value("saturation", 1.f);
     if (!std::isfinite(saturation) || saturation < 0.f || saturation > 1.f ||
         std::any_of(multiply.begin(), multiply.end(), [](float v) { return !std::isfinite(v) || v < 0.f; }))
+    {
         throw std::runtime_error("color adjustment requires nonnegative multiply and saturation in [0, 1]");
+    }
     for (size_t i = 0; i < pixels.size(); i += 4)
     {
         const std::array<float, 3> rgb{ linearize(pixels[i]), linearize(pixels[i + 1]), linearize(pixels[i + 2]) };
         const float luminance = rgb[0] * 0.2126f + rgb[1] * 0.7152f + rgb[2] * 0.0722f;
         for (size_t channel = 0; channel < 3; ++channel)
+        {
             pixels[i + channel] = srgbEncode((luminance + saturation * (rgb[channel] - luminance)) * multiply[channel]);
+        }
     }
 }
 
@@ -366,7 +370,10 @@ static uint32_t loadBlockTextureArray(Scene* scene,
         {
             std::ifstream file(colorPath);
             colorAdjustments = nlohmann::json::parse(file);
-            if (!colorAdjustments.is_object()) throw std::runtime_error("expected an object keyed by texture name");
+            if (!colorAdjustments.is_object())
+            {
+                throw std::runtime_error("expected an object keyed by texture name");
+            }
         }
         catch (const std::exception& e)
         {

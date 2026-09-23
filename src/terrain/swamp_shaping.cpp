@@ -82,8 +82,8 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         return { .swampy = false, .pondLevel = seaLevel };
     }
 
-    // The site already supplies the center sample. All five fields now contribute to
-    // natural terrain, including formations at climate boundaries.
+    // The site already supplies the center sample. Every field contributes to natural
+    // terrain, including formations at climate boundaries.
     float sampleX[8];
     float sampleZ[8];
     int numSamples = 0;
@@ -104,7 +104,13 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
     float peak[8];
     float inland[8];
     float erosion[8];
-    const BiomeNoiseFields::BiomeNoiseGrids grids{ temperature, humidity, peak, inland, erosion };
+    const BiomeNoiseFields::BiomeNoiseGrids grids{
+        .temperature = temperature,
+        .humidity = humidity,
+        .peak = peak,
+        .inland = inland,
+        .erosion = erosion,
+    };
     BiomeNoiseFields::fillPositions(grids, sampleX, sampleZ, numSamples);
 
     // Keep the same second-lowest height and sample ordering as the scalar path.

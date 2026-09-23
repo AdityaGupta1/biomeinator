@@ -16,7 +16,10 @@ constexpr float cellSize = 384.f;
 constexpr float maxPondSupport = 115.f;
 static_assert(2.f * maxPondSupport < 0.6f * cellSize);
 
-void init(uint32_t seed) { worldSeed = seed; }
+void init(uint32_t seed)
+{
+    worldSeed = seed;
+}
 
 Context makeContext(ivec2 origin, ivec2 extent)
 {
@@ -69,9 +72,15 @@ Sample sample(vec2 pos, const Context& context)
             const ivec2 index = cell + ivec2(x, z) - context.minCell;
             ASSERT(index.x >= 0 && index.y >= 0 && index.x < context.size.x && index.y < context.size.y);
             const Pond& pond = context.ponds[index.x + context.size.x * index.y];
-            if (!pond.active) continue;
+            if (!pond.active)
+            {
+                continue;
+            }
             const vec2 worldDelta = pos - pond.center;
-            if (dot(worldDelta, worldDelta) >= maxPondSupport * maxPondSupport) continue;
+            if (dot(worldDelta, worldDelta) >= maxPondSupport * maxPondSupport)
+            {
+                continue;
+            }
             const vec2 delta = worldDelta / pond.radius;
             const vec2 local(dot(delta, pond.direction), dot(delta, vec2(-pond.direction.y, pond.direction.x)));
             const vec2 stretched = local * vec2(1.f / pond.aspect, pond.aspect);
@@ -94,7 +103,10 @@ Sample sample(vec2 pos, const Context& context)
             // simultaneously into a group of little round pools instead of bending its shores.
             radius += 0.24f * clamp(noise(stretched * 1.4f, 0x33u) - noise(vec2(0.f), 0x33u), -1.f, 1.f) +
                       0.09f * clamp(noise(stretched * 4.2f, 0xA9u) - noise(vec2(0.f), 0xA9u), -1.f, 1.f);
-            if (radius >= 1.55f) continue;
+            if (radius >= 1.55f)
+            {
+                continue;
+            }
             const float depth = 5.f + 2.f * noise(stretched * 1.7f, 0xD3u);
             const float bank = 4.5f + noise(stretched * 2.3f, 0xB4u);
             const float shelf = 0.5f + 0.22f * noise(stretched * 1.8f, 0x52u);

@@ -15,28 +15,6 @@
 #include <string>
 #include <vector>
 
-// Biome initialization validates decorator supports. The scanner needs only their
-// shape/state metadata; loading the engine's block loader would require a renderer.
-namespace Blocks
-{
-const BlockData& getBlockData(Block block)
-{
-    static const auto metadata = []
-    {
-        std::array<BlockData, static_cast<size_t>(Block::COUNT)> result{};
-        for (size_t i = 0; i < result.size(); ++i)
-        {
-            std::ifstream file(std::string(CMAKE_SOURCE_DIR) + "/assets/blocks/" + std::string(blockIdNames[i]) + ".json");
-            const auto json = nlohmann::json::parse(file);
-            if (json.value("shape", "cube") == "decorator_custom") result[i].shape = BlockShape::DECORATOR_CUSTOM;
-            if (json.value("blockState", "none") == "surface_mount") result[i].stateKind = BlockStateKind::SURFACE_MOUNT;
-        }
-        return result;
-    }();
-    return metadata[static_cast<size_t>(block)];
-}
-} // namespace Blocks
-
 namespace
 {
 

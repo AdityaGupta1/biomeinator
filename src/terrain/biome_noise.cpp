@@ -123,7 +123,6 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
 {
     const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
     {
-        if (!data) return;
         fn->GenUniformGrid2D(data,
                              startXZ.x + noiseOffsetXZ.x,
                              startXZ.y + noiseOffsetXZ.y /*z*/,
@@ -144,11 +143,8 @@ void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const 
 {
     const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
     {
-        if (data != nullptr)
-        {
-            fn->GenPositionArray2D(data, numSamples, xPositions, zPositions,
-                                  noiseOffsetXZ.x, noiseOffsetXZ.y, noiseFieldSeed);
-        }
+        fn->GenPositionArray2D(data, numSamples, xPositions, zPositions,
+                              noiseOffsetXZ.x, noiseOffsetXZ.y, noiseFieldSeed);
     };
     fill(grids.temperature, fnTemperature);
     fill(grids.humidity, fnHumidity);
@@ -177,7 +173,7 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
         .humidity = grids.humidity[idx],
         .peak = grids.peak[idx],
         .inland = grids.inland[idx],
-        .erosion = grids.erosion ? grids.erosion[idx] : 0.f,
+        .erosion = grids.erosion[idx],
     };
 }
 
@@ -224,14 +220,13 @@ static float terraceHeight(float height, const BiomeNoise& n)
     constexpr float spacing = 42.f;
     const float offset = 10.f * n.humidity + 6.f * n.temperature;
     const float localHeight = height - offset;
-    int band = static_cast<int>(floor((localHeight - SEA_LEVEL) / spacing));
     const auto anchor = [](int index)
     {
         RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x7E22ACEu, index);
         return SEA_LEVEL + spacing * (index + rng.nextFloat(-0.32f, 0.32f));
     };
-    if (anchor(band) > localHeight) --band;
-    else if (anchor(band + 1) < localHeight) ++band;
+    const int band = TerrainFormations::jitteredBand(
+        localHeight, static_cast<int>(floor((localHeight - SEA_LEVEL) / spacing)), anchor);
     const float low = anchor(band), high = anchor(band + 1);
     const float t = clamp((localHeight - low) / (high - low), 0.f, 1.f);
     RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x51E1Fu, band);
@@ -259,13 +254,13 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     const float mountainClimate = 1.f - smoothstep(0.05f, 0.35f, dry);
     const float highland = rugged * smoothstep(0.25f, 1.05f, n.inland) * mountainClimate;
     const float peakRelief = 160.f * highland * pow(peak, 4.f);
-    // Complementary weights blend complete ordinary/Tianzi profiles: as the additional
-    // mountain relief recedes, the same weight supplies the stacked formations below.
+    // Complementary weights blend complete profiles: as Tianzi weight removes the extra
+    // peak relief, the same weight supplies the stacked formations below.
     float height = foundation + land * (mountainRelief + (1.f - tianzi) * peakRelief);
     if (terraces > 0.f)
     {
-        // Blend complete profiles with complementary weights. The same weight replaces
-        // ordinary relief and introduces the plateau, so neither can disappear first.
+        // The same weight replaces ordinary relief and introduces the plateau, so neither
+        // can disappear first.
         float mesaHeight = foundation + land * (6.f + 42.f * TerrainFormations::plateauRelief(pos, noiseFieldSeed ^ 0xBA01u));
         mesaHeight = mix(mesaHeight, terraceHeight(mesaHeight, n), 0.45f);
         height = mix(height, mesaHeight, terraces);
@@ -278,8 +273,8 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     ivec2 formationSite{};
     if (tianzi > 0.f)
     {
-        // Split the previous 112-block core budget across three independently sited
-        // tiers. Broad summits and narrow rises leave plantable shelves between crowns.
+        // Three independently sited tiers. Broad summits and narrow rises leave plantable
+        // shelves between crowns.
         constexpr std::array<TerrainFormations::Profile, 3> tiers{{
             { 92.f, 34.f, 52.f, 42.f, 8.f, 0.84f, 0.85f },
             { 54.f, 24.f, 30.f, 38.f, 4.f, 0.80f, 0.85f },
@@ -352,9 +347,8 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
 
     for (uint32_t idx = 0; idx < numSamples; ++idx)
     {
-        outBiomes[idx] = biomeFromNoise(noiseAt(grids, idx));
         const vec2 pos = texelCentersStartXZ + vec2(idx % numTexels.x, idx / numTexels.x) * static_cast<float>(texelSizeBlocks);
-        if (OasisShaping::sample(pos, oases).vegetation) outBiomes[idx] = Biome::OASIS;
+        outBiomes[idx] = OasisShaping::sample(pos, oases).vegetation ? Biome::OASIS : biomeFromNoise(noiseAt(grids, idx));
     }
 }
 

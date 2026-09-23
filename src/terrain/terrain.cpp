@@ -79,6 +79,34 @@ static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemo
 
 static ThreadPool threadPool;
 
+// Validated here rather than in Decorator::addEntry: BiomeScanner shares biome registration
+// but has no block metadata.
+static void validateDecorators()
+{
+    const auto validate = [](const Decorator& decorator)
+    {
+        for (const DecoratorEntry& entry : decorator.getEntries())
+        {
+            if (entry.block == Block::AIR || !(entry.surfaces & (DECORATOR_SURFACE_WALL | DECORATOR_SURFACE_CEILING)))
+            {
+                continue;
+            }
+            const BlockData& blockData = Blocks::getBlockData(entry.block);
+            ASSERT(blockData.shape == BlockShape::DECORATOR_CUSTOM &&
+                   blockData.stateKind == BlockStateKind::SURFACE_MOUNT,
+                   "wall/ceiling decorators require a surface-mounted custom model");
+        }
+    };
+    for (uint32_t biomeIdx = 0; biomeIdx < static_cast<uint32_t>(Biome::COUNT); ++biomeIdx)
+    {
+        validate(Biomes::getBiomeData(static_cast<Biome>(biomeIdx)).decorator);
+    }
+    for (uint32_t caveBiomeIdx = 0; caveBiomeIdx < static_cast<uint32_t>(CaveBiome::COUNT); ++caveBiomeIdx)
+    {
+        validate(CaveBiomes::getCaveBiomeData(static_cast<CaveBiome>(caveBiomeIdx)).decorator);
+    }
+}
+
 void init(Scene* scene)
 {
     Terrain::scene = scene;
@@ -91,6 +119,7 @@ void init(Scene* scene)
 
     Biomes::init();
     CaveBiomes::init();
+    validateDecorators();
     Structures::init();
     CaveStructures::init();
     ChunkGenerator::init();
@@ -174,6 +203,12 @@ static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
+
+// One ring beyond render distance gets geometry and a BLAS.
+static int getCreateBlasDistance()
+{
+    return SettingsManager::getAsInt("renderDistance") + 1;
+}
 
 struct ChunkScanDistances
 {
@@ -266,7 +301,7 @@ static void scheduleChunkWork(Chunk* chunk,
 void update(ToFreeList& toFreeList)
 {
     const int renderDistance = SettingsManager::getAsInt("renderDistance");
-    const int createBlasDistance = renderDistance + 1;
+    const int createBlasDistance = getCreateBlasDistance();
     // see knowledge/terrain/terrain_manager.md for why fillStructuresDistance has the
     // extra structureMaxChunkRadius term (not just +1)
     const int fillStructuresDistance = createBlasDistance + 1 + structureMaxChunkRadius;
@@ -1242,7 +1277,7 @@ static bool importWorldImpl(const std::filesystem::path& worldDir)
     const glm::ivec2 cameraChunkPos = glmUtil::floorDiv(
         glm::ivec2(cameraPosInt.x, cameraPosInt.z),
         glm::ivec2(static_cast<int>(chunkSizeXZ)));
-    const int createBlasDistance = SettingsManager::getAsInt("renderDistance") + 1;
+    const int createBlasDistance = getCreateBlasDistance();
 
     const std::vector<Block> blockRemapTable = buildBlockRemapTable(worldJson["blocks"]);
 
@@ -1377,17 +1412,26 @@ bool pollHeadlessTerrain()
         // must finish the geometry ring before screenshot accumulation can start.
         if (SettingsManager::getAsString("world").empty())
         {
-            if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX)) return false;
-            const int distance = SettingsManager::getAsInt("renderDistance") + 1;
-            for (int z = -distance; z <= distance; ++z)
+            if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
             {
-                for (int x = -distance; x <= distance; ++x)
+                return false;
+            }
+            const int createBlasDistance = getCreateBlasDistance();
+            for (int z = -createBlasDistance; z <= createBlasDistance; ++z)
+            {
+                for (int x = -createBlasDistance; x <= createBlasDistance; ++x)
                 {
                     const glm::ivec2 pos = lastChunkPos + glm::ivec2(x, z);
                     const auto region = regions.find(glmUtil::floorDiv(pos, glm::ivec2(regionSideLength)));
-                    if (region == regions.end()) return false;
+                    if (region == regions.end())
+                    {
+                        return false;
+                    }
                     const Chunk* chunk = region->second->getChunk(pos);
-                    if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY) return false;
+                    if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY)
+                    {
+                        return false;
+                    }
                 }
             }
         }

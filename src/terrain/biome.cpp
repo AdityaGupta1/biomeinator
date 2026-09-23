@@ -372,7 +372,10 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     }
     else if (BiomeNoiseFields::dryClimateWeight(biomeNoise) > 0.35f)
     {
-        if (BiomeNoiseFields::terraceWeight(biomeNoise) > 0.4f) return Biome::MESA;
+        if (BiomeNoiseFields::terraceWeight(biomeNoise) > 0.4f)
+        {
+            return Biome::MESA;
+        }
         return biomeNoise.erosion < 0.35f ? Biome::RED_DESERT : Biome::DESERT;
     }
     else if (biomeNoise.inland < 0.85f && !(biomeNoise.peak > 0.0f && biomeNoise.erosion < 0.0f))
