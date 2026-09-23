@@ -1,5 +1,5 @@
 {
-    "textures": "cattail_top",
+    "textures": "lupine_bottom",
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "randomJitter": true,

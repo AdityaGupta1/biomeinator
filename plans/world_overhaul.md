@@ -71,6 +71,21 @@ After switching to 2D climate matching per tier (relief picks highland) and re-s
   - *Slivers:* after scaling, measure connected-patch sizes (scanner report) and remove what remains with the balancing plan's tools: axis equalization plus relaxation for even shares, and a minimum patch size for multi-axis regimes (Tianzi etc.), whose products produce stringy regions.
 - Order: add biomes first (more mild and highland targets), then scale, then balance, since every added biome reshuffles shares.
 
+### First wave and deferred biomes (2026-09-23)
+
+First wave, all climate targets needing only new tree structures and ground cover (blocks
+already exist): **cherry grove**, **mixed conifer forest** (fir + pine), **redwood forest**, and
+**willow** mixed into the existing swamp alongside cypress. Reference implementations live in
+`../mega-minecraft` (redwood especially).
+
+Deferred:
+- **Taiga / boreal:** waits for snow layers on tree canopies
+  ([issue #300](https://github.com/AdityaGupta1/biomeinator/issues/300)); a snowy conifer biome
+  without them looks unfinished.
+- **Monterey cypress coast:** belongs on the seaside cliffs below, which don't exist yet, and
+  likely needs a darker, denser leaf block (the existing cypress leaves are the swamp's light,
+  feathery bald cypress). The log block can be reused.
+
 ### Seaside cliffs (Big Sur)
 
 A coastal landform, with the label derived from it:
