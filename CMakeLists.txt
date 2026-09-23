@@ -10,6 +10,7 @@ if(MSVC)
 endif()
 
 include(FetchContent)
+include(CTest)
 
 # ==================================================
 # Biomeinator
@@ -382,6 +383,46 @@ target_compile_definitions(Biomeinator PRIVATE
     # pix3.h enables markers itself in Debug; Release stays marker-free
     $<$<CONFIG:RelWithDebInfo>:USE_PIX>
 )
+
+# ==================================================
+# BiomeinatorUnitTests
+# ==================================================
+
+if(BUILD_TESTING)
+    set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Build Catch2 documentation" FORCE)
+    set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "Install Catch2 extras" FORCE)
+    add_subdirectory("${EXT}/Catch2" "${CMAKE_BINARY_DIR}/Catch2" EXCLUDE_FROM_ALL)
+
+    file(GLOB UNIT_TESTS_SRC CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/*.cpp"
+    )
+
+    add_executable(BiomeinatorUnitTests
+        ${UNIT_TESTS_SRC}
+        "${SRC_DIR}/logger.cpp"
+        "${SRC_DIR}/util/halton.cpp"
+    )
+    assign_source_group("tests\\unit" "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit" "${UNIT_TESTS_SRC}")
+    source_group("src" FILES "${SRC_DIR}/logger.cpp")
+    source_group("src\\util" FILES "${SRC_DIR}/util/halton.cpp")
+
+    target_include_directories(BiomeinatorUnitTests PRIVATE
+        ${SRC_DIR}
+        ${GENERATED_HEADERS_DIR}
+        "${EXT}/DirectX-Headers/include/directx"
+    )
+    target_link_libraries(BiomeinatorUnitTests PRIVATE Catch2::Catch2WithMain glm::glm-header-only)
+    target_compile_definitions(BiomeinatorUnitTests PRIVATE
+        ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
+    )
+
+    list(APPEND CMAKE_MODULE_PATH "${EXT}/Catch2/extras")
+    include(Catch)
+    catch_discover_tests(BiomeinatorUnitTests
+        TEST_PREFIX "unit::"
+        PROPERTIES LABELS "unit"
+    )
+endif()
 
 # ==================================================
 # BiomeinatorTests
