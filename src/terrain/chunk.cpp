@@ -109,7 +109,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
@@ -417,7 +417,7 @@ void Chunk::runStructuresAndDecoratorPass()
 
 void Chunk::fillStructuresAndDecorators()
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
@@ -1130,17 +1130,12 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
     this->caveStructures = std::move(data.caveStructures);
     this->terrainAirMask = std::move(data.terrainAirMask);
     this->terrainSolidCubeMask = std::move(data.terrainSolidCubeMask);
-    this->wasImported = true;
+    this->hasSerializedData = true;
 }
 
 bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
-}
-
-bool Chunk::getWasImported() const
-{
-    return this->wasImported;
 }
 
 void Chunk::setIsMarkedForDestruction(bool marked)

@@ -193,7 +193,7 @@ private:
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
-    bool wasImported{ false };
+    bool hasSerializedData{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
@@ -242,8 +242,6 @@ public:
 
     bool getIsMarkedForDestruction() const;
     void setIsMarkedForDestruction(bool marked = true);
-
-    bool getWasImported() const;
 
     void setInstancesVisible(bool visible);
 

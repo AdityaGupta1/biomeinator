@@ -181,5 +181,6 @@ from final blocks is safe. Legacy v5/v6 fixture worlds retain empty cave lists a
 approximate masks; exploring beyond those old fixture boundaries is not a goal.
 
 Voxel golden screenshots load baked blocks, so they do not test this boundary
-behavior. [Region file tests](../tests/region_files.md) exercise fresh generation
-against exported neighbors using the actual structure/decorator code.
+behavior. Re-exporting legacy chunks keeps those approximations even though the
+new file uses v7. When changing this path, check fresh generation against exported
+neighbors as well as golden screenshots of already completed chunks.

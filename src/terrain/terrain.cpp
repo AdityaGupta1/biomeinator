@@ -37,7 +37,10 @@
 #include <cmath>
 #include <deque>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #define DEBUG_SINGLE_THREAD 0
@@ -107,6 +110,11 @@ struct IVec2Hash
 
 static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
 
+static glm::ivec2 cameraChunkPosition(glm::ivec3 position)
+{
+    return glm::ivec2(position.x, position.z) / static_cast<int>(chunkSizeXZ);
+}
+
 static std::deque<Chunk*> chunksToGenerateTerrain;
 static std::deque<Chunk*> chunksToGenerateGeometry;
 static std::vector<Chunk*> chunksToCreateBlas;
@@ -134,12 +142,15 @@ StreamingStats getStreamingStats()
 static std::atomic<uint32_t> expectedImportedChunks{ 0 };
 static std::atomic<uint32_t> importedChunksEnqueuedForBlas{ 0 };
 static std::atomic<bool> worldImportActive{ false };
+// Protected by chunksToCreateBlasMutex; each initial-import coordinate counts once.
+static std::unordered_set<glm::ivec2, IVec2Hash> pendingImportedChunks;
 
 void addChunkToCreateBlas(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
     chunksToCreateBlas.push_back(chunk);
-    if (headless && worldImportActive.load(std::memory_order_acquire) && chunk->getWasImported())
+    if (headless && worldImportActive.load(std::memory_order_acquire) &&
+        pendingImportedChunks.erase(chunk->getChunkPos()) != 0)
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
@@ -273,7 +284,7 @@ void update(ToFreeList& toFreeList)
 
     const Camera& camera = Renderer::getCamera();
     const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
-    const glm::ivec2 currentChunkPos = glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z) / static_cast<int>(chunkSizeXZ);
+    const glm::ivec2 currentChunkPos = cameraChunkPosition(cameraPosInt_WS);
     const glm::ivec2 minRenderChunkPos = currentChunkPos - renderDistance;
     const glm::ivec2 maxRenderChunkPos = currentChunkPos + renderDistance;
 
@@ -566,6 +577,8 @@ static constexpr uint32_t worldJsonVersion = 2;
 
 void exportWorld()
 {
+    std::filesystem::path createdExportDir;
+    bool published = false;
     try
     {
         const std::filesystem::path exportsDir = FileUtil::getDocumentsDir("exports");
@@ -578,7 +591,10 @@ void exportWorld()
         const std::string timestamp = FileUtil::getTimestampString();
         std::filesystem::path exportDir = exportsDir / timestamp;
         for (uint32_t suffix = 1; !std::filesystem::create_directory(exportDir); ++suffix)
+        {
             exportDir = exportsDir / (timestamp + "_" + std::to_string(suffix));
+        }
+        createdExportDir = exportDir;
 
         const Camera& camera = Renderer::getCamera();
         const glm::ivec3 cameraPosInt = camera.getPosInt_WS();
@@ -598,27 +614,53 @@ void exportWorld()
         uint32_t totalChunks = 0;
         for (const auto& [position, region] : regions)
         {
-            if (!region || std::none_of(region->chunks.begin(), region->chunks.end(), [](const auto& chunk) {
-                    return chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS;
-                })) continue;
-            uint32_t chunksWritten = 0;
-            if (!RegionFile::write(exportDir / RegionFile::fileName(position), *region, chunksWritten))
+            if (!region)
             {
-                Logger::logError("world export: aborted; incomplete export has no world.json");
-                return;
+                continue;
             }
-            totalChunks += chunksWritten;
+            std::vector<const Chunk*> chunks;
+            for (const auto& chunk : region->chunks)
+            {
+                if (chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
+                {
+                    chunks.push_back(chunk.get());
+                }
+            }
+            if (chunks.empty())
+            {
+                continue;
+            }
+            if (!RegionFile::write(exportDir / RegionFile::fileName(position), position, chunks))
+            {
+                throw std::runtime_error("region write failed");
+            }
+            totalChunks += static_cast<uint32_t>(chunks.size());
             worldJson["regions"].push_back({ position.x, position.y });
         }
         // Publish the manifest last so a failed region write never advertises a complete world.
         const std::string jsonBytes = worldJson.dump();
-        if (!FileUtil::writeAtomically(exportDir / "world.json", jsonBytes)) return;
+        if (!FileUtil::writeAtomically(exportDir / "world.json", jsonBytes))
+        {
+            throw std::runtime_error("manifest write failed");
+        }
+        published = true;
         Logger::log("world export: exported %u chunks across %zu regions to %s", totalChunks,
                     worldJson["regions"].size(), exportDir.generic_string().c_str());
     }
     catch (const std::exception& error)
     {
         Logger::logError("world export: %s", error.what());
+        // This path is assigned only after creating our own fresh export directory.
+        if (!createdExportDir.empty() && !published)
+        {
+            std::error_code cleanupError;
+            std::filesystem::remove_all(createdExportDir, cleanupError);
+            if (cleanupError)
+            {
+                Logger::logError("world export cleanup: %s: %s", createdExportDir.generic_string().c_str(),
+                                 cleanupError.message().c_str());
+            }
+        }
     }
 }
 
@@ -676,18 +718,26 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
         return false;
     }
 
-    const auto integerInRange = [](const nlohmann::json& value, int64_t min, int64_t max) {
-        if (!value.is_number_integer()) return false;
+    const auto integerInRange = [](const nlohmann::json& value, int64_t min, int64_t max)
+    {
+        if (!value.is_number_integer())
+        {
+            return false;
+        }
         if (value.is_number_unsigned())
+        {
             return value.get<uint64_t>() <= static_cast<uint64_t>(max) &&
                    (min <= 0 || value.get<uint64_t>() >= static_cast<uint64_t>(min));
+        }
         const int64_t number = value.get<int64_t>();
         return number >= min && number <= max;
     };
-    const auto worldInt = [&](const nlohmann::json& value) {
+    const auto worldInt = [&](const nlohmann::json& value)
+    {
         return integerInRange(value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
     };
-    const auto finiteFloat = [](const nlohmann::json& value) {
+    const auto finiteFloat = [](const nlohmann::json& value)
+    {
         return value.is_number() && std::isfinite(value.get<float>());
     };
     const auto& camera = outJson["camera"];
@@ -703,11 +753,20 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
                 camera["posFloat"].is_array() && camera["posFloat"].size() == 3 &&
                 finiteFloat(camera["phi"]) && finiteFloat(camera["theta"]);
         if (valid)
+        {
             for (int axis = 0; axis < 3; ++axis)
+            {
                 valid &= worldInt(camera["posInt"][axis]) && finiteFloat(camera["posFloat"][axis]);
-        for (const auto& block : outJson["blocks"]) valid &= block.is_string();
+            }
+        }
+        for (const auto& block : outJson["blocks"])
+        {
+            valid &= block.is_string();
+        }
         for (const auto& region : outJson["regions"])
+        {
             valid &= region.is_array() && region.size() == 2 && worldInt(region[0]) && worldInt(region[1]);
+        }
     }
     if (!valid)
     {
@@ -741,77 +800,102 @@ static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson
     return remapTable;
 }
 
-static bool importWorldImpl(const std::filesystem::path& worldDir)
+struct ImportedWorld
+{
+    decltype(Terrain::regions) regions;
+    std::unordered_set<glm::ivec2, IVec2Hash> pendingChunks;
+    uint32_t seed;
+    uint32_t numChunks{ 0 };
+    int renderDistance;
+    glm::ivec3 cameraPosInt;
+    glm::vec3 cameraPosFloat;
+    float phi;
+    float theta;
+};
+
+static std::optional<ImportedWorld> readWorld(const std::filesystem::path& worldDir)
 {
     try
     {
         nlohmann::json worldJson;
-        if (!loadAndValidateWorldJson(worldDir / "world.json", worldJson)) return false;
-        if (!regions.empty())
+        if (!loadAndValidateWorldJson(worldDir / "world.json", worldJson))
         {
-            Logger::logError("world import: terrain must be reset before replacing a world");
-            return false;
+            return std::nullopt;
         }
-        const uint32_t worldSeed = worldJson["worldSeed"].get<uint32_t>();
-        const int renderDistance = headless ? worldJson["renderDistance"].get<int>() : SettingsManager::getAsInt("renderDistance");
+        ImportedWorld world;
+        world.seed = worldJson["worldSeed"].get<uint32_t>();
+        world.renderDistance = headless ? worldJson["renderDistance"].get<int>() :
+                                         SettingsManager::getAsInt("renderDistance");
         const auto& cameraJson = worldJson["camera"];
-        const glm::ivec3 cameraPosInt{ cameraJson["posInt"][0].get<int>(), cameraJson["posInt"][1].get<int>(),
-                                       cameraJson["posInt"][2].get<int>() };
-        const glm::vec3 cameraPosFloat{ cameraJson["posFloat"][0].get<float>(), cameraJson["posFloat"][1].get<float>(),
-                                        cameraJson["posFloat"][2].get<float>() };
-        const float phi = cameraJson["phi"].get<float>();
-        const float theta = cameraJson["theta"].get<float>();
-        const glm::ivec2 cameraChunkPos = glmUtil::floorDiv(glm::ivec2(cameraPosInt.x, cameraPosInt.z),
-                                                          glm::ivec2(static_cast<int>(chunkSizeXZ)));
-        const int createBlasDistance = renderDistance + 1;
+        world.cameraPosInt = { cameraJson["posInt"][0].get<int>(), cameraJson["posInt"][1].get<int>(),
+                               cameraJson["posInt"][2].get<int>() };
+        world.cameraPosFloat = { cameraJson["posFloat"][0].get<float>(), cameraJson["posFloat"][1].get<float>(),
+                                 cameraJson["posFloat"][2].get<float>() };
+        world.phi = cameraJson["phi"].get<float>();
+        world.theta = cameraJson["theta"].get<float>();
+        const glm::ivec2 cameraChunkPos = cameraChunkPosition(world.cameraPosInt);
+        const int createBlasDistance = world.renderDistance + 1;
         const std::vector<Block> blockRemap = buildBlockRemapTable(worldJson["blocks"]);
 
-        // Decode into private ownership. A failed region leaves no partial world or changed seed.
-        decltype(regions) loadedRegions;
-        uint32_t totalChunks = 0;
-        uint32_t chunksWithinBlasDistance = 0;
         for (const auto& entry : worldJson["regions"])
         {
             const glm::ivec2 position{ entry[0].get<int>(), entry[1].get<int>() };
-            if (loadedRegions.contains(position))
+            if (world.regions.contains(position))
             {
                 Logger::logError("world import: duplicate region (%d, %d)", position.x, position.y);
-                return false;
+                return std::nullopt;
             }
-            auto region = RegionFile::read(worldDir / RegionFile::fileName(position), position, blockRemap);
-            if (!region) return false;
-            for (const auto& chunk : region->chunks)
+            auto data = RegionFile::read(worldDir / RegionFile::fileName(position), position, blockRemap);
+            if (!data)
             {
-                if (!chunk) continue;
-                ++totalChunks;
-                if (glmUtil::chebyshevDistance(chunk->getChunkPos(), cameraChunkPos) <= createBlasDistance)
-                    ++chunksWithinBlasDistance;
+                return std::nullopt;
             }
-            loadedRegions.emplace(position, std::move(region));
+            auto region = std::make_unique<Region>(position);
+            for (auto& chunk : *data)
+            {
+                region->createChunk(chunk.position)->loadSerializedData(std::move(chunk.data));
+                ++world.numChunks;
+                if (headless && glmUtil::chebyshevDistance(chunk.position, cameraChunkPos) <= createBlasDistance)
+                {
+                    world.pendingChunks.insert(chunk.position);
+                }
+            }
+            world.regions.emplace(position, std::move(region));
         }
-
-        SettingsManager::setWorldSeed(worldSeed);
-        // Fresh boundary generation must use the imported seed and its cached noise offsets.
-        ChunkGenerator::init();
-        if (headless) SettingsManager::setAsInt("renderDistance", renderDistance);
-        regions = std::move(loadedRegions);
-        if (headless)
-        {
-            expectedImportedChunks.store(chunksWithinBlasDistance, std::memory_order_relaxed);
-            importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
-            worldImportActive.store(true, std::memory_order_release);
-        }
-        Renderer::restoreCameraFromImport(cameraPosInt, cameraPosFloat, phi, theta);
-        setDirty();
-        Logger::log("world import: imported %u chunks across %zu regions from %s; expectedImported=%u",
-                    totalChunks, regions.size(), worldDir.generic_string().c_str(), chunksWithinBlasDistance);
-        return true;
+        return world;
     }
     catch (const std::exception& error)
     {
         Logger::logError("world import: %s: %s", worldDir.generic_string().c_str(), error.what());
-        return false;
+        return std::nullopt;
     }
+}
+
+// The replacement has been decoded and allocated before the current world is removed.
+// No chunk work may run while its settings and import-completion batch are installed.
+static void applyImportedWorld(ImportedWorld&& world, const std::filesystem::path& worldDir)
+{
+    ASSERT(regions.empty());
+    SettingsManager::setWorldSeed(world.seed);
+    ChunkGenerator::init();
+    if (headless)
+    {
+        SettingsManager::setAsInt("renderDistance", world.renderDistance);
+    }
+    regions = std::move(world.regions);
+    const uint32_t expected = static_cast<uint32_t>(world.pendingChunks.size());
+    if (headless)
+    {
+        std::scoped_lock lock(chunksToCreateBlasMutex);
+        pendingImportedChunks = std::move(world.pendingChunks);
+        expectedImportedChunks.store(expected, std::memory_order_relaxed);
+        importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
+        worldImportActive.store(true, std::memory_order_release);
+    }
+    Renderer::restoreCameraFromImport(world.cameraPosInt, world.cameraPosFloat, world.phi, world.theta);
+    setDirty();
+    Logger::log("world import: imported %u chunks across %zu regions from %s; expectedImported=%u",
+                world.numChunks, regions.size(), worldDir.generic_string().c_str(), expected);
 }
 
 void importWorld()
@@ -821,10 +905,12 @@ void importWorld()
     {
         return;
     }
-    if (!importWorldImpl(worldPathStr))
+    auto world = readWorld(worldPathStr);
+    if (!world)
     {
         exit(1);
     }
+    applyImportedWorld(std::move(*world), worldPathStr);
 }
 
 // Tear down everything that holds Chunk* / region pointers so a fresh world can be
@@ -861,6 +947,7 @@ static void resetTerrainState()
     {
         std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
         chunksToCreateBlas.clear();
+        pendingImportedChunks.clear();
     }
     {
         std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
@@ -883,16 +970,17 @@ static void resetTerrainState()
 
 void reimportWorld(const std::filesystem::path& worldDir)
 {
-    threadPool.shutdown();
-
-    resetTerrainState();
-
-    threadPool.init();
-
-    if (!importWorldImpl(worldDir))
+    auto world = readWorld(worldDir);
+    if (!world)
     {
-        Logger::logError("world reimport: failed; terrain will regenerate from current settings");
+        Logger::logError("world reimport: failed; current world is unchanged");
+        return;
     }
+
+    threadPool.shutdown();
+    resetTerrainState();
+    applyImportedWorld(std::move(*world), worldDir);
+    threadPool.init();
 }
 
 bool pollHeadlessImport()

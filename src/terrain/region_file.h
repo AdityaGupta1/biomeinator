@@ -3,28 +3,33 @@
 
 #pragma once
 
-#include "block.h"
+#include "chunk.h"
 
 #include <glm/vec2.hpp>
-#include <memory>
+#include <optional>
 #include <span>
-
-class Region;
 
 namespace RegionFile
 {
 
+struct DecodedChunk
+{
+    glm::ivec2 position;
+    SerializedChunkData data;
+};
+
+using DecodedRegion = std::vector<DecodedChunk>;
+
 std::string fileName(glm::ivec2 regionPos);
 bool isValidPosition(glm::ivec2 regionPos);
 
-// The caller owns the region lifetime and must not change its chunk slots during
-// the call. Only chunks whose blocks are complete are saved; those inputs are immutable.
-// An empty region is a valid file. Block values index the current Blocks::blockIdNames palette.
-bool write(const std::filesystem::path& path, const Region& region, uint32_t& outChunksWritten);
+// The caller retains these completed chunks for the duration of the write.
+// An empty region is valid. Block values index the current Blocks::blockIdNames palette.
+bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<const Chunk* const> chunks);
 
-// Decode privately: failure returns nullptr, never a partially attached region.
-// Does not wire neighbors, run tasks, or change world settings/camera.
-std::unique_ptr<Region> read(const std::filesystem::path& path, glm::ivec2 expectedPos,
-                             std::span<const Block> blockRemap);
+// The result has no live chunk/region pointers. Attach on the main thread only
+// after reserving the destination chunks against generation and other readers.
+std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 expectedPos,
+                                  std::span<const Block> blockRemap);
 
 } // namespace RegionFile
