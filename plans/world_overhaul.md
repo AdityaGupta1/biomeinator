@@ -30,7 +30,32 @@
 
 - Biome = enum entry + init block in `biome.cpp`. `uint8_t`, up to 255 fine.
 - Crowding: lowland band gets full. Need more inland bands or extra selection axis (weirdness) — varzea/igapo/terra firme all hot+humid+flat.
-- `BiomeData` too thin for terrain shaping: add per-biome base-height offset, surface multiplier, ridge params. Blend neighbor columns' params to avoid border cliffs.
+- Terrain chooses the biome, not the other way around (see `knowledge/terrain/biome_system.md`). Don't add per-biome height offsets or swap profiles; a new landform is a bounded style on top of the shared height (like mesa terraces), and its label derives from the same factor. Landform biomes go in the terrain regime table; others are climate targets.
+
+### High-ground lowland biomes
+
+Lowland climate targets all have negative peak, and `distance2` weighs peak like climate, so high-peak lowland picks whichever low-peak target is least wrong (e.g. forest on hot, dry ground at peak ~0.96, seed 100 x≈3863). Adding positive-peak lowland targets covers each climate corner and fixes this:
+
+| climate | biome | character |
+|---|---|---|
+| mild, very humid | redwood forest | very tall thick trunks, ferns; foggy |
+| warm, very humid | cloud forest | mossy twisted trees, vines, dense undergrowth, heavy fog (fog density plumbing in §2) |
+| cold, humid | taiga / boreal | dense spruce, snow near the top of the range |
+| cool, moderate | highland moor / alpine meadow | grass, heather, flowers, boulders, sparse conifers |
+| dry (hot or cold) | high desert steppe | sagebrush, junipers, sparse grass; eroded dry high ground mesa/red desert don't claim |
+
+Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianzi takes preserved relief, cloud forest the eroded rolling highlands). Alternatively the lowland search could ignore peak, since relief already decides lowland vs highland; decide alongside `plans/biome_balancing.md`.
+
+### Seaside cliffs (Big Sur)
+
+A coastal landform, with the label derived from it:
+
+1. `cliffWeight` from high peak + low erosion near the coast.
+2. Let relief reach the shore: two terms flatten every coast today — `coastPull` (toward sea level + 8) and `landWeight` (relief ramps in over inland 0–0.35). Scale `coastPull` down and steepen the `landWeight` ramp (e.g. 0–0.03) by `cliffWeight`, so relief stays high to the waterline and drops into the sea within a few blocks.
+3. Loosen the near-coast division of the 3D density amplitude by `cliffWeight` for overhangs and coves. Sea stacks can reuse the formation sampler on the ocean side, like the quartz spires.
+4. The beach band becomes a "sea cliff" biome (bare stone or grass tops, no sand) where `cliffWeight` is high.
+
+Watch: the seabed next to cliffs must also drop steeply, or cliffs stand on a shallow shelf. `inlandHeight` is already steep around inland 0; probe it first.
 
 Roster:
 - Brazil: varzea, igapo, cerrado, terra firme, lencois maranhenses, cloud forest, **pantanal**, **atlantic forest**
