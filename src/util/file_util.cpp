@@ -2,11 +2,37 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "file_util.h"
+#include "logger.h"
 
+#include <fstream>
 #include <shlobj.h>
 
 namespace FileUtil
 {
+
+bool writeAtomically(const std::filesystem::path& path, std::span<const char> bytes)
+{
+    std::filesystem::path temporaryPath = path;
+    temporaryPath += ".tmp";
+    std::ofstream file(temporaryPath, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        Logger::logError("file write: failed to create %s", temporaryPath.generic_string().c_str());
+        return false;
+    }
+    file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    file.close();
+    std::error_code error;
+    if (file)
+    {
+        std::filesystem::rename(temporaryPath, path, error);
+        if (!error) return true;
+    }
+    Logger::logError("file write: failed to publish %s: %s", path.generic_string().c_str(),
+                     error ? error.message().c_str() : "write or close failed");
+    std::filesystem::remove(temporaryPath, error);
+    return false;
+}
 
 std::filesystem::path getDocumentsDir(const std::string& category)
 {

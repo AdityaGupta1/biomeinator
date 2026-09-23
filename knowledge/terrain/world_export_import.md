@@ -1,8 +1,30 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-22_
 
 # World Export / Import
 
-`Terrain::exportWorld` / `importWorld` / `reimportWorld` serialize all populated chunks (blocks, biomes, structures), the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; will eventually be reused for chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. Region binary format and `world.json` schema live in code (`terrain.cpp` near `worldRegionMagic`) — do not duplicate here.
+`Terrain::exportWorld` / `importWorld` / `reimportWorld` save completed chunks, the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; region serialization is also intended for future chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. The binary format lives in `region_file.cpp`; `terrain.cpp` owns the `world.json` schema and whole-world integration.
+
+## Exact generation inputs and private region ownership
+
+Region v7 preserves original pre-structure terrain masks and ordered cave candidates,
+in addition to final blocks and the existing data. Fresh neighbors consult these
+inputs when growing cave structures and placing decorators. Rebuilding masks from
+decorated blocks changes that generation; sorting either candidate list changes
+structure precedence. Imported v7 chunks therefore retain both masks and candidate
+order exactly. The v5/v6 readers keep the historical approximations (masks rebuilt
+from final blocks and no cave candidates), acceptable for the bounded golden worlds.
+
+`RegionFile` reads a privately owned region without wiring neighbors, scheduling
+work, changing the seed, or moving the camera. It validates lengths and indices
+before publishing data; a failure destroys the entire partial region. Whole-world
+import decodes all regions before attaching them or changing world settings. This
+ownership boundary lets a future cache reuse the codec without resetting the world.
+
+Writes use a sibling temporary file and replace the destination only after a
+successful write and close. The caller must allow only one writer per destination.
+Whole-world export reserves a fresh directory and publishes `world.json` last, so
+a failed region write cannot advertise a complete export. This handles reported
+I/O failures; it is not a power-loss durability guarantee.
 
 Sparse block-state records are sorted by local block index before export so the
 in-memory unordered map does not make world files nondeterministic. State bytes are
@@ -11,7 +33,7 @@ rejecting unused packed bits. Surface-mounted blocks explicitly store every face
 including the ordinary upward/floor-facing value; absence never implicitly means floor.
 Region v5 imports predate block-state records; as a narrow migration, every block that
 now declares `surface_mount` receives an explicit upward-facing entry in memory. A later
-export writes those migrated entries in v6 format.
+export writes those migrated entries in v7 format.
 
 ## Block palette decouples exports from enum values
 
@@ -30,12 +52,12 @@ Imported chunks load their data, set `wasImported = true`, and **traverse the fu
 
 | Task | If `wasImported` |
 |---|---|
-| `generateTerrain` | skip `fillTerrainBlocksAndCreateStructures`; advance to `HAS_TERRAIN` |
-| `checkStructureNeighbors` | unchanged (always runs — drives 5×5 counter on 25 neighbors) |
+| `generateTerrain` | skip generation; retain v7 masks or build the legacy approximation; advance to `HAS_TERRAIN` |
+| `checkStructureNeighbors` | unchanged (always runs — drives 3×3 counter on 9 neighbors) |
 | `fillStructuresAndDecorators` | skip structure fill loop AND decorator pass; advance to `HAS_ALL_BLOCKS` |
 | `generateSegments`, `createInstances` | unchanged (segments + geometry are not serialized) |
 
-The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 5×5 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
+The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 3×3 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
 
 ## `ChunkGenerator::init()` must rerun after `setWorldSeed`
 
@@ -49,7 +71,7 @@ The interactive import path does not need to know when import finishes — frame
 
 Three statics in `terrain.cpp` drive the gate:
 
-- `expectedImportedChunks` — total imported chunks within `createBlasDistance` of the imported camera position. Tallied inside `loadRegionFile` as each chunk is decoded; stored once at the end of `importWorldImpl` while no workers are running yet, so a `relaxed` store suffices.
+- `expectedImportedChunks` — total imported chunks within `createBlasDistance` of the imported camera position. Tallied by `importWorldImpl` over each privately decoded region; stored once at the end of `importWorldImpl` while no workers are running yet, so a `relaxed` store suffices.
 - `importedChunksEnqueuedForBlas` — incremented by `addChunkToCreateBlas` whenever an imported chunk reaches the BLAS-create queue. `relaxed` increments are fine because the values are only consumed by `pollHeadlessImport()`, which doesn't synchronize anything else against them.
 - `worldImportActive` — the publish flag. Stored `release` at the end of `importWorldImpl`; loaded `acquire` by `addChunkToCreateBlas` so workers see a fully-populated `expectedImportedChunks` before they start ticking the counter. `pollHeadlessImport()` reads it `relaxed` because by the time the renderer calls it, the corresponding `addChunkToCreateBlas` happens-before edges through the BLAS-create-queue mutex have already established visibility of the counter values.
 
@@ -64,3 +86,10 @@ All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && wo
 ## `reimportWorld` flushes everything
 
 `Ctrl+O` mid-run requires shutting the thread pool down (`threadPool.shutdown`), tearing down all regions + per-chunk state + queues, resetting BLAS tracking, then rebuilding the pool and rerunning the import body. Half-running tasks holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the full flush.
+
+## Validation
+
+[Region file tests](../tests/region_files.md) cover exact v7 round trips, legacy
+compatibility, rejected corrupt files, checked writes, and imported/fresh boundary
+generation using production chunk code. Golden screenshots complement those tests;
+they do not exercise fresh generation across an exported boundary.

@@ -93,6 +93,18 @@ inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmen
 class Region;
 class ThreadMemoryAllocator;
 
+// Completed block generation only. Empty masks are permitted solely for legacy imports.
+struct SerializedChunkData
+{
+    std::vector<Block> blocks;
+    std::vector<Biome> biomes;
+    std::vector<Structure> structures;
+    std::unordered_map<uint32_t, uint8_t> blockStates;
+    std::vector<CaveStructure> caveStructures;
+    std::vector<uint64_t> terrainAirMask;
+    std::vector<uint64_t> terrainSolidCubeMask;
+};
+
 // Chunk-owned inputs for deferred cave decoration. Neighboring chunks read only
 // the immutable terrain masks; these fields live until this chunk finishes decoration.
 struct CaveDecorationData
@@ -245,10 +257,11 @@ public:
     const std::vector<Biome>& getBiomes() const;
     const std::vector<Structure>& getStructures() const;
     const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
+    const std::vector<CaveStructure>& getCaveStructures() const;
+    const std::vector<uint64_t>& getTerrainAirMask() const;
+    const std::vector<uint64_t>& getTerrainSolidCubeMask() const;
 
-    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
-                            std::vector<Structure>&& structures,
-                            std::unordered_map<uint32_t, uint8_t>&& blockStates);
+    void loadSerializedData(SerializedChunkData&& data);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);

@@ -415,6 +415,40 @@ target_compile_definitions(BiomeinatorTests PRIVATE
 )
 
 # ==================================================
+# RegionFileTests
+# ==================================================
+
+# CPU region/generation regression tests use production chunk code and fail-fast
+# rendering substitutes, so these checks do not need a GPU or renderer.
+add_executable(RegionFileTests
+    src/tests/terrain/region_file_tests.cpp
+    src/tests/terrain/support.cpp
+    src/terrain/region_file.cpp
+    src/terrain/chunk.cpp
+    src/terrain/chunk_generator.cpp
+    src/terrain/block.cpp
+    src/terrain/biome.cpp
+    src/terrain/biome_noise.cpp
+    src/terrain/cave_biome.cpp
+    src/terrain/swamp_shaping.cpp
+    src/terrain/structure/structure.cpp
+    src/terrain/structure/structure_gen.cpp
+    src/terrain/structure/cave_structure.cpp
+    src/terrain/structure/decorator.cpp
+    src/multithreading/thread_memory_allocator.cpp
+    src/util/file_util.cpp
+    src/logger.cpp
+)
+target_include_directories(RegionFileTests PRIVATE $<TARGET_PROPERTY:Biomeinator,INCLUDE_DIRECTORIES>)
+target_link_libraries(RegionFileTests PRIVATE glm::glm-header-only FastNoise lz4_static)
+target_compile_definitions(RegionFileTests PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+    TARGET_FILE_DIR="${CMAKE_SOURCE_DIR}"
+    ENABLE_ASSERTS=1
+)
+
+# ==================================================
 # BiomeScanner
 # ==================================================
 
