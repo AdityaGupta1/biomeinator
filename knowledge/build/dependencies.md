@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-22_
 
 # Third-Party Dependencies
 
@@ -9,8 +9,8 @@ apart so that nothing in `reference/` can accidentally become a build input.
 ## Three kinds of dependency
 
 - **Git submodules** (`.gitmodules`) for source that is built in-tree or used header-only:
-  imgui, implot, FastNoise2, lz4, GPUSorting, nvapi, DirectX-Headers, SHARC. Update by moving the
-  submodule commit.
+  imgui, implot, FastNoise2, lz4, GPUSorting, nvapi, DirectX-Headers, SHARC, Catch2. Update by
+  moving the submodule commit. Catch2 is only added to the build when `BUILD_TESTING` is enabled.
 - **Vendored prebuilt SDKs**, committed as files: AgilitySDK, streamline, dxc,
   WinPixEventRuntime. Each folder carries its own `LICENSE.txt` at the root and splits into
   `include/`, `lib/`, `bin/` (or the SDK's native layout when it ships one, as streamline

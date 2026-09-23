@@ -7,19 +7,11 @@
 
 void DescriptorHeapAllocator::init(ID3D12Device* device, ID3D12DescriptorHeap* heapPtr)
 {
-    this->heapPtr = heapPtr;
     const D3D12_DESCRIPTOR_HEAP_DESC heapDesc = heapPtr->GetDesc();
-
-    this->heapHandleIncrement = device->GetDescriptorHandleIncrementSize(heapDesc.Type);
-    this->heapStartCpu = heapPtr->GetCPUDescriptorHandleForHeapStart();
-    this->heapStartGpu = heapPtr->GetGPUDescriptorHandleForHeapStart();
-
-    const uint32_t numDescriptors = heapDesc.NumDescriptors;
-    this->freeIdxs.reserve(numDescriptors);
-    for (int idx = numDescriptors - 1; idx >= 0; --idx)
-    {
-        this->freeIdxs.push_back(idx);
-    }
+    const D3D12_CPU_DESCRIPTOR_HANDLE heapStartCpu = heapPtr->GetCPUDescriptorHandleForHeapStart();
+    const D3D12_GPU_DESCRIPTOR_HANDLE heapStartGpu = heapPtr->GetGPUDescriptorHandleForHeapStart();
+    const uint32_t heapHandleIncrement = device->GetDescriptorHandleIncrementSize(heapDesc.Type);
+    this->indexAllocator.reset(heapDesc.NumDescriptors, heapStartCpu.ptr, heapStartGpu.ptr, heapHandleIncrement);
 }
 
 uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle)
@@ -30,26 +22,40 @@ uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandl
 uint32_t DescriptorHeapAllocator::alloc(D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle,
                                         D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
 {
-    ASSERT(this->freeIdxs.size() > 0);
-    const uint32_t idx = this->freeIdxs.back();
-    this->freeIdxs.pop_back();
-    outCpuHandle->ptr = this->heapStartCpu.ptr + (idx * this->heapHandleIncrement);
+    ASSERT(outCpuHandle != nullptr);
+    if (outCpuHandle == nullptr)
+    {
+        return DescriptorIndexAllocation::INVALID_INDEX;
+    }
+
+    const std::optional<DescriptorIndexAllocation> allocation = this->indexAllocator.allocate();
+    ASSERT(allocation.has_value(), "Descriptor heap exhausted");
+    if (!allocation)
+    {
+        *outCpuHandle = {};
+        if (outGpuHandle != nullptr)
+        {
+            *outGpuHandle = {};
+        }
+        return DescriptorIndexAllocation::INVALID_INDEX;
+    }
+
+    outCpuHandle->ptr = allocation->cpuHandle;
     if (outGpuHandle != nullptr)
     {
-        outGpuHandle->ptr = this->heapStartGpu.ptr + (idx * this->heapHandleIncrement);
+        outGpuHandle->ptr = allocation->gpuHandle;
     }
-    return idx;
+    return allocation->index;
 }
 
 void DescriptorHeapAllocator::free(uint32_t idx)
 {
-    this->freeIdxs.push_back(idx);
+    const bool didRelease = this->indexAllocator.release(idx);
+    ASSERT(didRelease, "Attempted to free an invalid or already-free descriptor index");
 }
 
 void DescriptorHeapAllocator::free(D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle)
 {
-    const uint32_t cpuIdx = (cpuHandle.ptr - this->heapStartCpu.ptr) / this->heapHandleIncrement;
-    const uint32_t gpuIdx = (gpuHandle.ptr - this->heapStartGpu.ptr) / this->heapHandleIncrement;
-    ASSERT(cpuIdx == gpuIdx);
-    this->free(cpuIdx);
+    const bool didRelease = this->indexAllocator.release(cpuHandle.ptr, gpuHandle.ptr);
+    ASSERT(didRelease, "Attempted to free invalid or mismatched descriptor handles");
 }
