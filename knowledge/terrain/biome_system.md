@@ -37,9 +37,11 @@ in the selection code.
 
 `regimeWeight` derives the terrain strength from the same suitability: 0 at the label threshold,
 1 at `fullStrength`. It is also multiplied down to 0 approaching the label of every
-higher-priority regime, over that regime's ramp width mirrored below its threshold. So a
-landform never extends past its label, and overlapping regimes (red desert spires under Mesa)
-need no special-case masks. Apply the ramp **after** combining every suitability axis:
+higher-priority regime, over that regime's `fadeWidth` just below its threshold. So a landform
+never extends past its label, and overlapping regimes (red desert spires under Mesa) need no
+special-case masks. `fadeWidth` must stay below the threshold: suitabilities bottom out at 0,
+so a fade reaching below 0 suppresses lower regimes everywhere (this once capped red desert
+spires at 31% height far from any mesa). Apply the ramp **after** combining every suitability axis:
 separately fading inlandness let coastal columns keep tall pillars after the label had already
 switched to tundra. Shape, formation rock and cliff soil use the unjittered strength; biome
 jitter can affect the negligible outer foothills but cannot cut through a tower's core.

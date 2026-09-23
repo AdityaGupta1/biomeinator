@@ -5,6 +5,7 @@
 #include "oasis_shaping.h"
 #include "terrain_formation.h"
 
+#include "debug.h"
 #include "rendering/common/common_settings.h"
 #include "util/rng.h"
 
@@ -231,18 +232,20 @@ struct TerrainRegimeData
     float (*suitability)(const BiomeNoise&);
     // Label boundary.
     float threshold;
-    // Suitability at full terrain weight. The same ramp width, mirrored below the threshold,
-    // fades lower-priority regimes out before this regime's label begins.
+    // Suitability at full terrain weight.
     float fullStrength;
+    // Lower-priority regimes fade out over this width just below the threshold. Keep it smaller
+    // than the threshold: suitabilities bottom out at 0, so a wider fade would suppress them
+    // everywhere, even far from this regime.
+    float fadeWidth;
 };
 
-// Swamp terrain comes from flood cells (see swamp_shaping), not from its regime weight; its
-// ramp only sets how lower-priority regimes fade out next to wetlands.
+// Swamp terrain comes from flood cells (see swamp_shaping), not from its regime weight.
 static const std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
-    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f },
-    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f },
-    { Biome::MESA, mesaSuitability, 0.15f, 0.5f },
-    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f },
+    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f, 0.1f },
+    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f, 0.15f },
+    { Biome::MESA, mesaSuitability, 0.15f, 0.5f, 0.1f },
+    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f, 0.05f },
 }};
 
 float regimeWeight(TerrainRegime regime, const BiomeNoise& n)
@@ -255,8 +258,8 @@ float regimeWeight(TerrainRegime regime, const BiomeNoise& n)
     for (size_t claimantIdx = 0; claimantIdx < regimeIdx && weight > 0.f; ++claimantIdx)
     {
         const TerrainRegimeData& claimant = regimes[claimantIdx];
-        const float rampWidth = claimant.fullStrength - claimant.threshold;
-        weight *= 1.f - smoothstep(claimant.threshold - rampWidth, claimant.threshold, claimant.suitability(n));
+        ASSERT(claimant.fadeWidth < claimant.threshold);
+        weight *= 1.f - smoothstep(claimant.threshold - claimant.fadeWidth, claimant.threshold, claimant.suitability(n));
     }
     return weight;
 }
