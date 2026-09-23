@@ -15,10 +15,7 @@ public:
 protected:
     void initializeStorage(ToFreeList* toFreeList, size_t sizeBytes) override;
 
-    void ensureCapacity(ID3D12GraphicsCommandList* cmdList,
-                        ToFreeList& toFreeList,
-                        size_t minCapacityBytes,
-                        bool useBackFreeSection) override;
+    void ensureCapacity(ID3D12GraphicsCommandList* cmdList, ToFreeList& toFreeList, size_t minCapacityBytes) override;
 
     void onReset() override;
 };

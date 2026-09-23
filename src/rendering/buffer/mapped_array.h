@@ -3,15 +3,18 @@
 
 #pragma once
 
-#include "rendering/dxr_common.h"
-#include "rendering/renderer.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/dirty_range_set.h"
 #include "rendering/buffer/gpu_memory_reporter.h"
 #include "rendering/buffer/to_free_list.h"
+#include "rendering/dxr_common.h"
+#include "rendering/renderer.h"
 #include "util/util.h"
 
 #include "debug.h"
 
+#include <algorithm>
+#include <cstring>
 #include <vector>
 
 struct MappedArrayOptions
@@ -47,65 +50,11 @@ private:
         return slotIdx;
     }
 
-    struct DirtyRange
-    {
-        uint32_t begin;
-        uint32_t end; // exclusive
-    };
-    std::vector<DirtyRange> dirtyRanges;
+    DirtyRangeSet dirtyRanges;
 
     void setNotDirty()
     {
         this->dirtyRanges.clear();
-    }
-
-    void insertDirtyRange(uint32_t newRangeBegin, uint32_t newRangeEnd)
-    {
-        if (this->dirtyRanges.empty())
-        {
-            this->dirtyRanges.emplace_back(newRangeBegin, newRangeEnd);
-            return;
-        }
-
-        // skip binary search if new range is at or after all existing ranges
-        DirtyRange& last = this->dirtyRanges.back();
-        if (newRangeBegin >= last.end)
-        {
-            if (newRangeBegin == last.end)
-            {
-                last.end = newRangeEnd; // adjacent to last range, extend it
-            }
-            else
-            {
-                this->dirtyRanges.push_back({ newRangeBegin, newRangeEnd }); // after last range, append new one
-            }
-            return;
-        }
-
-        // find first existing range whose .end >= newRangeBegin (might overlap or be adjacent)
-        auto it = std::lower_bound(this->dirtyRanges.begin(),
-                                   this->dirtyRanges.end(),
-                                   newRangeBegin,
-                                   [](const DirtyRange& r, uint32_t val) { return r.end < val; });
-
-        // no overlapping or adjacent range found, so insert a new one
-        if (it == this->dirtyRanges.end() || it->begin > newRangeEnd)
-        {
-            this->dirtyRanges.insert(it, { newRangeBegin, newRangeEnd });
-            return;
-        }
-
-        // merge into found range
-        it->begin = std::min(it->begin, newRangeBegin);
-        it->end = std::max(it->end, newRangeEnd);
-
-        // absorb any subsequent overlapping ranges
-        auto next = std::next(it);
-        while (next != this->dirtyRanges.end() && next->begin <= it->end)
-        {
-            it->end = std::max(it->end, next->end);
-            next = this->dirtyRanges.erase(next);
-        }
     }
 
     void init(uint32_t size, ToFreeList* toFreeList)
@@ -170,12 +119,22 @@ public:
 
     inline void markDirty(uint32_t idx)
     {
-        this->insertDirtyRange(idx, idx + 1);
+        const bool inBounds = idx < this->size;
+        ASSERT(inBounds, "MappedArray dirty index is out of bounds");
+        if (inBounds)
+        {
+            this->dirtyRanges.insert(idx, idx + 1);
+        }
     }
 
     inline void markDirtyRange(uint32_t begin, uint32_t end)
     {
-        this->insertDirtyRange(begin, end);
+        const bool inBounds = begin <= end && end <= this->size;
+        ASSERT(inBounds, "MappedArray dirty range is out of bounds");
+        if (inBounds)
+        {
+            this->dirtyRanges.insert(begin, end);
+        }
     }
 
     bool copyFromUploadBufferIfDirty(ID3D12GraphicsCommandList* cmdList)
@@ -192,7 +151,7 @@ public:
                                                      D3D12_RESOURCE_STATE_COPY_DEST);
 
         ID3D12Resource* const upload_buffer = this->upload_buffers[this->getUploadSlotIdx()].Get();
-        for (const DirtyRange& range : this->dirtyRanges)
+        for (const DirtyRange& range : this->dirtyRanges.getRanges())
         {
             const uint32_t startBytes = sizeof(T) * range.begin;
             const uint32_t sizeBytes = sizeof(T) * (range.end - range.begin);
@@ -231,7 +190,7 @@ public:
         memcpy(this->host_buffers[slotIdx], host_oldBuffer, sizeof(T) * copyCount);
 
         this->dirtyRanges.clear();
-        this->insertDirtyRange(0, newSize);
+        this->dirtyRanges.insert(0, newSize);
     }
 
     // For arrays whose device buffer is the source of truth (filled incrementally or by the

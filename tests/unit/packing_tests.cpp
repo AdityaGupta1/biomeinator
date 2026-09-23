@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <random>
 
 TEST_CASE("packFloat2ToUint stores each IEEE half in its expected lane", "[unit][packing]")
 {
@@ -62,6 +63,36 @@ TEST_CASE("terrain vertex packing round-trips within quantization error", "[unit
         CHECK(unpacked.pos_OS.x == Catch::Approx(position.x).margin(0.5f / PACKED_TERRAIN_POS_XZ_SCALE));
         CHECK(unpacked.pos_OS.y == Catch::Approx(position.y).margin(0.5f / PACKED_TERRAIN_POS_Y_SCALE));
         CHECK(unpacked.pos_OS.z == Catch::Approx(position.z).margin(0.5f / PACKED_TERRAIN_POS_XZ_SCALE));
+        CHECK(unpacked.uv.x == Catch::Approx(source.uv.x).margin(0.5f / 255.f));
+        CHECK(unpacked.uv.y == Catch::Approx(source.uv.y).margin(0.5f / 255.f));
+        CHECK(unpacked.packedNor == source.packedNor);
+    }
+}
+
+TEST_CASE("terrain vertex packing preserves randomized in-range values", "[unit][packing][stress]")
+{
+    constexpr uint32_t seed = 0xBACC1234u;
+    constexpr float maxXZ = 65535.f / PACKED_TERRAIN_POS_XZ_SCALE - PACKED_TERRAIN_POS_XZ_BIAS;
+    constexpr float maxY = 65535.f / PACKED_TERRAIN_POS_Y_SCALE - PACKED_TERRAIN_POS_Y_BIAS;
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> xzDistribution(-PACKED_TERRAIN_POS_XZ_BIAS, maxXZ);
+    std::uniform_real_distribution<float> yDistribution(-PACKED_TERRAIN_POS_Y_BIAS, maxY);
+    std::uniform_real_distribution<float> uvDistribution(0.f, 1.f);
+    INFO("seed=" << seed);
+
+    for (int sample = 0; sample < 10000; ++sample)
+    {
+        Vertex source{};
+        source.pos_OS = { xzDistribution(rng), yDistribution(rng), xzDistribution(rng) };
+        source.packedNor = rng();
+        source.uv = { uvDistribution(rng), uvDistribution(rng) };
+
+        const Vertex unpacked = Util::unpackTerrainVertex(Util::packTerrainVertex(source));
+
+        CAPTURE(sample);
+        CHECK(unpacked.pos_OS.x == Catch::Approx(source.pos_OS.x).margin(0.5f / PACKED_TERRAIN_POS_XZ_SCALE));
+        CHECK(unpacked.pos_OS.y == Catch::Approx(source.pos_OS.y).margin(0.5f / PACKED_TERRAIN_POS_Y_SCALE));
+        CHECK(unpacked.pos_OS.z == Catch::Approx(source.pos_OS.z).margin(0.5f / PACKED_TERRAIN_POS_XZ_SCALE));
         CHECK(unpacked.uv.x == Catch::Approx(source.uv.x).margin(0.5f / 255.f));
         CHECK(unpacked.uv.y == Catch::Approx(source.uv.y).margin(0.5f / 255.f));
         CHECK(unpacked.packedNor == source.packedNor);

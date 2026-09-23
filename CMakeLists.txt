@@ -400,10 +400,20 @@ if(BUILD_TESTING)
     add_executable(BiomeinatorUnitTests
         ${UNIT_TESTS_SRC}
         "${SRC_DIR}/logger.cpp"
+        "${SRC_DIR}/multithreading/thread_memory_allocator.cpp"
+        "${SRC_DIR}/rendering/buffer/descriptor_index_allocator.cpp"
+        "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
+        "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
         "${SRC_DIR}/util/halton.cpp"
     )
     assign_source_group("tests\\unit" "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit" "${UNIT_TESTS_SRC}")
     source_group("src" FILES "${SRC_DIR}/logger.cpp")
+    source_group("src\\multithreading" FILES "${SRC_DIR}/multithreading/thread_memory_allocator.cpp")
+    source_group("src\\rendering\\buffer" FILES
+        "${SRC_DIR}/rendering/buffer/descriptor_index_allocator.cpp"
+        "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
+        "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
+    )
     source_group("src\\util" FILES "${SRC_DIR}/util/halton.cpp")
 
     target_include_directories(BiomeinatorUnitTests PRIVATE

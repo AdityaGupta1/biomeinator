@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # ManagedBuffer
 
@@ -6,7 +6,10 @@ _Last edited: 2026-09-21_
 
 ## Free-List Allocator
 
-The allocator tracks free regions using two mirrored maps kept in sync at all times:
+The CPU-side bookkeeping lives in `FreeRangeAllocator`, separate from the D3D resource and
+copy machinery. This keeps the allocation policy directly unit-testable while
+`ManagedBuffer` remains responsible for growing the underlying resource. The allocator
+tracks free regions using two mirrored maps kept in sync at all times:
 - `freeByOffset` — keyed by byte offset, used to find and merge adjacent free blocks on deallocation.
 - `freeBySize` — keyed by size, used for O(log n) best-fit lookup on allocation.
 
@@ -18,7 +21,11 @@ The allocator tracks free regions using two mirrored maps kept in sync at all ti
 
 **`ManagedBufferSection`** is a lightweight handle — offset, size, and a raw pointer to the owning `ManagedBuffer`. `getGpuVirtualAddress()` adds the offset to the buffer's base GPU VA. Sections should always be freed via `ToFreeList` rather than directly, to avoid freeing while the GPU is still reading them.
 
-`free()` clears the handle afterwards, so a freed section reads back as invalid. This matters because the free list cannot detect a double free: `freeSection` only merges free blocks that are exactly adjacent, so freeing a range that already sits inside a free block silently inserts an overlapping node. The corruption only surfaces much later, as the `isBufferOccupied` assert in `reset()`.
+`free()` clears the handle afterwards, so a freed section reads back as invalid. The range
+allocator also rejects releases that overlap an existing free range, catching duplicate,
+partially overlapping, and out-of-bounds releases at the boundary instead of silently
+corrupting the two maps. Its invariant checker is primarily for model-based stress tests;
+production operations still maintain the maps incrementally rather than rescanning them.
 
 `ToFreeList::pushManagedBufferSection` takes a copy, so the caller's own handle is *not* invalidated and stays stale until reassigned. Any long-lived handle pushed to a `ToFreeList` must be overwritten or cleared by the caller.
 

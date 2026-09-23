@@ -8,11 +8,22 @@ testable without linking the renderer, starting a D3D12 device, or producing sha
 CTest discovers each Catch2 case separately and gives every discovered case the `unit` label,
 so a single failure is visible by name and the suite can be selected without running GPU tests.
 
-The initial coverage protects deterministic, widely reused building blocks: integer boundary
-math, circular-buffer wrap/reset state, procedural RNG sequences and ranges, Halton generation,
-CPU/GPU-shared vertex packing, and block face/orientation rules. Fixed expected RNG and packing
-values are compatibility checks, not statistical tests: world generation and shader decoding
-depend on those bit-level results remaining stable.
+Coverage protects deterministic, widely reused building blocks: integer boundary math,
+circular-buffer wrap/reset state, procedural RNG sequences and ranges, Halton generation,
+CPU/GPU-shared vertex packing, and block face/orientation rules. It also exercises the
+stateful bookkeeping extracted from GPU-facing classes: managed-buffer free ranges,
+mapped-array dirty ranges, and descriptor indices, plus the thread scratch allocator. Fixed
+expected RNG and packing values are compatibility checks, not statistical tests: world
+generation and shader decoding depend on those bit-level results remaining stable.
+
+The stateful allocators use both focused boundary cases and deterministic model-based stress
+tests. The reference models are intentionally simpler than the production data structures
+(byte occupancy masks or sets of live indices), so thousands of allocate/free/merge operations
+can expose bookkeeping drift without duplicating the implementation under test. Stress inputs
+remain fixed-seed so any failure is reproducible. The ring buffer uses the same approach against
+a small array model; thread scratch allocations use randomized sizes and alignments with byte
+canaries that remain valid until each clear. Numeric packing additionally samples the full valid
+terrain position and UV domains and checks the documented quantization bounds.
 
 Build and run the suite with:
 

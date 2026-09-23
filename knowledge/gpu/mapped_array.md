@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-09-22_
 
 # MappedArray
 
@@ -14,9 +14,11 @@ directly from the upload buffer by TLAS build, so a device-side copy would be wa
 
 ## Dirty Range Merging
 
-`insertDirtyRange` maintains a sorted, non-overlapping list of dirty ranges and merges
-adjacent/overlapping entries. `copyFromUploadBufferIfDirty` only copies dirty ranges rather
-than the full buffer. This matters when only a few entries change per frame out of thousands.
+`DirtyRangeSet` maintains a sorted, non-overlapping list of dirty ranges and merges
+adjacent/overlapping entries. Keeping this bookkeeping separate from the D3D upload path
+makes insertion-order independence and long randomized update sequences testable without a
+GPU. `copyFromUploadBufferIfDirty` only copies the resulting dirty ranges rather than the full
+buffer. This matters when only a few entries change per frame out of thousands.
 
 ## Per-Frame Upload Staging
 

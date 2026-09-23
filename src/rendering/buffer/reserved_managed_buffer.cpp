@@ -115,9 +115,8 @@ size_t ReservedManagedBuffer::mapNewHeap(size_t virtualStartTile, size_t minAddi
 }
 
 void ReservedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
-                                            ToFreeList& toFreeList,
-                                            size_t minCapacityBytes,
-                                            bool useBackFreeSection)
+                                           ToFreeList& toFreeList,
+                                           size_t minCapacityBytes)
 {
     if (this->bufferSizeBytes >= minCapacityBytes)
     {
@@ -126,13 +125,8 @@ void ReservedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
 
     const size_t additionalNeeded = minCapacityBytes - this->bufferSizeBytes;
     const size_t virtualStartTile = this->bufferSizeBytes / D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
-
-    const size_t oldBufferSizeBytes = this->bufferSizeBytes;
-
     const size_t heapSize = mapNewHeap(virtualStartTile, additionalNeeded, true /*prefetchNext*/);
     this->bufferSizeBytes += heapSize;
-
-    this->extendFreelistCapacity(oldBufferSizeBytes, this->bufferSizeBytes, useBackFreeSection);
 }
 
 void ReservedManagedBuffer::onReset()
