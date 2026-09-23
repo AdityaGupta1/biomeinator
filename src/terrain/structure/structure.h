@@ -7,6 +7,7 @@
 #include "util/rng.h"
 
 #include <glm/glm.hpp>
+#include <optional>
 #include <vector>
 
 // Serialized by value in world exports — only append new types.
@@ -19,6 +20,9 @@ enum class StructureType : uint8_t
     LARGE_OAK_TREE,
     BIRCH_TREE,
     CYPRESS_TREE,
+
+    PINE_TREE,
+    PINE_SHRUB,
 
     COUNT
 };
@@ -43,10 +47,29 @@ struct StructureBounds
 
 #define STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER (1 << 0)
 
+// Opt-in exposed-surface placement uses a conservative clear envelope around the
+// trunk, a supported footprint, and an exclusion ellipsoid around each anchor.
+// These are placement requirements, independent of how a structure draws itself.
+struct StructureSurfaceFit
+{
+    uint32_t height{ 1 };
+    uint32_t clearanceRadius{ 0 };
+    uint32_t supportRadius{ 0 };
+    uint32_t minSupportBlocks{ 1 };
+    float spacingXZ{ 4.f };
+    float spacingY{ 6.f };
+};
+
 struct StructureGenVariant
 {
     StructureType type;
     float weight{ 1.f };
+    StructureSurfaceFit surfaceFit{};
+};
+
+struct StructureSurfacePlacement
+{
+    std::vector<Block> groundBlocks{ Block::GRASS_BLOCK };
 };
 
 struct StructureGen
@@ -59,6 +82,9 @@ struct StructureGen
     // between candidates in adjacent cells.
     uint32_t gridCellPadding;
     uint32_t flags;
+    // Unset: the ordinary one-candidate-per-XZ-cell ground grid. Set: inspect
+    // actual exposed surfaces, including lower ledges, and fit/thin them in 3D.
+    std::optional<StructureSurfacePlacement> surfacePlacement{};
 
     StructureGen(StructureType type, uint32_t gridCellSideLength, uint32_t gridCellPadding = 0, uint32_t flags = 0);
     StructureGen(std::vector<StructureGenVariant> variants,
@@ -69,6 +95,16 @@ struct StructureGen
     StructureType pickVariant(RandomNumberGenerator& rng) const;
     // Distinguishes this gen's candidate grid from other gens over the same cells.
     uint32_t gridSalt() const;
+};
+
+// Published with terrain, immutable thereafter. Neighboring chunks independently
+// resolve these against immutable terrain masks before filling the same geometry.
+struct SurfaceStructureCandidate
+{
+    glm::ivec3 pos_WS;
+    const StructureGen* gen;
+    uint32_t priority;
+    uint32_t headroom;
 };
 
 namespace Structures

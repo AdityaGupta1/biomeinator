@@ -1,5 +1,6 @@
 #include "test_loader.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <json.hpp>
@@ -49,11 +50,15 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
         tc.threshold = t.value("threshold", 0.0f);
         tc.args = t.value("args", std::vector<std::string>{});
 
+        // Neither a scene nor a world means a procedurally generated voxel world, configured
+        // entirely by args (seed, render distance, camera).
         const bool hasScene = t.contains("scene");
         const bool hasWorld = t.contains("world");
-        if (hasScene == hasWorld)
+        const bool isProcedural = std::ranges::find(tc.args, "--voxelMode") != tc.args.end();
+        if ((hasScene && hasWorld) || (!hasScene && !hasWorld && !isProcedural))
         {
-            std::cerr << "Test '" << name << "' must have exactly one of 'scene' or 'world'\n";
+            std::cerr << "Test '" << name << "' needs exactly one of 'scene' or 'world', or '--voxelMode' "
+                      << "in its args for a procedural world\n";
             exit(1);
         }
 
@@ -62,7 +67,7 @@ std::vector<TestCase> loadTests(const std::filesystem::path& jsonPath)
             const std::filesystem::path scene = testsDir / t.at("scene").get<std::string>();
             tc.args.push_back("--scene=" + scene.generic_string());
         }
-        else
+        else if (hasWorld)
         {
             const std::filesystem::path world = testsDir / t.at("world").get<std::string>();
             tc.args.push_back("--world=" + world.generic_string());

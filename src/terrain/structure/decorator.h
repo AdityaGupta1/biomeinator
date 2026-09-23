@@ -41,4 +41,6 @@ public:
     bool supportsSurface(uint8_t surface, Block supportBlock) const;
 
     bool isEmpty() const;
+
+    const std::vector<DecoratorEntry>& getEntries() const;
 };

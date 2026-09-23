@@ -1,4 +1,4 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-09-22_
 
 # Golden Image Tests
 
@@ -8,6 +8,16 @@ GUI hidden, animation paused), and compares the screenshot against the entry's g
 RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name. Every run writes
 `<name>_GENERATED.png`, `<name>_GOLDEN.png` and `<name>_DIFF.png` to `build/test_output/`,
 which is the place to look when a test fails.
+
+A test entry has a `scene` (glTF), a `world` (saved export), or neither: a procedurally generated
+voxel world configured entirely by its args (`--voxelMode`, `--worldSeed`, `--renderDistance`,
+`--cameraX/Y/Z`, `--cameraYaw/Pitch` in degrees, as a world export stores its camera). Headless
+capture waits for the complete geometry ring before accumulating. Use procedural entries for
+features that should track current generation, like `grass_biome_blend`'s real biome edge: an
+imported world keeps its saved blocks but still takes grass tint from the current biome noise,
+so it would test neither the old nor the new biomes cleanly. Procedural goldens need
+regenerating whenever world generation changes; keep their render distance small to bound
+generation time.
 
 ## Three kinds of golden image
 

@@ -64,6 +64,11 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("noJitter", "Disable jitter", bool, "false");
     ADD_OPTION("voxelMode", "Enable voxel mode", bool, "false");
     ADD_OPTION("worldSeed", "World seed", uint32_t, "1738");
+    ADD_OPTION("cameraX", "Generated voxel-world camera X", float, "0");
+    ADD_OPTION("cameraY", "Generated voxel-world camera Y", float, "196");
+    ADD_OPTION("cameraZ", "Generated voxel-world camera Z", float, "0");
+    ADD_OPTION("cameraYaw", "Generated voxel-world camera yaw in degrees (0=+Z)", float, "180");
+    ADD_OPTION("cameraPitch", "Generated voxel-world camera pitch in degrees (positive=up)", float, "0");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
     ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
     ADD_OPTION("animTime", "Initial world animation time in seconds (0 = sunrise)", float, "150");
@@ -183,6 +188,11 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("noJitter", bool);
     COPY_SETTING("voxelMode", bool);
     COPY_SETTING("worldSeed", uint32_t);
+    COPY_SETTING("cameraX", float);
+    COPY_SETTING("cameraY", float);
+    COPY_SETTING("cameraZ", float);
+    COPY_SETTING("cameraYaw", float);
+    COPY_SETTING("cameraPitch", float);
     COPY_SETTING("movementSpeed", float);
     COPY_SETTING("animTimePaused", bool);
     COPY_SETTING("animTime", float);

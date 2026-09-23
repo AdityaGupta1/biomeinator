@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # Cave Biome System
 
@@ -15,7 +15,7 @@ axis, and they own their own theming (base and secondary rock, surface skin,
 structure gens, surface decorator) rather than the surface data.
 Overloading `Biome` would drag in the irrelevant inland partitioning and
 per-column assumptions, so `CaveBiome` is its own enum + data table with the
-same nearest-neighbor-by-`distance2` shape, kept deliberately extensible (add
+same nearest-climate-target shape, kept deliberately extensible (add
 an enum entry + one init block).
 
 ## STONE at the origin
@@ -76,6 +76,11 @@ per captured layer at fill time. Air needs no material or structure classificati
 Instead, generation records a one-bit cave-air marker and retains the coarse temperature
 and humidity fields plus each column's surface bias. The marker distinguishes original
 cave air from ordinary surface air independently of later structure placement.
+
+Rock classification alone does **not** authorize lamp scatter: exposed rock and sealed
+Tianzi pillars also pass through it. Lamps require the underground, formation-excluding
+wall-band guard described in [chunk_generator.md](chunk_generator.md). Keep this separate
+from the rock palette so fixing surface lights does not erase stone/marble outcrops.
 
 The decorator pass classifies only marked cells that are still AIR and border an immutable
 terrain full cube. It builds this candidate set 64 cells at a time from the existing solid

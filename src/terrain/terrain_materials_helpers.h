@@ -9,15 +9,19 @@
 #include "scene/scene.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <json.hpp>
 #include <numeric>
 #include <shlobj.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -38,6 +42,29 @@ static uint8_t srgbEncode(float linear)
 {
     const float c = linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.f / 2.4f) - 0.055f;
     return static_cast<uint8_t>(std::clamp(c * 255.f + 0.5f, 0.f, 255.f));
+}
+
+// Asset color grading is baked before mip generation, so all distances share the
+// same albedo and the original pixel pattern/alpha stays intact. Aux/normal maps
+// never pass through this function.
+static void applyColorAdjustment(std::vector<uint8_t>& pixels, const nlohmann::json& adjustment)
+{
+    const auto multiply = adjustment.value("multiply", std::array<float, 3>{ 1.f, 1.f, 1.f });
+    const float saturation = adjustment.value("saturation", 1.f);
+    if (!std::isfinite(saturation) || saturation < 0.f || saturation > 1.f ||
+        std::any_of(multiply.begin(), multiply.end(), [](float v) { return !std::isfinite(v) || v < 0.f; }))
+    {
+        throw std::runtime_error("color adjustment requires nonnegative multiply and saturation in [0, 1]");
+    }
+    for (size_t i = 0; i < pixels.size(); i += 4)
+    {
+        const std::array<float, 3> rgb{ linearize(pixels[i]), linearize(pixels[i + 1]), linearize(pixels[i + 2]) };
+        const float luminance = rgb[0] * 0.2126f + rgb[1] * 0.7152f + rgb[2] * 0.0722f;
+        for (size_t channel = 0; channel < 3; ++channel)
+        {
+            pixels[i + channel] = srgbEncode((luminance + saturation * (rgb[channel] - luminance)) * multiply[channel]);
+        }
+    }
 }
 
 static size_t texelIdx(uint32_t x, uint32_t y, uint32_t width)
@@ -335,6 +362,25 @@ static uint32_t loadBlockTextureArray(Scene* scene,
     namespace fs = std::filesystem;
 
     const fs::path texturesDir = fs::path(TARGET_FILE_DIR) / fs::path("assets/blocks/textures/");
+    nlohmann::json colorAdjustments = nlohmann::json::object();
+    const fs::path colorPath = texturesDir / "color_adjustments.json";
+    if (fileNameSuffix.empty() && options.sRGB && fs::exists(colorPath))
+    {
+        try
+        {
+            std::ifstream file(colorPath);
+            colorAdjustments = nlohmann::json::parse(file);
+            if (!colorAdjustments.is_object())
+            {
+                throw std::runtime_error("expected an object keyed by texture name");
+            }
+        }
+        catch (const std::exception& e)
+        {
+            Logger::logError("Failed to load texture color adjustments: %s", e.what());
+            return TEXTURE_ID_INVALID;
+        }
+    }
 
     constexpr uint32_t numMips = 5;
     static_assert(TERRAIN_TILE_SIZE >> (numMips - 1) == 1);
@@ -386,6 +432,19 @@ static uint32_t loadBlockTextureArray(Scene* scene,
             ASSERT(width == TERRAIN_TILE_SIZE && height == TERRAIN_TILE_SIZE);
             std::memcpy(mipData[0].data(), data, mipData[0].size());
             stbi_image_free(data);
+        }
+
+        if (colorAdjustments.contains(textureNames[slice]))
+        {
+            try
+            {
+                applyColorAdjustment(mipData[0], colorAdjustments.at(textureNames[slice]));
+            }
+            catch (const std::exception& e)
+            {
+                Logger::logError("Invalid color adjustment for %s: %s", textureNames[slice].c_str(), e.what());
+                return TEXTURE_ID_INVALID;
+            }
         }
 
         if (options.isNormalMap)

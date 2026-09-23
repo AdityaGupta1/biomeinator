@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # Chunk Generator
 
@@ -6,17 +6,34 @@ _Last edited: 2026-09-20_
 
 ## Noise Architecture
 
-FastNoise2 node graphs provide the four 2D surface biome axes, swamp warps and shore variation,
-three 3D shape fields (terrain surface and two cave sources), and five coarse cave biome/material
+FastNoise2 node graphs provide the five 2D surface biome axes, swamp warps and shore variation,
+four 3D shape fields (broad terrain, fine terrain detail and two cave sources), and five coarse cave biome/material
 fields. A random `noiseOffsetXZ` derived from the world seed shifts all sample positions so
 different seeds produce different terrain even though node seed offsets are hardcoded.
 
 ## Shape Noise Sampling
 
-The terrain shape is sampled every four blocks and both cave shapes every two blocks, then
-trilinearly reconstructed into the existing voxel grids before thresholding. Noise feature
+The broad terrain shape is sampled every four blocks; both cave shapes every two blocks; fine
+terrain detail every two blocks horizontally and four vertically, since that field is already
+stretched vertically. All are then trilinearly reconstructed into the existing voxel grids before thresholding. Noise feature
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
+
+Fine detail is generated only in chunks touched by the Mesa style weight or the Tianzi landform
+weight, using smooth climate/erosion masks rather than jittered labels. Mesa detail is texture,
+so it follows the same soft style weight as Mesa roughness; Tianzi's belongs to its formations. Red desert and ordinary biomes receive none.
+Its three octaves
+span roughly four to sixteen blocks horizontally, with longer vertical features to limit detached
+fragments, breaking up otherwise extruded cliff walls. The displacement
+is scaled by the natural surface gradient so it remains visible on steep faces, with a cap to
+preserve narrow formation cores. The same world-space slope query serves Tianzi's topsoil mask.
+Tianzi's steep faces allow a larger inward displacement for shallow undercuts; a separate
+upward limit keeps that slope boost from making thin spikes above planted crowns. This limit
+does not enlarge the conservative displacement bound used for allocating the noise grids.
+Mesa additionally tapers detail on gentle ground and plateau tops, retaining some bumps while
+leaving steep slopes at full strength. This uses the slope before fine displacement, so bumps
+do not amplify themselves; apply the taper before computing the sampled Y bounds.
+Pond and dam footprints suppress detail continuously to preserve water containment.
 
 Reconstruction keeps world Y contiguous and shares each XZ interpolation across a coarse Y
 interval. Keeping dense output grids lets carving, cave blending, and central differences use
@@ -42,6 +59,21 @@ Two mechanisms suppress caves near the surface:
 - **Surface fade**: `caveSurfaceVal` ramps down approaching `terrainBaseHeight`, making the threshold harder to meet and closing caves near the terrain surface.
 - **Altitude squash**: above y=240 an additive term on `caveSurfaceVal` smoothly closes caves so tall mountain peaks remain solid.
 
+Quartz formation material is determined before this carve pass and bypasses it entirely. This
+keeps the crystal solid and prevents cave-air metadata from placing decorations inside it.
+Tianzi instead suppresses carving in the formation volume above its original ground height,
+with a short seal fading into the roots. Rock and skin classification still run separately:
+the user wants the exposed stone/marble patches at the transition, so suppressing the entire
+cave-material pass would incorrectly repaint those areas. No cave-air markers or cave layers
+may originate inside the solid pillar, while deeper cave systems remain available.
+
+Lamp scatter is separate from that broad rock/skin classification and is off unless all of the
+following hold: it is eligible only below both the local base height and the shared pre-formation ground by the
+surface fade depth, outside the pillar, and near the final carve threshold including the
+root seal. This preserves underground cave lighting without treating exposed mountain rock
+or sealed formations as places to scatter lights. These tests use existing column and voxel
+fields, so placement remains independent of chunk generation order.
+
 ## Cave Biome Noise
 
 Two additional 3D fields (temperature, humidity) drive cave biome theming — see
@@ -60,14 +92,31 @@ cell bordering terrain support; cave interiors never need a biome lookup.
 
 The terrain isn't a simple heightmap — it uses a 3D surface threshold (`terrainNoise < surfaceVal`) so overhangs can form. But the threshold is shaped by a per-column `terrainBaseHeight` and `terrainSurfaceMultiplier`:
 
-- **Below base height**: the surface multiplier is doubled (`terrainBelowHeightfieldSurfaceMultiplier = 2`), which makes underground much more uniformly solid and flattens the base. Without this, you'd get as many air pockets below as above.
+- **Below base height**: the surface multiplier is doubled (`terrainBelowHeightfieldSurfaceMultiplier = 2`), which makes underground much more uniformly solid and flattens the base. Without this, you'd get as many air pockets below as above. The asymmetry is intentional (it was chosen because it looked better, not derived). Its side effect is that density amplitude (roughness) also raises the effective surface a little, since noise builds up above the base more easily than it carves below. Don't compensate for that bias; just keep roughness away from raw climate so the small shift stays smooth (see [biome_system.md](biome_system.md)).
 - **Near coast** (`inland` near 0): base height is pulled toward `seaLevel + 8` via smoothstep, creating gentle shorelines rather than cliffs.
-- **Mountains**: `peak^4 * inland` adds up to ~135 blocks of additional height, but only when both peak ridgeline and inland values are high.
+- **Relief and formations**: peak and erosion jointly control broad relief; smooth terrace
+  shaping and a shared finite-support formation sampler supply plateaus, pillars and spires.
+  These modify the same base height and surface amplitude before voxel thresholding, so
+  transitions remain continuous across biome labels. See [terrain_profiles.md](terrain_profiles.md).
+
+Natural terrain is independent of local water shaping. Swamp pond-height probes must evaluate
+all five natural-terrain inputs and their world positions, including climate-dependent
+formations. Oasis bowls then blend into this natural terrain, override local water levels,
+and reuse the bounded cave-waterline seals.
 
 ## 3D Noise Bounds Optimization
 
-The 3D terrain noise is only sampled in the Y range that could possibly contain the surface (derived from `surfaceValBound / multiplier`). For flat biomes this might be a 30-block band; for mountains it's larger. This avoids sampling noise for blocks that are trivially underground or trivially air.
+The 3D terrain noise is only sampled in the Y range that could possibly contain the surface
+(derived from `surfaceValBound / multiplier`, widened on both sides by the maximum fine detail
+displacement). Fine noise is explicitly clamped to its assumed bound. Leaving out that extra
+displacement would truncate outcrops at chunk-dependent heights. For flat biomes this might be
+a 30-block band; for mountains it's larger. This avoids sampling trivially solid or empty voxels.
 
 ## Structure Creation Happens Here
 
 After blocks are filled, structure candidates are generated using the heightfield (which is in scratch memory and would be lost after this task) and biome data. See [structure_system.md](structure_system.md) for the placement algorithm.
+
+Tianzi also scans actual planted surfaces for side shelves below the highest voxel; soil there
+is limited to exposed formation stone above the shared ground. Exposed-surface structure
+candidates come from the same kind of column-local scan, but their fit and spacing are resolved
+later against neighbors' terrain masks (see [structure_system.md](structure_system.md)).

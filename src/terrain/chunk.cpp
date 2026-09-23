@@ -231,6 +231,8 @@ void Chunk::runStructuresAndDecoratorPass()
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
     }
 
+    this->placeSurfaceStructures();
+
     // Cave structures fill one type at a time in enum order so a type's blocks are all in place
     // before a lower-priority type (e.g. vines) reads the world around it
     for (uint32_t typeIdx = 0; typeIdx < static_cast<uint32_t>(CaveStructureType::COUNT); ++typeIdx)
@@ -1181,9 +1183,13 @@ const std::vector<Biome>& Chunk::getBiomes() const
     return this->biomes;
 }
 
-const std::vector<Structure>& Chunk::getStructures() const
+std::vector<Structure> Chunk::getStructures() const
 {
-    return this->structures;
+    // Grid structures plus the accepted surface structures this chunk owns; transient
+    // surface candidates are never exported.
+    std::vector<Structure> result = this->structures;
+    result.insert(result.end(), this->placedSurfaceStructures.begin(), this->placedSurfaceStructures.end());
+    return result;
 }
 
 const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const
