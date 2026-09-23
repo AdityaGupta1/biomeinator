@@ -22,6 +22,20 @@ struct BiomeNoiseGrids
     float* peak;
     float* inland;
     float* erosion;
+
+    static constexpr uint32_t numFields = 5;
+
+    // Views one caller-owned buffer of numFields * numSamples floats, one field after another.
+    static BiomeNoiseGrids fromBuffer(float* data, uint32_t numSamples)
+    {
+        return {
+            .temperature = data,
+            .humidity = data + numSamples,
+            .peak = data + 2 * numSamples,
+            .inland = data + 3 * numSamples,
+            .erosion = data + 4 * numSamples,
+        };
+    }
 };
 
 // A cell floods when the flood factor at its site exceeds floodCellThreshold; columns are painted
@@ -29,6 +43,8 @@ struct BiomeNoiseGrids
 // knowledge/terrain/swamp_generation.md.
 inline constexpr float floodCellThreshold = 0.3f;
 inline constexpr float floodTintThreshold = 0.25f;
+// Flood factor at which pond floors reach full depth; also the swamp regime's full strength.
+inline constexpr float floodFullStrength = 0.9f;
 
 void init(uint32_t worldSeed);
 
@@ -44,7 +60,7 @@ void fillGrids(const BiomeNoiseGrids& grids, glm::vec2 startXZ, glm::uvec2 numSa
 // Batch counterpart of sampleAt for arbitrary positions.
 void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples);
 
-// Single-point counterpart of fillGrids for arbitrary positions (swamp cell sites).
+// Single-point counterpart of fillGrids for arbitrary positions.
 BiomeNoise sampleAt(glm::vec2 posXZ_WS);
 
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
@@ -63,8 +79,7 @@ enum class TerrainRegime : uint8_t
     COUNT
 };
 
-// One weight per regime. Every regime weight is 0 wherever a higher-priority regime claims the
-// label, so a regime's styling never extends past its label (up to per-column jitter).
+// One weight per regime. Every weight is 0 wherever a higher-priority regime claims the label.
 struct RegimeWeights
 {
     std::array<float, static_cast<size_t>(TerrainRegime::COUNT)> weights{};
@@ -75,7 +90,8 @@ struct RegimeWeights
     }
 };
 
-// Whether a terrain regime claims this column's label.
+// Whether a terrain regime claims this column's label. Regime landforms (weight > 0) only exist
+// inside their labels, so this also answers whether any landform is present.
 bool isClaimedByRegime(const BiomeNoise& noise);
 
 // Natural terrain before local water shaping. Uses smooth biome noise and world-space
@@ -97,6 +113,13 @@ struct NaturalTerrain
     // the labelled area uniformly (roughness, rock) use this; the landform ramp would leave the
     // outer band of the label with foreign styling.
     RegimeWeights regimeCoverage{};
+
+    // Whether a regime's yes/no styles (rock materials) apply here. Half coverage sits just
+    // outside the label; a lower cutoff would spread them deep into neighboring biomes.
+    bool isCoveredBy(TerrainRegime regime) const
+    {
+        return regimeCoverage[regime] >= 0.5f;
+    }
 };
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
@@ -104,10 +127,12 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 pos
 float dryClimateWeight(const BiomeNoise& noise);
 // Preserved relief: 1 where erosion keeps dramatic landforms, 0 in eroded, flat terrain.
 float ruggedWeight(const BiomeNoise& noise);
-// Preserved relief away from the coast, 0 near the shore. Terrain scales its mountain relief by
-// this; the biome search uses it to choose highland candidates, so highland labels only extend
-// toward the coast where relief does.
-float highlandReliefWeight(const BiomeNoise& noise);
+// Strength of the tall peak relief terrain raises in preserved highlands, 0-1: preserved relief
+// away from the coast, times a steep response to peak.
+float mountainPeakWeight(const BiomeNoise& noise);
+// Highland candidates are chosen where mountainPeakWeight is substantial, so highland labels sit
+// exactly where mountain relief does: not on low-peak rugged ground, not ahead of relief at coasts.
+bool isHighland(const BiomeNoise& noise);
 
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
 // give balanced water/land; values toward 1 give mostly-water terrain. Computed from smooth

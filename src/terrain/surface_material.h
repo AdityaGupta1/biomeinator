@@ -3,6 +3,7 @@
 
 #pragma once
 #include "biome_noise.h"
+#include "formation_rock.h"
 #include "terrain_formation.h"
 #include "rendering/common/common_settings.h"
 #include "util/rng.h"
@@ -11,6 +12,8 @@
 
 namespace SurfaceMaterials
 {
+using BiomeNoiseFields::TerrainRegime;
+
 struct TerracottaLayer
 {
     float bottom;
@@ -20,13 +23,14 @@ struct TerracottaLayer
     bool accentAtTop;
 };
 
-inline constexpr float terracottaLayerThickness = 3.f;
+inline constexpr int terracottaLayerBlocks = 3;
+inline constexpr float terracottaLayerThickness = static_cast<float>(terracottaLayerBlocks);
 // Largest bedding displacement: strataVariation (+/-4) plus the Mesa bedding offset (+/-4).
 inline constexpr int terracottaMaxOffset = 8;
 // Covers every layer a lookup can touch: heights span [1 - maxOffset, chunkSizeY - 1 + maxOffset],
 // and jitteredBand reads one boundary below and two above the unjittered guess.
-inline constexpr int terracottaMinLayer = -(terracottaMaxOffset / 3 + 1) - 1;
-inline constexpr int terracottaMaxLayer = (static_cast<int>(chunkSizeY) - 1 + terracottaMaxOffset) / 3 + 2;
+inline constexpr int terracottaMinLayer = -(terracottaMaxOffset / terracottaLayerBlocks + 1) - 1;
+inline constexpr int terracottaMaxLayer = (static_cast<int>(chunkSizeY) - 1 + terracottaMaxOffset) / terracottaLayerBlocks + 2;
 inline constexpr int terracottaNumLayers = terracottaMaxLayer - terracottaMinLayer + 1;
 
 // Seeded per world and built once at generator init, rather than hashed per voxel.
@@ -102,15 +106,9 @@ inline bool isQuartz(Block block)
     return block == Block::SMOOTH_QUARTZ;
 }
 
-inline bool isTianziStone(Block block)
-{
-    return block == Block::GRAY_SANDSTONE || block == Block::BUFF_SANDSTONE ||
-           block == Block::WEATHERED_SANDSTONE || block == Block::DARK_SANDSTONE;
-}
-
 inline bool isLedgeRock(Block block)
 {
-    return block == Block::STONE || isTianziStone(block);
+    return block == Block::STONE || FormationRock::isTianziRock(block);
 }
 
 // The supporting formation site owns its strata. Neighboring pillars get different
@@ -130,7 +128,8 @@ class TianziColumn
     float patchDetail;
     uint32_t patchSeed;
     int patchCell = std::numeric_limits<int>::min();
-    float patchLow = 0.f, patchHigh = 0.f;
+    float patchLow = 0.f;
+    float patchHigh = 0.f;
 
     static float stratumDisplacement(glm::vec2 pos, uint32_t seed)
     {
@@ -164,8 +163,7 @@ public:
         auto rng = initRng(seed ^ 0x57A71u, site.x, site.y);
         int top = -40 + rng.nextInt(30);
         int color = rng.nextInt(3);
-        constexpr std::array palette{ Block::GRAY_SANDSTONE, Block::BUFF_SANDSTONE,
-                                      Block::WEATHERED_SANDSTONE };
+        constexpr auto& palette = FormationRock::tianziLayerBlocks;
         for (auto& stratum : strata)
         {
             top += rng.nextInt(20, 41);
@@ -202,38 +200,34 @@ public:
             {
                 return TerrainFormations::valueNoise(patchPos, patchSeed ^ hash(static_cast<uint32_t>(index)));
             };
-            patchLow = plane(cell);
+            // The fill loop climbs one voxel at a time, so the previous upper plane is usually
+            // this cell's lower one.
+            patchLow = cell == patchCell + 1 ? patchHigh : plane(cell);
             patchHigh = plane(cell + 1);
             patchCell = cell;
         }
         const float f = glm::fract(patchY);
         const float patch = glm::mix(patchLow, patchHigh, f * f * (3.f - 2.f * f)) + patchDetail;
-        return patch > 0.32f ? Block::DARK_SANDSTONE : strata[layer].block;
+        return patch > 0.32f ? FormationRock::tianziPatchBlock : strata[layer].block;
     }
 };
 
 class Column
 {
-    Biome biome;
-    BiomeNoiseFields::NaturalTerrain terrain;
+    const BiomeNoiseFields::NaturalTerrain& terrain;
     float variation;
     float mesaOffset;
     float tianziFloor;
     std::optional<TianziColumn> tianzi;
 
-    // Follows Mesa's unjittered coverage rather than the label, so per-column jitter can't
-    // alternate terracotta and stone along one cliff at the Mesa border.
-    bool hasTerracotta() const
-    {
-        return terrain.regimeCoverage[BiomeNoiseFields::TerrainRegime::MESA] > 0.f;
-    }
-
 public:
-    Column(Biome biome, const BiomeNoiseFields::NaturalTerrain& terrain, glm::vec2 pos,
-           uint32_t seed, float variation, bool formationRock, float tianziFloor)
-        : biome(biome), terrain(terrain), variation(variation), mesaOffset(variation), tianziFloor(tianziFloor)
+    // Regime materials follow the unjittered coverage rather than the label, so per-column jitter
+    // can't alternate materials along one cliff at a regime border.
+    Column(const BiomeNoiseFields::NaturalTerrain& terrain, glm::vec2 pos, uint32_t seed, float variation,
+           float tianziFloor)
+        : terrain(terrain), variation(variation), mesaOffset(variation), tianziFloor(tianziFloor)
     {
-        if (hasTerracotta())
+        if (terrain.isCoveredBy(TerrainRegime::MESA))
         {
             // Displace the bedding together, preserving its thickness and the
             // existing deep-rock boundary. This does not move the terrain surface.
@@ -241,7 +235,7 @@ public:
                           1.f * TerrainFormations::valueNoise(pos / 8.f, seed ^ 0xAB71u);
             ASSERT(glm::abs(mesaOffset) <= terracottaMaxOffset, "Mesa bedding offset exceeds the terracotta table");
         }
-        if (formationRock)
+        if (terrain.isCoveredBy(TerrainRegime::TIANZI))
         {
             tianzi.emplace(pos, terrain.formationSite, seed);
         }
@@ -249,14 +243,13 @@ public:
 
     Block rock(int y)
     {
-        // Quartz decides the carve mask and topsoil, so it follows the unjittered spire weight
-        // rather than the biome label; the red sandstone shell around it is material only.
-        if (terrain.regimeWeights[BiomeNoiseFields::TerrainRegime::RED_DESERT] > 0.f &&
+        // Quartz decides the carve mask and topsoil, so it follows the spire landform itself.
+        if (terrain.regimeWeights[TerrainRegime::RED_DESERT] > 0.f &&
             terrain.formationHeight > 20.f && y > terrain.formationBaseHeight + 13.f + variation)
         {
             return Block::SMOOTH_QUARTZ;
         }
-        if (hasTerracotta() && y > SEA_LEVEL - 14 + variation)
+        if (terrain.isCoveredBy(TerrainRegime::MESA) && y > SEA_LEVEL - 14 + variation)
         {
             return terracotta(y, mesaOffset);
         }
@@ -264,7 +257,7 @@ public:
         {
             return tianzi->rock(y);
         }
-        if (biome == Biome::RED_DESERT && y > terrain.formationBaseHeight - 20.f)
+        if (terrain.isCoveredBy(TerrainRegime::RED_DESERT) && y > terrain.formationBaseHeight - 20.f)
         {
             return Block::RED_SANDSTONE;
         }

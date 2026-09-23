@@ -28,8 +28,8 @@ Additional rejection: must be in this chunk's bounds, on valid ground (heightfie
 Setting a gen's `surfacePlacement` replaces its grid with an actual surface scan. Every
 eligible upward-facing support is considered, including shelves below the highest surface
 in a column. The ground-block whitelist belongs to the rule, and cave-air anchors are excluded
-before cave metadata is released. This avoids the previous Tianzi-only exception, which could
-scan multiple Y surfaces but still missed narrow ledges between its sparse XZ grid points.
+before cave metadata is released. A grid can't do this: even one scanning several Y surfaces
+per grid point misses narrow ledges between its sparse XZ points.
 
 Each variant supplies a supported footprint, a clear trunk envelope and horizontal/vertical
 spacing. Configure these for the geometry when opting in. Neighbors may be one block lower
@@ -41,8 +41,9 @@ plants fill low shelves without type-specific fallback logic. Tianzi enables the
 pines and shrubs; the placement code knows nothing about that biome or those tree types.
 Terrain still controls soil and exposed rock independently.
 
-Spacing uses world-XYZ hash priorities and ellipsoidal exclusion volumes. A valid lower-priority
-candidate suppresses a nearby candidate even if it is itself suppressed elsewhere. This is
+Spacing uses world-XYZ hash priorities and ellipsoidal exclusion volumes. A fitting candidate
+with higher priority (smaller hash) suppresses a nearby one even if it is itself suppressed
+elsewhere. This is
 deliberately a local thinning rule, not a recursive greedy packing algorithm: the latter could
 depend on arbitrarily distant sites or chunk generation order. The larger spacing of the two
 variants wins. Different elevation shelves can coexist, and shrubs need less room than pines.

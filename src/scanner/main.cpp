@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <mutex>
 #include <sstream>
@@ -56,9 +57,22 @@ void ensureSeed(uint32_t seed)
 }
 
 constexpr int64_t maxTexelsPerRequest = 8'000'000;
-// Oasis lookup allocates per 384-block cell of the covered area, so the texel size bounds that
-// area as well as the texel count does. The map UI requests at most this.
-constexpr int64_t maxTexelSizeBlocks = 128;
+// fillBiomeRect works in int block coordinates, and its oasis lookup allocates one pond per
+// 384-block cell of the covered rect, so the rect itself is bounded, not just the texel count.
+constexpr int64_t maxCoordinateBlocks = int64_t(1) << 28;
+constexpr int64_t maxCoveredBlocksPerAxis = int64_t(1) << 24;
+constexpr int64_t maxCoveredOasisCells = int64_t(1) << 20;
+
+bool isCoveredRectValid(int64_t x0, int64_t z0, int64_t sizeX, int64_t sizeZ)
+{
+    if (std::abs(x0) > maxCoordinateBlocks || std::abs(z0) > maxCoordinateBlocks ||
+        sizeX > maxCoveredBlocksPerAxis || sizeZ > maxCoveredBlocksPerAxis)
+    {
+        return false;
+    }
+    constexpr int64_t oasisCellSize = 384;
+    return (sizeX / oasisCellSize + 3) * (sizeZ / oasisCellSize + 3) <= maxCoveredOasisCells;
+}
 
 bool tryGetIntParam(const httplib::Request& req, const char* name, int64_t& outValue)
 {
@@ -136,7 +150,8 @@ int main(int argc, char** argv)
         // Each axis is capped before multiplying so the product can't overflow
         if (numTexelsX <= 0 || numTexelsZ <= 0 || numTexelsX > maxTexelsPerRequest ||
             numTexelsZ > maxTexelsPerRequest || numTexelsX * numTexelsZ > maxTexelsPerRequest || texelSizeBlocks <= 0 ||
-            texelSizeBlocks > maxTexelSizeBlocks)
+            texelSizeBlocks > maxCoveredBlocksPerAxis ||
+            !isCoveredRectValid(x0, z0, numTexelsX * texelSizeBlocks, numTexelsZ * texelSizeBlocks))
         {
             setBadRequest(res, "invalid dimensions");
             return;
@@ -170,7 +185,7 @@ int main(int argc, char** argv)
         // The radius cap also keeps the arithmetic below far from overflow
         if (biomeId < 0 || biomeId >= static_cast<int64_t>(Biome::COUNT) || radiusBlocks <= 0 ||
             radiusBlocks > maxTexelsPerRequest || seedCount <= 0 || seedCount > 1000 || texelSizeBlocks <= 0 ||
-            texelSizeBlocks > maxTexelSizeBlocks)
+            !isCoveredRectValid(-radiusBlocks, -radiusBlocks, 2 * radiusBlocks, 2 * radiusBlocks))
         {
             setBadRequest(res, "invalid params");
             return;

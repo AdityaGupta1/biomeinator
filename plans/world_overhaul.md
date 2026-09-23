@@ -34,7 +34,7 @@
 
 ### Highland and high-ground biomes
 
-Highland candidates are chosen purely by relief (`highlandReliefWeight`), and the highland list holds only relief biomes: today just mountains. Savanna and ice fields are climate zones and live in the lowland list. So the new mountain-country biomes go in the **highland** list, each a climate target within relief ground:
+Each biome declares a `tier`; highland is chosen where mountain peak relief is substantial (`isHighland`), and the highland tier holds only relief biomes: today just mountains. Savanna and ice fields are climate zones and live in the lowland tier. So the new mountain-country biomes go in the **highland** tier, each a climate target within relief ground:
 
 | climate | biome | character |
 |---|---|---|
@@ -48,7 +48,7 @@ Redwood forest is the exception: mild, very humid, **lowland** and coastal (tall
 
 Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianzi takes preserved relief as a regime, cloud forest the eroded rolling highlands left over).
 
-Remaining lowland issue: lowland climate targets all have negative peak, and `distance2` weighs peak like climate, so high-peak lowland (eroded high ground, or high ground near the coast) picks whichever low-peak target is least wrong (e.g. forest on hot, dry ground at peak ~0.96, seed 100 x≈3863). Since relief already decides lowland vs highland, the simplest fix is for the lowland search to ignore peak; decide alongside `plans/biome_balancing.md`.
+Climate matching within a tier is 2D (temperature, humidity); peak no longer takes part, since relief already picks the tier. That removed the old issue where high-peak lowland picked whichever low-peak target was least wrong (forest on hot, dry ground).
 
 ### Coverage today and what it implies (2026-09-22)
 
@@ -62,10 +62,12 @@ Measured over seeds 1–20, 32k×32k blocks each, macro biome field (`build/prob
 | 3–4% | desert, plains, tundra, mesa |
 | ≤2.4% | black sand beach, swamp, oasis |
 
+After switching to 2D climate matching per tier (relief picks highland) and re-spacing the lowland targets (8 seeds): forest 22%, plains 11%, tundra 11%, savanna 9%, mountains 5%, desert 5%, ice fields 5% of land; regime biomes unchanged. Forest still leads and highland is small until the new highland biomes exist.
+
 - **Forest is far too prevalent.** Its climate target sits near where temperature/humidity values cluster, so it wins most mild ground. Break it up with many **mild biomes**, especially forest variants that share the climate band but differ in trees and ground cover. Candidates: birch forest, old-growth / dark forest, autumn / maple forest, cherry grove, mixed conifer forest, flower meadow, and the Atlantic forest from the roster. Several mild targets close together also make equalization (below) more effective, since the dense middle of climate space gets divided among more biomes.
 - **Mountains shrink once the highland biomes land** (cloud forest, taiga, moor/alpine meadow, high desert steppe above): today every high-relief column is mountains.
 - **Biomes are too small and chaotic.** Borders change too often and produce tiny slivers. Two separate fixes:
-  - *Scale:* raise the climate noise scales (`biomeNoiseScale` and the per-field `SetScale`/warp settings in `biome_noise.cpp`) so regions are larger overall. Terrain relief fields (peak, erosion, inland) can stay at their own scales; landform regimes that multiply several fields will grow with them.
+  - *Scale:* raise `climateNoiseScale` in `biome_noise.cpp` so regions are larger overall. Relief fields (peak, erosion, inland) have their own `reliefNoiseScale`, so coastlines and mountains stay put; landform regimes that multiply climate and relief fields will grow partly.
   - *Slivers:* after scaling, measure connected-patch sizes (scanner report) and remove what remains with the balancing plan's tools: axis equalization plus relaxation for even shares, and a minimum patch size for multi-axis regimes (Tianzi etc.), whose products produce stringy regions.
 - Order: add biomes first (more mild and highland targets), then scale, then balance, since every added biome reshuffles shares.
 
@@ -79,6 +81,8 @@ A coastal landform, with the label derived from it:
 4. The beach band becomes a "sea cliff" biome (bare stone or grass tops, no sand) where `cliffWeight` is high.
 
 Watch: the seabed next to cliffs must also drop steeply, or cliffs stand on a shallow shelf. `inlandHeight` is already steep around inland 0; probe it first.
+
+Also: ocean and beach tiers use fixed inland cutoffs (-0.15, 0) in `getClosestBiome`. Once cliffs change coastal shaping, derive the beach/cliff label from the same coast factor that shapes the terrain, or beach labels will land on cliffs.
 
 Roster:
 - Brazil: varzea, igapo, cerrado, terra firme, lencois maranhenses, cloud forest, **pantanal**, **atlantic forest**

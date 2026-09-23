@@ -42,6 +42,13 @@ did not claim, matching the first-match lookup.
 1. **Equalize each climate axis** by remapping it through its sampled CDF, so values are uniform
    on [0, 1]. After this, equal Voronoi volume ≈ equal world area. Only approximate if axes are
    correlated; check with the area report.
+   - Equalize at the source (`fillGrids`, `fillPositions`, `sampleAt`), not inside the climate
+     search. Many consumers read raw climate values: `dryClimateWeight`, the Tianzi
+     temperature/humidity window, the flood factor, oasis activation, and the cave-biome surface
+     bias. Equalizing only the search would move labels while those landforms stay put. After
+     equalizing, re-tune those windows once in the new coordinates.
+   - Climate matching is 2D (temperature, humidity) within a tier; relief picks the tier. Keep it
+     that way: matching on relief too splits neighboring targets along relief contours.
 2. **Relax the climate points** so their cells have equal volume. Lloyd relaxation (centroidal
    Voronoi tessellation) is the standard deterministic form of "points repel until evenly
    spread", simpler than a physics simulation.
@@ -50,8 +57,8 @@ did not claim, matching the first-match lookup.
      evens out *how much* it gets.
    - Relax over samples not claimed by regimes, so ordinary biomes share the remaining land
      evenly and regime cut-outs don't leave remnants.
-   - Respect the existing candidate partitions (lowland/highland lists): relax each list over
-     its own samples.
+   - Respect the tiers (`BiomeData::tier`: ocean, beach, lowland, highland): relax each tier's
+     targets over that tier's own samples.
 
 ## Offline, baked constants
 

@@ -15,7 +15,6 @@ namespace
 struct PlacementReach
 {
     int geometry = 0;
-    int fit = 0;
     float spacingXZ = 0.f;
     float spacingY = 0.f;
 };
@@ -23,6 +22,7 @@ struct PlacementReach
 PlacementReach placementReach(const StructureGen& gen)
 {
     PlacementReach reach;
+    int fitReach = 0;
     ASSERT(!gen.variants.empty());
     for (const auto& variant : gen.variants)
     {
@@ -30,7 +30,7 @@ PlacementReach placementReach(const StructureGen& gen)
         const ivec2 extent = max(abs(bounds.minDiffXZ), abs(bounds.maxDiffXZ));
         reach.geometry = max(reach.geometry, max(extent.x, extent.y));
         const auto& fit = variant.surfaceFit;
-        reach.fit = max(reach.fit, static_cast<int>(max(fit.clearanceRadius, fit.supportRadius)));
+        fitReach = max(fitReach, static_cast<int>(max(fit.clearanceRadius, fit.supportRadius)));
         reach.spacingXZ = max(reach.spacingXZ, fit.spacingXZ);
         reach.spacingY = max(reach.spacingY, fit.spacingY);
         ASSERT(fit.height > 0 && fit.spacingXZ > 0.f && fit.spacingY > 0.f && variant.weight > 0.f);
@@ -40,7 +40,7 @@ PlacementReach placementReach(const StructureGen& gen)
     // their fit probes must STILL fit inside this chunk's ready terrain halo.
     // Enforce this when opting larger structures into the mode, rather than reading
     // a neighbor's potentially unready neighborhood or silently clipping checks.
-    ASSERT(reach.geometry + static_cast<int>(ceil(reach.spacingXZ)) + reach.fit <=
+    ASSERT(reach.geometry + static_cast<int>(ceil(reach.spacingXZ)) + fitReach <=
         static_cast<int>(structureMaxChunkRadius * chunkSizeXZ), "surface placement exceeds ready terrain halo");
     return reach;
 }
@@ -94,6 +94,18 @@ bool fitsSurface(const Chunk& chunk, const SurfaceStructureCandidate& candidate,
     return true;
 }
 
+ivec2 posXZ(const SurfaceStructureCandidate& candidate)
+{
+    return ivec2(candidate.pos_WS.x, candidate.pos_WS.z);
+}
+
+// Whether a chunk-local XZ position lies within margin blocks of the chunk.
+bool isNearChunk(ivec2 local, int margin)
+{
+    return local.x >= -margin && local.y >= -margin &&
+           local.x < static_cast<int>(chunkSizeXZ) + margin && local.y < static_cast<int>(chunkSizeXZ) + margin;
+}
+
 bool hasPriority(const SurfaceStructureCandidate& a, const SurfaceStructureCandidate& b)
 {
     return std::tie(a.priority, a.pos_WS.x, a.pos_WS.y, a.pos_WS.z) <
@@ -121,7 +133,7 @@ void Chunk::placeSurfaceStructures()
     {
         const SurfaceStructureCandidate* source;
         uint32_t genGridIdx;
-        uint32_t cellIdx;
+        ivec2 cell;
         bool resolved = false;
         int variant = -1; // -1 when no variant fits
     };
@@ -151,18 +163,14 @@ void Chunk::placeSurfaceStructures()
             }
             // A candidate farther than geometry + spacing from this chunk can neither reach it
             // nor suppress one that does.
-            const ivec2 local = ivec2(source.pos_WS.x, source.pos_WS.z) - origin;
-            const int margin = genGrid->reach.geometry + genGrid->cellSize;
-            if (local.x < -margin || local.y < -margin ||
-                local.x >= static_cast<int>(chunkSizeXZ) + margin || local.y >= static_cast<int>(chunkSizeXZ) + margin)
+            if (!isNearChunk(posXZ(source) - origin, genGrid->reach.geometry + genGrid->cellSize))
             {
                 continue;
             }
-            const ivec2 cell = (ivec2(source.pos_WS.x, source.pos_WS.z) - neighborhoodMin) / genGrid->cellSize;
+            const ivec2 cell = (posXZ(source) - neighborhoodMin) / genGrid->cellSize;
             ASSERT(all(greaterThanEqual(cell, ivec2(0))) && all(lessThan(cell, ivec2(genGrid->cellsPerSide))));
-            const uint32_t cellIdx = static_cast<uint32_t>(cell.x + genGrid->cellsPerSide * cell.y);
-            ++genGrid->cellStarts[cellIdx + 1];
-            candidates.push_back({ &source, static_cast<uint32_t>(genGrid - genGrids.begin()), cellIdx });
+            ++genGrid->cellStarts[cell.x + genGrid->cellsPerSide * cell.y + 1];
+            candidates.push_back({ &source, static_cast<uint32_t>(genGrid - genGrids.begin()), cell });
         }
     }
     for (GenGrid& genGrid : genGrids)
@@ -179,7 +187,9 @@ void Chunk::placeSurfaceStructures()
         for (uint32_t candidateIdx = 0; candidateIdx < candidates.size(); ++candidateIdx)
         {
             const Candidate& candidate = candidates[candidateIdx];
-            genGrids[candidate.genGridIdx].candidateIdxs[cursors[candidate.genGridIdx][candidate.cellIdx]++] = candidateIdx;
+            GenGrid& genGrid = genGrids[candidate.genGridIdx];
+            const int cellIdx = candidate.cell.x + genGrid.cellsPerSide * candidate.cell.y;
+            genGrid.candidateIdxs[cursors[candidate.genGridIdx][cellIdx]++] = candidateIdx;
         }
     }
 
@@ -217,10 +227,8 @@ void Chunk::placeSurfaceStructures()
         const auto& source = *candidate.source;
         const GenGrid& genGrid = genGrids[candidate.genGridIdx];
         const PlacementReach& reach = genGrid.reach;
-        const ivec2 local = ivec2(source.pos_WS.x, source.pos_WS.z) - origin;
-        if (local.x + reach.geometry < 0 || local.y + reach.geometry < 0 ||
-            local.x - reach.geometry >= static_cast<int>(chunkSizeXZ) ||
-            local.y - reach.geometry >= static_cast<int>(chunkSizeXZ))
+        const ivec2 local = posXZ(source) - origin;
+        if (!isNearChunk(local, reach.geometry))
         {
             continue;
         }
@@ -235,9 +243,8 @@ void Chunk::placeSurfaceStructures()
         // itself suppressed. This can thin more than a greedy packing would, but it keeps
         // the decision local: resolving competitors recursively could depend on arbitrarily
         // distant candidates, beyond the ready terrain halo.
-        const ivec2 cell = (ivec2(source.pos_WS.x, source.pos_WS.z) - neighborhoodMin) / genGrid.cellSize;
-        const ivec2 minCell = max(cell - 1, ivec2(0));
-        const ivec2 maxCell = min(cell + 1, ivec2(genGrid.cellsPerSide - 1));
+        const ivec2 minCell = max(candidate.cell - 1, ivec2(0));
+        const ivec2 maxCell = min(candidate.cell + 1, ivec2(genGrid.cellsPerSide - 1));
         bool accepted = true;
         for (int cellZ = minCell.y; cellZ <= maxCell.y && accepted; ++cellZ)
         {

@@ -26,19 +26,27 @@ inline float valueNoise(glm::vec2 pos, uint32_t seed)
     return mix(mix(at(0, 0), at(1, 0), t.x), mix(at(0, 1), at(1, 1), t.x), t.y);
 }
 
+// Smooth window: rises from 0 to 1 over [riseStart, riseEnd], then falls back to 0 over
+// [fallStart, fallEnd].
+inline float smoothBand(float x, float riseStart, float riseEnd, float fallStart, float fallEnd)
+{
+    return glm::smoothstep(riseStart, riseEnd, x) * (1.f - glm::smoothstep(fallStart, fallEnd, x));
+}
+
 // Two independent value noise channels at one position, e.g. for a 2D domain warp.
 inline glm::vec2 valueNoise2(glm::vec2 pos, uint32_t seedX, uint32_t seedY)
 {
     return { valueNoise(pos, seedX), valueNoise(pos, seedY) };
 }
 
-// Visits the 3x3 cells around cell, each with its own position-seeded random stream.
+// Visits the cells within `radius` cells of cell (3x3 by default), each with its own
+// position-seeded random stream.
 template<typename Visit>
-inline void forEachNeighborCell(glm::ivec2 cell, uint32_t seed, const Visit& visit)
+inline void forEachNeighborCell(glm::ivec2 cell, uint32_t seed, const Visit& visit, int radius = 1)
 {
-    for (int z = -1; z <= 1; ++z)
+    for (int z = -radius; z <= radius; ++z)
     {
-        for (int x = -1; x <= 1; ++x)
+        for (int x = -radius; x <= radius; ++x)
         {
             const glm::ivec2 key = cell + glm::ivec2(x, z);
             RandomNumberGenerator rng = initRng(seed, key.x, key.y);
@@ -116,13 +124,13 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
         valueNoise2(pos / profile.radius, seed ^ 0x541u, seed ^ 0x901u);
     const float summitRoughness = valueNoise(pos / (profile.radius * 0.8f), seed ^ 0x339u) *
                                   profile.summitWidth * profile.height * 0.11f;
-    float result = 0.f;
-    ivec2 supportingSite{};
-    // Between feet no site contributes. Falling back to the nearest site keeps ownership
-    // continuous there, instead of switching along the straight edges of the search cell.
-    float nearestDistance = std::numeric_limits<float>::max();
-    ivec2 nearestSite{};
-    forEachNeighborCell(cell, seed, [&](ivec2 key, RandomNumberGenerator& rng)
+    struct Site
+    {
+        float distance;
+        float radius;
+        float height;
+    };
+    const auto evaluateSite = [&](ivec2 key, RandomNumberGenerator& rng) -> Site
     {
         const vec2 site = (vec2(key) + vec2(rng.nextFloat(0.25f, 0.75f), rng.nextFloat(0.25f, 0.75f))) * profile.spacing;
         const float radius = profile.radius * rng.nextFloat(0.75f, 1.2f);
@@ -141,33 +149,54 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
             const float faceted = max(max(rotated.x, rotated.y), (rotated.x + rotated.y) * 0.7071068f);
             distance = mix(distance, faceted, profile.angularity);
         }
-        if (distance < nearestDistance)
-        {
-            nearestDistance = distance;
-            nearestSite = key;
-        }
+        return { distance, radius, height };
+    };
+
+    float result = 0.f;
+    ivec2 supportingSite{};
+    forEachNeighborCell(cell, seed, [&](ivec2 key, RandomNumberGenerator& rng)
+    {
+        const Site site = evaluateSite(key, rng);
         // Both the foot and the core are zero beyond their radii.
-        if (distance >= max(profile.footRadius, radius))
+        if (site.distance >= max(profile.footRadius, site.radius))
         {
             return;
         }
-        const float inward = max(0.f, 1.f - distance / profile.footRadius);
+        const float inward = max(0.f, 1.f - site.distance / profile.footRadius);
         // Subtract the linear term so the outer edge meets the desert with zero slope.
         // The exponential then steepens toward the crystal instead of rounding into a dome.
         const float risingFoot = (exp(3.f * inward) - 1.f - 3.f * inward) / (exp(3.f) - 4.f);
-        const float foot = mix(1.f - smoothstep(0.f, profile.footRadius, distance), risingFoot, profile.angularity);
-        const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
-            clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
-        const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
+        const float foot = mix(1.f - smoothstep(0.f, profile.footRadius, site.distance), risingFoot, profile.angularity);
+        const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, site.distance / site.radius),
+            clamp((1.f - site.distance / site.radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
+        const float contribution = profile.footHeight * foot + (site.height + summitRoughness) * core;
         if (contribution > result)
         {
             result = contribution;
             supportingSite = key;
         }
     });
+
     if (dominantSite)
     {
-        *dominantSite = result > 0.f ? supportingSite : nearestSite;
+        *dominantSite = supportingSite;
+        if (result <= 0.f)
+        {
+            // Between feet no site contributes. Falling back to the nearest site keeps ownership
+            // continuous there. Unlike support, the nearest distorted site can lie outside the
+            // 3x3 window (stretch and warp can make a far site measure closer), so search 5x5:
+            // omitted sites are then at least 2.25 cells away, beyond any in-window distortion.
+            float nearestDistance = std::numeric_limits<float>::max();
+            forEachNeighborCell(cell, seed, [&](ivec2 key, RandomNumberGenerator& rng)
+            {
+                const float distance = evaluateSite(key, rng).distance;
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    *dominantSite = key;
+                }
+            }, 2);
+        }
     }
     return result;
 }

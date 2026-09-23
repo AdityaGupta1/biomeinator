@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Cave Biome System
 
@@ -15,7 +15,7 @@ axis, and they own their own theming (base and secondary rock, surface skin,
 structure gens, surface decorator) rather than the surface data.
 Overloading `Biome` would drag in the irrelevant inland partitioning and
 per-column assumptions, so `CaveBiome` is its own enum + data table with the
-same nearest-neighbor-by-`distance2` shape, kept deliberately extensible (add
+same nearest-climate-target shape, kept deliberately extensible (add
 an enum entry + one init block).
 
 ## STONE at the origin

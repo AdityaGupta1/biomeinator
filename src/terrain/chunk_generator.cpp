@@ -380,6 +380,7 @@ static inline ivec2 gridCellCandidateXZ_WS(ivec2 cellCornerXZ_WS, int innerSide,
 }; // namespace ChunkGenerator
 
 using namespace ChunkGenerator;
+using BiomeNoiseFields::TerrainRegime;
 
 // Deliberately asymmetric: density noise carves less below the base height than it builds above
 // it, which looked better. As a side effect a larger amplitude raises the effective surface
@@ -417,22 +418,31 @@ struct ColumnShape
 // whose anchor sits at or below this are rejected unless flagged to allow lava.
 inline constexpr int lavaSurfaceY = 4;
 
+// Visits each non-air voxel of a column from topY down to minY (exclusive) with the run of air
+// directly above it, covering shelves under overhangs as well as the top surface.
+template<typename Visit>
+static void forEachExposedSurface(const std::vector<Block>& blocks, uint baseBlockIdx, uint topY, uint minY,
+                                  uint airAboveTopY, const Visit& visit)
+{
+    uint headroom = airAboveTopY;
+    for (uint y = topY; y > minY; --y)
+    {
+        if (blocks[baseBlockIdx + y] == Block::AIR)
+        {
+            ++headroom;
+            continue;
+        }
+        visit(y, headroom);
+        headroom = 0;
+    }
+}
+
 void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
-    float* temperatureNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    float* humidityNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    float* peakNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    float* inlandNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    float* erosionNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const BiomeNoiseFields::BiomeNoiseGrids biomeNoiseGrids = {
-        .temperature = temperatureNoise,
-        .humidity = humidityNoise,
-        .peak = peakNoise,
-        .inland = inlandNoise,
-        .erosion = erosionNoise,
-    };
+    const BiomeNoiseFields::BiomeNoiseGrids biomeNoiseGrids = BiomeNoiseFields::BiomeNoiseGrids::fromBuffer(
+        threadMemoryAlloc.request<float>(BiomeNoiseFields::BiomeNoiseGrids::numFields * chunkSizeXZSquare), chunkSizeXZSquare);
     BiomeNoiseFields::fillGrids(biomeNoiseGrids, vec2(chunkPosBlocksXZ_WS), uvec2(chunkSizeXZ), 1.f);
 
     ColumnShape* columnShapes = threadMemoryAlloc.request<ColumnShape>(chunkSizeXZSquare);
@@ -515,8 +525,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // Smooth regimes control detail, never the jittered material/biome labels.
             // Protect pond floors and dams with the same continuous footprint as their seals.
             const BiomeNoiseFields::RegimeWeights& regimeWeights = naturalTerrain.regimeWeights;
-            const float detailWeight = max(regimeWeights[BiomeNoiseFields::TerrainRegime::MESA],
-                                           regimeWeights[BiomeNoiseFields::TerrainRegime::TIANZI]);
+            // Mesa detail is texture, so it covers the whole label like its roughness; Tianzi's
+            // follows its formations.
+            const float detailWeight = max(naturalTerrain.regimeCoverage[TerrainRegime::MESA],
+                                           regimeWeights[TerrainRegime::TIANZI]);
             float waterShapingWeight = 0.f;
             for (int i = 0; i < numSeals; ++i)
             {
@@ -539,7 +551,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     const auto needsSlope = [](const ColumnShape& shape)
     {
-        return shape.detailAmplitude > 0.f || shape.natural.regimeWeights[BiomeNoiseFields::TerrainRegime::TIANZI] > 0.f;
+        return shape.detailAmplitude > 0.f || shape.natural.regimeWeights[TerrainRegime::TIANZI] > 0.f;
     };
 
     // Natural heights of the columns just outside each chunk edge, for the central differences
@@ -547,7 +559,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     std::array<float, 4 * chunkSizeXZ> edgeHeights{};
     if (std::any_of(columnShapes, columnShapes + chunkSizeXZSquare, needsSlope))
     {
-        std::array<float, 4 * chunkSizeXZ> edgeX, edgeZ;
+        std::array<float, 4 * chunkSizeXZ> edgeX;
+        std::array<float, 4 * chunkSizeXZ> edgeZ;
         for (uint i = 0; i < chunkSizeXZ; ++i)
         {
             const std::array<ivec2, 4> local{ ivec2(-1, i), ivec2(chunkSizeXZ, i), ivec2(i, -1), ivec2(i, chunkSizeXZ) };
@@ -557,14 +570,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 edgeZ[edge * chunkSizeXZ + i] = static_cast<float>(chunkPosBlocksXZ_WS.y + local[edge].y);
             }
         }
-        std::array<float, 4 * chunkSizeXZ> temperature, humidity, peak, inland, erosion;
-        const BiomeNoiseFields::BiomeNoiseGrids edgeGrids{
-            .temperature = temperature.data(),
-            .humidity = humidity.data(),
-            .peak = peak.data(),
-            .inland = inland.data(),
-            .erosion = erosion.data(),
-        };
+        std::array<float, BiomeNoiseFields::BiomeNoiseGrids::numFields * 4 * chunkSizeXZ> edgeNoise;
+        const auto edgeGrids = BiomeNoiseFields::BiomeNoiseGrids::fromBuffer(edgeNoise.data(), 4 * chunkSizeXZ);
         BiomeNoiseFields::fillPositions(edgeGrids, edgeX.data(), edgeZ.data(), 4 * chunkSizeXZ);
         for (uint i = 0; i < 4 * chunkSizeXZ; ++i)
         {
@@ -612,14 +619,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             // Convert a small displacement normal to the surface into height units. Without
             // the slope factor, vertical jitter barely moves the sides of a steep pillar.
             // Cap it to preserve narrow cores, and use the bound below as well as in filling.
-            const float cliffDetail = regimeWeights[BiomeNoiseFields::TerrainRegime::TIANZI] * smoothstep(1.f, 4.f, slope);
+            const float cliffDetail = regimeWeights[TerrainRegime::TIANZI] * smoothstep(1.f, 4.f, slope);
             shape.detailAmplitude *= min(mix(10.f, 14.f, cliffDetail),
                 mix(2.f, 2.25f, cliffDetail) * sqrt(1.f + slope * slope));
             // Leave some fine variation on Mesa floors and plateau tops, with full detail
             // on escarpments. The unjittered mask and pre-detail slope keep this continuous
             // across biome/chunk borders and avoid having bumps amplify their own noise.
             const float flatDetail = mix(0.35f, 1.f, smoothstep(0.1f, 0.8f, slope));
-            shape.detailAmplitude *= mix(1.f, flatDetail, regimeWeights[BiomeNoiseFields::TerrainRegime::MESA]);
+            shape.detailAmplitude *= mix(1.f, flatDetail, shape.natural.regimeCoverage[TerrainRegime::MESA]);
             hasTerrainDetail |= shape.detailAmplitude > 0.f;
             terrainNoiseMinY = std::min(terrainNoiseMinY, static_cast<int>(std::floor(shape.lowestSurface())));
             terrainNoiseMaxY = std::max(terrainNoiseMaxY, static_cast<int>(std::ceil(shape.highestSurface())));
@@ -772,18 +779,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float terrainSurfaceMultiplier = shape.surfaceMultiplier;
             const int waterLevel = shape.waterLevel;
             const auto& naturalTerrain = shape.natural;
-            const float tianziWeight = naturalTerrain.regimeWeights[BiomeNoiseFields::TerrainRegime::TIANZI];
+            const float tianziWeight = naturalTerrain.regimeWeights[TerrainRegime::TIANZI];
             const bool hasTianziFormation = tianziWeight > 0.f && naturalTerrain.formationHeight > 0.f;
             const float detailUpwardLimit = mix(shape.detailAmplitude, 3.f, tianziWeight);
             const float pillarRootSeal = hasTianziFormation ? smoothstep(0.f, 8.f, naturalTerrain.formationHeight) : 0.f;
             const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
                                          1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
             // Cover every potentially exposed Tianzi surface, including low recesses at its
-            // biome boundary. Deep cave rock keeps its underground palette. The unjittered
-            // weight, not the label, decides coverage, as it does for the landform itself.
+            // biome boundary. Deep cave rock keeps its underground palette.
             const float tianziMaterialFloor = min(naturalTerrain.formationBaseHeight - 22.f, shape.lowestSurface() - 4.f);
-            SurfaceMaterials::Column surfaceMaterials(biome, naturalTerrain, vec2(blockPosXZ_WS), worldSeed,
-                strataVariation, tianziWeight > 0.f, tianziMaterialFloor);
+            SurfaceMaterials::Column surfaceMaterials(naturalTerrain, vec2(blockPosXZ_WS), worldSeed,
+                strataVariation, tianziMaterialFloor);
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
@@ -838,8 +844,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     glm::smoothstep(240.0f, 320.0f, y) * 0.8f;
             };
 
-            const float caveBiomeSurfaceTemperatureOffset = temperatureNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
-            const float caveBiomeSurfaceHumidityOffset = humidityNoise[columnIdx] * caveBiomeSurfaceNoiseBias;
+            const float caveBiomeSurfaceTemperatureOffset = biomeNoiseGrids.temperature[columnIdx] * caveBiomeSurfaceNoiseBias;
+            const float caveBiomeSurfaceHumidityOffset = biomeNoiseGrids.humidity[columnIdx] * caveBiomeSurfaceNoiseBias;
             this->caveDecoration.surfaceBias[columnIdx] = {
                 .temperature = caveBiomeSurfaceTemperatureOffset,
                 .humidity = caveBiomeSurfaceHumidityOffset,
@@ -885,12 +891,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                     // Detail depends on Y too: cliff faces acquire outcrops and recesses,
                     // rather than extruding one wavy outline unchanged from foot to summit.
-                    float detail = terrainDetailNoise ? shape.detailAmplitude *
-                        clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f) : 0.f;
                     // A steep side needs more displacement than its crown. Keep recesses
                     // and small overhangs, but don't lift the cliff's slope boost into thin
                     // towers of rubble above the otherwise broad, planted summit.
-                    detail = min(detail, detailUpwardLimit);
+                    const float detail = terrainDetailNoise ? min(shape.detailAmplitude *
+                        clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f), detailUpwardLimit) : 0.f;
                     const float detailedHeight = terrainBaseHeight + detail;
                     float surfaceVal = (detailedHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
                     if (y < detailedHeight)
@@ -922,8 +927,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             const SwampShaping::CaveSeal& seal =
                                 swampCaveSealsArray[columnIdx * maxSurfaceCaveSeals + sealIdx];
                             const float sealLevel = static_cast<float>(seal.level);
-                            const float band = smoothstep(sealLevel + 10.f, sealLevel + 4.f, static_cast<float>(y)) *
-                                smoothstep(sealLevel - 44.f, sealLevel - 12.f, static_cast<float>(y));
+                            const float band = TerrainFormations::smoothBand(static_cast<float>(y),
+                                sealLevel - 44.f, sealLevel - 12.f, sealLevel + 4.f, sealLevel + 10.f);
                             swampSealSub = glm::max(swampSealSub, band * seal.strength * 1.5f);
                         }
                         caveSurfaceVal -= swampSealSub;
@@ -1054,7 +1059,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     RandomNumberGenerator oreRng = initRng(worldSeed ^ hash(0xC7157A1u),
                         blockPosXZ_WS.x, y, blockPosXZ_WS.y);
-                    if (oreRng.nextFloat() < 0.01f) block = Block::CRACKED_BASALT_CRYSTAL_ORE;
+                    if (oreRng.nextFloat() < 0.01f)
+                    {
+                        block = Block::CRACKED_BASALT_CRYSTAL_ORE;
+                    }
                 }
 
                 if (isInTerrain && !isCave && surfaceRock != Block::AIR)
@@ -1159,24 +1167,16 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 // ground; underground cave floors and lower stone/marble outcrops stay intact.
                 if (hasTianziFormation && ledgeVegetation > mix(1.f, -0.4f, formationSoil))
                 {
-                    uint headroom = 0;
                     const uint ledgeMinY = static_cast<uint>(max(2.f, ceil(naturalTerrain.formationBaseHeight + 4.f)));
-                    for (uint y = topBlockY; y > ledgeMinY; --y)
+                    forEachExposedSurface(this->blocks, baseBlockIdx, topBlockY, ledgeMinY, 0, [&](uint y, uint headroom)
                     {
-                        Block& block = this->blocks[baseBlockIdx + y];
-                        if (block == Block::AIR)
-                        {
-                            ++headroom;
-                            continue;
-                        }
-                        if (headroom >= 6 && SurfaceMaterials::isLedgeRock(block) &&
+                        if (headroom >= 6 && SurfaceMaterials::isLedgeRock(this->blocks[baseBlockIdx + y]) &&
                             SurfaceMaterials::isLedgeRock(this->blocks[baseBlockIdx + y - 1]))
                         {
-                            block = Block::GRASS_BLOCK;
+                            this->blocks[baseBlockIdx + y] = Block::GRASS_BLOCK;
                             this->blocks[baseBlockIdx + y - 1] = Block::DIRT;
                         }
-                        headroom = 0;
-                    }
+                    });
                 }
             }
 
@@ -1234,15 +1234,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
                     const ivec2 posXZ = chunkPosBlocksXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
                     // Nothing is filled above maxFillY yet, so start there with that air as headroom.
-                    uint headroom = chunkSizeY - 1 - maxFillY;
-                    for (int y = static_cast<int>(maxFillY); y > 0; --y)
+                    forEachExposedSurface(this->blocks, columnIdx * chunkSizeY, maxFillY, 0, chunkSizeY - 1 - maxFillY,
+                        [&](uint y, uint headroom)
                     {
                         const Block block = this->blocks[columnIdx * chunkSizeY + y];
-                        if (block == Block::AIR)
-                        {
-                            ++headroom;
-                            continue;
-                        }
                         if (headroom >= minHeadroom &&
                             std::find(groundBlocks.begin(), groundBlocks.end(), block) != groundBlocks.end() &&
                             !this->caveDecoration.isCaveAir(columnIdx, y + 1))
@@ -1251,8 +1246,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                             this->surfaceStructureCandidates.push_back({ ivec3(posXZ.x, y + 1, posXZ.y),
                                 &structureGen, rng.nextUint(), headroom });
                         }
-                        headroom = 0;
-                    }
+                    });
                 }
                 continue;
             }

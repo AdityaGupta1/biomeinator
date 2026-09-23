@@ -19,8 +19,9 @@ stretched vertically. All are then trilinearly reconstructed into the existing v
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
 
-Fine detail is generated only in chunks touched by the Mesa or Tianzi regime weight, using
-smooth climate/erosion masks rather than jittered labels. Red desert and ordinary biomes receive none.
+Fine detail is generated only in chunks touched by Mesa coverage or the Tianzi landform weight,
+using smooth climate/erosion masks rather than jittered labels. Mesa detail is texture, so it
+covers the whole label like Mesa roughness; Tianzi's belongs to its formations. Red desert and ordinary biomes receive none.
 Its three octaves
 span roughly four to sixteen blocks horizontally, with longer vertical features to limit detached
 fragments, breaking up otherwise extruded cliff walls. The displacement
@@ -66,8 +67,8 @@ the user wants the exposed stone/marble patches at the transition, so suppressin
 cave-material pass would incorrectly repaint those areas. No cave-air markers or cave layers
 may originate inside the solid pillar, while deeper cave systems remain available.
 
-Lamp scatter is separate from that broad rock/skin classification and defaults off. It is
-eligible only below both the local base height and the shared pre-formation ground by the
+Lamp scatter is separate from that broad rock/skin classification and is off unless all of the
+following hold: it is eligible only below both the local base height and the shared pre-formation ground by the
 surface fade depth, outside the pillar, and near the final carve threshold including the
 root seal. This preserves underground cave lighting without treating exposed mountain rock
 or sealed formations as places to scatter lights. These tests use existing column and voxel
@@ -115,7 +116,7 @@ a 30-block band; for mountains it's larger. This avoids sampling trivially solid
 
 After blocks are filled, structure candidates are generated using the heightfield (which is in scratch memory and would be lost after this task) and biome data. See [structure_system.md](structure_system.md) for the placement algorithm.
 
-Tianzi also scans actual planted surfaces for side shelves below the highest voxel. Soil there
-is limited to exposed formation stone above the shared ground; grass support and vertical
-headroom gate tree placement. Both scans are column-local, so they need no neighbor-generation
-dependency and do not produce special behavior at chunk edges.
+Tianzi also scans actual planted surfaces for side shelves below the highest voxel; soil there
+is limited to exposed formation stone above the shared ground. Exposed-surface structure
+candidates come from the same kind of column-local scan, but their fit and spacing are resolved
+later against neighbors' terrain masks (see [structure_system.md](structure_system.md)).

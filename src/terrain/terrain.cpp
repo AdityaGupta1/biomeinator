@@ -617,8 +617,9 @@ static constexpr size_t blockBiomePayloadSize =
 //   bits  [21..24] = localZ (4 bits)
 // Owner chunk origin is implicit from where the entry is stored, so only chunk-local
 // position is serialized. Exposed-surface placement can anchor a structure on every shelf of
-// a cliff, so the limit is a hard bound rather than a typical count: each anchor is an air
-// voxel directly above a solid one, so a column holds at most chunkSizeY / 2 of them.
+// a cliff, so the limit is generous rather than typical: an anchor is an air voxel directly
+// above a solid one, at most chunkSizeY / 2 per column. Separate gens can share an anchor, so
+// this is not a proof; export and import both check the count at runtime.
 static constexpr size_t maxStructuresPerChunk = chunkSizeXZSquare * chunkSizeY / 2;
 static constexpr size_t structureEntrySize = sizeof(uint32_t);
 static constexpr size_t structuresScratchSize = sizeof(uint32_t) + maxStructuresPerChunk * structureEntrySize;
@@ -758,8 +759,13 @@ void exportWorld()
             const std::vector<Structure>& structures = chunk.getStructures();
             if (!structures.empty())
             {
+                if (structures.size() > maxStructuresPerChunk)
+                {
+                    Logger::logError("world export: chunk idx %u in region (%d, %d) has %zu structures, over the limit of %zu; aborting export",
+                                     localIdx, regionPos.x, regionPos.y, structures.size(), maxStructuresPerChunk);
+                    return;
+                }
                 const uint32_t numStructures = static_cast<uint32_t>(structures.size());
-                ASSERT(numStructures <= maxStructuresPerChunk, "structure count exceeds max per chunk");
                 const int structuresPayloadSize = static_cast<int>(
                     sizeof(uint32_t) + numStructures * structureEntrySize);
 
@@ -1146,6 +1152,13 @@ static bool loadRegionFile(const std::filesystem::path& regionFilePath,
 
             uint32_t numStructures;
             memcpy(&numStructures, structuresBuffer.data(), sizeof(uint32_t));
+            // Checked before the size arithmetic below, which would otherwise wrap.
+            if (numStructures > maxStructuresPerChunk)
+            {
+                Logger::logError("world import: chunk idx %u in %s claims %u structures, over the limit of %zu",
+                                 localIdx, regionFilePath.generic_string().c_str(), numStructures, maxStructuresPerChunk);
+                return false;
+            }
 
             const uint32_t expectedSize = sizeof(uint32_t) + numStructures * structureEntrySize;
             if (static_cast<uint32_t>(decompressedStructures) != expectedSize)

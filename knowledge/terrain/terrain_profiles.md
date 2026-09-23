@@ -19,7 +19,9 @@ Mesa reshapes the shared elevation within bounded offsets rather than replacing 
 multiscale plateau noise adds buttes and cuts short gullies (about +/-21 blocks), then partial
 height quantization forms shelves, moving a column by at most one terrace band. Because every
 Mesa term is bounded relative to the ordinary height, its regime ramp cannot open a pit into
-neighboring relief. Keep quantization secondary: remapping a smooth mountain into evenly spaced
+neighboring relief. Shelf elevations shift regionally with a slow world-position noise, not with
+climate, which would move every shelf whenever the climate fields are rescaled or equalized.
+Keep quantization secondary: remapping a smooth mountain into evenly spaced
 steps produced huge concentric terraces, which the user's Minecraft references ruled out.
 
 All formations retain the same continuous ground beneath them. Independently suppressing
@@ -58,11 +60,11 @@ pattern with a different base elevation and water treatment. Tianzi's climate, e
 inland suitability is combined before applying the formation-strength ramp. This makes the
 strength vanish at every label boundary, including coastal edges, while ordinary mountain
 relief returns with the complementary weight. Cliff soil follows that continuous strength.
-Tianzi's material shell covers its labeled columns and its actual formations completely;
-the old correlated coverage mask let unrelated cave stone and marble show through its sides.
+Tianzi's material shell covers every column Tianzi covers (coverage at least 0.5, which includes
+all of its formations), so unrelated cave stone and marble cannot show through its sides.
 
-Tianzi divides the former two-tier core-height budget across three independently seeded site
-fields, each with a finer footprint. The reusable sampler accepts an array of profiles; each
+Tianzi splits its core-height budget across three independently seeded site fields, each with
+a finer footprint. The reusable sampler accepts an array of profiles; each
 tier needs support from the preceding tier, so crowns cannot appear independently on valley
 floors or skip a missing shoulder. Wider summit fractions and shorter lateral ramps make
 steeper walls with broad plantable shelves at several elevations, rather than increasing
@@ -71,9 +73,8 @@ share one continuous biome weight, so stacking does not add another transition r
 Core footprints are widened independently of site spacing and root extent to avoid thin
 needle-like towers while keeping distinct gaps and the same vertical tier budget. Check the
 finite-support bound when widening: footprint warping grows with the core radius too.
-Main sites are now farther apart, with smaller spacing increases in the upper tiers. This
-opens valleys between formations without shrinking their cores or eliminating most stacked
-crowns. Increasing every tier's spacing equally would make higher shoulders much rarer.
+Main sites are spaced wider than the upper tiers, whose spacing grows less. This opens valleys
+between formations without shrinking their cores or eliminating most stacked crowns. Increasing every tier's spacing equally would make higher shoulders much rarer.
 
 Steep Tianzi faces receive a little more bounded 3D displacement for shallow recesses and
 overhangs. Positive displacement is separately capped near crowns: lifting the full cliff
@@ -103,10 +104,12 @@ the ordinary topsoil pass. Absolute elevation keeps bands connected across adjac
 a slow world-position offset bends them slightly. Quartz stays exposed through the topsoil
 pass, and trees/cacti cannot anchor on it. Smooth quartz is recognized before carving and
 topsoil/structure placement, so it cannot acquire caves, skins, soil or plants. Because quartz
-controls the carve mask, it follows the unjittered red desert weight, not the label; the red
-sandstone shell around it is material only and stays label-driven. Terracotta follows Mesa's
-coverage weight rather than the label: jitter otherwise alternated terracotta and stone along one
-cliff at the Mesa border. A few columns just outside the label get terracotta as a result.
+controls the carve mask, it follows the red desert landform weight itself. Yes/no rock
+materials (terracotta, the red sandstone shell, Tianzi strata) follow their regime's coverage via
+`NaturalTerrain::isCoveredBy` (coverage at least 0.5) rather than the label: per-column jitter
+otherwise alternated materials along one cliff at a regime border. A cutoff above 0 matters:
+coverage starts well below the label threshold, and testing `> 0` spread terracotta over an extra
+area about a fifth the size of Mesa itself.
 
 Terracotta strata are seeded per world. The layer sequence is a table built once at generator
 init rather than hashed per voxel; its range covers every height plus the largest bedding offset,
@@ -121,8 +124,9 @@ cave rock and skins below that shell retain their normal classification.
 Tianzi's broad strata are seeded by the dominant supporting Worley site, whose identity is
 returned with the natural-terrain query without changing its height. Between feet, where no site
 contributes, the nearest site owns the column; the search cell would switch owners along straight
-grid lines and seam the bedding. Strata apply wherever the unjittered Tianzi weight is positive,
-not by label, so jitter-only border columns keep ordinary rock. Stacked shoulders share
+grid lines and seam the bedding. That search covers 5x5 cells, not the 3x3 used for height:
+stretch and warp can make a site outside the 3x3 window measure nearest, which also seams along
+the grid. Strata follow Tianzi coverage, not the label. Stacked shoulders share
 that foundation's geology, while neighboring pillars get different phases and layer sequences.
 Each stratum is 20–40 blocks thick; adjacent materials always differ so two layers cannot
 merge into an unintended double-width band. Warped, jittered fracture cells offset whole
@@ -176,9 +180,10 @@ are batched through `fillPositions` rather than sampled one point at a time.
 
 `oasis_shaping` caches seeded pond sites for the requested region and halo; sites farther than
 their support from the region skip their noise evaluation entirely. Eligibility uses smooth
-hot/dry inland fields and the shared relief factor at the site, and excludes sites any terrain
-regime claims: a pond forces an absolute floor and bank, which would cut into Mesa terraces or
-red desert spires. The water level comes from the ground before formations, so a pond never sits
+hot/dry inland fields and the shared relief factor at the site, and excludes ponds any terrain
+regime claims anywhere in the footprint (checked at the center and on two rings): a pond forces
+an absolute floor and bank, which would cut into Mesa terraces or red desert spires, and scaling
+it down near one would breach its water containment. The water level comes from the ground before formations, so a pond never sits
 on a butte or spire foot. Each pond has one integer water level, a depressed
 floor, a fully raised rim, and an outer blend to natural terrain. The water-level override
 ends inside that rim, before terrain blending begins; surface noise is suppressed there.

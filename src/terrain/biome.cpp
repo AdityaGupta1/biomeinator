@@ -3,6 +3,7 @@
 
 #include "biome.h"
 #include "biome_noise.h"
+#include "formation_rock.h"
 
 #include "util/glm_util.h"
 #include "util/rng.h"
@@ -13,13 +14,6 @@
 #include <glm/glm.hpp>
 
 //#define DEBUG_BIOME_OVERRIDE Biome::SAVANNA
-
-float BiomeNoise::distance2(const BiomeNoise& other) const
-{
-    return (this->temperature - other.temperature) * (this->temperature - other.temperature) +
-           (this->humidity - other.humidity) * (this->humidity - other.humidity) +
-           (this->peak - other.peak) * (this->peak - other.peak);
-}
 
 BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng)
 {
@@ -43,17 +37,10 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
     BiomeData& data = BIOME_DATA_BY_NAME(biomeName); \
     data.name = displayName
 
-static std::vector<Biome> oceanBiomes;
-static std::vector<Biome> beachBiomes;
-static std::vector<Biome> lowlandBiomes;
-static std::vector<Biome> highlandBiomes;
+static std::array<std::vector<Biome>, static_cast<size_t>(BiomeTier::COUNT)> candidatesByTier;
 
 void init()
 {
-    oceanBiomes.clear();
-    beachBiomes.clear();
-    lowlandBiomes.clear();
-    highlandBiomes.clear();
     biomeDatas = {};
     // ==================================================
     // OCEAN
@@ -62,12 +49,8 @@ void init()
     // OCEAN
     {
         BIOME_INIT(OCEAN, "ocean");
-        oceanBiomes.push_back(Biome::OCEAN);
-        data.biomeNoise = {
-            .temperature = 0.0f,
-            .humidity = 0.0f,
-            .peak = -1.0f,
-        };
+        data.tier = BiomeTier::OCEAN;
+        data.climate = { .temperature = 0.0f, .humidity = 0.0f };
         data.grassTint = glmUtil::colorFromHex("#8eb971");
         data.topBlocks = {
             .top = Block::SAND,
@@ -82,12 +65,8 @@ void init()
     // BEACH
     {
         BIOME_INIT(BEACH, "beach");
-        beachBiomes.push_back(Biome::BEACH);
-        data.biomeNoise = {
-            .temperature = 0.3f,
-            .humidity = 0.2f,
-            .peak = -1.0f,
-        };
+        data.tier = BiomeTier::BEACH;
+        data.climate = { .temperature = 0.3f, .humidity = 0.2f };
         data.grassTint = glmUtil::colorFromHex("#a1ba68");
         data.topBlocks = {
             .top = Block::SAND,
@@ -101,12 +80,8 @@ void init()
     // GRAVEL_BEACH
     {
         BIOME_INIT(GRAVEL_BEACH, "gravel beach");
-        beachBiomes.push_back(Biome::GRAVEL_BEACH);
-        data.biomeNoise = {
-            .temperature = -0.2f,
-            .humidity = -0.2f,
-            .peak = -1.0f,
-        };
+        data.tier = BiomeTier::BEACH;
+        data.climate = { .temperature = -0.2f, .humidity = -0.2f };
         data.grassTint = glmUtil::colorFromHex("#8fa470");
         data.topBlocks = {
             .top = Block::GRAVEL,
@@ -117,12 +92,8 @@ void init()
     // BLACK_SAND_BEACH
     {
         BIOME_INIT(BLACK_SAND_BEACH, "black sand beach");
-        beachBiomes.push_back(Biome::BLACK_SAND_BEACH);
-        data.biomeNoise = {
-            .temperature = -0.6f,
-            .humidity = -0.3f,
-            .peak = -1.0f,
-        };
+        data.tier = BiomeTier::BEACH;
+        data.climate = { .temperature = -0.6f, .humidity = -0.3f };
         data.grassTint = glmUtil::colorFromHex("#7e9152");
         data.topBlocks = {
             .top = Block::BLACK_SAND,
@@ -137,12 +108,8 @@ void init()
     // PLAINS
     {
         BIOME_INIT(PLAINS, "plains");
-        lowlandBiomes.push_back(Biome::PLAINS);
-        data.biomeNoise = {
-            .temperature = 0.0f,
-            .humidity = 0.0f,
-            .peak = -0.7f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.1f, .humidity = -0.1f };
         data.grassTint = glmUtil::colorFromHex("#91bd59");
         data.decorator.addEntry(Block::GRASS, 5.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
@@ -154,12 +121,8 @@ void init()
     // DESERT
     {
         BIOME_INIT(DESERT, "desert");
-        lowlandBiomes.push_back(Biome::DESERT);
-        data.biomeNoise = {
-            .temperature = 0.45f,
-            .humidity = -0.45f,
-            .peak = -0.6f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.5f, .humidity = -0.4f };
         data.grassTint = glmUtil::colorFromHex("#bfb755");
         data.topBlocks = {
             .top = Block::SAND,
@@ -178,12 +141,8 @@ void init()
     // FOREST
     {
         BIOME_INIT(FOREST, "forest");
-        lowlandBiomes.push_back(Biome::FOREST);
-        data.biomeNoise = {
-            .temperature = -0.1f,
-            .humidity = 0.2f,
-            .peak = -0.4f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.15f, .humidity = 0.25f };
         data.grassTint = glmUtil::colorFromHex("#50a13b");
         data.structureGens = {
             {
@@ -206,12 +165,8 @@ void init()
     // TUNDRA
     {
         BIOME_INIT(TUNDRA, "tundra");
-        lowlandBiomes.push_back(Biome::TUNDRA);
-        data.biomeNoise = {
-            .temperature = -0.7f,
-            .humidity = -0.6f,
-            .peak = -0.6f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.5f, .humidity = -0.35f };
         data.grassTint = glmUtil::colorFromHex("#80b497");
         data.topBlocks = {
             .top = Block::SNOWY_GRASS_BLOCK,
@@ -240,12 +195,8 @@ void init()
     // SAVANNA
     {
         BIOME_INIT(SAVANNA, "savanna");
-        lowlandBiomes.push_back(Biome::SAVANNA);
-        data.biomeNoise = {
-            .temperature = 0.7f,
-            .humidity = -0.7f,
-            .peak = -0.2f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.45f, .humidity = -0.1f };
         data.grassTint = glmUtil::colorFromHex("#bfa243");
         data.structureGens = {
             { StructureType::ACACIA_TREE, 48, 16 },
@@ -259,12 +210,8 @@ void init()
     // ICE_FIELDS
     {
         BIOME_INIT(ICE_FIELDS, "ice fields");
-        lowlandBiomes.push_back(Biome::ICE_FIELDS);
-        data.biomeNoise = {
-            .temperature = -0.85f,
-            .humidity = -0.8f,
-            .peak = -0.3f,
-        };
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.6f, .humidity = -0.5f };
         data.grassTint = glmUtil::colorFromHex("#8ab4a0");
         data.topBlocks = {
             .top = Block::SNOW,
@@ -279,12 +226,8 @@ void init()
     // MOUNTAINS
     {
         BIOME_INIT(MOUNTAINS, "mountains");
-        highlandBiomes.push_back(Biome::MOUNTAINS);
-        data.biomeNoise = {
-            .temperature = -0.4f,
-            .humidity = -0.4f,
-            .peak = 0.6f,
-        };
+        data.tier = BiomeTier::HIGHLAND;
+        data.climate = { .temperature = -0.4f, .humidity = -0.4f };
         data.grassTint = glmUtil::colorFromHex("#6da36b");
         data.topBlocks = {
             .top = Block::STONE,
@@ -313,10 +256,10 @@ void init()
                     { .height = 7, .clearanceRadius = 0, .supportRadius = 1, .minSupportBlocks = 3,
                       .spacingXZ = 3.f, .spacingY = 7.f } } }, 8, 2 },
         };
-        data.structureGens.back().surfacePlacement = StructureSurfacePlacement{
-            { Block::GRASS_BLOCK, Block::STONE, Block::GRAY_SANDSTONE, Block::BUFF_SANDSTONE,
-              Block::WEATHERED_SANDSTONE, Block::DARK_SANDSTONE }
-        };
+        std::vector<Block> pineGroundBlocks{ Block::GRASS_BLOCK, Block::STONE, FormationRock::tianziPatchBlock };
+        pineGroundBlocks.insert(pineGroundBlocks.end(), FormationRock::tianziLayerBlocks.begin(),
+                                FormationRock::tianziLayerBlocks.end());
+        data.structureGens.back().surfacePlacement = StructureSurfacePlacement{ std::move(pineGroundBlocks) };
         data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::AIR, 22.f);
@@ -341,6 +284,15 @@ void init()
         data.decorator.addEntry(Block::PINK_DAFFODIL, 1.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::AIR, 18.f);
     }
+
+    for (auto& candidates : candidatesByTier)
+    {
+        candidates.clear();
+    }
+    for (size_t biomeIdx = 0; biomeIdx < biomeDatas.size(); ++biomeIdx)
+    {
+        candidatesByTier[static_cast<size_t>(biomeDatas[biomeIdx].tier)].push_back(static_cast<Biome>(biomeIdx));
+    }
 }
 
 const BiomeData& getBiomeData(Biome biome)
@@ -357,30 +309,35 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     }
 #endif
 
-    std::vector<Biome>* closestBiomeCandidates;
+    BiomeTier tier;
     if (biomeNoise.inland < -0.15f)
     {
-        closestBiomeCandidates = &oceanBiomes;
+        tier = BiomeTier::OCEAN;
     }
     else if (biomeNoise.inland < 0.0f)
     {
-        closestBiomeCandidates = &beachBiomes;
+        tier = BiomeTier::BEACH;
     }
-    else if (BiomeNoiseFields::highlandReliefWeight(biomeNoise) < 0.35f)
+    else if (BiomeNoiseFields::isHighland(biomeNoise))
     {
-        closestBiomeCandidates = &lowlandBiomes;
+        tier = BiomeTier::HIGHLAND;
     }
     else
     {
-        closestBiomeCandidates = &highlandBiomes;
+        tier = BiomeTier::LOWLAND;
     }
 
+    // Climate alone picks within a tier: relief already chose the tier, and matching on relief
+    // too would split neighboring climate targets along relief contours.
     Biome closestBiome = Biome::COUNT;
     float closestDist2 = std::numeric_limits<float>::max();
 
-    for (const Biome biome : *closestBiomeCandidates)
+    for (const Biome biome : candidatesByTier[static_cast<size_t>(tier)])
     {
-        const float dist2 = biomeNoise.distance2(BIOME_DATA(biome).biomeNoise);
+        const ClimateTarget& target = BIOME_DATA(biome).climate;
+        const float dTemperature = biomeNoise.temperature - target.temperature;
+        const float dHumidity = biomeNoise.humidity - target.humidity;
+        const float dist2 = dTemperature * dTemperature + dHumidity * dHumidity;
 
         if (dist2 < closestDist2)
         {

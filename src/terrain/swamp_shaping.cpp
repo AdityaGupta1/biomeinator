@@ -99,18 +99,8 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         sampleZ[numSamples] = static_cast<float>(sampleXZ_WS.y);
         ++numSamples;
     }
-    float temperature[8];
-    float humidity[8];
-    float peak[8];
-    float inland[8];
-    float erosion[8];
-    const BiomeNoiseFields::BiomeNoiseGrids grids{
-        .temperature = temperature,
-        .humidity = humidity,
-        .peak = peak,
-        .inland = inland,
-        .erosion = erosion,
-    };
+    float noise[BiomeNoiseFields::BiomeNoiseGrids::numFields * 8];
+    const auto grids = BiomeNoiseFields::BiomeNoiseGrids::fromBuffer(noise, 8);
     BiomeNoiseFields::fillPositions(grids, sampleX, sampleZ, numSamples);
 
     // Keep the same second-lowest height and sample ordering as the scalar path.
@@ -211,7 +201,8 @@ Shaping computeShaping(vec2 warpedPosXZ_WS,
 
     const CellInfo nearestCell = getSwampCellInfo(cellCorners[nearestIdx]);
     const float deepFloodMix =
-        smoothstep(BiomeNoiseFields::floodCellThreshold, 0.9f, BiomeNoiseFields::computeFloodFactor(biomeNoise));
+        smoothstep(BiomeNoiseFields::floodCellThreshold, BiomeNoiseFields::floodFullStrength,
+                   BiomeNoiseFields::computeFloodFactor(biomeNoise));
 
     // Shape height this column would take under the given cell: pond-floor pull-down for swampy
     // cells, untouched natural terrain otherwise. Natural terrain below the marsh floor is left

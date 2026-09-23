@@ -13,8 +13,13 @@ namespace OasisShaping
 using namespace glm;
 static uint32_t worldSeed;
 constexpr float cellSize = 384.f;
+// Support is bounded by (.7 + .78 + .55 + .33 + sqrt(2)*.14 + .2)*37*1.12 < 115 blocks, below half
+// the minimum 230.4-block site separation, so the one-cell halo suffices.
 constexpr float maxPondSupport = 115.f;
 static_assert(2.f * maxPondSupport < 0.6f * cellSize);
+// Shore noise channels; the site's own value of each is stored as the pond's bias.
+constexpr uint32_t coarseShoreSalt = 0x33u;
+constexpr uint32_t fineShoreSalt = 0xA9u;
 
 void init(uint32_t seed)
 {
@@ -56,12 +61,22 @@ Context makeContext(ivec2 origin, ivec2 extent)
                 const vec2 center = basinCenters[i] + vec2(shapeRng.nextFloatAbs(0.05f), shapeRng.nextFloatAbs(0.05f));
                 pond.basins[i] = vec3(center, shapeRng.nextFloat(0.70f - 0.12f * i, 0.78f - 0.09f * i));
             }
-            pond.shoreNoiseBias = TerrainFormations::valueNoise2(vec2(0.f), pond.shapeSeed ^ 0x33u, pond.shapeSeed ^ 0xA9u);
-            // Oases sit in flat, dry interior ground that no landform regime claims; shaping
-            // a pond into terraces or spires would cut into their relief.
+            pond.shoreNoiseBias = TerrainFormations::valueNoise2(vec2(0.f), pond.shapeSeed ^ coarseShoreSalt,
+                                                                  pond.shapeSeed ^ fineShoreSalt);
+            // Oases sit in flat, dry interior ground with no regime landform. A pond forces an
+            // absolute floor and rim, so it would cut into terraces or spires anywhere in its
+            // footprint, and scaling it down near one would breach its water containment. Check
+            // the center and two rings across the support instead of the center alone.
             const BiomeNoise n = BiomeNoiseFields::sampleAt(pond.center);
             pond.active = BiomeNoiseFields::dryClimateWeight(n) > 0.4f && BiomeNoiseFields::ruggedWeight(n) < 0.3f &&
                           n.inland > 0.32f && n.peak < 0.f && !BiomeNoiseFields::isClaimedByRegime(n);
+            for (int i = 0; i < 16 && pond.active; ++i)
+            {
+                const float ringAngle = 6.2831853f * (i % 8) / 8.f;
+                const float ringRadius = i < 8 ? 0.5f * maxPondSupport : maxPondSupport;
+                const vec2 ringPos = pond.center + ringRadius * vec2(cos(ringAngle), sin(ringAngle));
+                pond.active = !BiomeNoiseFields::isClaimedByRegime(BiomeNoiseFields::sampleAt(ringPos));
+            }
             if (pond.active)
             {
                 const auto terrain = BiomeNoiseFields::computeNaturalTerrain(n, pond.center);
@@ -99,8 +114,7 @@ Sample sample(vec2 pos, const Context& context)
             {
                 return TerrainFormations::valueNoise(p, pond.shapeSeed ^ salt);
             };
-            const vec2 warped = stretched +
-                0.14f * TerrainFormations::valueNoise2(stretched * 1.3f, pond.shapeSeed ^ 0x14u, pond.shapeSeed ^ 0x71u);
+            const vec2 warped = stretched + 0.14f * vec2(noise(stretched * 1.3f, 0x14u), noise(stretched * 1.3f, 0x71u));
             const auto distanceToBasin = [&](const vec3& basin) { return length(warped - vec2(basin)) - basin.z; };
             const auto join = [](float a, float b)
             {
@@ -113,8 +127,8 @@ Sample sample(vec2 pos, const Context& context)
                                       distanceToBasin(pond.basins[2]));
             // Remove the site's noise bias: otherwise positive offsets shrink every basin
             // simultaneously into a group of little round pools instead of bending its shores.
-            radius += 0.24f * clamp(noise(stretched * 1.4f, 0x33u) - pond.shoreNoiseBias.x, -1.f, 1.f) +
-                      0.09f * clamp(noise(stretched * 4.2f, 0xA9u) - pond.shoreNoiseBias.y, -1.f, 1.f);
+            radius += 0.24f * clamp(noise(stretched * 1.4f, coarseShoreSalt) - pond.shoreNoiseBias.x, -1.f, 1.f) +
+                      0.09f * clamp(noise(stretched * 4.2f, fineShoreSalt) - pond.shoreNoiseBias.y, -1.f, 1.f);
             if (radius >= 1.55f)
             {
                 continue;
@@ -122,8 +136,6 @@ Sample sample(vec2 pos, const Context& context)
             const float depth = 5.f + 2.f * noise(stretched * 1.7f, 0xD3u);
             const float bank = 4.5f + noise(stretched * 2.3f, 0xB4u);
             const float shelf = 0.5f + 0.22f * noise(stretched * 1.8f, 0x52u);
-            // Support is bounded by (.7 + .78 + .55 + .33 + sqrt(2)*.14 + .2)*37*1.12 < 115 blocks,
-            // below half the minimum 230.4-block site separation. The one-cell halo suffices.
             // The entire raised rim remains inside full shaping, before the outer blend.
             return {
                 .weight = 1.f - smoothstep(1.25f, 1.55f, radius),

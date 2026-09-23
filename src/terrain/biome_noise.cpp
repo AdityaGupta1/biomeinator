@@ -9,6 +9,7 @@
 #include "rendering/common/common_settings.h"
 #include "util/rng.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <vector>
@@ -26,7 +27,10 @@ static FN::SmartNode<FN::Generator> fnHumidity;
 static FN::SmartNode<FN::Generator> fnPeak;
 static FN::SmartNode<FN::Generator> fnInland;
 static FN::SmartNode<FN::Generator> fnErosion;
-inline constexpr float biomeNoiseScale = 1000.f;
+// Climate (temperature, humidity) and relief (peak, inland, erosion) scale independently: enlarging
+// climate regions must not move coastlines or mountains.
+inline constexpr float climateNoiseScale = 1000.f;
+inline constexpr float reliefNoiseScale = 1000.f;
 
 // Shared by fillGrids and sampleAt so single-point samples match the grids
 static int noiseFieldSeed;
@@ -41,7 +45,7 @@ void init(uint32_t worldSeed)
     {
         auto source = FN::New<FN::Simplex>();
         source->SetSeedOffset(186729341);
-        source->SetScale(1500.f);
+        source->SetScale(1.5f * reliefNoiseScale);
         auto fractal = FN::New<FN::FractalFBm>();
         fractal->SetSource(source);
         fractal->SetOctaveCount(3);
@@ -52,13 +56,13 @@ void init(uint32_t worldSeed)
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(5689481209);
-        fnSimplex->SetScale(2.5f * biomeNoiseScale);
+        fnSimplex->SetScale(2.5f * climateNoiseScale);
         fnSimplex->SetOutputMin(-0.7f);
         fnSimplex->SetOutputMax(0.7f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.06f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
+        fnWarp->SetScale(0.06f * climateNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * climateNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
         fnFractal->SetOctaveCount(3);
@@ -69,13 +73,13 @@ void init(uint32_t worldSeed)
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(680199230);
-        fnSimplex->SetScale(1.5f * biomeNoiseScale);
+        fnSimplex->SetScale(1.5f * climateNoiseScale);
         fnSimplex->SetOutputMin(-0.7f);
         fnSimplex->SetOutputMax(0.7f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.04f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.03f * biomeNoiseScale);
+        fnWarp->SetScale(0.04f * climateNoiseScale);
+        fnWarp->SetWarpAmplitude(0.03f * climateNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
         fnFractal->SetOctaveCount(3);
@@ -86,7 +90,7 @@ void init(uint32_t worldSeed)
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(901992021);
-        fnSimplex->SetScale(2.5f * biomeNoiseScale);
+        fnSimplex->SetScale(2.5f * reliefNoiseScale);
         fnSimplex->SetOutputMin(0.0f);
         fnSimplex->SetOutputMax(1.0f);
         auto fnFractalRidged = FN::New<FN::FractalRidged>();
@@ -102,13 +106,13 @@ void init(uint32_t worldSeed)
     {
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(76123912);
-        fnSimplex->SetScale(5.f * biomeNoiseScale);
+        fnSimplex->SetScale(5.f * reliefNoiseScale);
         fnSimplex->SetOutputMin(-1.0f);
         fnSimplex->SetOutputMax(1.0f);
         auto fnWarp = FN::New<FN::DomainWarpGradient>();
         fnWarp->SetSource(fnSimplex);
-        fnWarp->SetScale(0.04f * biomeNoiseScale);
-        fnWarp->SetWarpAmplitude(0.02f * biomeNoiseScale);
+        fnWarp->SetScale(0.04f * reliefNoiseScale);
+        fnWarp->SetWarpAmplitude(0.02f * reliefNoiseScale);
         auto fnFractal = FN::New<FN::FractalFBm>();
         fnFractal->SetSource(fnWarp);
         fnFractal->SetOctaveCount(5);
@@ -122,9 +126,20 @@ glm::ivec2 getNoiseOffsetXZ()
     return noiseOffsetXZ;
 }
 
+// Pairs each grid field with its generator, so every batch fill covers the same fields.
+template<typename Fill>
+static void forEachField(const BiomeNoiseGrids& grids, const Fill& fill)
+{
+    fill(grids.temperature, fnTemperature);
+    fill(grids.humidity, fnHumidity);
+    fill(grids.peak, fnPeak);
+    fill(grids.inland, fnInland);
+    fill(grids.erosion, fnErosion);
+}
+
 void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples, float stepBlocks)
 {
-    const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
+    forEachField(grids, [&](float* data, const FN::SmartNode<FN::Generator>& fn)
     {
         fn->GenUniformGrid2D(data,
                              startXZ.x + noiseOffsetXZ.x,
@@ -134,26 +149,16 @@ void fillGrids(const BiomeNoiseGrids& grids, vec2 startXZ, glm::uvec2 numSamples
                              stepBlocks,
                              stepBlocks,
                              noiseFieldSeed);
-    };
-    fill(grids.temperature, fnTemperature);
-    fill(grids.humidity, fnHumidity);
-    fill(grids.peak, fnPeak);
-    fill(grids.inland, fnInland);
-    fill(grids.erosion, fnErosion);
+    });
 }
 
 void fillPositions(const BiomeNoiseGrids& grids, const float* xPositions, const float* zPositions, uint32_t numSamples)
 {
-    const auto fill = [&](float* data, const FN::SmartNode<FN::Generator>& fn)
+    forEachField(grids, [&](float* data, const FN::SmartNode<FN::Generator>& fn)
     {
         fn->GenPositionArray2D(data, numSamples, xPositions, zPositions,
                               noiseOffsetXZ.x, noiseOffsetXZ.y, noiseFieldSeed);
-    };
-    fill(grids.temperature, fnTemperature);
-    fill(grids.humidity, fnHumidity);
-    fill(grids.peak, fnPeak);
-    fill(grids.inland, fnInland);
-    fill(grids.erosion, fnErosion);
+    });
 }
 
 BiomeNoise sampleAt(vec2 posXZ_WS)
@@ -180,12 +185,14 @@ BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx)
     };
 }
 
+// Relief of any kind ramps in from the shoreline, so hills can rise straight out of beaches.
 static float landWeight(const BiomeNoise& n)
 {
     return smoothstep(0.f, 0.35f, n.inland);
 }
 
-// Landforms that need solid ground behind the coast (terraces, karst) ramp in here.
+// Landforms that need solid ground behind the coast (terraces, karst) start farther inland and
+// finish sooner than general relief, so they never sit on the beach band.
 static float interiorWeight(const BiomeNoise& n)
 {
     return smoothstep(0.1f, 0.3f, n.inland);
@@ -196,14 +203,31 @@ float ruggedWeight(const BiomeNoise& n)
     return 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
 }
 
-float highlandReliefWeight(const BiomeNoise& n)
+static float highlandReliefWeight(const BiomeNoise& n)
 {
     return ruggedWeight(n) * smoothstep(0.25f, 1.05f, n.inland);
 }
 
+static float peak01(const BiomeNoise& n)
+{
+    return clamp((n.peak + 1.f) * 0.5f, 0.f, 1.f);
+}
+
+float mountainPeakWeight(const BiomeNoise& n)
+{
+    return highlandReliefWeight(n) * pow(peak01(n), 4.f);
+}
+
+inline constexpr float highlandThreshold = 0.1f;
+
+bool isHighland(const BiomeNoise& n)
+{
+    return mountainPeakWeight(n) >= highlandThreshold;
+}
+
 static float terraceWeight(const BiomeNoise& n)
 {
-    return smoothstep(-0.18f, 0.02f, n.erosion) * (1.f - smoothstep(0.27f, 0.48f, n.erosion)) * interiorWeight(n);
+    return TerrainFormations::smoothBand(n.erosion, -0.18f, 0.02f, 0.27f, 0.48f) * interiorWeight(n);
 }
 
 float dryClimateWeight(const BiomeNoise& n)
@@ -215,8 +239,7 @@ static float tianziSuitability(const BiomeNoise& n)
 {
     // Karst occupies humid, temperate-to-warm rugged regions. Cold or dry mountain
     // climates retain ordinary peaks instead of being intercepted by erosion alone.
-    const float temperate = smoothstep(-0.55f, -0.05f, n.temperature) *
-                            (1.f - smoothstep(0.65f, 1.05f, n.temperature));
+    const float temperate = TerrainFormations::smoothBand(n.temperature, -0.55f, -0.05f, 0.65f, 1.05f);
     const float humid = smoothstep(-0.1f, 0.3f, n.humidity);
     const float preserved = 1.f - smoothstep(-0.65f, -0.1f, n.erosion);
     return temperate * humid * preserved * interiorWeight(n);
@@ -238,24 +261,40 @@ struct TerrainRegimeData
     float (*suitability)(const BiomeNoise&);
     // Label boundary.
     float threshold;
-    // Suitability at full terrain weight.
-    float fullStrength;
-    // Lower-priority regimes fade out over this width just below the threshold. Keep it smaller
-    // than the threshold: suitabilities bottom out at 0, so a wider fade would suppress them
+    // Stored relative to the threshold so recalibrating a threshold (e.g. from a target area
+    // share) keeps the ramps valid.
+    // Suitability span from the threshold to full landform weight.
+    float strengthRange;
+    // Lower-priority regimes fade out over this fraction of the threshold, just below it. It
+    // must stay below 1: suitabilities bottom out at 0, so a wider fade would suppress them
     // everywhere, even far from this regime.
-    float fadeWidth;
-    // Density amplitude of the regime's landform, blended in by its weight. Unset regimes keep
+    float fadeFraction;
+    // Density amplitude of the regime's landform, blended in by its coverage. Unset regimes keep
     // the roughness their relief implies.
     std::optional<float> amplitude;
+
+    constexpr float fullStrength() const
+    {
+        return threshold + strengthRange;
+    }
+    constexpr float fadeWidth() const
+    {
+        return threshold * fadeFraction;
+    }
 };
 
-// Swamp terrain comes from flood cells (see swamp_shaping), so nothing reads its weight.
-static const std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
-    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f, 0.1f, std::nullopt },
-    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f, 0.15f, 7.f },
-    { Biome::MESA, mesaSuitability, 0.15f, 0.5f, 0.1f, 10.f },
-    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f, 0.05f, 12.f },
+// Swamp terrain comes from flood cells (see swamp_shaping); its row sets the label, the fade of
+// lower-priority regimes, and the flood strength at which pond floors reach full depth.
+static constexpr std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
+    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, floodFullStrength - floodTintThreshold, 0.4f, std::nullopt },
+    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.5f, 0.43f, 7.f },
+    { Biome::MESA, mesaSuitability, 0.15f, 0.35f, 0.67f, 10.f },
+    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.5f, 0.5f, 12.f },
 }};
+static_assert(std::ranges::all_of(regimes, [](const TerrainRegimeData& regime)
+{
+    return regime.threshold > 0.f && regime.strengthRange > 0.f && regime.fadeFraction > 0.f && regime.fadeFraction < 1.f;
+}));
 
 // See NaturalTerrain::regimeWeights and regimeCoverage.
 struct RegimeEvaluation
@@ -273,15 +312,15 @@ static RegimeEvaluation evaluateRegimes(const BiomeNoise& n)
     for (size_t regimeIdx = 0; regimeIdx < regimes.size(); ++regimeIdx)
     {
         const TerrainRegimeData& regime = regimes[regimeIdx];
-        ASSERT(regime.fadeWidth < regime.threshold);
         const float suitability = regime.suitability(n);
-        const float claim = smoothstep(regime.threshold - regime.fadeWidth, regime.threshold, suitability);
-        result.landform.weights[regimeIdx] = unclaimed * smoothstep(regime.threshold, regime.fullStrength, suitability);
+        const float claim = smoothstep(regime.threshold - regime.fadeWidth(), regime.threshold, suitability);
+        result.landform.weights[regimeIdx] = unclaimed * smoothstep(regime.threshold, regime.fullStrength(), suitability);
         result.coverage.weights[regimeIdx] = unclaimed * claim;
         unclaimed *= 1.f - claim;
     }
     return result;
 }
+
 
 static const TerrainRegimeData* findClaimingRegime(const BiomeNoise& n)
 {
@@ -295,17 +334,15 @@ static const TerrainRegimeData* findClaimingRegime(const BiomeNoise& n)
     return nullptr;
 }
 
-bool isClaimedByRegime(const BiomeNoise& n)
-{
-    return findClaimingRegime(n) != nullptr;
-}
 
-static float terraceHeight(float height, const BiomeNoise& n)
+static float terraceHeight(float height, vec2 pos)
 {
     // Irregular elevation intervals avoid repeating identical shelves up the hillside.
     // Shared anchors keep the remap continuous when either the interval or biome changes.
+    // A slow world-position offset shifts the shelf elevations regionally; climate must not,
+    // since rescaling or equalizing the climate fields would then move every shelf.
     constexpr float spacing = 42.f;
-    const float offset = 10.f * n.humidity + 6.f * n.temperature;
+    const float offset = 12.f * TerrainFormations::valueNoise(pos / 700.f, noiseFieldSeed ^ 0x7E2F0u);
     const float localHeight = height - offset;
     const auto anchor = [](int index)
     {
@@ -324,7 +361,7 @@ static float terraceHeight(float height, const BiomeNoise& n)
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
 {
-    const float peak = clamp((n.peak + 1.f) * 0.5f, 0.f, 1.f);
+    const float peak = peak01(n);
     const float land = landWeight(n);
     const float rugged = ruggedWeight(n);
     const RegimeEvaluation regimeEvaluation = evaluateRegimes(n);
@@ -342,7 +379,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     // preserved highlands, without roughening flat lowlands.
     const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f);
     const float highland = highlandReliefWeight(n);
-    const float peakRelief = 160.f * highland * pow(peak, 4.f);
+    const float peakRelief = 160.f * mountainPeakWeight(n);
     // Complementary weights blend complete profiles: as Tianzi weight removes the extra
     // peak relief, the same weight supplies the stacked formations below.
     float height = foundation + land * (mountainRelief + (1.f - tianzi) * peakRelief);
@@ -354,7 +391,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
         // pit into neighboring relief; high ground becomes a tall terraced massif.
         const float plateau = TerrainFormations::plateauRelief(pos, noiseFieldSeed ^ 0xBA01u);
         height += terraces * land * 42.f * (plateau - 0.5f);
-        height = mix(height, terraceHeight(height, n), 0.45f * terraces);
+        height = mix(height, terraceHeight(height, pos), 0.45f * terraces);
     }
     const float coastPull = smoothstep(0.2f, 0.f, abs(n.inland)) * 0.9f;
     height = mix(height, static_cast<float>(SEA_LEVEL + 8), coastPull);
@@ -414,6 +451,11 @@ float computeFloodFactor(const BiomeNoise& biomeNoise)
     return min(min(temperatureFactor, humidityFactor), min(flatFactor, inlandFactor));
 }
 
+bool isClaimedByRegime(const BiomeNoise& n)
+{
+    return findClaimingRegime(n) != nullptr;
+}
+
 Biome biomeFromNoise(const BiomeNoise& biomeNoise)
 {
     const TerrainRegimeData* regime = findClaimingRegime(biomeNoise);
@@ -423,18 +465,8 @@ Biome biomeFromNoise(const BiomeNoise& biomeNoise)
 void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
 {
     const uint32_t numSamples = numTexels.x * numTexels.y;
-    std::vector<float> temperatureNoise(numSamples);
-    std::vector<float> humidityNoise(numSamples);
-    std::vector<float> peakNoise(numSamples);
-    std::vector<float> inlandNoise(numSamples);
-    std::vector<float> erosionNoise(numSamples);
-    const BiomeNoiseGrids grids = {
-        .temperature = temperatureNoise.data(),
-        .humidity = humidityNoise.data(),
-        .peak = peakNoise.data(),
-        .inland = inlandNoise.data(),
-        .erosion = erosionNoise.data(),
-    };
+    std::vector<float> noise(BiomeNoiseGrids::numFields * numSamples);
+    const BiomeNoiseGrids grids = BiomeNoiseGrids::fromBuffer(noise.data(), numSamples);
 
     const vec2 texelCentersStartXZ = vec2(originBlocksXZ_WS) + texelSizeBlocks * 0.5f;
     fillGrids(grids, texelCentersStartXZ, numTexels, static_cast<float>(texelSizeBlocks));

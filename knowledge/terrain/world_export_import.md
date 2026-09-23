@@ -68,11 +68,12 @@ All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && wo
 
 ## Structure count bound
 
-The per-chunk structure scratch buffers are sized by a hard bound, not a typical count, because
-exposed-surface placement can anchor a structure on every shelf of a multi-ledge cliff. The
-export loop writes into a fixed-size buffer and only an ASSERT checks the count, so a bound that
-real terrain can exceed becomes a heap overflow in Release. Keep the bound provable (each anchor
-is an air voxel directly above a solid one) if the packing or anchor rules change.
+The per-chunk structure scratch buffers are sized generously, not for a typical count, because
+exposed-surface placement can anchor a structure on every shelf of a multi-ledge cliff. The limit
+is not a proof: separate gens never compete, so several can share an anchor. Export therefore
+fails loudly when a chunk exceeds it, and import rejects a count over the limit before doing any
+size arithmetic with it (which would otherwise wrap). Both writes go into fixed-size buffers, so
+an ASSERT alone would leave a Release heap overflow.
 
 ## `reimportWorld` flushes everything
 

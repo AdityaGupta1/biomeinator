@@ -30,6 +30,7 @@ terrain/cave/swamp noises.
   the renderer). Anything in `biome.cpp` or its dependencies that needs `Blocks::getBlockData`
   breaks the scanner link; wall/ceiling decorator validation therefore runs in `Terrain::init`,
   not in `Decorator::addEntry`.
-- The API caps the texel size as well as the texel count. The oasis lookup allocates one pond
-  per 384-block cell of the covered area, so an unbounded `step` could exhaust memory even with
-  few texels.
+- The API bounds the covered rectangle and its origin, not just the texel count. The oasis
+  lookup allocates one pond per 384-block cell of the covered area, so a long thin request at a
+  coarse step could exhaust memory with few texels, and `fillBiomeRect` works in `int` block
+  coordinates.
