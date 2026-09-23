@@ -10,6 +10,7 @@
 #include "util/rng.h"
 
 #include <array>
+#include <optional>
 #include <vector>
 
 #include <FastNoise/FastNoise.h>
@@ -184,7 +185,13 @@ static float landWeight(const BiomeNoise& n)
     return smoothstep(0.f, 0.35f, n.inland);
 }
 
-static float ruggedWeight(const BiomeNoise& n)
+// Landforms that need solid ground behind the coast (terraces, karst) ramp in here.
+static float interiorWeight(const BiomeNoise& n)
+{
+    return smoothstep(0.1f, 0.3f, n.inland);
+}
+
+float ruggedWeight(const BiomeNoise& n)
 {
     return 1.f - smoothstep(-0.1f, 0.5f, n.erosion);
 }
@@ -196,8 +203,7 @@ float highlandReliefWeight(const BiomeNoise& n)
 
 static float terraceWeight(const BiomeNoise& n)
 {
-    return smoothstep(-0.18f, 0.02f, n.erosion) * (1.f - smoothstep(0.27f, 0.48f, n.erosion)) *
-           smoothstep(0.1f, 0.3f, n.inland);
+    return smoothstep(-0.18f, 0.02f, n.erosion) * (1.f - smoothstep(0.27f, 0.48f, n.erosion)) * interiorWeight(n);
 }
 
 float dryClimateWeight(const BiomeNoise& n)
@@ -213,7 +219,7 @@ static float tianziSuitability(const BiomeNoise& n)
                             (1.f - smoothstep(0.65f, 1.05f, n.temperature));
     const float humid = smoothstep(-0.1f, 0.3f, n.humidity);
     const float preserved = 1.f - smoothstep(-0.65f, -0.1f, n.erosion);
-    return temperate * humid * preserved * smoothstep(0.08f, 0.32f, n.inland);
+    return temperate * humid * preserved * interiorWeight(n);
 }
 
 static float mesaSuitability(const BiomeNoise& n)
@@ -238,35 +244,60 @@ struct TerrainRegimeData
     // than the threshold: suitabilities bottom out at 0, so a wider fade would suppress them
     // everywhere, even far from this regime.
     float fadeWidth;
+    // Density amplitude of the regime's landform, blended in by its weight. Unset regimes keep
+    // the roughness their relief implies.
+    std::optional<float> amplitude;
 };
 
-// Swamp terrain comes from flood cells (see swamp_shaping), not from its regime weight.
+// Swamp terrain comes from flood cells (see swamp_shaping), so nothing reads its weight.
 static const std::array<TerrainRegimeData, static_cast<size_t>(TerrainRegime::COUNT)> regimes{{
-    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f, 0.1f },
-    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f, 0.15f },
-    { Biome::MESA, mesaSuitability, 0.15f, 0.5f, 0.1f },
-    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f, 0.05f },
+    { Biome::SWAMP, computeFloodFactor, floodTintThreshold, 0.45f, 0.1f, std::nullopt },
+    { Biome::TIANZI_MOUNTAINS, tianziSuitability, 0.35f, 0.85f, 0.15f, 7.f },
+    { Biome::MESA, mesaSuitability, 0.15f, 0.5f, 0.1f, 10.f },
+    { Biome::RED_DESERT, redDesertSuitability, 0.1f, 0.6f, 0.05f, 12.f },
 }};
 
-float regimeWeight(TerrainRegime regime, const BiomeNoise& n)
+// See NaturalTerrain::regimeWeights and regimeCoverage.
+struct RegimeEvaluation
+{
+    RegimeWeights landform;
+    RegimeWeights coverage;
+};
+
+static RegimeEvaluation evaluateRegimes(const BiomeNoise& n)
 {
     // Ramping the complete suitability (rather than separately fading each axis) keeps
     // coastal and climate boundaries from cutting through full-strength landforms.
-    const size_t regimeIdx = static_cast<size_t>(regime);
-    const TerrainRegimeData& data = regimes[regimeIdx];
-    float weight = smoothstep(data.threshold, data.fullStrength, data.suitability(n));
-    for (size_t claimantIdx = 0; claimantIdx < regimeIdx && weight > 0.f; ++claimantIdx)
+    RegimeEvaluation result;
+    float unclaimed = 1.f;
+    for (size_t regimeIdx = 0; regimeIdx < regimes.size(); ++regimeIdx)
     {
-        const TerrainRegimeData& claimant = regimes[claimantIdx];
-        ASSERT(claimant.fadeWidth < claimant.threshold);
-        weight *= 1.f - smoothstep(claimant.threshold - claimant.fadeWidth, claimant.threshold, claimant.suitability(n));
+        const TerrainRegimeData& regime = regimes[regimeIdx];
+        ASSERT(regime.fadeWidth < regime.threshold);
+        const float suitability = regime.suitability(n);
+        const float claim = smoothstep(regime.threshold - regime.fadeWidth, regime.threshold, suitability);
+        result.landform.weights[regimeIdx] = unclaimed * smoothstep(regime.threshold, regime.fullStrength, suitability);
+        result.coverage.weights[regimeIdx] = unclaimed * claim;
+        unclaimed *= 1.f - claim;
     }
-    return weight;
+    return result;
 }
 
-float surfaceDetailWeight(const BiomeNoise& n)
+static const TerrainRegimeData* findClaimingRegime(const BiomeNoise& n)
 {
-    return max(regimeWeight(TerrainRegime::MESA, n), regimeWeight(TerrainRegime::TIANZI, n));
+    for (const TerrainRegimeData& regime : regimes)
+    {
+        if (regime.suitability(n) > regime.threshold)
+        {
+            return &regime;
+        }
+    }
+    return nullptr;
+}
+
+bool isClaimedByRegime(const BiomeNoise& n)
+{
+    return findClaimingRegime(n) != nullptr;
 }
 
 static float terraceHeight(float height, const BiomeNoise& n)
@@ -281,15 +312,14 @@ static float terraceHeight(float height, const BiomeNoise& n)
         RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x7E22ACEu, index);
         return SEA_LEVEL + spacing * (index + rng.nextFloat(-0.32f, 0.32f));
     };
-    const int band = TerrainFormations::jitteredBand(
+    const TerrainFormations::Band band = TerrainFormations::jitteredBand(
         localHeight, static_cast<int>(floor((localHeight - SEA_LEVEL) / spacing)), anchor);
-    const float low = anchor(band), high = anchor(band + 1);
-    const float t = clamp((localHeight - low) / (high - low), 0.f, 1.f);
-    RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x51E1Fu, band);
+    const float t = clamp((localHeight - band.low) / (band.high - band.low), 0.f, 1.f);
+    RandomNumberGenerator rng = initRng(noiseFieldSeed ^ 0x51E1Fu, band.index);
     const float rampStart = rng.nextFloat(0.15f, 0.4f);
     const float rampEnd = rng.nextFloat(0.75f, 0.95f);
     // Retain a slope across the shelf instead of flattening each tread completely.
-    return offset + mix(low, high, mix(t, smoothstep(rampStart, rampEnd, t), 0.8f));
+    return offset + mix(band.low, band.high, mix(t, smoothstep(rampStart, rampEnd, t), 0.8f));
 }
 
 NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
@@ -297,9 +327,10 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     const float peak = clamp((n.peak + 1.f) * 0.5f, 0.f, 1.f);
     const float land = landWeight(n);
     const float rugged = ruggedWeight(n);
-    const float dry = dryClimateWeight(n);
-    const float terraces = regimeWeight(TerrainRegime::MESA, n);
-    const float tianzi = regimeWeight(TerrainRegime::TIANZI, n);
+    const RegimeEvaluation regimeEvaluation = evaluateRegimes(n);
+    const RegimeWeights& weights = regimeEvaluation.landform;
+    const float terraces = weights[TerrainRegime::MESA];
+    const float tianzi = weights[TerrainRegime::TIANZI];
     const vec2 pos = posXZ_WS + vec2(noiseOffsetXZ);
 
     // Elevation comes only from peak, erosion and inland; climate selects landform styles
@@ -344,7 +375,7 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     }
     // Quartz spires are the red desert's formation. They reuse the same finite-support
     // sampler with a narrow summit and a broad foot, not a new noise field.
-    const float spireWeight = regimeWeight(TerrainRegime::RED_DESERT, n);
+    const float spireWeight = weights[TerrainRegime::RED_DESERT];
     if (spireWeight > 0.f)
     {
         constexpr TerrainFormations::Profile spires{ 116.f, 6.5f, 34.f, 42.f, 24.f, 0.04f, 1.f };
@@ -352,24 +383,31 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     }
     height += uplift;
 
-    float amplitude = mix(38.f, 12.f, smoothstep(-0.1f, 0.5f, n.erosion));
+    // Roughness follows relief; landform regimes override it across their whole label. Density
+    // amplitude also biases the effective surface slightly (terrain below the base height is
+    // denser), so it must not follow raw climate either.
+    float amplitude = mix(12.f, 38.f, rugged);
     amplitude += 40.f * highland * smoothstep(0.1f, 0.65f, n.peak);
-    amplitude = mix(amplitude, 10.f, terraces);
-    amplitude = mix(amplitude, 7.f, tianzi);
-    amplitude = mix(amplitude, 12.f, dry * (1.f - terraces));
+    for (size_t regimeIdx = 0; regimeIdx < regimes.size(); ++regimeIdx)
+    {
+        if (regimes[regimeIdx].amplitude)
+        {
+            amplitude = mix(amplitude, *regimes[regimeIdx].amplitude, regimeEvaluation.coverage.weights[regimeIdx]);
+        }
+    }
     amplitude = mix(amplitude, 4.f, smoothstep(5.f, 30.f, uplift));
     amplitude /= 1.f + 3.f * smoothstep(0.4f, -0.1f, abs(n.inland));
-    return { height, 1.f / amplitude, formationBase, uplift, formationSite };
+    return { height, 1.f / amplitude, formationBase, uplift, formationSite, weights, regimeEvaluation.coverage };
 }
 
 float computeFloodFactor(const BiomeNoise& biomeNoise)
 {
     const float temperatureFactor = smoothstep(-0.1f, 0.35f, biomeNoise.temperature);
     const float humidityFactor = smoothstep(0.0f, 0.45f, biomeNoise.humidity);
+    // Wetlands need the same eroded, low-relief ground that terrain flattens.
     const float flatFactor = min(smoothstep(-0.1f, -0.55f, biomeNoise.peak),
-                                smoothstep(0.25f, 0.55f, biomeNoise.erosion));
-    const float inlandFactor =
-        min(smoothstep(0.2f, 0.3f, biomeNoise.inland), smoothstep(0.85f, 0.75f, biomeNoise.inland));
+                                smoothstep(0.37f, 0.f, ruggedWeight(biomeNoise)));
+    const float inlandFactor = smoothstep(0.2f, 0.3f, biomeNoise.inland);
 
     // min, not product: the factor is limited by its worst axis, instead of requiring every axis
     // to be near-perfect at once.
@@ -378,14 +416,8 @@ float computeFloodFactor(const BiomeNoise& biomeNoise)
 
 Biome biomeFromNoise(const BiomeNoise& biomeNoise)
 {
-    for (const TerrainRegimeData& regime : regimes)
-    {
-        if (regime.suitability(biomeNoise) > regime.threshold)
-        {
-            return regime.biome;
-        }
-    }
-    return Biomes::getClosestBiome(biomeNoise);
+    const TerrainRegimeData* regime = findClaimingRegime(biomeNoise);
+    return regime ? regime->biome : Biomes::getClosestBiome(biomeNoise);
 }
 
 void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
@@ -406,7 +438,7 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
 
     const vec2 texelCentersStartXZ = vec2(originBlocksXZ_WS) + texelSizeBlocks * 0.5f;
     fillGrids(grids, texelCentersStartXZ, numTexels, static_cast<float>(texelSizeBlocks));
-    const auto oases = OasisShaping::makeContext(originBlocksXZ_WS, glm::ivec2(numTexels * texelSizeBlocks));
+    const auto oases = OasisShaping::makeContext(originBlocksXZ_WS, glm::ivec2(numTexels) * static_cast<int>(texelSizeBlocks));
 
     for (uint32_t idx = 0; idx < numSamples; ++idx)
     {

@@ -4,6 +4,7 @@
 #include "../chunk.h"
 #include <algorithm>
 #include <iterator>
+#include <numeric>
 #include <tuple>
 
 using namespace glm;
@@ -105,19 +106,22 @@ void Chunk::placeSurfaceStructures()
 {
     // Candidates only compete within their own gen. Each gen buckets its candidates on an XZ
     // grid over the neighborhood, with cells at least as wide as its largest spacing, so every
-    // competitor lies in the 3x3 cells around a candidate.
+    // competitor lies in the 3x3 cells around a candidate. Buckets are ranges of one index
+    // array (counting sort) rather than a vector per cell.
     struct GenGrid
     {
         const StructureGen* gen;
         PlacementReach reach;
         int cellSize;
         int cellsPerSide;
-        std::vector<std::vector<uint32_t>> cellCandidateIdxs;
+        std::vector<uint32_t> cellStarts; // cellsPerSide^2 + 1 offsets into candidateIdxs
+        std::vector<uint32_t> candidateIdxs;
     };
     struct Candidate
     {
         const SurfaceStructureCandidate* source;
         uint32_t genGridIdx;
+        uint32_t cellIdx;
         bool resolved = false;
         int variant = -1; // -1 when no variant fits
     };
@@ -142,14 +146,40 @@ void Chunk::placeSurfaceStructures()
                 const int cellSize = static_cast<int>(ceil(reach.spacingXZ));
                 const int cellsPerSide = (neighborhoodSize + cellSize - 1) / cellSize;
                 genGrids.push_back({ source.gen, reach, cellSize, cellsPerSide,
-                    std::vector<std::vector<uint32_t>>(cellsPerSide * cellsPerSide) });
+                    std::vector<uint32_t>(cellsPerSide * cellsPerSide + 1, 0), {} });
                 genGrid = std::prev(genGrids.end());
+            }
+            // A candidate farther than geometry + spacing from this chunk can neither reach it
+            // nor suppress one that does.
+            const ivec2 local = ivec2(source.pos_WS.x, source.pos_WS.z) - origin;
+            const int margin = genGrid->reach.geometry + genGrid->cellSize;
+            if (local.x < -margin || local.y < -margin ||
+                local.x >= static_cast<int>(chunkSizeXZ) + margin || local.y >= static_cast<int>(chunkSizeXZ) + margin)
+            {
+                continue;
             }
             const ivec2 cell = (ivec2(source.pos_WS.x, source.pos_WS.z) - neighborhoodMin) / genGrid->cellSize;
             ASSERT(all(greaterThanEqual(cell, ivec2(0))) && all(lessThan(cell, ivec2(genGrid->cellsPerSide))));
-            genGrid->cellCandidateIdxs[cell.x + genGrid->cellsPerSide * cell.y].push_back(
-                static_cast<uint32_t>(candidates.size()));
-            candidates.push_back({ &source, static_cast<uint32_t>(genGrid - genGrids.begin()) });
+            const uint32_t cellIdx = static_cast<uint32_t>(cell.x + genGrid->cellsPerSide * cell.y);
+            ++genGrid->cellStarts[cellIdx + 1];
+            candidates.push_back({ &source, static_cast<uint32_t>(genGrid - genGrids.begin()), cellIdx });
+        }
+    }
+    for (GenGrid& genGrid : genGrids)
+    {
+        std::partial_sum(genGrid.cellStarts.begin(), genGrid.cellStarts.end(), genGrid.cellStarts.begin());
+        genGrid.candidateIdxs.resize(genGrid.cellStarts.back());
+    }
+    {
+        std::vector<std::vector<uint32_t>> cursors;
+        for (const GenGrid& genGrid : genGrids)
+        {
+            cursors.emplace_back(genGrid.cellStarts.begin(), genGrid.cellStarts.end() - 1);
+        }
+        for (uint32_t candidateIdx = 0; candidateIdx < candidates.size(); ++candidateIdx)
+        {
+            const Candidate& candidate = candidates[candidateIdx];
+            genGrids[candidate.genGridIdx].candidateIdxs[cursors[candidate.genGridIdx][candidate.cellIdx]++] = candidateIdx;
         }
     }
 
@@ -213,9 +243,10 @@ void Chunk::placeSurfaceStructures()
         {
             for (int cellX = minCell.x; cellX <= maxCell.x && accepted; ++cellX)
             {
-                for (const uint32_t otherIdx : genGrid.cellCandidateIdxs[cellX + genGrid.cellsPerSide * cellZ])
+                const uint32_t cellIdx = static_cast<uint32_t>(cellX + genGrid.cellsPerSide * cellZ);
+                for (uint32_t slot = genGrid.cellStarts[cellIdx]; slot < genGrid.cellStarts[cellIdx + 1]; ++slot)
                 {
-                    Candidate& other = candidates[otherIdx];
+                    Candidate& other = candidates[genGrid.candidateIdxs[slot]];
                     const auto& competitor = *other.source;
                     if (!hasPriority(competitor, source))
                     {

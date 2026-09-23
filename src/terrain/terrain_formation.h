@@ -7,6 +7,7 @@
 #include "debug.h"
 #include <array>
 #include <glm/glm.hpp>
+#include <limits>
 
 namespace TerrainFormations
 {
@@ -25,20 +26,51 @@ inline float valueNoise(glm::vec2 pos, uint32_t seed)
     return mix(mix(at(0, 0), at(1, 0), t.x), mix(at(0, 1), at(1, 1), t.x), t.y);
 }
 
-// Corrects an unjittered band guess to the band whose jittered lower boundary lies at or below
-// value. One step suffices while each boundary(i) stays within half a band of its regular spot.
-template<typename Boundary>
-inline int jitteredBand(float value, int guess, const Boundary& boundary)
+// Two independent value noise channels at one position, e.g. for a 2D domain warp.
+inline glm::vec2 valueNoise2(glm::vec2 pos, uint32_t seedX, uint32_t seedY)
 {
-    if (boundary(guess) > value)
+    return { valueNoise(pos, seedX), valueNoise(pos, seedY) };
+}
+
+// Visits the 3x3 cells around cell, each with its own position-seeded random stream.
+template<typename Visit>
+inline void forEachNeighborCell(glm::ivec2 cell, uint32_t seed, const Visit& visit)
+{
+    for (int z = -1; z <= 1; ++z)
     {
-        return guess - 1;
+        for (int x = -1; x <= 1; ++x)
+        {
+            const glm::ivec2 key = cell + glm::ivec2(x, z);
+            RandomNumberGenerator rng = initRng(seed, key.x, key.y);
+            visit(key, rng);
+        }
     }
-    if (boundary(guess + 1) < value)
+}
+
+struct Band
+{
+    int index;
+    float low;
+    float high;
+};
+
+// Corrects an unjittered band guess to the band whose jittered lower boundary lies at or below
+// value, returning that band's boundaries. One step suffices while each boundary(i) stays within
+// half a band of its regular spot.
+template<typename Boundary>
+inline Band jitteredBand(float value, int guess, const Boundary& boundary)
+{
+    const float low = boundary(guess);
+    if (low > value)
     {
-        return guess + 1;
+        return { guess - 1, boundary(guess - 1), low };
     }
-    return guess;
+    const float high = boundary(guess + 1);
+    if (high < value)
+    {
+        return { guess + 1, high, boundary(guess + 2) };
+    }
+    return { guess, low, high };
 }
 
 // A connected plateau field with broken escarpments and short gullies. Unlike the
@@ -46,8 +78,7 @@ inline int jitteredBand(float value, int guess, const Boundary& boundary)
 inline float plateauRelief(glm::vec2 pos, uint32_t seed)
 {
     using namespace glm;
-    pos += 42.f * vec2(valueNoise(pos / 210.f, seed ^ 0x713u),
-                      valueNoise(pos / 210.f, seed ^ 0x951u));
+    pos += 42.f * valueNoise2(pos / 210.f, seed ^ 0x713u, seed ^ 0x951u);
     const float broad = valueNoise(pos / 170.f, seed);
     const float medium = valueNoise(pos / 65.f, seed ^ 0x823u);
     const float detail = valueNoise(pos / 22.f, seed ^ 0x195u);
@@ -81,52 +112,62 @@ inline float sample(glm::vec2 pos, uint32_t seed, const Profile& profile, glm::i
     const float facetBound = mix(1.f, 1.083f, profile.angularity);
     ASSERT(max(profile.footRadius, profile.radius * 1.2f) * facetBound / 0.8f + warpBound < 1.25f * profile.spacing);
     const ivec2 cell = ivec2(floor(pos / profile.spacing));
-    if (dominantSite)
-    {
-        *dominantSite = cell;
-    }
-    const vec2 warped = pos + profile.radius * 0.3f * vec2(
-        valueNoise(pos / profile.radius, seed ^ 0x541u), valueNoise(pos / profile.radius, seed ^ 0x901u));
+    const vec2 warped = pos + profile.radius * 0.3f *
+        valueNoise2(pos / profile.radius, seed ^ 0x541u, seed ^ 0x901u);
     const float summitRoughness = valueNoise(pos / (profile.radius * 0.8f), seed ^ 0x339u) *
                                   profile.summitWidth * profile.height * 0.11f;
     float result = 0.f;
-    for (int z = -1; z <= 1; ++z)
+    ivec2 supportingSite{};
+    // Between feet no site contributes. Falling back to the nearest site keeps ownership
+    // continuous there, instead of switching along the straight edges of the search cell.
+    float nearestDistance = std::numeric_limits<float>::max();
+    ivec2 nearestSite{};
+    forEachNeighborCell(cell, seed, [&](ivec2 key, RandomNumberGenerator& rng)
     {
-        for (int x = -1; x <= 1; ++x)
+        const vec2 site = (vec2(key) + vec2(rng.nextFloat(0.25f, 0.75f), rng.nextFloat(0.25f, 0.75f))) * profile.spacing;
+        const float radius = profile.radius * rng.nextFloat(0.75f, 1.2f);
+        const float height = profile.height * rng.nextFloat(0.65f, 1.25f);
+        const vec2 stretch(rng.nextFloat(0.8f, 1.2f), rng.nextFloat(0.8f, 1.2f));
+        // Small continuous distortion roughens footprints without adding another noise grid.
+        vec2 delta = warped - site;
+        delta += 2.f * vec2(sin(pos.y * 0.17f + site.x), sin(pos.x * 0.19f + site.y));
+        delta *= stretch;
+        float distance = length(delta);
+        if (profile.angularity > 0.f)
         {
-            const ivec2 key = cell + ivec2(x, z);
-            RandomNumberGenerator rng = initRng(seed, key.x, key.y);
-            const vec2 site = (vec2(key) + vec2(rng.nextFloat(0.25f, 0.75f), rng.nextFloat(0.25f, 0.75f))) * profile.spacing;
-            const float radius = profile.radius * rng.nextFloat(0.75f, 1.2f);
-            const float height = profile.height * rng.nextFloat(0.65f, 1.25f);
-            const vec2 stretch(rng.nextFloat(0.8f, 1.2f), rng.nextFloat(0.8f, 1.2f));
-            // Small continuous distortion roughens footprints without adding another noise grid.
-            vec2 delta = warped - site;
-            delta += 2.f * vec2(sin(pos.y * 0.17f + site.x), sin(pos.x * 0.19f + site.y));
-            delta *= stretch;
-            float distance = length(delta);
-            if (profile.angularity > 0.f)
-            {
-                const float angle = rng.nextFloat(0.f, 6.2831853f);
-                const vec2 rotated = abs(vec2(delta.x * cos(angle) - delta.y * sin(angle),
-                                              delta.x * sin(angle) + delta.y * cos(angle)));
-                const float faceted = max(max(rotated.x, rotated.y), (rotated.x + rotated.y) * 0.7071068f);
-                distance = mix(distance, faceted, profile.angularity);
-            }
-            const float inward = max(0.f, 1.f - distance / profile.footRadius);
-            // Subtract the linear term so the outer edge meets the desert with zero slope.
-            // The exponential then steepens toward the crystal instead of rounding into a dome.
-            const float risingFoot = (exp(3.f * inward) - 1.f - 3.f * inward) / (exp(3.f) - 4.f);
-            const float foot = mix(1.f - smoothstep(0.f, profile.footRadius, distance), risingFoot, profile.angularity);
-            const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
-                clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
-            const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
-            if (dominantSite && contribution > result)
-            {
-                *dominantSite = key;
-            }
-            result = max(result, contribution);
+            const float angle = rng.nextFloat(0.f, 6.2831853f);
+            const vec2 rotated = abs(vec2(delta.x * cos(angle) - delta.y * sin(angle),
+                                          delta.x * sin(angle) + delta.y * cos(angle)));
+            const float faceted = max(max(rotated.x, rotated.y), (rotated.x + rotated.y) * 0.7071068f);
+            distance = mix(distance, faceted, profile.angularity);
         }
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestSite = key;
+        }
+        // Both the foot and the core are zero beyond their radii.
+        if (distance >= max(profile.footRadius, radius))
+        {
+            return;
+        }
+        const float inward = max(0.f, 1.f - distance / profile.footRadius);
+        // Subtract the linear term so the outer edge meets the desert with zero slope.
+        // The exponential then steepens toward the crystal instead of rounding into a dome.
+        const float risingFoot = (exp(3.f * inward) - 1.f - 3.f * inward) / (exp(3.f) - 4.f);
+        const float foot = mix(1.f - smoothstep(0.f, profile.footRadius, distance), risingFoot, profile.angularity);
+        const float core = mix(1.f - smoothstep(profile.summitWidth, 1.f, distance / radius),
+            clamp((1.f - distance / radius) / (1.f - profile.summitWidth), 0.f, 1.f), profile.angularity);
+        const float contribution = profile.footHeight * foot + (height + summitRoughness) * core;
+        if (contribution > result)
+        {
+            result = contribution;
+            supportingSite = key;
+        }
+    });
+    if (dominantSite)
+    {
+        *dominantSite = result > 0.f ? supportingSite : nearestSite;
     }
     return result;
 }

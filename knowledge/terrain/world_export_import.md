@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # World Export / Import
 
@@ -65,6 +65,14 @@ The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-
 ### Cost containment
 
 All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (golden tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+
+## Structure count bound
+
+The per-chunk structure scratch buffers are sized by a hard bound, not a typical count, because
+exposed-surface placement can anchor a structure on every shelf of a multi-ledge cliff. The
+export loop writes into a fixed-size buffer and only an ASSERT checks the count, so a bound that
+real terrain can exceed becomes a heap overflow in Release. Keep the bound provable (each anchor
+is an air voxel directly above a solid one) if the packing or anchor rules change.
 
 ## `reimportWorld` flushes everything
 

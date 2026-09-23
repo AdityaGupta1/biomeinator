@@ -11,47 +11,90 @@
 
 namespace SurfaceMaterials
 {
+struct TerracottaLayer
+{
+    float bottom;
+    Block base;
+    Block accent; // AIR when the layer carries no seam
+    float accentWidth;
+    bool accentAtTop;
+};
+
+inline constexpr float terracottaLayerThickness = 3.f;
+// Largest bedding displacement: strataVariation (+/-4) plus the Mesa bedding offset (+/-4).
+inline constexpr int terracottaMaxOffset = 8;
+// Covers every layer a lookup can touch: heights span [1 - maxOffset, chunkSizeY - 1 + maxOffset],
+// and jitteredBand reads one boundary below and two above the unjittered guess.
+inline constexpr int terracottaMinLayer = -(terracottaMaxOffset / 3 + 1) - 1;
+inline constexpr int terracottaMaxLayer = (static_cast<int>(chunkSizeY) - 1 + terracottaMaxOffset) / 3 + 2;
+inline constexpr int terracottaNumLayers = terracottaMaxLayer - terracottaMinLayer + 1;
+
+// Seeded per world and built once at generator init, rather than hashed per voxel.
+inline std::array<TerracottaLayer, terracottaNumLayers> terracottaLayers{};
+
+inline void initTerracotta(uint32_t worldSeed)
+{
+    for (int i = 0; i < terracottaNumLayers; ++i)
+    {
+        const int layerIdx = terracottaMinLayer + i;
+        TerracottaLayer& layer = terracottaLayers[i];
+        RandomNumberGenerator boundaryRng = initRng(worldSeed ^ 0x57A7Au, layerIdx);
+        layer.bottom = layerIdx * terracottaLayerThickness + boundaryRng.nextFloat(-0.9f, 0.9f);
+        RandomNumberGenerator baseRng = initRng(worldSeed ^ 0xC1A7u, layerIdx);
+        layer.base = baseRng.nextFloat() < 0.7f ? Block::TERRACOTTA : Block::ORANGE_TERRACOTTA;
+        // Colored seams are 1-2 blocks thick within the earth-toned bedding. Either
+        // edge can carry a seam, allowing adjacent accents as well as separated ones.
+        auto accentRng = initRng(worldSeed ^ 0xACC31u, layerIdx);
+        if (accentRng.nextFloat() >= 0.32f)
+        {
+            layer.accent = Block::AIR;
+            continue;
+        }
+        layer.accentWidth = static_cast<float>(accentRng.nextInt(1, 3));
+        layer.accentAtTop = accentRng.chance(0.5f);
+        const float color = accentRng.nextFloat();
+        if (color < 0.25f)
+        {
+            layer.accent = Block::RED_TERRACOTTA;
+        }
+        else if (color < 0.40f)
+        {
+            layer.accent = Block::YELLOW_TERRACOTTA;
+        }
+        else if (color < 0.70f)
+        {
+            layer.accent = Block::BROWN_TERRACOTTA;
+        }
+        else
+        {
+            layer.accent = Block::WHITE_TERRACOTTA;
+        }
+    }
+}
+
+inline const TerracottaLayer& terracottaLayer(int index)
+{
+    const int i = index - terracottaMinLayer;
+    ASSERT(i >= 0 && i < terracottaNumLayers, "terracotta layer out of range");
+    return terracottaLayers[i];
+}
+
 // Strata are keyed to absolute elevation, never column-top depth. Irregular boundaries
 // and a nonrepeating palette sequence avoid identical stripes on every terrace.
 inline Block terracotta(int y, float offset)
 {
     const float height = static_cast<float>(y) + offset;
-    const auto boundary = [](int index)
+    const TerrainFormations::Band band = TerrainFormations::jitteredBand(
+        height, static_cast<int>(glm::floor(height / terracottaLayerThickness)),
+        [](int index) { return terracottaLayer(index).bottom; });
+    const TerracottaLayer& layer = terracottaLayer(band.index);
+    if (layer.accent == Block::AIR)
     {
-        RandomNumberGenerator rng = initRng(0x57A7Au, index);
-        return index * 3.f + rng.nextFloat(-0.9f, 0.9f);
-    };
-    const int layer = TerrainFormations::jitteredBand(height, static_cast<int>(glm::floor(height / 3.f)), boundary);
-    RandomNumberGenerator rng = initRng(0xC1A7u, layer);
-    const Block base = rng.nextFloat() < 0.7f ? Block::TERRACOTTA : Block::ORANGE_TERRACOTTA;
-    // Colored seams are 1-2 blocks thick within the earth-toned bedding. Either
-    // edge can carry a seam, allowing adjacent accents as well as separated ones.
-    auto accentRng = initRng(0xACC31u, layer);
-    if (accentRng.nextFloat() >= 0.32f)
-    {
-        return base;
+        return layer.base;
     }
-    const float low = boundary(layer), high = boundary(layer + 1);
-    const float width = glm::min(static_cast<float>(accentRng.nextInt(1, 3)), high - low);
-    const float depth = accentRng.chance(0.5f) ? high - height : height - low;
-    if (depth >= width)
-    {
-        return base;
-    }
-    const float color = accentRng.nextFloat();
-    if (color < 0.25f)
-    {
-        return Block::RED_TERRACOTTA;
-    }
-    if (color < 0.40f)
-    {
-        return Block::YELLOW_TERRACOTTA;
-    }
-    if (color < 0.70f)
-    {
-        return Block::BROWN_TERRACOTTA;
-    }
-    return Block::WHITE_TERRACOTTA;
+    const float width = glm::min(layer.accentWidth, band.high - band.low);
+    const float depth = layer.accentAtTop ? band.high - height : height - band.low;
+    return depth < width ? layer.accent : layer.base;
 }
 
 inline bool isQuartz(Block block)
@@ -95,31 +138,22 @@ class TianziColumn
         // Offset whole pieces of the bedding across crooked fractures. Keeping the
         // same throw through the column preserves layer widths; smooth noise alone
         // makes the contacts look like level, painted stripes around each tower.
-        const vec2 warped = pos + 7.f * vec2(
-            TerrainFormations::valueNoise(pos / 18.f, seed ^ 0xF271u),
-            TerrainFormations::valueNoise(pos / 18.f, seed ^ 0xA731u)) + 2.f * vec2(
-            TerrainFormations::valueNoise(pos / 4.f, seed ^ 0xC317u),
-            TerrainFormations::valueNoise(pos / 4.f, seed ^ 0x195Bu));
+        const vec2 warped = pos + 7.f * TerrainFormations::valueNoise2(pos / 18.f, seed ^ 0xF271u, seed ^ 0xA731u) +
+                            2.f * TerrainFormations::valueNoise2(pos / 4.f, seed ^ 0xC317u, seed ^ 0x195Bu);
         const vec2 p = warped / 20.f;
-        const ivec2 cell = ivec2(floor(p));
         float nearest = std::numeric_limits<float>::max();
         float faultThrow = 0.f;
-        for (int z = -1; z <= 1; ++z)
+        TerrainFormations::forEachNeighborCell(ivec2(floor(p)), seed ^ 0xFA017u, [&](ivec2 key, RandomNumberGenerator& rng)
         {
-            for (int x = -1; x <= 1; ++x)
+            const vec2 site = vec2(key) + vec2(rng.nextFloat(0.2f, 0.8f), rng.nextFloat(0.2f, 0.8f));
+            const vec2 delta = p - site;
+            const float distance = dot(delta, delta);
+            if (distance < nearest)
             {
-                const ivec2 key = cell + ivec2(x, z);
-                auto rng = initRng(seed ^ 0xFA017u, key.x, key.y);
-                const vec2 site = vec2(key) + vec2(rng.nextFloat(0.2f, 0.8f), rng.nextFloat(0.2f, 0.8f));
-                const vec2 delta = p - site;
-                const float distance = dot(delta, delta);
-                if (distance < nearest)
-                {
-                    nearest = distance;
-                    faultThrow = 6.8f * rng.nextInt(-3, 4);
-                }
+                nearest = distance;
+                faultThrow = 6.8f * rng.nextInt(-3, 4);
             }
-        }
+        });
         return faultThrow + 4.f * TerrainFormations::valueNoise(pos / 32.f, seed ^ 0x5721u) +
                1.5f * TerrainFormations::valueNoise(pos / 3.f, seed ^ 0x72A1u);
     }
@@ -140,9 +174,7 @@ public:
             stratum = { static_cast<float>(top), palette[color] };
         }
         offset = stratumDisplacement(pos, seed);
-        const glm::vec2 warp = 6.f * glm::vec2(
-            TerrainFormations::valueNoise(pos / 55.f, seed ^ 0x912u),
-            TerrainFormations::valueNoise(pos / 55.f, seed ^ 0x713u));
+        const glm::vec2 warp = 6.f * TerrainFormations::valueNoise2(pos / 55.f, seed ^ 0x912u, seed ^ 0x713u);
         patchPos = (pos + warp) / 18.f;
         patchDetail = 0.08f * TerrainFormations::valueNoise(pos / 6.f, seed ^ 0xB41u);
         patchSeed = seed ^ 0xD47C1u;
@@ -189,17 +221,25 @@ class Column
     float tianziFloor;
     std::optional<TianziColumn> tianzi;
 
+    // Follows Mesa's unjittered coverage rather than the label, so per-column jitter can't
+    // alternate terracotta and stone along one cliff at the Mesa border.
+    bool hasTerracotta() const
+    {
+        return terrain.regimeCoverage[BiomeNoiseFields::TerrainRegime::MESA] > 0.f;
+    }
+
 public:
     Column(Biome biome, const BiomeNoiseFields::NaturalTerrain& terrain, glm::vec2 pos,
            uint32_t seed, float variation, bool formationRock, float tianziFloor)
         : biome(biome), terrain(terrain), variation(variation), mesaOffset(variation), tianziFloor(tianziFloor)
     {
-        if (biome == Biome::MESA)
+        if (hasTerracotta())
         {
             // Displace the bedding together, preserving its thickness and the
             // existing deep-rock boundary. This does not move the terrain surface.
             mesaOffset += 3.f * TerrainFormations::valueNoise(pos / 24.f, seed ^ 0x6E51u) +
                           1.f * TerrainFormations::valueNoise(pos / 8.f, seed ^ 0xAB71u);
+            ASSERT(glm::abs(mesaOffset) <= terracottaMaxOffset, "Mesa bedding offset exceeds the terracotta table");
         }
         if (formationRock)
         {
@@ -209,7 +249,14 @@ public:
 
     Block rock(int y)
     {
-        if (biome == Biome::MESA && y > SEA_LEVEL - 14 + variation)
+        // Quartz decides the carve mask and topsoil, so it follows the unjittered spire weight
+        // rather than the biome label; the red sandstone shell around it is material only.
+        if (terrain.regimeWeights[BiomeNoiseFields::TerrainRegime::RED_DESERT] > 0.f &&
+            terrain.formationHeight > 20.f && y > terrain.formationBaseHeight + 13.f + variation)
+        {
+            return Block::SMOOTH_QUARTZ;
+        }
+        if (hasTerracotta() && y > SEA_LEVEL - 14 + variation)
         {
             return terracotta(y, mesaOffset);
         }
@@ -219,10 +266,6 @@ public:
         }
         if (biome == Biome::RED_DESERT && y > terrain.formationBaseHeight - 20.f)
         {
-            if (terrain.formationHeight > 20.f && y > terrain.formationBaseHeight + 13.f + variation)
-            {
-                return Block::SMOOTH_QUARTZ;
-            }
             return Block::RED_SANDSTONE;
         }
         return Block::AIR; // retain deep rock / cave biomes

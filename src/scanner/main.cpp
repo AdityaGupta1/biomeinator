@@ -56,6 +56,9 @@ void ensureSeed(uint32_t seed)
 }
 
 constexpr int64_t maxTexelsPerRequest = 8'000'000;
+// Oasis lookup allocates per 384-block cell of the covered area, so the texel size bounds that
+// area as well as the texel count does. The map UI requests at most this.
+constexpr int64_t maxTexelSizeBlocks = 128;
 
 bool tryGetIntParam(const httplib::Request& req, const char* name, int64_t& outValue)
 {
@@ -132,7 +135,8 @@ int main(int argc, char** argv)
         }
         // Each axis is capped before multiplying so the product can't overflow
         if (numTexelsX <= 0 || numTexelsZ <= 0 || numTexelsX > maxTexelsPerRequest ||
-            numTexelsZ > maxTexelsPerRequest || numTexelsX * numTexelsZ > maxTexelsPerRequest || texelSizeBlocks <= 0)
+            numTexelsZ > maxTexelsPerRequest || numTexelsX * numTexelsZ > maxTexelsPerRequest || texelSizeBlocks <= 0 ||
+            texelSizeBlocks > maxTexelSizeBlocks)
         {
             setBadRequest(res, "invalid dimensions");
             return;
@@ -165,7 +169,8 @@ int main(int argc, char** argv)
         }
         // The radius cap also keeps the arithmetic below far from overflow
         if (biomeId < 0 || biomeId >= static_cast<int64_t>(Biome::COUNT) || radiusBlocks <= 0 ||
-            radiusBlocks > maxTexelsPerRequest || seedCount <= 0 || seedCount > 1000 || texelSizeBlocks <= 0)
+            radiusBlocks > maxTexelsPerRequest || seedCount <= 0 || seedCount > 1000 || texelSizeBlocks <= 0 ||
+            texelSizeBlocks > maxTexelSizeBlocks)
         {
             setBadRequest(res, "invalid params");
             return;

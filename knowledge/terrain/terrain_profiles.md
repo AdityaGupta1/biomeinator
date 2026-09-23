@@ -102,7 +102,15 @@ density multiplier; interpolate that reciprocal when blending local shaping.
 the ordinary topsoil pass. Absolute elevation keeps bands connected across adjacent columns;
 a slow world-position offset bends them slightly. Quartz stays exposed through the topsoil
 pass, and trees/cacti cannot anchor on it. Smooth quartz is recognized before carving and
-topsoil/structure placement, so it cannot acquire caves, skins, soil or plants.
+topsoil/structure placement, so it cannot acquire caves, skins, soil or plants. Because quartz
+controls the carve mask, it follows the unjittered red desert weight, not the label; the red
+sandstone shell around it is material only and stays label-driven. Terracotta follows Mesa's
+coverage weight rather than the label: jitter otherwise alternated terracotta and stone along one
+cliff at the Mesa border. A few columns just outside the label get terracotta as a result.
+
+Terracotta strata are seeded per world. The layer sequence is a table built once at generator
+init rather than hashed per voxel; its range covers every height plus the largest bedding offset,
+which the Mesa column asserts.
 Deep rock beneath formations remains available to cave biomes.
 
 Tianzi pillars also exclude cave carving above their shared ground, with the seal fading
@@ -111,7 +119,10 @@ lowest possible surface, so exposed recesses and roots keep the Tianzi palette. 
 cave rock and skins below that shell retain their normal classification.
 
 Tianzi's broad strata are seeded by the dominant supporting Worley site, whose identity is
-returned with the natural-terrain query without changing its height. Stacked shoulders share
+returned with the natural-terrain query without changing its height. Between feet, where no site
+contributes, the nearest site owns the column; the search cell would switch owners along straight
+grid lines and seam the bedding. Strata apply wherever the unjittered Tianzi weight is positive,
+not by label, so jitter-only border columns keep ordinary rock. Stacked shoulders share
 that foundation's geology, while neighboring pillars get different phases and layer sequences.
 Each stratum is 20–40 blocks thick; adjacent materials always differ so two layers cannot
 merge into an unintended double-width band. Warped, jittered fracture cells offset whole
@@ -158,12 +169,17 @@ trunk column with solid root support while allowing foliage to meet the backing 
 requiring a full ring of air at root level rejected most narrow steps. Soil creation remains in
 terrain generation, rather than having a plant-placement rule repaint its own supports.
 Boundary slope samples use the same world-space natural terrain query as interior cached
-columns, avoiding a special edge treatment at chunk borders.
+columns, avoiding a special edge treatment at chunk borders. The columns just outside the chunk
+are batched through `fillPositions` rather than sampled one point at a time.
 
 ## Pond oases
 
-`oasis_shaping` caches seeded pond sites for the requested region and halo. Eligibility uses
-smooth hot/dry inland fields at the site. Each pond has one integer water level, a depressed
+`oasis_shaping` caches seeded pond sites for the requested region and halo; sites farther than
+their support from the region skip their noise evaluation entirely. Eligibility uses smooth
+hot/dry inland fields and the shared relief factor at the site, and excludes sites any terrain
+regime claims: a pond forces an absolute floor and bank, which would cut into Mesa terraces or
+red desert spires. The water level comes from the ground before formations, so a pond never sits
+on a butte or spire foot. Each pond has one integer water level, a depressed
 floor, a fully raised rim, and an outer blend to natural terrain. The water-level override
 ends inside that rim, before terrain blending begins; surface noise is suppressed there.
 This contains elevated water without simulating flow. Nearby caves are sealed around the

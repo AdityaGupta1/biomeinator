@@ -616,9 +616,10 @@ static constexpr size_t blockBiomePayloadSize =
 //   bits  [12..20] = y (9 bits)
 //   bits  [21..24] = localZ (4 bits)
 // Owner chunk origin is implicit from where the entry is stored, so only chunk-local
-// position is serialized. No chunk should realistically have more than 512 structures
-// in its 16x16xN footprint.
-static constexpr size_t maxStructuresPerChunk = 512;
+// position is serialized. Exposed-surface placement can anchor a structure on every shelf of
+// a cliff, so the limit is a hard bound rather than a typical count: each anchor is an air
+// voxel directly above a solid one, so a column holds at most chunkSizeY / 2 of them.
+static constexpr size_t maxStructuresPerChunk = chunkSizeXZSquare * chunkSizeY / 2;
 static constexpr size_t structureEntrySize = sizeof(uint32_t);
 static constexpr size_t structuresScratchSize = sizeof(uint32_t) + maxStructuresPerChunk * structureEntrySize;
 

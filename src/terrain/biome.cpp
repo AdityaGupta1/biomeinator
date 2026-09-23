@@ -156,8 +156,8 @@ void init()
         BIOME_INIT(DESERT, "desert");
         lowlandBiomes.push_back(Biome::DESERT);
         data.biomeNoise = {
-            .temperature = 1.0f,
-            .humidity = -1.0f,
+            .temperature = 0.45f,
+            .humidity = -0.45f,
             .peak = -0.6f,
         };
         data.grassTint = glmUtil::colorFromHex("#bfb755");
@@ -237,17 +237,13 @@ void init()
         data.decorator.addEntry(Block::AIR, 15.f);
     }
 
-    // ==================================================
-    // HIGHLAND
-    // ==================================================
-
     // SAVANNA
     {
         BIOME_INIT(SAVANNA, "savanna");
-        highlandBiomes.push_back(Biome::SAVANNA);
+        lowlandBiomes.push_back(Biome::SAVANNA);
         data.biomeNoise = {
-            .temperature = 0.6f,
-            .humidity = -0.6f,
+            .temperature = 0.7f,
+            .humidity = -0.7f,
             .peak = -0.2f,
         };
         data.grassTint = glmUtil::colorFromHex("#bfa243");
@@ -263,7 +259,7 @@ void init()
     // ICE_FIELDS
     {
         BIOME_INIT(ICE_FIELDS, "ice fields");
-        highlandBiomes.push_back(Biome::ICE_FIELDS);
+        lowlandBiomes.push_back(Biome::ICE_FIELDS);
         data.biomeNoise = {
             .temperature = -0.85f,
             .humidity = -0.8f,
@@ -275,6 +271,10 @@ void init()
             .mid = Block::ICE,
         };
     }
+
+    // ==================================================
+    // HIGHLAND
+    // ==================================================
 
     // MOUNTAINS
     {
@@ -366,7 +366,7 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     {
         closestBiomeCandidates = &beachBiomes;
     }
-    else if (biomeNoise.inland < 0.85f && BiomeNoiseFields::highlandReliefWeight(biomeNoise) < 0.35f)
+    else if (BiomeNoiseFields::highlandReliefWeight(biomeNoise) < 0.35f)
     {
         closestBiomeCandidates = &lowlandBiomes;
     }

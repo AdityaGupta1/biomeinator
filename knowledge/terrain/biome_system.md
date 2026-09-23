@@ -24,10 +24,12 @@ red desert), defined in one priority-ordered table in `biome_noise.cpp`. Each re
 its axes into a single suitability; `biomeFromNoise` returns the first regime whose suitability
 exceeds its threshold. Everything else uses the nearest climate/peak target: ocean and beach are
 partitioned by inlandness first, keeping climate from turning coastlines into inland biomes, then
-lowland or highland candidates. Highland means far inland (as originally) or strong
-`highlandReliefWeight`, the same preserved-relief factor that raises mountain terrain. Sharing it
-keeps low-erosion highland labels from reaching the shore ahead of the relief, which painted
-mountain stone directly behind beaches.
+lowland or highland candidates. Highland means strong `highlandReliefWeight`, the same
+preserved-relief factor that raises mountain terrain, and nothing else. Sharing it keeps highland
+labels from reaching the shore ahead of the relief, which painted mountain stone directly behind
+beaches. Highland candidates are relief biomes; climate zones without relief of their own
+(savanna, ice fields) are lowland candidates. A former "far inland means highland" rule had no
+terrain counterpart and put highland labels on flat, eroded interior.
 Regime suitabilities are zero on the coast, so checking them before that partition is safe.
 
 A nearest-target search cannot express these regimes: Tianzi is a window across temperature,
@@ -35,7 +37,8 @@ humidity, preserved relief and inlandness, and a Voronoi cell gives no terrain s
 vanishes at its border. Add a new landform biome as a regime row, not as another special case
 in the selection code.
 
-`regimeWeight` derives the terrain strength from the same suitability: 0 at the label threshold,
+`computeRegimeWeights` derives every regime's terrain strength from the same suitabilities in one
+pass, returned with the natural terrain so consumers never recompute it: 0 at the label threshold,
 1 at `fullStrength`. It is also multiplied down to 0 approaching the label of every
 higher-priority regime, over that regime's `fadeWidth` just below its threshold. So a landform
 never extends past its label, and overlapping regimes (red desert spires under Mesa) need no
@@ -47,12 +50,24 @@ switched to tundra. Shape, formation rock and cliff soil use the unjittered stre
 jitter can affect the negligible outer foothills but cannot cut through a tower's core.
 
 Swamp's row sets its label and how other regimes fade next to wetlands; its terrain comes from
-flood cells with their own threshold (see [swamp_generation.md](swamp_generation.md)).
+flood cells with their own threshold (see [swamp_generation.md](swamp_generation.md)). The flood
+factor's flatness term reads `ruggedWeight`, the same relief factor terrain uses, rather than a
+separate erosion window.
+
+A row may also set its landform's density amplitude (roughness). Roughness uses the regime's
+*coverage* weight (full across the whole label, fading just outside it), not the landform ramp:
+blending by the landform weight left the outer band of Mesa and red desert labels, where their
+landforms are still weak, with full mountain roughness, which carved ravine-like gashes into
+rugged dry ground. Elsewhere roughness follows relief alone. Roughness is not purely texture: terrain below the base
+height is denser, so a larger amplitude raises the effective ground slightly. It therefore must
+not follow raw climate, which is exactly what a dryness term once did.
 
 Erosion controls suitability, not nearest-target distance. Its thresholds belong to shared
 terrain regimes rather than individual biome height overrides. The swamp flood factor also
 requires eroded terrain. Oases are spatial pond footprints and override the label in both the
-chunk generator and map, after climate selection; a climate-only lookup cannot locate one.
+chunk generator and map, after climate selection; a climate-only lookup cannot locate one. A
+pond site is only active where no regime claims the label, so ponds never cut into terraces or
+spires.
 See [swamp_generation.md](swamp_generation.md) for the other local-water override.
 
 ## Per-Column Jitter

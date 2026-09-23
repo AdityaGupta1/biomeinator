@@ -51,8 +51,10 @@ As with the grid, separate gens do not compete with each other.
 Each destination buckets a gen's candidates on an XZ grid over the neighborhood whose cells
 are at least that gen's largest spacing, so competitors are found in the adjacent 3x3 cells
 instead of an all-pairs scan (one candidate per exposed surface makes the all-pairs cost
-quadratic). Accepted structures are still filled in neighbor order, which every destination
-shares, so overlapping trees resolve identically across chunk borders.
+quadratic). Buckets are ranges of one index array (counting sort). Candidates farther than
+geometry reach plus spacing from the destination are dropped first: they can neither reach it
+nor suppress a candidate that does. Accepted structures are still filled in neighbor order,
+which every destination shares, so overlapping trees resolve identically across chunk borders.
 
 Terrain publishes immutable surface candidates alongside its immutable air/full-cube masks.
 Filling waits for the existing 3x3 neighborhood, and each destination independently resolves

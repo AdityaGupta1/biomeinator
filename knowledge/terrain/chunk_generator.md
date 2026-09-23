@@ -13,8 +13,9 @@ different seeds produce different terrain even though node seed offsets are hard
 
 ## Shape Noise Sampling
 
-The broad terrain shape is sampled every four blocks; fine terrain detail and both cave shapes every two blocks, then
-trilinearly reconstructed into the existing voxel grids before thresholding. Noise feature
+The broad terrain shape is sampled every four blocks; both cave shapes every two blocks; fine
+terrain detail every two blocks horizontally and four vertically, since that field is already
+stretched vertically. All are then trilinearly reconstructed into the existing voxel grids before thresholding. Noise feature
 scales, octave counts, and biome fields remain independent of these sampling spacings. The
 finer cave spacing retains narrow passages and limits changes to cave-surface material gradients.
 
@@ -90,7 +91,7 @@ cell bordering terrain support; cave interiors never need a biome lookup.
 
 The terrain isn't a simple heightmap — it uses a 3D surface threshold (`terrainNoise < surfaceVal`) so overhangs can form. But the threshold is shaped by a per-column `terrainBaseHeight` and `terrainSurfaceMultiplier`:
 
-- **Below base height**: the surface multiplier is doubled (`terrainBelowHeightfieldSurfaceMultiplier = 2`), which makes underground much more uniformly solid and flattens the base. Without this, you'd get as many air pockets below as above.
+- **Below base height**: the surface multiplier is doubled (`terrainBelowHeightfieldSurfaceMultiplier = 2`), which makes underground much more uniformly solid and flattens the base. Without this, you'd get as many air pockets below as above. The asymmetry is intentional (it was chosen because it looked better, not derived). Its side effect is that density amplitude (roughness) also raises the effective surface a little, since noise builds up above the base more easily than it carves below. Don't compensate for that bias; just keep roughness away from raw climate so the small shift stays smooth (see [biome_system.md](biome_system.md)).
 - **Near coast** (`inland` near 0): base height is pulled toward `seaLevel + 8` via smoothstep, creating gentle shorelines rather than cliffs.
 - **Relief and formations**: peak and erosion jointly control broad relief; smooth terrace
   shaping and a shared finite-support formation sampler supply plateaus, pillars and spires.

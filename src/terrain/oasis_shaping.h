@@ -17,6 +17,7 @@ struct Pond
     float aspect;
     uint32_t shapeSeed;
     std::array<glm::vec3, 3> basins; // local center and radius
+    glm::vec2 shoreNoiseBias; // the shore noise channels at the site
     int level;
     bool active;
 };

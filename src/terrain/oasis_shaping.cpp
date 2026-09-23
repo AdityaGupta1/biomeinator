@@ -36,6 +36,14 @@ Context makeContext(ivec2 origin, ivec2 extent)
             RandomNumberGenerator rng = initRng(worldSeed ^ 0x0A515u, cell.x, cell.y);
             Pond pond{};
             pond.center = (vec2(cell) + vec2(rng.nextFloat(0.3f, 0.7f), rng.nextFloat(0.3f, 0.7f))) * cellSize;
+            // A pond farther than its support from the context rect never shapes any sample,
+            // so skip its noise evaluation.
+            const vec2 nearestInContext = clamp(pond.center, vec2(origin), vec2(origin + extent));
+            if (distance(nearestInContext, pond.center) >= maxPondSupport)
+            {
+                result.ponds.push_back(pond);
+                continue;
+            }
             pond.radius = rng.nextFloat(25.f, 37.f);
             const float angle = rng.nextFloat(0.f, 6.2831853f);
             pond.direction = vec2(cos(angle), sin(angle));
@@ -48,13 +56,16 @@ Context makeContext(ivec2 origin, ivec2 extent)
                 const vec2 center = basinCenters[i] + vec2(shapeRng.nextFloatAbs(0.05f), shapeRng.nextFloatAbs(0.05f));
                 pond.basins[i] = vec3(center, shapeRng.nextFloat(0.70f - 0.12f * i, 0.78f - 0.09f * i));
             }
+            pond.shoreNoiseBias = TerrainFormations::valueNoise2(vec2(0.f), pond.shapeSeed ^ 0x33u, pond.shapeSeed ^ 0xA9u);
+            // Oases sit in flat, dry interior ground that no landform regime claims; shaping
+            // a pond into terraces or spires would cut into their relief.
             const BiomeNoise n = BiomeNoiseFields::sampleAt(pond.center);
-            pond.active = BiomeNoiseFields::dryClimateWeight(n) > 0.4f && n.erosion > 0.28f &&
-                          n.inland > 0.32f && n.peak < 0.f;
+            pond.active = BiomeNoiseFields::dryClimateWeight(n) > 0.4f && BiomeNoiseFields::ruggedWeight(n) < 0.3f &&
+                          n.inland > 0.32f && n.peak < 0.f && !BiomeNoiseFields::isClaimedByRegime(n);
             if (pond.active)
             {
                 const auto terrain = BiomeNoiseFields::computeNaturalTerrain(n, pond.center);
-                pond.level = max(SEA_LEVEL + 5, static_cast<int>(floor(terrain.baseHeight)) - 3);
+                pond.level = max(SEA_LEVEL + 5, static_cast<int>(floor(terrain.formationBaseHeight)) - 3);
             }
             result.ponds.push_back(pond);
         }
@@ -88,7 +99,8 @@ Sample sample(vec2 pos, const Context& context)
             {
                 return TerrainFormations::valueNoise(p, pond.shapeSeed ^ salt);
             };
-            const vec2 warped = stretched + 0.14f * vec2(noise(stretched * 1.3f, 0x14u), noise(stretched * 1.3f, 0x71u));
+            const vec2 warped = stretched +
+                0.14f * TerrainFormations::valueNoise2(stretched * 1.3f, pond.shapeSeed ^ 0x14u, pond.shapeSeed ^ 0x71u);
             const auto distanceToBasin = [&](const vec3& basin) { return length(warped - vec2(basin)) - basin.z; };
             const auto join = [](float a, float b)
             {
@@ -101,8 +113,8 @@ Sample sample(vec2 pos, const Context& context)
                                       distanceToBasin(pond.basins[2]));
             // Remove the site's noise bias: otherwise positive offsets shrink every basin
             // simultaneously into a group of little round pools instead of bending its shores.
-            radius += 0.24f * clamp(noise(stretched * 1.4f, 0x33u) - noise(vec2(0.f), 0x33u), -1.f, 1.f) +
-                      0.09f * clamp(noise(stretched * 4.2f, 0xA9u) - noise(vec2(0.f), 0xA9u), -1.f, 1.f);
+            radius += 0.24f * clamp(noise(stretched * 1.4f, 0x33u) - pond.shoreNoiseBias.x, -1.f, 1.f) +
+                      0.09f * clamp(noise(stretched * 4.2f, 0xA9u) - pond.shoreNoiseBias.y, -1.f, 1.f);
             if (radius >= 1.55f)
             {
                 continue;

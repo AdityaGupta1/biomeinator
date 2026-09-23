@@ -32,19 +32,23 @@
 - Crowding: lowland band gets full. Need more inland bands or extra selection axis (weirdness) — varzea/igapo/terra firme all hot+humid+flat.
 - Terrain chooses the biome, not the other way around (see `knowledge/terrain/biome_system.md`). Don't add per-biome height offsets or swap profiles; a new landform is a bounded style on top of the shared height (like mesa terraces), and its label derives from the same factor. Landform biomes go in the terrain regime table; others are climate targets.
 
-### High-ground lowland biomes
+### Highland and high-ground biomes
 
-Lowland climate targets all have negative peak, and `distance2` weighs peak like climate, so high-peak lowland picks whichever low-peak target is least wrong (e.g. forest on hot, dry ground at peak ~0.96, seed 100 x≈3863). Adding positive-peak lowland targets covers each climate corner and fixes this:
+Highland candidates are chosen purely by relief (`highlandReliefWeight`), and the highland list holds only relief biomes: today just mountains. Savanna and ice fields are climate zones and live in the lowland list. So the new mountain-country biomes go in the **highland** list, each a climate target within relief ground:
 
 | climate | biome | character |
 |---|---|---|
-| mild, very humid | redwood forest | very tall thick trunks, ferns; foggy |
 | warm, very humid | cloud forest | mossy twisted trees, vines, dense undergrowth, heavy fog (fog density plumbing in §2) |
 | cold, humid | taiga / boreal | dense spruce, snow near the top of the range |
 | cool, moderate | highland moor / alpine meadow | grass, heather, flowers, boulders, sparse conifers |
-| dry (hot or cold) | high desert steppe | sagebrush, junipers, sparse grass; eroded dry high ground mesa/red desert don't claim |
+| dry (hot or cold) | high desert steppe | sagebrush, junipers, sparse grass; dry relief ground mesa/red desert don't claim |
+| cold, dry / very high | mountains (existing) | bare stone peaks |
 
-Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianzi takes preserved relief, cloud forest the eroded rolling highlands). Alternatively the lowland search could ignore peak, since relief already decides lowland vs highland; decide alongside `plans/biome_balancing.md`.
+Redwood forest is the exception: mild, very humid, **lowland** and coastal (tall thick trunks, ferns, fog), so it's a lowland climate target, ideally one that favors ground near the coast.
+
+Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianzi takes preserved relief as a regime, cloud forest the eroded rolling highlands left over).
+
+Remaining lowland issue: lowland climate targets all have negative peak, and `distance2` weighs peak like climate, so high-peak lowland (eroded high ground, or high ground near the coast) picks whichever low-peak target is least wrong (e.g. forest on hot, dry ground at peak ~0.96, seed 100 x≈3863). Since relief already decides lowland vs highland, the simplest fix is for the lowland search to ignore peak; decide alongside `plans/biome_balancing.md`.
 
 ### Seaside cliffs (Big Sur)
 

@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
+
 // The surface biome noise fields (temperature/humidity/peak/inland/erosion) and biome classification from
 // them. Independent of chunk generation, rendering, and settings so tools (e.g. BiomeScanner) can
 // evaluate the biome field for a seed without linking the engine.
@@ -47,29 +49,6 @@ BiomeNoise sampleAt(glm::vec2 posXZ_WS);
 
 BiomeNoise noiseAt(const BiomeNoiseGrids& grids, uint32_t idx);
 
-// Natural terrain before local water shaping. Uses smooth biome noise and world-space
-// formations; independent of chunk resolution, biome labels, and generation order.
-struct NaturalTerrain
-{
-    float baseHeight;
-    float surfaceMultiplier;
-    // Ground before formations and their contribution, used to expose rock/quartz without
-    // painting isolated structures or extending surface materials through deep cave biomes.
-    float formationBaseHeight;
-    float formationHeight;
-    // The supporting Worley site's identity lets materials vary by pillar without
-    // deriving their layers from the per-column surface height.
-    glm::ivec2 formationSite{};
-};
-
-NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
-
-float dryClimateWeight(const BiomeNoise& noise);
-// Preserved relief away from the coast, 0 near the shore. Terrain scales its mountain relief by
-// this; the biome search uses it to choose highland candidates, so highland labels only extend
-// toward the coast where relief does.
-float highlandReliefWeight(const BiomeNoise& noise);
-
 // Biomes whose label must agree with a landform. Each regime combines its climate, erosion and
 // inland axes into one suitability; the regime claims the label where suitability exceeds its
 // threshold, checked in enum (priority) order before the nearest-climate search. Suitabilities
@@ -84,11 +63,51 @@ enum class TerrainRegime : uint8_t
     COUNT
 };
 
-// Terrain strength of a regime's landform: 0 at its label threshold, ramping to 1 at full
-// strength, and also 0 wherever a higher-priority regime claims the label. A landform therefore
-// never extends past its label (up to per-column jitter at the border).
-float regimeWeight(TerrainRegime regime, const BiomeNoise& noise);
-float surfaceDetailWeight(const BiomeNoise& noise);
+// One weight per regime. Every regime weight is 0 wherever a higher-priority regime claims the
+// label, so a regime's styling never extends past its label (up to per-column jitter).
+struct RegimeWeights
+{
+    std::array<float, static_cast<size_t>(TerrainRegime::COUNT)> weights{};
+
+    float operator[](TerrainRegime regime) const
+    {
+        return weights[static_cast<size_t>(regime)];
+    }
+};
+
+// Whether a terrain regime claims this column's label.
+bool isClaimedByRegime(const BiomeNoise& noise);
+
+// Natural terrain before local water shaping. Uses smooth biome noise and world-space
+// formations; independent of chunk resolution, biome labels, and generation order.
+struct NaturalTerrain
+{
+    float baseHeight;
+    float surfaceMultiplier;
+    // Ground before formations and their contribution, used to expose rock/quartz without
+    // painting isolated structures or extending surface materials through deep cave biomes.
+    float formationBaseHeight;
+    float formationHeight;
+    // The supporting Worley site's identity lets materials vary by pillar without
+    // deriving their layers from the per-column surface height.
+    glm::ivec2 formationSite{};
+    // Landform strength: 0 at each regime's label threshold, ramping to 1 at full strength.
+    RegimeWeights regimeWeights{};
+    // 1 across each regime's whole label, fading out just outside it. Styles that should cover
+    // the labelled area uniformly (roughness, rock) use this; the landform ramp would leave the
+    // outer band of the label with foreign styling.
+    RegimeWeights regimeCoverage{};
+};
+
+NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 posXZ_WS);
+
+float dryClimateWeight(const BiomeNoise& noise);
+// Preserved relief: 1 where erosion keeps dramatic landforms, 0 in eroded, flat terrain.
+float ruggedWeight(const BiomeNoise& noise);
+// Preserved relief away from the coast, 0 near the shore. Terrain scales its mountain relief by
+// this; the biome search uses it to choose highland candidates, so highland labels only extend
+// toward the coast where relief does.
+float highlandReliefWeight(const BiomeNoise& noise);
 
 // Continuous 0-1 flood factor: how strongly this location wants to be flooded wetland. Mid values
 // give balanced water/land; values toward 1 give mostly-water terrain. Computed from smooth
