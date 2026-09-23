@@ -93,7 +93,7 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudMultiScatterStrength", "Strength of the cloud multiple scattering approximation", float, "1");
     ADD_OPTION("cloudWindX", "Cloud wind X in blocks/s", float, "10");
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
-    ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
+    ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
@@ -231,6 +231,12 @@ void parseArgs(const int argc, const char* const* argv)
     COPY_SETTING("verboseLogging", bool);
 
 #undef COPY_SETTING
+
+    if (getAsInt("renderDistance") <= 0)
+    {
+        std::cerr << "--renderDistance must be greater than zero" << std::endl;
+        exit(1);
+    }
 
     if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {
