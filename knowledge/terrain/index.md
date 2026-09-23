@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Terrain Knowledgebase
 
@@ -12,7 +12,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [chunk_segments.md](chunk_segments.md) | 4×8×4 ChunkSegment subdivision, AIR/SOLID_SURROUNDED/MIXED culling |
 | [chunk_generator.md](chunk_generator.md) | FastNoise2-based height maps, cave carving, coarse cave fields, biome allocation |
 | [CPU terrain experiments](../tests/cpu_terrain_benchmarks.md) | Temporary benchmark harness to adapt for algorithm comparisons, with timing and correctness gotchas |
-| [biome_system.md](biome_system.md) | Voronoi biome distribution, BiomeNoise parameters, swamp override |
+| [biome_system.md](biome_system.md) | Terrain-chooses-biome rule, terrain regime table, climate-point search for other biomes |
 | [terrain_profiles.md](terrain_profiles.md) | Shared erosion shaping, reusable formations, strata and contained pond oases |
 | [cave_biome_system.md](cave_biome_system.md) | 3D cave biome noise, downsampled classification, surface bias, carve-noise skin/fringe, secondary rock |
 | [block_system.md](block_system.md) | JSON block definitions, generated Block enum, BlockData, emissive blocks |

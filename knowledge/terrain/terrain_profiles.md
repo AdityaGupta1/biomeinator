@@ -8,22 +8,27 @@ reduce relief and permit wetlands. Peak still determines broad elevation and inl
 still determines land/coast placement. Existing biomes acquire gentler foothills without
 adding per-biome shaping fields; the terrace profile additionally requires dry climate.
 
-The dry terrace regime blends a complete mountain profile into modest, connected plateaus. Warped
-multiscale noise breaks up their outlines and cuts short gullies into escarpments; height
-quantization supplies only secondary ledges. Remapping a smooth mountain into evenly spaced
-steps produced huge concentric terraces, which the user's Minecraft references specifically
-ruled out. Keep Mesa relief closer to low buttes than Tianzi's tall isolated pillars.
+**Terrain chooses the biome, not the other way around.** Elevation comes only from peak,
+erosion and inland. Climate and regime weights select landform *styles* (terraces, towers,
+spires, surface roughness) but never raise or lower the shared ground. Gating relief by dryness
+flipped elevation by 100+ blocks wherever humidity crossed the dry threshold, cutting steep pits
+where mesa or red desert met mountains. Dry regions are therefore as tall as the relief fields
+make them: high peak in a hot, dry area gives tall terraced massifs or red desert mountains.
+
+Mesa reshapes the shared elevation within bounded offsets rather than replacing it. Warped
+multiscale plateau noise adds buttes and cuts short gullies (about +/-21 blocks), then partial
+height quantization forms shelves, moving a column by at most one terrace band. Because every
+Mesa term is bounded relative to the ordinary height, its regime ramp cannot open a pit into
+neighboring relief. Keep quantization secondary: remapping a smooth mountain into evenly spaced
+steps produced huge concentric terraces, which the user's Minecraft references ruled out.
 
 All formations retain the same continuous ground beneath them. Independently suppressing
 mountain relief with terrace and Tianzi masks made deep troughs where the replacement relief
-was absent or only partly weighted. Applying terraces in humid terrain also cut thin trenches
-through ordinary mountains. Blend complete Mesa and ordinary profiles with complementary
-weights. Ordinary preserved highlands additionally receive a steep peak-driven elevation
-response and stronger broad 3D displacement. The extra relief grows toward the interior and
-fades out before dry terrain; suppressing it globally had erased the tall ordinary mountains.
-Tianzi exchanges this extra mountain relief for its complete stacked formation profile with
-complementary weights, retaining the modest shared ground throughout. Only the broad density
-amplitude grows in ordinary mountains; the fine detail field remains confined to formations.
+was absent or only partly weighted. Preserved highlands receive a steep peak-driven elevation
+response and stronger broad 3D displacement, growing toward the interior. Tianzi exchanges
+this extra mountain relief for its complete stacked formation profile with complementary
+weights, retaining the modest shared ground throughout. Only the broad density amplitude grows
+in ordinary mountains; the fine detail field remains confined to formations.
 
 `BiomeNoiseFields::computeNaturalTerrain` returns the same height and density amplitude
 inputs consumed by the existing 3D threshold. It is a pure world-position query after seed

@@ -66,8 +66,8 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& biomeNoise, glm::vec2 pos
 
 float dryClimateWeight(const BiomeNoise& noise);
 // Preserved relief away from the coast, 0 near the shore. Terrain scales its mountain relief by
-// this (further limited to non-dry climates); the biome search uses it to choose highland
-// candidates, so highland labels only extend toward the coast where relief does.
+// this; the biome search uses it to choose highland candidates, so highland labels only extend
+// toward the coast where relief does.
 float highlandReliefWeight(const BiomeNoise& noise);
 
 // Biomes whose label must agree with a landform. Each regime combines its climate, erosion and

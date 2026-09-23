@@ -299,24 +299,28 @@ NaturalTerrain computeNaturalTerrain(const BiomeNoise& n, vec2 posXZ_WS)
     const float tianzi = regimeWeight(TerrainRegime::TIANZI, n);
     const vec2 pos = posXZ_WS + vec2(noiseOffsetXZ);
 
+    // Elevation comes only from peak, erosion and inland; climate selects landform styles
+    // below but never raises or lowers the ground. Gating relief by climate would shift
+    // elevation by hundreds of blocks where humidity crosses the dry threshold.
     const float inlandHeight = 1.f / (1.f + expf(-10.f * n.inland + 0.1f)) + 0.03f * n.inland - 0.7f;
     const float foundation = 140.f + inlandHeight * 90.f;
-    // The modest shared ground still connects all profiles. Restore strong peaks only
-    // in preserved highlands, without lifting dry plateaus or roughening flat lowlands.
-    const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f) * (1.f - dry * 0.75f);
-    const float mountainClimate = 1.f - smoothstep(0.05f, 0.35f, dry);
-    const float highland = highlandReliefWeight(n) * mountainClimate;
+    // The modest shared ground still connects all profiles. Strong peaks rise only in
+    // preserved highlands, without roughening flat lowlands.
+    const float mountainRelief = mix(8.f, 75.f, rugged) * pow(peak, 2.5f);
+    const float highland = highlandReliefWeight(n);
     const float peakRelief = 160.f * highland * pow(peak, 4.f);
     // Complementary weights blend complete profiles: as Tianzi weight removes the extra
     // peak relief, the same weight supplies the stacked formations below.
     float height = foundation + land * (mountainRelief + (1.f - tianzi) * peakRelief);
     if (terraces > 0.f)
     {
-        // The same weight replaces ordinary relief and introduces the plateau, so neither
-        // can disappear first.
-        float mesaHeight = foundation + land * (6.f + 42.f * TerrainFormations::plateauRelief(pos, noiseFieldSeed ^ 0xBA01u));
-        mesaHeight = mix(mesaHeight, terraceHeight(mesaHeight, n), 0.45f);
-        height = mix(height, mesaHeight, terraces);
+        // Mesa reshapes the shared elevation within bounded offsets instead of replacing it:
+        // buttes and gullies of about +/-21 blocks, then shelves that move a column by at
+        // most one terrace band. A partial weight at the regime edge therefore cannot open a
+        // pit into neighboring relief; high ground becomes a tall terraced massif.
+        const float plateau = TerrainFormations::plateauRelief(pos, noiseFieldSeed ^ 0xBA01u);
+        height += terraces * land * 42.f * (plateau - 0.5f);
+        height = mix(height, terraceHeight(height, n), 0.45f * terraces);
     }
     const float coastPull = smoothstep(0.2f, 0.f, abs(n.inland)) * 0.9f;
     height = mix(height, static_cast<float>(SEA_LEVEL + 8), coastPull);
