@@ -1,8 +1,0 @@
-{
-  "red_sand": { "multiply": [0.48, 0.43, 0.32] },
-  "red_sandstone": { "multiply": [0.53, 0.33, 0.72] },
-  "red_sandstone_top": { "multiply": [0.55, 0.33, 0.64] },
-  "red_sandstone_bottom": { "multiply": [0.55, 0.33, 0.64] },
-  "terracotta": { "multiply": [0.84, 0.58, 0.68], "saturation": 0.65 },
-  "red_terracotta": { "multiply": [0.9, 0.9, 0.9], "saturation": 0.72 }
-}
