@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-22_
 
 # Block System
 
@@ -14,6 +14,9 @@ needs no recompile, just a build to re-run the asset copy. Ordering is air-first
 across builds**; world exports stay valid because they carry a name palette (see
 [world_export_import.md](world_export_import.md)). `AIR == 0` is the one fixed value — chunk block
 storage assumes it, enforced by a `static_assert` in `block.h`.
+
+Formation blocks use descriptive material names (e.g. gray sandstone) rather than biome-specific
+IDs.
 
 Texture names in the JSONs refer to 16×16 PNGs in `assets/blocks/textures/` (shared freely
 between blocks, e.g. `dirt` is also grass/snowy-grass bottom); `Blocks::init()` resolves them

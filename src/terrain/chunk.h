@@ -101,6 +101,7 @@ struct SerializedChunkData
     std::vector<Structure> structures;
     std::unordered_map<uint32_t, uint8_t> blockStates;
     std::vector<CaveStructure> caveStructures;
+    std::vector<SurfaceStructureCandidate> surfaceStructureCandidates;
     std::vector<uint64_t> terrainAirMask;
     std::vector<uint64_t> terrainSolidCubeMask;
 };
@@ -185,6 +186,7 @@ private:
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
     std::vector<Structure> structures{};
+    std::vector<SurfaceStructureCandidate> surfaceStructureCandidates{};
     std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
@@ -206,6 +208,7 @@ private:
     void buildTerrainAirMask();
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
+    void placeSurfaceStructures();
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 
@@ -254,6 +257,7 @@ public:
     const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
     const std::vector<Structure>& getStructures() const;
+    const std::vector<SurfaceStructureCandidate>& getSurfaceStructureCandidates() const;
     const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
     const std::vector<CaveStructure>& getCaveStructures() const;
     const std::vector<uint64_t>& getTerrainAirMask() const;

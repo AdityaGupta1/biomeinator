@@ -237,6 +237,8 @@ void Chunk::runStructuresAndDecoratorPass()
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
     }
 
+    this->placeSurfaceStructures();
+
     // Cave structures fill one type at a time in enum order so a type's blocks are all in place
     // before a lower-priority type (e.g. vines) reads the world around it
     for (uint32_t typeIdx = 0; typeIdx < static_cast<uint32_t>(CaveStructureType::COUNT); ++typeIdx)
@@ -1128,6 +1130,7 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
     this->structures = std::move(data.structures);
     this->blockStates = std::move(data.blockStates);
     this->caveStructures = std::move(data.caveStructures);
+    this->surfaceStructureCandidates = std::move(data.surfaceStructureCandidates);
     this->terrainAirMask = std::move(data.terrainAirMask);
     this->terrainSolidCubeMask = std::move(data.terrainSolidCubeMask);
     this->hasSerializedData = true;
@@ -1190,6 +1193,11 @@ const std::vector<Biome>& Chunk::getBiomes() const
 const std::vector<Structure>& Chunk::getStructures() const
 {
     return this->structures;
+}
+
+const std::vector<SurfaceStructureCandidate>& Chunk::getSurfaceStructureCandidates() const
+{
+    return this->surfaceStructureCandidates;
 }
 
 const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const

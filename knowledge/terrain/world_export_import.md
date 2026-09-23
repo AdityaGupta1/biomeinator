@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # World Export / Import
 
@@ -13,9 +13,18 @@ decorated blocks changes that generation; sorting either candidate list changes
 structure precedence. Imported v7 chunks therefore retain both masks and candidate
 order exactly. The v5/v6 readers keep the historical approximations (masks rebuilt
 from final blocks and no cave candidates), acceptable for the bounded golden worlds.
-Re-exporting those legacy chunks stores the approximations in v7; a format upgrade
+Re-exporting those legacy chunks retains the approximations; a format upgrade
 cannot recover their missing original terrain. Exactness applies to freshly generated
-v7 data and subsequent round trips of that data.
+worlds saved with all their generation inputs and subsequent round trips of that data.
+
+Region v8 also preserves ordered exposed-surface placement candidates, including
+their priority and headroom. Saving accepted trees alone loses rejected competitors
+that suppress trees across an imported boundary. Grid structures remain separate so
+fresh neighbors fill grid structures before resolving exposed-surface candidates,
+just as uninterrupted generation does. Generator pointers are encoded as biome/index
+pairs and rebound to the immutable biome configuration on read; existing generator
+indices must remain stable. v5-v7 have no exposed-surface candidates, so they retain
+their saved blocks without recovering these missing inputs.
 
 `RegionFile` returns chunk coordinates and owned serialized data, without constructing
 live chunks or regions. A failure discards the entire decoded result. Whole-world
@@ -47,7 +56,7 @@ rejecting unused packed bits. Surface-mounted blocks explicitly store every face
 including the ordinary upward/floor-facing value; absence never implicitly means floor.
 Region v5 imports predate block-state records; as a narrow migration, every block that
 now declares `surface_mount` receives an explicit upward-facing entry in memory. A later
-export writes those migrated entries in v7 format.
+export writes those migrated entries in the current format.
 
 ## Block palette decouples exports from enum values
 
@@ -77,9 +86,14 @@ The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`
 
 `ChunkGenerator` caches `worldSeed` and the RNG-derived `noiseOffsetXZ` at init time. The first `Terrain::init` runs with whatever seed was active at startup; `importWorld` then calls `setWorldSeed` and must re-init `ChunkGenerator` before any boundary chunk runs fresh-gen. Without this, regenerated boundary chunks use the wrong noise offset and produce visible seams against imported chunks.
 
-## `pollHeadlessImport()` is a headless-only gate
+## `pollHeadlessTerrain()` is a headless-only gate
 
 The interactive import path does not need to know when import finishes — frames render unconditionally. Headless runs, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before the golden screenshot or the perf warmup starts, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
+
+For fresh procedural worlds, the same gate waits until the entire geometry ring has reached
+`HAS_GEOMETRY`. This prevents fast empty frames from exhausting screenshot accumulation before
+chunk generation starts. Imported worlds retain the bounded counter below; waiting for a full
+procedural ring would change their existing test behavior.
 
 ### Counter mechanics
 
@@ -98,11 +112,19 @@ visibility before the renderer polls completion. Resetting terrain clears the ba
 
 ### Why the gate is one frame early
 
-The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollHeadlessImport()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
+The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollHeadlessTerrain()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
 
 ### Cost containment
 
 All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (golden tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+
+## Structure count bound
+
+The decoder permits larger structure lists from v5/v6 exports containing accepted
+cliff-surface trees. v8 keeps grid structures and exposed-surface candidates separate.
+Counts are bounded before decompression and size arithmetic; release builds reject
+oversized payloads as well. These are defensive limits, not typical population sizes
+or proofs about placement density, since separate generators can share an anchor.
 
 ## `reimportWorld` flushes everything
 

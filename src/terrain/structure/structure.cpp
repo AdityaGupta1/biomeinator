@@ -556,6 +556,97 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     }
 }
 
+static void fillPineTrunk(std::vector<Block>& blocks, ivec3 rootPos_CS, int height)
+{
+    for (int y = 0; y <= height; ++y)
+    {
+        const ivec3 pos = rootPos_CS + ivec3(0, y, 0);
+        if (!Chunk::isInChunk(pos))
+        {
+            continue;
+        }
+        const uint blockIdx = Chunk::blockPosToIdx(uvec3(pos));
+        // Pines on different cliff ledges can have overlapping crowns. Their
+        // leaves must not interrupt another pine's trunk; rock stays untouched.
+        if (blocks[blockIdx] == Block::PINE_LEAVES)
+        {
+            blocks[blockIdx] = Block::PINE_LOG;
+        }
+        else
+        {
+            tryPlaceStructureBlock(blocks, blockIdx, Block::PINE_LOG);
+        }
+    }
+}
+
+fillStructureBlocksHeader(PINE_TREE)
+{
+    const int height = rng.nextInt(5, 9);
+    const float radius = rng.nextFloat(3.f, 4.5f);
+    fillPineTrunk(blocks, structurePos_CS, height);
+
+    const auto placeLeaf = [&](ivec3 pos_CS)
+    {
+        if (Chunk::isInChunk(pos_CS))
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::PINE_LEAVES, false /*canReplaceWater*/);
+        }
+    };
+
+    // Separate shallow boughs leave visible trunk between tiers, rather than filling
+    // every Y layer into a solid cone.
+    for (int y = height; y >= 2; y -= rng.nextInt(2, 4))
+    {
+        const float t = static_cast<float>(y - 2) / (height - 2);
+        const float layerRadius = radius * mix(1.f, 0.70f, t) + rng.nextFloat(-0.2f, 0.2f);
+        const vec2 stretch(rng.nextFloat(0.9f, 1.1f), rng.nextFloat(0.9f, 1.1f));
+        const vec2 offset(rng.nextFloat(-0.3f, 0.3f), rng.nextFloat(-0.3f, 0.3f));
+        for (int z = -5; z <= 5; ++z)
+        {
+            for (int x = -5; x <= 5; ++x)
+            {
+                const float distance = length((vec2(x, z) - offset) / stretch);
+                if (distance > layerRadius)
+                {
+                    continue;
+                }
+                // These draws depend on the whole tree's shape, never local
+                // chunk clipping, so every destination produces the same fringe.
+                if (distance > layerRadius - 0.45f && rng.chance(0.22f))
+                {
+                    continue;
+                }
+                const bool droop = x * x + z * z > 2 && distance > layerRadius - 0.8f && rng.chance(0.18f);
+                const ivec3 pos = structurePos_CS + ivec3(x, y, z);
+                placeLeaf(pos);
+                if (droop)
+                {
+                    placeLeaf(pos - ivec3(0, 1, 0));
+                }
+            }
+        }
+    }
+
+    // One small asymmetric cap covers the trunk end without stacking solid 3x3
+    // leaf layers or extending a long needle above the crown.
+    const int missingArm = rng.nextInt(4);
+    constexpr std::array<ivec2, 5> capOffsets{{ {0, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1} }};
+    for (int i = 0; i < static_cast<int>(capOffsets.size()); ++i)
+    {
+        if (i != missingArm + 1)
+        {
+            placeLeaf(structurePos_CS + ivec3(capOffsets[i].x, height + 1, capOffsets[i].y));
+        }
+    }
+}
+
+fillStructureBlocksHeader(PINE_SHRUB)
+{
+    const int height = rng.nextInt(2, 4);
+    fillPineTrunk(blocks, structurePos_CS, height);
+    placeBlobCanopy(blocks, structurePos_CS + ivec3(0, height, 0), rng, Block::PINE_LEAVES);
+}
+
 StructureBounds::StructureBounds(int diff)
     : minDiffXZ(-diff, -diff), maxDiffXZ(diff, diff)
 {}
@@ -599,6 +690,11 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(CYPRESS_TREE);
     STRUCTURE_BOUNDS_BY_NAME(CYPRESS_TREE) = 11;
+
+    SET_FILL_STRUCTURE_FUNC(PINE_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(PINE_TREE) = 5;
+    SET_FILL_STRUCTURE_FUNC(PINE_SHRUB);
+    STRUCTURE_BOUNDS_BY_NAME(PINE_SHRUB) = 2;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {

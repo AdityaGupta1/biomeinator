@@ -82,8 +82,8 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         return { .swampy = false, .pondLevel = seaLevel };
     }
 
-    // The site already supplies the center sample. Batch the other eight positions and
-    // request only the two fields that contribute to natural terrain height.
+    // The site already supplies the center sample. Every field contributes to natural
+    // terrain, including formations at climate boundaries.
     float sampleX[8];
     float sampleZ[8];
     int numSamples = 0;
@@ -99,18 +99,18 @@ static CellInfo computeSwampCellInfo(ivec2 cellCornerXZ_WS)
         sampleZ[numSamples] = static_cast<float>(sampleXZ_WS.y);
         ++numSamples;
     }
-    float peak[8];
-    float inland[8];
-    BiomeNoiseFields::fillPositions({ .temperature = nullptr, .humidity = nullptr, .peak = peak, .inland = inland },
-                                   sampleX, sampleZ, numSamples);
+    float noise[BiomeNoiseFields::BiomeNoiseGrids::numFields * 8];
+    const auto grids = BiomeNoiseFields::BiomeNoiseGrids::fromBuffer(noise, 8);
+    BiomeNoiseFields::fillPositions(grids, sampleX, sampleZ, numSamples);
 
     // Keep the same second-lowest height and sample ordering as the scalar path.
-    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise).baseHeight;
+    float minNaturalBase = BiomeNoiseFields::computeNaturalTerrain(siteNoise, vec2(siteXZ_WS)).baseHeight;
     float secondMinNaturalBase = std::numeric_limits<float>::max();
     for (int sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
     {
         const float sampleBase = BiomeNoiseFields::computeNaturalTerrain(
-            { .peak = peak[sampleIdx], .inland = inland[sampleIdx] }).baseHeight;
+            BiomeNoiseFields::noiseAt(grids, sampleIdx),
+            vec2(sampleX[sampleIdx], sampleZ[sampleIdx])).baseHeight;
         if (sampleBase < minNaturalBase)
         {
             secondMinNaturalBase = minNaturalBase;
@@ -201,7 +201,8 @@ Shaping computeShaping(vec2 warpedPosXZ_WS,
 
     const CellInfo nearestCell = getSwampCellInfo(cellCorners[nearestIdx]);
     const float deepFloodMix =
-        smoothstep(BiomeNoiseFields::floodCellThreshold, 0.9f, BiomeNoiseFields::computeFloodFactor(biomeNoise));
+        smoothstep(BiomeNoiseFields::floodCellThreshold, BiomeNoiseFields::floodFullStrength,
+                   BiomeNoiseFields::computeFloodFactor(biomeNoise));
 
     // Shape height this column would take under the given cell: pond-floor pull-down for swampy
     // cells, untouched natural terrain otherwise. Natural terrain below the marsh floor is left
