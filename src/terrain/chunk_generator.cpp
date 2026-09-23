@@ -567,6 +567,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
+                    ASSERT(Chunk::isInChunkXZ(columnPosXZ_WS - chunkPosBlocksXZ_WS));
+                    ASSERT(anchorY >= 0 && anchorY < static_cast<int>(chunkSizeY));
+                    ASSERT(layerHeight > 0 && layerHeight <= static_cast<int>(chunkSizeY));
+                    ASSERT(gen.type < CaveStructureType::COUNT);
+                    ASSERT(this->caveStructures.size() < numChunkBlocks);
                     this->caveStructures.emplace_back(
                         gen.type, ivec3(columnPosXZ_WS.x, anchorY, columnPosXZ_WS.y /*z*/), layerHeight);
                     return; // first passing gen wins for this side (gen-list order = priority)
@@ -998,6 +1003,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         continue; // top of this column is a cave, so skip this candidate
                     }
+                    ASSERT(candidateGroundHeight + 1 < chunkSizeY);
 
                     if (!bool(structureGen.flags & STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER))
                     {
@@ -1017,7 +1023,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     RandomNumberGenerator variantRng =
                         initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
-                    this->structures.emplace_back(structureGen.pickVariant(variantRng), candidatePos_WS);
+                    const StructureType type = structureGen.pickVariant(variantRng);
+                    ASSERT(type < StructureType::COUNT);
+                    ASSERT(this->structures.size() < maxSurfaceStructuresPerChunk);
+                    this->structures.emplace_back(type, candidatePos_WS);
                 }
             }
         }

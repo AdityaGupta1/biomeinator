@@ -30,6 +30,7 @@ struct Structure
 };
 
 inline constexpr uint32_t structureMaxChunkRadius = 1;
+inline constexpr uint32_t maxSurfaceStructuresPerChunk = 512;
 
 struct StructureBounds
 {

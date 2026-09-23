@@ -109,7 +109,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
@@ -117,8 +117,14 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->caveDecoration.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+        this->buildTerrainAirMask();
     }
-    this->buildTerrainAirMask();
+    else if (this->terrainAirMask.empty())
+    {
+        // v5/v6 golden worlds omitted the original masks. Keep their historical
+        // approximation; v7 masks must never be rebuilt from decorated blocks.
+        this->buildTerrainAirMask();
+    }
 
     if (this->advanceState(ChunkState::HAS_TERRAIN))
     {
@@ -411,7 +417,7 @@ void Chunk::runStructuresAndDecoratorPass()
 
 void Chunk::fillStructuresAndDecorators()
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
@@ -1108,28 +1114,28 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
-                               std::vector<Structure>&& structures,
-                               std::unordered_map<uint32_t, uint8_t>&& blockStates)
+void Chunk::loadSerializedData(SerializedChunkData&& data)
 {
-    ASSERT(blocks.size() == numChunkBlocks);
-    ASSERT(biomes.size() == chunkSizeXZSquare);
+    ASSERT(this->getState() == ChunkState::NEEDS_TERRAIN);
+    ASSERT(data.blocks.size() == numChunkBlocks);
+    ASSERT(data.biomes.size() == chunkSizeXZSquare);
+    ASSERT((data.terrainAirMask.empty() && data.terrainSolidCubeMask.empty()) ||
+           (data.terrainAirMask.size() == numChunkBlocks / 64 &&
+            data.terrainSolidCubeMask.size() == numChunkBlocks / 64));
 
-    this->blocks = std::move(blocks);
-    this->biomes = std::move(biomes);
-    this->structures = std::move(structures);
-    this->blockStates = std::move(blockStates);
-    this->wasImported = true;
+    this->blocks = std::move(data.blocks);
+    this->biomes = std::move(data.biomes);
+    this->structures = std::move(data.structures);
+    this->blockStates = std::move(data.blockStates);
+    this->caveStructures = std::move(data.caveStructures);
+    this->terrainAirMask = std::move(data.terrainAirMask);
+    this->terrainSolidCubeMask = std::move(data.terrainSolidCubeMask);
+    this->hasSerializedData = true;
 }
 
 bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
-}
-
-bool Chunk::getWasImported() const
-{
-    return this->wasImported;
 }
 
 void Chunk::setIsMarkedForDestruction(bool marked)
@@ -1189,6 +1195,21 @@ const std::vector<Structure>& Chunk::getStructures() const
 const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const
 {
     return this->blockStates;
+}
+
+const std::vector<CaveStructure>& Chunk::getCaveStructures() const
+{
+    return this->caveStructures;
+}
+
+const std::vector<uint64_t>& Chunk::getTerrainAirMask() const
+{
+    return this->terrainAirMask;
+}
+
+const std::vector<uint64_t>& Chunk::getTerrainSolidCubeMask() const
+{
+    return this->terrainSolidCubeMask;
 }
 
 // y changes fastest, then x, then z
