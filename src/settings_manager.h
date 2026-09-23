@@ -12,6 +12,21 @@ namespace SettingsManager
 
 using SettingValue = std::variant<bool, int, uint32_t, float, std::string>;
 
+enum class ParseArgsStatus
+{
+    Success,
+    Help,
+    Error,
+};
+
+struct ParseArgsOutcome
+{
+    ParseArgsStatus status;
+    std::string message;
+};
+
+// Parses and validates without terminating the process. Settings are replaced only on success.
+ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv);
 void parseArgs(const int argc, const char* const* argv);
 
 bool getAsBool(const std::string& name);

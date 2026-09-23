@@ -3,10 +3,12 @@
 
 #include "settings_manager.h"
 
-#define CXXOPTS_NO_EXCEPTIONS
 #include <cxxopts.hpp>
 
+#include <cstdlib>
+#include <iostream>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 
 #include "rendering/common/common_enums.h"
@@ -20,7 +22,7 @@ static std::unordered_map<std::string, SettingValue> settings;
 
 uint32_t worldSeed; // cached due to frequent access
 
-void parseArgs(const int argc, const char* const* argv)
+ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
 {
     Options options("Biomeinator", "Real-time path traced voxel engine");
     OptionAdder optionAdder = options.add_options();
@@ -49,11 +51,20 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
     ADD_OPTION("perfFrames", "Perf run: number of frames to measure", uint32_t, "300");
     ADD_OPTION("perfTimeoutSeconds", "Perf run: give up and write whatever was measured after this long", float, "120");
-    ADD_OPTION("perfMoveSpeed", "Perf run: move the camera forward at this many blocks per nominal 60 Hz second while measuring", float, "0");
-    ADD_OPTION("perfMoveTurnFrames", "Perf run: pick a new random horizontal heading every this many frames (0 = straight)", uint32_t, "0");
+    ADD_OPTION("perfMoveSpeed",
+               "Perf run: move the camera forward at this many blocks per nominal 60 Hz second while measuring",
+               float,
+               "0");
+    ADD_OPTION("perfMoveTurnFrames",
+               "Perf run: pick a new random horizontal heading every this many frames (0 = straight)",
+               uint32_t,
+               "0");
     ADD_OPTION("samplingMode", "Sampling mode (0=naive, 1=MIS, 2=RTSL)", uint32_t, "2");
     ADD_OPTION("tonemapping", "Tonemapping (0=none, 1=standard, 2=agx, 3=khronos pbr neutral)", uint32_t, "3");
-    ADD_OPTION("antialiasingMode", "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)", uint32_t, "0");
+    ADD_OPTION("antialiasingMode",
+               "Antialiasing mode (0=none, 1=accumulate, 2=DLSS; defaults to DLSS in voxel mode)",
+               uint32_t,
+               "0");
     ADD_OPTION("maxAccumulatedFrames", "Max accumulated frames", uint32_t, "512");
     ADD_OPTION("dlssMode", "DLSS mode", uint32_t, "2"); // sl::DLSSMode::eBalanced
     ADD_OPTION("dlssPreset", "DLSS Ray Reconstruction preset (0=D, 1=F)", uint32_t, "1");
@@ -70,8 +81,14 @@ void parseArgs(const int argc, const char* const* argv)
     ADD_OPTION("fullscreen", "Start in fullscreen mode", bool, "false");
     ADD_OPTION("useWaitableSwapChain", "Use waitable swap chain", bool, "true");
     ADD_OPTION("showGui", "Show GUI", bool, "true");
-    ADD_OPTION("refractionIndirectPassthrough", "Treat transmissive surfaces as passthrough after diffuse bounces", bool, "true");
-    ADD_OPTION("fogScatteringMultiplier", "Fog scattering multiplier on the time-of-day fog strength (0 disables fog; voxel mode only)", float, "1");
+    ADD_OPTION("refractionIndirectPassthrough",
+               "Treat transmissive surfaces as passthrough after diffuse bounces",
+               bool,
+               "true");
+    ADD_OPTION("fogScatteringMultiplier",
+               "Fog scattering multiplier on the time-of-day fog strength (0 disables fog; voxel mode only)",
+               float,
+               "1");
     ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "40");
     ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
@@ -113,12 +130,19 @@ void parseArgs(const int argc, const char* const* argv)
 
 #undef ADD_OPTION
 
-    ParseResult parseResult = options.parse(argc, argv);
+    ParseResult parseResult;
+    try
+    {
+        parseResult = options.parse(argc, argv);
+    }
+    catch (const cxxopts::exceptions::exception& exception)
+    {
+        return { ParseArgsStatus::Error, exception.what() };
+    }
 
     if (parseResult.count("help"))
     {
-        std::cout << options.help() << std::endl;
-        exit(0);
+        return { ParseArgsStatus::Help, options.help() };
     }
 
     if (parseResult.contains("testOutput"))
@@ -126,8 +150,7 @@ void parseArgs(const int argc, const char* const* argv)
         const std::string& testOutputPath = parseResult["testOutput"].as<std::string>();
         if (!testOutputPath.ends_with(".png"))
         {
-            std::cerr << "--testOutput must be a .png" << std::endl;
-            exit(1);
+            return { ParseArgsStatus::Error, "--testOutput must be a .png" };
         }
     }
 
@@ -136,159 +159,166 @@ void parseArgs(const int argc, const char* const* argv)
         const std::string& perfOutputPath = parseResult["perfOutput"].as<std::string>();
         if (!perfOutputPath.ends_with(".json"))
         {
-            std::cerr << "--perfOutput must be a .json" << std::endl;
-            exit(1);
+            return { ParseArgsStatus::Error, "--perfOutput must be a .json" };
         }
         if (parseResult.contains("testOutput"))
         {
-            std::cerr << "--perfOutput and --testOutput are mutually exclusive" << std::endl;
-            exit(1);
+            return { ParseArgsStatus::Error, "--perfOutput and --testOutput are mutually exclusive" };
         }
     }
 
-#define COPY_SETTING(name, type) settings[name] = parseResult[name].as<type>()
+    std::unordered_map<std::string, SettingValue> parsedSettings;
 
-    COPY_SETTING("width", uint32_t);
-    COPY_SETTING("height", uint32_t);
-    COPY_SETTING("rngSeed", uint32_t);
-    COPY_SETTING("sharc", bool);
-    COPY_SETTING("sharcCapacityLog2", uint32_t);
-    COPY_SETTING("sharcDownscale", uint32_t);
-    COPY_SETTING("sharcSceneScale", float);
-    COPY_SETTING("sharcRoughnessMin", float);
-    COPY_SETTING("sharcAccumulationFrames", uint32_t);
-    COPY_SETTING("sharcStaleFrames", uint32_t);
-    COPY_SETTING("sharcWarmupFrames", uint32_t);
-    COPY_SETTING("sharcDebug", uint32_t);
-    COPY_SETTING("maxPathDepth", uint32_t);
-    COPY_SETTING("scene", std::string);
-    COPY_SETTING("testOutput", std::string);
-    COPY_SETTING("perfOutput", std::string);
-    COPY_SETTING("perfWarmupFrames", uint32_t);
-    COPY_SETTING("perfWarmupSeconds", float);
-    COPY_SETTING("perfFrames", uint32_t);
-    COPY_SETTING("perfTimeoutSeconds", float);
-    COPY_SETTING("perfMoveSpeed", float);
-    COPY_SETTING("perfMoveTurnFrames", uint32_t);
-    COPY_SETTING("samplingMode", uint32_t);
-    COPY_SETTING("tonemapping", uint32_t);
-    COPY_SETTING("antialiasingMode", uint32_t);
-    COPY_SETTING("maxAccumulatedFrames", uint32_t);
-    COPY_SETTING("dlssMode", uint32_t);
-    COPY_SETTING("dlssPreset", uint32_t);
-    COPY_SETTING("frameGeneration", bool);
-    COPY_SETTING("doPathSplitting", bool);
-    COPY_SETTING("useVsync", bool);
-    COPY_SETTING("lockCamera", bool);
-    COPY_SETTING("noJitter", bool);
-    COPY_SETTING("voxelMode", bool);
-    COPY_SETTING("worldSeed", uint32_t);
-    COPY_SETTING("movementSpeed", float);
-    COPY_SETTING("animTimePaused", bool);
-    COPY_SETTING("animTime", float);
-    COPY_SETTING("fullscreen", bool);
-    COPY_SETTING("useWaitableSwapChain", bool);
-    COPY_SETTING("showGui", bool);
-    COPY_SETTING("refractionIndirectPassthrough", bool);
-    COPY_SETTING("fogScatteringMultiplier", float);
-    COPY_SETTING("fogScaleHeight", float);
-    COPY_SETTING("fogG", float);
-    COPY_SETTING("fogMarchSteps", uint32_t);
-    COPY_SETTING("fogAmbientStrength", float);
-    COPY_SETTING("skyStrength", float);
-    COPY_SETTING("clouds", bool);
-    COPY_SETTING("cloudCoverage", float);
-    COPY_SETTING("cloudExtinction", float);
-    COPY_SETTING("cloudBaseHeight", float);
-    COPY_SETTING("cloudThickness", float);
-    COPY_SETTING("cloudCellSize", float);
-    COPY_SETTING("cloudPatternScale", float);
-    COPY_SETTING("cloudSeed", uint32_t);
-    COPY_SETTING("cloudDrawDistance", float);
-    COPY_SETTING("cloudShadowDistance", float);
-    COPY_SETTING("cloudSamples", uint32_t);
-    COPY_SETTING("cloudAmbient", float);
-    COPY_SETTING("cloudPhaseG", float);
-    COPY_SETTING("cloudMultiScatterStrength", float);
-    COPY_SETTING("cloudWindX", float);
-    COPY_SETTING("cloudWindZ", float);
-    COPY_SETTING("renderDistance", int);
-    COPY_SETTING("world", std::string);
+    try
+    {
+#define COPY_SETTING(name, type) parsedSettings[name] = parseResult[name].as<type>()
 
-    COPY_SETTING("debugView", std::string);
-    COPY_SETTING("debugViewScale", float);
-    COPY_SETTING("debugViewApplyTonemap", bool);
-    COPY_SETTING("debugColorChunks", bool);
-    COPY_SETTING("debugBool0", bool);
-    COPY_SETTING("debugBool1", bool);
-    COPY_SETTING("debugBool2", bool);
-    COPY_SETTING("debugBool3", bool);
-    COPY_SETTING("debugFloat0", float);
-    COPY_SETTING("debugFloat1", float);
-    COPY_SETTING("debugFloat2", float);
-    COPY_SETTING("debugFloat3", float);
-    COPY_SETTING("gpuValidation", bool);
-    COPY_SETTING("verboseLogging", bool);
+        COPY_SETTING("width", uint32_t);
+        COPY_SETTING("height", uint32_t);
+        COPY_SETTING("rngSeed", uint32_t);
+        COPY_SETTING("sharc", bool);
+        COPY_SETTING("sharcCapacityLog2", uint32_t);
+        COPY_SETTING("sharcDownscale", uint32_t);
+        COPY_SETTING("sharcSceneScale", float);
+        COPY_SETTING("sharcRoughnessMin", float);
+        COPY_SETTING("sharcAccumulationFrames", uint32_t);
+        COPY_SETTING("sharcStaleFrames", uint32_t);
+        COPY_SETTING("sharcWarmupFrames", uint32_t);
+        COPY_SETTING("sharcDebug", uint32_t);
+        COPY_SETTING("maxPathDepth", uint32_t);
+        COPY_SETTING("scene", std::string);
+        COPY_SETTING("testOutput", std::string);
+        COPY_SETTING("perfOutput", std::string);
+        COPY_SETTING("perfWarmupFrames", uint32_t);
+        COPY_SETTING("perfWarmupSeconds", float);
+        COPY_SETTING("perfFrames", uint32_t);
+        COPY_SETTING("perfTimeoutSeconds", float);
+        COPY_SETTING("perfMoveSpeed", float);
+        COPY_SETTING("perfMoveTurnFrames", uint32_t);
+        COPY_SETTING("samplingMode", uint32_t);
+        COPY_SETTING("tonemapping", uint32_t);
+        COPY_SETTING("antialiasingMode", uint32_t);
+        COPY_SETTING("maxAccumulatedFrames", uint32_t);
+        COPY_SETTING("dlssMode", uint32_t);
+        COPY_SETTING("dlssPreset", uint32_t);
+        COPY_SETTING("frameGeneration", bool);
+        COPY_SETTING("doPathSplitting", bool);
+        COPY_SETTING("useVsync", bool);
+        COPY_SETTING("lockCamera", bool);
+        COPY_SETTING("noJitter", bool);
+        COPY_SETTING("voxelMode", bool);
+        COPY_SETTING("worldSeed", uint32_t);
+        COPY_SETTING("movementSpeed", float);
+        COPY_SETTING("animTimePaused", bool);
+        COPY_SETTING("animTime", float);
+        COPY_SETTING("fullscreen", bool);
+        COPY_SETTING("useWaitableSwapChain", bool);
+        COPY_SETTING("showGui", bool);
+        COPY_SETTING("refractionIndirectPassthrough", bool);
+        COPY_SETTING("fogScatteringMultiplier", float);
+        COPY_SETTING("fogScaleHeight", float);
+        COPY_SETTING("fogG", float);
+        COPY_SETTING("fogMarchSteps", uint32_t);
+        COPY_SETTING("fogAmbientStrength", float);
+        COPY_SETTING("skyStrength", float);
+        COPY_SETTING("clouds", bool);
+        COPY_SETTING("cloudCoverage", float);
+        COPY_SETTING("cloudExtinction", float);
+        COPY_SETTING("cloudBaseHeight", float);
+        COPY_SETTING("cloudThickness", float);
+        COPY_SETTING("cloudCellSize", float);
+        COPY_SETTING("cloudPatternScale", float);
+        COPY_SETTING("cloudSeed", uint32_t);
+        COPY_SETTING("cloudDrawDistance", float);
+        COPY_SETTING("cloudShadowDistance", float);
+        COPY_SETTING("cloudSamples", uint32_t);
+        COPY_SETTING("cloudAmbient", float);
+        COPY_SETTING("cloudPhaseG", float);
+        COPY_SETTING("cloudMultiScatterStrength", float);
+        COPY_SETTING("cloudWindX", float);
+        COPY_SETTING("cloudWindZ", float);
+        COPY_SETTING("renderDistance", int);
+        COPY_SETTING("world", std::string);
+
+        COPY_SETTING("debugView", std::string);
+        COPY_SETTING("debugViewScale", float);
+        COPY_SETTING("debugViewApplyTonemap", bool);
+        COPY_SETTING("debugColorChunks", bool);
+        COPY_SETTING("debugBool0", bool);
+        COPY_SETTING("debugBool1", bool);
+        COPY_SETTING("debugBool2", bool);
+        COPY_SETTING("debugBool3", bool);
+        COPY_SETTING("debugFloat0", float);
+        COPY_SETTING("debugFloat1", float);
+        COPY_SETTING("debugFloat2", float);
+        COPY_SETTING("debugFloat3", float);
+        COPY_SETTING("gpuValidation", bool);
+        COPY_SETTING("verboseLogging", bool);
 
 #undef COPY_SETTING
-
-    if (getAsUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
+    }
+    catch (const cxxopts::exceptions::exception& exception)
     {
-        std::cerr << "Invalid samplingMode option" << std::endl;
-        exit(1);
+        return { ParseArgsStatus::Error, exception.what() };
     }
 
-    if (getAsUint("antialiasingMode") >= static_cast<uint32_t>(AntialiasingMode::COUNT))
+    const auto getBool = [&parsedSettings](const char* name) { return std::get<bool>(parsedSettings.at(name)); };
+    const auto getUint = [&parsedSettings](const char* name) { return std::get<uint32_t>(parsedSettings.at(name)); };
+    const auto getFloat = [&parsedSettings](const char* name) { return std::get<float>(parsedSettings.at(name)); };
+    const auto getString = [&parsedSettings](const char* name) -> const std::string&
+    { return std::get<std::string>(parsedSettings.at(name)); };
+
+    if (getUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {
-        std::cerr << "Invalid antialiasingMode option" << std::endl;
-        exit(1);
+        return { ParseArgsStatus::Error, "Invalid samplingMode option" };
     }
 
-    if (getAsUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
+    if (getUint("antialiasingMode") >= static_cast<uint32_t>(AntialiasingMode::COUNT))
     {
-        std::cerr << "Invalid tonemapping option" << std::endl;
-        exit(1);
+        return { ParseArgsStatus::Error, "Invalid antialiasingMode option" };
     }
 
-    if (getAsUint("dlssPreset") >= 2)
+    if (getUint("tonemapping") >= static_cast<uint32_t>(Tonemapping::COUNT))
     {
-        std::cerr << "Invalid dlssPreset option" << std::endl;
-        exit(1);
+        return { ParseArgsStatus::Error, "Invalid tonemapping option" };
     }
 
-    if (getAsUint("sharcCapacityLog2") < 16 || getAsUint("sharcCapacityLog2") > 24 || getAsUint("sharcDownscale") < 1 ||
-        getAsUint("sharcDownscale") > 16 ||
-        !(getAsFloat("sharcSceneScale") > 0.f && getAsFloat("sharcSceneScale") <= 10000.f) ||
-        !(getAsFloat("sharcRoughnessMin") >= 0.f && getAsFloat("sharcRoughnessMin") <= 1.f) ||
-        getAsUint("sharcDebug") > 4 || getAsUint("sharcAccumulationFrames") > 1024 ||
-        getAsUint("sharcStaleFrames") < 8 || getAsUint("sharcStaleFrames") > 1024)
+    if (getUint("dlssPreset") >= 2)
     {
-        std::cerr << "Invalid SHARC settings" << std::endl;
-        exit(1);
+        return { ParseArgsStatus::Error, "Invalid dlssPreset option" };
     }
 
-    worldSeed = getAsUint("worldSeed");
-
-    if (!getAsString("world").empty())
+    if (getUint("sharcCapacityLog2") < 16 || getUint("sharcCapacityLog2") > 24 || getUint("sharcDownscale") < 1 ||
+        getUint("sharcDownscale") > 16 ||
+        !(getFloat("sharcSceneScale") > 0.f && getFloat("sharcSceneScale") <= 10000.f) ||
+        !(getFloat("sharcRoughnessMin") >= 0.f && getFloat("sharcRoughnessMin") <= 1.f) || getUint("sharcDebug") > 4 ||
+        getUint("sharcAccumulationFrames") > 1024 || getUint("sharcStaleFrames") < 8 ||
+        getUint("sharcStaleFrames") > 1024)
     {
-        settings["voxelMode"] = true;
+        return { ParseArgsStatus::Error, "Invalid SHARC settings" };
     }
 
-    if (getAsBool("voxelMode") && parseResult.count("antialiasingMode") == 0)
+    if (!getString("world").empty())
     {
-        settings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
+        parsedSettings["voxelMode"] = true;
+    }
+
+    if (getBool("voxelMode") && parseResult.count("antialiasingMode") == 0)
+    {
+        parsedSettings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
     // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so golden
     // screenshots are reproducible and perf measurements are not throttled; each of these can
     // still be overridden explicitly
-    if (isHeadless())
+    const bool isParsedHeadless = !getString("testOutput").empty() || !getString("perfOutput").empty();
+    if (isParsedHeadless)
     {
-        const auto defaultTo = [&parseResult](const char* name, const bool value)
+        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
         {
             if (parseResult.count(name) == 0)
             {
-                settings[name] = value;
+                parsedSettings[name] = value;
             }
         };
         defaultTo("sharc", false); // Existing goldens and perf baselines remain uncached.
@@ -297,6 +327,23 @@ void parseArgs(const int argc, const char* const* argv)
         defaultTo("animTimePaused", true);
         defaultTo("useVsync", false);
     }
+
+    worldSeed = getUint("worldSeed");
+    settings = std::move(parsedSettings);
+    return { ParseArgsStatus::Success, {} };
+}
+
+void parseArgs(const int argc, const char* const* argv)
+{
+    const ParseArgsOutcome outcome = tryParseArgs(argc, argv);
+    if (outcome.status == ParseArgsStatus::Success)
+    {
+        return;
+    }
+
+    std::ostream& output = outcome.status == ParseArgsStatus::Help ? std::cout : std::cerr;
+    output << outcome.message << std::endl;
+    std::exit(outcome.status == ParseArgsStatus::Help ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback)

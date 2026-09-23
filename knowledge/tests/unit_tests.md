@@ -25,6 +25,12 @@ a small array model; thread scratch allocations use randomized sizes and alignme
 canaries that remain valid until each clear. Numeric packing additionally samples the full valid
 terrain position and UV domains and checks the documented quantization bounds.
 
+Settings tests exercise the non-terminating parser, including dependent defaults, headless
+overrides, validation failures, and runtime mutation. Camera tests target the extracted pure math:
+split-position normalization and large-coordinate precision, direction-basis orthonormality, and
+frustum-plane symmetry. Keeping this math outside `Camera` avoids pulling D3D or renderer globals
+into the CPU-only target.
+
 Build and run the suite with:
 
 ```powershell

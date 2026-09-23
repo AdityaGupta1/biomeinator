@@ -43,17 +43,10 @@ void Camera::setJitterHaltonSequenceLength(uint32_t sequenceLength)
 
 void Camera::setDirectionVectorsFromAngles()
 {
-    const float cosPhi = cosf(phi);
-    const XMVECTOR forward =
-        XMVector3Normalize(XMVectorSet(cosPhi * sinf(theta), sinf(phi), cosPhi * cosf(theta), 0.0f));
-
-    XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-    const XMVECTOR right = XMVector3Normalize(XMVector3Cross(forward, up));
-    up = XMVector3Normalize(XMVector3Cross(right, forward));
-
-    XMStoreFloat3(&this->params.forward_WS, forward);
-    XMStoreFloat3(&this->params.right_WS, right);
-    XMStoreFloat3(&this->params.up_WS, up);
+    const CameraMath::Basis basis = CameraMath::makeBasis(this->phi, this->theta);
+    this->params.forward_WS = { basis.forward.x, basis.forward.y, basis.forward.z };
+    this->params.right_WS = { basis.right.x, basis.right.y, basis.right.z };
+    this->params.up_WS = { basis.up.x, basis.up.y, basis.up.z };
 }
 
 void Camera::moveLinear(XMFLOAT3 linearMovement)
@@ -68,10 +61,11 @@ void Camera::moveLinear(XMFLOAT3 linearMovement)
 
     XMFLOAT3 displacementVec;
     XMStoreFloat3(&displacementVec, displacement);
-    this->posFloat_WS += glm::vec3(displacementVec.x, displacementVec.y, displacementVec.z);
+    CameraMath::add(this->position_WS, glm::vec3(displacementVec.x, displacementVec.y, displacementVec.z));
 }
 
-constexpr float absMaxPhi = std::numbers::pi_v<float> / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
+constexpr float absMaxPhi =
+    std::numbers::pi_v<float> / 2.f - 0.01f; // slightly under pi/2 to avoid going past the poles
 
 void Camera::rotate(float dTheta, float dPhi)
 {
@@ -145,7 +139,9 @@ constexpr float zoomFovRatio = 0.3f;
 
 void Camera::processInput(double deltaTime, const PlayerInput& input)
 {
-    this->params.worldToPrevClipMat = this->params.worldToClipMat; // if globalInstanceOffset changed, a correction to worldToPrevClipMat will be applied in setMatrices()
+    this->params.worldToPrevClipMat =
+        this->params.worldToClipMat; // if globalInstanceOffset changed, a correction to worldToPrevClipMat will be
+                                     // applied in setMatrices()
     this->params.prevJitter = this->params.jitter;
     this->params.prevPos_WS = this->params.pos_WS;
     this->params.prevForward_WS = this->params.forward_WS;
@@ -194,17 +190,6 @@ void Camera::processInput(double deltaTime, const PlayerInput& input)
         this->areMatricesDirty = true;
     }
 
-    for (int i = 0; i < 3; ++i)
-    {
-        float& floatPosComponent = this->posFloat_WS[i];
-        if (floatPosComponent < 0.f || floatPosComponent > 1.f)
-        {
-            const int intPart = static_cast<int>(floor(floatPosComponent));
-            this->posInt_WS[i] += intPart;
-            floatPosComponent -= intPart;
-        }
-    }
-
     this->params.jitter = this->jitterHalton.next();
 }
 
@@ -215,7 +200,7 @@ bool Camera::update()
     const glm::ivec3 globalInstanceOffset = scene.getGlobalInstanceOffset();
     const glm::ivec3 prevGlobalInstanceOffset = scene.getPrevGlobalInstanceOffset();
 
-    const glm::vec3 paramsPos_WS = glm::vec3(this->getPosInt_WS() - globalInstanceOffset) + this->getPosFloat_WS();
+    const glm::vec3 paramsPos_WS = CameraMath::relativeTo(this->position_WS, globalInstanceOffset);
     this->params.pos_WS = toDirectXFloat3(paramsPos_WS);
 
     this->params.globalInstanceOffset = toDirectXInt3(globalInstanceOffset);
@@ -287,38 +272,32 @@ void Camera::copyParamsTo(CameraParams* dest) const
 
 void Camera::setPos_WS(glm::vec3 newPos)
 {
-    this->posInt_WS = glm::ivec3(0, 0, 0);
-    this->posFloat_WS = newPos; // will be updated properly on next call to processInput()
+    this->position_WS = CameraMath::split(newPos);
 }
 
 std::array<glm::vec3, 4> Camera::getFrustumSideNormals_WS() const
 {
-    const glm::vec3 forward(this->params.forward_WS.x, this->params.forward_WS.y, this->params.forward_WS.z);
-    const glm::vec3 right(this->params.right_WS.x, this->params.right_WS.y, this->params.right_WS.z);
-    const glm::vec3 up(this->params.up_WS.x, this->params.up_WS.y, this->params.up_WS.z);
-    const float tanHalfFovY = tanf(this->currentFovYRadians * 0.5f);
-    const float tanHalfFovX = tanHalfFovY * this->aspectRatio;
-    return {
-        glm::normalize(right + forward * tanHalfFovX),
-        glm::normalize(-right + forward * tanHalfFovX),
-        glm::normalize(up + forward * tanHalfFovY),
-        glm::normalize(-up + forward * tanHalfFovY),
+    const CameraMath::Basis basis{
+        .forward = { this->params.forward_WS.x, this->params.forward_WS.y, this->params.forward_WS.z },
+        .right = { this->params.right_WS.x, this->params.right_WS.y, this->params.right_WS.z },
+        .up = { this->params.up_WS.x, this->params.up_WS.y, this->params.up_WS.z },
     };
+    return CameraMath::frustumSideNormals(basis, this->currentFovYRadians, this->aspectRatio);
 }
 
 glm::vec3 Camera::getPos_WS() const
 {
-    return glm::vec3(this->posInt_WS) + this->posFloat_WS;
+    return CameraMath::combine(this->position_WS);
 }
 
 const glm::ivec3& Camera::getPosInt_WS() const
 {
-    return this->posInt_WS;
+    return this->position_WS.integer;
 }
 
 const glm::vec3& Camera::getPosFloat_WS() const
 {
-    return this->posFloat_WS;
+    return this->position_WS.fractional;
 }
 
 float Camera::getPhi() const
@@ -333,8 +312,8 @@ float Camera::getTheta() const
 
 void Camera::restoreFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, float theta)
 {
-    this->posInt_WS = posInt;
-    this->posFloat_WS = posFloat;
+    this->position_WS = { posInt, posFloat };
+    CameraMath::normalize(this->position_WS);
     this->phi = phi;
     this->theta = theta;
     this->setDirectionVectorsFromAngles();

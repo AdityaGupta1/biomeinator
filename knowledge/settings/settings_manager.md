@@ -1,8 +1,14 @@
-_Last edited: 2026-09-06_
+_Last edited: 2026-09-22_
 
 # Settings Manager
 
 `src/settings_manager.h/cpp` — a global, stringly-typed key-value store for all runtime settings. Parsed once from CLI args at startup via `parseArgs()`, then readable and writable from anywhere at any time (including mid-frame from the GUI).
+
+`tryParseArgs()` contains the non-terminating parse/validation path. It builds a candidate map and
+only replaces the live settings after every option and cross-option rule succeeds, which makes a
+failed parse atomic and directly unit-testable. The application-facing `parseArgs()` is a thin
+wrapper that preserves the command-line contract by printing help/errors and exiting when the
+result is not successful.
 
 ## Storage
 
