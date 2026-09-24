@@ -77,8 +77,9 @@ texels come from `marble.normal.png` or `stone.normal.png`, respectively. Their 
 and bottom faces reuse those source normal maps directly through the block textures.
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
-r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass
-(read only there, so every other block's zero-filled b costs nothing). Aux data is authored as an optional
+r = per-texel emissive strength, g = biome tint mask, b = roughness wherever a glossy lobe exists
+(glass faces and `AUX_MASK_GLOSSY` texels; zero-filled elsewhere at no cost), a = per-texel binary
+mask bits (below). Aux data is authored as an optional
 `<name>.aux.png` companion next to each block texture — most textures have none, and missing
 files load as zero-filled slices. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old
@@ -103,3 +104,24 @@ Two invariants:
   texels the diffuse map cuts away. On an X-shaped block (~18% coverage) that drives the tint mask
   toward zero within one mip, and since tint-masked texels are authored grayscale the block reads
   gray at distance.
+
+## Per-Texel Binary Masks (aux alpha)
+
+Binary per-texel settings (`AUX_MASK_*` in `common_structs.h`; currently only glossy) are authored
+one file per setting — `<texture>.glossy.png`, black/white — and merged into a bitfield in the aux
+alpha channel by `loadBlockTextureArray` at startup (`auxMaskDefs` maps suffix to bit). Separate
+files keep masks independent: adding a setting never means re-authoring an existing aux PNG.
+
+Why alpha, and why it is safe:
+- Aux alpha is needed only as the coverage weight while the aux mips are built (the
+  `alphaOverrides` invariant above); no shader reads it. The bitfield is written over it *after*
+  the whole cascade, so the weighting is untouched.
+- Voxel mode samples terrain with `MIN_MAG_MIP_POINT`, so a lookup returns one texel of one mip and
+  the byte decodes to exact bits. Linear or trilinear filtering would blend neighboring bit
+  patterns into garbage — the scheme depends on point sampling.
+- Mips cannot be box-filtered for the same reason. Each mip bit is a majority vote of its 2x2 source
+  texels (ties set), which keeps thin features alive for a few levels. The vote ignores diffuse
+  coverage, so on cutout tiles a mask bit can come from a texel the diffuse map cuts away.
+
+A per-slice `sliceHasAuxMasks` sets `FACE_FLAG_AUX_MASKS` at mesh time, so faces without masks skip
+the decode entirely — the same gating pattern as the biome tint mask.

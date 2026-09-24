@@ -323,7 +323,91 @@ struct LoadTextureOptions
     // Missing files load as zero-filled tiles instead of failing the whole array; aux maps
     // exist only for the textures with emissive/tint data
     bool missingFilesAreZero = false;
+    // Replace every mip's alpha with the AUX_MASK_* bitfield merged from the per-mask files. Only
+    // valid for the aux maps, whose alpha is needed for mip weighting but never read by shaders.
+    bool mergeAuxMasks = false;
+    // One bool per slice: whether any mask bit is set at mip 0
+    std::vector<bool>* outSliceHasAuxMasks = nullptr;
 };
+
+// One entry per AUX_MASK_* bit. A mask is authored as <texture><fileSuffix>.png, black/white, next to
+// the texture; keeping each in its own file means adding a mask never touches existing aux PNGs.
+struct AuxMaskDef
+{
+    const char* fileSuffix;
+    uint8_t bit;
+};
+inline constexpr AuxMaskDef auxMaskDefs[] = {
+    { ".glossy", AUX_MASK_GLOSSY },
+};
+
+// Merges every mask file present for one texture into a per-texel bitfield. A texel's bit is set
+// where the mask's red channel is at least half.
+static std::vector<uint8_t> loadAuxMaskBits(const std::filesystem::path& texturesDir, const std::string& textureName)
+{
+    constexpr size_t texelCount = static_cast<size_t>(TERRAIN_TILE_SIZE) * TERRAIN_TILE_SIZE;
+    std::vector<uint8_t> bits(texelCount, 0);
+    for (const AuxMaskDef& def : auxMaskDefs)
+    {
+        const std::filesystem::path path = texturesDir / (textureName + def.fileSuffix + ".png");
+        if (!std::filesystem::exists(path))
+        {
+            continue;
+        }
+
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        unsigned char* data = stbi_load(path.generic_string().c_str(), &width, &height, &channels, 4);
+        if (data == nullptr || width != TERRAIN_TILE_SIZE || height != TERRAIN_TILE_SIZE)
+        {
+            Logger::logError("Skipping unreadable or wrongly sized aux mask: %s", path.generic_string().c_str());
+            stbi_image_free(data);
+            continue;
+        }
+        for (size_t i = 0; i < texelCount; ++i)
+        {
+            if (data[i * 4] >= 128)
+            {
+                bits[i] |= def.bit;
+            }
+        }
+        stbi_image_free(data);
+    }
+    return bits;
+}
+
+// Mask bits cannot be box-filtered like the other channels: averaging two texels' bytes yields an
+// unrelated third bit pattern. Each bit is instead decided by majority over the 2x2 source block,
+// with ties setting it so thin masked features survive the first few mips.
+static void downsampleMaskBits2x2(const std::vector<uint8_t>& src, std::vector<uint8_t>& dst, uint32_t dstTileSize)
+{
+    const uint32_t srcTileSize = dstTileSize * 2;
+    // One byte per texel here, unlike texelIdx's RGBA layout
+    const auto srcAt = [&](uint32_t x, uint32_t y) { return src[static_cast<size_t>(y) * srcTileSize + x]; };
+    dst.assign(static_cast<size_t>(dstTileSize) * dstTileSize, 0);
+    for (uint32_t y = 0; y < dstTileSize; ++y)
+    {
+        for (uint32_t x = 0; x < dstTileSize; ++x)
+        {
+            const uint8_t s0 = srcAt(x * 2, y * 2);
+            const uint8_t s1 = srcAt(x * 2 + 1, y * 2);
+            const uint8_t s2 = srcAt(x * 2, y * 2 + 1);
+            const uint8_t s3 = srcAt(x * 2 + 1, y * 2 + 1);
+            uint8_t out = 0;
+            for (uint32_t bit = 0; bit < 8; ++bit)
+            {
+                const uint8_t mask = static_cast<uint8_t>(1u << bit);
+                const int count = ((s0 & mask) != 0) + ((s1 & mask) != 0) + ((s2 & mask) != 0) + ((s3 & mask) != 0);
+                if (count >= 2)
+                {
+                    out |= mask;
+                }
+            }
+            dst[static_cast<size_t>(y) * dstTileSize + x] = out;
+        }
+    }
+}
 
 // Loads one TERRAIN_TILE_SIZE^2 PNG per texture name from assets/blocks/textures/ into a
 // texture array whose slice indices match the given order (see Blocks::getTextureNames())
@@ -354,6 +438,10 @@ static uint32_t loadBlockTextureArray(Scene* scene,
     if (options.outAlphaChannels != nullptr)
     {
         options.outAlphaChannels->resize(numSlices);
+    }
+    if (options.outSliceHasAuxMasks != nullptr)
+    {
+        options.outSliceHasAuxMasks->assign(numSlices, false);
     }
 
     for (uint32_t slice = 0; slice < numSlices; ++slice)
@@ -448,6 +536,32 @@ static uint32_t loadBlockTextureArray(Scene* scene,
             for (uint32_t m = 1; m < numMips; ++m)
             {
                 opaquifyCutoutMip(mipData[m], TERRAIN_TILE_SIZE >> m);
+            }
+        }
+
+        // Last, after the whole cascade: the downsamples above still need alpha as their coverage
+        // weight, and nothing reads aux alpha after that.
+        if (options.mergeAuxMasks)
+        {
+            std::vector<uint8_t> maskBits = loadAuxMaskBits(texturesDir, textureNames[slice]);
+            if (options.outSliceHasAuxMasks != nullptr)
+            {
+                (*options.outSliceHasAuxMasks)[slice] =
+                    std::any_of(maskBits.begin(), maskBits.end(), [](uint8_t b) { return b != 0; });
+            }
+            for (uint32_t m = 0; m < numMips; ++m)
+            {
+                const uint32_t tileSize = TERRAIN_TILE_SIZE >> m;
+                if (m > 0)
+                {
+                    std::vector<uint8_t> downsampled;
+                    downsampleMaskBits2x2(maskBits, downsampled, tileSize);
+                    maskBits = std::move(downsampled);
+                }
+                for (size_t i = 0; i < static_cast<size_t>(tileSize) * tileSize; ++i)
+                {
+                    mipData[m][i * 4 + 3] = maskBits[i];
+                }
             }
         }
 
