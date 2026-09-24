@@ -168,10 +168,14 @@ void init()
         data.tier = BiomeTier::LOWLAND;
         data.climate = { .temperature = -0.5f, .humidity = -0.35f };
         data.grassTint = glmUtil::colorFromHex("#80b497");
+        // PROTOTYPE placement for snow layers: grass under a mostly-continuous snow sheet with bare
+        // patches. The intended home is the snow line's snowy-grass band, once that lands.
         data.topBlocks = {
-            .top = Block::SNOWY_GRASS_BLOCK,
+            .top = Block::GRASS_BLOCK,
             .mid = Block::DIRT,
         };
+        data.decorator.addEntry(Block::SNOW_LAYER, 80.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 20.f);
     }
 
     // SWAMP
