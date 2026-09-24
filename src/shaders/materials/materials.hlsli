@@ -142,6 +142,31 @@ void applyGlassMaterial(inout Material material, const float2 uv, const TexSampl
     material.ior = glassIor;
 }
 
+// Coat IOR for AUX_MASK_GLOSSY texels; only drives the Fresnel split between coat and diffuse
+static const float glossyCoatIor = 1.5f;
+
+// Applies the per-texel binary masks packed into aux alpha, for faces flagged FACE_FLAG_AUX_MASKS.
+// A glossy texel keeps the terrain material's diffuse lobe and gains glossy reflection over it
+// (macro-normal Fresnel, like glTF glossy-over-diffuse), untinted, with roughness from aux b — the
+// channel glass faces already read, so a texture's roughness means the same thing on either path.
+// Voxel mode point samples, so the decoded byte is exactly one texel's bits at this mip.
+void applyAuxMasks(inout Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    if (!material.hasPackedAux() || material.auxTextureId == TEXTURE_ID_INVALID)
+    {
+        return;
+    }
+    const float4 aux = sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx);
+    const uint maskBits = uint(aux.a * 255.f + 0.5f);
+    if (maskBits & AUX_MASK_GLOSSY)
+    {
+        material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION;
+        material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
+        material.roughness = aux.b;
+        material.ior = glossyCoatIor;
+    }
+}
+
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
 // alpha = roughness^2
 float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const float alpha, float nDotV)
@@ -590,6 +615,8 @@ Material getMaterialFromPayload(const Payload payload, const uint triangleFlags,
     // Resolve surface overrides before orienting IOR for this particular hit.
     if (bool(triangleFlags & FACE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    else if (bool(triangleFlags & FACE_FLAG_AUX_MASKS))
+        applyAuxMasks(material, payload.hitInfo.uv, texCtx);
     material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
     if (bool(triangleFlags & FACE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;

@@ -25,5 +25,7 @@ uint32_t getMaterialIdx(TerrainMaterial terrainMaterial);
 // Whether the aux map tile for this texture array slice has any biome tint mask coverage
 bool sliceHasBiomeTint(uint32_t sliceIdx);
 bool sliceHasNormalMap(uint32_t sliceIdx);
+// Whether the aux tile has any per-texel mask bit set (see AUX_MASK_* in common_structs.h)
+bool sliceHasAuxMasks(uint32_t sliceIdx);
 
 } // namespace TerrainMaterials

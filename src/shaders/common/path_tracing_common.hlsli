@@ -305,7 +305,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const PerFaceData perFaceData = loadPerFaceData(instanceData, PrimitiveIndex());
     const bool hasNormalMap = material.normalTextureId != TEXTURE_ID_INVALID &&
                               (!material.hasPackedAux() || perFaceData.hasFlag(FACE_FLAG_NORMAL_MAP));
-    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && perFaceData.hasFlag(FACE_FLAG_IS_GLASS));
+    // Mask-bearing faces count as glossy for the whole face: deciding per texel here would need the
+    // aux sample and mip level, which are only resolved later. The correction only moves shading
+    // normals that would reflect below the surface, so it is harmless on the diffuse texels.
+    const bool hasGlossy = material.hasGlossy() ||
+                           (hasNormalMap && perFaceData.hasFlag(FACE_FLAG_IS_GLASS | FACE_FLAG_AUX_MASKS));
     const bool isWaterTop = perFaceData.hasFlag(FACE_FLAG_IS_WATER_TOP);
 
     if (hasNormalMap)
