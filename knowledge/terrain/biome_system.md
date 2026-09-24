@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # Biome System
 
@@ -124,3 +124,9 @@ Each biome's `BiomeData` bundles its tier, climate target, surface blocks, struc
 Landform-specific rock is applied separately from topsoil. Mesa deliberately leaves its top
 and mid blocks unset, preserving elevation-based terracotta bands instead of repainting every
 column with the same cap. Append biome/structure enum values: world exports serialize them.
+
+`TopBlocks` is not the last word on a column's surface block: the snow line in
+[chunk_generator.md](chunk_generator.md#snow-line) overrides `top` above a climate-driven altitude
+for every biome that sets one. It follows climate rather than labels, with Tianzi's tower lift as
+the single landform exception; a new landform whose surface must never snow needs an entry there,
+not a `BiomeData` flag.

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # Chunk Generator
 
@@ -103,6 +103,78 @@ Natural terrain is independent of local water shaping. Swamp pond-height probes 
 all five natural-terrain inputs and their world positions, including climate-dependent
 formations. Oasis bowls then blend into this natural terrain, override local water levels,
 and reuse the bounded cave-waterline seals.
+
+## Snow Line
+
+Snow capping runs in the top-block stamp, after the biome's `TopBlocks` are chosen, and
+overrides them. It lives here rather than in [biome_system.md](biome_system.md) because it is an
+altitude effect that cuts across biomes: relief raises ground everywhere, not only in
+`MOUNTAINS`.
+
+**The line comes from climate, not biome labels**, in keeping with the biome system's design rule.
+Per column it is a base height plus:
+
+- **temperature**, so cold columns whiten lower. Temperature is an unnormalised fbm sum (about
+  ±0.7 at the 5th-95th percentile, ±1.1 at the extremes), so the very tallest hot peaks can still
+  cap; that is intended.
+- **aridity** (negative humidity), which raises it. Dry climates' real snow lines sit far higher,
+  and this is what keeps hot, dry Mesa and red desert highlands essentially bare without naming
+  them. A steeper temperature term was tried instead and made things worse: it lowered the line
+  in cold forest and tundra more than it raised it in the warm regimes.
+- **a dedicated low-frequency 2D field** (`fnSnowLine`) for wander. Reusing the biome noise would
+  tie the snow boundary to biome boundaries and bring back the isosurface look.
+
+**Tianzi is the one exception climate cannot express.** It is humid, spans cool to warm, and its
+towers clear the line by 150+ blocks even in warm columns, where snow would erase its planted
+summits. Its *landform* weight lifts the line out of reach, faded out with falling temperature so
+only genuinely cold karst gets snowy tower tops. Landform weight, not style or coverage: it is the
+weight that raises the towers, so the lift tracks exactly how much tower a column has. Style weight
+extends past the label and was measured stripping snow from ~2% of the mountains biome next to
+Tianzi; landform weight is zero outside the label.
+
+**The base is calibrated against measured terrain, and depends on relief heights.** It was
+chosen by sweeping `computeNaturalTerrain` over a large area on several seeds and counting each
+biome's land above the line: roughly 40-60% of mountains, ~1% of forest, 1-3% of tundra, and a
+few percent at most of Tianzi (cold edges), red desert and Mesa. #400's taller relief moved the
+mountains figure from about half to ~90% at the old base, so re-measure whenever relief changes.
+`baseHeight` is not the exact surface (3D noise still moves it), so treat the numbers as relative.
+
+Constraints worth keeping:
+
+- **Top block only.** The mid block stays the biome's own. `snow` is white on all six faces, so
+  on its own this reads solid white on any slope; rock comes from the steep-rock pass.
+- **"Capped" means snow was actually written.** Biomes that leave their top unset (Mesa, to keep
+  its terracotta bands), quartz, and bare Tianzi cliffs never enter the stamp loop. The per-column
+  capped flag is set inside it, so those columns are never treated as capped by the steep-rock or
+  treeline passes. Setting it from the height test alone painted stone over terracotta.
+- **Underwater tops are skipped**, using the same `topBlockUnderwater` as the grass rules rather
+  than a sea-level test, because water level is per column.
+- **The sub-block surface uses the fill loop's own threshold.** `terrainSurfaceValAt` is shared by
+  the voxel fill and the snow line's surface height, including the per-voxel detail term. A copy
+  of the formula would silently diverge the next time the threshold changes.
+
+**Steep rock.** After the fill loop, capped columns whose surface gradient reaches
+`snowSteepGradient` (1 = 45°) get rock instead of snow:
+
+- The rock is the **landform's surface rock** (`SurfaceMaterials::Column::rock`: terracotta,
+  Tianzi strata, red sandstone) or plain stone. Never the voxel the fill loop left at the top:
+  that carries cave-biome rock theming, which the topsoil stamp always hides, and exposing it put
+  large dark basalt patches across mountain faces.
+- The gradient comes from the **sub-block surface height**, where terrain density crosses zero
+  between the top block and the air above, not from `terrainTopY`. Whole-block heights quantize a
+  central difference to multiples of 0.5, which lands exactly on a 45° threshold and turns rock
+  into isolated speckles.
+- It needs neighbor heights the stamp doesn't have yet, hence a separate pass. Neighbor chunks
+  generate concurrently, so border columns use a one-sided difference; on the smooth sub-block
+  surface that differs from the central one only by curvature, so no seam shows.
+
+The cap doubles as the **treeline** for both placement paths: grid candidates are rejected in
+capped columns, and exposed-surface placement (Tianzi's pines and shrubs) skips a capped column's
+top voxel. Both read the capped flag rather than the ground block, since steep capped columns end
+up as rock, which is valid ground for those gens. Shelves below a capped top and the snowy-grass
+band stay plantable, which is where a real treeline sits. Decorators need nothing: every surface
+decorator entry is restricted to supports like `GRASS_BLOCK`, which snow, snowy grass and rock
+already fail.
 
 ## 3D Noise Bounds Optimization
 

@@ -103,6 +103,39 @@ static FN::SmartNode<FN::Generator> fnSwampWarp;
 static FN::SmartNode<FN::Generator> fnSwampWarpFine;
 static FN::SmartNode<FN::Generator> fnSwampShore;
 
+// Altitude above which a column's surface is capped with snow. The line is deliberately not a
+// plane: a column's threshold is the base height shifted by its own temperature and by a
+// low-frequency 2D field, so the boundary wanders instead of reading as a contour line at one
+// world y. Snow is applied to the top block only, leaving the biome's mid block underneath.
+// That alone exposes almost no rock: `snow` is white on all six faces, so a slope renders as a
+// staircase of snow tops and reads fully white. A later pass therefore swaps the cap back to the
+// column's own rock wherever the surface gradient reaches snowSteepGradient.
+//
+// The temperature term is what makes this track climate rather than pure altitude. Temperature
+// spans about ±0.7 (5th-95th percentile, ±1.1 at the extremes), so before aridity the line ranges
+// from roughly y=180 in the coldest columns to y=300 in the hottest. The base is calibrated against
+// measured terrain (knowledge/terrain/chunk_generator.md): roughly 40-60% of the mountains biome is
+// capped and about 1% of forest. It depends on relief heights, so re-measure after changing them.
+inline constexpr float snowLineBaseY = 238.f;
+inline constexpr float snowLineTemperatureRange = 55.f;
+inline constexpr float snowLineNoiseAmplitude = 13.f;
+// Band directly below the line where a grass top becomes snowy grass instead of bare grass,
+// softening the transition on biomes that have one. Biomes topped with stone or sand step
+// straight from their own block to snow.
+inline constexpr float snowLineGrassBandDepth = 7.f;
+// Surface rise per block (1 = 45 degrees) at which a capped column is too steep to hold snow
+inline constexpr float snowSteepGradient = 1.0f;
+// Raise per unit of dryness (negative humidity). Dry climates hold far less snow; this is what
+// keeps hot, dry Mesa and red desert highlands bare without special-casing their labels.
+inline constexpr float snowLineAridityLift = 100.f;
+// Lift at full Tianzi landform weight, above any pillar Tianzi builds, faded out between the warm and
+// cold temperatures so only cold karst is capped (see the stamp for why Tianzi needs its own term)
+inline constexpr float snowLineTianziLift = 400.f;
+inline constexpr float snowLineTianziColdTemperature = -0.4f;
+inline constexpr float snowLineTianziWarmTemperature = 0.f;
+
+static FN::SmartNode<FN::Generator> fnSnowLine;
+
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
 
@@ -172,6 +205,22 @@ void init()
         fnSimplex->SetOutputMax(1.5f);
 
         fnSwampShore = fnSimplex;
+    }
+
+    {
+        // Source range is kept under 1 so the three fbm octaves land near [-1, 1], the range
+        // snowLineNoiseAmplitude is scaled against. The large feature scale gives the slow
+        // sweep across a mountain range; the octaves add the smaller ragged detail on top.
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(374829156);
+        fnSimplex->SetScale(220.0f);
+        fnSimplex->SetOutputMin(-0.6f);
+        fnSimplex->SetOutputMax(0.6f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
+
+        fnSnowLine = fnFractal;
     }
 
     {
@@ -455,7 +504,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* swampWarpFineXNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampWarpFineZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const auto fillSwampNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
+    float* snowLineNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    // Set per column by the top-block stamp; read by the steep-rock pass and the treeline check
+    uint8_t* snowCappedArray = threadMemoryAlloc.request<uint8_t>(chunkSizeXZSquare);
+    float* surfaceHeightArray = threadMemoryAlloc.request<float>(chunkSizeXZSquare); // < 0: no surface
+    // Rock exposed where a column's cap is too steep for snow (landform surface rock, else stone)
+    Block* snowExposedRockArray = threadMemoryAlloc.request<Block>(chunkSizeXZSquare);
+    const auto fillColumnNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
     {
         fn->GenUniformGrid2D(data,
                              chunkPosBlocksXZ_WS.x + noiseOffsetXZ.x,
@@ -466,11 +521,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                              1.f,
                              static_cast<int>(worldSeed ^ hash(seedSalt)));
     };
-    fillSwampNoise(swampWarpXNoise, fnSwampWarp, 651209371);
-    fillSwampNoise(swampWarpZNoise, fnSwampWarp, 287119023);
-    fillSwampNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
-    fillSwampNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
-    fillSwampNoise(swampShoreNoise, fnSwampShore, 190283475);
+    fillColumnNoise(swampWarpXNoise, fnSwampWarp, 651209371);
+    fillColumnNoise(swampWarpZNoise, fnSwampWarp, 287119023);
+    fillColumnNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
+    fillColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
+    fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
+    fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
@@ -773,6 +829,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const uint caveColumnIdx = (blockX + caveNoiseMarginXZ) + caveNoiseSizeXZ * (blockZ + caveNoiseMarginXZ);
 
             blocks[baseBlockIdx + 0] = Block::BEDROCK;
+            snowCappedArray[columnIdx] = 0; // scratch memory is not zeroed
+            surfaceHeightArray[columnIdx] = -1.f;
+            snowExposedRockArray[columnIdx] = Block::STONE;
 
             const ColumnShape& shape = columnShapes[columnIdx];
             const float terrainBaseHeight = shape.baseHeight;
@@ -835,6 +894,28 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 return glm::mix(minVal, simplexVal, glm::smoothstep(0.0f, 1.0f, t));
             };
 
+            // A voxel is terrain where the terrain noise is below this. Only valid for y inside
+            // [terrainNoiseMinY, terrainNoiseMaxY). Shared by the fill test and the snow line's
+            // sub-block surface height, which must agree with it exactly.
+            const auto terrainSurfaceValAt = [&](const uint y)
+            {
+                const int terrainNoiseIdx = baseTerrainNoiseIdx + static_cast<int>(y);
+                // Detail depends on Y too: cliff faces acquire outcrops and recesses,
+                // rather than extruding one wavy outline unchanged from foot to summit.
+                // A steep side needs more displacement than its crown. Keep recesses
+                // and small overhangs, but don't lift the cliff's slope boost into thin
+                // towers of rubble above the otherwise broad, planted summit.
+                const float detail = terrainDetailNoise ? min(shape.detailAmplitude *
+                    clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f), detailUpwardLimit) : 0.f;
+                const float detailedHeight = terrainBaseHeight + detail;
+                float surfaceVal = (detailedHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
+                if (y < detailedHeight)
+                {
+                    surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
+                }
+                return surfaceVal;
+            };
+
             // Carve threshold before the per-column swamp seal: surface fade plus altitude squash
             const auto caveSurfaceValAt = [&](const float y)
             {
@@ -889,21 +970,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const int terrainNoiseIdx = baseTerrainNoiseIdx + static_cast<int>(y);
                     ASSERT(terrainNoiseIdx >= 0 && static_cast<uint>(terrainNoiseIdx) < terrainNoiseSize, "terrain noise index out of bounds");
 
-                    // Detail depends on Y too: cliff faces acquire outcrops and recesses,
-                    // rather than extruding one wavy outline unchanged from foot to summit.
-                    // A steep side needs more displacement than its crown. Keep recesses
-                    // and small overhangs, but don't lift the cliff's slope boost into thin
-                    // towers of rubble above the otherwise broad, planted summit.
-                    const float detail = terrainDetailNoise ? min(shape.detailAmplitude *
-                        clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f), detailUpwardLimit) : 0.f;
-                    const float detailedHeight = terrainBaseHeight + detail;
-                    float surfaceVal = (detailedHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
-                    if (y < detailedHeight)
-                    {
-                        surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
-                    }
-
-                    isInTerrain = terrainNoise[terrainNoiseIdx] < surfaceVal;
+                    isInTerrain = terrainNoise[terrainNoiseIdx] < terrainSurfaceValAt(y);
                 }
 
                 bool isCave = false;
@@ -1122,6 +1189,26 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const bool bareFormationCliff = hasTianziFormation &&
                     shape.slope > mix(5.f,
                         mix(2.f, 4.f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
+
+                // Sub-block surface height: where terrain density (surface value minus noise) crosses
+                // zero between the top block and the air above it. The steep-rock pass needs this
+                // rather than topBlockY because whole-block heights quantize the gradient to multiples
+                // of 0.5, which flickers against any threshold and leaves isolated rock speckles.
+                float surfaceHeight = static_cast<float>(topBlockY) + 0.5f;
+                const int topNoiseY = static_cast<int>(topBlockY);
+                if (topNoiseY >= terrainNoiseMinY && topNoiseY + 1 < terrainNoiseMaxY)
+                {
+                    const float densityTop =
+                        terrainSurfaceValAt(topBlockY) - terrainNoise[baseTerrainNoiseIdx + topNoiseY];
+                    const float densityAbove =
+                        terrainSurfaceValAt(topBlockY + 1) - terrainNoise[baseTerrainNoiseIdx + topNoiseY + 1];
+                    if (densityTop > 0.f && densityAbove <= 0.f)
+                    {
+                        surfaceHeight = static_cast<float>(topBlockY) + densityTop / (densityTop - densityAbove);
+                    }
+                }
+                surfaceHeightArray[columnIdx] = surfaceHeight;
+
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
 
@@ -1132,6 +1219,40 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const int heightAboveWater = static_cast<int>(topBlockY) - waterLevel;
                     topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
                 }
+
+                // Snow cap. Underwater tops are left alone: the ocean floor of a cold column can
+                // sit above the line, and snow under water reads as a bug rather than as ice.
+                //
+                // The line comes from climate, not biome labels. Temperature lowers it in cold
+                // columns; aridity raises it in dry ones, as dry climates' real snow lines sit far
+                // higher, which keeps Mesa and red desert (both hot and dry) bare without naming
+                // them. Tianzi is the exception climate can't express: it is humid and its pillars
+                // clear the line by 150+ blocks even when warm, so its landform weight lifts the line
+                // out of reach, faded out with falling temperature so only genuinely cold karst gets
+                // snowy tower tops. Landform weight, not style or coverage: it is the weight that
+                // raises the towers, so the lift tracks exactly how much tower a column has. Style
+                // weight extends past the label and was measured stripping snow from ~2% of the
+                // mountains biome next to Tianzi; landform weight is zero outside the label.
+                const float temperature = biomeNoiseGrids.temperature[columnIdx];
+                const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]);
+                const float warmTianzi = naturalTerrain.regimeWeights[TerrainRegime::TIANZI] *
+                    smoothstep(snowLineTianziColdTemperature, snowLineTianziWarmTemperature, temperature);
+                const float snowLineY = snowLineBaseY + temperature * snowLineTemperatureRange +
+                    aridity * snowLineAridityLift + snowLineNoise[columnIdx] * snowLineNoiseAmplitude +
+                    warmTianzi * snowLineTianziLift;
+                const bool topBlockAboveSnowLine =
+                    !topBlockUnderwater && static_cast<float>(topBlockY) >= snowLineY;
+                const bool topBlockInSnowGrassBand =
+                    !topBlockUnderwater && !topBlockAboveSnowLine &&
+                    static_cast<float>(topBlockY) >= snowLineY - snowLineGrassBandDepth;
+
+                // What a too-steep cap exposes: the landform's own surface rock where one covers
+                // this column (terracotta band, Tianzi stratum, red sandstone), else plain stone.
+                // Not the voxel the fill loop left here: that carries cave-biome rock theming
+                // (basalt and the like), which the topsoil stamp always hides on main and which
+                // showed through steep mountain faces as large dark patches.
+                const Block landformRock = surfaceMaterials.rock(static_cast<int>(topBlockY));
+                snowExposedRockArray[columnIdx] = (landformRock != Block::AIR) ? landformRock : Block::STONE;
 
                 const uint soilDepth = bareFormationCliff ? 0 : static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
                 for (uint y = topBlockY; y > topBlockY - soilDepth; --y)
@@ -1158,6 +1279,20 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         {
                             newBlock = topBlocks.shoreTop;
                         }
+                        else if (topBlockInSnowGrassBand && y == topBlockY)
+                        {
+                            newBlock = Block::SNOWY_GRASS_BLOCK;
+                        }
+                    }
+                    // Outside the grass rules, not an arm of them: the cap has to replace stone
+                    // and sand tops too, which never enter that branch.
+                    if (topBlockAboveSnowLine && y == topBlockY)
+                    {
+                        newBlock = Block::SNOW;
+                        // Only where snow is actually written: biomes that leave their top unset
+                        // (Mesa's terracotta bands), quartz, and bare formation cliffs skip this
+                        // loop, and must not count as capped for the steep-rock and treeline passes.
+                        snowCappedArray[columnIdx] = 1;
                     }
                     block = newBlock;
                 }
@@ -1207,6 +1342,52 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             placeCaveStructuresForColumn(blockPosXZ_WS);
         }
     }
+
+    // Snow does not hold on steep ground, so capped columns whose surface gradient is steep get bare
+    // rock instead. This needs every column's surface height, hence a pass after the fill loop
+    // rather than a test in the stamp. Neighbor chunks' heights are not available (they generate
+    // concurrently), so border columns fall back to a one-sided difference against their in-chunk
+    // neighbor. On the sub-block surface that differs from the central difference only by the
+    // surface's curvature, so no seam shows at chunk borders. Must run before structure placement,
+    // which treats capped columns as above the treeline whatever block they ended up with.
+    {
+        const auto surfaceHeightAt = [&](int x, int z) -> float
+        {
+            if (x < 0 || z < 0 || x >= static_cast<int>(chunkSizeXZ) || z >= static_cast<int>(chunkSizeXZ))
+            {
+                return -1.f;
+            }
+            return surfaceHeightArray[x + chunkSizeXZ * z];
+        };
+        // Central difference, or one-sided where a neighbor is missing
+        const auto gradientAlong = [](float lowSide, float center, float highSide) -> float
+        {
+            if (lowSide >= 0.f && highSide >= 0.f) return (highSide - lowSide) * 0.5f;
+            if (highSide >= 0.f) return highSide - center;
+            if (lowSide >= 0.f) return center - lowSide;
+            return 0.f;
+        };
+
+        for (int blockZ = 0; blockZ < static_cast<int>(chunkSizeXZ); ++blockZ)
+        {
+            for (int blockX = 0; blockX < static_cast<int>(chunkSizeXZ); ++blockX)
+            {
+                const uint columnIdx = blockX + chunkSizeXZ * blockZ;
+                if (!snowCappedArray[columnIdx])
+                {
+                    continue;
+                }
+                const float height = surfaceHeightAt(blockX, blockZ);
+                const float gradX = gradientAlong(surfaceHeightAt(blockX - 1, blockZ), height, surfaceHeightAt(blockX + 1, blockZ));
+                const float gradZ = gradientAlong(surfaceHeightAt(blockX, blockZ - 1), height, surfaceHeightAt(blockX, blockZ + 1));
+                if (gradX * gradX + gradZ * gradZ >= snowSteepGradient * snowSteepGradient)
+                {
+                    this->blocks[chunkSizeY * columnIdx + this->terrainTopY[columnIdx]] = snowExposedRockArray[columnIdx];
+                }
+            }
+        }
+    }
+
     const ivec2 chunkEndPosBlocksXZ_WS = chunkPosBlocksXZ_WS + static_cast<int>(chunkSizeXZ);
 
     for (Biome biome : biomeSet)
@@ -1238,7 +1419,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         [&](uint y, uint headroom)
                     {
                         const Block block = this->blocks[columnIdx * chunkSizeY + y];
-                        if (headroom >= minHeadroom &&
+                        // Treeline also applies here: a capped column's top is snow or exposed rock,
+                        // and rock is valid ground for these gens. Shelves below it stay plantable.
+                        const bool aboveTreeline = snowCappedArray[columnIdx] && y == this->terrainTopY[columnIdx];
+                        if (headroom >= minHeadroom && !aboveTreeline &&
                             std::find(groundBlocks.begin(), groundBlocks.end(), block) != groundBlocks.end() &&
                             !this->caveDecoration.isCaveAir(columnIdx, y + 1))
                         {
@@ -1306,6 +1490,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         {
                             continue;
                         }
+                    }
+
+                    // Treeline: nothing grows above the snow line, including on the steep rock the
+                    // cap leaves bare. Snowy grass below the line stays plantable, so forests thin
+                    // out at the cap instead of running up into it.
+                    if (snowCappedArray[columnIdx])
+                    {
+                        continue;
                     }
 
                     if (SurfaceMaterials::isQuartz(this->blocks[candidateGroundHeight + chunkSizeY * columnIdx]))
