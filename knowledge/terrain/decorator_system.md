@@ -2,11 +2,16 @@ _Last edited: 2026-09-30_
 
 # Decorator System
 
-`src/terrain/structure/decorator.h/cpp` — weighted random single-block vegetation placement on terrain surfaces.
+`src/terrain/structure/decorator.h/cpp` — weighted random vegetation placement on terrain surfaces.
 
 ## Design
 
 Each biome has a `Decorator` — a weighted list of blocks. Surface-biome decorators are sampled at air-above-solid transitions. Cave decorators are sampled once per cave-air voxel bordering an eligible full-cube terrain support. AIR entries in the weight pool act as "nothing placed" outcomes, controlling density.
+
+A block with an `upperHalf` (see [block_system.md](block_system.md)) also fills the cell above.
+If that cell isn't air, nothing is placed, but the draw has already consumed its RNG, so a
+blocked two-tall plant doesn't shift later placements. Both passes go through
+`Chunk::tryPlaceDecorator`, so cave floors can use two-tall plants too.
 
 Support-block filtering lets entries restrict placement to particular blocks. A surface mask independently permits floors, walls, or ceilings; it defaults to floors so ordinary vegetation remains upright. Eligible surface/support pairs are indexed when entries are registered, so probing six neighboring faces does not repeatedly scan the weighted pool. If several eligible faces border one cave-air voxel, a position hash chooses one before the weighted draw, preventing corner density from multiplying.
 

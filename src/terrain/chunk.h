@@ -259,6 +259,8 @@ private:
     // Only valid during the structure pass.
     float terrainSlopeSquared_WS(glm::ivec2 posXZ_WS) const;
     void placeSnowLayers();
+    // Places nothing when a two-tall block's upper cell is not air
+    bool tryPlaceDecorator(uint32_t baseBlockIdx, uint32_t blockY, Block block);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 

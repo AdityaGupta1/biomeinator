@@ -389,6 +389,21 @@ void Chunk::placeSnowLayers()
     }
 }
 
+bool Chunk::tryPlaceDecorator(uint32_t baseBlockIdx, uint32_t blockY, Block block)
+{
+    const Block upperHalf = Blocks::getBlockData(block).upperHalf;
+    if (upperHalf != Block::AIR)
+    {
+        if (blockY + 1 >= chunkSizeY || this->blocks[baseBlockIdx + blockY + 1] != Block::AIR)
+        {
+            return false;
+        }
+        this->blocks[baseBlockIdx + blockY + 1] = upperHalf;
+    }
+    this->blocks[baseBlockIdx + blockY] = block;
+    return true;
+}
+
 void Chunk::runStructuresAndDecoratorPass()
 {
     for (const Chunk* structureNeighbor : this->structureNeighbors)
@@ -449,7 +464,7 @@ void Chunk::runStructuresAndDecoratorPass()
                     }
                     if (decoratorBlock != Block::AIR)
                     {
-                        thisBlock = decoratorBlock;
+                        this->tryPlaceDecorator(baseBlockIdx, blockY, decoratorBlock);
                     }
                 }
 
@@ -567,9 +582,11 @@ void Chunk::runStructuresAndDecoratorPass()
                     auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                     const Block decoratorBlock = caveDecorator.getBlock(
                         blockRng.nextFloat(), supportBlock, surfaceForFace(face));
-                    if (decoratorBlock == Block::AIR) continue;
+                    if (decoratorBlock == Block::AIR || !this->tryPlaceDecorator(baseBlockIdx, blockY, decoratorBlock))
+                    {
+                        continue;
+                    }
 
-                    this->blocks[blockIdx] = decoratorBlock;
                     if (Blocks::getBlockData(decoratorBlock).stateKind == BlockStateKind::SURFACE_MOUNT)
                     {
                         this->blockStates.insert_or_assign(blockIdx, faceIdx);
