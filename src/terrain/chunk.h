@@ -155,9 +155,9 @@ struct SnowLayerData
     // Coverage ramps from none at a column's line to a continuous sheet this far above it, so snow
     // thins into patches downhill instead of ending at a hard edge
     static constexpr float fadeDepth = 6.f;
-    // Where cover is partial, hollows hold snow and ridges shed it. A column's hollowness is the mean
-    // terrain height on rings around it minus its own; this many blocks of it shifts coverage by
-    // hollowBias, scaled down to nothing where cover is none or complete.
+    // Where cover is partial, hollows hold snow and ridges shed it: this many blocks of
+    // Chunk::terrainHollowness_WS shifts coverage by hollowBias, scaled down to nothing where cover
+    // is none or complete.
     static constexpr float hollowScale = 4.f;
     static constexpr float hollowBias = 0.4f;
 
@@ -231,6 +231,8 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void buildTerrainAirMask();
+    // The structure neighbor containing a world XZ position, and that position within it
+    const Chunk* structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const;
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();

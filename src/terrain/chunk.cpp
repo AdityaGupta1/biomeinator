@@ -148,6 +148,17 @@ void Chunk::buildTerrainAirMask()
     }
 }
 
+const Chunk* Chunk::structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const
+{
+    const glm::ivec2 posChunk(MathUtil::floorDiv(posXZ_WS.x, chunkSizeXZ), MathUtil::floorDiv(posXZ_WS.y, chunkSizeXZ));
+    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
+    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
+    constexpr int sideLength = 2 * radius + 1;
+    outPosXZ_CS = posXZ_WS - posChunk * static_cast<int>(chunkSizeXZ);
+    return this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+}
+
 bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const
 {
     if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
@@ -155,16 +166,9 @@ bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> 
         return false;
     }
 
-    const glm::ivec2 posChunk(MathUtil::floorDiv(pos_WS.x, chunkSizeXZ), MathUtil::floorDiv(pos_WS.z, chunkSizeXZ));
-    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
-    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
-    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
-    constexpr int sideLength = 2 * radius + 1;
-    const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
-
-    const glm::ivec2 chunkOriginXZ_WS = posChunk * static_cast<int>(chunkSizeXZ);
-    const uint32_t blockIdx =
-        blockPosToIdx(glm::uvec3(pos_WS.x - chunkOriginXZ_WS.x, pos_WS.y, pos_WS.z - chunkOriginXZ_WS.y /*z*/));
+    glm::ivec2 posXZ_CS;
+    const Chunk* chunk = this->structureNeighborAt_WS(glm::ivec2(pos_WS.x, pos_WS.z), posXZ_CS);
+    const uint32_t blockIdx = blockPosToIdx(glm::uvec3(posXZ_CS.x, pos_WS.y, posXZ_CS.y /*z*/));
     const std::vector<uint64_t>& terrainMask = chunk->*mask;
     return (terrainMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
 }
@@ -229,18 +233,13 @@ float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
     // Water counts as ground at sea level, so a shoreline does not read as a ridge
     const auto groundHeightAt = [&](ivec2 samplePosXZ_WS, float& outHeight) -> bool
     {
-        const ivec2 sampleChunkPos(MathUtil::floorDiv(samplePosXZ_WS.x, static_cast<int>(chunkSizeXZ)),
-                                   MathUtil::floorDiv(samplePosXZ_WS.y, static_cast<int>(chunkSizeXZ)));
-        const ivec2 chunkOffset = sampleChunkPos - this->chunkPos;
-        constexpr int radius = static_cast<int>(structureMaxChunkRadius);
-        constexpr int sideLength = 2 * radius + 1;
-        const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+        ivec2 samplePos_CS;
+        const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
         // Imported neighbors keep no terrain heights
         if (chunk->terrainTopY.empty())
         {
             return false;
         }
-        const ivec2 samplePos_CS = samplePosXZ_WS - sampleChunkPos * static_cast<int>(chunkSizeXZ);
         const uint16_t topY = chunk->terrainTopY[samplePos_CS.x + chunkSizeXZ * samplePos_CS.y];
         if (topY == 0)
         {
@@ -285,10 +284,14 @@ void Chunk::placeSnowLayers()
         const uint baseBlockIdx = chunkSizeY * columnIdx;
 
         // Only the highest block in the column, so overhangs and cave mouths stay bare beneath it
-        uint topY = chunkSizeY - 2;
+        uint topY = chunkSizeY - 1;
         while (topY > 0 && this->blocks[baseBlockIdx + topY] == Block::AIR)
         {
             --topY;
+        }
+        if (topY == chunkSizeY - 1)
+        {
+            continue;
         }
 
         Block& topBlock = this->blocks[baseBlockIdx + topY];

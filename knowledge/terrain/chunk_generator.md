@@ -161,11 +161,13 @@ Constraints worth keeping:
   large dark basalt patches across mountain faces.
 - The gradient comes from the **sub-block surface height**, where terrain density crosses zero
   between the top block and the air above, not from `terrainTopY`. Whole-block heights quantize a
-  central difference to multiples of 0.5, which lands exactly on a 45° threshold and turns rock
+  central difference to multiples of 0.5, which land on or right next to a threshold and turn rock
   into isolated speckles.
 - It needs neighbor heights the stamp doesn't have yet, hence a separate pass. Neighbor chunks
-  generate concurrently, so border columns use a one-sided difference; on the smooth sub-block
-  surface that differs from the central one only by curvature, so no seam shows.
+  generate concurrently, so border columns use a one-sided difference. That differs from the
+  central one by the surface's curvature: negligible on open slopes, but at a ridge crest or valley
+  floor crossing a chunk border the one-sided slope is the full flank, which can leave a
+  one-column line of rock (or of missing layers) along the border.
 
 The cap doubles as the **treeline** for both placement paths: grid candidates are rejected in
 capped columns, and exposed-surface placement (Tianzi's pines and shrubs) skips a capped column's
@@ -190,6 +192,8 @@ One steep line could not do both. Forest's climate target is only slightly warme
 so a line low enough to reach tundra lowlands also buried most forest. Full snow stays
 concentrated on high, cold ground while layers are the prevalent cover. Tundra relies on this: its
 own top is plain grass, and its white look comes from layers turning covered grass into snowy grass.
+Grass becomes snowy grass only under a layer, so partial cover thins out instead of ending at a
+fixed band.
 
 - **Placed after structures, before decorators** (`Chunk::placeSnowLayers`), because canopies
   only exist once neighbors' trees are filled in. Generation can't see them, so it hands the pass
@@ -207,12 +211,14 @@ own top is plain grass, and its white look comes from layers turning covered gra
   blobs that read as obviously noise-driven). The same value is used for every block in a column,
   so a canopy's cover matches the ground under it.
 - **Terrain shapes partial cover.** Where coverage is partial, hollows gain cover and ridges lose
-  it, from the column's height relative to rings of terrain around it. The bias is weighted by
+  it (`Chunk::terrainHollowness_WS`). The bias is weighted by
   `4c(1-c)`, so fully covered tundra keeps its ridges white. The rings reach into neighbor chunks
   through the structure neighborhood, reading their `terrainTopY`, which is written once during
   generation and never again, so it is safe to read while neighbors fill structures; computing it
   from in-chunk heights alone would put seams on chunk borders. Water counts as ground at sea
-  level, or every shoreline would read as a ridge.
+  level, or every shoreline would read as a ridge. Imported neighbors keep no terrain heights and
+  are left out of the rings, so a chunk generated beside an imported one can differ slightly from
+  a full regeneration.
 
 **Sea ice** is placed in the top-block stamp rather than the layer pass, because only generation
 knows the water level and the `inland` coast field. Where cold-climate cover applies, the top
@@ -222,8 +228,6 @@ noise as snow cover, so the edge breaks into floes. Snow on the ice uses a narro
 shore, so the outer ice stays bare; because both draw against the same noise value and the snow
 band lies inside the ice band, snow never lands beyond the ice edge. Columns
 under ice still count as underwater for the grass and cap rules: only the surface freezes.
-- Layers replace the old fixed snowy-grass band below the cap: grass becomes snowy grass only
-  under a layer, so the transition thins out instead of ending at a stripe.
 
 ## 3D Noise Bounds Optimization
 

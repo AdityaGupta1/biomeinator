@@ -119,9 +119,16 @@ static FN::SmartNode<FN::Generator> fnSwampShore;
 inline constexpr float snowLineBaseY = 260.f;
 inline constexpr float snowLineTemperatureRange = 55.f;
 inline constexpr float snowLineNoiseAmplitude = 13.f;
-// Extra raise per unit of temperature above zero, shared by both lines. Warmth has to win
-// decisively: hot regimes (Mesa massifs, red desert mountains) are as tall as the relief makes
-// them, so a linear term that still lets cold columns snow low would also snow on hot peaks.
+// Raise per unit of dryness (negative humidity). Dry climates hold far less snow; this is what
+// keeps hot, dry Mesa and red desert highlands bare without special-casing their labels. It fades
+// out between these temperatures: cold dry ground (tundra, ice fields) keeps what little snow
+// falls, and lifting the line there left tundra bare.
+inline constexpr float snowLineAridityLift = 100.f;
+inline constexpr float snowLineAridityColdTemperature = -0.3f;
+inline constexpr float snowLineAridityWarmTemperature = 0.2f;
+// Extra raise per unit of temperature above zero, shared with the snow layer line below. Warmth
+// has to win decisively: hot regimes (Mesa massifs, red desert mountains) are as tall as the relief
+// makes them, so a linear term that still lets cold columns snow low would also snow on hot peaks.
 inline constexpr float snowLineWarmTemperatureLift = 250.f;
 // Snow layers have two sources, and a column is covered if either is. Altitude cover is a second,
 // lower line built from the same terms as the cap, so high ground whitens below the full cap.
@@ -149,13 +156,6 @@ inline constexpr float snowSteepGradient = 0.700f;
 // Steeper limit (tan 45 degrees) for snow layers, so the rock a too-steep cap exposes still
 // collects snow on its ledges
 inline constexpr float snowLayerSteepGradient = 1.0f;
-// Raise per unit of dryness (negative humidity). Dry climates hold far less snow; this is what
-// keeps hot, dry Mesa and red desert highlands bare without special-casing their labels. It fades
-// out between these temperatures: cold dry ground (tundra, ice fields) keeps what little snow
-// falls, and lifting the line there left tundra bare.
-inline constexpr float snowLineAridityLift = 100.f;
-inline constexpr float snowLineAridityColdTemperature = -0.3f;
-inline constexpr float snowLineAridityWarmTemperature = 0.2f;
 
 static FN::SmartNode<FN::Generator> fnSnowLine;
 static FN::SmartNode<FN::Generator> fnSnowLayerPatch;
@@ -877,8 +877,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             snowCappedArray[columnIdx] = 0; // scratch memory is not zeroed
             surfaceHeightArray[columnIdx] = -1.f;
             snowExposedRockArray[columnIdx] = Block::STONE;
-            this->snowLayers.lineY[columnIdx] = std::numeric_limits<float>::infinity();
-            this->snowLayers.coldCover[columnIdx] = 0.f;
 
             const ColumnShape& shape = columnShapes[columnIdx];
             const float terrainBaseHeight = shape.baseHeight;
@@ -1227,6 +1225,28 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 wasSolid = isSolid;
             }
 
+            // Snow lines depend only on climate and noise, so every column gets them, including ones
+            // whose top is a cave opening and which the layer pass still visits.
+            //
+            // The line comes from climate, not biome labels. Temperature lowers it in cold
+            // columns; aridity raises it in dry ones, as dry climates' real snow lines sit far
+            // higher, which keeps Mesa and red desert (both hot and dry) bare without naming
+            // them.
+            const float temperature = biomeNoiseGrids.temperature[columnIdx];
+            const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]) *
+                smoothstep(snowLineAridityColdTemperature, snowLineAridityWarmTemperature, temperature);
+            const auto climateLineY = [&](float baseY, float temperatureRange, float aridityLift)
+            {
+                return baseY + temperature * temperatureRange +
+                    max(temperature, 0.f) * snowLineWarmTemperatureLift + aridity * aridityLift +
+                    snowLineNoise[columnIdx] * snowLineNoiseAmplitude;
+            };
+            const float snowLineY = climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift);
+            this->snowLayers.lineY[columnIdx] =
+                climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift);
+            this->snowLayers.coldCover[columnIdx] = 1.f -
+                smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+
             if (topBlockY != 0)
             {
                 const float ledgeVegetation = hasTianziFormation ?
@@ -1269,25 +1289,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
                 // Snow cap. Underwater tops are left alone: the ocean floor of a cold column can
                 // sit above the line, and snow under water reads as a bug rather than as ice.
-                //
-                // The line comes from climate, not biome labels. Temperature lowers it in cold
-                // columns; aridity raises it in dry ones, as dry climates' real snow lines sit far
-                // higher, which keeps Mesa and red desert (both hot and dry) bare without naming
-                // them.
-                const float temperature = biomeNoiseGrids.temperature[columnIdx];
-                const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]) *
-                    smoothstep(snowLineAridityColdTemperature, snowLineAridityWarmTemperature, temperature);
-                const auto climateLineY = [&](float baseY, float temperatureRange, float aridityLift)
-                {
-                    return baseY + temperature * temperatureRange +
-                        max(temperature, 0.f) * snowLineWarmTemperatureLift + aridity * aridityLift +
-                        snowLineNoise[columnIdx] * snowLineNoiseAmplitude;
-                };
-                const float snowLineY = climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift);
-                this->snowLayers.lineY[columnIdx] =
-                    climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift);
-                this->snowLayers.coldCover[columnIdx] = 1.f -
-                    smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
                 if (topBlockUnderwater && this->blocks[baseBlockIdx + waterLevel] == Block::WATER_TOP)
                 {
                     // Drawn against the same patch noise as snow cover, so the ice edge breaks into floes.
@@ -1307,7 +1308,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 // What a too-steep cap exposes: the landform's own surface rock where one covers
                 // this column (terracotta band, Tianzi stratum, red sandstone), else plain stone.
                 // Not the voxel the fill loop left here: that carries cave-biome rock theming
-                // (basalt and the like), which the topsoil stamp always hides on main and which
+                // (basalt and the like), which the topsoil stamp always hides and which
                 // showed through steep mountain faces as large dark patches.
                 const Block landformRock = surfaceMaterials.rock(static_cast<int>(topBlockY));
                 snowExposedRockArray[columnIdx] = (landformRock != Block::AIR) ? landformRock : Block::STONE;
@@ -1399,12 +1400,12 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
     // Snow does not hold on steep ground, so capped columns whose surface gradient is steep get bare
     // rock instead, and terrain steeper still takes no snow layer. This needs every column's surface
-    // height, hence a pass after the fill loop
-    // rather than a test in the stamp. Neighbor chunks' heights are not available (they generate
-    // concurrently), so border columns fall back to a one-sided difference against their in-chunk
-    // neighbor. On the sub-block surface that differs from the central difference only by the
-    // surface's curvature, so no seam shows at chunk borders. Must run before structure placement,
-    // which treats capped columns as above the treeline whatever block they ended up with.
+    // height, hence a pass after the fill loop rather than a test in the stamp. Neighbor chunks'
+    // heights are not available (they generate concurrently), so border columns fall back to a
+    // one-sided difference against their in-chunk neighbor. That differs from the central difference
+    // by the surface's curvature, which is small on open slopes but not at ridge crests and valley
+    // floors. Must run before structure placement, which treats capped columns as above the
+    // treeline whatever block they ended up with.
     {
         const auto surfaceHeightAt = [&](int x, int z) -> float
         {
@@ -1417,9 +1418,18 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         // Central difference, or one-sided where a neighbor is missing
         const auto gradientAlong = [](float lowSide, float center, float highSide) -> float
         {
-            if (lowSide >= 0.f && highSide >= 0.f) return (highSide - lowSide) * 0.5f;
-            if (highSide >= 0.f) return highSide - center;
-            if (lowSide >= 0.f) return center - lowSide;
+            if (lowSide >= 0.f && highSide >= 0.f)
+            {
+                return (highSide - lowSide) * 0.5f;
+            }
+            if (highSide >= 0.f)
+            {
+                return highSide - center;
+            }
+            if (lowSide >= 0.f)
+            {
+                return center - lowSide;
+            }
             return 0.f;
         };
 
