@@ -371,7 +371,7 @@ struct ScreenshotRequest
     uint32_t height{ 0 };
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
-    bool useTestOutputPath{ false };
+    bool useRenderingTestOutputPath{ false };
 };
 
 // The back buffers and everything that has to match them exactly (PSO render target formats, the
@@ -440,7 +440,7 @@ struct RendererState
     GpuRadixSort gpuRadixSort;
 
     // -- Mode flags --
-    bool testMode{ false };
+    bool renderingTestMode{ false };
     bool headless{ false };
     bool voxelMode{ false };
     bool useSer{ false };

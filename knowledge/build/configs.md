@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-30_
 
 # Build Configurations
 
@@ -9,9 +9,12 @@ configuration that is both optimized and fully instrumented:
 cmake --build build --config RelWithDebInfo --target Biomeinator
 ```
 
-Output goes to `build/<Config>/`. `BiomeinatorTests` is the golden-image target and depends on
+Output goes to `build/<Config>/`. `BiomeinatorRenderingTests` is the rendering test target and depends on
 `Biomeinator`; `BiomeinatorUnitTests` is the independent CPU target registered with CTest. See
 [tests → unit_tests.md](../tests/unit_tests.md) for its build and run commands.
+Both are executable build targets: building them does not run the suites. Execute the binaries
+directly or use CTest; [tests → rendering_tests.md](../tests/rendering_tests.md) covers the shared
+CTest commands and rendering test prerequisites.
 
 | | Debug | RelWithDebInfo | Release |
 |---|---|---|---|

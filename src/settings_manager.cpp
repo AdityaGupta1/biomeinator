@@ -45,7 +45,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance", uint32_t, "0");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
-    ADD_OPTION("testOutput", "Test screenshot output path (*.png)", std::string, "");
+    ADD_OPTION("renderingTestOutput", "Rendering test screenshot output path (*.png)", std::string, "");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
@@ -145,12 +145,12 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         return { ParseArgsStatus::Help, options.help() };
     }
 
-    if (parseResult.contains("testOutput"))
+    if (parseResult.contains("renderingTestOutput"))
     {
-        const std::string& testOutputPath = parseResult["testOutput"].as<std::string>();
-        if (!testOutputPath.ends_with(".png"))
+        const std::string& renderingTestOutputPath = parseResult["renderingTestOutput"].as<std::string>();
+        if (!renderingTestOutputPath.ends_with(".png"))
         {
-            return { ParseArgsStatus::Error, "--testOutput must be a .png" };
+            return { ParseArgsStatus::Error, "--renderingTestOutput must be a .png" };
         }
     }
 
@@ -161,9 +161,9 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         {
             return { ParseArgsStatus::Error, "--perfOutput must be a .json" };
         }
-        if (parseResult.contains("testOutput"))
+        if (parseResult.contains("renderingTestOutput"))
         {
-            return { ParseArgsStatus::Error, "--perfOutput and --testOutput are mutually exclusive" };
+            return { ParseArgsStatus::Error, "--perfOutput and --renderingTestOutput are mutually exclusive" };
         }
     }
 
@@ -187,7 +187,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("sharcDebug", uint32_t);
         COPY_SETTING("maxPathDepth", uint32_t);
         COPY_SETTING("scene", std::string);
-        COPY_SETTING("testOutput", std::string);
+        COPY_SETTING("renderingTestOutput", std::string);
         COPY_SETTING("perfOutput", std::string);
         COPY_SETTING("perfWarmupFrames", uint32_t);
         COPY_SETTING("perfWarmupSeconds", float);
@@ -308,10 +308,10 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         parsedSettings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
-    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so golden
+    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so rendering test
     // screenshots are reproducible and perf measurements are not throttled; each of these can
     // still be overridden explicitly
-    const bool isParsedHeadless = !getString("testOutput").empty() || !getString("perfOutput").empty();
+    const bool isParsedHeadless = !getString("renderingTestOutput").empty() || !getString("perfOutput").empty();
     if (isParsedHeadless)
     {
         const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
@@ -420,9 +420,9 @@ void setWorldSeed(uint32_t value)
     settings["worldSeed"] = value;
 }
 
-bool isTestMode()
+bool isRenderingTestMode()
 {
-    return !getAsString("testOutput").empty();
+    return !getAsString("renderingTestOutput").empty();
 }
 
 bool isPerfMode()
@@ -432,7 +432,7 @@ bool isPerfMode()
 
 bool isHeadless()
 {
-    return isTestMode() || isPerfMode();
+    return isRenderingTestMode() || isPerfMode();
 }
 
 } // namespace SettingsManager

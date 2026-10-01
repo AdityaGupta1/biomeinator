@@ -1,4 +1,4 @@
-_Last edited: 2026-08-16_
+_Last edited: 2026-09-30_
 
 # Nsight Aftermath GPU crash dump instrumentation
 
@@ -70,7 +70,7 @@ and is scriptable for stress loops. The GUI is needed for shader source resoluti
 
 ## Reproducing a GPU fault
 
-The golden test runner builds its command line from `tests.json` and cannot inject extra
+The rendering test runner builds its command line from `tests.json` and cannot inject extra
 flags, so stress runs have to launch `Biomeinator.exe` directly with the same arguments the
 runner would use, plus `--aftermath=true`, and grep stderr for `fence wait timed out`.
 

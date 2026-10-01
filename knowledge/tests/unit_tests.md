@@ -1,9 +1,9 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-30_
 
 # CPU Unit Tests
 
 `BiomeinatorUnitTests` is the fast, CPU-only Catch2 target. It is deliberately independent of
-`Biomeinator` and the golden-image runner: changing a math helper or terrain rule should be
+`Biomeinator` and the rendering test runner: changing a math helper or terrain rule should be
 testable without linking the renderer, starting a D3D12 device, or producing shader output.
 CTest discovers each Catch2 case separately and gives every discovered case the `unit` label,
 so a single failure is visible by name and the suite can be selected without running GPU tests.
@@ -31,7 +31,9 @@ split-position normalization and large-coordinate precision, direction-basis ort
 frustum-plane symmetry. Keeping this math outside `Camera` avoids pulling D3D or renderer globals
 into the CPU-only target.
 
-Build and run the suite with:
+Building `BiomeinatorUnitTests` compiles the executable without executing its test cases.
+Launching `BiomeinatorUnitTests.exe` without arguments runs the complete suite; CTest discovers
+the cases separately so it can filter and report each one. Build and run the suite with:
 
 ```powershell
 cmake --build build --config RelWithDebInfo --target BiomeinatorUnitTests

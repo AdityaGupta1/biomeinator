@@ -48,8 +48,8 @@ void setWorldSeed(uint32_t value);
 // Visits every setting in unspecified order
 void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback);
 
-// Golden screenshot run: render, save --testOutput, exit
-bool isTestMode();
+// Rendering test run: render, save --renderingTestOutput, exit
+bool isRenderingTestMode();
 // Performance measurement run: warm up, measure, write --perfOutput, exit
 bool isPerfMode();
 // Either automated run: camera locked, GUI hidden, animation paused, vsync off (all as

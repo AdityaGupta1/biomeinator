@@ -442,15 +442,15 @@ if(BUILD_TESTING)
 endif()
 
 # ==================================================
-# BiomeinatorTests
+# BiomeinatorRenderingTests
 # ==================================================
 
-file(GLOB TESTS_SRC CONFIGURE_DEPENDS
+file(GLOB RENDERING_TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"
     "${SRC_DIR}/tests/*.h"
 )
 
-foreach(FILE IN LISTS TESTS_SRC)
+foreach(FILE IN LISTS RENDERING_TESTS_SRC)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
     string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
@@ -458,19 +458,50 @@ foreach(FILE IN LISTS TESTS_SRC)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(BiomeinatorTests ${TESTS_SRC})
-target_include_directories(BiomeinatorTests PRIVATE
+add_executable(BiomeinatorRenderingTests ${RENDERING_TESTS_SRC})
+target_include_directories(BiomeinatorRenderingTests PRIVATE
     ${SRC_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/json/include"
     "${EXT}/stb/include"
 )
-add_dependencies(BiomeinatorTests Biomeinator)
-target_compile_definitions(BiomeinatorTests PRIVATE
+add_dependencies(BiomeinatorRenderingTests Biomeinator)
+target_compile_definitions(BiomeinatorRenderingTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     BIOMEINATOR_EXE_PATH="$<TARGET_FILE:Biomeinator>"
 )
+
+if(BUILD_TESTING)
+    set(RENDERING_TEST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/tests/tests.json")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${RENDERING_TEST_MANIFEST}")
+
+    file(READ "${RENDERING_TEST_MANIFEST}" RENDERING_TEST_MANIFEST_JSON)
+    string(JSON RENDERING_TEST_COUNT LENGTH "${RENDERING_TEST_MANIFEST_JSON}" tests)
+
+    if(RENDERING_TEST_COUNT GREATER 0)
+        math(EXPR RENDERING_TEST_LAST "${RENDERING_TEST_COUNT} - 1")
+        set(RENDERING_TEST_NAMES)
+
+        foreach(INDEX RANGE 0 ${RENDERING_TEST_LAST})
+            string(JSON RENDERING_TEST_NAME GET "${RENDERING_TEST_MANIFEST_JSON}" tests ${INDEX} name)
+            if(RENDERING_TEST_NAME IN_LIST RENDERING_TEST_NAMES)
+                message(FATAL_ERROR "Duplicate rendering test name in ${RENDERING_TEST_MANIFEST}: ${RENDERING_TEST_NAME}")
+            endif()
+            list(APPEND RENDERING_TEST_NAMES "${RENDERING_TEST_NAME}")
+
+            add_test(
+                NAME "rendering::${RENDERING_TEST_NAME}"
+                COMMAND BiomeinatorRenderingTests --test "${RENDERING_TEST_NAME}"
+            )
+            set_tests_properties("rendering::${RENDERING_TEST_NAME}" PROPERTIES
+                LABELS "rendering"
+                RESOURCE_LOCK "biomeinator_gpu"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            )
+        endforeach()
+    endif()
+endif()
 
 # ==================================================
 # BiomeScanner

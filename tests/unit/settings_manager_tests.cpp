@@ -45,7 +45,7 @@ TEST_CASE("SettingsManager installs documented defaults", "[unit][settings_manag
     CHECK_FALSE(SettingsManager::getAsBool("voxelMode"));
     CHECK(SettingsManager::getAsUint("antialiasingMode") == static_cast<uint32_t>(AntialiasingMode::NONE));
     CHECK(SettingsManager::getWorldSeed() == 1738);
-    CHECK_FALSE(SettingsManager::isTestMode());
+    CHECK_FALSE(SettingsManager::isRenderingTestMode());
     CHECK_FALSE(SettingsManager::isPerfMode());
     CHECK_FALSE(SettingsManager::isHeadless());
 }
@@ -125,8 +125,8 @@ TEST_CASE("SettingsManager applies and permits overriding headless defaults", "[
 {
     SECTION("test runs receive deterministic defaults")
     {
-        requireSuccess({ "Biomeinator", "--testOutput=result.png" });
-        CHECK(SettingsManager::isTestMode());
+        requireSuccess({ "Biomeinator", "--renderingTestOutput=result.png" });
+        CHECK(SettingsManager::isRenderingTestMode());
         CHECK_FALSE(SettingsManager::isPerfMode());
         CHECK(SettingsManager::isHeadless());
         CHECK_FALSE(SettingsManager::getAsBool("sharc"));
@@ -145,7 +145,7 @@ TEST_CASE("SettingsManager applies and permits overriding headless defaults", "[
                          "--showGui=true",
                          "--animTimePaused=false",
                          "--useVsync=true" });
-        CHECK_FALSE(SettingsManager::isTestMode());
+        CHECK_FALSE(SettingsManager::isRenderingTestMode());
         CHECK(SettingsManager::isPerfMode());
         CHECK(SettingsManager::isHeadless());
         CHECK(SettingsManager::getAsBool("sharc"));
@@ -163,9 +163,9 @@ TEST_CASE("SettingsManager reports help and invalid command lines without exitin
     CHECK(help.message.find("Real-time path traced voxel engine") != std::string::npos);
 
     const std::vector<std::pair<std::vector<std::string>, std::string>> invalidCases{
-        { { "Biomeinator", "--testOutput=result.jpg" }, "--testOutput must be a .png" },
+        { { "Biomeinator", "--renderingTestOutput=result.jpg" }, "--renderingTestOutput must be a .png" },
         { { "Biomeinator", "--perfOutput=result.txt" }, "--perfOutput must be a .json" },
-        { { "Biomeinator", "--testOutput=result.png", "--perfOutput=result.json" }, "mutually exclusive" },
+        { { "Biomeinator", "--renderingTestOutput=result.png", "--perfOutput=result.json" }, "mutually exclusive" },
         { { "Biomeinator", "--samplingMode=3" }, "samplingMode" },
         { { "Biomeinator", "--antialiasingMode=3" }, "antialiasingMode" },
         { { "Biomeinator", "--tonemapping=4" }, "tonemapping" },

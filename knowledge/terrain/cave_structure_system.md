@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-30_
 
 # Cave Structure System
 
@@ -179,6 +179,6 @@ with cave structures already baked in, so this only matters for the overhang of 
 cave structure whose origin sits in an imported chunk but spills into a freshly-
 generated neighbor — that overhang is lost. Surface avoids this by serializing its
 list; cave structures accept the gap (decorative, and the case is rare). Voxel-
-mode golden tests load imported worlds, so they do **not** exercise cave-structure
+mode rendering tests load imported worlds, so they do **not** exercise cave-structure
 generation — regenerating those goldens means re-exporting the world dump (Ctrl+U)
 with current code.
