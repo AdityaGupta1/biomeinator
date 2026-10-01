@@ -40,7 +40,7 @@ RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFU
 bool isOrphanWaterBackfaceHit(const Payload payload)
 {
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || !bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ||
-        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+        getPayloadMedium(payload) == MEDIUM_WATER)
     {
         return false;
     }
@@ -62,14 +62,14 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
 float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
     const uint numInScatterSteps, const bool cloudScatter, inout float3 pathColor, out CloudResult cloud)
 {
-    const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
+    const uint medium = getPayloadMedium(payload);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && medium == MEDIUM_AIR;
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
     const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
     cloud = integrateClouds(origin_WS, dir, cloudState,
-        fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
+        fogEnabled ? volumeDistance : 0.f, (medium == MEDIUM_WATER) ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;
     if (fogEnabled)
@@ -218,7 +218,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
-        const bool hitWasWater = perFaceData.hasFlag(FACE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
             makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
 
@@ -340,10 +339,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (isPassthrough)
         {
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
-            if (hitWasWater)
-            {
-                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
-            }
+            transmitThroughFace(payload, perFaceData);
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfGeoNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
@@ -379,7 +375,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 // sample area lights
                 // ------------------------------
 
-                const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
+                const bool isUnderwater = getPayloadMedium(payload) == MEDIUM_WATER;
 
                 DirectLightingSample lightSample;
                 if (useRtsl)
@@ -501,9 +497,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfShadingNor_WS);
             }
 
-            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f) // apply only for rays that will transmit through the water
+            if (dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f)
             {
-                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                transmitThroughFace(payload, perFaceData);
             }
 
             if (pathDepth == 0 && !useAnalyticAlbedoGuides && !useDiffuseMaterialAlbedo)
@@ -528,7 +524,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
-        payload.flags &= PAYLOAD_FLAG_UNDERWATER; // reset all payload flags except PAYLOAD_FLAG_UNDERWATER
+        payload.flags &= PAYLOAD_MEDIUM_MASK; // reset all payload flags except the medium
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
 #if SHARC_QUERY

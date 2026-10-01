@@ -42,6 +42,13 @@ static const std::unordered_map<std::string, BlockType> blockTypesByName = {
     { "solid", BlockType::SOLID },
     { "transparent_cutout", BlockType::TRANSPARENT_CUTOUT },
     { "glass", BlockType::GLASS },
+    { "scattering", BlockType::SCATTERING },
+};
+
+static const std::unordered_map<std::string, uint8_t> mediaByName = {
+    { "water", MEDIUM_WATER },
+    { "ice", MEDIUM_ICE },
+    { "glass", MEDIUM_GLASS },
 };
 
 static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
@@ -162,6 +169,12 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
         data.randomJitter = blockJson.value("randomJitter", false);
+        if (blockJson.contains("medium"))
+        {
+            data.medium = parseNamedValue(mediaByName, blockJson["medium"], "medium");
+        }
+        if ((data.type == BlockType::WATER || isVolumeType(data.type)) != (data.medium != MEDIUM_AIR))
+            throw std::runtime_error("water, glass and scattering blocks need a medium; other types must not set one");
         if (blockJson.contains("blockState"))
         {
             data.stateKind = parseNamedValue(blockStateKindsByName, blockJson["blockState"], "blockState");

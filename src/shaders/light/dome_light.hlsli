@@ -93,9 +93,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     // Occlusion-only ray: the candidate handling still runs on non-opaque geometry, preserving
     // passthrough tint and water entry/exit tracking for absorption.
     Payload domeLightPayload;
-    domeLightPayload.flags =
-        (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
-        (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
+    domeLightPayload.flags = canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     domeLightPayload.rng = rng;
     domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;

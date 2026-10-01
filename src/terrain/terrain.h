@@ -38,7 +38,8 @@ struct StreamingStats
 };
 StreamingStats getStreamingStats();
 
-bool isCameraUnderwater();
+// MEDIUM_* of the cell the camera is in
+uint32_t getCameraMedium();
 
 // Biome of the camera's column from the loaded chunk's per-column biomes (jittered, exactly what
 // generated). False while the camera's chunk isn't loaded yet.

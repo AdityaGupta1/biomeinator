@@ -117,9 +117,7 @@ bool traceToLight(const float3 surfPos_WS,
     }
 
     Payload lightPayload;
-    lightPayload.flags =
-        (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
-        (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
+    lightPayload.flags = canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     lightPayload.rng = rng;
     lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;

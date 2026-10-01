@@ -7,8 +7,7 @@
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
-
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
+#include "materials/media.hlsli"
 
 float3 computeWaterAbsorption(const float dist)
 {
@@ -43,26 +42,26 @@ float getSegmentVolumeDistance(const Payload payload, const float3 rayOrigin, co
         : getDistanceToVoxelBounds(rayOrigin, rayDir);
 }
 
-void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
+// A path transmitting through a medium boundary enters the medium on the face's far side. Thin sheets
+// (foliage, alpha passthrough) have the same medium on both sides and leave it unchanged.
+void transmitThroughFace(inout Payload payload, const PerFaceData perFaceData)
 {
-    if (wasBackfaceHit)
+    if (perFaceData.isMediumBoundary())
     {
-        payload.flags &= ~PAYLOAD_FLAG_UNDERWATER;
-    }
-    else
-    {
-        payload.flags |= PAYLOAD_FLAG_UNDERWATER;
+        const bool wasBackfaceHit = bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT);
+        setPayloadMedium(payload, wasBackfaceHit ? perFaceData.getFrontMedium() : perFaceData.getBackMedium());
     }
 }
 
 float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, const float3 rayDir)
 {
-    if (!bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    const uint medium = getPayloadMedium(payload);
+    if (medium == MEDIUM_AIR)
     {
         return float3(1.f, 1.f, 1.f);
     }
 
-    return computeWaterAbsorption(getSegmentVolumeDistance(payload, rayOrigin, rayDir));
+    return exp(-mediumSigmaAs[medium] * getSegmentVolumeDistance(payload, rayOrigin, rayDir));
 }
 
 float3 computePassthroughAbsorption(const Payload payload, const float rayEndT)

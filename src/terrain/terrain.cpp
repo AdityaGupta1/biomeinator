@@ -195,7 +195,7 @@ void setDirty()
 }
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
-static bool cameraUnderwater = false;
+static uint32_t cameraMedium = MEDIUM_AIR;
 static Biome cameraBiome = Biome::OCEAN;
 static bool cameraBiomeValid = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
@@ -340,7 +340,7 @@ void update(ToFreeList& toFreeList)
     scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);
 
     CpuProfiler::beginScope("chunk scan");
-    cameraUnderwater = false;
+    cameraMedium = MEDIUM_AIR;
     cameraBiomeValid = false;
     {
         const glm::ivec2 cameraChunkPos =
@@ -371,10 +371,9 @@ void update(ToFreeList& toFreeList)
                     };
 
                     Block cameraBlock;
-                    const bool blockIsWater = cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
-                                              Blocks::getBlockData(cameraBlock).type == BlockType::WATER;
-                    if (blockIsWater)
+                    if (cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock))
                     {
+                        cameraMedium = Blocks::getBlockData(cameraBlock).medium;
                         if (cameraBlock == Block::WATER_TOP)
                         {
                             const glm::vec3 cameraPosFloat_WS = camera.getPosFloat_WS();
@@ -383,11 +382,10 @@ void update(ToFreeList& toFreeList)
                                     glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z),
                                     glm::vec2(cameraPosFloat_WS.x, cameraPosFloat_WS.z),
                                     Renderer::getWaveTime());
-                            cameraUnderwater = cameraPosFloat_WS.y < surfaceY;
-                        }
-                        else
-                        {
-                            cameraUnderwater = true;
+                            if (cameraPosFloat_WS.y >= surfaceY)
+                            {
+                                cameraMedium = MEDIUM_AIR;
+                            }
                         }
                     }
                 }
@@ -523,7 +521,8 @@ void update(ToFreeList& toFreeList)
 
         Instance* terrainInstance = scene->requestNewInstance(toFreeList);
         Instance* waterInstance = scene->requestNewInstance(toFreeList);
-        chunk->setInstances(terrainInstance, waterInstance);
+        Instance* waterlineInstance = scene->requestNewInstance(toFreeList);
+        chunk->setInstances(terrainInstance, waterInstance, waterlineInstance);
         tasksToEnqueue.push_back({ task_createInstances, chunk });
     }
 
@@ -579,10 +578,12 @@ void update(ToFreeList& toFreeList)
 
         chunk->cleanUnusedInstances(toFreeList);
 
-        Instance* waterInstance = chunk->getWaterInstance();
-        if (waterInstance != nullptr)
+        for (Instance* instance : chunk->getDeformableInstances())
         {
-            scene->markInstanceReadyForBlasBuild(waterInstance);
+            if (instance != nullptr)
+            {
+                scene->markInstanceReadyForBlasBuild(instance);
+            }
         }
     }
 
@@ -1396,7 +1397,7 @@ static void resetTerrainState()
     tasksToEnqueue.clear();
     thisFrameTasks.clear();
     lastChunkPos = { INT_MAX, INT_MAX };
-    cameraUnderwater = false;
+    cameraMedium = MEDIUM_AIR;
     cameraBiomeValid = false;
     dirty.store(true, std::memory_order_release);
     expectedImportedChunks.store(0, std::memory_order_relaxed);
@@ -1470,9 +1471,9 @@ void shutdown()
     TerrainOmm::reset();
 }
 
-bool isCameraUnderwater()
+uint32_t getCameraMedium()
 {
-    return cameraUnderwater;
+    return cameraMedium;
 }
 
 bool tryGetCameraBiome(Biome& outBiome)

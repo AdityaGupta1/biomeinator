@@ -1,4 +1,5 @@
 {
     "type": "water",
-    "shape": "liquid_top"
+    "shape": "liquid_top",
+    "medium": "water"
 }

@@ -1,3 +1,5 @@
 {
-    "textures": "ice"
+    "textures": "ice",
+    "type": "scattering",
+    "medium": "ice"
 }

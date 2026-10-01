@@ -8,6 +8,7 @@
 
 #include "common/dispatch.hlsli"
 #include "common/water_waves.hlsli"
+#include "util/packing.hlsli"
 
 // One dispatch covers every animated instance: thread i is vertex i of the concatenated
 // instance vertex ranges and finds its instance by binary search on firstVert
@@ -60,6 +61,13 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const float3 restPos_WS = float3(vert.pos_OS.x, restY, vert.pos_OS.z) + float3(instance.transformOffset);
     const float fade = waveFade(restPos_WS, waveFadeParams) * instance.waveScale;
-    vert.pos_OS.y = restY + waveHeight(restPos_WS.xz, waveTime) * fade;
+    const float displacement = waveHeight(restPos_WS.xz, waveTime) * fade;
+    vert.pos_OS.y = restY + displacement;
+    // Side faces run v = 0 at their cell's top edge; following the moved vertex keeps a textured side face
+    // (a waterline band) still in world space instead of stretching it
+    if (abs(octDecode(vert.packedNor).y) < 0.5f)
+    {
+        vert.uv.y = (1.f - 0.875f) - displacement;
+    }
     vertsOut[vertIdx] = vert;
 }

@@ -7,6 +7,7 @@
 #include "../rendering/common/common_registers.h"
 
 #include "common/payload.hlsli"
+#include "materials/media.hlsli"
 #include "util/ggx.hlsli"
 #include "util/sampling.hlsli"
 
@@ -117,8 +118,6 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
     return emissiveColor * material.emissiveStrength * texCtx.proceduralColor;
 }
 
-static const float glassIor = 1.55f; // quartz-ish
-
 float getMaterialRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     // Packed-aux terrain resolves roughness in its surface override. glTF uses G of a
@@ -128,18 +127,39 @@ float getMaterialRoughness(const Material material, const float2 uv, const TexSa
         : material.roughness;
 }
 
+float getPackedAuxRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    return (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
+        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
+        : 0.f;
+}
+
 // Turns the hit's material into glass, for faces flagged FACE_FLAG_IS_GLASS. Terrain shares
 // one diffuse material across every block, so glass is a per-triangle override rather than its own
 // material and instance; the base color texture becomes the transmission tint and the packed aux
-// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric.
+// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric. The IOR
+// comes from the media on the face's two sides.
 void applyGlassMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     material.flags = (material.flags & ~MATERIAL_FLAG_DIFFUSE) | MATERIAL_FLAGS_GLOSSY;
     material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
-    material.roughness = (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
-        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
-        : 0.f;
-    material.ior = glassIor;
+    material.roughness = getPackedAuxRoughness(material, uv, texCtx);
+}
+
+// Share of the light entering a scattering medium that leaves through the far side rather than
+// back out of the side it entered
+static const float scatteringDiffuseTransmission = 0.85f;
+
+// Turns the hit's material into a surface standing in for a scattering medium (ice), for faces
+// flagged FACE_FLAG_IS_SCATTERING: light that gets past the untinted glossy reflection scatters
+// inside and leaves through either side, approximated by a diffuse lobe that transmits part of it.
+// Roughness comes from the packed aux b channel, as for glass.
+void applyScatteringMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION;
+    material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
+    material.roughness = getPackedAuxRoughness(material, uv, texCtx);
+    material.diffuseTransmission = scatteringDiffuseTransmission;
 }
 
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
@@ -584,15 +604,19 @@ void scatterRayCone(inout RayCone cone, const Material material, const BsdfSampl
 // Thin diffuse transmission fraction applied to FACE_FLAG_DIFFUSE_TRANSMISSION hits
 static const float foliageDiffuseTransmission = 0.4f;
 
-Material getMaterialFromPayload(const Payload payload, const uint triangleFlags, const TexSampleCtx texCtx)
+Material getMaterialFromPayload(const Payload payload, const PerFaceData perFaceData, const TexSampleCtx texCtx)
 {
     Material material = materials[payload.materialIdx];
     // Resolve surface overrides before orienting IOR for this particular hit.
-    if (bool(triangleFlags & FACE_FLAG_IS_GLASS))
+    if (perFaceData.hasFlag(FACE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    if (perFaceData.hasFlag(FACE_FLAG_IS_SCATTERING))
+        applyScatteringMaterial(material, payload.hitInfo.uv, texCtx);
     material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
-    if (bool(triangleFlags & FACE_FLAG_DIFFUSE_TRANSMISSION))
+    if (perFaceData.hasFlag(FACE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
+    if (perFaceData.isMediumBoundary())
+        material.ior = mediumIors[perFaceData.getBackMedium()] / mediumIors[perFaceData.getFrontMedium()];
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {

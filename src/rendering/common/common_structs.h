@@ -303,6 +303,23 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
 #define FACE_FLAG_NORMAL_MAP (1 << 6)
+// Faces of a scattering medium, approximated as a surface: glossy reflection over a diffuse lobe
+// that transmits part of its light (see applyScatteringMaterial)
+#define FACE_FLAG_IS_SCATTERING (1 << 7)
+
+// Media that fill voxel cells. Each terrain face records the medium in front of it (the side its
+// normal points to) and behind it; equal media mean the face is not a medium boundary.
+#define MEDIUM_AIR 0
+#define MEDIUM_WATER 1
+#define MEDIUM_ICE 2
+#define MEDIUM_GLASS 3
+#define MEDIUM_COUNT 4
+
+#define FACE_MEDIUM_BITS 3
+#define FACE_MEDIUM_MASK ((1u << FACE_MEDIUM_BITS) - 1u)
+#define FACE_MEDIUM_FRONT_SHIFT 8
+#define FACE_MEDIUM_BACK_SHIFT (FACE_MEDIUM_FRONT_SHIFT + FACE_MEDIUM_BITS)
+#define FACE_MEDIA_FLAGS(front, back) (((front) << FACE_MEDIUM_FRONT_SHIFT) | ((back) << FACE_MEDIUM_BACK_SHIFT))
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)
@@ -331,6 +348,21 @@ public:
         return bool(packedFlagsAndSlice & flag);
     }
 
+    uint getFrontMedium()
+    {
+        return (packedFlagsAndSlice >> FACE_MEDIUM_FRONT_SHIFT) & FACE_MEDIUM_MASK;
+    }
+
+    uint getBackMedium()
+    {
+        return (packedFlagsAndSlice >> FACE_MEDIUM_BACK_SHIFT) & FACE_MEDIUM_MASK;
+    }
+
+    bool isMediumBoundary()
+    {
+        return getFrontMedium() != getBackMedium();
+    }
+
     uint getTexArraySliceIdx()
     {
         return packedFlagsAndSlice >> FACE_FLAGS_BITS;
@@ -339,6 +371,8 @@ public:
 
 #ifdef __cplusplus
 static_assert(sizeof(PerFaceData) == 8, "PerFaceData must be 8 bytes for parity with the HLSL layout");
+static_assert(FACE_MEDIUM_BACK_SHIFT + FACE_MEDIUM_BITS <= FACE_FLAGS_BITS, "Face media must fit in the face flags");
+static_assert(MEDIUM_COUNT <= (1u << FACE_MEDIUM_BITS), "Medium ids must fit in FACE_MEDIUM_BITS");
 #endif
 
 #ifdef __cplusplus
