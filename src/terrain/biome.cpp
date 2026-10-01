@@ -271,6 +271,7 @@ void init()
                     { StructureType::LARGE_OAK_TREE, 45.f },
                     { StructureType::OAK_TREE, 35.f },
                     { StructureType::BIRCH_TREE, 20.f },
+                    { StructureType::GIANT_OAK_TREE, 6.f },
                 },
                 12,
                 5,
@@ -331,6 +332,31 @@ void init()
         data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::FIREWEED_BOTTOM, 1.5f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::AIR, 15.f);
+    }
+
+    // BIRCH_FOREST
+    {
+        BIOME_INIT(BIRCH_FOREST, "birch forest");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.3f, .humidity = 0.05f };
+        data.grassTint = glmUtil::colorFromHex("#79b356");
+        data.structureGens = {
+            {
+                {
+                    { StructureType::AUTUMN_BIRCH_TREE, 65.f },
+                    { StructureType::TALL_AUTUMN_BIRCH_TREE, 35.f },
+                },
+                7,
+                2,
+            },
+        };
+        data.decorator.addEntry(Block::SHORT_GRASS, 10.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::FERN, 3.f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::WOOD_ANEMONE, 1.5f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::LILY_OF_THE_VALLEY, 1.5f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::LUPINE_BOTTOM, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 14.f);
     }
 
     // ==================================================

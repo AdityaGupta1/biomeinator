@@ -52,6 +52,7 @@ enum class Biome : uint8_t
     OLD_GROWTH_FOREST,
     CHERRY_GROVE,
     TAIGA,
+    BIRCH_FOREST,
 
     COUNT
 };

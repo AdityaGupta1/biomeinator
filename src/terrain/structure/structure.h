@@ -28,6 +28,9 @@ enum class StructureType : uint8_t
     CHERRY_TREE,
     BOREAL_PINE_TREE,
     BOREAL_BIRCH_TREE,
+    AUTUMN_BIRCH_TREE,
+    TALL_AUTUMN_BIRCH_TREE,
+    GIANT_OAK_TREE,
 
     COUNT
 };
