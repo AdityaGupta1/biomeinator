@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-23_
 
 # Materials and Textures
 
@@ -31,21 +31,6 @@ Texture upload requires a command list (for `CopyTextureRegion`), but textures m
 `PendingTexture` stores `sliceMipData[slice][mip]` + `arraySize`. Subresource index is computed via `D3D12CalcSubresource(mip, slice, ...)`. Row pitch is aligned to `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` per row; each mip start in the upload buffer is aligned to `D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT`.
 
 The glTF loader uses the single-mip overload (no mip generation). The terrain material system (`terrain_materials_helpers.h`) loads one 16×16 PNG per texture array slice from `assets/blocks/textures/` (slice order from `Blocks::getTextureNames()`) and generates each slice's mip chain CPU-side.
-
-Terrain palette adjustments live in the optional `assets/blocks/textures/color_adjustments.json`,
-keyed by texture name. Saturation blends toward linear luminance before an RGB multiplier;
-both operate in linear light. Baking this into the color slice **before** mip generation keeps
-the palette consistent at every distance without shader work or altering the source PNGs.
-Unlisted textures, alpha, normal maps and aux data are untouched. The red sand/sandstone family
-shares an earthier palette so exposed sandstone does not turn salmon-colored below the sand;
-red terracotta is desaturated separately to soften its contrast with the other strata.
-Plain terracotta is graded from the source's yellow ochre toward a muted reddish brown so it
-can provide the bulk of Mesa's bedding alongside orange terracotta. Keep the source pixels
-intact; the color adjustment applies consistently to all faces and mip levels.
-Red sandstone copies the existing sandstone side grain and its shared top/bottom grain,
-with its own color multipliers retaining the warm red-desert palette. This removes the old
-masonry pattern without repainting or changing ordinary sandstone. Keep both the copied
-grain and its tint settings together when replacing these assets.
 
 ## Texture2D vs Texture2DArray
 

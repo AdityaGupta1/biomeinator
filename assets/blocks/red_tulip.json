@@ -1,0 +1,7 @@
+{
+    "textures": "red_tulip",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "randomJitter": true,
+    "translucent": true
+}

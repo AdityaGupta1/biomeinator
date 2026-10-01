@@ -1,10 +1,10 @@
-_Last edited: 2026-05-15_
+_Last edited: 2026-09-23_
 
 # GPU Radix Sort
 
 Wraps the external GPUSorting library (`external/GPUSorting`, MIT) to provide an
-in-place sort of 32-bit uint keys + 32-bit uint values, ascending. Intended
-first caller is the Stage 2 light tree build (RTSL, see `plans/plan.md`); future
+in-place sort of 32-bit uint keys + 32-bit uint values, ascending. Its first
+caller is the Stage 2 light tree build (see [light_tree.md](light_tree.md)); future
 Morton/depth-sorting passes can reuse it.
 
 ## Why GPUSorting / DeviceRadixSort

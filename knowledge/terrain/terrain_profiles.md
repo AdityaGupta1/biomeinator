@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # Terrain profiles and local formations
 
@@ -152,14 +152,16 @@ overwrite their neighbors. Adjacent accents of the same color can still merge vi
 Two scales of seeded XZ noise displace the whole stack by up to four extra blocks,
 preserving layer thickness and the deep-rock boundary. Keep the material frequency
 independent of terrace spacing: many strata should cross a single escarpment. Irregular seeded terrace intervals, differing ramp
-widths and residual shelf slope avoid a stack of identical, flat treads. Terracotta,
-red sand/sandstone textures were copied from the user's GoodVibes block directory
-(`C:/Users/SDOAJ/code/textures/GoodVibes/minecraft/textures/block`). Tianzi's selected T03/T05/T07
-textures provide the strata and T06 supplies darker patches. Quartz uses Q01 throughout
-the crystal, replacing the bordered GoodVibes quartz faces. Source mappings are kept in the texture
-folder's `formation_sources.md`; Yuushya Q01/T07 remain under `textures/yuushya/` with that
-folder's separate attribution and license. Tianzi's trees/shrubs use the existing pine log
-and leaf assets; their generators obey the clipping-independent RNG contract.
+widths and residual shelf slope avoid a stack of identical, flat treads.
+The red-desert and Mesa textures are recolored in the PNGs themselves. Red sand and red
+sandstone share an earthier palette so exposed sandstone does not turn salmon below the sand;
+red sandstone is the ordinary sandstone grain recolored, so replacing the sandstone art means
+re-deriving it. Plain terracotta was shifted from yellow ochre to a muted reddish brown so it
+can carry most of Mesa's bedding beside orange terracotta, and red terracotta is desaturated to
+soften its contrast with the other strata. The Yuushya textures stay under `textures/yuushya/`
+because their noncommercial license keeps them out of the project's MIT terms.
+Tianzi's trees/shrubs use the existing pine log and leaf assets; their generators obey the
+clipping-independent RNG contract.
 Tianzi's broad ledges, summits and valley floors receive soil, while steep faces retain
 exposed rock. Lower shelves beneath an overhang can also acquire a grass cap when there is
 enough open headroom above the shared ground. Do not scatter soil over tiny steps on the

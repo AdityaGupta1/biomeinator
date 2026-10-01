@@ -1,0 +1,7 @@
+{
+    "textures": "wood_anemone",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "randomJitter": true,
+    "translucent": true
+}

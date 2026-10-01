@@ -1,8 +1,8 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-23_
 
 # Common CPU/GPU Structs
 
-`src/rendering/common/` — headers shared verbatim between C++ and HLSL. This is the primary mechanism for passing data from the CPU to shaders. See [settings → settings_manager.md](../../../settings/settings_manager.md) for how runtime settings feed into these params, and [rendering → param_blocks.md](../../../rendering/param_blocks.md) for how they are uploaded each frame.
+`src/rendering/common/` — headers shared verbatim between C++ and HLSL. This is the primary mechanism for passing data from the CPU to shaders. See [settings → settings_manager.md](../settings/settings_manager.md) for how runtime settings feed into these params, and [rendering → param_blocks.md](../rendering/param_blocks.md) for how they are uploaded each frame.
 
 The headers use preprocessor macros to alias HLSL types to DirectX math types when compiled as C++:
 ```cpp

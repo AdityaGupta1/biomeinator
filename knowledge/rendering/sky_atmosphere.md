@@ -1,9 +1,9 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-23_
 
 # Sky Atmosphere (PBR sky)
 
-Physically based sky per Hillaire's EGSR 2020 technique (see `plans/pbr-sky.md` for the full
-plan and paper references). `src/rendering/sky_atmosphere.cpp` owns three LUT textures and
+Physically based sky per Hillaire's EGSR 2020 technique ("A Scalable and Production Ready Sky
+and Atmosphere Rendering Technique"). `src/rendering/sky_atmosphere.cpp` owns three LUT textures and
 their compute passes; `shaders/sky/atmosphere.hlsli` holds the shared constants and
 parameterizations; `shaders/sky/sky_lighting.hlsli` consumes the transmittance and sky-view
 LUTs (the multi-scattering LUT is only read during sky-view generation).
