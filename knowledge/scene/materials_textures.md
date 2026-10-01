@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Materials and Textures
 
@@ -63,7 +63,7 @@ controls height range in texels (default 1, zero is flat); exponent controls the
 makes bright areas recessed; `--face top|side|bottom` selects a single face's texture.
 Edges wrap for tiling, with no heightfield blur. Current asset settings are:
 
-- `stone --strength 1 --exponent 2`
+- `stone --strength 0.5 --exponent 2`
 - `marble --strength 1 --exponent 2`
 - `basalt --strength 2 --exponent 2`
 - `cracked_basalt --strength 2 --exponent 2`
