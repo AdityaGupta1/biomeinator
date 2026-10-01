@@ -87,7 +87,7 @@ struct BiomeData
     ClimateTarget climate{};
     TopBlocks topBlocks{};
     glm::vec3 grassTint{ 1.f, 1.f, 1.f }; // sRGB
-    // Region v8 identifies surface-placement gens by biome and index; preserve existing indices.
+    // Region v7 identifies surface-placement gens by biome and index; preserve existing indices.
     std::vector<StructureGen> structureGens{};
     Decorator decorator{};
 };

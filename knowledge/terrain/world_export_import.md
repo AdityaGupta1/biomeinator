@@ -6,10 +6,10 @@ _Last edited: 2026-09-23_
 
 ## Generation inputs and decoding without live pointers
 
-Region v7 preserves original pre-structure terrain masks and ordered cave candidates,
-in addition to final blocks and the existing data. Fresh neighbors consult these
-inputs when growing cave structures and placing decorators. Rebuilding masks from
-decorated blocks changes that generation; sorting either candidate list changes
+Region v7 preserves original pre-structure terrain masks and ordered cave and
+exposed-surface candidates, in addition to final blocks and the existing data.
+Fresh neighbors use these inputs when placing structures and decorators. Rebuilding
+masks from decorated blocks changes generation; reordering candidates changes
 structure precedence. Imported v7 chunks therefore retain both masks and candidate
 order exactly. The v5/v6 readers keep the historical approximations (masks rebuilt
 from final blocks and no cave candidates), acceptable for the bounded golden worlds.
@@ -17,13 +17,13 @@ Re-exporting those legacy chunks retains the approximations; a format upgrade
 cannot recover their missing original terrain. Exactness applies to freshly generated
 worlds saved with all their generation inputs and subsequent round trips of that data.
 
-Region v8 also preserves ordered exposed-surface placement candidates, including
-their priority and headroom. Saving accepted trees alone loses rejected competitors
-that suppress trees across an imported boundary. Grid structures remain separate so
-fresh neighbors fill grid structures before resolving exposed-surface candidates,
+Exposed-surface placement candidates retain their priority and headroom.
+Saving accepted trees alone loses rejected competitors that suppress trees across
+an imported boundary. Grid structures remain separate so fresh neighbors fill
+grid structures before resolving exposed-surface candidates,
 just as uninterrupted generation does. Generator pointers are encoded as biome/index
 pairs and rebound to the immutable biome configuration on read; existing generator
-indices must remain stable. v5-v7 have no exposed-surface candidates, so they retain
+indices must remain stable. v5/v6 have no exposed-surface candidates, so they retain
 their saved blocks without recovering these missing inputs.
 
 `RegionFile` returns chunk coordinates and owned serialized data, without constructing
@@ -121,7 +121,7 @@ All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && wo
 ## Structure count bound
 
 The decoder permits larger structure lists from v5/v6 exports containing accepted
-cliff-surface trees. v8 keeps grid structures and exposed-surface candidates separate.
+cliff-surface trees. v7 keeps grid structures and exposed-surface candidates separate.
 Counts are bounded before decompression and size arithmetic; release builds reject
 oversized payloads as well. These are defensive limits, not typical population sizes
 or proofs about placement density, since separate generators can share an anchor.

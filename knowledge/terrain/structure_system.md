@@ -65,7 +65,7 @@ the candidates after filling, or read another chunk's in-progress accepted list.
 an assertion enforces it when a rule is used. Opting a much wider structure into this mode
 may require expanding that dependency halo, not just increasing its spacing values.
 
-Region v8 saves all exposed-surface candidates, including rejected competitors, alongside
+Region v7 saves all exposed-surface candidates, including rejected competitors, alongside
 the original terrain masks. Fresh neighbors need those competitors to reproduce spacing
 at an imported boundary. Grid structures remain a separate ordered list to preserve fill
 precedence. Generator pointers are serialized as biome/index pairs; preserve existing

@@ -21,10 +21,9 @@ namespace RegionFile
 namespace
 {
 constexpr uint32_t magic = 0x42494F4D;
-constexpr uint16_t currentVersion = 8;
+constexpr uint16_t currentVersion = 7;
 constexpr uint16_t blockStatesVersion = 6;
 constexpr uint16_t generationDataVersion = 7;
-constexpr uint16_t surfacePlacementVersion = 8;
 constexpr uint16_t oldestVersion = 5;
 constexpr size_t regionChunkCount = regionSideLength * regionSideLength;
 constexpr size_t blockBiomeBytes = numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome);
@@ -47,13 +46,13 @@ static_assert(static_cast<size_t>(CaveStructureType::COUNT) <= 256);
 
 // Little-endian Windows format. Region header: magic(u32), version(u16), x/z(i32),
 // chunk count(u16). v5 chunk header: local index(u16), blocks/structures LZ4 sizes(u32).
-// v6 adds block-state count(u32). v7 adds generation LZ4 size and cave count(u32).
-// Payload order: LZ4(blocks + biomes), LZ4(surface candidates), packed block states,
-// then v7 LZ4(air mask + solid-cube mask + ordered cave candidates).
-// Surface candidate payload starts with its count(u32). Each candidate's type/position
+// v6 adds block-state count(u32). v7 adds generation LZ4 size, cave count, and
+// surface-placement count (all u32).
+// Payload order: LZ4(blocks + biomes), LZ4(grid/legacy structures), packed block states,
+// then v7 LZ4(air mask + solid-cube mask + ordered cave and surface-placement candidates).
+// The structure payload starts with its count(u32). Each structure's type/position
 // is packed [type:8, x:4, y:9, z:4, unused:7]; cave records append availableHeight(u32).
-// v8 adds a surface-placement count(u32) to the header and appends ordered candidates
-// to the generation payload: position (type=0), gen (biome:8, index:24), priority,
+// Surface-placement candidates append position (type=0), gen (biome:8, index:24), priority,
 // headroom (all u32). Rejected candidates also affect neighboring placement decisions.
 
 void require(bool condition, const char* message)
@@ -386,7 +385,7 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
             const uint32_t stateCount = version >= blockStatesVersion ? reader.value<uint32_t>() : 0;
             const uint32_t compressedGeneration = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
             const uint32_t caveCount = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
-            const uint32_t surfaceCount = version >= surfacePlacementVersion ? reader.value<uint32_t>() : 0;
+            const uint32_t surfaceCount = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
             require(stateCount <= numChunkBlocks && caveCount <= maxCaveStructures &&
                     surfaceCount <= maxSurfaceCandidates, "invalid chunk payload count");
 
