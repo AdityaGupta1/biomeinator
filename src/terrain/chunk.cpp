@@ -109,7 +109,7 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
@@ -119,8 +119,14 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->snow.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+        this->buildTerrainAirMask();
     }
-    this->buildTerrainAirMask();
+    else if (this->terrainAirMask.empty())
+    {
+        // v5/v6 golden worlds omitted the original masks. Keep their historical
+        // approximation; v7 masks must never be rebuilt from decorated blocks.
+        this->buildTerrainAirMask();
+    }
 
     if (this->advanceState(ChunkState::HAS_TERRAIN))
     {
@@ -130,9 +136,8 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
 void Chunk::buildTerrainAirMask()
 {
-    constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
-    this->terrainAirMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
-    this->terrainSolidCubeMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+    this->terrainAirMask.assign(terrainMaskWords, 0);
+    this->terrainSolidCubeMask.assign(terrainMaskWords, 0);
     for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
     {
         const Block block = this->blocks[blockIdx];
@@ -236,7 +241,7 @@ float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
     {
         ivec2 samplePos_CS;
         const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
-        // Imported neighbors keep no terrain heights
+        // Legacy imported neighbors keep no terrain heights
         if (chunk->terrainTopY.empty())
         {
             return false;
@@ -282,7 +287,7 @@ float Chunk::terrainSlopeSquared_WS(ivec2 posXZ_WS) const
     {
         ivec2 samplePos_CS;
         const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
-        // Imported neighbors keep no surface heights
+        // Legacy imported neighbors keep no surface heights
         if (chunk->terrainSurfaceHeight.empty())
         {
             return false;
@@ -582,7 +587,7 @@ void Chunk::runStructuresAndDecoratorPass()
 
 void Chunk::fillStructuresAndDecorators()
 {
-    if (!this->wasImported)
+    if (!this->hasSerializedData)
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
@@ -1291,28 +1296,32 @@ bool Chunk::advanceState(ChunkState newState)
     return false; // already >= newState, or another thread advanced it
 }
 
-void Chunk::loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
-                               std::vector<Structure>&& structures,
-                               std::unordered_map<uint32_t, uint8_t>&& blockStates)
+void Chunk::loadSerializedData(SerializedChunkData&& data)
 {
-    ASSERT(blocks.size() == numChunkBlocks);
-    ASSERT(biomes.size() == chunkSizeXZSquare);
+    ASSERT(this->getState() == ChunkState::NEEDS_TERRAIN);
+    ASSERT(data.blocks.size() == numChunkBlocks);
+    ASSERT(data.biomes.size() == chunkSizeXZSquare);
+    ASSERT((data.terrainAirMask.empty() && data.terrainSolidCubeMask.empty()) ||
+           (data.terrainAirMask.size() == terrainMaskWords && data.terrainSolidCubeMask.size() == terrainMaskWords));
+    ASSERT((data.terrainTopY.empty() && data.terrainSurfaceHeight.empty()) ||
+           (data.terrainTopY.size() == chunkSizeXZSquare && data.terrainSurfaceHeight.size() == chunkSizeXZSquare));
 
-    this->blocks = std::move(blocks);
-    this->biomes = std::move(biomes);
-    this->structures = std::move(structures);
-    this->blockStates = std::move(blockStates);
-    this->wasImported = true;
+    this->blocks = std::move(data.blocks);
+    this->biomes = std::move(data.biomes);
+    this->structures = std::move(data.structures);
+    this->blockStates = std::move(data.blockStates);
+    this->caveStructures = std::move(data.caveStructures);
+    this->surfaceStructureCandidates = std::move(data.surfaceStructureCandidates);
+    this->terrainAirMask = std::move(data.terrainAirMask);
+    this->terrainSolidCubeMask = std::move(data.terrainSolidCubeMask);
+    this->terrainTopY = std::move(data.terrainTopY);
+    this->terrainSurfaceHeight = std::move(data.terrainSurfaceHeight);
+    this->hasSerializedData = true;
 }
 
 bool Chunk::getIsMarkedForDestruction() const
 {
     return this->isMarkedForDestruction.load(std::memory_order_acquire);
-}
-
-bool Chunk::getWasImported() const
-{
-    return this->wasImported;
 }
 
 void Chunk::setIsMarkedForDestruction(bool marked)
@@ -1354,28 +1363,26 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
     return true;
 }
 
-const std::vector<Block>& Chunk::getBlocks() const
-{
-    return this->blocks;
-}
-
 const std::vector<Biome>& Chunk::getBiomes() const
 {
     return this->biomes;
 }
 
-std::vector<Structure> Chunk::getStructures() const
+SerializedChunkView Chunk::getSerializedView() const
 {
-    // Grid structures plus the accepted surface structures this chunk owns; transient
-    // surface candidates are never exported.
-    std::vector<Structure> result = this->structures;
-    result.insert(result.end(), this->placedSurfaceStructures.begin(), this->placedSurfaceStructures.end());
-    return result;
-}
-
-const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const
-{
-    return this->blockStates;
+    return {
+        .position = this->chunkPos,
+        .blocks = this->blocks,
+        .biomes = this->biomes,
+        .structures = this->structures,
+        .blockStates = &this->blockStates,
+        .caveStructures = this->caveStructures,
+        .surfaceStructureCandidates = this->surfaceStructureCandidates,
+        .terrainAirMask = this->terrainAirMask,
+        .terrainSolidCubeMask = this->terrainSolidCubeMask,
+        .terrainTopY = this->terrainTopY,
+        .terrainSurfaceHeight = this->terrainSurfaceHeight,
+    };
 }
 
 // y changes fastest, then x, then z

@@ -166,6 +166,8 @@ TEST_CASE("SettingsManager reports help and invalid command lines without exitin
         { { "Biomeinator", "--renderingTestOutput=result.jpg" }, "--renderingTestOutput must be a .png" },
         { { "Biomeinator", "--perfOutput=result.txt" }, "--perfOutput must be a .json" },
         { { "Biomeinator", "--renderingTestOutput=result.png", "--perfOutput=result.json" }, "mutually exclusive" },
+        { { "Biomeinator", "--renderDistance=0" }, "renderDistance" },
+        { { "Biomeinator", "--renderDistance=-1" }, "renderDistance" },
         { { "Biomeinator", "--samplingMode=3" }, "samplingMode" },
         { { "Biomeinator", "--antialiasingMode=3" }, "antialiasingMode" },
         { { "Biomeinator", "--tonemapping=4" }, "tonemapping" },

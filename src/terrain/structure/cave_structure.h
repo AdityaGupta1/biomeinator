@@ -11,6 +11,7 @@
 
 // Enum order is also fill order across all neighbor chunks (see Chunk::runStructuresAndDecoratorPass),
 // so earlier types claim space before later ones regardless of which chunk emitted them.
+// Serialized by value in world exports: only append new types.
 enum class CaveStructureType : uint8_t
 {
     LAMP_CLUSTER,

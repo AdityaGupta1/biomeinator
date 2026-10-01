@@ -115,7 +115,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudMultiScatterStrength", "Strength of the cloud multiple scattering approximation", float, "1");
     ADD_OPTION("cloudWindX", "Cloud wind X in blocks/s", float, "10");
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
-    ADD_OPTION("renderDistance", "Render distance in chunks", int, "30");
+    ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
 
     ADD_OPTION("debugView", "Debug view", std::string, "off");
@@ -277,6 +277,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     const auto getFloat = [&parsedSettings](const char* name) { return std::get<float>(parsedSettings.at(name)); };
     const auto getString = [&parsedSettings](const char* name) -> const std::string&
     { return std::get<std::string>(parsedSettings.at(name)); };
+
+    if (std::get<int>(parsedSettings.at("renderDistance")) <= 0)
+    {
+        return { ParseArgsStatus::Error, "--renderDistance must be greater than zero" };
+    }
 
     if (getUint("samplingMode") >= static_cast<uint32_t>(SamplingMode::COUNT))
     {

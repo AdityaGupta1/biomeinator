@@ -217,9 +217,10 @@ fixed band.
   through the structure neighborhood, reading their `terrainTopY`, which is written once during
   generation and never again, so it is safe to read while neighbors fill structures; computing it
   from in-chunk heights alone would put seams on chunk borders. Water counts as ground at sea
-  level, or every shoreline would read as a ridge. Imported neighbors keep no terrain heights and
-  are left out of the rings, so a chunk generated beside an imported one can differ slightly from
-  a full regeneration.
+  level, or every shoreline would read as a ridge. Region v7 saves `terrainTopY` and
+  `terrainSurfaceHeight` so neighbors of imported chunks see the same slopes and hollows as a
+  full regeneration. Legacy v5/v6 imports have no heights and are left out of the rings, so a
+  chunk generated beside one can differ slightly.
 
 **Sea ice** is placed in the top-block stamp rather than the layer pass, because only generation
 knows the water level and the `inland` coast field. Where cold-climate cover applies, the top

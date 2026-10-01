@@ -104,6 +104,8 @@ void init();
 
 const BiomeData& getBiomeData(Biome biome);
 
+const SurfaceStructureGens& getSurfaceStructureGens();
+
 Biome getClosestBiome(const BiomeNoise& biomeNoise);
 
 } // namespace Biomes
