@@ -398,7 +398,7 @@ void init()
     hwnd = CreateWindowExW(0,
                            L"BiomeinatorClass",
                            L"Biomeinator",
-                           WS_VISIBLE | WS_OVERLAPPEDWINDOW,
+                           WS_OVERLAPPEDWINDOW,
                            320,
                            180,
                            width,
@@ -407,6 +407,9 @@ void init()
                            nullptr,
                            nullptr,
                            nullptr);
+
+    // Non-test runs are brought to the front by the renderer once init finishes
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01; // generic desktop controls
