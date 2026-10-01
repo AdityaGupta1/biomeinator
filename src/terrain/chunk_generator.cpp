@@ -816,6 +816,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         continue;
                     }
+                    if (!layer.closed && bool(gen.flags & CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING))
+                    {
+                        continue;
+                    }
 
                     const int gridCellSideLength = static_cast<int>(gen.gridCellSideLength);
                     const int innerSide = gridCellSideLength - static_cast<int>(gen.gridCellPadding);
