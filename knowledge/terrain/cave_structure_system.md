@@ -179,10 +179,6 @@ v7 exports retain the ordered cave candidate list, including available height,
 alongside the original terrain masks. Imported chunks skip their own filling but
 fresh neighbors still consume their candidates, so a structure originating in an
 imported chunk keeps its overhang. Neither sorting candidates nor rebuilding masks
-from final blocks is safe. Legacy v5/v6 fixture worlds retain empty cave lists and
-approximate masks; exploring beyond those old fixture boundaries is not a goal.
-
-Voxel rendering tests load baked blocks, so they do not test this boundary
-behavior. Re-exporting legacy chunks keeps those approximations even though the
-new file uses v7. When changing this path, check fresh generation against exported
-neighbors as well as rendering tests of already completed chunks.
+from final blocks is safe. Legacy v5/v6 worlds have no cave candidates; see
+[world export/import](world_export_import.md) for the legacy approximations and how to
+validate changes to this path.

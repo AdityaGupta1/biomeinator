@@ -136,9 +136,8 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 
 void Chunk::buildTerrainAirMask()
 {
-    constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
-    this->terrainAirMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
-    this->terrainSolidCubeMask.assign(chunkSizeXZSquare * wordsPerColumn, 0);
+    this->terrainAirMask.assign(terrainMaskWords, 0);
+    this->terrainSolidCubeMask.assign(terrainMaskWords, 0);
     for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
     {
         const Block block = this->blocks[blockIdx];
@@ -1303,8 +1302,7 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
     ASSERT(data.blocks.size() == numChunkBlocks);
     ASSERT(data.biomes.size() == chunkSizeXZSquare);
     ASSERT((data.terrainAirMask.empty() && data.terrainSolidCubeMask.empty()) ||
-           (data.terrainAirMask.size() == numChunkBlocks / 64 &&
-            data.terrainSolidCubeMask.size() == numChunkBlocks / 64));
+           (data.terrainAirMask.size() == terrainMaskWords && data.terrainSolidCubeMask.size() == terrainMaskWords));
     ASSERT((data.terrainTopY.empty() && data.terrainSurfaceHeight.empty()) ||
            (data.terrainTopY.size() == chunkSizeXZSquare && data.terrainSurfaceHeight.size() == chunkSizeXZSquare));
 

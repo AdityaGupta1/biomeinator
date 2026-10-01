@@ -10,5 +10,7 @@ inline constexpr uint32_t chunkSizeXZ = 16;
 inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
 inline constexpr uint32_t chunkSizeY = 512;
 inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
+// Pre-structure terrain masks hold one bit per block
+inline constexpr uint32_t terrainMaskWords = numChunkBlocks / 64;
 
 inline constexpr uint32_t regionSideLength = 32;

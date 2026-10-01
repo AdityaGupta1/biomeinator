@@ -85,8 +85,8 @@ SerializedChunkData makeChunk(glm::ivec2 chunkPos, const TestRegistry& registry,
         biome = static_cast<Biome>(rng() % static_cast<uint32_t>(Biome::COUNT));
     }
 
-    data.terrainAirMask.resize(numChunkBlocks / 64);
-    data.terrainSolidCubeMask.resize(numChunkBlocks / 64);
+    data.terrainAirMask.resize(terrainMaskWords);
+    data.terrainSolidCubeMask.resize(terrainMaskWords);
     for (size_t word = 0; word < data.terrainAirMask.size(); ++word)
     {
         const uint64_t bits = (static_cast<uint64_t>(rng()) << 32) | rng();
@@ -115,23 +115,6 @@ SerializedChunkData makeChunk(glm::ivec2 chunkPos, const TestRegistry& registry,
         { { origin.x + 4, chunkSizeY - 1, origin.y + 11 }, &registry.surfaceGen, 3, 1 },
     };
     return data;
-}
-
-SerializedChunkView viewOf(glm::ivec2 position, const SerializedChunkData& data)
-{
-    return {
-        .position = position,
-        .blocks = data.blocks,
-        .biomes = data.biomes,
-        .structures = data.structures,
-        .blockStates = &data.blockStates,
-        .caveStructures = data.caveStructures,
-        .surfaceStructureCandidates = data.surfaceStructureCandidates,
-        .terrainAirMask = data.terrainAirMask,
-        .terrainSolidCubeMask = data.terrainSolidCubeMask,
-        .terrainTopY = data.terrainTopY,
-        .terrainSurfaceHeight = data.terrainSurfaceHeight,
-    };
 }
 
 std::vector<Block> identityRemap()
@@ -200,7 +183,7 @@ TEST_CASE("RegionFile v7 round-trips every generation input in order", "[unit][r
     const std::vector<glm::ivec2> positions{ regionOrigin + glm::ivec2(31, 31), regionOrigin + glm::ivec2(0, 4) };
     const std::vector<SerializedChunkData> chunks{ makeChunk(positions[0], registry, 1),
                                                    makeChunk(positions[1], registry, 2) };
-    const std::vector<SerializedChunkView> views{ viewOf(positions[0], chunks[0]), viewOf(positions[1], chunks[1]) };
+    const std::vector<SerializedChunkView> views{ chunks[0].view(positions[0]), chunks[1].view(positions[1]) };
     REQUIRE(RegionFile::write(dir.regionPath(), regionPos, views, registry.get()));
 
     const auto decoded = RegionFile::read(dir.regionPath(), regionPos, identityRemap(), registry.get());
@@ -219,13 +202,13 @@ TEST_CASE("RegionFile re-export of decoded data is byte-identical", "[unit][regi
     const TempDir dir("reexport");
     const glm::ivec2 position = regionOrigin + glm::ivec2(7, 3);
     const SerializedChunkData chunk = makeChunk(position, registry, 3);
-    const std::vector<SerializedChunkView> views{ viewOf(position, chunk) };
+    const std::vector<SerializedChunkView> views{ chunk.view(position) };
     REQUIRE(RegionFile::write(dir.regionPath(), regionPos, views, registry.get()));
     const std::vector<char> original = readBytes(dir.regionPath());
 
     const auto decoded = RegionFile::read(dir.regionPath(), regionPos, identityRemap(), registry.get());
     REQUIRE(decoded);
-    const std::vector<SerializedChunkView> decodedViews{ viewOf(position, (*decoded)[0].data) };
+    const std::vector<SerializedChunkView> decodedViews{ (*decoded)[0].data.view(position) };
     REQUIRE(RegionFile::write(dir.regionPath(), regionPos, decodedViews, registry.get()));
     CHECK(readBytes(dir.regionPath()) == original);
 }
@@ -238,7 +221,7 @@ TEST_CASE("RegionFile writes missing legacy terrain heights as no surface", "[un
     SerializedChunkData chunk = makeChunk(position, registry, 4);
     chunk.terrainTopY.clear();
     chunk.terrainSurfaceHeight.clear();
-    const std::vector<SerializedChunkView> views{ viewOf(position, chunk) };
+    const std::vector<SerializedChunkView> views{ chunk.view(position) };
     REQUIRE(RegionFile::write(dir.regionPath(), regionPos, views, registry.get()));
 
     const auto decoded = RegionFile::read(dir.regionPath(), regionPos, identityRemap(), registry.get());
@@ -254,7 +237,7 @@ TEST_CASE("RegionFile rejects surface generators outside the registry", "[unit][
     const TempDir dir("generators");
     const glm::ivec2 position = regionOrigin;
     const SerializedChunkData chunk = makeChunk(position, registry, 5);
-    const std::vector<SerializedChunkView> views{ viewOf(position, chunk) };
+    const std::vector<SerializedChunkView> views{ chunk.view(position) };
 
     const SurfaceStructureGens emptyGens;
     const RegionFile::Registry withoutGens{ registry.blockStateKinds, &emptyGens };
@@ -273,7 +256,7 @@ TEST_CASE("RegionFile rejects inconsistent block states", "[unit][region_file]")
     SerializedChunkData chunk = makeChunk(position, registry, 6);
     REQUIRE_FALSE(chunk.blockStates.empty());
     chunk.blockStates.erase(chunk.blockStates.begin());
-    const std::vector<SerializedChunkView> views{ viewOf(position, chunk) };
+    const std::vector<SerializedChunkView> views{ chunk.view(position) };
     CHECK_FALSE(RegionFile::write(dir.regionPath(), regionPos, views, registry.get()));
 }
 
@@ -283,13 +266,13 @@ TEST_CASE("RegionFile rejects truncated, padded, and misplaced files", "[unit][r
     const TempDir dir("corruption");
     const glm::ivec2 position = regionOrigin + glm::ivec2(2, 2);
     const SerializedChunkData chunk = makeChunk(position, registry, 7);
-    const std::vector<SerializedChunkView> views{ viewOf(position, chunk) };
+    const std::vector<SerializedChunkView> views{ chunk.view(position) };
     REQUIRE(RegionFile::write(dir.regionPath(), regionPos, views, registry.get()));
     const std::vector<char> original = readBytes(dir.regionPath());
 
     CHECK_FALSE(RegionFile::read(dir.regionPath(), regionPos + glm::ivec2(1, 0), identityRemap(), registry.get()));
 
-    std::vector<char> truncated(original.begin(), original.end() - 1);
+    const std::vector<char> truncated(original.begin(), original.end() - 1);
     writeBytes(dir.regionPath(), truncated);
     CHECK_FALSE(RegionFile::read(dir.regionPath(), regionPos, identityRemap(), registry.get()));
 

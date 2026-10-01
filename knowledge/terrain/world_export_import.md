@@ -17,8 +17,10 @@ from final blocks, no cave candidates, no heights), acceptable for the bounded t
 Re-exporting those legacy chunks retains the approximations; a format upgrade
 cannot recover their missing original terrain. Missing heights are written as zeros,
 which neighbors already treat as "no surface", so the approximation round-trips unchanged.
-Any new per-chunk data that neighbors read during generation must be added to v7 too. Exactness applies to freshly generated
-worlds saved with all their generation inputs and subsequent round trips of that data.
+Exactness applies to freshly generated worlds saved with all their generation inputs and
+subsequent round trips of that data. Any new per-chunk data that neighbors read during
+generation must be serialized too, under a new region version with v7 kept as a legacy reader;
+appending to the v7 layout would break every existing v7 file.
 
 Exposed-surface placement candidates retain their priority and headroom.
 Saving accepted trees alone loses rejected competitors that suppress trees across
@@ -36,7 +38,9 @@ their saved blocks without recovering these missing inputs.
 borrowed `SerializedChunkView`s, never touching `Chunk`, and takes the block state kinds and
 surface-generator table it validates against as a `RegionFile::Registry`. That keeps it free of
 `chunk.h`'s renderer dependencies and of loaded assets, so the CPU-only unit target tests it
-directly. It returns chunk coordinates and owned data, without constructing live chunks or regions. A failure discards the entire decoded result. Whole-world
+directly. Write and read share one chunk validation, so the writer's inputs and the reader's
+outputs obey the same rules. Reads return chunk coordinates and owned data, without
+constructing live chunks or regions. A failure discards the entire decoded result. Whole-world
 import assembles private regions before attaching them; a cache can instead move
 the data into reserved `NEEDS_TERRAIN` chunks in existing regions. The caller must
 prevent generation and other readers from accessing those chunks during attachment.
@@ -146,7 +150,6 @@ holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the 
 
 ## Validation
 
-Unit tests (`tests/unit/region_file_tests.cpp`) cover the v7 codec: exact, order-preserving
-round trips, byte-identical re-export, legacy heights, registry rejection, and corrupt files.
-Rendering tests exercise imported worlds. Neither exercises fresh generation across an exported
-boundary; check that separately when changing the saved generation inputs.
+Unit tests cover the v7 codec in isolation and rendering tests cover imported worlds.
+Neither exercises fresh generation across an exported boundary, which is where lost or
+reordered generation inputs show up; check that separately when changing them.

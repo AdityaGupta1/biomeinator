@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <vector>
 
+struct SerializedChunkView;
+
 // Completed block generation only. Empty terrain masks and heights are permitted solely for
 // legacy imports.
 struct SerializedChunkData
@@ -28,6 +30,8 @@ struct SerializedChunkData
     std::vector<uint64_t> terrainSolidCubeMask;
     std::vector<uint16_t> terrainTopY;
     std::vector<uint16_t> terrainSurfaceHeight;
+
+    SerializedChunkView view(glm::ivec2 position) const;
 };
 
 // Borrows a completed chunk's data for writing; the owner must outlive the view.
@@ -45,3 +49,20 @@ struct SerializedChunkView
     std::span<const uint16_t> terrainTopY;
     std::span<const uint16_t> terrainSurfaceHeight;
 };
+
+inline SerializedChunkView SerializedChunkData::view(glm::ivec2 position) const
+{
+    return {
+        .position = position,
+        .blocks = this->blocks,
+        .biomes = this->biomes,
+        .structures = this->structures,
+        .blockStates = &this->blockStates,
+        .caveStructures = this->caveStructures,
+        .surfaceStructureCandidates = this->surfaceStructureCandidates,
+        .terrainAirMask = this->terrainAirMask,
+        .terrainSolidCubeMask = this->terrainSolidCubeMask,
+        .terrainTopY = this->terrainTopY,
+        .terrainSurfaceHeight = this->terrainSurfaceHeight,
+    };
+}

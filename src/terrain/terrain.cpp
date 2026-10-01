@@ -227,12 +227,6 @@ static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 inline constexpr uint32_t maxTasksPerFrame = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
 
-// One ring beyond render distance gets geometry and a BLAS.
-static int getCreateBlasDistance()
-{
-    return SettingsManager::getAsInt("renderDistance") + 1;
-}
-
 struct ChunkScanDistances
 {
     int renderDistance;
@@ -240,6 +234,26 @@ struct ChunkScanDistances
     int fillStructuresDistance;
     int generateTerrainDistance;
 };
+
+static constexpr ChunkScanDistances getScanDistances(int renderDistance)
+{
+    // One ring beyond render distance gets geometry and a BLAS.
+    const int createBlasDistance = renderDistance + 1;
+    // see knowledge/terrain/terrain_manager.md for why fillStructuresDistance has the
+    // extra structureMaxChunkRadius term (not just +1)
+    const int fillStructuresDistance = createBlasDistance + 1 + static_cast<int>(structureMaxChunkRadius);
+    return {
+        .renderDistance = renderDistance,
+        .createBlasDistance = createBlasDistance,
+        .fillStructuresDistance = fillStructuresDistance,
+        .generateTerrainDistance = fillStructuresDistance + static_cast<int>(structureMaxChunkRadius),
+    };
+}
+
+static int getCreateBlasDistance()
+{
+    return getScanDistances(SettingsManager::getAsInt("renderDistance")).createBlasDistance;
+}
 
 // The per-chunk half of the scan: queues whatever stage the chunk's state and distance call
 // for, and handles it entering or leaving the BLAS distance. A chunk is revisited on its own,
@@ -323,18 +337,13 @@ static void scheduleChunkWork(Chunk* chunk,
 
 void update(ToFreeList& toFreeList)
 {
-    const int renderDistance = SettingsManager::getAsInt("renderDistance");
-    const int createBlasDistance = getCreateBlasDistance();
-    // see knowledge/terrain/terrain_manager.md for why fillStructuresDistance has the
-    // extra structureMaxChunkRadius term (not just +1)
-    const int fillStructuresDistance = createBlasDistance + 1 + structureMaxChunkRadius;
-    const int generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius;
+    const ChunkScanDistances distances = getScanDistances(SettingsManager::getAsInt("renderDistance"));
 
     const Camera& camera = Renderer::getCamera();
     const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
     const glm::ivec2 currentChunkPos = cameraChunkPosition(cameraPosInt_WS);
-    const glm::ivec2 minRenderChunkPos = currentChunkPos - renderDistance;
-    const glm::ivec2 maxRenderChunkPos = currentChunkPos + renderDistance;
+    const glm::ivec2 minRenderChunkPos = currentChunkPos - distances.renderDistance;
+    const glm::ivec2 maxRenderChunkPos = currentChunkPos + distances.renderDistance;
 
     voxelRenderBoundsMin_WS = {
         minRenderChunkPos.x * static_cast<int>(chunkSizeXZ),
@@ -414,13 +423,6 @@ void update(ToFreeList& toFreeList)
         }
     }
 
-    const ChunkScanDistances distances = {
-        .renderDistance = renderDistance,
-        .createBlasDistance = createBlasDistance,
-        .fillStructuresDistance = fillStructuresDistance,
-        .generateTerrainDistance = generateTerrainDistance,
-    };
-
     bool updateTerrain = currentChunkPos != lastChunkPos;
     if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
     {
@@ -443,10 +445,10 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
-        const glm::ivec2 minCurrentChunkPos = currentChunkPos - generateTerrainDistance;
-        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + generateTerrainDistance;
-        const glm::ivec2 minLastChunkPos = lastChunkPos - createBlasDistance;
-        const glm::ivec2 maxLastChunkPos = lastChunkPos + createBlasDistance;
+        const glm::ivec2 minCurrentChunkPos = currentChunkPos - distances.generateTerrainDistance;
+        const glm::ivec2 maxCurrentChunkPos = currentChunkPos + distances.generateTerrainDistance;
+        const glm::ivec2 minLastChunkPos = lastChunkPos - distances.createBlasDistance;
+        const glm::ivec2 maxLastChunkPos = lastChunkPos + distances.createBlasDistance;
 
         const glm::ivec2 minChunkPos = glm::min(minCurrentChunkPos, minLastChunkPos);
         const glm::ivec2 maxChunkPos = glm::max(maxCurrentChunkPos, maxLastChunkPos);
@@ -506,9 +508,9 @@ void update(ToFreeList& toFreeList)
                         const glm::ivec2 chunkPos = glm::ivec2(chunkX, chunkZ);
 
                         const bool inCurrentGenerateTerrainDistance =
-                            glmUtil::chebyshevDistance(chunkPos, currentChunkPos) <= generateTerrainDistance;
+                            glmUtil::chebyshevDistance(chunkPos, currentChunkPos) <= distances.generateTerrainDistance;
                         const bool inLastCreateBlasDistance =
-                            glmUtil::chebyshevDistance(chunkPos, lastChunkPos) <= createBlasDistance;
+                            glmUtil::chebyshevDistance(chunkPos, lastChunkPos) <= distances.createBlasDistance;
                         if (!inCurrentGenerateTerrainDistance && !inLastCreateBlasDistance)
                         {
                             continue;
@@ -619,92 +621,95 @@ void update(ToFreeList& toFreeList)
 
 static constexpr uint32_t worldJsonVersion = 2;
 
+// Writes every completed region, then the manifest. Failures are logged by the writers.
+static bool writeWorld(const std::filesystem::path& exportDir)
+{
+    const Camera& camera = Renderer::getCamera();
+    const glm::ivec3 cameraPosInt = camera.getPosInt_WS();
+    const glm::vec3 cameraPosFloat = camera.getPosFloat_WS();
+    nlohmann::json worldJson;
+    worldJson["version"] = worldJsonVersion;
+    worldJson["camera"] = {
+        { "posInt", { cameraPosInt.x, cameraPosInt.y, cameraPosInt.z } },
+        { "posFloat", { cameraPosFloat.x, cameraPosFloat.y, cameraPosFloat.z } },
+        { "phi", camera.getPhi() }, { "theta", camera.getTheta() },
+    };
+    worldJson["renderDistance"] = SettingsManager::getAsInt("renderDistance");
+    worldJson["worldSeed"] = SettingsManager::getWorldSeed();
+    worldJson["blocks"] = Blocks::blockIdNames;
+    worldJson["regions"] = nlohmann::json::array();
+
+    uint32_t totalChunks = 0;
+    std::vector<SerializedChunkView> chunks;
+    for (const auto& [position, region] : regions)
+    {
+        if (!region)
+        {
+            continue;
+        }
+        chunks.clear();
+        for (const auto& chunk : region->chunks)
+        {
+            if (chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
+            {
+                chunks.push_back(chunk->getSerializedView());
+            }
+        }
+        if (chunks.empty())
+        {
+            continue;
+        }
+        if (!RegionFile::write(exportDir / RegionFile::fileName(position), position, chunks,
+                               getRegionFileRegistry()))
+        {
+            return false;
+        }
+        totalChunks += static_cast<uint32_t>(chunks.size());
+        worldJson["regions"].push_back({ position.x, position.y });
+    }
+
+    // Publish the manifest last so a failed region write never advertises a complete world.
+    const std::string jsonBytes = worldJson.dump();
+    if (!FileUtil::writeAtomically(exportDir / "world.json", jsonBytes))
+    {
+        return false;
+    }
+    Logger::log("world export: exported %u chunks across %zu regions to %s", totalChunks,
+                worldJson["regions"].size(), exportDir.generic_string().c_str());
+    return true;
+}
+
 void exportWorld()
 {
-    std::filesystem::path createdExportDir;
-    bool published = false;
-    try
+    const std::filesystem::path exportsDir = FileUtil::getDocumentsDir("exports");
+    if (exportsDir.empty())
     {
-        const std::filesystem::path exportsDir = FileUtil::getDocumentsDir("exports");
-        if (exportsDir.empty())
+        Logger::logError("world export: failed to get Documents directory");
+        return;
+    }
+
+    // Reserve a fresh directory even if two exports occur in the same second.
+    const std::string timestamp = FileUtil::getTimestampString();
+    std::filesystem::path exportDir = exportsDir / timestamp;
+    std::error_code error;
+    for (uint32_t suffix = 1; !std::filesystem::create_directory(exportDir, error); ++suffix)
+    {
+        if (error)
         {
-            Logger::logError("world export: failed to get Documents directory");
+            Logger::logError("world export: %s: %s", exportDir.generic_string().c_str(), error.message().c_str());
             return;
         }
-        // Reserve a fresh directory even if two exports occur in the same second.
-        const std::string timestamp = FileUtil::getTimestampString();
-        std::filesystem::path exportDir = exportsDir / timestamp;
-        for (uint32_t suffix = 1; !std::filesystem::create_directory(exportDir); ++suffix)
-        {
-            exportDir = exportsDir / (timestamp + "_" + std::to_string(suffix));
-        }
-        createdExportDir = exportDir;
-
-        const Camera& camera = Renderer::getCamera();
-        const glm::ivec3 cameraPosInt = camera.getPosInt_WS();
-        const glm::vec3 cameraPosFloat = camera.getPosFloat_WS();
-        nlohmann::json worldJson;
-        worldJson["version"] = worldJsonVersion;
-        worldJson["camera"] = {
-            { "posInt", { cameraPosInt.x, cameraPosInt.y, cameraPosInt.z } },
-            { "posFloat", { cameraPosFloat.x, cameraPosFloat.y, cameraPosFloat.z } },
-            { "phi", camera.getPhi() }, { "theta", camera.getTheta() },
-        };
-        worldJson["renderDistance"] = SettingsManager::getAsInt("renderDistance");
-        worldJson["worldSeed"] = SettingsManager::getWorldSeed();
-        worldJson["blocks"] = Blocks::blockIdNames;
-        worldJson["regions"] = nlohmann::json::array();
-
-        uint32_t totalChunks = 0;
-        for (const auto& [position, region] : regions)
-        {
-            if (!region)
-            {
-                continue;
-            }
-            std::vector<SerializedChunkView> chunks;
-            for (const auto& chunk : region->chunks)
-            {
-                if (chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
-                {
-                    chunks.push_back(chunk->getSerializedView());
-                }
-            }
-            if (chunks.empty())
-            {
-                continue;
-            }
-            if (!RegionFile::write(exportDir / RegionFile::fileName(position), position, chunks,
-                                   getRegionFileRegistry()))
-            {
-                throw std::runtime_error("region write failed");
-            }
-            totalChunks += static_cast<uint32_t>(chunks.size());
-            worldJson["regions"].push_back({ position.x, position.y });
-        }
-        // Publish the manifest last so a failed region write never advertises a complete world.
-        const std::string jsonBytes = worldJson.dump();
-        if (!FileUtil::writeAtomically(exportDir / "world.json", jsonBytes))
-        {
-            throw std::runtime_error("manifest write failed");
-        }
-        published = true;
-        Logger::log("world export: exported %u chunks across %zu regions to %s", totalChunks,
-                    worldJson["regions"].size(), exportDir.generic_string().c_str());
+        exportDir = exportsDir / (timestamp + "_" + std::to_string(suffix));
     }
-    catch (const std::exception& error)
+
+    if (!writeWorld(exportDir))
     {
-        Logger::logError("world export: %s", error.what());
-        // This path is assigned only after creating our own fresh export directory.
-        if (!createdExportDir.empty() && !published)
+        Logger::logError("world export: failed; removing %s", exportDir.generic_string().c_str());
+        std::filesystem::remove_all(exportDir, error);
+        if (error)
         {
-            std::error_code cleanupError;
-            std::filesystem::remove_all(createdExportDir, cleanupError);
-            if (cleanupError)
-            {
-                Logger::logError("world export cleanup: %s: %s", createdExportDir.generic_string().c_str(),
-                                 cleanupError.message().c_str());
-            }
+            Logger::logError("world export cleanup: %s: %s", exportDir.generic_string().c_str(),
+                             error.message().c_str());
         }
     }
 }
@@ -787,7 +792,8 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
     };
     const auto& camera = outJson["camera"];
     bool valid = integerInRange(outJson["worldSeed"], 0, std::numeric_limits<uint32_t>::max()) &&
-                 integerInRange(outJson["renderDistance"], 1, std::numeric_limits<int>::max() - 4) &&
+                 integerInRange(outJson["renderDistance"], 1,
+                                std::numeric_limits<int>::max() - getScanDistances(0).generateTerrainDistance) &&
                  outJson["regions"].is_array() && outJson["blocks"].is_array() &&
                  !outJson["blocks"].empty() && outJson["blocks"].size() <= (1u << 16) &&
                  camera.is_object() && camera.contains("posInt") && camera.contains("posFloat") &&
@@ -879,7 +885,7 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
         world.phi = cameraJson["phi"].get<float>();
         world.theta = cameraJson["theta"].get<float>();
         const glm::ivec2 cameraChunkPos = cameraChunkPosition(world.cameraPosInt);
-        const int createBlasDistance = world.renderDistance + 1;
+        const int createBlasDistance = getScanDistances(world.renderDistance).createBlasDistance;
         const std::vector<Block> blockRemap = buildBlockRemapTable(worldJson["blocks"]);
 
         for (const auto& entry : worldJson["regions"])

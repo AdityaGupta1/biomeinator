@@ -31,7 +31,6 @@ struct Registry
 };
 
 std::string fileName(glm::ivec2 regionPos);
-bool isValidPosition(glm::ivec2 regionPos);
 
 // The views' chunks must have all their blocks and outlive the write.
 // An empty region is valid. Block values index the current Blocks::blockIdNames palette.

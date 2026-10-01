@@ -68,10 +68,10 @@ may require expanding that dependency halo, not just increasing its spacing valu
 Region v7 saves all exposed-surface candidates, including rejected competitors, alongside
 the original terrain masks. Fresh neighbors need those competitors to reproduce spacing
 at an imported boundary. Grid structures remain a separate ordered list to preserve fill
-precedence. Exposed-surface rules have explicit, globally unique IDs for serialization;
-their position in biome configuration can change freely. Assigned IDs remain stable
-and removed IDs must never be reused. `Biomes::init` throws on a missing or duplicate ID, so a
-misconfigured rule fails at startup instead of on the first export. See [world_export_import.md](world_export_import.md).
+precedence. Exposed-surface rules carry stable serialization IDs, so their position in biome
+configuration can change freely; `Biomes::init` throws on a missing or duplicate ID, so a
+misconfigured rule fails at startup instead of on the first export. ID rules are in
+[world_export_import.md](world_export_import.md).
 
 ## Cross-Chunk Filling
 
